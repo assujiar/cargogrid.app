@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 50 — Risk-Ranked Critical Path)
+**Updated:** 2026-07-14 (post Step 3 Prompt 51 — Step 3 Closure Verification; Step 3 `RUNTIME_ARCHITECTURE_VERIFIED`)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `claude/sleepy-ride-4vxsk6` (continuation of `agent/cargogrid-autonomous-build`, merged forward; cut from `origin/main`@`39d923e`)
 **Build trust:** `TRUSTED`
@@ -13,29 +13,30 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (15/16 prompts) |
-| Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`) |
-| Active task | `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50) |
-| Active task status | `VERIFIED` — `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` complete |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** — `RUNTIME_ARCHITECTURE_VERIFIED` (16/16 outputs) |
+| Current phase/workstream | Step 3 closed; Phase 0 — Foundation is now the active workstream (`NOT_STARTED`) |
+| Active task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51) |
+| Active task status | `VERIFIED` — `docs/architecture/16_STEP3_CLOSURE_REPORT.md` complete, closure state `RUNTIME_ARCHITECTURE_VERIFIED` |
 | Branch | `claude/sleepy-ride-4vxsk6` (continuation branch; picked up `agent/cargogrid-autonomous-build`'s 3 unmerged commits by merge; cut from `origin/main`@`39d923e`) |
 | HEAD | this checkpoint's commit on `claude/sleepy-ride-4vxsk6` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — this checkpoint ranks/sequences already-produced architecture content, no implementation task was started) |
+| Schema/migration head | NONE (no database — this checkpoint independently verifies already-produced architecture content, no implementation task was started) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51, final Step 3 output) |
+| Next eligible task | Phase 0 Foundation kickoff — `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
 
-Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 15 of 16 outputs, most recently `15_RISK_RANKED_CRITICAL_PATH.md`: risk-ranked, dependency-depth-ordered critical path over the WBS (`13_*.md`) and traceability matrix (`14_*.md`) — 9 ranking dimensions (severity, likelihood, blast radius, tenant/security/finance/data exposure, dependency centrality, reversibility, detection-strength gap, uncertainty, remediation complexity), each 1–5, combined into a reproducible Composite Risk Score (range 8–60, full arithmetic shown per row); critical path `Phase 0 → 1 → 2 → 3 → 4 → {5‖6} → 7 → 8 → 9 → 15 → 16 → direct GA` (matches `12_RELEASE_TRAIN.md` §9 exactly); top risks: Finance tax/legal SME gate (`FIN-195`, CRS 49), payroll SME gate (`HRT-282`, CRS 47), Supreme Admin absolute-CRUD disclosure (RPD-022, CRS 46), direct-GA/zero-critical-defect gate (`RGL-412`, CRS 43), penetration test (`RGL-402`, CRS 42); foundation blockers dominate the top half of the ranking; risk-adjusted recommendation to pull `FIN-195`/`HRT-282` SME *engagement* forward into Phase 0/1 without moving their WBS position; concurrency lanes (Phase 5/6 fork, 4 independent Phase-0 tooling ADRs, SME engagement parallel to build); 5 recalculation triggers binding this document to re-derivation. No duration/staffing/date invented anywhere. No new ADR candidate raised; no product decision was reopened; every claim is sourced. Repository remains 100% documentation.
+Checkpoint summary: Step 2 discovery closed prior. **Step 3 (Architecture and Execution Blueprint) is now fully closed: `16_STEP3_CLOSURE_REPORT.md` independently re-verified (not re-stated) all nine required closure conditions against primary sources** — full re-read of all 15 architecture files, direct re-derivation of every requirement/decision/gap/conflict total against the package's control files, independent git-history checkpoint-lineage verification, and an independent `git status`/`git ls-files` forbidden-change audit. Result: all 15 Step 3 deliverables present/consistent; all 194 requirements + 63 protected decisions + 13 gap requirements + full conflict/gap/duplicate/decision-backlog catalogues have delivery+evidence owners; 12 named control areas mapped; the four standing accepted-risk disclosures (RPD-022, RPD-034/036, RPD-031/037, RPD-038) preserved consistently everywhere; repository independently confirmed 100% documentation. Two new, non-blocking findings (F1: cosmetic pre-merge checkpoint-hash citations in `12_*.md`/`13_*.md`, corrected this checkpoint; F2: `CHANGE_MANIFEST.md`'s summary index table two rows stale, corrected this checkpoint) — neither reopened a decision or broke an evidence chain. **Closure state: `RUNTIME_ARCHITECTURE_VERIFIED`.** Step 4 (`04-reusable-prompts/`, 25 templates) confirmed to be a template library consumed opportunistically starting inside Phase 0 prompts, not a sequential phase of its own — this matches `START_HERE.md` §5 and `13_*.md` §8. Feature/application implementation remains forbidden until `PHASE_0_VERIFIED` is also achieved. Repository remains 100% documentation.
 
-**Branch note (carried forward):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. At the start of the prior checkpoint's run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48: DevOps, Release Train, Full WBS workstreams). Those 3 commits were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical to the source branch), so no progress was lost. All Step 3 checkpoints continue on `claude/sleepy-ride-4vxsk6`.
+**Branch note (carried forward):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. Earlier in this run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48). Those were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical), so no progress was lost. All Step 3 checkpoints, and all future checkpoints, continue on `claude/sleepy-ride-4vxsk6`.
 
 ## 2. Discovery and foundation readiness
 
 | Gate | Status | Evidence | Owner | Blocks |
 |---|---|---|---|---|
 | Source and decision controls | `VERIFIED` (package) | `00-control/06_PACKAGE_BUILD_STATUS.md` | Product | All work |
-| Repository discovery (14/14 prompts) | `VERIFIED` | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | Architecture | Feature code (still blocked pending Step 3) |
+| Repository discovery (14/14 prompts) | `VERIFIED` | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | Architecture | Feature code (still blocked pending Phase 0) |
+| Architecture and Execution Blueprint (16/16 prompts) | `RUNTIME_ARCHITECTURE_VERIFIED` | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | Architecture | Feature code (still blocked pending `PHASE_0_VERIFIED`) |
 | Greenfield/brownfield decision | `VERIFIED` — `GREENFIELD`, High confidence | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | Architecture | Target plan (now unblocked) |
 | Environment/toolchain baseline | `VERIFIED` (absence confirmed) | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | DevEx | Reliable gates (pending Phase 0 build-out) |
 | Database/migration baseline | `VERIFIED` (absence confirmed) | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` | Data | Schema changes (pending Phase 0) |
@@ -50,7 +51,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~50% (Step 2 done; Step 3 15/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 51, final Step 3 output), then Phase 0 foundation prompts |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation-build sub-phase not started) | ~55% (Step 2 done; Step 3 done 16/16; Phase 0 foundation prompts 79–102 not started) | Phase 0 Foundation: `79_PHASE0_README.md` → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -109,11 +110,11 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (final Step 3 output).
-- Entry conditions: `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` `VERIFIED` (met); every critical-path item source-verified, ranking reproducible, no unverified dates (met — §15 of that document).
-- Required prompt/output: `03-architecture-and-plan/51_STEP3_CLOSURE_VERIFICATION_PROMPT.md` → `docs/architecture/16_STEP3_CLOSURE_REPORT.md`.
-- If blocked, resume: re-read `docs/architecture/01_*.md` through `15_*.md` in full before starting Prompt 51.
-- Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
+- Next eligible task: Phase 0 Foundation kickoff.
+- Entry conditions: `docs/architecture/16_STEP3_CLOSURE_REPORT.md` closure state `RUNTIME_ARCHITECTURE_VERIFIED` (met — §11 of that document); Step 2 `RUNTIME_DISCOVERY_VERIFIED` (met, standing).
+- Required prompt/output: read `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` in full, then execute `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md`, then capability prompts `81`–`98` in that README's own dependency order, then `99`–`102` (verification/hardening/documentation/closure — `102` is the only prompt authorized to set `PHASE_0_VERIFIED`).
+- If blocked, resume: re-read `docs/architecture/01_*.md` through `16_*.md` in full, then `05-phase-00-discovery-foundation/79_PHASE0_README.md`, before starting Phase 0 work.
+- Authorized command: read-only inspection + `docs/architecture/**`/`docs/runtime/**`/`docs/build-logs/**` writes for closure bookkeeping; Phase 0 work additionally authorizes whatever paths `79_PHASE0_README.md` names for the first time (app/config/toolchain scaffolding) — confirm exact allowed paths from that README before writing outside `docs/`.
 
 ## 10. Update rules
 
