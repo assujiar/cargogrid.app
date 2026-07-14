@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 43 — API/Integration Workstream)
+**Updated:** 2026-07-14 (post Step 3 Prompt 44 — UX/Design System Workstream)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index
@@ -20,6 +20,7 @@
 | `CHG-2026-009` | `CG-S3-ARCH-006` | DOCS | Author `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` (Prompt 41) — sixth Step 3 architecture output; access model, 8-stage evaluation flow, 7-family RLS matrix, 19-action permission catalogue, RPD-022 Supreme Admin enforcement, 15-item negative-test matrix, 9-slice atomic backlog. Resolves `ADR-CAND-ARCH-002/006` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-010` | `CG-S3-ARCH-007` | DOCS | Author `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` (Prompt 42) — seventh Step 3 architecture output; 10 sub-engines, shared metadata/lifecycle, all 91 blueprint-catalogued rules/patterns/use-cases/transitions/exceptions accounted for as config data, 6-level precedence, 4 bypass prohibitions, 9-slice atomic backlog. Resolves `ADR-CAND-ARCH-010` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-011` | `CG-S3-ARCH-008` | DOCS | Author `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` (Prompt 43) — eighth Step 3 architecture output; REST/GraphQL ownership matrix sharing the 8-stage evaluation flow (RPD-033), shared contract/error/pagination/idempotency/concurrency rules, GraphQL-specific controls, auth/security control table, webhook/event architecture, 17-category integration inventory with a binding adapter template (RPD-038), PostgreSQL durable-queue job contract (RPD-012), import/export/file/report paths, compatibility/deprecation policy, performance budgets, 12-row test matrix, 10-slice atomic backlog. Resolves `ADR-CAND-ARCH-016` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-012` | `CG-S3-ARCH-009` | DOCS | Author `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` (Prompt 44) — ninth Step 3 architecture output; 3-portal experience architecture, portal/route map, design-system inventory ("one component owner, many consumers"), 11-state component contract, 7 workflow-to-page/route/action maps, access-presentation rules, responsive/PWA/browser matrix, 8-area WCAG 2.2 AA plan, localization/branding rules, performance budgets, 10-row test strategy, 14-slice atomic backlog. Resolves `OD-UX-001/002`/`OD-OPS-001` via RPD-019/RPD-004 | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -529,6 +530,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 #### Approval and closure
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-004/011/012/013/014/015/017/018/019` (implementation ADRs, non-blocking). Next eligible task: `CG-S3-ARCH-009` — UX/Design System Workstream (Prompt 44).
+
+### CHG-2026-012 — UX/Design System Workstream (Step 3, Prompt 44)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-009` / `44_UX_DESIGN_SYSTEM_WORKSTREAM_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no component/token/route/design asset created**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`08_*.md` (precondition, VERIFIED); Blueprint `03_CargoGrid_UX_Data_Access_Design.md` §6–§18, §29–§32 (full); Tech Arch §7 (full); `docs/discovery/09_ACCESSIBILITY_UX_BASELINE.md`; RPD-004, RPD-019 |
+| Decisions | No new product decision. Resolved 3 blueprint-level Open Decisions via existing RPDs (`OD-UX-001` by RPD-019, `OD-UX-002`/`OD-OPS-001` by RPD-004). Raised `ADR-CAND-ARCH-020/021` (component-library foundation, design-token mechanism) |
+| Baseline evidence | Zero UI/component/token/route implementation, confirmed unchanged |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md`: 3-portal experience architecture (Supreme Admin, Tenant Internal, Customer Portal) mapped onto `04_*.md`'s 4 App Router route groups, with route group fixed as a UX boundary only, never an authorization boundary; a portal/route map binding every navigation group to its owning domain and phase; a design-system inventory (tokens/primitives/form controls/tables/filters/status/dialogs/timeline/upload/chart/feedback/layout) under a "one component owner, many consumers" ownership rule; an 11-state component contract (loading/empty/error/offline/partial/unauthorized/forbidden/conflict/success/retry/destructive-confirmation) binding on every data-bearing component; all 7 Blueprint canonical user flows translated into page/route/action maps cross-referenced to `07_*.md`'s 24 status transitions and 14 approval use cases; access-presentation rules (field masking never fetch-then-hide, disabled-vs-hidden, export/search/report parity with `06_*.md`, support-mode banner, Supreme Admin disclosure); a responsive/PWA/browser matrix; an 8-area WCAG 2.2 AA accessibility plan; localization/branding rules bound to RPD-019; performance budgets aligned to `08_*.md` §12's numbers; a 10-row test strategy; a 14-slice atomic backlog sequenced strictly behind each domain's schema/API phase.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` | ADD | Prompt 44 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-009` → `VERIFIED`, next eligible task → `CG-S3-ARCH-010` (Prompt 45) | `git revert` |
+
+No component, token, route, layout, or design asset file exists or was touched — this document plans the UX/design-system layer, it does not create a component (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, route, component, token, or design asset exists or changed. RPD-004/019 disclosures preserved and cited; every access-presentation rule is a UI-layer instantiation of the already-ratified `06_*.md` field-masking/RLS design — no new privilege surface introduced.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-004/011/012/013/014/015/017/018/019/020/021` (implementation ADRs, non-blocking). Next eligible task: `CG-S3-ARCH-010` — Testing Workstream (Prompt 45).
 
 ## 3. Maintenance rules
 
