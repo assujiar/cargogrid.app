@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 46 — DevOps Workstream)
+**Updated:** 2026-07-14 (post Step 3 Prompt 47 — Release Train)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index
@@ -23,6 +23,7 @@
 | `CHG-2026-012` | `CG-S3-ARCH-009` | DOCS | Author `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` (Prompt 44) — ninth Step 3 architecture output; 3-portal experience architecture, portal/route map, design-system inventory ("one component owner, many consumers"), 11-state component contract, 7 workflow-to-page/route/action maps, access-presentation rules, responsive/PWA/browser matrix, 8-area WCAG 2.2 AA plan, localization/branding rules, performance budgets, 10-row test strategy, 14-slice atomic backlog. Resolves `OD-UX-001/002`/`OD-OPS-001` via RPD-019/RPD-004 | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-013` | `CG-S3-ARCH-010` | DOCS | Author `docs/architecture/10_TESTING_WORKSTREAM.md` (Prompt 45) — tenth Step 3 architecture output; 18-layer test architecture, requirement/control matrix, 3 mandatory critical-scenario catalogues preserved verbatim (20 `UAT-E2E-*`, 18 `TI-*`, 24 `FINTEST-*`), 7-tier environment/10-factory data strategy, CI gate model, migration/recovery/compatibility/browser/accessibility/load/DR tests, 12-phase exit-criteria mapping, RPD-034/036 zero-critical-defect direct-GA gate | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-014` | `CG-S3-ARCH-011` | DOCS | Author `docs/architecture/11_DEVOPS_WORKSTREAM.md` (Prompt 46) — eleventh Step 3 architecture output; 7-tier environment topology with ownership/parity/promotion rules, CI/CD pipeline + artifact-provenance plan, migration/deployment/rollback plan reconciling progressive exposure with direct GA, secret/key/certificate lifecycle, observability plan (11 dashboards/8 alerts), storage/file/CDN controls, backup/restore/DR/incident/support model (9-runbook catalogue), feature-flag/capacity-threshold rules, 12-slice atomic backlog, go-live blockers. Resolves `ADR-CAND-ARCH-004` (live-OLTP→replica/warehouse threshold, open since Prompt 36) | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-015` | `CG-S3-ARCH-012` | DOCS | Author `docs/architecture/12_RELEASE_TRAIN.md` (Prompt 47) — twelfth Step 3 architecture output; internal release train for all 12 phases (0–9, 15, 16), phase increment table cross-referenced to every workstream's atomic backlog, explicit RPD-034/036 supersession of Blueprint's external pilot/beta/limited-availability release-type language, cross-phase split reconciliation, integration/stabilization/freeze/promotion/retention policy, internal feature-flag exposure, quality/security/data/finance/freeze/go-no-go/rollback/hypercare/PIR rules, capacity assumptions (not commitments), dependency-based sequencing, phase-level gate diagram, Risk Register carry-forward | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -676,6 +677,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 #### Approval and closure
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; `004` resolved this checkpoint). Next eligible task: `CG-S3-ARCH-012` — Release Train (Prompt 47).
+
+### CHG-2026-015 — Release Train (Step 3, Prompt 47)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-012` / `47_RELEASE_TRAIN_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no release branch, environment, deployment, or calendar commitment created**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`11_*.md` (precondition, VERIFIED); Blueprint `05_*.md` §3/§4/§5–7/§8/§9.1–9.2/§12/§13/§14/§15/§31/§32/§35; RPD-001, RPD-034/036 |
+| Decisions | No new product decision. Explicitly superseded Blueprint §3.2/§8.1/§8.2's external pilot/beta/limited-availability release-type language with RPD-034/036 (third and most consequential application of this supersession, after `10_*.md`/`11_*.md`) |
+| Baseline evidence | Zero release branch/environment/calendar artifact, confirmed unchanged |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/12_RELEASE_TRAIN.md`: release principles (Blueprint §3.1's 15-row table, with the two RPD-034/036-affected rows flagged inline); a phase increment table for all 12 phases (0–9, 15, 16) stating scope/capabilities-unlocked/prerequisite/entry-gate/business-acceptance/downstream-consumers, sourced to `01_*.md` §10 and Blueprint §8; a companion table indexing each phase's DB/API/UI/security/test/DevOps outputs to the exact atomic-backlog slice in its owning workstream document (`04_*.md`–`11_*.md`), plus demo/evidence and rollback/recovery columns not owned by any single workstream; cross-phase split reconciliation (vendor-rate lookup vs. full procurement, basic vs. advanced TMS/WMS, WMS ownership, Customer Portal basic vs. full, Finance linkage, platform-engine adoption) by citation to already-ratified resolutions; integration-point/stabilization-window/compatibility-window/freeze/promotion/retention policy; internal feature-flag exposure reconciled with DUP-012; quality/security/data/finance gates, no-new-feature window, go/no-go authority, rollback triggers, hypercare, and Post-Implementation Review rules (Blueprint §5.2/§7/§15/§26/§27/§32, reproduced not re-derived); capacity/resource figures (team FTE, sprint cadence) explicitly labeled assumptions, with fully dependency-based (gate-based, never date-based) sequencing; a Mermaid phase-level dependency/gate diagram; the relevant subset of Blueprint §35's Risk Register carried forward with mitigation linkage.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/12_RELEASE_TRAIN.md` | ADD | Prompt 47 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-012` → `VERIFIED`, next eligible task → `CG-S3-ARCH-013` (Prompt 48) | `git revert` |
+
+No release branch, environment, deployment target, or calendar artifact exists or was touched — this document plans release sequencing, it does not execute a release (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, branch, environment, or deployment resource exists or changed. RPD-001/034/036 disclosures preserved and cited; every phase gate's security/tenant-isolation/financial evidence requirement is cited from `06_*.md`/`10_*.md`, never restated with a weaker criterion.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/12_RELEASE_TRAIN.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-013` — Full Work Breakdown Structure (Prompt 48).
 
 ## 3. Maintenance rules
 
