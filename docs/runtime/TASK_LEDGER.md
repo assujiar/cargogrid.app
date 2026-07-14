@@ -38,7 +38,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-008` | API/Integration Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-007` (VERIFIED) | `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-009` |
 | `CG-S3-ARCH-009` | UX/Design System Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-008` (VERIFIED) | `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-010` |
 | `CG-S3-ARCH-010` | Testing Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-009` (VERIFIED) | `docs/architecture/10_TESTING_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-011` |
-| `CG-S3-ARCH-011` | DevOps Workstream | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-010` (VERIFIED) | — | 2026-07-14 | Execute Prompt 46 |
+| `CG-S3-ARCH-011` | DevOps Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-010` (VERIFIED) | `docs/architecture/11_DEVOPS_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-012` |
+| `CG-S3-ARCH-012` | Release Train | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-011` (VERIFIED) | — | 2026-07-14 | Execute Prompt 47 |
 
 ## 3. Task records
 
@@ -299,6 +300,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/10_TESTING_WORKSTREAM.md` §14 exit gates — every critical control has a planned proof, unsafe-unavailable tests are visible (baseline vs. quarantined, not hidden), direct-GA gates are enforceable (RPD-034/036 restated as hard criteria), no test/config/source change occurred. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-011` — DevOps Workstream (Prompt 46).
 
+### CG-S3-ARCH-011 — DevOps Workstream
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 3 — Architecture and Execution Blueprint |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `agent/cargogrid-autonomous-build` |
+| Prompt path/version | `03-architecture-and-plan/46_DEVOPS_WORKSTREAM_PROMPT.md` (`CG-AABPP-ARCH-046` v0.4.0) |
+| Build log path | `docs/architecture/11_DEVOPS_WORKSTREAM.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001..010` (all VERIFIED) |
+
+**Objective and outcome:** Defined a seven-tier environment topology (ownership/access/config-promotion/parity columns, same seven tiers `10_*.md` §4.1 already cites). Defined the CI/CD pipeline and artifact-provenance plan (reproduces Tech Arch §28.1, shared with `10_*.md` §6; adds deterministic build, artifact SHA/pipeline-run tagging, dependency/SCA evidence). Defined migration/deployment/rollback rules (Blueprint §25 flow/checklist, Tech Arch §28.2/§28.3 rollback table) and reconciled internal feature-flag/canary progressive exposure with RPD-034/036's direct-GA "no external pilot" rule. Defined secret/key/certificate lifecycle (least privilege, rotation with overlap window, leakage prevention extending Tech Arch §23.6/§23.7). Defined the observability plan (Tech Arch §30's 5 signals/11 dashboards/8 alerts verbatim, tenant-aware/exception-class diagnostics, RPD-025 retention). Defined storage/file/CDN controls (malware-scan/signed-URL gate extended to infrastructure backup/restore/cleanup). Defined the backup/restore/DR/incident/support model (Tech Arch §31 + Blueprint §30 verbatim; cites — does not re-author — the migration/cutover rollback procedures already fixed in `10_*.md`; 9-item runbook catalogue). **Resolved `ADR-CAND-ARCH-004`** (live-OLTP→read-replica/reporting-warehouse threshold, open since Prompt 36) with a concrete four-signal, evidence-based trigger rather than a guessed number. Defined feature-flag operation (DUP-012 restated), database/job capacity thresholds, and release artifacts. Raised `ADR-CAND-ARCH-024/025/026/027` (CI/CD platform, secret manager, observability tool, hosting/CDN platform). **No environment, pipeline, deployment, secret, or infrastructure resource was created.**
+
+**Acceptance and closure:** `docs/architecture/11_DEVOPS_WORKSTREAM.md` §13 exit gates — every environment/pipeline gate has owner/evidence/rollback, recovery claims match contracts and rehearsals (RPO/RTO tiers and rehearsal cadence cited exactly, not diluted), direct-GA safeguards are explicit (§4.3, §12), no external state was changed. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-012` — Release Train (Prompt 47).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -315,7 +332,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-008` | ARCH-007 VERIFIED | CG-S3-ARCH-009 | `docs/architecture/08_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-009` | ARCH-008 VERIFIED | CG-S3-ARCH-010 | `docs/architecture/09_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-010` | ARCH-009 VERIFIED | CG-S3-ARCH-011 | `docs/architecture/10_*` | Done (VERIFIED) |
-| `CG-S3-ARCH-011` | ARCH-010 VERIFIED | CG-S3-ARCH-012 | `docs/architecture/11_*` | YES |
+| `CG-S3-ARCH-011` | ARCH-010 VERIFIED | CG-S3-ARCH-012 | `docs/architecture/11_*` | Done (VERIFIED) |
+| `CG-S3-ARCH-012` | ARCH-011 VERIFIED | CG-S3-ARCH-013 | `docs/architecture/12_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -345,7 +363,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-007` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-008` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-009` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-010` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/10_TESTING_WORKSTREAM.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-010` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/10_TESTING_WORKSTREAM.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-011` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/11_DEVOPS_WORKSTREAM.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
