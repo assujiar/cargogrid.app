@@ -12,6 +12,7 @@
 | `CHG-2026-001` | `CG-S2-DISC-001` | DOCS | Instantiate Step 1 governance instances + Prompt 21 repository inventory (session A) | NONE | LOW | `SUPERSEDED` (by CHG-2026-002) | `0097236` (merged) | 2026-07-14 |
 | `CHG-2026-002` | `CG-S2-DISC-001-R1` | DOCS | Reconcile parallel-session collision: single canonical context in `docs/runtime/`, coherent inventory, incident logged | NONE | LOW | `COMPLETED` | reconciliation commit | 2026-07-14 |
 | `CHG-2026-003` | `CG-S2-DISC-002..014` | DOCS | Complete remaining Step 2 discovery (Prompts 22–34) on branch `claude/eloquent-mayer-s40hn4`; merge that branch with `main` to adopt `-R1`'s canonical-location decision while keeping the discovery deliverables; close Step 2 with `RUNTIME_DISCOVERY_VERIFIED` | NONE | LOW | `COMPLETED` | merge commit, this branch | 2026-07-14 |
+| `CHG-2026-004` | `CG-S3-ARCH-001` | DOCS | Author `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` (Prompt 36) — first Step 3 architecture output; module catalogue, dependency matrix, directed map, cycles/conflicts, shared primitives, external dependencies, ADR candidates, phase implications, validation rules | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -134,6 +135,54 @@ Issues/errors changed: `ISS-2026-002` updated (recurrence note, second occurrenc
 #### Approval and closure
 
 No external approval required (documentation-only, feature-branch merge). Final residual risks: `ISS-2026-002` (recurrence demonstrates it needs an enforced fix), `ISS-2026-003`, `tes.md` deletion pending owner approval. Next eligible task: `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36).
+
+### CHG-2026-004 — Module Dependency Map (Step 3, Prompt 36)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-001` / `36_MODULE_DEPENDENCY_MAP_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `35_STEP3_ARCHITECTURE_PLAN_README.md`, `36_MODULE_DEPENDENCY_MAP_PROMPT.md`, Step 2 evidence, blueprint §§01/02/03/04, `00-control/02_CONFIRMED_DECISION_REGISTER.md`, `04_CONFLICT_REGISTER.md` |
+| Decisions | No new product decision made. Resolved apparent tech-arch/blueprint tensions in favor of already-ratified RPDs where they conflict with softer blueprint prose (RPD-012 queue, RPD-014/039 reporting/search, RPD-015 PostGIS, RPD-032 malware scan, RPD-033 REST+GraphQL) — see map §6. Raised two new implementation-level ADR candidates (`ADR-CAND-ARCH-001` vendor-rate ownership, `ADR-CAND-ARCH-002` Platform-user/HRIS-employee reconciliation) and two new non-blocking risks (`MDM-RISK-001/002`) — none of these are product decisions and none are silently resolved. |
+| Baseline evidence | `docs/discovery/02,05,11,12,13,14_*.md`; confirmed zero non-doc file drift between Step 2 checkpoint `d587445` and this checkpoint |
+| Final status | `COMPLETED`; entry gate conditions (Step 2 `RUNTIME_DISCOVERY_VERIFIED`, `GREENFIELD`) verified before authoring |
+
+#### Outcome
+
+Produced `docs/architecture/01_MODULE_DEPENDENCY_MAP.md`: module catalogue (10 platform primitives, 8 business domains, each with owner/phase), a dependency matrix organized by primitive-internal, primitive→domain, domain→domain, domain→reporting/audit, and external-integration edges (each tagged `COMPILE|RUNTIME|DATA|EVENT|API|CONFIGURATION|ACCESS|REPORTING|RELEASE`), a compact Mermaid directed map, a cycles/conflicts analysis (no true cycle found; two phase-order/ownership findings raised as ADR candidates rather than assumed), a shared-primitives table reconciling RPD supersessions over blueprint "Proposed Default"/"Open Decision" language, an external-dependency summary (RPD-038 governed), 4 ADR candidates, a phase-implication table matching `CARGOGRID_BUILD_STATUS.md` exactly, 11 validation rules for later prompts to enforce, and 2 new architecture-identified risks. Every edge is sourced; no edge is inferred from implemented code (none exists).
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` | ADD | Prompt 36 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md` | EDIT | Checkpoint update: `CG-S3-ARCH-001` → `VERIFIED`, next eligible task → `CG-S3-ARCH-002` (Prompt 37) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched (Step 3 README §7 scope contract).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022/032/033/038 disclosures preserved and cited, not weakened. Sensitive-file search: NONE_FOUND.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch, no parallel session detected at start of this task).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, handoff. No new issue/error IDs opened against the Step 2 register; two new architecture-local risk IDs (`MDM-RISK-001/002`) recorded inside the architecture document itself (§12), recommended for future folding into `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` if that register is reopened for Step 3 additions.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-003/004` (deferred to Prompts 39/45). Next eligible task: `CG-S3-ARCH-002` — Canonical Data Flow Map (Prompt 37).
 
 ## 3. Maintenance rules
 

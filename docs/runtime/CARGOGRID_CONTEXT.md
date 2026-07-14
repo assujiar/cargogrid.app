@@ -39,8 +39,8 @@ Shared DB/schema + RLS (dedicated Enterprise = contractual); online-first respon
 |---|---|---|
 | Repository | `assujiar/cargogrid.app` | `docs/discovery/01_REPOSITORY_INVENTORY.md` |
 | Greenfield/brownfield | **`GREENFIELD`** (High confidence, formally decided) | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` |
-| Default branch | `main` @ `90129fc` (includes `CG-S2-DISC-001-R1`) | inventory §1 |
-| Active build branch | `claude/eloquent-mayer-s40hn4` (merged with `main` to adopt `-R1`'s canonical location; carries Step 2 closure Prompts 22–34) | `TASK_LEDGER.md` |
+| Default branch | `main` @ `39d923e` (includes `CG-S2-DISC-001-R1` and Step 2 closure Prompts 22–34) | inventory §1 |
+| Active build branch | `agent/cargogrid-autonomous-build` (cut from `main`@`39d923e`; carries Step 3 Prompt 36) | `TASK_LEDGER.md` |
 | Package manager / runtime / framework / Supabase / tests | NONE yet | inventory §5 |
 | Monorepo/workspaces | NONE (single documentation repo) | inventory §4 |
 | Schema/migration head | NONE (no database) | inventory §5 |
@@ -60,7 +60,7 @@ Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14/14 prompts VERIFIE
 | Build logs | `docs/build-logs/` | per-task |
 | App/domain/UI/migrations/tests | — | not created (greenfield) |
 
-Canonical maps (module dependency, data flow, schema registry, API contracts): not yet produced (Step 3).
+Canonical maps: module dependency map **produced** (`docs/architecture/01_MODULE_DEPENDENCY_MAP.md`, `CG-S3-ARCH-001` `VERIFIED`); data flow, schema registry, API contracts not yet produced (remaining Step 3 prompts).
 
 ## 6. Environment matrix
 
@@ -82,16 +82,16 @@ Tenant context preserved across DB/storage/cache/jobs/logs/search/reports/export
 
 | Field | Value |
 |---|---|
-| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (about to start) |
-| Current task | `CG-S2-DISC-014` — Step 2 Closure Verification |
-| Task status | `VERIFIED` — closure state `RUNTIME_DISCOVERY_VERIFIED` |
-| Branch/commit | `claude/eloquent-mayer-s40hn4`, merged with `main`@`90129fc` |
-| Last known good checkpoint | merge of `claude/eloquent-mayer-s40hn4` + `origin/main`@`90129fc` |
+| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`, 1/16 prompts) |
+| Current task | `CG-S3-ARCH-001` — Module Dependency Map |
+| Task status | `VERIFIED` — `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` complete |
+| Branch/commit | `agent/cargogrid-autonomous-build`, cut from `main`@`39d923e` |
+| Last known good checkpoint | `origin/main`@`39d923e` |
 | Latest applied migration | none |
 | Last fully passing gate set | none (no gates exist; confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Known issues affecting work | ISS-2026-002 (recurred twice, non-blocking), ISS-2026-003 (non-blocking); ISS-2026-001 RESOLVED |
-| Next eligible task | `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36) |
+| Known issues affecting work | ISS-2026-002 (recurred twice previously, non-blocking), ISS-2026-003 (non-blocking); ISS-2026-001 RESOLVED |
+| Next eligible task | `CG-S3-ARCH-002` — Canonical Data Flow Map (Prompt 37) |
 
 ## 11. Active constraints and accepted risks
 
