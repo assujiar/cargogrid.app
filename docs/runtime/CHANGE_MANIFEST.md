@@ -12,6 +12,13 @@
 | `CHG-2026-001` | `CG-S2-DISC-001` | DOCS | Instantiate Step 1 governance instances + Prompt 21 repository inventory (session A) | NONE | LOW | `SUPERSEDED` (by CHG-2026-002) | `0097236` (merged) | 2026-07-14 |
 | `CHG-2026-002` | `CG-S2-DISC-001-R1` | DOCS | Reconcile parallel-session collision: single canonical context in `docs/runtime/`, coherent inventory, incident logged | NONE | LOW | `COMPLETED` | reconciliation commit | 2026-07-14 |
 | `CHG-2026-003` | `CG-S2-DISC-002..014` | DOCS | Complete remaining Step 2 discovery (Prompts 22–34) on branch `claude/eloquent-mayer-s40hn4`; merge that branch with `main` to adopt `-R1`'s canonical-location decision while keeping the discovery deliverables; close Step 2 with `RUNTIME_DISCOVERY_VERIFIED` | NONE | LOW | `COMPLETED` | merge commit, this branch | 2026-07-14 |
+| `CHG-2026-004` | `CG-S3-ARCH-001` | DOCS | Author `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` (Prompt 36) — first Step 3 architecture output; module catalogue, dependency matrix, directed map, cycles/conflicts, shared primitives, external dependencies, ADR candidates, phase implications, validation rules | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-005` | `CG-S3-ARCH-002` | DOCS | Author `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` (Prompt 37) — second Step 3 architecture output; canonical entity register, 6 lifecycle flow maps, lineage table, integration/job/file/report flows, 7 reconciliation points, 9 exception/recovery paths, data classifications, retention/legal-hold table, 2 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-006` | `CG-S3-ARCH-003` | DOCS | Author `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` (Prompt 38) — third Step 3 architecture output; ownership catalogue, allowed dependency directions, 10 public contracts + anti-corruption rule, shared kernel, access responsibility split, current-to-target mapping, boundary violations, enforcement/test strategy, 2 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-007` | `CG-S3-ARCH-004` | DOCS | Author `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` (Prompt 39) — fourth Step 3 architecture output; concrete + bounded-pattern target tree, directory purpose/owner table, import/dependency rules, contract placement, current-to-target mapping, 10-slice incremental transition sequence, enforcement gates, 3 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-008` | `CG-S3-ARCH-005` | DOCS | Author `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` (Prompt 40) — fifth Step 3 architecture output; schema principles, single-`app`-schema ownership catalogue, relationship/constraint plan, finance controls, migration-wave policy, test matrix, atomic workstream backlog. **Amends** `03_DOMAIN_BOUNDARY_MAP.md` (namespace column superseded by evidence). Resolves `ADR-CAND-ARCH-001/005/007/008` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-009` | `CG-S3-ARCH-006` | DOCS | Author `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` (Prompt 41) — sixth Step 3 architecture output; access model, 8-stage evaluation flow, 7-family RLS matrix, 19-action permission catalogue, RPD-022 Supreme Admin enforcement, 15-item negative-test matrix, 9-slice atomic backlog. Resolves `ADR-CAND-ARCH-002/006` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-010` | `CG-S3-ARCH-007` | DOCS | Author `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` (Prompt 42) — seventh Step 3 architecture output; 10 sub-engines, shared metadata/lifecycle, all 91 blueprint-catalogued rules/patterns/use-cases/transitions/exceptions accounted for as config data, 6-level precedence, 4 bypass prohibitions, 9-slice atomic backlog. Resolves `ADR-CAND-ARCH-010` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -134,6 +141,345 @@ Issues/errors changed: `ISS-2026-002` updated (recurrence note, second occurrenc
 #### Approval and closure
 
 No external approval required (documentation-only, feature-branch merge). Final residual risks: `ISS-2026-002` (recurrence demonstrates it needs an enforced fix), `ISS-2026-003`, `tes.md` deletion pending owner approval. Next eligible task: `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36).
+
+### CHG-2026-004 — Module Dependency Map (Step 3, Prompt 36)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-001` / `36_MODULE_DEPENDENCY_MAP_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `35_STEP3_ARCHITECTURE_PLAN_README.md`, `36_MODULE_DEPENDENCY_MAP_PROMPT.md`, Step 2 evidence, blueprint §§01/02/03/04, `00-control/02_CONFIRMED_DECISION_REGISTER.md`, `04_CONFLICT_REGISTER.md` |
+| Decisions | No new product decision made. Resolved apparent tech-arch/blueprint tensions in favor of already-ratified RPDs where they conflict with softer blueprint prose (RPD-012 queue, RPD-014/039 reporting/search, RPD-015 PostGIS, RPD-032 malware scan, RPD-033 REST+GraphQL) — see map §6. Raised two new implementation-level ADR candidates (`ADR-CAND-ARCH-001` vendor-rate ownership, `ADR-CAND-ARCH-002` Platform-user/HRIS-employee reconciliation) and two new non-blocking risks (`MDM-RISK-001/002`) — none of these are product decisions and none are silently resolved. |
+| Baseline evidence | `docs/discovery/02,05,11,12,13,14_*.md`; confirmed zero non-doc file drift between Step 2 checkpoint `d587445` and this checkpoint |
+| Final status | `COMPLETED`; entry gate conditions (Step 2 `RUNTIME_DISCOVERY_VERIFIED`, `GREENFIELD`) verified before authoring |
+
+#### Outcome
+
+Produced `docs/architecture/01_MODULE_DEPENDENCY_MAP.md`: module catalogue (10 platform primitives, 8 business domains, each with owner/phase), a dependency matrix organized by primitive-internal, primitive→domain, domain→domain, domain→reporting/audit, and external-integration edges (each tagged `COMPILE|RUNTIME|DATA|EVENT|API|CONFIGURATION|ACCESS|REPORTING|RELEASE`), a compact Mermaid directed map, a cycles/conflicts analysis (no true cycle found; two phase-order/ownership findings raised as ADR candidates rather than assumed), a shared-primitives table reconciling RPD supersessions over blueprint "Proposed Default"/"Open Decision" language, an external-dependency summary (RPD-038 governed), 4 ADR candidates, a phase-implication table matching `CARGOGRID_BUILD_STATUS.md` exactly, 11 validation rules for later prompts to enforce, and 2 new architecture-identified risks. Every edge is sourced; no edge is inferred from implemented code (none exists).
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` | ADD | Prompt 36 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md` | EDIT | Checkpoint update: `CG-S3-ARCH-001` → `VERIFIED`, next eligible task → `CG-S3-ARCH-002` (Prompt 37) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched (Step 3 README §7 scope contract).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022/032/033/038 disclosures preserved and cited, not weakened. Sensitive-file search: NONE_FOUND.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch, no parallel session detected at start of this task).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, handoff. No new issue/error IDs opened against the Step 2 register; two new architecture-local risk IDs (`MDM-RISK-001/002`) recorded inside the architecture document itself (§12), recommended for future folding into `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` if that register is reopened for Step 3 additions.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-003/004` (deferred to Prompts 39/45). Next eligible task: `CG-S3-ARCH-002` — Canonical Data Flow Map (Prompt 37).
+
+### CHG-2026-005 — Canonical Data Flow Map (Step 3, Prompt 37)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-002` / `37_CANONICAL_DATA_FLOW_MAP_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | Blueprint §6/§8/§14/§20–21 status-lifecycle and data-dictionary content; Tech Arch §9.5–9.7, §12.4, §16–22, §24.5, §26, §31–32; UX §23–24; `00-control/02_*` (RPD-025), `04_*` (DUP-002); phase-package READMEs `189/249/272/298` |
+| Decisions | No new product decision. Raised 2 new ADR candidates (`ADR-CAND-ARCH-005/006`, non-atomic Job→Shipment fan-out and ticket-link staleness) and 2 new non-blocking risks (`MDM-RISK-003/004`), following the same pattern as Prompt 36 |
+| Baseline evidence | `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` (precondition, `VERIFIED`); confirmed no non-doc file drift since Step 2 checkpoint |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md`: a 14-entity canonical register; 6 lifecycle flow maps (Lead-to-Cash primary flow at full step-level detail — 20 steps with system-of-record/canonical-ID/tenant-context/validation/status-transition/event/audit/access/retention/reconciliation columns — plus vendor, HRIS/payroll, three-channel ticketing, Customer Portal, and loyalty secondary flows); the blueprint's own lineage/no-re-entry table extended with the linkage-key standard; integration/job/file/report flow sections reproducing the technical architecture's engine specifications verbatim with citations; 7 named reconciliation points; 9 exception/recovery paths; a data-classification table; a retention/legal-hold table keyed to RPD-025; 2 new ADR candidates; and a downstream-input map for Prompts 38–45. Every step is sourced; none is inferred from implemented code (none exists).
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` | ADD | Prompt 37 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-002` → `VERIFIED`, next eligible task → `CG-S3-ARCH-003` (Prompt 38) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched (Step 3 README §7 scope contract).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022/025/032/038 disclosures preserved and cited, not weakened. Sensitive-file search: NONE_FOUND.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened against the Step 2 register; two new architecture-local risk IDs (`MDM-RISK-003/004`) recorded inside the architecture document itself (§12).
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002/005/006` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-003/004` (deferred to Prompts 39/45). Next eligible task: `CG-S3-ARCH-003` — Domain Boundary Map (Prompt 38).
+
+### CHG-2026-006 — Domain Boundary Map (Step 3, Prompt 38)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-003` / `38_DOMAIN_BOUNDARY_MAP_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_MODULE_DEPENDENCY_MAP.md`, `02_CANONICAL_DATA_FLOW_MAP.md` (both precondition, VERIFIED); Tech Arch §7.1/7.5/8/9.1–9.4/10/11.2; `298_*.md` "Non-negotiable boundaries" |
+| Decisions | No new product decision. Raised 2 new ADR candidates (`ADR-CAND-ARCH-007/008`: schema-per-domain namespace strategy, Reporting-schema timing) |
+| Baseline evidence | `docs/discovery/02_*`, `05_*` (zero implementation, confirmed unchanged) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md`: a boundary context map (Mermaid) distinguishing Platform shared-kernel, 7 bounded business domains, and 2 experience-layer modules that own no canonical entity; an ownership catalogue assigning table/schema namespace, service, UI route, API namespace, and events/jobs to one authoritative owner per domain; allowed dependency directions; 10 named public contracts with an explicit anti-corruption rule; a shared-kernel definition constrained to the Platform primitive set already established in Prompt 36 (no new kernel candidate introduced); a 7-layer access-responsibility split mapping each layer to the boundary that enforces it; a current-to-target mapping (100% `TARGET`, since the repository is greenfield); 7 boundary-violation patterns for future enforcement tooling to detect; an enforcement/test strategy spanning Prompts 39/41/43/45; and 2 new ADR candidates.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` | ADD | Prompt 38 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-003` → `VERIFIED`, next eligible task → `CG-S3-ARCH-004` (Prompt 39) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched (Step 3 README §7 scope contract).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022/035/038 disclosures preserved and cited, not weakened. Sensitive-file search: NONE_FOUND.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened against the Step 2 register.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002/005/006/007/008` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-003/004` (deferred to Prompts 39/45). Next eligible task: `CG-S3-ARCH-004` — Repository Target Structure (Prompt 39).
+
+### CHG-2026-007 — Repository Target Structure (Step 3, Prompt 39)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-004` / `39_REPOSITORY_TARGET_STRUCTURE_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`03_*.md` (precondition, VERIFIED); Tech Arch §7.1/7.5/8/25/27/28 |
+| Decisions | No new product decision. Raised 3 new ADR candidates (`ADR-CAND-ARCH-009/010/011`: migration naming convention, `server/contracts/` folder timing, no-empty-stub-domain-folder convention) and resolved `ADR-CAND-ARCH-003` (repository boundary enforcement) directly rather than re-deferring it, per `HANDOFF.md`'s explicit instruction |
+| Baseline evidence | `docs/discovery/02_*`, `03_*`, `05_*` (zero code/workspace topology, confirmed unchanged) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md`: current structure (documentation-only, nothing to preserve/move/wrap at the code level); target structure combining concrete paths (Tech Arch §7.1 App Router tree, §8 Backend Module Layout tree) with bounded patterns marked `ADR_REQUIRED` for migrations/tests/workers/design-system/scripts/observability/infra/runbooks; a directory purpose/owner table mapping every folder onto `03_DOMAIN_BOUNDARY_MAP.md`'s ownership catalogue; an import/dependency rule table encoding `03_*.md`'s boundaries in enforceable physical-path form; contract and generated-code placement; a current-to-target mapping; a 10-slice incremental transition sequence matching the existing phase order with compatibility/rollback/verification per slice; enforcement gates (lint boundary rule, CODEOWNERS-equivalent, architecture tests, CI pipeline mapping); 3 new ADR candidates; and 1 new risk (`MDM-RISK-005`, per-domain-folder naming-drift risk).
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` | ADD | Prompt 39 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-004` → `VERIFIED`, next eligible task → `CG-S3-ARCH-005` (Prompt 40) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched (Step 3 README §7 scope contract) — this document only *plans* where such files will eventually live; it creates no directory and moves no file, per the prompt's own instruction #8.
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002/005/006/007/008/009/010/011` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-004` (deferred to Prompt 45). Next eligible task: `CG-S3-ARCH-005` — Database Schema Workstream (Prompt 40).
+
+### CHG-2026-008 — Database Schema Workstream (Step 3, Prompt 40)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-005` / `40_DATABASE_SCHEMA_WORKSTREAM_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no schema/database mutation**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`04_*.md` (precondition, VERIFIED); Tech Arch §9 (full), §11 (full, incl. example RLS policy), §24 (full, Financial Integrity), §25.4, §32.6/32.7 |
+| Decisions | No new product decision. **Resolved** `ADR-CAND-ARCH-001` (vendor-rate ownership), `005` (Job→Shipment atomicity), `007` (schema-per-domain → single `app` schema, correcting `03_*.md`), `008` (Reporting schema from Phase 1). Raised `ADR-CAND-ARCH-012/013` (customer/shipment table-splitting) |
+| Baseline evidence | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` (zero existing schema, confirmed unchanged) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md`: schema principles (Tech Arch §9.2/9.6 tenant/temporal columns, §10's data-classification-at-design-time rule); entity/schema ownership — a single flat `app` PostgreSQL schema (correcting `03_DOMAIN_BOUNDARY_MAP.md`'s earlier schema-per-domain recommendation using concrete SQL evidence) plus a `report` schema for materialized views only; a ~60-table phased catalogue mapped to `02_*.md`'s canonical entity register; a relationship/constraint plan (FKs, uniqueness, state-transition CHECKs, soft-delete/retention/legal-hold, idempotency keys, optimistic concurrency via `record_version`, RPD-022-exception RLS split); full finance controls reproducing Tech Arch §24 exactly (balanced postings, draft/post/reversal, period locks, allocation/reconciliation tied to `02_*.md`'s 7 reconciliation points, snapshots/lineage, multi-currency, idempotent-posting formula); spatial/file/job/config/audit/staging/reporting schema needs; an index/pagination plan reproducing Tech Arch §32.6's examples; a migration-wave policy (expand/migrate/contract, since the repo is pre-Phase-1 and this is a standing policy for future migrations); a test matrix mapped to Tech Arch §27.3's Test Pyramid; 4 resolved ADR candidates, 2 new ADR candidates, 1 new risk, and a 13-slice atomic workstream backlog sequenced to the existing phase order.
+
+An amendment note was added to the top of `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` (already `VERIFIED`) recording that its "Table/schema namespace" column and `ADR-CAND-ARCH-007` recommendation are superseded by this checkpoint's evidence-based resolution — the rest of `03_*.md` (ownership catalogue, contracts, shared kernel, access responsibilities) is unaffected and the amendment is a targeted addition, not a rewrite.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` | ADD | Prompt 40 runtime output | `git revert` |
+| `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` | EDIT (amendment note only, 1 blockquote added at top) | Correct the schema-per-domain recommendation with better evidence found during Prompt 40 | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-005` → `VERIFIED`, next eligible task → `CG-S3-ARCH-006` (Prompt 41) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched — this document plans schema, it does not create one (prompt precondition #14 "Do not create or apply migrations," verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-012/014/015/022/025/032/039/040 disclosures preserved and cited, not weakened; the RPD-022 exception is given a concrete RLS-policy-split design (§4) rather than left abstract.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s), including the `03_*.md` amendment; last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` exists, non-empty; `03_*.md`'s amendment note is present and does not corrupt the rest of that file.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff, plus the targeted `03_*.md` amendment. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-002/006/009(resolved)/010/011/012/013` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-004` (deferred to Prompt 45). Next eligible task: `CG-S3-ARCH-006` — RLS/RBAC Workstream (Prompt 41).
+
+### CHG-2026-009 — RLS/RBAC Workstream (Step 3, Prompt 41)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-006` / `41_RLS_RBAC_WORKSTREAM_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no policy/permission mutation**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`05_*.md` (precondition, VERIFIED); Tech Arch §11 (full), §12 (full), §23 (full); UX §23–25; `docs/discovery/06_SECURITY_BASELINE.md`; RPD-022/023/035 |
+| Decisions | No new product decision. **Resolved** `ADR-CAND-ARCH-002` (employee↔user FK identity check) and `ADR-CAND-ARCH-006` (ticket-link staleness enforcement) with concrete RLS/RBAC mechanisms. No new ADR candidates raised. |
+| Baseline evidence | `docs/discovery/06_SECURITY_BASELINE.md` (zero auth/RLS/RBAC/support/impersonation implementation, confirmed unchanged) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/06_RLS_RBAC_WORKSTREAM.md`: an access model (identities/principals table, 14 scope dimensions, a new support-access-grant model); an 8-stage evaluation flow (Tech Arch §23.3, superset of §12.3) applied identically across UI/REST/GraphQL/server actions/database/storage/jobs/realtime/search/reports/exports; a 7-family RLS policy matrix covering all ~60 tables from `05_*.md` §3 with negative-test references; a permission catalogue (19 actions from Tech Arch §12.1, field masking bound to those actions, ownership/sharing, separation of duties, approval authority, sensitive HR/finance access); privileged/support access paths (MFA per RPD-023, session/token security per Tech Arch §23.6); API/job/file/report/search/realtime controls; RPD-022 Supreme Admin semantics preserved literally with a concrete dual-policy enforcement mechanism; policy performance/rollout/migration-compatibility/emergency-recovery rules; a 15-item negative/abuse test matrix (7 reproduced verbatim from Tech Arch §11.4, 8 new); resolution of `ADR-CAND-ARCH-002/006`; and a 9-slice atomic backlog mirroring `05_*.md` §12's phase order.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` | ADD | Prompt 41 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-006` → `VERIFIED`, next eligible task → `CG-S3-ARCH-007` (Prompt 42) | `git revert` |
+
+No application/config/migration/dependency/policy/permission file exists or was touched — this document plans authorization, it does not implement it (prompt precondition #14 "Do not write policies or permissions," verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022/023/032/035/038/039 disclosures preserved and cited, not weakened; RPD-022's exception is given a concrete dual-RLS-policy design (§8) rather than left abstract.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-010/011/012/013` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-004` (deferred to Prompt 45). Next eligible task: `CG-S3-ARCH-007` — Configuration Engine Workstream (Prompt 42).
+
+### CHG-2026-010 — Configuration Engine Workstream (Step 3, Prompt 42)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-007` / `42_CONFIGURATION_ENGINE_WORKSTREAM_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no configuration mutation**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`06_*.md` (precondition, VERIFIED); Tech Arch §13/§14/§15 (full); Blueprint §10/§11.1/§11.2/§12/§13 (full, all 5 exact counts confirmed) |
+| Decisions | No new product decision. Raised `ADR-CAND-ARCH-014/015` (rule-evaluation timeout, expression-language grammar). Resolved `ADR-CAND-ARCH-010` (`server/contracts/config/` timing) |
+| Baseline evidence | Zero configuration implementation, confirmed unchanged |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md`: an engine context map (10 sub-engines under one `CFG` primitive); a capability/ownership table; configuration schema concepts mapping Tech Arch §13.2's ER diagram onto `05_*.md`'s tables (2 new tables identified: `config_items`, `config_dependencies`); the Draft→Archived lifecycle state machine; the 6-level precedence/override model with a determinism rule; evaluation contracts for all 4 catalogues named in the prompt's precondition (24 business rules, 13 approval patterns, 14 approval use cases, 24 status transitions, 16 exceptions — all verified exact matches against the blueprint's own tables); dependency validation; caching; the config-version migration table; 4 explicit security/finance bypass prohibitions (no RLS/RBAC bypass, no financial-control bypass, no arbitrary executable code, no tenant fork); a module adoption map; a test matrix (78 minimum named regression scenarios); and a 9-slice atomic backlog.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` | ADD | Prompt 42 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-007` → `VERIFIED`, next eligible task → `CG-S3-ARCH-008` (Prompt 43) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched — this document plans the configuration engine, it does not create a configuration item (prompt precondition #14, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-019/038/040 disclosures preserved and cited; the "no RLS/RBAC bypass via configuration" and "no financial-control bypass via configuration" rules are stated as hard prohibitions consistent with `06_*.md`/`05_*.md`.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-004/011/012/013/014/015` (implementation ADRs, non-blocking). Next eligible task: `CG-S3-ARCH-008` — API/Integration Workstream (Prompt 43).
 
 ## 3. Maintenance rules
 
