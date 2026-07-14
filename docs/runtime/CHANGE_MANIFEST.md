@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 45 — Testing Workstream)
+**Updated:** 2026-07-14 (post Step 3 Prompt 46 — DevOps Workstream)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index
@@ -22,6 +22,7 @@
 | `CHG-2026-011` | `CG-S3-ARCH-008` | DOCS | Author `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` (Prompt 43) — eighth Step 3 architecture output; REST/GraphQL ownership matrix sharing the 8-stage evaluation flow (RPD-033), shared contract/error/pagination/idempotency/concurrency rules, GraphQL-specific controls, auth/security control table, webhook/event architecture, 17-category integration inventory with a binding adapter template (RPD-038), PostgreSQL durable-queue job contract (RPD-012), import/export/file/report paths, compatibility/deprecation policy, performance budgets, 12-row test matrix, 10-slice atomic backlog. Resolves `ADR-CAND-ARCH-016` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-012` | `CG-S3-ARCH-009` | DOCS | Author `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` (Prompt 44) — ninth Step 3 architecture output; 3-portal experience architecture, portal/route map, design-system inventory ("one component owner, many consumers"), 11-state component contract, 7 workflow-to-page/route/action maps, access-presentation rules, responsive/PWA/browser matrix, 8-area WCAG 2.2 AA plan, localization/branding rules, performance budgets, 10-row test strategy, 14-slice atomic backlog. Resolves `OD-UX-001/002`/`OD-OPS-001` via RPD-019/RPD-004 | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-013` | `CG-S3-ARCH-010` | DOCS | Author `docs/architecture/10_TESTING_WORKSTREAM.md` (Prompt 45) — tenth Step 3 architecture output; 18-layer test architecture, requirement/control matrix, 3 mandatory critical-scenario catalogues preserved verbatim (20 `UAT-E2E-*`, 18 `TI-*`, 24 `FINTEST-*`), 7-tier environment/10-factory data strategy, CI gate model, migration/recovery/compatibility/browser/accessibility/load/DR tests, 12-phase exit-criteria mapping, RPD-034/036 zero-critical-defect direct-GA gate | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-014` | `CG-S3-ARCH-011` | DOCS | Author `docs/architecture/11_DEVOPS_WORKSTREAM.md` (Prompt 46) — eleventh Step 3 architecture output; 7-tier environment topology with ownership/parity/promotion rules, CI/CD pipeline + artifact-provenance plan, migration/deployment/rollback plan reconciling progressive exposure with direct GA, secret/key/certificate lifecycle, observability plan (11 dashboards/8 alerts), storage/file/CDN controls, backup/restore/DR/incident/support model (9-runbook catalogue), feature-flag/capacity-threshold rules, 12-slice atomic backlog, go-live blockers. Resolves `ADR-CAND-ARCH-004` (live-OLTP→replica/warehouse threshold, open since Prompt 36) | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -627,6 +628,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 #### Approval and closure
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-004/011/012/013/014/015/017/018/019/020/021/022/023` (implementation ADRs, non-blocking). Next eligible task: `CG-S3-ARCH-011` — DevOps Workstream (Prompt 46).
+
+### CHG-2026-014 — DevOps Workstream (Step 3, Prompt 46)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-011` / `46_DEVOPS_WORKSTREAM_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no environment, pipeline, deployment, secret, or infrastructure resource created**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`10_*.md` (precondition, VERIFIED); Tech Arch §6, §23.6/§23.7, §27–§31, §32.8/§32.11/§32.15/§32.17, §33; Blueprint `05_*.md` §6/§7/§24/§25/§26/§27/§30; RPD-012/025/031/034/036/037/038 |
+| Decisions | No new product decision. **Resolved `ADR-CAND-ARCH-004`** (live-OLTP→read-replica/reporting-warehouse threshold, open since Prompt 36) with a concrete four-signal evidence-based trigger. Raised `ADR-CAND-ARCH-024/025/026/027` (CI/CD platform, secret manager, observability tool, hosting/CDN platform) |
+| Baseline evidence | Zero CI/environment/secret/infra resource, confirmed unchanged (`docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md`: "no `.github/workflows`") |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/11_DEVOPS_WORKSTREAM.md`: a seven-tier environment topology (Blueprint §25.1/Tech Arch §27.1/§29, identical to `10_*.md` §4.1, extended with ownership/access/config-promotion/parity columns) with environment-instance isolation and Tech Arch §29 seed-data rules; a CI/CD pipeline and artifact-provenance plan (Tech Arch §28.1 pipeline order, shared with `10_*.md` §6; deterministic install/build, commit-SHA/pipeline-run artifact tagging, dependency/SCA evidence, migration-check gate); a migration/deployment/rollback plan (Blueprint §25.2/§25.3 flow and 15-item checklist, Tech Arch §28.2/§28.3 rollback table) reconciling internal feature-flag/canary progressive exposure with RPD-034/036's direct-GA "no external pilot" rule; secret/key/certificate lifecycle (least privilege, rotation with overlap window, leakage prevention extending Tech Arch §23.6/§23.7); an observability plan (Tech Arch §30's 5 signals/11 dashboards/8 alerts verbatim, correlation-ID-based tenant-aware diagnostics, RPD-025 retention); storage/file/CDN controls (malware-scan/signed-URL gate extended to infrastructure backup/restore/cleanup); a backup/restore/DR/incident/support model (Tech Arch §31 RPO/RTO tiers + RPD-031/037 contract-silent framing, Blueprint §30 support-level/SLA/incident-flow/RCA tables verbatim, migration/cutover rollback procedures cited by reference from `10_*.md` rather than re-authored, a 9-item runbook catalogue); feature-flag operation (DUP-012 restated) and database/job capacity thresholds, including the **resolution of `ADR-CAND-ARCH-004`** with a concrete four-signal (DB saturation, slow-query breach post-optimization, `PERF-005` miss, OLTP-starvation) evidence-based trigger for graduating live-OLTP reporting to a read replica/warehouse; a 12-slice atomic backlog; go-live blockers.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/11_DEVOPS_WORKSTREAM.md` | ADD | Prompt 46 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-011` → `VERIFIED`, next eligible task → `CG-S3-ARCH-012` (Prompt 47) | `git revert` |
+
+No CI configuration, environment, deployment target, secret, or infrastructure resource exists or was touched — this document plans the DevOps layer, it does not provision one (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, CI, environment, secret, or infrastructure resource exists or changed. RPD-025/031/034/036/037/038 disclosures preserved and cited; RPO/RTO tiers and the DR-rehearsal cadence are reproduced exactly from Tech Arch §31.2/§31.3, matching the single cadence `10_*.md` §7.4/§11 (`ADR-CAND-ARCH-023`) already fixes — not a second, conflicting cadence.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/11_DEVOPS_WORKSTREAM.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; `004` resolved this checkpoint). Next eligible task: `CG-S3-ARCH-012` — Release Train (Prompt 47).
 
 ## 3. Maintenance rules
 
