@@ -60,7 +60,7 @@ Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14/14 prompts VERIFIE
 | Build logs | `docs/build-logs/` | per-task |
 | App/domain/UI/migrations/tests | — | not created (greenfield) |
 
-Canonical maps: module dependency map **produced** (`docs/architecture/01_MODULE_DEPENDENCY_MAP.md`, `CG-S3-ARCH-001` `VERIFIED`); canonical data flow map **produced** (`docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md`, `CG-S3-ARCH-002` `VERIFIED`); domain boundary map **produced** (`docs/architecture/03_DOMAIN_BOUNDARY_MAP.md`, `CG-S3-ARCH-003` `VERIFIED`, amended by Prompt 40 — see its header note); repository target structure **produced** (`docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md`, `CG-S3-ARCH-004` `VERIFIED`); database schema workstream **produced** (`docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md`, `CG-S3-ARCH-005` `VERIFIED`); RLS/RBAC workstream and remaining Step 3 outputs not yet produced.
+Canonical maps: module dependency map, canonical data flow map, domain boundary map (amended by Prompt 40), repository target structure, database schema workstream — all **produced**, `CG-S3-ARCH-001..005` `VERIFIED`. RLS/RBAC workstream **produced** (`docs/architecture/06_RLS_RBAC_WORKSTREAM.md`, `CG-S3-ARCH-006` `VERIFIED`). Remaining Step 3 outputs (Configuration Engine through Closure Verification, Prompts 42–51) not yet produced.
 
 ## 6. Environment matrix
 
@@ -82,16 +82,16 @@ Tenant context preserved across DB/storage/cache/jobs/logs/search/reports/export
 
 | Field | Value |
 |---|---|
-| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`, 5/16 prompts) |
-| Current task | `CG-S3-ARCH-005` — Database Schema Workstream |
-| Task status | `VERIFIED` — `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` complete |
+| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`, 6/16 prompts) |
+| Current task | `CG-S3-ARCH-006` — RLS/RBAC Workstream |
+| Task status | `VERIFIED` — `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` complete |
 | Branch/commit | `agent/cargogrid-autonomous-build`, cut from `main`@`39d923e` |
 | Last known good checkpoint | `origin/main`@`39d923e` |
 | Latest applied migration | none |
 | Last fully passing gate set | none (no gates exist; confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
 | Known issues affecting work | ISS-2026-002 (recurred twice previously, non-blocking), ISS-2026-003 (non-blocking); ISS-2026-001 RESOLVED |
-| Next eligible task | `CG-S3-ARCH-006` — RLS/RBAC Workstream (Prompt 41) |
+| Next eligible task | `CG-S3-ARCH-007` — Configuration Engine Workstream (Prompt 42) |
 
 ## 11. Active constraints and accepted risks
 

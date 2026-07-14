@@ -17,6 +17,7 @@
 | `CHG-2026-006` | `CG-S3-ARCH-003` | DOCS | Author `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` (Prompt 38) — third Step 3 architecture output; ownership catalogue, allowed dependency directions, 10 public contracts + anti-corruption rule, shared kernel, access responsibility split, current-to-target mapping, boundary violations, enforcement/test strategy, 2 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-007` | `CG-S3-ARCH-004` | DOCS | Author `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` (Prompt 39) — fourth Step 3 architecture output; concrete + bounded-pattern target tree, directory purpose/owner table, import/dependency rules, contract placement, current-to-target mapping, 10-slice incremental transition sequence, enforcement gates, 3 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-008` | `CG-S3-ARCH-005` | DOCS | Author `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` (Prompt 40) — fifth Step 3 architecture output; schema principles, single-`app`-schema ownership catalogue, relationship/constraint plan, finance controls, migration-wave policy, test matrix, atomic workstream backlog. **Amends** `03_DOMAIN_BOUNDARY_MAP.md` (namespace column superseded by evidence). Resolves `ADR-CAND-ARCH-001/005/007/008` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-009` | `CG-S3-ARCH-006` | DOCS | Author `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` (Prompt 41) — sixth Step 3 architecture output; access model, 8-stage evaluation flow, 7-family RLS matrix, 19-action permission catalogue, RPD-022 Supreme Admin enforcement, 15-item negative-test matrix, 9-slice atomic backlog. Resolves `ADR-CAND-ARCH-002/006` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -382,6 +383,54 @@ Updated: this manifest, task ledger, build status, context, handoff, plus the ta
 #### Approval and closure
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-002/006/009(resolved)/010/011/012/013` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-004` (deferred to Prompt 45). Next eligible task: `CG-S3-ARCH-006` — RLS/RBAC Workstream (Prompt 41).
+
+### CHG-2026-009 — RLS/RBAC Workstream (Step 3, Prompt 41)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-006` / `41_RLS_RBAC_WORKSTREAM_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no policy/permission mutation**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`05_*.md` (precondition, VERIFIED); Tech Arch §11 (full), §12 (full), §23 (full); UX §23–25; `docs/discovery/06_SECURITY_BASELINE.md`; RPD-022/023/035 |
+| Decisions | No new product decision. **Resolved** `ADR-CAND-ARCH-002` (employee↔user FK identity check) and `ADR-CAND-ARCH-006` (ticket-link staleness enforcement) with concrete RLS/RBAC mechanisms. No new ADR candidates raised. |
+| Baseline evidence | `docs/discovery/06_SECURITY_BASELINE.md` (zero auth/RLS/RBAC/support/impersonation implementation, confirmed unchanged) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/06_RLS_RBAC_WORKSTREAM.md`: an access model (identities/principals table, 14 scope dimensions, a new support-access-grant model); an 8-stage evaluation flow (Tech Arch §23.3, superset of §12.3) applied identically across UI/REST/GraphQL/server actions/database/storage/jobs/realtime/search/reports/exports; a 7-family RLS policy matrix covering all ~60 tables from `05_*.md` §3 with negative-test references; a permission catalogue (19 actions from Tech Arch §12.1, field masking bound to those actions, ownership/sharing, separation of duties, approval authority, sensitive HR/finance access); privileged/support access paths (MFA per RPD-023, session/token security per Tech Arch §23.6); API/job/file/report/search/realtime controls; RPD-022 Supreme Admin semantics preserved literally with a concrete dual-policy enforcement mechanism; policy performance/rollout/migration-compatibility/emergency-recovery rules; a 15-item negative/abuse test matrix (7 reproduced verbatim from Tech Arch §11.4, 8 new); resolution of `ADR-CAND-ARCH-002/006`; and a 9-slice atomic backlog mirroring `05_*.md` §12's phase order.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` | ADD | Prompt 41 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-006` → `VERIFIED`, next eligible task → `CG-S3-ARCH-007` (Prompt 42) | `git revert` |
+
+No application/config/migration/dependency/policy/permission file exists or was touched — this document plans authorization, it does not implement it (prompt precondition #14 "Do not write policies or permissions," verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022/023/032/035/038/039 disclosures preserved and cited, not weakened; RPD-022's exception is given a concrete dual-RLS-policy design (§8) rather than left abstract.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-010/011/012/013` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-004` (deferred to Prompt 45). Next eligible task: `CG-S3-ARCH-007` — Configuration Engine Workstream (Prompt 42).
 
 ## 3. Maintenance rules
 
