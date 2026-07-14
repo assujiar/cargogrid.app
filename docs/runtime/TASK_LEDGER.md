@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 51 — Step 3 Closure Verification; Step 3 `RUNTIME_ARCHITECTURE_VERIFIED`)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
 
 ## 1. Task identity and state model
@@ -44,7 +44,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-013` (VERIFIED) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-015` |
 | `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-014` (VERIFIED) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-016` |
 | `CG-S3-ARCH-016` | Step 3 Closure Verification | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-015` (VERIFIED) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | 2026-07-14 | Step 3 `RUNTIME_ARCHITECTURE_VERIFIED` — proceed to Phase 0 Foundation (Prompt 79) |
-| `CG-PH0-000` | Phase 0 Foundation kickoff | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-016` (VERIFIED) | — | 2026-07-14 | Read `05-phase-00-discovery-foundation/79_PHASE0_README.md`, then execute `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| `CG-S5-PH0-001` | Phase 0 WBS and Runtime Kickoff | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-016` (VERIFIED) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-002` (Prompt 81) |
+| `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-001` (VERIFIED) | — | 2026-07-14 | Execute `81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` |
 
 ## 3. Task records
 
@@ -401,6 +402,24 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/16_STEP3_CLOSURE_REPORT.md` §11 — all nine verification items pass on independent re-check. Final status `VERIFIED`, closure state `RUNTIME_ARCHITECTURE_VERIFIED`. **Step 3 (Architecture and Execution Blueprint) is now fully closed — 16/16 outputs `VERIFIED`.** Next eligible task: Phase 0 Foundation, entry point `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` → capability prompts `81`–`98` → `99`–`102` (verification/hardening/documentation/closure, the only prompt authorized to set `PHASE_0_VERIFIED`).
 
+### CG-S5-PH0-001 — Phase 0 WBS and Runtime Kickoff (Prompt 80, first Phase 0 task)
+
+| Field | Value |
+|---|---|
+| Parent phase | Phase 0 — Discovery and Foundation |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `05-phase-00-discovery-foundation/80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` (`CG-AABPP-PH0-080` v0.6.0) |
+| Build log path | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` |
+| Dependency | `CG-S3-ARCH-016` (VERIFIED, `RUNTIME_ARCHITECTURE_VERIFIED`); `docs/discovery/14_STEP2_CLOSURE_REPORT.md` (`RUNTIME_DISCOVERY_VERIFIED`); Step 4 reusable library (`PACKAGE_STEP_4_VERIFIED`, package-level, confirmed via `00-control/06_PACKAGE_BUILD_STATUS.md`) |
+
+**Naming-convention note:** Prompt 80's own text names its outputs `docs/build-log/phase-00/...` (singular, phase-nested). This repository's established Step 2 convention — one flat file per task under `docs/build-logs/` (plural) — takes priority per this repo's evidence-precedence rule; both output files use that path, and the substitution rule is documented in each file's header for every future `PH0-081..102` build log.
+
+**Objective and outcome:** Validated the Phase 0 runtime entry gate (all 5 conditions in `79_PHASE0_README.md` §2 independently re-checked, not accepted from prior headers); reconciled the mandatory 10-level hierarchy for all 18 Phase 0 capabilities against `13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §4's Phase 0 row; produced a full execution register for all 22 downstream prompts (`PH0-081..098` = 18 capabilities + `PH0-099` verification + `PH0-100` hardening + `PH0-101` documentation + `PH0-102` closure), each with task/WBS ID, hierarchy, dependencies, allowed paths, outputs, owner, and status. Ran an independent worktree/branch/migration/schema collision audit (`git status`, `git branch -a`, `git ls-files` extension scan) — zero collision risk, repository confirmed greenfield. Defined the concurrency model: the dependency graph is a strict single sequential lane (`081→082→…→098→099→100→101→102`) since every downstream capability's dependency range grows monotonically to "all prior," combined with the standing single-writer rule (`ISS-2026-002`) — no parallel lane opened. Defined 4 integration checkpoints (after `084` governance, after `089` engineering-foundation cluster, after `098` before verification, after `102` Phase 1 entry), 4 stale-evidence triggers, and reverse-order recovery/rollback rules. Result: `PH0-081` (Source Alignment and Context Bootstrap) marked `READY` with every variable resolvable (no unresolved `{{VARIABLE}}`); `PH0-082..102` correctly `BLOCKED` on their exact unmet upstream ranges, per the linear-chain structure — expected at this point, not a defect. **No runtime source/config/data/environment change occurred** (index/planning only, confirmed by this checkpoint's own `git status`).
+
+**Acceptance and closure:** Both build-log files' own §6/closing self-checks — one authoritative checkpoint and dependency graph exist; zero cycles/orphans/collisions (verified by direct graph construction); `PH0-081`'s variables fully resolvable; no runtime file outside `docs/build-logs/**` was touched. All four completion-gate conditions satisfied. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -423,7 +442,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-016` | ARCH-015 VERIFIED | Phase 0 kickoff (Prompts 79+) | `docs/architecture/16_*` | Done (VERIFIED) |
-| `CG-PH0-000` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | Phase 0 capability prompts `81..98` | `05-phase-00-discovery-foundation/79,80_*` | YES |
+| `CG-S5-PH0-001` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | CG-S5-PH0-002 | `docs/build-logs/CG-S5-PH0-001_*` | Done (VERIFIED) |
+| `CG-S5-PH0-002` | PH0-001 VERIFIED | CG-S5-PH0-003 | `05-phase-00-discovery-foundation/81_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -459,7 +479,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-013` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`, merged forward) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-014` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-015` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-016` | `VERIFIED` (`RUNTIME_ARCHITECTURE_VERIFIED`) | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-016` | `VERIFIED` (`RUNTIME_ARCHITECTURE_VERIFIED`) | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-14 |
+| `CG-S5-PH0-001` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 

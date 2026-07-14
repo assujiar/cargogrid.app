@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 51 — Step 3 Closure Verification; Step 3 `RUNTIME_ARCHITECTURE_VERIFIED`)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `claude/sleepy-ride-4vxsk6` (continuation of `agent/cargogrid-autonomous-build`, merged forward; cut from `origin/main`@`39d923e`)
 **Build trust:** `TRUSTED`
@@ -13,22 +13,22 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** — `RUNTIME_ARCHITECTURE_VERIFIED` (16/16 outputs) |
-| Current phase/workstream | Step 3 closed; Phase 0 — Foundation is now the active workstream (`NOT_STARTED`) |
-| Active task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51) |
-| Active task status | `VERIFIED` — `docs/architecture/16_STEP3_CLOSURE_REPORT.md` complete, closure state `RUNTIME_ARCHITECTURE_VERIFIED` |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16); Phase 0 **IN_PROGRESS** (kickoff done, 1/22 downstream prompts) |
+| Current phase/workstream | Phase 0 — Discovery and Foundation (`PHASE_0_IN_PROGRESS`) |
+| Active task | `CG-S5-PH0-001` — Phase 0 WBS and Runtime Kickoff (Prompt 80) |
+| Active task status | `VERIFIED` — execution index + WBS build logs complete; `PH0-081` marked `READY` |
 | Branch | `claude/sleepy-ride-4vxsk6` (continuation branch; picked up `agent/cargogrid-autonomous-build`'s 3 unmerged commits by merge; cut from `origin/main`@`39d923e`) |
 | HEAD | this checkpoint's commit on `claude/sleepy-ride-4vxsk6` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — this checkpoint independently verifies already-produced architecture content, no implementation task was started) |
+| Schema/migration head | NONE (no database — this checkpoint is index/planning only, no foundation change performed) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | Phase 0 Foundation kickoff — `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Next eligible task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81) |
 
-Checkpoint summary: Step 2 discovery closed prior. **Step 3 (Architecture and Execution Blueprint) is now fully closed: `16_STEP3_CLOSURE_REPORT.md` independently re-verified (not re-stated) all nine required closure conditions against primary sources** — full re-read of all 15 architecture files, direct re-derivation of every requirement/decision/gap/conflict total against the package's control files, independent git-history checkpoint-lineage verification, and an independent `git status`/`git ls-files` forbidden-change audit. Result: all 15 Step 3 deliverables present/consistent; all 194 requirements + 63 protected decisions + 13 gap requirements + full conflict/gap/duplicate/decision-backlog catalogues have delivery+evidence owners; 12 named control areas mapped; the four standing accepted-risk disclosures (RPD-022, RPD-034/036, RPD-031/037, RPD-038) preserved consistently everywhere; repository independently confirmed 100% documentation. Two new, non-blocking findings (F1: cosmetic pre-merge checkpoint-hash citations in `12_*.md`/`13_*.md`, corrected this checkpoint; F2: `CHANGE_MANIFEST.md`'s summary index table two rows stale, corrected this checkpoint) — neither reopened a decision or broke an evidence chain. **Closure state: `RUNTIME_ARCHITECTURE_VERIFIED`.** Step 4 (`04-reusable-prompts/`, 25 templates) confirmed to be a template library consumed opportunistically starting inside Phase 0 prompts, not a sequential phase of its own — this matches `START_HERE.md` §5 and `13_*.md` §8. Feature/application implementation remains forbidden until `PHASE_0_VERIFIED` is also achieved. Repository remains 100% documentation.
+Checkpoint summary: Step 2 discovery closed prior; **Step 3 (Architecture and Execution Blueprint) fully closed** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 outputs, independently re-verified with two non-blocking findings corrected). **Phase 0 — Discovery and Foundation is now underway.** Prompt 80 (`CG-S5-PH0-001`) validated all 5 Phase 0 entry-gate conditions independently (Prompt 34/Step 2 closure, Prompt 51/Step 3 closure, package-level Step 4 verification, `AGENTS.md`/ledger agreement, known branch/toolchain state); reconciled the mandatory 10-level hierarchy for all 18 Phase 0 capabilities against `13_FULL_WORK_BREAKDOWN_STRUCTURE.md`; produced a full execution register for all 22 downstream prompts (`docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md`); ran an independent collision audit (zero risk, repository confirmed greenfield); defined the concurrency model as one strict sequential lane (`081→…→102`, per monotonically-growing dependency ranges plus the standing single-writer rule) with 4 integration checkpoints, 4 stale-evidence triggers, and reverse-order recovery rules. `PH0-081` (Source Alignment and Context Bootstrap) is `READY` with every variable resolvable; `PH0-082..102` correctly `BLOCKED` on their exact unmet upstream ranges (expected at this point in a linear chain). No runtime source/config/data/environment file was touched — index/planning only. Repository remains 100% documentation outside `docs/build-logs/**`.
 
-**Branch note (carried forward):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. Earlier in this run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48). Those were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical), so no progress was lost. All Step 3 checkpoints, and all future checkpoints, continue on `claude/sleepy-ride-4vxsk6`.
+**Branch note (carried forward):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. Earlier in this run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48). Those were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical), so no progress was lost. All checkpoints continue on `claude/sleepy-ride-4vxsk6`.
 
 ## 2. Discovery and foundation readiness
 
@@ -51,7 +51,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation-build sub-phase not started) | ~55% (Step 2 done; Step 3 done 16/16; Phase 0 foundation prompts 79–102 not started) | Phase 0 Foundation: `79_PHASE0_README.md` → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation-build sub-phase kicked off, 1/22 downstream prompts) | ~58% (Step 2 done; Step 3 done 16/16; Phase 0 kickoff done, capability prompts 81–102 not started) | Phase 0: `81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -110,11 +110,11 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: Phase 0 Foundation kickoff.
-- Entry conditions: `docs/architecture/16_STEP3_CLOSURE_REPORT.md` closure state `RUNTIME_ARCHITECTURE_VERIFIED` (met — §11 of that document); Step 2 `RUNTIME_DISCOVERY_VERIFIED` (met, standing).
-- Required prompt/output: read `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` in full, then execute `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md`, then capability prompts `81`–`98` in that README's own dependency order, then `99`–`102` (verification/hardening/documentation/closure — `102` is the only prompt authorized to set `PHASE_0_VERIFIED`).
-- If blocked, resume: re-read `docs/architecture/01_*.md` through `16_*.md` in full, then `05-phase-00-discovery-foundation/79_PHASE0_README.md`, before starting Phase 0 work.
-- Authorized command: read-only inspection + `docs/architecture/**`/`docs/runtime/**`/`docs/build-logs/**` writes for closure bookkeeping; Phase 0 work additionally authorizes whatever paths `79_PHASE0_README.md` names for the first time (app/config/toolchain scaffolding) — confirm exact allowed paths from that README before writing outside `docs/`.
+- Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
+- Entry conditions: `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` marks `PH0-081` `READY` with every variable resolvable (met — §3/§6 of that document and companion WBS §5).
+- Required prompt/output: `05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` → per that prompt's own required-output field (confirm exact path when executing; do not assume).
+- If blocked, resume: re-read `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md` in full, then `81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md`, before continuing Phase 0 work.
+- Authorized command: read-only inspection + `docs/runtime/**`/`docs/build-logs/**` writes per `PH0-081`'s allowed-path list (repository governance/context/status/ledger/build-log documentation only, per the execution index); later Phase 0 capabilities (`085`+) authorize toolchain/environment/CI scaffolding outside `docs/` — confirm each capability's own allowed-path list before writing outside `docs/`.
 
 ## 10. Update rules
 

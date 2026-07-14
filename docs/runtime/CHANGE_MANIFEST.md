@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 51 — Step 3 Closure Verification)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index
@@ -27,7 +27,8 @@
 | `CHG-2026-016` | `CG-S3-ARCH-013` | DOCS | Author `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` (Prompt 48) — thirteenth Step 3 architecture output; binds the prompt package's already-validated 430-file numbering into the mandatory 10-level runtime hierarchy, complete phase register (263 capability prompts, Phase 0–Final Validation), dependency edges, cross-cutting workstream coverage, Template-53-bound task record schema, atomic-sizing verification, brownfield N/A confirmation, ADR/legal/SME/evidence gate consolidation, completeness/duplicate/orphan/cycle checks (zero unresolved), downstream handoff mapping | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-017` | `CG-S3-ARCH-014` | DOCS | Branch reconciliation (`claude/sleepy-ride-4vxsk6` adopted as continuation branch, `agent/cargogrid-autonomous-build`'s 3 unmerged commits merged forward) + author `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (Prompt 49) — fourteenth Step 3 architecture output; 401-item requirement/phase/test traceability matrix, 0 `NOT_COVERED` at close, 13-vs-14 gap-requirement count discrepancy found and resolved | NONE | LOW | `COMPLETED` | `e1a658c` | 2026-07-14 |
 | `CHG-2026-018` | `CG-S3-ARCH-015` | DOCS | Author `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` (Prompt 50) — fifteenth Step 3 architecture output; 9-dimension reproducible Composite Risk Score ranking, dependency-depth-ordered critical path, foundation blockers, concurrency lanes, risk burn-down recalculation triggers, no duration/staffing/date invented | NONE | LOW | `COMPLETED` | `678f384` | 2026-07-14 |
-| `CHG-2026-019` | `CG-S3-ARCH-016` | DOCS | Author `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (Prompt 51) — sixteenth and final Step 3 output; independent re-verification of all nine closure conditions against primary sources, closure state `RUNTIME_ARCHITECTURE_VERIFIED`; corrects Findings F1 (`12_*.md`/`13_*.md` pre-merge checkpoint-hash citations) and F2 (this manifest's index table). **Step 3 fully closed, 16/16 outputs.** | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-019` | `CG-S3-ARCH-016` | DOCS | Author `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (Prompt 51) — sixteenth and final Step 3 output; independent re-verification of all nine closure conditions against primary sources, closure state `RUNTIME_ARCHITECTURE_VERIFIED`; corrects Findings F1 (`12_*.md`/`13_*.md` pre-merge checkpoint-hash citations) and F2 (this manifest's index table). **Step 3 fully closed, 16/16 outputs.** | NONE | LOW | `COMPLETED` | (checkpoint) | 2026-07-14 |
+| `CHG-2026-020` | `CG-S5-PH0-001` | DOCS | Author `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` + `_phase0_wbs.md` (Prompt 80) — first Phase 0 output; validates all 5 Phase 0 entry-gate conditions, produces full execution register for 22 downstream prompts (18 capabilities + verification/hardening/documentation/closure), single-sequential-lane concurrency model, zero collision risk (independent `git`-based audit). `PH0-081` marked `READY`. **Phase 0 kicked off.** | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -927,6 +928,55 @@ Updated: this manifest (including its own §1 index-table hygiene gap, F2), task
 #### Approval and closure
 
 No external approval required (documentation-only). Residual items: 17 open `ADR-CAND-ARCH-0xx` implementation ADRs (non-blocking, unaffected by this checkpoint); `FIN-195`/`HRT-282` external SME gates (non-blocking for Step 3 closure, tracked for Phase 4/7 activation). **Next eligible task: Phase 0 Foundation kickoff** — `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` → capability prompts `81`–`98` → `99`–`102` (verification/hardening/documentation/closure, the only prompt authorized to set `PHASE_0_VERIFIED`).
+
+### CHG-2026-020 — Phase 0 WBS and Runtime Kickoff (Phase 0, Prompt 80)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-001` / `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation (first task) |
+| Change type | DOCS (index/planning only; no foundation change implemented) |
+| Author/agent | Claude Code (autonomous build agent), branch `claude/sleepy-ride-4vxsk6` |
+| Source requirements | `05-phase-00-discovery-foundation/79_PHASE0_README.md` (full); `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md`, `14_REQUIREMENT_PHASE_TRACEABILITY.md`, `15_RISK_RANKED_CRITICAL_PATH.md`; `docs/discovery/14_STEP2_CLOSURE_REPORT.md`; `docs/architecture/16_STEP3_CLOSURE_REPORT.md`; all 18 Phase 0 capability prompt files (`81`–`98`) plus `99`–`102`, read for titles/objectives, several read in full |
+| Decisions | No new product decision; no new ADR candidate |
+| Baseline evidence | Zero runtime source/config/data/environment change, confirmed by this checkpoint's own `git status`/`git ls-files` run |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` (339 lines) and companion `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` (159 lines) — written under this repository's established `docs/build-logs/` (plural, flat) convention rather than the package prompt's own literal `docs/build-log/phase-00/...` (singular, nested) suggestion, per this repo's evidence-precedence rule (documented in both files' headers as a standing substitution rule for every future `PH0-081..102` build log). Validated all 5 Phase 0 runtime-entry-gate conditions independently (Step 2/Step 3 closure reports, package-level Step 4 verification, `AGENTS.md`/ledger agreement, known branch/toolchain state — greenfield, `NONE`). Reconciled the mandatory 10-level hierarchy (Phase → Workstream → Epic → Capability → Feature slice → Atomic task → Verification → Hardening → Documentation → Closure) for all 18 Phase 0 capabilities against `13_*.md` §4's Phase 0 row. Produced a full execution register for all 22 downstream prompts (`PH0-081..098` capabilities, `099` verification, `100` hardening, `101` documentation, `102` closure), each with task/WBS ID, hierarchy, dependencies, allowed paths, outputs, owner, and status. Ran an independent worktree/branch/migration/schema collision audit (`git status`, `git branch -a`, `git ls-files` extension-pattern scan) — zero collision risk, repository confirmed greenfield (no migration/script/config/lockfile/CI workflow exists anywhere). Defined the concurrency model: a strict single sequential lane (`081→082→…→098→099→100→101→102`), since every downstream capability's dependency range grows monotonically to "all prior," combined with the standing single-writer rule (`ISS-2026-002`) — no parallel lane opened (the four theoretically independent Phase-0 tooling ADRs resolve *inside* sequential slices `085`/`088`/`093`, not as separate WBS rows). Defined 4 integration checkpoints, 4 stale-evidence triggers, and reverse-order recovery/rollback rules. Result: `PH0-081` (Source Alignment and Context Bootstrap) marked `READY`, every variable resolvable (no unresolved `{{VARIABLE}}`, proven in the WBS file's §5); `PH0-082..102` correctly `BLOCKED` on their exact unmet upstream ranges — expected at this point in a linear chain, not a defect.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` | ADD | Prompt 80 runtime output (execution register) | `git revert` |
+| `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | ADD | Prompt 80 runtime output (hierarchy/dependency proof) | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S5-PH0-001` → `VERIFIED`, Phase 0 marked `PHASE_0_IN_PROGRESS`, next eligible task → `CG-S5-PH0-002` (Prompt 81) | `git revert` |
+
+No runtime source/config/data/environment/migration/dependency artifact exists or changed anywhere in the repository — confirmed by this checkpoint's own independent `git ls-files` extension-pattern audit (prompt completion-gate requirement, verified directly rather than assumed).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. RPD-022, direct-GA/no-pilot, contract-silent recovery, and custom-integration policy remain unaffected — this checkpoint touches none of them; they resurface starting with `PH0-084`'s ADR baseline and `PH0-094`'s security baseline.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2/Step 3 baseline (`UNKNOWN`, not `RED`). No test gate is expected until Phase 0's own `PH0-091` (Testing Foundation) and `PH0-088` (CI/CD Baseline) land.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch `claude/sleepy-ride-4vxsk6`).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: both `docs/build-logs/CG-S5-PH0-001_*` files exist, non-empty, self-consistent with `docs/runtime/*` next-task pointers; recovery/rollback order for future Phase 0 tasks is itself defined in the execution index §5.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened; no new ADR candidate raised; no product decision reopened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, index/planning task). Residual items: 17 open `ADR-CAND-ARCH-0xx` implementation ADRs, four of which (`024..027`) resolve inside upcoming Phase 0 capability slices (`085`/`088`/`093`) per this checkpoint's own concurrency-lane analysis; `ISS-2026-003` (`.gitignore`) to close at or before `PH0-085`/`087`. **Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81)**, confirmed `READY` in the execution index.
 
 ## 3. Maintenance rules
 

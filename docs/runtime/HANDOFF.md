@@ -1,8 +1,8 @@
 # CargoGrid Agent Handoff
 
 **Instance of:** `CG-AABPP-GOV-019`
-**Handoff ID:** `HO-20260714-019` (supersedes `HO-20260714-018`)
-**Created:** 2026-07-14 (post Step 3 Prompt 51 — Step 3 Closure Verification; **Step 3 fully closed**)
+**Handoff ID:** `HO-20260714-020` (supersedes `HO-20260714-019`)
+**Created:** 2026-07-14 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
 **From/To:** Runtime build agent (Claude Code) → next runtime agent
 **Trust status:** `TRUSTED`
 
@@ -10,20 +10,17 @@
 
 ## 1. Outcome first
 
-**Step 3 (Architecture and Execution Blueprint) is now fully closed.** All 16 outputs (`docs/architecture/01_*.md` through `16_STEP3_CLOSURE_REPORT.md`) are `VERIFIED`. The closure report independently re-verified — not re-stated — all nine required conditions against primary sources (full re-read of all 15 architecture files, direct re-derivation of every requirement/decision/gap/conflict count, independent git-history checkpoint verification, and an independent `git status`/`git ls-files` forbidden-change audit). **Closure state: `RUNTIME_ARCHITECTURE_VERIFIED`.**
+Step 3 (Architecture and Execution Blueprint) is fully closed (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 outputs — see `docs/architecture/16_STEP3_CLOSURE_REPORT.md`). **Phase 0 — Discovery and Foundation is now underway.** Prompt 80 (`CG-S5-PH0-001`) validated all 5 Phase 0 entry-gate conditions, reconciled the 10-level hierarchy for all 18 Phase 0 capabilities, and produced a full execution register for the 22 downstream prompts (`docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` + companion `_phase0_wbs.md`).
 
-Two new, non-blocking findings were surfaced by that independent check and corrected this same checkpoint:
-- **F1** — `12_RELEASE_TRAIN.md` and `13_FULL_WORK_BREAKDOWN_STRUCTURE.md` cited pre-branch-merge-reconciliation commit hashes in their §0 HEAD field (content verified byte-identical via `git diff`; corrected to the actual `claude/sleepy-ride-4vxsk6` parent hashes).
-- **F2** — `CHANGE_MANIFEST.md`'s §1 summary index table was two rows behind its own accurate `CHG-2026-017`/`018` detailed entries (corrected; `CHG-2026-019` row also added for this checkpoint).
-- Also corrected: `13_*.md`'s already-disclosed "14 vs. 13" package-generated gap-requirement count to the verified 13 (two citations, non-blocking, previously flagged by `14_*.md`).
+**Result:** `PH0-081` (Source Alignment and Context Bootstrap, task ID `CG-S5-PH0-002`) is `READY` with every variable resolvable. `PH0-082..102` are correctly `BLOCKED` on their exact unmet upstream ranges — this is expected: the execution index found the Phase 0 dependency graph is a **strict single sequential lane** (`081→082→…→098→099→100→101→102`), since every downstream capability's dependency range grows monotonically to "all prior," combined with the standing single-writer rule (`ISS-2026-002`). No parallel lane exists in Phase 0 — do not attempt to skip ahead or run two capability prompts concurrently.
 
-**Next workstream: Phase 0 — Foundation.** Per the closure report's own resolution of "what Step 4 means" (read, not guessed): `START_HERE.md` §5 defines Step 4 (`04-reusable-prompts/`, files 52–78) as a **template library** — 25 reusable task-shape templates consumed opportunistically by Phase 0+ capability prompts, not a sequential phase with its own execution order. Phase 0 is gated directly on Step 2 + Step 3 closure (both now `VERIFIED`), not on a separate "run Step 4 first" gate. **The next eligible task is Phase 0 Foundation**, entry point `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md`.
+**Naming-convention note (standing for all Phase 0 build logs):** the package's own prompt text names outputs `docs/build-log/phase-00/PH0-NN.md` (singular, phase-nested). This repository's established convention (used since Step 2) is `docs/build-logs/` (plural, flat, one file per task, e.g. `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md`). Use the plural, flat convention for every future Phase 0 build log — this substitution rule is documented in `CG-S5-PH0-001`'s own build logs and must be applied consistently, not re-litigated per task.
 
-**Branch (standing):** this session's designated continuation branch is `claude/sleepy-ride-4vxsk6` (not `agent/cargogrid-autonomous-build`, superseded — see `HO-20260714-017` for the reconciliation history).
+**Branch (standing):** this session's designated continuation branch is `claude/sleepy-ride-4vxsk6` (not `agent/cargogrid-autonomous-build`, superseded).
 
 **Environment note (standing):** commit signing is configured but the signing key file is empty in this environment, so commits show "Unverified" on GitHub — a pre-existing environment limitation, not something to fix by editing gnupg/ssh config. Author identity (`Claude <noreply@anthropic.com>`) is correct on all commits.
 
-Current task status: `CG-S3-ARCH-016` = `VERIFIED`. **Runtime architecture state: `RUNTIME_ARCHITECTURE_VERIFIED` (Step 3 CLOSED, 16/16 outputs).**
+Current task status: `CG-S5-PH0-001` = `VERIFIED`. **Phase state: `PHASE_0_IN_PROGRESS` (1 of 22 downstream prompts complete).**
 Safe to continue: `YES`. Immediate blocker: `NONE`.
 
 ## 2. Mandatory reading order
@@ -31,13 +28,12 @@ Safe to continue: `YES`. Immediate blocker: `NONE`.
 1. Repository `AGENTS.md` (root) — confirms `docs/runtime/` is canonical.
 2. `docs/runtime/CARGOGRID_CONTEXT.md`.
 3. `docs/runtime/CARGOGRID_BUILD_STATUS.md`.
-4. `docs/runtime/TASK_LEDGER.md` (records `CG-S3-ARCH-001..016` all `VERIFIED`; `CG-PH0-000` `READY`).
-5. `docs/runtime/CHANGE_MANIFEST.md` (`CHG-2026-004` through `CHG-2026-019`).
-6. `docs/architecture/16_STEP3_CLOSURE_REPORT.md` in full (the closure gate itself — read this before assuming any Step 3 fact, it is the most current cross-check of `01_*.md`–`15_*.md`).
-7. `docs/architecture/01_*.md` through `15_*.md` as needed for domain-specific detail (all cited and cross-verified by `16_*.md`).
-8. Next: `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` in full, then `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md`.
+4. `docs/runtime/TASK_LEDGER.md` (records `CG-S3-ARCH-001..016` all `VERIFIED`; `CG-S5-PH0-001` `VERIFIED`; `CG-S5-PH0-002` `READY`).
+5. `docs/runtime/CHANGE_MANIFEST.md` (`CHG-2026-004` through `CHG-2026-020`).
+6. `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` and `_phase0_wbs.md` in full — this is the authoritative Phase 0 dependency graph and per-task register; read before assuming any Phase 0 task's inputs/outputs/allowed paths.
+7. Next prompt: `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` (read in full — do not assume its output path or fields from this handoff; confirm from the prompt itself).
 
-**Feature/application code remains forbidden** until Phase 0's own closure prompt (`102_PHASE0_CLOSURE_VERIFICATION_PROMPT.md`) sets `PHASE_0_VERIFIED` — Step 3 closure alone does not authorize it. Do not edit `docs/blueprint/**` or `docs/ai-agent-build-prompt-package/**` except to read.
+**Feature/application code remains forbidden** until Phase 0's own closure prompt (`102_PHASE0_CLOSURE_VERIFICATION_PROMPT.md`) sets `PHASE_0_VERIFIED`. Do not edit `docs/blueprint/**` or `docs/ai-agent-build-prompt-package/**` except to read.
 
 ## 3. Checkpoint
 
@@ -46,7 +42,7 @@ Safe to continue: `YES`. Immediate blocker: `NONE`.
 | Repository/working dir | `/home/user/cargogrid.app` (origin `assujiar/cargogrid.app`) |
 | Branch | `claude/sleepy-ride-4vxsk6` (this session's designated branch) |
 | Dirty worktree | This checkpoint's changes only (documentation) |
-| Package manager/runtime/schema/env | NONE (greenfield; Step 3 closure is a verification pass, no implementation task was started — Phase 0 is the first workstream authorized to create real toolchain/environment artifacts, per its own README) |
+| Package manager/runtime/schema/env | NONE (greenfield; Phase 0's own capability prompts, starting around `PH0-085`, are the first to create real toolchain/environment artifacts — `PH0-081` itself is documentation-only) |
 | Canonical context location | `docs/runtime/` (do not recreate root duplicates) |
 | Trust boundary | Repository + package + sources trusted; no app/database/environment exists yet |
 
@@ -54,78 +50,77 @@ Safe to continue: `YES`. Immediate blocker: `NONE`.
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-PH0-000` — Phase 0 Foundation kickoff |
-| Prompt | `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` (read first, in full — it defines the phase's own dependency order and template usage before any capability prompt runs) → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
-| Objective | First Phase 0 runtime action: read the phase README (scope, dependency order for capability prompts `81`–`98`, which of the 25 Step 4 templates each task shape maps to), then execute the WBS runtime kickoff prompt |
-| Status | `READY` |
-| Output | Whatever `79_*.md`/`80_*.md` specify — do not assume the output path; read the prompt first |
-| Allowed paths | Confirm from `79_PHASE0_README.md` itself — Phase 0 is the first workstream authorized to touch paths outside `docs/**` (toolchain/environment/config scaffolding); do not write outside `docs/**` until that README explicitly authorizes it |
-| Upstream | `CG-S3-ARCH-001..016` (all VERIFIED, Step 3 `RUNTIME_ARCHITECTURE_VERIFIED`); Step 2 `RUNTIME_DISCOVERY_VERIFIED` (standing) |
+| Task ID/name | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap |
+| Prompt | `05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` |
+| Objective | First Phase 0 capability slice — bootstrap authoritative context/registers per the execution index's own hierarchy row (Governance and Source Control → Authoritative Product Baseline) |
+| Status | `READY` — sole upstream `CG-S5-PH0-001` satisfied; every variable resolvable (execution index §3, WBS §5) |
+| Output | Per the prompt's own required-output field (confirm when reading it — expected: updates to `docs/runtime/CARGOGRID_CONTEXT.md` plus a build log at `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md`, per repo convention) |
+| Allowed paths | Per execution index §3's `PH0-081` row: repository governance/context/status/ledger/build-log documentation only (`docs/runtime/*.md`, `docs/build-logs/CG-S5-PH0-002_*.md`); normally 5–15 files |
+| Upstream | `CG-S5-PH0-001` (VERIFIED) |
 
-**This is a genuine phase transition — read `79_PHASE0_README.md` fully before acting.** Step 3's documents (`01_*.md`–`16_*.md`) are the design; Phase 0 is the first workstream that may create real files outside `docs/` (toolchain choices per the still-open `ADR-CAND-ARCH-024..027`, `.gitignore` per `ISS-2026-003`, design-system/test-tooling foundations per `ADR-CAND-ARCH-020..023`). Do not skip straight to writing application code — Phase 0's own capability prompts (`81`–`98`) and closure prompt (`102`) gate that.
+## 5. Work completed (this run — 4 checkpoints on `claude/sleepy-ride-4vxsk6`: 3 closed Step 3, 1 opened Phase 0; 13 checkpoints previously on `agent/cargogrid-autonomous-build`, merged in)
 
-## 5. Work completed (this run — 3 checkpoints on `claude/sleepy-ride-4vxsk6`, closing Step 3; 13 checkpoints previously on `agent/cargogrid-autonomous-build`, merged in)
-
-- **Prompts 36–48** (`01_*.md`–`13_*.md`): completed on `agent/cargogrid-autonomous-build` by prior runs; merged forward into `claude/sleepy-ride-4vxsk6` this run.
-- **Prompt 49** (`14_REQUIREMENT_PHASE_TRACEABILITY.md`): 401-item requirement/phase/test traceability matrix, 0 `NOT_COVERED` at close. `CHG-2026-017`.
-- **Prompt 50** (`15_RISK_RANKED_CRITICAL_PATH.md`): 9-dimension reproducible Composite Risk Score ranking; critical path matches `12_*.md` §9. `CHG-2026-018`.
-- **Prompt 51** (`16_STEP3_CLOSURE_REPORT.md`): independent re-verification of all nine Step 3 closure conditions; closure state `RUNTIME_ARCHITECTURE_VERIFIED`; Findings F1/F2 surfaced and corrected in the same checkpoint. `CHG-2026-019`. **Step 3 fully closed.**
-- Updated `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `CARGOGRID_CONTEXT.md` after all three checkpoints; committing and pushing this one next.
+- **Prompts 36–48** (`01_*.md`–`13_*.md`): completed on `agent/cargogrid-autonomous-build` by prior runs; merged forward this run.
+- **Prompt 49** (`14_REQUIREMENT_PHASE_TRACEABILITY.md`): 401-item traceability matrix. `CHG-2026-017`.
+- **Prompt 50** (`15_RISK_RANKED_CRITICAL_PATH.md`): 9-dimension reproducible CRS ranking. `CHG-2026-018`.
+- **Prompt 51** (`16_STEP3_CLOSURE_REPORT.md`): independent Step 3 closure verification, `RUNTIME_ARCHITECTURE_VERIFIED`, Findings F1/F2 corrected. `CHG-2026-019`. **Step 3 fully closed.**
+- **Prompt 80** (`CG-S5-PH0-001_phase0_execution_index.md` + `_phase0_wbs.md`): Phase 0 entry-gate validation, full 22-prompt execution register, single-sequential-lane concurrency model, zero collision risk. `CHG-2026-020`. **Phase 0 kicked off.**
+- Updated `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `CARGOGRID_CONTEXT.md` after all four checkpoints; committing and pushing this one next.
 
 ## 6. Remaining work
 
 | Item | State | Safe next action |
 |---|---|---|
-| Phase 0 Foundation (Prompts 79–102) | `NOT_STARTED` | Read `79_PHASE0_README.md` in full, then execute `80_*.md` next |
+| `PH0-081` Source Alignment and Context Bootstrap | `READY` | Execute next |
+| `PH0-082..098` (17 remaining capabilities) | `BLOCKED` on sequential upstream | Execute in strict order per execution index |
+| `PH0-099..102` (verification/hardening/documentation/closure) | `BLOCKED` on `PH0-098` | Execute after all 18 capabilities `VERIFIED` |
 | Phase 1+ business-domain implementation | `NOT_STARTED`, blocked on `PHASE_0_VERIFIED` | Do not begin until Phase 0 closes |
-| `ADR-CAND-ARCH-011` (no empty domain-folder stubs) | Deferred | Phase 0 kickoff |
-| `ADR-CAND-ARCH-020`/`021` (component-library/design-token foundation) | Deferred | Phase 0 design-system foundation (Prompt 90) |
-| `ADR-CAND-ARCH-022`/`023` (test-runner/DR-cadence tooling) | Deferred | Phase 0 testing foundation (Prompt 91) |
-| `ADR-CAND-ARCH-024..027` (CI/CD, secrets, observability, hosting/CDN) | Deferred | Phase 0 environment/CI kickoff |
+| `ADR-CAND-ARCH-020`/`021` (component-library/design-token foundation) | Deferred | Resolves inside `PH0-090` |
+| `ADR-CAND-ARCH-022`/`023` (test-runner/DR-cadence tooling) | Deferred | Resolves inside `PH0-091` |
+| `ADR-CAND-ARCH-024..027` (CI/CD, secrets, observability, hosting/CDN) | Deferred | Resolve inside `PH0-085`/`088`/`093` (per execution index's concurrency-lane analysis — these 4 are internally order-independent but each resolves inside its own sequential slice, not a separate WBS row) |
+| `ADR-CAND-ARCH-011` (no empty domain-folder stubs) | Deferred | Phase 0 kickoff (candidate: `PH0-083`/`087`) |
 | `ADR-CAND-ARCH-012..015,017..019` (schema/config/API implementation-level) | Deferred | Phase 1/3 implementation (later, not Phase 0) |
-| `.gitignore` (`ISS-2026-003`) | `PLANNED` | Add at Phase 0 kickoff (`11_*.md` §11's atomic backlog) |
-| SME-engagement pull-forward recommendation (`15_*.md` §4.2) | Recommendation, not yet acted on | Operator/owner decision — surface at Phase 0 kickoff, not a blocking action |
+| `.gitignore` (`ISS-2026-003`) | `PLANNED` | Close at or before `PH0-085`/`087` |
+| SME-engagement pull-forward recommendation (`15_*.md` §4.2) | Recommendation, not yet acted on | Operator/owner decision — surface during Phase 0, not a blocking action |
 | `GAP-017` (SaaS billing vs. tenant-finance ID separation) | Closed to `PARTIAL_BLOCKED` with named closure task (`14_*.md` §23) | Phase 1 Platform Core capability slice |
-| `MDM-RISK-001..006` | Tracked across `01_*.md`–`10_*.md` only | Consider folding into `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` if reopened — not required to proceed |
+| `MDM-RISK-001..006` | Tracked across `01_*.md`–`10_*.md` only | Consider folding into `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` if reopened |
 | `docs/blueprint/tes.md` deletion | Classified, not deleted | Needs owner approval — unchanged |
 | `ISS-2026-002` enforced fix | Still `OPEN` | Single writer maintained (`claude/sleepy-ride-4vxsk6`) |
 | PR for `claude/sleepy-ride-4vxsk6` | Not yet opened | Not requested by operator |
 
-Migration state: `NOT_CREATED`. Pre-existing/change-caused test failures: NONE (no gates exist yet).
+Migration state: `NOT_CREATED`. Pre-existing/change-caused test failures: NONE (no gates exist yet — `PH0-088`/`091` are the first to create any).
 
 ## 7. Errors, issues, decisions
 
 | ID | Type/status | Summary | Handling |
 |---|---|---|---|
 | `ERR-2026-001` | Error / `RECOVERED` (prior checkpoints) | Parallel-session merge corruption | Not recurred this run |
-| `ISS-2026-002` | Issue / `OPEN` | No single-writer discipline enforced by tooling | `claude/sleepy-ride-4vxsk6` is the designated continuation branch |
-| `ISS-2026-003` | Issue / `PLANNED` | No root `.gitignore` | Add at Phase 0 kickoff |
+| `ISS-2026-002` | Issue / `OPEN` | No single-writer discipline enforced by tooling | `claude/sleepy-ride-4vxsk6` is the designated continuation branch; Phase 0's own WBS additionally enforces a strict sequential lane |
+| `ISS-2026-003` | Issue / `PLANNED` | No root `.gitignore` | Close at or before `PH0-085`/`087` |
 | `ISS-2026-001` | Issue / `RESOLVED` | `tes.md` classified `CONFIRMED_PLACEHOLDER` | Awaiting owner-approved deletion |
-| RPD-001/004/012/014/015/016/019/022/023/025/031/032/033/034/035/036/037/038/039/040 | Decisions / standing | Ratified defaults, cited throughout `01–16_*.md` | Preserved, not weakened |
-| `ADR-CAND-ARCH-001..010,016` (10 resolved) | Resolved | See `04_*.md`–`08_*.md` for resolutions | Closed |
-| `ADR-CAND-ARCH-011..015,017..027` (17 open) | Tracked, open | Implementation-level ADR candidates | Non-blocking; resolve per §6 above |
-| Tax/legal SME gate (`FIN-195`), Payroll/tax SME gate (`HRT-282`) | Evidence gate, tracked (`14_*.md` §23, `15_*.md` §5/§7 top-2 ranked risk, `16_*.md` §10) | Must be verified by current legal/finance/tax SMEs before activation | Blocks only those two capabilities' activation, not Phase 0 |
-| F1 (checkpoint-hash citation, `12_*.md`/`13_*.md`) | Found + corrected this checkpoint | Pre-merge hashes replaced with actual branch parent hashes; content was already byte-identical | Closed |
-| F2 (`CHANGE_MANIFEST.md` index table stale) | Found + corrected this checkpoint | `CHG-2026-017`/`018` rows added, header updated | Closed |
-| `13_*.md` §0 gap-requirement count ("14" vs. verified "13") | Found (Prompt 49) + corrected this checkpoint | Both citations in `13_*.md` updated to 13 | Closed |
-| `GAP-017` (SaaS billing ID separation) | Transiently `NOT_COVERED`, closed same-checkpoint (Prompt 49) | Named closure task assigned (`14_*.md` §23, Phase 1 Platform Core) | Non-blocking |
-| SME-engagement pull-forward (`15_*.md` §4.2) | Scheduling recommendation, not a decision | Does not move any WBS capability position; surfaces at Phase 0 kickoff | Non-blocking, operator-facing |
+| RPD-001/004/012/014/015/016/019/022/023/025/031/032/033/034/035/036/037/038/039/040 | Decisions / standing | Ratified defaults, cited throughout `01–16_*.md` | Preserved, not weakened; resurface in Phase 0 starting `PH0-084` (ADR baseline) and `PH0-094` (security) |
+| `ADR-CAND-ARCH-001..010,016` (10 resolved) | Resolved | See `04_*.md`–`08_*.md` | Closed |
+| `ADR-CAND-ARCH-011..015,017..027` (17 open) | Tracked, open | Implementation-level ADR candidates | Non-blocking; resolve per §6 above, several inside upcoming Phase 0 slices |
+| Tax/legal SME gate (`FIN-195`), Payroll/tax SME gate (`HRT-282`) | Evidence gate | Must be verified by current legal/finance/tax SMEs before Phase 4/7 activation | Not a Phase 0 blocker |
+| F1/F2 (Step 3 closure findings) | Found + corrected | See `HO-20260714-019` for detail | Closed |
+| `13_*.md` gap-requirement count (corrected to 13) | Found + corrected | Both citations updated | Closed |
 
 ## 8. Recovery and rollback
 
-- Last known good: `origin/main`@`39d923e` (pre-PR#8) / `origin/main`@`27389a4` (post-PR#8, current default-branch tip).
-- Code revert: `git revert` the relevant checkpoint commit(s) (documentation-only).
-- Must not: recreate root-level context duplicates; edit `docs/blueprint/**` or `docs/ai-agent-build-prompt-package/**` except to read; start Phase 1+ feature code before `PHASE_0_VERIFIED`; write outside `docs/**` before `79_PHASE0_README.md` explicitly authorizes it; open a second parallel session without coordinating; resume work on `agent/cargogrid-autonomous-build` (superseded — use `claude/sleepy-ride-4vxsk6`).
+- Last known good: `origin/main`@`39d923e` (pre-PR#8) / `origin/main`@`27389a4` (post-PR#8).
+- Code revert: `git revert` the relevant checkpoint commit(s) (documentation-only so far).
+- Must not: recreate root-level context duplicates; edit `docs/blueprint/**` or `docs/ai-agent-build-prompt-package/**` except to read; start Phase 1+ feature code before `PHASE_0_VERIFIED`; write outside `docs/**` before the specific Phase 0 capability prompt authorizes it; skip ahead in the Phase 0 sequential lane (e.g. do not attempt `PH0-085` before `PH0-081..084` are `VERIFIED`); open a second parallel session without coordinating; resume work on `agent/cargogrid-autonomous-build` (superseded).
+- Phase 0-specific rollback: if any `PH0-081..098` task fails, halt at that task; use Step 4 Template 73 (resume-failed-task) or 74 (resume-interrupted-phase); if rolling back, unwind in strict reverse order (`102←101←...←081`) and re-declare every downstream task `BLOCKED` again — per the execution index §5's recovery-order rule.
 
 ## 9. Resume instructions
 
 1. Confirm repo `/home/user/cargogrid.app`, branch `claude/sleepy-ride-4vxsk6`, worktree clean apart from this checkpoint.
-2. Read §2 records; do not rely on this handoff alone.
-3. Re-baseline: `git status --short --branch`, `git rev-parse HEAD`; confirm `docs/architecture/01_*.md` through `16_*.md` all exist and Step 3 shows `RUNTIME_ARCHITECTURE_VERIFIED` in `CARGOGRID_BUILD_STATUS.md`.
-4. Read `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` in full — do not assume its structure; it defines Phase 0's own dependency order, allowed paths, and template-usage rules.
-5. Execute `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md`, then continue through capability prompts `81`–`98` in that README's dependency order, then `99`–`102` (verification/hardening/documentation/closure). Update ledgers + change manifest + this handoff after each checkpoint; commit and push after each. Continue looping through as many Phase 0 prompts as usage/context allow in the same run — completing one prompt is not a stop condition.
+2. Read §2 records; do not rely on this handoff alone — especially re-read `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` for the authoritative per-task register.
+3. Re-baseline: `git status --short --branch`, `git rev-parse HEAD`; confirm it matches the execution index's cited checkpoint (or re-verify if it has advanced — the index's own stale-evidence trigger #1 covers this).
+4. Read `05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` in full before acting.
+5. Execute `PH0-081`; update ledgers + change manifest + this handoff + the execution index (mark `PH0-081` `VERIFIED`, `PH0-082` `READY`). Continue looping through as many subsequent Phase 0 capability prompts as usage/context allow in the same run, in strict sequential order — completing one prompt is not a stop condition.
 
-First safe action: read `docs/architecture/16_STEP3_CLOSURE_REPORT.md` in full, then `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md`.
+First safe action: read `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` in full, then `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md`.
 
 ## 10. Handoff validation
 
