@@ -775,6 +775,58 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-014` — Requirement/Phase Traceability (Prompt 49).
 
+### CHG-2026-017 — Branch reconciliation + Requirement/Phase Traceability (Step 3, Prompt 49)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-014` / `49_REQUIREMENT_PHASE_TRACEABILITY_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; no implementation task created or started) |
+| Author/agent | Claude Code (autonomous build agent), branch `claude/sleepy-ride-4vxsk6` |
+| Source requirements | `docs/architecture/01_*.md`–`13_*.md` (precondition, VERIFIED); `00-control/05_REQUIREMENT_COVERAGE_MATRIX.md`, `02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md`, `04_CONFLICT_REGISTER.md`; `docs/blueprint/CargoGrid_Product_Concept_Brief.md`, `02_*.md` §10–§16, `05_*.md` §19.2/§22.1/§23.1 |
+| Decisions | No new product decision; no new ADR candidate |
+| Baseline evidence | Zero implementation task started, confirmed against `git status` |
+| Final status | `COMPLETED` |
+
+#### Branch reconciliation (precedes the Prompt 49 output this checkpoint)
+
+At the start of this run, this session's designated continuation branch (`claude/sleepy-ride-4vxsk6`) was found reconciled to `origin/main`@`27389a4` (PR #8 already merged), while `origin/agent/cargogrid-autonomous-build` — the branch prior checkpoints had been using — carried 3 further commits never merged into `main`: Prompts 46–48 (`11_DEVOPS_WORKSTREAM.md`, `12_RELEASE_TRAIN.md`, `13_FULL_WORK_BREAKDOWN_STRUCTURE.md`) plus their runtime-doc updates. `origin/agent/cargogrid-autonomous-build` was merged into `claude/sleepy-ride-4vxsk6` (clean merge, no conflicts, content-identical to the source branch) so that progress was not lost. All Step 3 checkpoints from this one forward continue on `claude/sleepy-ride-4vxsk6`; `agent/cargogrid-autonomous-build`/PR #7 is superseded as the tracking branch going forward (PR #7's commits are now also reachable from `claude/sleepy-ride-4vxsk6`).
+
+#### Outcome
+
+Produced `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (737 lines): full bidirectional requirement↔phase↔test traceability matrix tracing `CPD-001..023` (23), `RPD-001..040` (40), all 184 functional IDs at their 46-family granularity plus 10 explicit NFR IDs, the 13 package-generated gap requirements (`00-control/05_*.md` §5 — a count discrepancy against `13_*.md` §0's stated "14" was found and resolved in favor of the matrix's verified count of 13, documented not silently corrected), 24 business rules, 13 approval patterns, 14 approval use cases, 24 status transitions, 16 exception types, 12 report categories, 20 NFR catalogue rows, 20 `UAT-E2E-*`, 18 `TI-*`, 24 `FINTEST-*` scenarios, all 92 assumption-register rows, and the full conflict/gap/duplicate/decision-closure register (14 `CON-*`, 18 `GAP-*`, 12 `DUP-*`, 16 `OD-PKG-*`) — 401 total traced items, every row citing a WBS ID already registered in `13_*.md` §4 (no invented IDs, verified by range-membership spot-check). Cross-phase items given exactly one primary owner with prerequisite/extension links, no duplication. Coverage totals: 362 `COVERED` (90.3%), 9 `PARTIAL_BLOCKED`, 7 `EXTERNAL_VERIFICATION`, 7 `ACCEPTED_RISK`, 0 `NOT_COVERED` at document close — every non-`COVERED` row has a named owner and gate (§23's closure-task table); `GAP-017` (SaaS billing vs. tenant-finance ID separation) was found transiently unowned during analysis and closed same-document with a Phase 1 Platform Core closure task. RPD-022's risk disclosure, the direct-GA all-module gate, contract-silent recovery semantics, and the custom-integration policy preserved and cross-cited at every occurrence.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | ADD | Prompt 49 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-014` → `VERIFIED`, next eligible task → `CG-S3-ARCH-015` (Prompt 50); branch reconciliation recorded | `git revert` |
+
+No implementation task, code, or migration exists or was touched — this document indexes already-produced architecture/blueprint/package content, it does not execute a task from it (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. RPD-022, RPD-034/036, RPD-031/037, RPD-038, and every phase's own binding rules (tax/payroll SME gates) are cited, never restated with a weaker criterion.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch, now `claude/sleepy-ride-4vxsk6`).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened. One non-blocking correction flagged: `13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §0's inputs-read note states "14" package-generated gap-requirement IDs where direct enumeration of `00-control/05_*.md` finds 13 — recommended correction at next touch of that document, not itself a blocking action.
+
+#### Approval and closure
+
+No external approval required (documentation-only). Residual items: `ADR-CAND-ARCH-011..015,017..027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

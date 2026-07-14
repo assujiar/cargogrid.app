@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 43 — API/Integration Workstream)
+**Updated:** 2026-07-14 (post Step 3 Prompt 49 — Requirement/Phase Traceability)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
 
 ## 1. Task identity and state model
@@ -41,7 +41,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-011` | DevOps Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-010` (VERIFIED) | `docs/architecture/11_DEVOPS_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-012` |
 | `CG-S3-ARCH-012` | Release Train | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-011` (VERIFIED) | `docs/architecture/12_RELEASE_TRAIN.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-013` |
 | `CG-S3-ARCH-013` | Full Work Breakdown Structure | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-012` (VERIFIED) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-014` |
-| `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-013` (VERIFIED) | — | 2026-07-14 | Execute Prompt 49 |
+| `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-013` (VERIFIED) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-015` |
+| `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-014` (VERIFIED) | — | 2026-07-14 | Execute Prompt 50 |
 
 ## 3. Task records
 
@@ -350,6 +351,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §15 exit gates — every requirement/control has a delivery/verification owner, every task has dependencies and completion evidence, oversized work would be split (none found), cycles/orphans are zero (not merely blocking-but-tracked), no implementation was performed. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-014` — Requirement/Phase Traceability (Prompt 49).
 
+### CG-S3-ARCH-014 — Requirement/Phase Traceability
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 3 — Architecture and Execution Blueprint |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` (continuation of `agent/cargogrid-autonomous-build` progress, merged forward) |
+| Prompt path/version | `03-architecture-and-plan/49_REQUIREMENT_PHASE_TRACEABILITY_PROMPT.md` (`CG-AABPP-ARCH-049` v0.4.0) |
+| Build log path | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001..013` (all VERIFIED) |
+
+**Objective and outcome:** Produced a full bidirectional requirement↔phase↔test traceability matrix tracing `CPD-001..023` (23), `RPD-001..040` (40), all 184 functional IDs at their 46-family granularity plus 10 explicit NFR IDs, the 13 package-generated gap requirements (`00-control/05_*.md` §5 — a discrepancy against `13_*.md` §0's stated "14" was found and resolved in favor of the matrix's verified count of 13, documented rather than silently corrected), 24 business rules, 13 approval patterns, 14 approval use cases, 24 status transitions, 16 exception types, 12 report categories, 20 NFR catalogue rows, 20 `UAT-E2E-*`, 18 `TI-*`, 24 `FINTEST-*` scenarios, all 92 assumption-register rows, and the full conflict/gap/duplicate/decision-closure register (14 `CON-*`, 18 `GAP-*`, 12 `DUP-*`, 16 `OD-PKG-*`) — 401 total traced items. Every row cites a WBS ID already registered in `13_*.md` §4 (no invented IDs, verified by range-membership spot-check). Coverage totals: 362 `COVERED` (90.3%), 9 `PARTIAL_BLOCKED`, 7 `EXTERNAL_VERIFICATION`, 7 `ACCEPTED_RISK`, 0 `NOT_COVERED` at document close — every partial/external item carries a named owner and gate (§23's closure-task table). `GAP-017` (SaaS billing vs. tenant-finance ID separation) was found transiently unowned during analysis and closed same-document with a Phase 1 Platform Core closure task. RPD-022's risk disclosure, the direct-GA all-module gate, contract-silent recovery semantics, and the custom-integration policy are preserved and cross-cited at every occurrence. **No new ADR candidate raised; no product decision was reopened; no implementation task was created or started.**
+
+**Acceptance and closure:** `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` §27 exit gates — zero `NOT_COVERED` rows, every partial/external row has an owner and gate, every WBS task cited is source-verified, totals reconcile with `00-control/05_REQUIREMENT_COVERAGE_MATRIX.md` (one discrepancy found and resolved, not silently assumed), RPD-022/direct-GA/contract-silent-recovery/custom-integration policy preserved, cross-phase items have exactly one primary owner. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -369,7 +386,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-011` | ARCH-010 VERIFIED | CG-S3-ARCH-012 | `docs/architecture/11_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-012` | ARCH-011 VERIFIED | CG-S3-ARCH-013 | `docs/architecture/12_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-013` | ARCH-012 VERIFIED | CG-S3-ARCH-014 | `docs/architecture/13_*` | Done (VERIFIED) |
-| `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | YES |
+| `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | Done (VERIFIED) |
+| `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -402,7 +420,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-010` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/10_TESTING_WORKSTREAM.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-011` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/11_DEVOPS_WORKSTREAM.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-012` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/12_RELEASE_TRAIN.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-013` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-013` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`, merged forward) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-014` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
