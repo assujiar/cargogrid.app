@@ -18,8 +18,9 @@
 | ID | Issue | Severity | Discovered | Workaround | Blocks | Acceptance/closure |
 |---|---|---|---|---|---|---|
 | KI-001 | Repository is greenfield — no toolchain, database, CI, or ignore policy exists | Info/Low | CG-S2-DISC-001 (2026-07-14) | Expected; establish in Step 3 / Phase 0 | Nothing at discovery; blocks code until Phase 0 foundations exist | Open — resolves when Phase 0 foundations VERIFIED |
-| KI-002 | `docs/blueprint/tes.md` is an unclassified placeholder inside the authoritative blueprint folder | Low | CG-S2-DISC-001 (2026-07-14) | Ignore as non-authoritative | Nothing | Open — classify/remove during Prompt 22 (existing implementation audit) or Prompt 30 (placeholder/dead-code) |
+| KI-002 | `docs/blueprint/tes.md` is a placeholder inside the authoritative blueprint folder — classified `CONFIRMED_PLACEHOLDER` (empty, 1-byte file) in Prompt 30, finding `PH-001` | Low | CG-S2-DISC-001 (2026-07-14); classified CG-S2-DISC-010 (2026-07-14) | Ignore as non-authoritative; content is empty so it cannot mislead | Nothing | Open — awaiting owner-approved deletion in a dedicated documentation-cleanup task (deletion inside `docs/blueprint/` is out of scope for read-only discovery) |
 | KI-003 | No repository-root `.gitignore` before application scaffolding | Medium (future) | CG-S2-DISC-001 (2026-07-14) | Add ignore policy before introducing code/secrets | Safe secret/artifact handling once code is added | Open — resolve at Phase 0 (Prompt 85/87) before first code |
+| KI-004 | `docs/runtime/*.md` is a stale, diverged duplicate of the canonical root persistent-context/ledger files (from the earlier `oanf5a` lineage); `AGENTS.md` pointed at it as canonical | Medium | CG-S2-DISC-002 (2026-07-14) | Root files are canonical; `AGENTS.md` repointed to root; `docs/runtime/*` marked superseded in-place | Prevents a future agent from trusting/editing the stale copy | Open — resolves when `docs/runtime/*` is consolidated/removed in a dedicated cleanup task |
 
 ## 3. Rules
 

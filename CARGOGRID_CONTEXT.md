@@ -3,8 +3,8 @@
 **Template ID:** `CG-AABPP-GOV-012` (instance)
 **Template version:** `0.2.0`
 **Instance owner:** Product/Tech owner (SAIKI Group) — runtime agent maintained
-**Last updated:** 2026-07-14T10:16:05+07:00
-**Last verified commit:** `db1742c9bfaf79e4bb604def46126eabcfa946c2`
+**Last updated:** 2026-07-14 (this session)
+**Last verified commit:** `d58744500a55c267ddf7447c6518fc86c1323912`
 **Context status:** `CURRENT`
 
 > Durable orientation point for any new agent. Facts below are verified from the repository at the checkpoint above. Detailed evidence is linked, not duplicated.
@@ -52,33 +52,34 @@ Active source conflict: `NONE` (package reports 14/14 conflicts resolved, 0 open
 | Item | Verified value | Evidence |
 |---|---|---|
 | Repository URL/name | `assujiar/cargogrid.app` | `docs/discovery/01_REPOSITORY_INVENTORY.md` §1 |
-| Greenfield/brownfield | Greenfield (preliminary; formal decision owned by Prompt 32) | discovery §10 |
-| Default branch | `main` (@ `53e3d4a`) | discovery §1 |
-| Active build branch | `claude/cargogrid-ai-agent-setup-b492y3` (@ `db1742c`) | discovery §1 |
-| Package manager/version | NONE yet | discovery §5 |
-| Node/runtime version | NONE yet | discovery §5 |
-| Next.js/React/TypeScript | NONE yet | discovery §5 |
-| Supabase CLI/clients | NONE yet | discovery §5 |
-| Test frameworks | NONE yet | discovery §5 |
+| Greenfield/brownfield | **`GREENFIELD`** (High confidence, formally decided) | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` |
+| Default branch | `main` (@ `d587445`) | discovery §1 |
+| Active build branch | `claude/eloquent-mayer-s40hn4` (@ `d587445`) | discovery §1 |
+| Package manager/version | NONE yet | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` |
+| Node/runtime version | NONE repository-declared (sandbox-ambient only) | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` |
+| Next.js/React/TypeScript | NONE yet | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` |
+| Supabase CLI/clients | NONE yet | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` |
+| Test frameworks | NONE yet | `docs/discovery/07_TEST_QUALITY_BASELINE.md` |
 | Monorepo/workspaces | NONE (single documentation repo) | discovery §4 |
-| Current schema/migration head | NONE (no database) | discovery §5 |
-| Generated type path/status | NONE | discovery §5 |
-| Last clean baseline | `db1742c` (2026-07-14, clean tree) | discovery §1 |
+| Current schema/migration head | NONE (no database); trust `TRUSTED_REPOSITORY_ONLY` | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` |
+| Generated type path/status | NONE | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` |
+| Last clean baseline | `d587445` (2026-07-14, clean tree) | discovery §1 |
 
-Step 2 discovery status: `IN_PROGRESS` (1 of 14 prompts VERIFIED). Feature coding is forbidden until `RUNTIME_DISCOVERY_VERIFIED` and later implementation gates authorize code.
+Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14 of 14 prompts VERIFIED, `docs/discovery/14_STEP2_CLOSURE_REPORT.md`). Step 3 (architecture) is now eligible. Feature coding remains forbidden until Step 3 and the Phase 0 foundation gates are also VERIFIED.
 
 ## 5. Repository topology
 
 | Area | Path | Owner/boundary | Notes |
 |---|---|---|---|
-| Product/delivery blueprints | `docs/blueprint/` | Product | 6 authoritative sources + `tes.md` placeholder |
+| Product/delivery blueprints | `docs/blueprint/` | Product | 6 authoritative sources + `tes.md` placeholder (classified `CONFIRMED_PLACEHOLDER`, `PH-001`) |
 | AI agent build prompt package | `docs/ai-agent-build-prompt-package/` | Governance | 430 files, Steps 0–17 |
-| Persistent runtime context | repo root (`CARGOGRID_*.md`, `TASK_LEDGER.md`, ...) | Runtime agent | Bootstrapped 2026-07-14 |
-| Discovery evidence | `docs/discovery/` | Architecture | Initialized this task |
-| Build logs | `docs/build-logs/` | Runtime agent | Initialized this task |
-| Application/domain/UI/migrations/tests | — | — | Not yet created (greenfield) |
+| Persistent runtime context | repo root (`CARGOGRID_*.md`, `TASK_LEDGER.md`, `CHANGE_MANIFEST.md`, ...) | Runtime agent | Canonical; reconciled 2026-07-14 |
+| Superseded duplicate context | `docs/runtime/` | Runtime agent | **Stale** (`KI-004`) — banners added, do not treat as canonical |
+| Discovery evidence | `docs/discovery/` | Architecture | **Complete** — 14/14 Step 2 outputs, `RUNTIME_DISCOVERY_VERIFIED` |
+| Build logs | `docs/build-logs/` | Runtime agent | 1 log (+ repair addendum) |
+| Application/domain/UI/migrations/tests | — | — | Not yet created (greenfield, confirmed) |
 
-Canonical maps: not yet produced (owned by Step 3 architecture prompts 36–39).
+Canonical maps: not yet produced (owned by Step 3 architecture prompts 36–39, next eligible task).
 
 ## 6. Environment matrix
 
@@ -107,16 +108,16 @@ Repository-specific verified invariants: NONE yet (no code).
 
 | Field | Current value |
 |---|---|
-| Active phase/workstream | Runtime Step 2 — Repository Discovery |
-| Current task | `CG-S2-DISC-001` — Repository Discovery |
-| Task status | `VERIFIED` |
-| Branch/commit | `claude/cargogrid-ai-agent-setup-b492y3` / `db1742c` |
-| Last known good checkpoint | `db1742c` |
+| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (about to start) |
+| Current task | `CG-S2-DISC-014` — Step 2 Closure Verification |
+| Task status | `VERIFIED` — closure state `RUNTIME_DISCOVERY_VERIFIED` |
+| Branch/commit | `claude/eloquent-mayer-s40hn4` / `d587445` |
+| Last known good checkpoint | `d587445` |
 | Latest applied migration | none |
-| Last fully passing gate set | none (no gates exist) |
+| Last fully passing gate set | none (no gates exist; confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Known issues affecting work | KI-001, KI-002, KI-003 (informational) |
-| Next eligible task | `CG-S2-DISC-002` — Existing Implementation Audit (Prompt 22) |
+| Known issues affecting work | KI-001, KI-002, KI-003, KI-004 (informational/non-blocking) |
+| Next eligible task | `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36) |
 
 ## 11. Active constraints and accepted risks
 

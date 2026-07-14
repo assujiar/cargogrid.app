@@ -4,7 +4,7 @@
 **Instance version:** `0.2.0`
 **Status:** `ACTIVE` (repository-native instance)
 **Instantiated:** 2026-07-14T09:58:59+07:00 by runtime agent during Step 2 Prompt 21 (Repository Discovery)
-**Persistent context location:** `docs/runtime/` — read the files under `## Required pre-flight` from there.
+**Persistent context location:** repository root (`CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, `HANDOFF.md`). `docs/runtime/*.md` is a **stale, superseded duplicate** from an earlier bootstrap lineage (`KI-004`) — do not read or edit it as canonical.
 
 ## Mission
 
@@ -22,17 +22,17 @@ Never use an implementation artifact as implicit permission to contradict a rati
 
 ## Required pre-flight
 
-Before any edit, read the repository-native persistent context under `docs/runtime/`:
+Before any edit, read the repository-native persistent context at the repository root:
 
-- `docs/runtime/CARGOGRID_CONTEXT.md`
-- `docs/runtime/CARGOGRID_BUILD_STATUS.md`
-- `docs/runtime/TASK_LEDGER.md`
-- `docs/runtime/CHANGE_MANIFEST.md`
-- `docs/runtime/ERROR_LEDGER.md`
-- `docs/runtime/KNOWN_ISSUES.md`
-- `docs/runtime/HANDOFF.md`
+- `CARGOGRID_CONTEXT.md`
+- `CARGOGRID_BUILD_STATUS.md`
+- `TASK_LEDGER.md`
+- `CHANGE_MANIFEST.md` (`docs/runtime/CHANGE_MANIFEST.md` until a root copy is created)
+- `ERROR_LEDGER.md`
+- `KNOWN_ISSUES.md`
+- `HANDOFF.md`
 
-The canonical decision/assumption/conflict registers live under `docs/ai-agent-build-prompt-package/00-control/` (`02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md`, `04_CONFLICT_REGISTER.md`) until repository-native copies are created.
+The canonical decision/assumption/conflict registers live under `docs/ai-agent-build-prompt-package/00-control/` (`02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md`, `04_CONFLICT_REGISTER.md`).
 
 Then:
 

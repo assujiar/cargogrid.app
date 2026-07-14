@@ -13,8 +13,21 @@
 
 | Task ID | Name | Phase/workstream | Status | Owner/agent | Branch | Dependency | Build log | Last update | Next action |
 |---|---|---|---|---|---|---|---|---|---|
-| CG-S2-DISC-001 | Repository Discovery | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/cargogrid-ai-agent-setup-b492y3 | none | `docs/build-logs/CG-S2-DISC-001_repository_discovery.md` | 2026-07-14T10:16:05+07:00 | Proceed to CG-S2-DISC-002 |
-| CG-S2-DISC-002 | Existing Implementation Audit | Runtime Step 2 / Architecture | `READY` | — | claude/cargogrid-ai-agent-setup-b492y3 | CG-S2-DISC-001 (VERIFIED) | — | 2026-07-14T10:16:05+07:00 | Execute Prompt 22 |
+| CG-S2-DISC-001 | Repository Discovery (+ repair) | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | none | `docs/build-logs/CG-S2-DISC-001_repository_discovery.md` | 2026-07-14 (this session) | Superseded — see CG-S2-DISC-002..014 |
+| CG-S2-DISC-002 | Existing Implementation Audit | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-001 (VERIFIED) | `docs/discovery/02_EXISTING_IMPLEMENTATION_AUDIT.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-003 | Toolchain/Dependency Audit | Runtime Step 2 / DevEx | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-002 | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-004 | Database/Migration Audit | Runtime Step 2 / Data | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-003 | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-005 | Route/Module Inventory | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-004 | `docs/discovery/05_ROUTE_MODULE_INVENTORY.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-006 | Security Baseline Audit | Runtime Step 2 / Security | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-005 | `docs/discovery/06_SECURITY_BASELINE.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-007 | Test/Quality Baseline | Runtime Step 2 / QA | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-006 | `docs/discovery/07_TEST_QUALITY_BASELINE.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-008 | Performance Baseline | Runtime Step 2 / QA | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-007 | `docs/discovery/08_PERFORMANCE_BASELINE.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-009 | Accessibility/UX Baseline | Runtime Step 2 / UX | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-008 | `docs/discovery/09_ACCESSIBILITY_UX_BASELINE.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-010 | Placeholder/Dead-Code Audit | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-009 | `docs/discovery/10_PLACEHOLDER_DEAD_CODE_INVENTORY.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-011 | Technical Debt/Risk Register | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-010 | `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-012 | Greenfield/Brownfield Decision | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-011 | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-013 | Baseline Evidence Capture | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-012 | `docs/discovery/00_EXECUTION_INDEX.md`, `docs/discovery/13_BASELINE_EVIDENCE_INDEX.md` | 2026-07-14 | Complete |
+| CG-S2-DISC-014 | Step 2 Closure Verification | Runtime Step 2 / Architecture | `VERIFIED` | Claude Code | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-013 | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | 2026-07-14 | `RUNTIME_DISCOVERY_VERIFIED` — Step 2 closed |
+| CG-S3-ARCH-001 | Module Dependency Map | Runtime Step 3 / Architecture | `READY` | — | claude/eloquent-mayer-s40hn4 | CG-S2-DISC-014 (VERIFIED) | — | 2026-07-14 | Execute Prompt 36 |
 
 ## 3. Task record
 
@@ -99,18 +112,57 @@ Establish the exact target repository, checkpoint, worktree condition, topology,
 - Rollback/recovery state: no mutation to reverse; all writes are new documentation.
 - Next eligible task: `CG-S2-DISC-002`.
 
+### CG-S2-DISC-002 through CG-S2-DISC-014 — Remaining Step 2 discovery and closure
+
+| Field | Value |
+|---|---|
+| Parent phase | Runtime Step 2 — Repository Discovery and Baseline |
+| Status | `VERIFIED` (all 13 tasks) |
+| Owner/agent | Claude Code |
+| Branch/checkpoint | `claude/eloquent-mayer-s40hn4` / `d587445` (all 13 tasks share this one checkpoint) |
+| Prompt paths | `docs/ai-agent-build-prompt-package/02-discovery/22_*.md` through `34_*.md` |
+| Detailed record | Each task's full evidence, method, and completion report lives in its own runtime output — see the task-index table above for the exact `docs/discovery/*.md` path per task ID. This ledger entry intentionally does not duplicate that content; it records ledger-level facts only, per the "link, don't duplicate" rule in `AGENTS.md`. |
+
+**Objective and outcome (all 13 tasks):** Complete Step 2 repository discovery and baseline for a confirmed-greenfield repository, then independently verify closure. Every task's evidence-backed conclusion is absence (`NOT_FOUND`/`DOCUMENTED_ONLY`/`NOT_APPLICABLE`/`UNKNOWN`), which is the correct result given zero application code exists (established in Prompt 21/22) — not a shortcut taken to save effort.
+
+**Preconditions:** each task required the previous task `VERIFIED` at the same checkpoint; verified in sequence, no reordering, one disclosed deviation (the Prompt 21 repair performed ahead of Prompt 22 — see `docs/discovery/00_EXECUTION_INDEX.md` "Deviations").
+
+**Change and evidence summary:** 14 new discovery documents + 14 sha256 sidecars (`docs/discovery/00_EXECUTION_INDEX.md`, `02_*.md`–`14_*.md`); root ledgers (`CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `CARGOGRID_CONTEXT.md`, `HANDOFF.md`, `KNOWN_ISSUES.md`, `CHANGE_MANIFEST.md`) reconciled in the same checkpoint. No application/config/dependency/migration file exists or was touched.
+
+**Migrations/schema/types:** none. **Routes/actions/contracts/jobs:** none. **Tests added:** none (no toolchain exists; correctly recorded as such, not skipped).
+
+**Acceptance and closure:** `docs/discovery/14_STEP2_CLOSURE_REPORT.md` independently verifies all 14 artifacts, all critical-control representations, the `GREENFIELD` classification, and declares closure state `RUNTIME_DISCOVERY_VERIFIED`.
+
+**Residual risks/issues:** `KI-001` (Phase 0 foundations pending), `KI-002`/`RISK-008` (`tes.md` deletion needs owner approval), `KI-003`/`RISK-009` (`.gitignore` before Phase 0 code), `KI-004`/`RISK-003` (full `docs/runtime` removal is a follow-up cleanup task, mitigated this checkpoint via superseded banners).
+
+**Next eligible task:** `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36), the first Step 3 architecture prompt, now that Step 2 is `RUNTIME_DISCOVERY_VERIFIED`.
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files/contracts | Collision owner | Ready? |
 |---|---|---|---|---|---|
 | CG-S2-DISC-001 | Package Steps 0–17 | CG-S2-DISC-002..014 | `docs/discovery/` checkpoint | Architecture | Done |
-| CG-S2-DISC-002 | CG-S2-DISC-001 VERIFIED | CG-S2-DISC-003 | `docs/discovery/02_*` | Architecture | YES |
+| CG-S2-DISC-002..014 | CG-S2-DISC-001 VERIFIED (repaired) | CG-S3-ARCH-001 | `docs/discovery/00,02..14_*` | Architecture | Done |
+| CG-S3-ARCH-001 | CG-S2-DISC-014 VERIFIED (`RUNTIME_DISCOVERY_VERIFIED`) | CG-S3-ARCH-002 | `docs/architecture/01_*` | Architecture | YES |
 
 ## 5. Completed and superseded index
 
 | Task ID | Final status | Commit | Evidence/build log | Superseded by | Closed date |
 |---|---|---|---|---|---|
-| CG-S2-DISC-001 | `VERIFIED` | db1742c (uncommitted docs) | `docs/build-logs/CG-S2-DISC-001_repository_discovery.md` | none | 2026-07-14 |
+| CG-S2-DISC-001 | `VERIFIED` | d587445 (repair on `claude/eloquent-mayer-s40hn4`, pending push) | `docs/build-logs/CG-S2-DISC-001_repository_discovery.md` | none | 2026-07-14 |
+| CG-S2-DISC-002 | `VERIFIED` | d587445 (pending push) | `docs/discovery/02_EXISTING_IMPLEMENTATION_AUDIT.md` | none | 2026-07-14 |
+| CG-S2-DISC-003 | `VERIFIED` | d587445 (pending push) | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-004 | `VERIFIED` | d587445 (pending push) | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-005 | `VERIFIED` | d587445 (pending push) | `docs/discovery/05_ROUTE_MODULE_INVENTORY.md` | none | 2026-07-14 |
+| CG-S2-DISC-006 | `VERIFIED` | d587445 (pending push) | `docs/discovery/06_SECURITY_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-007 | `VERIFIED` | d587445 (pending push) | `docs/discovery/07_TEST_QUALITY_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-008 | `VERIFIED` | d587445 (pending push) | `docs/discovery/08_PERFORMANCE_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-009 | `VERIFIED` | d587445 (pending push) | `docs/discovery/09_ACCESSIBILITY_UX_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-010 | `VERIFIED` | d587445 (pending push) | `docs/discovery/10_PLACEHOLDER_DEAD_CODE_INVENTORY.md` | none | 2026-07-14 |
+| CG-S2-DISC-011 | `VERIFIED` | d587445 (pending push) | `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` | none | 2026-07-14 |
+| CG-S2-DISC-012 | `VERIFIED` | d587445 (pending push) | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | none | 2026-07-14 |
+| CG-S2-DISC-013 | `VERIFIED` | d587445 (pending push) | `docs/discovery/00_EXECUTION_INDEX.md`, `docs/discovery/13_BASELINE_EVIDENCE_INDEX.md` | none | 2026-07-14 |
+| CG-S2-DISC-014 | `VERIFIED` | d587445 (pending push) | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
