@@ -14,6 +14,7 @@
 | `CHG-2026-003` | `CG-S2-DISC-002..014` | DOCS | Complete remaining Step 2 discovery (Prompts 22–34) on branch `claude/eloquent-mayer-s40hn4`; merge that branch with `main` to adopt `-R1`'s canonical-location decision while keeping the discovery deliverables; close Step 2 with `RUNTIME_DISCOVERY_VERIFIED` | NONE | LOW | `COMPLETED` | merge commit, this branch | 2026-07-14 |
 | `CHG-2026-004` | `CG-S3-ARCH-001` | DOCS | Author `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` (Prompt 36) — first Step 3 architecture output; module catalogue, dependency matrix, directed map, cycles/conflicts, shared primitives, external dependencies, ADR candidates, phase implications, validation rules | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-005` | `CG-S3-ARCH-002` | DOCS | Author `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` (Prompt 37) — second Step 3 architecture output; canonical entity register, 6 lifecycle flow maps, lineage table, integration/job/file/report flows, 7 reconciliation points, 9 exception/recovery paths, data classifications, retention/legal-hold table, 2 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-006` | `CG-S3-ARCH-003` | DOCS | Author `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` (Prompt 38) — third Step 3 architecture output; ownership catalogue, allowed dependency directions, 10 public contracts + anti-corruption rule, shared kernel, access responsibility split, current-to-target mapping, boundary violations, enforcement/test strategy, 2 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -232,6 +233,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 #### Approval and closure
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002/005/006` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-003/004` (deferred to Prompts 39/45). Next eligible task: `CG-S3-ARCH-003` — Domain Boundary Map (Prompt 38).
+
+### CHG-2026-006 — Domain Boundary Map (Step 3, Prompt 38)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-003` / `38_DOMAIN_BOUNDARY_MAP_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_MODULE_DEPENDENCY_MAP.md`, `02_CANONICAL_DATA_FLOW_MAP.md` (both precondition, VERIFIED); Tech Arch §7.1/7.5/8/9.1–9.4/10/11.2; `298_*.md` "Non-negotiable boundaries" |
+| Decisions | No new product decision. Raised 2 new ADR candidates (`ADR-CAND-ARCH-007/008`: schema-per-domain namespace strategy, Reporting-schema timing) |
+| Baseline evidence | `docs/discovery/02_*`, `05_*` (zero implementation, confirmed unchanged) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md`: a boundary context map (Mermaid) distinguishing Platform shared-kernel, 7 bounded business domains, and 2 experience-layer modules that own no canonical entity; an ownership catalogue assigning table/schema namespace, service, UI route, API namespace, and events/jobs to one authoritative owner per domain; allowed dependency directions; 10 named public contracts with an explicit anti-corruption rule; a shared-kernel definition constrained to the Platform primitive set already established in Prompt 36 (no new kernel candidate introduced); a 7-layer access-responsibility split mapping each layer to the boundary that enforces it; a current-to-target mapping (100% `TARGET`, since the repository is greenfield); 7 boundary-violation patterns for future enforcement tooling to detect; an enforcement/test strategy spanning Prompts 39/41/43/45; and 2 new ADR candidates.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` | ADD | Prompt 38 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-003` → `VERIFIED`, next eligible task → `CG-S3-ARCH-004` (Prompt 39) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched (Step 3 README §7 scope contract).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022/035/038 disclosures preserved and cited, not weakened. Sensitive-file search: NONE_FOUND.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened against the Step 2 register.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002/005/006/007/008` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-003/004` (deferred to Prompts 39/45). Next eligible task: `CG-S3-ARCH-004` — Repository Target Structure (Prompt 39).
 
 ## 3. Maintenance rules
 
