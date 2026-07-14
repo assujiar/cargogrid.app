@@ -38,15 +38,15 @@ Shared DB/schema + RLS (dedicated Enterprise = contractual); online-first respon
 | Item | Verified value | Evidence |
 |---|---|---|
 | Repository | `assujiar/cargogrid.app` | `docs/discovery/01_REPOSITORY_INVENTORY.md` |
-| Greenfield/brownfield | Greenfield (preliminary; formal decision = Prompt 32) | inventory §8 |
-| Default branch | `main` @ `d587445` | inventory §1 |
-| Active build branch | `claude/cargogrid-ai-agent-setup-b492y3` (restarted from main after PR #3 merged) | inventory §0 |
+| Greenfield/brownfield | **`GREENFIELD`** (High confidence, formally decided) | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` |
+| Default branch | `main` @ `90129fc` (includes `CG-S2-DISC-001-R1`) | inventory §1 |
+| Active build branch | `claude/eloquent-mayer-s40hn4` (merged with `main` to adopt `-R1`'s canonical location; carries Step 2 closure Prompts 22–34) | `TASK_LEDGER.md` |
 | Package manager / runtime / framework / Supabase / tests | NONE yet | inventory §5 |
 | Monorepo/workspaces | NONE (single documentation repo) | inventory §4 |
 | Schema/migration head | NONE (no database) | inventory §5 |
 | Product/source baseline size | 438 files (1 README + 7 blueprint + 430 package) | inventory §4 |
 
-Step 2 discovery status: `IN_PROGRESS` (order 1 VERIFIED + reconciled). Feature coding forbidden until `RUNTIME_DISCOVERY_VERIFIED`.
+Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14/14 prompts VERIFIED — `docs/discovery/14_STEP2_CLOSURE_REPORT.md`). Step 3 (architecture) is now eligible. Feature coding remains forbidden until Step 3 and the Phase 0 foundation gates are also VERIFIED.
 
 ## 5. Repository topology
 
@@ -56,7 +56,7 @@ Step 2 discovery status: `IN_PROGRESS` (order 1 VERIFIED + reconciled). Feature 
 | Prompt package | `docs/ai-agent-build-prompt-package/` | 430 files, Steps 0–17 |
 | Canonical runtime context | `docs/runtime/` | context/status/ledger/change-manifest/errors/issues/handoff |
 | Repository operating rules | `AGENTS.md` (root) | governance instance |
-| Discovery evidence | `docs/discovery/` | inventory + hash |
+| Discovery evidence | `docs/discovery/` | **Complete** — 14/14 Step 2 outputs, `RUNTIME_DISCOVERY_VERIFIED` |
 | Build logs | `docs/build-logs/` | per-task |
 | App/domain/UI/migrations/tests | — | not created (greenfield) |
 
@@ -82,16 +82,16 @@ Tenant context preserved across DB/storage/cache/jobs/logs/search/reports/export
 
 | Field | Value |
 |---|---|
-| Active phase/workstream | Runtime Step 2 — Repository Discovery |
-| Current task | `CG-S2-DISC-001` (reconciled by `CG-S2-DISC-001-R1`) |
-| Task status | `VERIFIED` |
-| Branch/commit | `claude/cargogrid-ai-agent-setup-b492y3` / post-R1 commit on `d587445` base |
-| Last known good checkpoint | `d587445` |
+| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (about to start) |
+| Current task | `CG-S2-DISC-014` — Step 2 Closure Verification |
+| Task status | `VERIFIED` — closure state `RUNTIME_DISCOVERY_VERIFIED` |
+| Branch/commit | `claude/eloquent-mayer-s40hn4`, merged with `main`@`90129fc` |
+| Last known good checkpoint | merge of `claude/eloquent-mayer-s40hn4` + `origin/main`@`90129fc` |
 | Latest applied migration | none |
-| Last fully passing gate set | none (no gates exist) |
-| Active blockers | none (ERR-2026-001 resolved) |
-| Known issues affecting work | ISS-2026-002/003 (medium, non-blocking); ISS-2026-001 RESOLVED |
-| Next eligible task | `CG-S2-DISC-002` — Existing Implementation Audit (Prompt 22) |
+| Last fully passing gate set | none (no gates exist; confirmed `UNKNOWN` baseline, not a failure) |
+| Active blockers | none |
+| Known issues affecting work | ISS-2026-002 (recurred twice, non-blocking), ISS-2026-003 (non-blocking); ISS-2026-001 RESOLVED |
+| Next eligible task | `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36) |
 
 ## 11. Active constraints and accepted risks
 

@@ -4,7 +4,7 @@
 **Instance version:** `0.2.0`
 **Status:** `ACTIVE` (repository-native instance)
 **Instantiated:** 2026-07-14T09:58:59+07:00 by runtime agent during Step 2 Prompt 21 (Repository Discovery)
-**Persistent context location:** `docs/runtime/` — read the files under `## Required pre-flight` from there.
+**Persistent context location:** `docs/runtime/` (`CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `CHANGE_MANIFEST.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, `HANDOFF.md`) — ratified as canonical by reconciliation `CG-S2-DISC-001-R1` (`docs/runtime/CHANGE_MANIFEST.md` `CHG-2026-002`) after a repo-root duplicate set caused a merge collision. Do not recreate a competing context set at repo root; see `docs/runtime/KNOWN_ISSUES.md` `ISS-2026-002` (single-writer discipline).
 
 ## Mission
 
@@ -32,7 +32,7 @@ Before any edit, read the repository-native persistent context under `docs/runti
 - `docs/runtime/KNOWN_ISSUES.md`
 - `docs/runtime/HANDOFF.md`
 
-The canonical decision/assumption/conflict registers live under `docs/ai-agent-build-prompt-package/00-control/` (`02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md`, `04_CONFLICT_REGISTER.md`) until repository-native copies are created.
+The canonical decision/assumption/conflict registers live under `docs/ai-agent-build-prompt-package/00-control/` (`02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md`, `04_CONFLICT_REGISTER.md`).
 
 Then:
 

@@ -69,6 +69,12 @@ Both merged into `main`. Merge commit `9278b9e` (into PR #3) resolved the `docs/
 
 Status: `RECOVERED` — verification passed. Resume at `CG-S2-DISC-002`.
 
+#### Recurrence (2026-07-14, merge with `claude/eloquent-mayer-s40hn4`)
+
+A third branch, `claude/eloquent-mayer-s40hn4`, was cut from `main` at `d587445` before this reconciliation (`-R1`) had merged. It independently discovered the identical corruption (same file, same symptom) and resolved it the opposite way — root-level context kept canonical, `docs/runtime/*` marked superseded — while also completing Step 2 discovery Prompts 22–34 on top of that resolution. Merging that branch into `main` (now at `90129fc`, including `-R1`) reproduced the modify/delete conflict pattern this incident already describes. Resolution: kept `-R1`'s canonical-location decision (`docs/runtime/`), discarded the other branch's root-canonical choice, and re-homed its Step 2 discovery deliverables under this ledger set. No data was lost; both branches' substantive work (this reconciliation + the other branch's Prompts 22–34) is preserved. See `TASK_LEDGER.md` `CG-S2-DISC-002..014` and `CHANGE_MANIFEST.md` `CHG-2026-003`.
+
+This is not logged as a new Error ID — it is the same root cause (`ISS-2026-002`) manifesting a second time, which is itself evidence that `ISS-2026-002` needs an *enforced* fix, not just a documented one.
+
 ## 4. Notes
 
-Prevention: run each runtime Step 2–onward prompt on **one** authoritative branch only; do not open parallel agent sessions on the same runtime step (tracked as ISS-2026-002). Use the full error-record template from `01-agent-governance/17_ERROR_LEDGER_TEMPLATE.md` for future entries.
+Prevention: run each runtime Step 2–onward prompt on **one** authoritative branch only; do not open parallel agent sessions on the same runtime step (tracked as ISS-2026-002 — now demonstrated twice). Use the full error-record template from `01-agent-governance/17_ERROR_LEDGER_TEMPLATE.md` for future entries.

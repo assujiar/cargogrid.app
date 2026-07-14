@@ -11,6 +11,7 @@
 |---|---|---|---|---|---|---|---|---|
 | `CHG-2026-001` | `CG-S2-DISC-001` | DOCS | Instantiate Step 1 governance instances + Prompt 21 repository inventory (session A) | NONE | LOW | `SUPERSEDED` (by CHG-2026-002) | `0097236` (merged) | 2026-07-14 |
 | `CHG-2026-002` | `CG-S2-DISC-001-R1` | DOCS | Reconcile parallel-session collision: single canonical context in `docs/runtime/`, coherent inventory, incident logged | NONE | LOW | `COMPLETED` | reconciliation commit | 2026-07-14 |
+| `CHG-2026-003` | `CG-S2-DISC-002..014` | DOCS | Complete remaining Step 2 discovery (Prompts 22–34) on branch `claude/eloquent-mayer-s40hn4`; merge that branch with `main` to adopt `-R1`'s canonical-location decision while keeping the discovery deliverables; close Step 2 with `RUNTIME_DISCOVERY_VERIFIED` | NONE | LOW | `COMPLETED` | merge commit, this branch | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -78,6 +79,61 @@ Issues/errors changed: `ERR-2026-001` created (RECOVERED); `ISS-2026-002`, `ISS-
 #### Approval and closure
 
 No external approval required (documentation-only, feature-branch). Final residual risks: `ISS-2026-002`, `ISS-2026-003`. Next eligible task: `CG-S2-DISC-002`.
+
+### CHG-2026-003 — Step 2 discovery closure + third-collision merge reconciliation
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S2-DISC-002` through `CG-S2-DISC-014` |
+| Phase/workstream | Step 2 — Repository Discovery and Baseline |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `claude/eloquent-mayer-s40hn4` |
+| Source requirements | `docs/ai-agent-build-prompt-package/02-discovery/22_*.md`–`34_*.md` |
+| Decisions | Kept `CHG-2026-002`'s canonical-location decision (`docs/runtime/`); superseded the other branch's root-canonical resolution of the same corruption |
+| Baseline evidence | `docs/discovery/00_EXECUTION_INDEX.md`, `docs/discovery/13_BASELINE_EVIDENCE_INDEX.md`, `docs/discovery/14_STEP2_CLOSURE_REPORT.md` |
+| Final status | `COMPLETED`; Step 2 closure state `RUNTIME_DISCOVERY_VERIFIED` |
+
+#### Outcome
+
+Branch `claude/eloquent-mayer-s40hn4` was cut from `main` at `d587445`, before `CG-S2-DISC-001-R1` had merged. It independently hit the identical corruption `ERR-2026-001` describes and resolved it the opposite way (root-canonical, `docs/runtime/*` marked superseded), then completed all remaining Step 2 discovery prompts (22–34) on top of that resolution and closed Step 2 with `RUNTIME_DISCOVERY_VERIFIED`. Merging that branch with `main` (now including `-R1`) reproduced the same modify/delete conflict pattern. This change resolves it by keeping `-R1`'s ratified `docs/runtime/` canonical location and re-homing the discovery deliverables (which don't overlap with `-R1`'s files) under it — no discovery evidence from either branch is lost.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/discovery/00_EXECUTION_INDEX.md`, `02_*.md`–`14_*.md` (+ sha256 sidecars) | ADD (kept from the other branch, no conflict with `-R1`) | Step 2 discovery deliverables | `git revert` |
+| `docs/discovery/01_REPOSITORY_INVENTORY.md` / `.sha256` | KEEP `-R1`'s version | Already reconciled; avoids re-litigating the same fix twice | `git revert` |
+| `CARGOGRID_*.md`, `TASK_LEDGER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, `HANDOFF.md` (root) | DELETE (again) | The other branch had recreated/modified these; re-applying `-R1`'s decision | `git revert` |
+| `CHANGE_MANIFEST.md` (root) | DELETE | Would recreate the exact root/`docs/runtime` duplication `-R1` fixed | `git revert` |
+| `AGENTS.md` (root) | EDIT | The other branch had repointed this to root; reverted to point at `docs/runtime/` per `-R1` | `git revert` |
+| `docs/runtime/*` (7 files) | EDIT | Removed the other branch's now-incorrect "superseded" banners; appended Step 2 closure facts (this task index, build status, context, known-issues recurrence note, error-ledger addendum) | `git revert` |
+
+Unrelated pre-existing dirty files preserved: NONE (worktree clean on both branches before this merge).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed. RPD-022 disclosure preserved throughout. Sensitive-file search: NONE_FOUND.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — confirmed independently by `docs/discovery/03,07_*.md`. `docs/discovery/07_TEST_QUALITY_BASELINE.md` correctly records baseline `UNKNOWN`, not `GREEN`/`RED`.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers).
+- Rollback: `git revert` the merge commit; `main`'s `-R1` state (`90129fc`) is unaffected since this is a merge on the feature branch.
+- Last known good commit/schema: `origin/main`@`90129fc` / none.
+- Recovery verification: `git ls-files` shows one context set under `docs/runtime/`; all 14 Step 2 discovery outputs present; single `01_REPOSITORY_INVENTORY.md` (no duplication).
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, known issues (recurrence note), error ledger (recurrence note), `AGENTS.md`.
+
+Issues/errors changed: `ISS-2026-002` updated (recurrence note, second occurrence); `ISS-2026-001` updated (`tes.md` classification result folded in). No new IDs opened — both events map to already-tracked issues.
+
+#### Approval and closure
+
+No external approval required (documentation-only, feature-branch merge). Final residual risks: `ISS-2026-002` (recurrence demonstrates it needs an enforced fix), `ISS-2026-003`, `tes.md` deletion pending owner approval. Next eligible task: `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36).
 
 ## 3. Maintenance rules
 

@@ -46,8 +46,12 @@ No command used destructive flags. No install/build/migrate/deploy/commit was ru
 
 ## Output hash
 
-`sha256(docs/discovery/01_REPOSITORY_INVENTORY.md)` = `97ecbe4d18b26a441e46161553d72f85b7ea657437574c520f3c26cc1ed7f4dd`
+`sha256(docs/discovery/01_REPOSITORY_INVENTORY.md)` = `97ecbe4d18b26a441e46161553d72f85b7ea657437574c520f3c26cc1ed7f4dd` (original, pre-corruption)
+
+## Addendum — 2026-07-14, session branch `claude/eloquent-mayer-s40hn4`
+
+At the start of task `CG-S2-DISC-002`, `docs/discovery/01_REPOSITORY_INVENTORY.md` was found corrupted: the merge that produced HEAD `d587445` had concatenated this file with the equivalent output from the parallel `oanf5a` lineage, producing duplicate/contradictory sections. Computed hash at repair time was `8a067b8d1d7aafd3e6041a326c9e7ec7cd30183b63ee1d63968e3037e774f29f`, which did not match the hash recorded above — confirming drift. The file was repaired (single reconciled record, checkpoint `d587445`/branch `claude/eloquent-mayer-s40hn4`). New hash: `c7f8d22f8d5dc62c31d37e9b972a72db414e412f8677abd7c3fd6cb7f77d1d72`. Full evidence: `ERROR_LEDGER.md` `ERR-2026-001`.
 
 ## Next eligible prompt
 
-`CG-S2-DISC-002` — Existing Implementation Audit (`22_EXISTING_IMPLEMENTATION_AUDIT_PROMPT.md`) → `docs/discovery/02_EXISTING_IMPLEMENTATION_AUDIT.md`, only while checkpoint `db1742c` stays trusted and unchanged.
+`CG-S2-DISC-002` — Existing Implementation Audit (`22_EXISTING_IMPLEMENTATION_AUDIT_PROMPT.md`) → `docs/discovery/02_EXISTING_IMPLEMENTATION_AUDIT.md`, only while checkpoint `d587445` stays trusted and unchanged.
