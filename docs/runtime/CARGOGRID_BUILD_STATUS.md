@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 36 — Module Dependency Map)
+**Updated:** 2026-07-14 (post Step 3 Prompt 37 — Canonical Data Flow Map)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `agent/cargogrid-autonomous-build` cut from `origin/main`@`39d923e`
 **Build trust:** `TRUSTED`
@@ -13,10 +13,10 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (1/16 prompts) |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (2/16 prompts) |
 | Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`) |
-| Active task | `CG-S3-ARCH-001` — Module Dependency Map (Prompt 36) |
-| Active task status | `VERIFIED` — `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` complete |
+| Active task | `CG-S3-ARCH-002` — Canonical Data Flow Map (Prompt 37) |
+| Active task status | `VERIFIED` — `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` complete |
 | Branch | `agent/cargogrid-autonomous-build` (cut from `origin/main`@`39d923e`) |
 | HEAD | this checkpoint's commit on `agent/cargogrid-autonomous-build` |
 | Last known good commit | `origin/main`@`39d923e` |
@@ -24,9 +24,9 @@
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | `CG-S3-ARCH-002` — Canonical Data Flow Map (Prompt 37) |
+| Next eligible task | `CG-S3-ARCH-003` — Domain Boundary Map (Prompt 38) |
 
-Checkpoint summary: Step 2 discovery closed in the prior checkpoint (`RUNTIME_DISCOVERY_VERIFIED`, `GREENFIELD`, `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md`). This checkpoint executed the first Step 3 architecture prompt: `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` catalogues 10 platform primitives and 8 business domains, a 5-part dependency matrix (primitive-internal, primitive→domain, domain→domain, domain→reporting/audit, external), a directed Mermaid map, cycles/conflicts analysis (no true cycle found; two phase-order/ownership findings raised as non-blocking ADR candidates `ADR-CAND-ARCH-001/002`), a shared-primitives table reconciling ratified decisions (RPD-012/014/015/032/033/039) against softer blueprint "Proposed Default"/"Open Decision" language, 11 validation rules for later prompts, and 2 new architecture-identified risks (`MDM-RISK-001/002`). No product decision was reopened; every edge is sourced (none inferred from code, since none exists). Repository remains 100% documentation — no application code, toolchain, database, or CI exists yet, and none is authorized until Step 3 and the Phase 0 foundation gates are also VERIFIED.
+Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 2 of 16 outputs: `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` (module catalogue, dependency matrix, cycles/conflicts, 11 validation rules) and `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` (canonical entity register; Lead-to-Cash primary flow plus vendor/HRIS/ticketing/portal/loyalty secondary flows at step-level detail; lineage table; integration/job/file/report flows; 7 reconciliation points; 9 exception/recovery paths; retention/legal-hold table per RPD-025; data classifications per Tech Arch §12.4). Two new non-blocking findings this checkpoint (`MDM-RISK-003/004`, atomicity and orphan-link risk) and two new ADR candidates (`ADR-CAND-ARCH-005/006`), following the same non-silent-assumption pattern as Prompt 36. No product decision was reopened; every step is sourced (none inferred from code, since none exists). Repository remains 100% documentation — no application code, toolchain, database, or CI exists yet, and none is authorized until Step 3 and the Phase 0 foundation gates are also VERIFIED.
 
 ## 2. Discovery and foundation readiness
 
@@ -48,7 +48,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase started) | ~20% (Step 2 done; Step 3 1/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 37), then Phase 0 foundation prompts |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~22% (Step 2 done; Step 3 2/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 38), then Phase 0 foundation prompts |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -104,10 +104,10 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S3-ARCH-002` — Canonical Data Flow Map.
-- Entry conditions: `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` `VERIFIED` (met); no unresolved cycle blocking flow tracing (met — §5/§14 of that document).
-- Required prompt/output: `03-architecture-and-plan/37_CANONICAL_DATA_FLOW_MAP_PROMPT.md` → `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md`.
-- If blocked, resume: re-read `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` in full (checkpoint, module catalogue, dependency matrix §3.3) before starting Prompt 37.
+- Next eligible task: `CG-S3-ARCH-003` — Domain Boundary Map.
+- Entry conditions: `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` `VERIFIED` (met); every flow step has traceable ownership (met — §15 of that document).
+- Required prompt/output: `03-architecture-and-plan/38_DOMAIN_BOUNDARY_MAP_PROMPT.md` → `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md`.
+- If blocked, resume: re-read `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` and `02_CANONICAL_DATA_FLOW_MAP.md` in full before starting Prompt 38.
 - Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules

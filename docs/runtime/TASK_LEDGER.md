@@ -29,7 +29,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S2-DISC-013` | Baseline Evidence Capture | Step 2 / Architecture-repo | `VERIFIED` | Claude Code | `claude/eloquent-mayer-s40hn4` | `CG-S2-DISC-012` | `docs/discovery/00_EXECUTION_INDEX.md`, `docs/discovery/13_BASELINE_EVIDENCE_INDEX.md` | 2026-07-14 | Complete |
 | `CG-S2-DISC-014` | Step 2 Closure Verification | Step 2 / Architecture-repo | `VERIFIED` | Claude Code | `claude/eloquent-mayer-s40hn4` | `CG-S2-DISC-013` | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | 2026-07-14 | `RUNTIME_DISCOVERY_VERIFIED` — Step 2 closed |
 | `CG-S3-ARCH-001` | Module Dependency Map | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S2-DISC-014` (VERIFIED) | `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-002` |
-| `CG-S3-ARCH-002` | Canonical Data Flow Map | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-001` (VERIFIED) | — | 2026-07-14 | Execute Prompt 37 |
+| `CG-S3-ARCH-002` | Canonical Data Flow Map | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-001` (VERIFIED) | `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-003` |
+| `CG-S3-ARCH-003` | Domain Boundary Map | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-002` (VERIFIED) | — | 2026-07-14 | Execute Prompt 38 |
 
 ## 3. Task records
 
@@ -146,6 +147,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 - Rollback/recovery: `git revert` this checkpoint's commit(s) restores `origin/main`@`39d923e`.
 - Next eligible task: `CG-S3-ARCH-002` — Canonical Data Flow Map (Prompt 37).
 
+### CG-S3-ARCH-002 — Canonical Data Flow Map
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 3 — Architecture and Execution Blueprint |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `agent/cargogrid-autonomous-build` |
+| Prompt path/version | `03-architecture-and-plan/37_CANONICAL_DATA_FLOW_MAP_PROMPT.md` (`CG-AABPP-ARCH-037` v0.4.0) |
+| Build log path | `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001` (VERIFIED) |
+
+**Objective and outcome:** Traced canonical end-to-end data movement (Lead-to-Cash primary flow plus vendor, HRIS/payroll, three-channel ticketing, Customer Portal, and loyalty secondary flows) with system of record, canonical ID, tenant context, validation, status transition, event/job, audit, access layer, retention class, and reconciliation checkpoint for every step. Added 7 named reconciliation points, 9 exception/recovery paths, a retention/legal-hold table (RPD-025), and 2 new non-blocking findings (`MDM-RISK-003/004`, `ADR-CAND-ARCH-005/006`). No dependency was invented; every step sources to Blueprint §6/§8/§14/§20–21 status-lifecycle and data-dictionary content or Tech Arch §12/16–22/32 engine specifications.
+
+**Acceptance and closure:** `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` §15 completion statement — every critical flow has traceable ownership origin-to-final-record, tenant/access context explicit, financial flows reconcile via 7 checkpoints. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-003` — Domain Boundary Map (Prompt 38).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -153,7 +170,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S2-DISC-001-R1` | DISC-001 (both runs) | DISC-002..014 | `docs/discovery/**`, `docs/runtime/**` | Done (VERIFIED) |
 | `CG-S2-DISC-002..014` | DISC-001-R1 VERIFIED | CG-S3-ARCH-001 | `docs/discovery/00,02..14_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-001` | DISC-014 VERIFIED (`RUNTIME_DISCOVERY_VERIFIED`) | CG-S3-ARCH-002 | `docs/architecture/01_*` | Done (VERIFIED) |
-| `CG-S3-ARCH-002` | ARCH-001 VERIFIED | CG-S3-ARCH-003 | `docs/architecture/02_*` | YES |
+| `CG-S3-ARCH-002` | ARCH-001 VERIFIED | CG-S3-ARCH-003 | `docs/architecture/02_*` | Done (VERIFIED) |
+| `CG-S3-ARCH-003` | ARCH-002 VERIFIED | CG-S3-ARCH-004 | `docs/architecture/03_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -174,7 +192,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S2-DISC-012` | `VERIFIED` | (merge commit, this branch) | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | none | 2026-07-14 |
 | `CG-S2-DISC-013` | `VERIFIED` | (merge commit, this branch) | `docs/discovery/00_EXECUTION_INDEX.md`, `docs/discovery/13_BASELINE_EVIDENCE_INDEX.md` | none | 2026-07-14 |
 | `CG-S2-DISC-014` | `VERIFIED` | (merge commit, this branch) | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-001` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-001` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-002` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
