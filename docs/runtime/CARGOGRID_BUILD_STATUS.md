@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 39 — Repository Target Structure)
+**Updated:** 2026-07-14 (post Step 3 Prompt 40 — Database Schema Workstream)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `agent/cargogrid-autonomous-build` cut from `origin/main`@`39d923e`
 **Build trust:** `TRUSTED`
@@ -13,20 +13,20 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (4/16 prompts) |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (5/16 prompts) |
 | Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`) |
-| Active task | `CG-S3-ARCH-004` — Repository Target Structure (Prompt 39) |
-| Active task status | `VERIFIED` — `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` complete |
+| Active task | `CG-S3-ARCH-005` — Database Schema Workstream (Prompt 40) |
+| Active task status | `VERIFIED` — `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` complete |
 | Branch | `agent/cargogrid-autonomous-build` (cut from `origin/main`@`39d923e`) |
 | HEAD | this checkpoint's commit on `agent/cargogrid-autonomous-build` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database) |
+| Schema/migration head | NONE (no database — this checkpoint is a schema *plan*, no migration created/applied) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | `CG-S3-ARCH-005` — Database Schema Workstream (Prompt 40) |
+| Next eligible task | `CG-S3-ARCH-006` — RLS/RBAC Workstream (Prompt 41) |
 
-Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 4 of 16 outputs: `01_MODULE_DEPENDENCY_MAP.md`, `02_CANONICAL_DATA_FLOW_MAP.md`, `03_DOMAIN_BOUNDARY_MAP.md` (all prior checkpoints), and `04_REPOSITORY_TARGET_STRUCTURE.md` (concrete + bounded-pattern target tree, directory purpose/owner table, import/dependency rules, contract placement, 10-slice incremental transition sequence matching the existing phase order, enforcement gates). Three new ADR candidates this checkpoint (`ADR-CAND-ARCH-009/010/011`: migration naming, contracts-folder timing, no-empty-stub convention) and one new risk (`MDM-RISK-005`, naming-drift risk), bringing the running total to 11 non-blocking ADR candidates and 5 architecture-identified risks across the four documents. No product decision was reopened; every claim is sourced (none inferred from code, since none exists). Repository remains 100% documentation — no application code, toolchain, database, or CI exists yet, and none is authorized until Step 3 and the Phase 0 foundation gates are also VERIFIED.
+Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 5 of 16 outputs, most recently `05_DATABASE_SCHEMA_WORKSTREAM.md`: schema principles, a single-`app`-schema entity/ownership catalogue (~60 tables), relationship/constraint plan, full finance controls (Tech Arch §24), spatial/file/job/config/audit/staging/reporting schema needs, index/pagination plan, migration-wave policy, test matrix, and a 13-slice atomic workstream backlog. This checkpoint **resolved 4 prior ADR candidates directly** (`ADR-CAND-ARCH-001` vendor-rate ownership, `005` Job→Shipment atomicity, `007` schema-per-domain, `008` Reporting-schema timing) using concrete SQL evidence from Tech Arch §11.3/§32.6 that **corrected** `03_DOMAIN_BOUNDARY_MAP.md`'s earlier schema-per-domain recommendation to a single flat `app` schema — an amendment note was added to `03_*.md` rather than rewriting it. Raised 2 new ADR candidates (`ADR-CAND-ARCH-012/013`) and 1 new risk (`MDM-RISK-006`). No product decision was reopened; every claim is sourced. Repository remains 100% documentation — no application code, toolchain, database, or CI exists yet.
 
 ## 2. Discovery and foundation readiness
 
@@ -48,7 +48,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~26% (Step 2 done; Step 3 4/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 40), then Phase 0 foundation prompts |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~28% (Step 2 done; Step 3 5/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 41), then Phase 0 foundation prompts |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -104,10 +104,10 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S3-ARCH-005` — Database Schema Workstream.
-- Entry conditions: `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` `VERIFIED` (met); target structure aligns with domain boundaries (met — §13 of that document).
-- Required prompt/output: `03-architecture-and-plan/40_DATABASE_SCHEMA_WORKSTREAM_PROMPT.md` → `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md`.
-- If blocked, resume: re-read `docs/architecture/01_*.md` through `04_*.md` in full before starting Prompt 40 — Prompt 40 must resolve `ADR-CAND-ARCH-001/005/007/008/009` as part of its schema design.
+- Next eligible task: `CG-S3-ARCH-006` — RLS/RBAC Workstream.
+- Entry conditions: `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` `VERIFIED` (met); every canonical entity has an owner/table (met — §13 of that document).
+- Required prompt/output: `03-architecture-and-plan/41_RLS_RBAC_WORKSTREAM_PROMPT.md` → `docs/architecture/06_RLS_RBAC_WORKSTREAM.md`.
+- If blocked, resume: re-read `docs/architecture/01_*.md` through `05_*.md` in full before starting Prompt 41 — Prompt 41 must resolve `ADR-CAND-ARCH-002/006` as part of its policy design, and must use the single-`app`-schema table list from `05_*.md` §3, not the superseded namespace column in `03_*.md`.
 - Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules

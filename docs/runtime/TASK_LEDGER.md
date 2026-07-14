@@ -32,7 +32,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-002` | Canonical Data Flow Map | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-001` (VERIFIED) | `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-003` |
 | `CG-S3-ARCH-003` | Domain Boundary Map | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-002` (VERIFIED) | `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-004` |
 | `CG-S3-ARCH-004` | Repository Target Structure | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-003` (VERIFIED) | `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-005` |
-| `CG-S3-ARCH-005` | Database Schema Workstream | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-004` (VERIFIED) | — | 2026-07-14 | Execute Prompt 40 |
+| `CG-S3-ARCH-005` | Database Schema Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-004` (VERIFIED) | `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-006` |
+| `CG-S3-ARCH-006` | RLS/RBAC Workstream | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-005` (VERIFIED) | — | 2026-07-14 | Execute Prompt 41 |
 
 ## 3. Task records
 
@@ -197,6 +198,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` §13 completion statement — target structure aligns with verified topology and domain boundaries, protects preserved assets, avoids tenant forks/broad rewrites, gives explicit allowed/forbidden path guidance. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-005` — Database Schema Workstream (Prompt 40).
 
+### CG-S3-ARCH-005 — Database Schema Workstream
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 3 — Architecture and Execution Blueprint |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `agent/cargogrid-autonomous-build` |
+| Prompt path/version | `03-architecture-and-plan/40_DATABASE_SCHEMA_WORKSTREAM_PROMPT.md` (`CG-AABPP-ARCH-040` v0.4.0) |
+| Build log path | `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001..004` (all VERIFIED) |
+
+**Objective and outcome:** Planned the PostgreSQL/Supabase schema and migration workstream: schema principles (tenant columns, temporal fields, data classification), entity/schema ownership (single `app` schema — **corrected** `03_DOMAIN_BOUNDARY_MAP.md`'s schema-per-domain recommendation using concrete SQL evidence from Tech Arch §11.3/§32.6, amendment note added to `03_*.md`), a ~60-table phased schema catalogue, a relationship/constraint plan (FKs, uniqueness, state transitions, soft-delete/retention/legal-hold, idempotency, optimistic concurrency, RPD-022-exception RLS split), full finance controls (balanced postings, draft/post/reversal, period locks, allocation/reconciliation, snapshots/lineage, multi-currency, idempotent posting), spatial/file/job/config/audit/staging/reporting schema needs, an index/pagination plan, migration-wave policy (expand/migrate/contract), a test matrix, resolution of `ADR-CAND-ARCH-001/005/007/008` plus 2 new ADR candidates (`ADR-CAND-ARCH-012/013`), 1 new risk (`MDM-RISK-006`), and a 13-slice atomic workstream backlog. **No schema/database mutation occurred** (prompt precondition, verified).
+
+**Acceptance and closure:** `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` §13 completion statement — every canonical entity has one owner/phase, tenant and finance integrity designed, no mutation occurred, every migration task sized to 1–3 migrations. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-006` — RLS/RBAC Workstream (Prompt 41).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -207,7 +224,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-002` | ARCH-001 VERIFIED | CG-S3-ARCH-003 | `docs/architecture/02_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-003` | ARCH-002 VERIFIED | CG-S3-ARCH-004 | `docs/architecture/03_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-004` | ARCH-003 VERIFIED | CG-S3-ARCH-005 | `docs/architecture/04_*` | Done (VERIFIED) |
-| `CG-S3-ARCH-005` | ARCH-004 VERIFIED | CG-S3-ARCH-006 | `docs/architecture/05_*` | YES |
+| `CG-S3-ARCH-005` | ARCH-004 VERIFIED | CG-S3-ARCH-006 | `docs/architecture/05_*` | Done (VERIFIED) |
+| `CG-S3-ARCH-006` | ARCH-005 VERIFIED | CG-S3-ARCH-007 | `docs/architecture/06_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -231,7 +249,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-001` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-002` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-003` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-004` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-004` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-005` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 

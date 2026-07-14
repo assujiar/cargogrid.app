@@ -4,6 +4,8 @@
 **Runtime output of:** `docs/ai-agent-build-prompt-package/03-architecture-and-plan/38_DOMAIN_BOUNDARY_MAP_PROMPT.md`
 **Status:** `VERIFIED`
 
+> **Amendment (Prompt 40, `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` §1/§3):** the "Table/schema namespace" column in §3 below (`commercial.*`, `operations.*`, `finance.*`, ...) and `ADR-CAND-ARCH-007` in §11 recommended PostgreSQL schema-per-domain. Concrete SQL evidence found while authoring Prompt 40 (Tech Arch §11.3's example RLS policy, §32.6's example indexes — both use a single flat `app` schema, e.g. `app.shipments`, `app.vendor_rates`) contradicts that recommendation and outranks it. `ADR-CAND-ARCH-007` is **resolved**: one `app` schema for all tenant-owned tables, plus a separate `report` schema for materialized views only; domain ownership is enforced at the application/RLS layer, not by physical schema boundary. Read the namespace column below as superseded by this amendment; every other part of this document (ownership catalogue, contracts, shared kernel, access responsibilities) is unaffected.
+
 ## 0. Checkpoint
 
 | Field | Value |
