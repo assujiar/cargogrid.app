@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 44 — UX/Design System Workstream)
+**Updated:** 2026-07-14 (post Step 3 Prompt 45 — Testing Workstream)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `agent/cargogrid-autonomous-build` cut from `origin/main`@`39d923e`
 **Build trust:** `TRUSTED`
@@ -13,20 +13,20 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (9/16 prompts) |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (10/16 prompts) |
 | Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`) |
-| Active task | `CG-S3-ARCH-009` — UX/Design System Workstream (Prompt 44) |
-| Active task status | `VERIFIED` — `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` complete |
+| Active task | `CG-S3-ARCH-010` — Testing Workstream (Prompt 45) |
+| Active task status | `VERIFIED` — `docs/architecture/10_TESTING_WORKSTREAM.md` complete |
 | Branch | `agent/cargogrid-autonomous-build` (cut from `origin/main`@`39d923e`; tracked by GitHub PR #7) |
 | HEAD | this checkpoint's commit on `agent/cargogrid-autonomous-build` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — this checkpoint is a UX/design-system *plan*, no component/token/route/asset created) |
+| Schema/migration head | NONE (no database — this checkpoint is a test *plan*, no test/CI/fixture created) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | `CG-S3-ARCH-010` — Testing Workstream (Prompt 45) |
+| Next eligible task | `CG-S3-ARCH-011` — DevOps Workstream (Prompt 46) |
 
-Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 9 of 16 outputs, most recently `09_UX_DESIGN_SYSTEM_WORKSTREAM.md`: 3-portal experience architecture (Supreme Admin/Tenant Internal/Customer Portal, distinct mental models mapped onto `04_*.md`'s 4 App Router route groups, route group = UX boundary only, never authorization); portal/route map; design-system inventory under "one component owner, many consumers"; 11-state component contract binding on every data-bearing component; 7 canonical workflows translated into page/route/action maps cross-referenced to `07_*.md`'s 24 status transitions/14 approval use cases; access-presentation rules (field masking never fetch-then-hide, disabled-vs-hidden, support-mode banner, Supreme Admin disclosure); responsive/PWA/browser matrix; 8-area WCAG 2.2 AA accessibility plan; localization/branding rules; performance budgets aligned to `08_*.md` §12. Resolved 3 blueprint-level Open Decisions via already-ratified RPDs (`OD-UX-001` by RPD-019, `OD-UX-002`/`OD-OPS-001` by RPD-004); raised `ADR-CAND-ARCH-020/021` (non-blocking, Phase 0 Prompt 90). No product decision was reopened; every claim is sourced. Repository remains 100% documentation.
+Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 10 of 16 outputs, most recently `10_TESTING_WORKSTREAM.md`: 18-layer test architecture bound to `01–09_*.md`'s catalogues; requirement/control matrix; all three mandatory critical-scenario catalogues preserved verbatim — 20 `UAT-E2E-*`, 18 `TI-*` (cross-referenced to `06_*.md` §10's 15 negative tests), 24 `FINTEST-*` (23/24 release-blocking); 7-tier environment/10-factory data strategy; CI gate model (pipeline order, flake/quarantine, no-hidden-failure rule); migration/recovery/compatibility/browser/accessibility/load/DR tests bound to Blueprint §21's performance table and §20's security scope; 12-phase exit-criteria mapping; baseline-vs-regression distinction and RPD-034/036's zero-critical-defect direct-GA gate fixed as enforceable. Raised `ADR-CAND-ARCH-022/023` (non-blocking, Phase 0 Prompt 91). No product decision was reopened; every claim is sourced. Repository remains 100% documentation.
 
 ## 2. Discovery and foundation readiness
 
@@ -48,7 +48,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~36% (Step 2 done; Step 3 9/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 45), then Phase 0 foundation prompts |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~38% (Step 2 done; Step 3 10/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 46), then Phase 0 foundation prompts |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -70,7 +70,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 | Database/RLS/RBAC | `NOT_STARTED` | Absence confirmed | `docs/discovery/04,06_*.md` | none |
 | REST/GraphQL/integration/jobs | `IN_PROGRESS` | API/Integration Workstream planned (`docs/architecture/08_*.md`) | `docs/architecture/08_*.md` | none |
 | UX/design/accessibility | `IN_PROGRESS` | UX/Design System Workstream planned (`docs/architecture/09_*.md`) | `docs/architecture/09_*.md` | none |
-| QA/regression/performance | `NOT_STARTED` | Baseline `UNKNOWN` | `docs/discovery/07,08_*.md` | none |
+| QA/regression/performance | `IN_PROGRESS` | Testing Workstream planned (`docs/architecture/10_*.md`); baseline `UNKNOWN` | `docs/architecture/10_*.md`, `docs/discovery/07,08_*.md` | none |
 | Documentation/onboarding/support | `IN_PROGRESS` | Canonical context reconciled; Step 2 fully documented | `docs/runtime/`, `CHANGE_MANIFEST.md` | none |
 | All other workstreams | `NOT_STARTED` | — | — | none |
 
@@ -104,10 +104,10 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S3-ARCH-010` — Testing Workstream.
-- Entry conditions: `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` `VERIFIED` (met); every critical flow has states and access behavior defined (met — §15 of that document).
-- Required prompt/output: `03-architecture-and-plan/45_TESTING_WORKSTREAM_PROMPT.md` → `docs/architecture/10_TESTING_WORKSTREAM.md`.
-- If blocked, resume: re-read `docs/architecture/01_*.md` through `09_*.md` in full before starting Prompt 45.
+- Next eligible task: `CG-S3-ARCH-011` — DevOps Workstream.
+- Entry conditions: `docs/architecture/10_TESTING_WORKSTREAM.md` `VERIFIED` (met); every critical control has a planned proof (met — §14 of that document).
+- Required prompt/output: `03-architecture-and-plan/46_DEVOPS_WORKSTREAM_PROMPT.md` → `docs/architecture/11_DEVOPS_WORKSTREAM.md`.
+- If blocked, resume: re-read `docs/architecture/01_*.md` through `10_*.md` in full before starting Prompt 46.
 - Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules
