@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 49 — Requirement/Phase Traceability)
+**Updated:** 2026-07-14 (post Step 3 Prompt 50 — Risk-Ranked Critical Path)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `claude/sleepy-ride-4vxsk6` (continuation of `agent/cargogrid-autonomous-build`, merged forward; cut from `origin/main`@`39d923e`)
 **Build trust:** `TRUSTED`
@@ -13,22 +13,22 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (14/16 prompts) |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (15/16 prompts) |
 | Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`) |
-| Active task | `CG-S3-ARCH-014` — Requirement/Phase Traceability (Prompt 49) |
-| Active task status | `VERIFIED` — `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` complete |
+| Active task | `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50) |
+| Active task status | `VERIFIED` — `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` complete |
 | Branch | `claude/sleepy-ride-4vxsk6` (continuation branch; picked up `agent/cargogrid-autonomous-build`'s 3 unmerged commits by merge; cut from `origin/main`@`39d923e`) |
 | HEAD | this checkpoint's commit on `claude/sleepy-ride-4vxsk6` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — this checkpoint is a traceability *index* over already-produced architecture content, no implementation task was started) |
+| Schema/migration head | NONE (no database — this checkpoint ranks/sequences already-produced architecture content, no implementation task was started) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50) |
+| Next eligible task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51, final Step 3 output) |
 
-Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 14 of 16 outputs, most recently `14_REQUIREMENT_PHASE_TRACEABILITY.md`: full bidirectional requirement↔phase↔test traceability matrix — `CPD-001..023`, `RPD-001..040`, all 184 functional IDs (46 families) plus 10 explicit NFR IDs, 13 package-generated gap requirements (discrepancy found against `13_*.md`'s stated "14", resolved in favor of the matrix's verified count), 24 business rules, 13 approval patterns, 14 approval use cases, 24 status transitions, 16 exception types, 12 report categories, 20 NFR catalogue rows, 20 `UAT-E2E-*`, 18 `TI-*`, 24 `FINTEST-*` scenarios, 92 assumption-register rows, and the full conflict/gap/duplicate/decision-closure register — 401 total traced items, each with a WBS ID already registered in `13_*.md` §4 (no invented IDs). Coverage totals: 362 `COVERED` (90.3%), 9 `PARTIAL_BLOCKED`, 7 `EXTERNAL_VERIFICATION`, 7 `ACCEPTED_RISK`, 0 `NOT_COVERED` at document close, each non-`COVERED` row carrying a named owner and gate. RPD-022's risk disclosure, the direct-GA all-module gate, contract-silent recovery semantics, and the custom-integration policy preserved and cross-cited. No new ADR candidate raised; no product decision was reopened; every claim is sourced. Repository remains 100% documentation.
+Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 15 of 16 outputs, most recently `15_RISK_RANKED_CRITICAL_PATH.md`: risk-ranked, dependency-depth-ordered critical path over the WBS (`13_*.md`) and traceability matrix (`14_*.md`) — 9 ranking dimensions (severity, likelihood, blast radius, tenant/security/finance/data exposure, dependency centrality, reversibility, detection-strength gap, uncertainty, remediation complexity), each 1–5, combined into a reproducible Composite Risk Score (range 8–60, full arithmetic shown per row); critical path `Phase 0 → 1 → 2 → 3 → 4 → {5‖6} → 7 → 8 → 9 → 15 → 16 → direct GA` (matches `12_RELEASE_TRAIN.md` §9 exactly); top risks: Finance tax/legal SME gate (`FIN-195`, CRS 49), payroll SME gate (`HRT-282`, CRS 47), Supreme Admin absolute-CRUD disclosure (RPD-022, CRS 46), direct-GA/zero-critical-defect gate (`RGL-412`, CRS 43), penetration test (`RGL-402`, CRS 42); foundation blockers dominate the top half of the ranking; risk-adjusted recommendation to pull `FIN-195`/`HRT-282` SME *engagement* forward into Phase 0/1 without moving their WBS position; concurrency lanes (Phase 5/6 fork, 4 independent Phase-0 tooling ADRs, SME engagement parallel to build); 5 recalculation triggers binding this document to re-derivation. No duration/staffing/date invented anywhere. No new ADR candidate raised; no product decision was reopened; every claim is sourced. Repository remains 100% documentation.
 
-**Branch note (this checkpoint):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. At start of this run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48: DevOps, Release Train, Full WBS workstreams). Those 3 commits were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical to the source branch) before this checkpoint's work began, so no progress was lost. All further Step 3 checkpoints continue on `claude/sleepy-ride-4vxsk6`.
+**Branch note (carried forward):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. At the start of the prior checkpoint's run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48: DevOps, Release Train, Full WBS workstreams). Those 3 commits were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical to the source branch), so no progress was lost. All Step 3 checkpoints continue on `claude/sleepy-ride-4vxsk6`.
 
 ## 2. Discovery and foundation readiness
 
@@ -50,7 +50,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~47% (Step 2 done; Step 3 14/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 50), then Phase 0 foundation prompts |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~50% (Step 2 done; Step 3 15/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 51, final Step 3 output), then Phase 0 foundation prompts |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -109,10 +109,10 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path.
-- Entry conditions: `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` `VERIFIED` (met); zero `NOT_COVERED` rows, every partial/external row has an owner and gate (met — §27 of that document).
-- Required prompt/output: `03-architecture-and-plan/50_RISK_RANKED_CRITICAL_PATH_PROMPT.md` → `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md`.
-- If blocked, resume: re-read `docs/architecture/01_*.md` through `14_*.md` in full before starting Prompt 50.
+- Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (final Step 3 output).
+- Entry conditions: `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` `VERIFIED` (met); every critical-path item source-verified, ranking reproducible, no unverified dates (met — §15 of that document).
+- Required prompt/output: `03-architecture-and-plan/51_STEP3_CLOSURE_VERIFICATION_PROMPT.md` → `docs/architecture/16_STEP3_CLOSURE_REPORT.md`.
+- If blocked, resume: re-read `docs/architecture/01_*.md` through `15_*.md` in full before starting Prompt 51.
 - Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules

@@ -827,6 +827,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 
 No external approval required (documentation-only). Residual items: `ADR-CAND-ARCH-011..015,017..027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
 
+### CHG-2026-018 — Risk-Ranked Critical Path (Step 3, Prompt 50)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-015` / `50_RISK_RANKED_CRITICAL_PATH_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; no implementation task created or started) |
+| Author/agent | Claude Code (autonomous build agent), branch `claude/sleepy-ride-4vxsk6` |
+| Source requirements | `docs/architecture/13_*.md` (WBS), `14_*.md` (traceability matrix), `12_RELEASE_TRAIN.md` (sequencing basis), `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md`, `01_*.md`–`11_*.md` (foundation/ADR detail) |
+| Decisions | No new product decision; no new ADR candidate |
+| Baseline evidence | Zero implementation task started, confirmed against `git status` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` (333 lines): defined 9 ranking dimensions (severity, likelihood, blast radius, tenant/security/finance/data exposure, dependency centrality, reversibility, detection-strength gap, uncertainty, remediation complexity), each on a 1–5 scale, combined into a reproducible Composite Risk Score (`CRS = Sev×Lik + Rad+Exp+Dep+Rev+Det+Unc+Rem`, range 8–60) with full per-row arithmetic — no duration, staffing figure, or calendar date invented anywhere, per the prompt's explicit prohibition. Critical path (dependency-depth only): `Phase 0 → 1 (Platform Core) → 2 (Commercial) → 3 (Operations/Portal basic) → 4 (Finance) → {5 (Advanced TMS/WMS) ‖ 6 (Procurement)} → 7 (HRIS/Ticketing) → 8 (Portal full/Loyalty) → 9 (Intelligence/Enterprise) → 15 (hardening) → 16 (RC/Go-Live) → direct GA`, matching `12_RELEASE_TRAIN.md` §9 exactly (Phase 5/6 the sole genuine parallel-eligible fork). Risk-ranked table scores 26 real, cited items; top 5: Finance tax/legal SME gate (`FIN-195`, CRS 49), payroll SME gate (`HRT-282`, CRS 47), Supreme Admin absolute-CRUD disclosure (RPD-022, CRS 46), direct-GA/zero-critical-defect gate (`RGL-412`, CRS 43), penetration test (`RGL-402`, CRS 42). Foundation blockers (repo strategy, boundaries, schema/migrations, RLS/RBAC, config engine, API/jobs/files, CI/environments, test data, observability, backup/recovery, compliance evidence) dominate the top half of the ranking. Risk-adjusted (non-WBS-reordering) recommendation: begin `FIN-195`/`HRT-282` external SME *engagement* in Phase 0/1 (capability-prompt WBS position unchanged at Phase 4/7) since SME review needs only reviewable policy content, and external-party lead time is the plan's least controllable variable. Concurrency lanes identified: Phase 5/6 fork; 4 independent Phase-0 tooling ADRs; SME engagement parallel to Phase 0–3 build; design-system foundation parallel to schema/RLS foundation. Risk burn-down evidence plan and 5 recalculation triggers (ADR resolution, runtime facts, estimate change, failure, requirement change) bind this document to re-derivation, not hand-patching. RPD-022, RPD-031/034/036/037, and RPD-038 each shown affecting a concrete sequencing/gate mechanism (not just narrative mention), satisfying that specific completion-gate clause.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | ADD | Prompt 50 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-015` → `VERIFIED`, next eligible task → `CG-S3-ARCH-016` (Prompt 51, final Step 3 output) | `git revert` |
+
+No implementation task, code, or migration exists or was touched — this document ranks/sequences already-produced architecture/requirement content, it does not execute a task from it (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. RPD-022, RPD-031/034/036/037, RPD-038, and the `FIN-195`/`HRT-282` SME gates are cited and shown affecting sequencing, never restated with a weaker criterion.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch `claude/sleepy-ride-4vxsk6`).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened; no new ADR candidate raised.
+
+#### Approval and closure
+
+No external approval required (documentation-only). Residual items: 17 open `ADR-CAND-ARCH-0xx` implementation ADRs (non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51, the final Step 3 output — verifies the full `01_*.md`–`15_*.md` package at one repository checkpoint).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -3,7 +3,7 @@
 **Instance of:** `CG-AABPP-GOV-012`
 **Instance version:** `0.2.0`
 **Instance owner:** Runtime build agent (repository owner: asujiar@gmail.com / SAIKI Group)
-**Last updated:** 2026-07-14 (post Step 3 Prompt 49 — Requirement/Phase Traceability)
+**Last updated:** 2026-07-14 (post Step 3 Prompt 50 — Risk-Ranked Critical Path)
 **Last verified commit:** `d58744500a55c267ddf7447c6518fc86c1323912` (main, reconciled)
 **Context status:** `CURRENT`
 **Canonical context location:** `docs/runtime/` (decision CHG-2026-002; duplicate root-level set removed)
@@ -60,7 +60,7 @@ Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14/14 prompts VERIFIE
 | Build logs | `docs/build-logs/` | per-task |
 | App/domain/UI/migrations/tests | — | not created (greenfield) |
 
-Canonical maps: module dependency map, canonical data flow map, domain boundary map (amended by Prompt 40), repository target structure, database schema workstream, RLS/RBAC workstream — all **produced**, `CG-S3-ARCH-001..006` `VERIFIED`. Configuration Engine workstream **produced** (`docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md`, `CG-S3-ARCH-007` `VERIFIED`). API/Integration workstream **produced** (`docs/architecture/08_API_INTEGRATION_WORKSTREAM.md`, `CG-S3-ARCH-008` `VERIFIED`). UX/Design System workstream **produced** (`docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md`, `CG-S3-ARCH-009` `VERIFIED`). Testing workstream **produced** (`docs/architecture/10_TESTING_WORKSTREAM.md`, `CG-S3-ARCH-010` `VERIFIED`). DevOps workstream **produced** (`docs/architecture/11_DEVOPS_WORKSTREAM.md`, `CG-S3-ARCH-011` `VERIFIED`; resolves `ADR-CAND-ARCH-004`). Release Train **produced** (`docs/architecture/12_RELEASE_TRAIN.md`, `CG-S3-ARCH-012` `VERIFIED`; supersedes Blueprint §3.2/§8.1/§8.2's external-pilot release-type language with RPD-034/036). Full Work Breakdown Structure **produced** (`docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md`, `CG-S3-ARCH-013` `VERIFIED`; binds the 430-file prompt package into the mandatory 10-level runtime hierarchy, 263 capability prompts registered). Requirement/Phase Traceability **produced** (`docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`, `CG-S3-ARCH-014` `VERIFIED`; 401 traced items, 0 `NOT_COVERED`). Remaining Step 3 outputs (Risk-Ranked Critical Path, Closure Verification — Prompts 50–51) not yet produced.
+Canonical maps: module dependency map, canonical data flow map, domain boundary map (amended by Prompt 40), repository target structure, database schema workstream, RLS/RBAC workstream — all **produced**, `CG-S3-ARCH-001..006` `VERIFIED`. Configuration Engine workstream **produced** (`docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md`, `CG-S3-ARCH-007` `VERIFIED`). API/Integration workstream **produced** (`docs/architecture/08_API_INTEGRATION_WORKSTREAM.md`, `CG-S3-ARCH-008` `VERIFIED`). UX/Design System workstream **produced** (`docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md`, `CG-S3-ARCH-009` `VERIFIED`). Testing workstream **produced** (`docs/architecture/10_TESTING_WORKSTREAM.md`, `CG-S3-ARCH-010` `VERIFIED`). DevOps workstream **produced** (`docs/architecture/11_DEVOPS_WORKSTREAM.md`, `CG-S3-ARCH-011` `VERIFIED`; resolves `ADR-CAND-ARCH-004`). Release Train **produced** (`docs/architecture/12_RELEASE_TRAIN.md`, `CG-S3-ARCH-012` `VERIFIED`; supersedes Blueprint §3.2/§8.1/§8.2's external-pilot release-type language with RPD-034/036). Full Work Breakdown Structure **produced** (`docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md`, `CG-S3-ARCH-013` `VERIFIED`; binds the 430-file prompt package into the mandatory 10-level runtime hierarchy, 263 capability prompts registered). Requirement/Phase Traceability **produced** (`docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`, `CG-S3-ARCH-014` `VERIFIED`; 401 traced items, 0 `NOT_COVERED`). Risk-Ranked Critical Path **produced** (`docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md`, `CG-S3-ARCH-015` `VERIFIED`; 9-dimension reproducible CRS ranking, critical path matches `12_*.md` §9, top risk `FIN-195` CRS 49). Remaining Step 3 output: Closure Verification (Prompt 51, final Step 3 output) not yet produced.
 
 ## 6. Environment matrix
 
@@ -82,16 +82,16 @@ Tenant context preserved across DB/storage/cache/jobs/logs/search/reports/export
 
 | Field | Value |
 |---|---|
-| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`, 14/16 prompts) |
-| Current task | `CG-S3-ARCH-014` — Requirement/Phase Traceability |
-| Task status | `VERIFIED` — `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` complete |
+| Active phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`, 15/16 prompts) |
+| Current task | `CG-S3-ARCH-015` — Risk-Ranked Critical Path |
+| Task status | `VERIFIED` — `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` complete |
 | Branch/commit | `claude/sleepy-ride-4vxsk6`, cut from `main`@`27389a4`, merged forward with `agent/cargogrid-autonomous-build` |
 | Last known good checkpoint | `origin/main`@`39d923e` |
 | Latest applied migration | none |
 | Last fully passing gate set | none (no gates exist; confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
 | Known issues affecting work | ISS-2026-002 (recurred twice previously, non-blocking), ISS-2026-003 (non-blocking); ISS-2026-001 RESOLVED |
-| Next eligible task | `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50) |
+| Next eligible task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51, final Step 3 output) |
 
 ## 11. Active constraints and accepted risks
 

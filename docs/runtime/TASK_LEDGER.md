@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 49 — Requirement/Phase Traceability)
+**Updated:** 2026-07-14 (post Step 3 Prompt 50 — Risk-Ranked Critical Path)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
 
 ## 1. Task identity and state model
@@ -42,7 +42,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-012` | Release Train | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-011` (VERIFIED) | `docs/architecture/12_RELEASE_TRAIN.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-013` |
 | `CG-S3-ARCH-013` | Full Work Breakdown Structure | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-012` (VERIFIED) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-014` |
 | `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-013` (VERIFIED) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-015` |
-| `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-014` (VERIFIED) | — | 2026-07-14 | Execute Prompt 50 |
+| `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-014` (VERIFIED) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-016` |
+| `CG-S3-ARCH-016` | Step 3 Closure Verification | Step 3 / Architecture | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-015` (VERIFIED) | — | 2026-07-14 | Execute Prompt 51 (final Step 3 output) |
 
 ## 3. Task records
 
@@ -367,6 +368,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` §27 exit gates — zero `NOT_COVERED` rows, every partial/external row has an owner and gate, every WBS task cited is source-verified, totals reconcile with `00-control/05_REQUIREMENT_COVERAGE_MATRIX.md` (one discrepancy found and resolved, not silently assumed), RPD-022/direct-GA/contract-silent-recovery/custom-integration policy preserved, cross-phase items have exactly one primary owner. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
 
+### CG-S3-ARCH-015 — Risk-Ranked Critical Path
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 3 — Architecture and Execution Blueprint |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `03-architecture-and-plan/50_RISK_RANKED_CRITICAL_PATH_PROMPT.md` (`CG-AABPP-ARCH-050` v0.4.0) |
+| Build log path | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001..014` (all VERIFIED) |
+
+**Objective and outcome:** Produced a risk-ranked, dependency-depth-ordered critical path over the full WBS (`13_*.md`) and traceability matrix (`14_*.md`): defined 9 ranking dimensions (severity, likelihood, blast radius, tenant/security/finance/data exposure, dependency centrality, reversibility, detection-strength gap, uncertainty, remediation complexity), each on a reproducible 1–5 scale, combined into a Composite Risk Score (`CRS = Sev×Lik + Rad+Exp+Dep+Rev+Det+Unc+Rem`, range 8–60) with full arithmetic shown per row so ranking is independently recomputable — no duration, staffing figure, or calendar date invented anywhere. Critical path: `Phase 0 → 1 (Platform Core) → 2 (Commercial) → 3 (Operations/Portal basic) → 4 (Finance) → {5 (Advanced TMS/WMS) ‖ 6 (Procurement)} → 7 (HRIS/Ticketing) → 8 (Portal full/Loyalty) → 9 (Intelligence/Enterprise) → 15 (hardening) → 16 (RC/Go-Live) → direct GA`, matching `12_RELEASE_TRAIN.md` §9 exactly (Phase 5/6 the one genuine parallel-eligible fork). Top-ranked risks: Finance tax/legal SME gate (`FIN-195`, CRS 49), payroll SME gate (`HRT-282`, CRS 47), Supreme Admin absolute-CRUD disclosure (RPD-022, CRS 46), direct-GA/zero-critical-defect gate (`RGL-412`, CRS 43), penetration test (`RGL-402`, CRS 42) — 26 real, cited items scored in full. Foundation blockers (repo strategy, boundaries, schema/migrations, RLS/RBAC, config engine, API/jobs/files, CI/environments, test data, observability, backup/recovery, compliance evidence) dominate the top half of the ranking. Risk-adjusted (not phase-reordering) recommendation: pull the `FIN-195`/`HRT-282` external SME *engagement* forward into Phase 0/1 (their capability-prompt WBS position stays at Phase 4/7) since SME review needs only reviewable policy content, not built schema, and external-party lead time is the least controllable variable in the plan. Concurrency lanes: Phase 5/6 fork; four independent Phase-0 tooling ADRs; SME engagement parallel to Phase 0–3 build; design-system foundation parallel to schema/RLS foundation. Risk burn-down plan and 5 recalculation triggers (ADR resolution, runtime facts, estimate change, failure, requirement change) bind this document to re-derivation, not hand-patching. **No new ADR candidate raised; no product decision reopened; no implementation task created or started.**
+
+**Acceptance and closure:** `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` §15 exit gates — every critical-path/risk-table item cites a real ID already registered in `13_*.md`/`14_*.md` (spot-checked, none invented), ranking is reproducible (component scores + arithmetic shown per row), uncertainty is explicit (dimension 8 scored per-row, all assumptions separately labeled in §13), no unverified date is claimed anywhere, all four accepted risks (RPD-022, RPD-031/034/036/037, RPD-038) plus both SME gates visibly affect a concrete sequencing/gate mechanism (§7), not just narrative mention. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51, the final Step 3 output).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -387,7 +404,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-012` | ARCH-011 VERIFIED | CG-S3-ARCH-013 | `docs/architecture/12_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-013` | ARCH-012 VERIFIED | CG-S3-ARCH-014 | `docs/architecture/13_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | Done (VERIFIED) |
-| `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | YES |
+| `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | Done (VERIFIED) |
+| `CG-S3-ARCH-016` | ARCH-015 VERIFIED | Phase 0 kickoff (Prompts 79+) | `docs/architecture/16_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -421,7 +439,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-011` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/11_DEVOPS_WORKSTREAM.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-012` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/12_RELEASE_TRAIN.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-013` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`, merged forward) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-014` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-014` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-015` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
