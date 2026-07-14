@@ -42,7 +42,7 @@ None implemented — no UI exists.
 
 ## 10. Dead/orphan/skeleton/duplicate surface candidates
 
-None found, because there are no surfaces to be dead, orphaned, skeletal, or duplicated. This is distinct from — and should not be conflated with — the documentation-level duplication already identified and remediated in Prompt 22 §7 (`docs/runtime/*` vs. root ledgers, `KI-004`), which is not an application surface.
+None found, because there are no surfaces to be dead, orphaned, skeletal, or duplicated. This is distinct from — and should not be conflated with — the documentation-level canonical-context collision discussed in Prompt 22 §7 (`docs/runtime/KNOWN_ISSUES.md` `ISS-2026-002`), which is not an application surface.
 
 ## 11. Preserve-sensitive contracts and recommended Step 3 mapping inputs
 
@@ -51,7 +51,7 @@ Nothing to preserve at the code level. For Step 3 (architecture), the recommende
 ## 12. Evidence appendix, risks/blockers/issue IDs, output hash
 
 - Evidence: `git ls-files | grep -iE '^(app|pages|src|api)/'` → no matches (run this task, exit 1/no-match, confirming no routing tree exists).
-- No new risk/blocker beyond KI-001..004 (carried).
+- No new risk/blocker beyond `ISS-2026-001..003` (carried, `docs/runtime/KNOWN_ISSUES.md`).
 - Output hash: `docs/discovery/05_ROUTE_MODULE_INVENTORY.sha256`.
 
 ## Acceptance / Definition of Done

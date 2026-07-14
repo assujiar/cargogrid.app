@@ -32,7 +32,7 @@ No Next.js/application entry point, no Supabase client, no database, no API, no 
 | RLS / field / record access | `NOT_FOUND` | none | none | none | none | No database exists |
 | Support/impersonation | `DOCUMENTED_ONLY` | none | none | none | none | Rules recorded in `AGENTS.md` §"Tenant, authorization, and secrets"; not implemented |
 | White-label / custom domain | `DOCUMENTED_ONLY` | none | none | none | none | — |
-| Localization | `DOCUMENTED_ONLY` | none | none | none | none | Indonesia-first per `CARGOGRID_CONTEXT.md` §3 |
+| Localization | `DOCUMENTED_ONLY` | none | none | none | none | Indonesia-first per `docs/runtime/CARGOGRID_CONTEXT.md` §3 |
 | Master data | `NOT_FOUND` | none | none | none | none | — |
 | Configuration/workflow/approval/status/numbering/form engines | `NOT_FOUND` | none | none | none | none | — |
 | Notification engine | `NOT_FOUND` | none | none | none | none | — |
@@ -71,28 +71,28 @@ None. Confirmed by the same file-extension and manifest-name search recorded in 
 
 ## 7. Hardcoding, mock, fake persistence, tenant-fork, and duplication findings
 
-None found in application code (none exists). One documentation-level duplication finding carried over from Prompt 21/22 repair: `docs/runtime/*.md` duplicated the root persistent-context ledgers and had diverged from them (`KI-004`); this has been remediated in-place (superseded banners added, `AGENTS.md` repointed to root) as part of this checkpoint and is not a product/code defect.
+None found in application code (none exists). One documentation-level duplication finding: this branch and a parallel branch (`CG-S2-DISC-001-R1`, merged separately to `main`) each independently found and fixed the same Prompt-21 merge corruption, choosing opposite canonical-context locations. Reconciling with `main` adopted `-R1`'s decision (`docs/runtime/` canonical); see `docs/runtime/KNOWN_ISSUES.md` `ISS-2026-002` (recurrence note) and `docs/runtime/CHANGE_MANIFEST.md` `CHG-2026-003`. Not a product/code defect.
 
 ## 8. Protected-decision alignment and explicit exceptions
 
-- RPD-022 (Supreme Admin absolute CRUD, no tamper-proof claim): no implementation exists yet to assess; the *requirement* is correctly and consistently recorded in `AGENTS.md`, `KNOWN_ISSUES.md`, and `CARGOGRID_CONTEXT.md`. No contradictory claim of tamper-proof/immutability was found anywhere in tracked documentation.
-- RPD-034/036 (direct GA, no external pilot): consistent across `CARGOGRID_CONTEXT.md` and `CARGOGRID_BUILD_STATUS.md`.
+- RPD-022 (Supreme Admin absolute CRUD, no tamper-proof claim): no implementation exists yet to assess; the *requirement* is correctly and consistently recorded in `AGENTS.md`, `docs/runtime/KNOWN_ISSUES.md`, and `docs/runtime/CARGOGRID_CONTEXT.md`. No contradictory claim of tamper-proof/immutability was found anywhere in tracked documentation.
+- RPD-034/036 (direct GA, no external pilot): consistent across `docs/runtime/CARGOGRID_CONTEXT.md` and `docs/runtime/CARGOGRID_BUILD_STATUS.md`.
 - RPD-031/037 (contract-silent recovery = best effort): consistent; no overstated RPO/RTO claim found.
 - RPD-038 (custom connectors, no generic abstraction): consistent; not yet applicable (no connector exists).
 - PWA/offline/native, custom-domain, PostGIS, PostgreSQL queue, live-OLTP reporting, upload scanning, AI/human approval, SSO sequence: all `NOT_FOUND` in implementation; all correctly described as *target*, not *fact*, in `AGENTS.md`'s stack-baseline note ("as of the current checkpoint no application code, manifest, or lockfile exists yet").
 
 ## 9. Preserve/regress-sensitive areas
 
-None — there is no working behavior to preserve or regress. The only artifacts that must be preserved across future work are: the six blueprint documents, the 430-file prompt package, the ratified decision/assumption/conflict registers, and the persistent-context/ledger set (root canonical copies).
+None — there is no working behavior to preserve or regress. The only artifacts that must be preserved across future work are: the six blueprint documents, the 430-file prompt package, the ratified decision/assumption/conflict registers, and the persistent-context/ledger set (`docs/runtime/` canonical copies).
 
 ## 10. Blockers, risks, technical-debt candidates, and follow-up IDs
 
 | ID | Item | Severity | Disposition |
 |---|---|---|---|
-| (carried) KI-001 | Greenfield: no toolchain/DB/CI/ignore | Info/Low | Resolves at Phase 0 |
-| (carried) KI-002 | `docs/blueprint/tes.md` placeholder | Low | Formal classification in Prompt 30 |
-| (carried) KI-003 | No `.gitignore` | Medium (future) | Resolves at Phase 0 |
-| (carried) KI-004 | `docs/runtime/*` stale duplicate | Medium | Banners added this checkpoint; full removal is a follow-up cleanup task |
+| (carried) — | Greenfield: no toolchain/DB/CI/ignore | Info/Low | Resolves at Phase 0 |
+| (carried) `ISS-2026-001` | `docs/blueprint/tes.md` placeholder | Low | Formal classification in Prompt 30 |
+| (carried) `ISS-2026-003` | No `.gitignore` | Medium (future) | Resolves at Phase 0 |
+| (carried) `ISS-2026-002` | Parallel-session collision (single-writer discipline) | Medium | Recurred a second time; reconciled at merge with `main` |
 
 No new technical-debt candidate was found beyond those already carried from Prompt 21, because there is no code to accumulate debt in.
 
@@ -111,7 +111,7 @@ No new technical-debt candidate was found beyond those already carried from Prom
 - **Verified working flows:** none.
 - **Partial/skeleton/absent areas:** all platform and domain capability is absent at the code level; requirements are documented only.
 - **Preserved behavior:** none required (no working system yet); documentation/registers must be preserved.
-- **Critical risks:** none new; KI-001..004 carried/updated.
+- **Critical risks:** none new; `ISS-2026-001..003` carried/updated (`docs/runtime/KNOWN_ISSUES.md`).
 - **Commands/evidence:** §11 (all read-only, exit 0 or expected non-match).
 - **Files written:** `docs/discovery/02_EXISTING_IMPLEMENTATION_AUDIT.md` (+ sha256 sidecar).
 - **Trust state:** `TRUSTED`.

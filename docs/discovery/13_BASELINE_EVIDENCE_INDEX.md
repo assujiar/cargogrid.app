@@ -28,22 +28,26 @@ Each evidence ID below has: source document, evidence class (`OBSERVED` = read d
 
 ## Checksum/checkpoint information
 
-All 13 discovery documents (01–12 plus this index and the execution index) carry a `.sha256` sidecar computed at write time and cite checkpoint `d587445` / branch `claude/eloquent-mayer-s40hn4` in their own text. Sidecar values are reproduced in `docs/build-logs/` cross-reference below.
+All 13 discovery documents (01–12 plus this index and the execution index) carry a `.sha256` sidecar computed at write time. Table below reflects hashes **after** reconciling this branch with `main`'s `CG-S2-DISC-001-R1` (see §"Merge reconciliation" below): `01_REPOSITORY_INVENTORY.md` was replaced with `-R1`'s version; `02`, `05`, `10`, `11`, `12`, `14` were lightly edited to correct `KI-00X` references onto `-R1`'s `ISS-2026-00X` IDs and root-ledger paths onto `docs/runtime/`; `03`, `04`, `06`, `07`, `08`, `09` are unchanged.
 
 | Document | SHA-256 |
 |---|---|
-| `01_REPOSITORY_INVENTORY.md` | `c7f8d22f8d5dc62c31d37e9b972a72db414e412f8677abd7c3fd6cb7f77d1d72` |
-| `02_EXISTING_IMPLEMENTATION_AUDIT.md` | `a141ad2d3c457458f919ed73e11500d3343bf08587c99331d8345440ad94168b` |
+| `01_REPOSITORY_INVENTORY.md` | `8eaae04d3fadb241a51639150bb926988546309ecc562389dda44ae4126a428a` (from `CG-S2-DISC-001-R1`) |
+| `02_EXISTING_IMPLEMENTATION_AUDIT.md` | `93c64f7ea4f3cccada6af0815a66a00d6fd98ad586d720cb83309e657ae3522f` |
 | `03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | `4a386e9843c20971f1a4a191f17645e9345dcd03e5e3b98137ef3fc0ba15d90a` |
 | `04_DATABASE_MIGRATION_BASELINE.md` | `61fe47233d1e576b48b35c9a79307aa59f1890e2f53a4f2ea01f6444efff75ea` |
-| `05_ROUTE_MODULE_INVENTORY.md` | `5af83c7dfdc76aacb0ef0f22280f5eb16f35533903fcbe05fd9b3d94ed9f7b67` |
+| `05_ROUTE_MODULE_INVENTORY.md` | `135088b35110d6e6115176a1e90ae8dd9ce1d14ea89af8d4bc4235c398abf53d` |
 | `06_SECURITY_BASELINE.md` | `b5f7faa90bba0b6d80b69fe8b77d63b5e542587d4b4e6b3b69ad3844ab32bc1b` |
 | `07_TEST_QUALITY_BASELINE.md` | `8520af7cb963527c386700057e6cdae65a0fbc1b21b10910c9006fbf3c6c2f5a` |
 | `08_PERFORMANCE_BASELINE.md` | `c8c12bb82ae7dc73b69dd6e1c1607d3302546765fe0c013aaed731ddfdd48955` |
-| `09_ACCESSIBILITY_UX_BASELINE.md` | `d6c33999e6c4a1e34db0d9c4b419f37c526be666b2b167dde7943f2062759c0a` (post-correction) |
-| `10_PLACEHOLDER_DEAD_CODE_INVENTORY.md` | `bbf41f3d32511f183edf3139d561e9654c54e01dab29f82fe74ac8d89df59e1c` |
-| `11_TECHNICAL_DEBT_RISK_REGISTER.md` | `5d70db6e9390df06dff474ab85cf92f8f0d04677ccdc5eff1406c0743a7fc182` |
-| `12_GREENFIELD_BROWNFIELD_DECISION.md` | `ba155367e24b74e208c047a8c6b857d34c2fbae573066e8ba0d15f737ec32f77` |
+| `09_ACCESSIBILITY_UX_BASELINE.md` | `d6c33999e6c4a1e34db0d9c4b419f37c526be666b2b167dde7943f2062759c0a` |
+| `10_PLACEHOLDER_DEAD_CODE_INVENTORY.md` | `9660697efe53635733a9cba4eb194178e2e61b250556f26e620df97bec0b7175` |
+| `11_TECHNICAL_DEBT_RISK_REGISTER.md` | `9b21b4e6dbb12682e4e61cc63666d928b178795821d9802a05942b0da6848e34` |
+| `12_GREENFIELD_BROWNFIELD_DECISION.md` | `1262bd2c6bed026ffe6d3d0ab866014fef15c124a51215a9f4a7716473acff20` |
+
+### Merge reconciliation
+
+This branch (`claude/eloquent-mayer-s40hn4`) was cut before `main`'s `CG-S2-DISC-001-R1` reconciliation merged. Both independently fixed the same Prompt-21 corruption with opposite canonical-context decisions. Reconciling: `-R1`'s `docs/runtime/` canonical location was kept; this branch's Step 2 discovery deliverables (Prompts 22–34) were kept and re-homed under it. Full detail: `docs/discovery/14_STEP2_CLOSURE_REPORT.md` §13, `docs/runtime/CHANGE_MANIFEST.md` `CHG-2026-003`.
 
 ## Redaction record
 

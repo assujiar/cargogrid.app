@@ -51,7 +51,7 @@ Branch `claude/eloquent-mayer-s40hn4`, HEAD `d587445`. Analysis only — no scaf
 - `docs/blueprint/**` (6 authoritative sources) — do not edit without a ratified decision change.
 - `docs/ai-agent-build-prompt-package/**` (430 files) — read-only source of execution prompts; do not delete or bulk-edit.
 - `docs/ai-agent-build-prompt-package/00-control/**` registers — authoritative decisions; never silently overridden.
-- Root persistent-context/ledger set (`CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, `HANDOFF.md`) — canonical; keep current.
+- `docs/runtime/` persistent-context/ledger set (`CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, `HANDOFF.md`, `CHANGE_MANIFEST.md`) — canonical (ratified by `CG-S2-DISC-001-R1`); keep current.
 - `docs/discovery/**` (this Step 2 evidence set) — the record Step 3 architecture planning must build on.
 
 ## Boundaries needing isolation / prohibited broad rewrites
@@ -61,7 +61,7 @@ No broad rewrite is authorized or needed — there is nothing to rewrite. Prohib
 ## Conditions under which this decision must be revisited
 
 - If any future session discovers untracked/hidden application code not visible to this audit (none is currently suspected).
-- If a future merge reintroduces the kind of document-duplication defect seen in `ERR-2026-001`/`KI-004`, this decision's evidentiary basis (Prompts 22–31) must be re-verified against the new checkpoint before being relied upon.
+- If a future merge reintroduces the kind of document-duplication defect seen in `docs/runtime/ERROR_LEDGER.md` `ERR-2026-001` (already recurred twice — see `ISS-2026-002`), this decision's evidentiary basis (Prompts 22–31) must be re-verified against the new checkpoint before being relied upon.
 
 ## Step 3 entry/exit implications
 
