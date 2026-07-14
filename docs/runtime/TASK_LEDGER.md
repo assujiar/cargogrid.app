@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
 
 ## 1. Task identity and state model
@@ -45,7 +45,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-014` (VERIFIED) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-016` |
 | `CG-S3-ARCH-016` | Step 3 Closure Verification | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-015` (VERIFIED) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | 2026-07-14 | Step 3 `RUNTIME_ARCHITECTURE_VERIFIED` — proceed to Phase 0 Foundation (Prompt 79) |
 | `CG-S5-PH0-001` | Phase 0 WBS and Runtime Kickoff | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-016` (VERIFIED) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-002` (Prompt 81) |
-| `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-001` (VERIFIED) | — | 2026-07-14 | Execute `81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` |
+| `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-001` (VERIFIED) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-003` (Prompt 82) |
+| `CG-S5-PH0-003` | Requirement Traceability Baseline | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-002` (VERIFIED) | — | 2026-07-14 | Execute `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md` |
 
 ## 3. Task records
 
@@ -420,6 +421,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** Both build-log files' own §6/closing self-checks — one authoritative checkpoint and dependency graph exist; zero cycles/orphans/collisions (verified by direct graph construction); `PH0-081`'s variables fully resolvable; no runtime file outside `docs/build-logs/**` was touched. All four completion-gate conditions satisfied. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
 
+### CG-S5-PH0-002 — Source Alignment and Context Bootstrap (Prompt 81)
+
+| Field | Value |
+|---|---|
+| Parent phase | Phase 0 — Discovery and Foundation |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` (`CG-AABPP-PH0-081` v0.6.0) |
+| Build log path | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` |
+| Dependency | `CG-S5-PH0-001` (VERIFIED) |
+
+**Objective and outcome:** Materialized the approved CargoGrid source hierarchy, `CPD-001..023`/`RPD-001..040` decisions, and package/runtime status into repository-native context. `CARGOGRID_CONTEXT.md` was already current from prior checkpoints' ongoing maintenance discipline; this task added an explicit `GOV-010..019` governance-instance-register citation (§2) mapping each of the 10 governance template IDs — `AGENTS.md` (`GOV-010`/`011`), `CARGOGRID_CONTEXT.md` (`GOV-012`), `CARGOGRID_BUILD_STATUS.md` (`GOV-013`), `TASK_LEDGER.md` (`GOV-014`), `CHANGE_MANIFEST.md` (`GOV-015`), `02_CONFIRMED_DECISION_REGISTER.md` (`GOV-016`), `ERROR_LEDGER.md` (`GOV-017`), `KNOWN_ISSUES.md` (`GOV-018`), `HANDOFF.md` (`GOV-019`) — to its repository-native instance, verified by direct header read of all 10 files (zero mismatch). Performed a fresh-context reconstruction test (a hypothetical fresh agent reading `AGENTS.md` → `CARGOGRID_CONTEXT.md` → `CARGOGRID_BUILD_STATUS.md` → `TASK_LEDGER.md` → `HANDOFF.md` can reconstruct product identity, source hierarchy, ratified snapshot, repository baseline, Step 2/3 closure states, Phase 0 progress, and the exact next task without chat history — traced manually, complete, no gap found). Confirmed zero duplicate/contradictory register copy exists in `docs/runtime/`. **No application/test/config/migration/lockfile/database/environment file was touched** (confirmed by this checkpoint's own `git status`).
+
+**Acceptance and closure:** `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` §11 — repository-native context complete and independently reconstructable; zero hidden source conflict; no runtime file outside allowed docs changed; task/change/checkpoint/handoff records agree. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -443,7 +460,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-016` | ARCH-015 VERIFIED | Phase 0 kickoff (Prompts 79+) | `docs/architecture/16_*` | Done (VERIFIED) |
 | `CG-S5-PH0-001` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | CG-S5-PH0-002 | `docs/build-logs/CG-S5-PH0-001_*` | Done (VERIFIED) |
-| `CG-S5-PH0-002` | PH0-001 VERIFIED | CG-S5-PH0-003 | `05-phase-00-discovery-foundation/81_*` | YES |
+| `CG-S5-PH0-002` | PH0-001 VERIFIED | CG-S5-PH0-003 | `docs/build-logs/CG-S5-PH0-002_*` | Done (VERIFIED) |
+| `CG-S5-PH0-003` | PH0-002 VERIFIED | CG-S5-PH0-004 | `05-phase-00-discovery-foundation/82_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -480,7 +498,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-014` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-015` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-016` | `VERIFIED` (`RUNTIME_ARCHITECTURE_VERIFIED`) | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-14 |
-| `CG-S5-PH0-001` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | none | 2026-07-14 |
+| `CG-S5-PH0-001` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | none | 2026-07-14 |
+| `CG-S5-PH0-002` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 

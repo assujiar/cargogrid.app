@@ -3,7 +3,7 @@
 **Instance of:** `CG-AABPP-GOV-012`
 **Instance version:** `0.2.0`
 **Instance owner:** Runtime build agent (repository owner: asujiar@gmail.com / SAIKI Group)
-**Last updated:** 2026-07-14 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
+**Last updated:** 2026-07-14 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap)
 **Last verified commit:** `d58744500a55c267ddf7447c6518fc86c1323912` (main, reconciled)
 **Context status:** `CURRENT`
 **Canonical context location:** `docs/runtime/` (decision CHG-2026-002; duplicate root-level set removed)
@@ -29,6 +29,8 @@
 
 Active source conflict: `NONE` (14/14 resolved, 0 open decisions). All six primary sources are present in `docs/blueprint/` (this corrects session-A's ISS-2026-001, now RESOLVED).
 
+**Governance instance register (`GOV-010..019`, per `00-control/05_REQUIREMENT_COVERAGE_MATRIX.md` §9 / `07_PROMPT_PACKAGE_MANIFEST.md` M-011/M-012):** `AGENTS.md` = `GOV-010`/`GOV-011` (repository operating rules, startup/execution contract); `CARGOGRID_CONTEXT.md` (this file) = `GOV-012`; `CARGOGRID_BUILD_STATUS.md` = `GOV-013`; `TASK_LEDGER.md` = `GOV-014`; `CHANGE_MANIFEST.md` = `GOV-015`; `02_CONFIRMED_DECISION_REGISTER.md` (CPD/RPD baseline) = `GOV-016`; `ERROR_LEDGER.md` = `GOV-017`; `KNOWN_ISSUES.md` = `GOV-018`; `HANDOFF.md` = `GOV-019`. All 10 instances are present, correctly ID-mapped (verified by direct header read of every file this checkpoint), and mutually consistent — `CG-S5-PH0-002` (Source Alignment and Context Bootstrap) confirms this register rather than re-deriving it.
+
 ## 3. Ratified operating snapshot
 
 Shared DB/schema + RLS (dedicated Enterprise = contractual); online-first responsive PWA; custom-domain from Platform Core; PostgreSQL durable queue first; live transactional analytics with query budgets; PostGIS from Platform Core; IAM OIDC→SAML→SCIM; REST `/v1` + GraphQL together with parity; OpenAI multimodal with human approval before financial/legal effect; custom per-integration (shared codebase, no generic abstraction); malware scan before upload release; RPO/RTO per contract (silent = best effort); Supreme Admin absolute CRUD incl. audit/ledger — **no tamper-proof claim** (RPD-022).
@@ -46,7 +48,7 @@ Shared DB/schema + RLS (dedicated Enterprise = contractual); online-first respon
 | Schema/migration head | NONE (no database) | inventory §5 |
 | Product/source baseline size | 438 files (1 README + 7 blueprint + 430 package) | inventory §4 |
 
-Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14/14 prompts VERIFIED — `docs/discovery/14_STEP2_CLOSURE_REPORT.md`). Step 3 architecture status: **`RUNTIME_ARCHITECTURE_VERIFIED`** (16/16 prompts VERIFIED — `docs/architecture/16_STEP3_CLOSURE_REPORT.md`, independently re-verified, closure state confirmed). Phase 0 Foundation status: **`PHASE_0_IN_PROGRESS`** (kickoff `CG-S5-PH0-001` `VERIFIED` — `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md`; `PH0-081` `READY`, `PH0-082..102` `BLOCKED` on upstream). Feature coding (Phase 1+) remains forbidden until Phase 0's own closure prompt (`102`) sets `PHASE_0_VERIFIED`.
+Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14/14 prompts VERIFIED — `docs/discovery/14_STEP2_CLOSURE_REPORT.md`). Step 3 architecture status: **`RUNTIME_ARCHITECTURE_VERIFIED`** (16/16 prompts VERIFIED — `docs/architecture/16_STEP3_CLOSURE_REPORT.md`, independently re-verified, closure state confirmed). Phase 0 Foundation status: **`PHASE_0_IN_PROGRESS`** (`CG-S5-PH0-001` kickoff `VERIFIED`, `CG-S5-PH0-002` Source Alignment/Context Bootstrap `VERIFIED` — `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md`; `PH0-082` `READY`, `PH0-083..102` `BLOCKED` on upstream). Feature coding (Phase 1+) remains forbidden until Phase 0's own closure prompt (`102`) sets `PHASE_0_VERIFIED`.
 
 ## 5. Repository topology
 
@@ -60,7 +62,7 @@ Step 2 discovery status: **`RUNTIME_DISCOVERY_VERIFIED`** (14/14 prompts VERIFIE
 | Build logs | `docs/build-logs/` | per-task |
 | App/domain/UI/migrations/tests | — | not created (greenfield) |
 
-Canonical maps: module dependency map, canonical data flow map, domain boundary map (amended by Prompt 40), repository target structure, database schema workstream, RLS/RBAC workstream — all **produced**, `CG-S3-ARCH-001..006` `VERIFIED`. Configuration Engine workstream **produced** (`docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md`, `CG-S3-ARCH-007` `VERIFIED`). API/Integration workstream **produced** (`docs/architecture/08_API_INTEGRATION_WORKSTREAM.md`, `CG-S3-ARCH-008` `VERIFIED`). UX/Design System workstream **produced** (`docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md`, `CG-S3-ARCH-009` `VERIFIED`). Testing workstream **produced** (`docs/architecture/10_TESTING_WORKSTREAM.md`, `CG-S3-ARCH-010` `VERIFIED`). DevOps workstream **produced** (`docs/architecture/11_DEVOPS_WORKSTREAM.md`, `CG-S3-ARCH-011` `VERIFIED`; resolves `ADR-CAND-ARCH-004`). Release Train **produced** (`docs/architecture/12_RELEASE_TRAIN.md`, `CG-S3-ARCH-012` `VERIFIED`; supersedes Blueprint §3.2/§8.1/§8.2's external-pilot release-type language with RPD-034/036). Full Work Breakdown Structure **produced** (`docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md`, `CG-S3-ARCH-013` `VERIFIED`; binds the 430-file prompt package into the mandatory 10-level runtime hierarchy, 263 capability prompts registered). Requirement/Phase Traceability **produced** (`docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`, `CG-S3-ARCH-014` `VERIFIED`; 401 traced items, 0 `NOT_COVERED`). Risk-Ranked Critical Path **produced** (`docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md`, `CG-S3-ARCH-015` `VERIFIED`; 9-dimension reproducible CRS ranking, critical path matches `12_*.md` §9, top risk `FIN-195` CRS 49). Step 3 Closure Verification **produced** (`docs/architecture/16_STEP3_CLOSURE_REPORT.md`, `CG-S3-ARCH-016` `VERIFIED`; independently re-checked all nine closure conditions, closure state `RUNTIME_ARCHITECTURE_VERIFIED`, two non-blocking findings F1/F2 surfaced and corrected). **Step 3 is now fully closed (16/16 outputs).** Phase 0 WBS/Runtime Kickoff **produced** (`docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md`, `CG-S5-PH0-001` `VERIFIED`; validated all 5 Phase 0 entry-gate conditions, full execution register for all 22 downstream prompts, single-sequential-lane concurrency model, zero collision risk). `PH0-081` (Source Alignment and Context Bootstrap) is the active next task.
+Canonical maps: module dependency map, canonical data flow map, domain boundary map (amended by Prompt 40), repository target structure, database schema workstream, RLS/RBAC workstream — all **produced**, `CG-S3-ARCH-001..006` `VERIFIED`. Configuration Engine workstream **produced** (`docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md`, `CG-S3-ARCH-007` `VERIFIED`). API/Integration workstream **produced** (`docs/architecture/08_API_INTEGRATION_WORKSTREAM.md`, `CG-S3-ARCH-008` `VERIFIED`). UX/Design System workstream **produced** (`docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md`, `CG-S3-ARCH-009` `VERIFIED`). Testing workstream **produced** (`docs/architecture/10_TESTING_WORKSTREAM.md`, `CG-S3-ARCH-010` `VERIFIED`). DevOps workstream **produced** (`docs/architecture/11_DEVOPS_WORKSTREAM.md`, `CG-S3-ARCH-011` `VERIFIED`; resolves `ADR-CAND-ARCH-004`). Release Train **produced** (`docs/architecture/12_RELEASE_TRAIN.md`, `CG-S3-ARCH-012` `VERIFIED`; supersedes Blueprint §3.2/§8.1/§8.2's external-pilot release-type language with RPD-034/036). Full Work Breakdown Structure **produced** (`docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md`, `CG-S3-ARCH-013` `VERIFIED`; binds the 430-file prompt package into the mandatory 10-level runtime hierarchy, 263 capability prompts registered). Requirement/Phase Traceability **produced** (`docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`, `CG-S3-ARCH-014` `VERIFIED`; 401 traced items, 0 `NOT_COVERED`). Risk-Ranked Critical Path **produced** (`docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md`, `CG-S3-ARCH-015` `VERIFIED`; 9-dimension reproducible CRS ranking, critical path matches `12_*.md` §9, top risk `FIN-195` CRS 49). Step 3 Closure Verification **produced** (`docs/architecture/16_STEP3_CLOSURE_REPORT.md`, `CG-S3-ARCH-016` `VERIFIED`; independently re-checked all nine closure conditions, closure state `RUNTIME_ARCHITECTURE_VERIFIED`, two non-blocking findings F1/F2 surfaced and corrected). **Step 3 is now fully closed (16/16 outputs).** Phase 0 WBS/Runtime Kickoff **produced** (`docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md`, `CG-S5-PH0-001` `VERIFIED`; validated all 5 Phase 0 entry-gate conditions, full execution register for all 22 downstream prompts, single-sequential-lane concurrency model, zero collision risk). Source Alignment and Context Bootstrap **produced** (`docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md`, `CG-S5-PH0-002` `VERIFIED`; explicit `GOV-010..019` governance-instance-register citation added to this file's §2, fresh-context reconstruction test passed). `PH0-082` (Requirement Traceability Baseline) is the active next task.
 
 ## 6. Environment matrix
 
@@ -83,15 +85,15 @@ Tenant context preserved across DB/storage/cache/jobs/logs/search/reports/export
 | Field | Value |
 |---|---|
 | Active phase/workstream | Step 3 CLOSED (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 prompts); Phase 0 — Foundation `PHASE_0_IN_PROGRESS` (1/22 downstream prompts) |
-| Current task | `CG-S5-PH0-001` — Phase 0 WBS and Runtime Kickoff |
-| Task status | `VERIFIED` — execution index + WBS build logs complete; `PH0-081` `READY` |
+| Current task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap |
+| Task status | `VERIFIED` — `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` complete; `PH0-082` `READY` |
 | Branch/commit | `claude/sleepy-ride-4vxsk6`, cut from `main`@`27389a4`, merged forward with `agent/cargogrid-autonomous-build` |
 | Last known good checkpoint | `origin/main`@`39d923e` |
 | Latest applied migration | none |
 | Last fully passing gate set | none (no gates exist; confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
 | Known issues affecting work | ISS-2026-002 (recurred twice previously, non-blocking), ISS-2026-003 (non-blocking); ISS-2026-001 RESOLVED |
-| Next eligible task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (`81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md`) |
+| Next eligible task | `CG-S5-PH0-003` — Requirement Traceability Baseline (`82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md`) |
 
 ## 11. Active constraints and accepted risks
 

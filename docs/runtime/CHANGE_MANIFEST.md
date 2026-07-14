@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index
@@ -28,7 +28,8 @@
 | `CHG-2026-017` | `CG-S3-ARCH-014` | DOCS | Branch reconciliation (`claude/sleepy-ride-4vxsk6` adopted as continuation branch, `agent/cargogrid-autonomous-build`'s 3 unmerged commits merged forward) + author `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (Prompt 49) — fourteenth Step 3 architecture output; 401-item requirement/phase/test traceability matrix, 0 `NOT_COVERED` at close, 13-vs-14 gap-requirement count discrepancy found and resolved | NONE | LOW | `COMPLETED` | `e1a658c` | 2026-07-14 |
 | `CHG-2026-018` | `CG-S3-ARCH-015` | DOCS | Author `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` (Prompt 50) — fifteenth Step 3 architecture output; 9-dimension reproducible Composite Risk Score ranking, dependency-depth-ordered critical path, foundation blockers, concurrency lanes, risk burn-down recalculation triggers, no duration/staffing/date invented | NONE | LOW | `COMPLETED` | `678f384` | 2026-07-14 |
 | `CHG-2026-019` | `CG-S3-ARCH-016` | DOCS | Author `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (Prompt 51) — sixteenth and final Step 3 output; independent re-verification of all nine closure conditions against primary sources, closure state `RUNTIME_ARCHITECTURE_VERIFIED`; corrects Findings F1 (`12_*.md`/`13_*.md` pre-merge checkpoint-hash citations) and F2 (this manifest's index table). **Step 3 fully closed, 16/16 outputs.** | NONE | LOW | `COMPLETED` | (checkpoint) | 2026-07-14 |
-| `CHG-2026-020` | `CG-S5-PH0-001` | DOCS | Author `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` + `_phase0_wbs.md` (Prompt 80) — first Phase 0 output; validates all 5 Phase 0 entry-gate conditions, produces full execution register for 22 downstream prompts (18 capabilities + verification/hardening/documentation/closure), single-sequential-lane concurrency model, zero collision risk (independent `git`-based audit). `PH0-081` marked `READY`. **Phase 0 kicked off.** | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-020` | `CG-S5-PH0-001` | DOCS | Author `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` + `_phase0_wbs.md` (Prompt 80) — first Phase 0 output; validates all 5 Phase 0 entry-gate conditions, produces full execution register for 22 downstream prompts (18 capabilities + verification/hardening/documentation/closure), single-sequential-lane concurrency model, zero collision risk (independent `git`-based audit). `PH0-081` marked `READY`. **Phase 0 kicked off.** | NONE | LOW | `COMPLETED` | (checkpoint) | 2026-07-14 |
+| `CHG-2026-021` | `CG-S5-PH0-002` | DOCS | Author `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` (Prompt 81) — materializes source hierarchy/decisions/status into repository-native context; adds explicit `GOV-010..019` governance-instance-register citation to `CARGOGRID_CONTEXT.md` §2; fresh-context reconstruction test passed; zero application/config/migration file touched. `PH0-082` marked `READY`. | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -977,6 +978,56 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 #### Approval and closure
 
 No external approval required (documentation-only, index/planning task). Residual items: 17 open `ADR-CAND-ARCH-0xx` implementation ADRs, four of which (`024..027`) resolve inside upcoming Phase 0 capability slices (`085`/`088`/`093`) per this checkpoint's own concurrency-lane analysis; `ISS-2026-003` (`.gitignore`) to close at or before `PH0-085`/`087`. **Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81)**, confirmed `READY` in the execution index.
+
+### CHG-2026-021 — Source Alignment and Context Bootstrap (Phase 0, Prompt 81)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-002` / `81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` |
+| Phase/workstream | Phase 0 — Governance and Source Control / Authoritative Product Baseline |
+| Change type | DOCS (context bootstrap/verification; no foundation change implemented) |
+| Author/agent | Claude Code (autonomous build agent), branch `claude/sleepy-ride-4vxsk6` |
+| Source requirements | Step 0 controls; `CPD-001..023`; `RPD-001..040`; `GOV-010..019`; `docs/discovery/14_STEP2_CLOSURE_REPORT.md`; `docs/architecture/16_STEP3_CLOSURE_REPORT.md`; `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md` |
+| Decisions | No new product decision; no new ADR candidate |
+| Baseline evidence | Zero application/test/config/migration/lockfile/database/environment file touched, confirmed by this checkpoint's own `git status` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md`: materializes the approved CargoGrid source hierarchy, `CPD-001..023`/`RPD-001..040` decisions, and package/runtime status into repository-native context, per Prompt 81's objective. `CARGOGRID_CONTEXT.md` was already current from ongoing maintenance across every Step 2/3 checkpoint this run; this task's substantive addition is an explicit `GOV-010..019` governance-instance-register citation (§2) — mapping all 10 governance template IDs (`AGENTS.md` = `GOV-010`/`011`; `CARGOGRID_CONTEXT.md` = `GOV-012`; `CARGOGRID_BUILD_STATUS.md` = `GOV-013`; `TASK_LEDGER.md` = `GOV-014`; `CHANGE_MANIFEST.md` = `GOV-015`; `02_CONFIRMED_DECISION_REGISTER.md` = `GOV-016`; `ERROR_LEDGER.md` = `GOV-017`; `KNOWN_ISSUES.md` = `GOV-018`; `HANDOFF.md` = `GOV-019`) to its repository-native instance, verified by direct header read of all 10 files (zero mismatch). Performed a fresh-context reconstruction test (traced manually: a hypothetical fresh agent reading `AGENTS.md`→`CARGOGRID_CONTEXT.md`→`CARGOGRID_BUILD_STATUS.md`→`TASK_LEDGER.md`→`HANDOFF.md` can reconstruct product identity, source hierarchy, ratified operating snapshot, repository baseline, Step 2/3 closure states, Phase 0 progress, and the exact next task without chat history — complete, no gap found). Confirmed no duplicate/contradictory register copy exists anywhere in `docs/runtime/`.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/runtime/CARGOGRID_CONTEXT.md` | EDIT | Added explicit `GOV-010..019` governance-instance-register citation (§2) | `git revert` |
+| `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | ADD | Prompt 81 runtime build log | `git revert` |
+| `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` | EDIT | Marked `PH0-081` `VERIFIED`, `PH0-082` `READY` | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md` | EDIT | Checkpoint update: `CG-S5-PH0-002` → `VERIFIED`, next eligible task → `CG-S5-PH0-003` (Prompt 82) | `git revert` |
+
+No application/test/config/migration/lockfile/generated-code/secret/database/external-system file was created or touched anywhere in the repository — confirmed by this checkpoint's own `git status` (prompt's §12 forbidden-paths requirement, verified directly).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. RPD-022/034/036/031/037/038 disclosures preserved verbatim in `CARGOGRID_CONTEXT.md` §11, not weakened.
+
+#### Tests and quality evidence
+
+No toolchain exists yet (`PH0-085`–`088` are the first to establish one). Applicable manual checks per prompt §28/§30 performed and passed: document link/ID/version/status consistency check (zero mismatch), fresh-context reconstruction test (complete), forbidden runtime-change worktree audit (`git status` clean apart from the files listed above).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch `claude/sleepy-ride-4vxsk6`).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is the `CG-S5-PH0-001` checkpoint.
+- Recovery verification: `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff, Phase 0 execution index. No new issue/error IDs opened; no new ADR candidate raised; no product decision reopened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, context-bootstrap task). **Next eligible task: `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82)**, confirmed `READY` in the execution index.
 
 ## 3. Maintenance rules
 

@@ -35,26 +35,26 @@ Every task below shares checkpoint `claude/sleepy-ride-4vxsk6` @ `7b241b8a8b96f0
 ### PH0-081 — Source Alignment and Context Bootstrap
 - **Task ID:** `CG-S5-PH0-002` (`CG-AABPP-PH0-081`) | **WBS ID:** `CG-WBS-081`
 - **Hierarchy:** Phase 0 → Governance and Source Control → Authoritative Product Baseline → Repository-native source alignment → Bootstrap authoritative context and registers
-- **Status:** `READY` — sole upstream (`PH0-080`, this task) is satisfied by this checkpoint's own completion; no unresolved variable (see companion WBS §5 for full resolution)
-- **Dependencies:** `PH0-080` (this kickoff)
+- **Status:** `VERIFIED` — `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` complete; `CARGOGRID_CONTEXT.md` §2 now explicitly cites the `GOV-010..019` governance-instance register; fresh-context reconstruction test passed
+- **Dependencies:** `PH0-080` (this kickoff) — satisfied
 - **Allowed paths:** repository governance/context/status/ledger/build-log documentation paths only (`docs/runtime/*.md`, `docs/build-logs/CG-S5-PH0-002_*.md`); normally 5–15 files
 - **Outputs:** updated `docs/runtime/CARGOGRID_CONTEXT.md`; build log at `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` (repo-convention path, package text names `docs/build-log/phase-00/PH0-81.md`)
-- **Baseline/final gate:** baseline = current `docs/runtime/*` state (post this checkpoint); final = task's own §33/§34 acceptance criteria/DoD
+- **Baseline/final gate:** baseline = current `docs/runtime/*` state (post this checkpoint); final = task's own §33/§34 acceptance criteria/DoD — both satisfied, see build log §11
 - **Owner:** Runtime build agent, `claude/sleepy-ride-4vxsk6`
-- **Evidence:** none yet (not yet executed) — this row records readiness, not completion
-- **Next action:** execute `81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md`
+- **Evidence:** `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` (this task's own build log, `VERIFIED`)
+- **Next action:** complete — proceed to `PH0-082`
 
 ### PH0-082 — Requirement Traceability Baseline
 - **Task ID:** `CG-S5-PH0-003` | **WBS ID:** `CG-WBS-082`
 - **Hierarchy:** Governance and Traceability → Requirement Control → Requirement-to-architecture/WBS/test mapping → Bootstrap repository traceability matrix
-- **Status:** `BLOCKED` — upstream `PH0-081` not yet `VERIFIED`
-- **Dependencies:** `PH0-081`
+- **Status:** `READY` — sole upstream (`PH0-081`) now `VERIFIED`
+- **Dependencies:** `PH0-081` — satisfied
 - **Allowed paths:** traceability, governance, build-log and validation-script paths explicitly approved
 - **Outputs:** repository traceability baseline; build log `docs/build-logs/CG-S5-PH0-003_*.md`
 - **Baseline/final gate:** baseline = `PH0-081` output; final = own acceptance criteria
 - **Owner:** Runtime build agent, `claude/sleepy-ride-4vxsk6`
-- **Evidence:** `PH0-081` = not yet `VERIFIED` (blocking evidence)
-- **Next action:** hold until `PH0-081` is `VERIFIED`, then execute `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md`
+- **Evidence:** `PH0-081` = `VERIFIED` (`docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md`)
+- **Next action:** execute `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md`
 
 ### PH0-083 — Repository Audit Adoption and Gap Closure
 - **Task ID:** `CG-S5-PH0-004` | **WBS ID:** `CG-WBS-083`
