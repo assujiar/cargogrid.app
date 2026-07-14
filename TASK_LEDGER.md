@@ -149,20 +149,20 @@ Establish the exact target repository, checkpoint, worktree condition, topology,
 
 | Task ID | Final status | Commit | Evidence/build log | Superseded by | Closed date |
 |---|---|---|---|---|---|
-| CG-S2-DISC-001 | `VERIFIED` | d587445 (repair on `claude/eloquent-mayer-s40hn4`, pending push) | `docs/build-logs/CG-S2-DISC-001_repository_discovery.md` | none | 2026-07-14 |
-| CG-S2-DISC-002 | `VERIFIED` | d587445 (pending push) | `docs/discovery/02_EXISTING_IMPLEMENTATION_AUDIT.md` | none | 2026-07-14 |
-| CG-S2-DISC-003 | `VERIFIED` | d587445 (pending push) | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | none | 2026-07-14 |
-| CG-S2-DISC-004 | `VERIFIED` | d587445 (pending push) | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` | none | 2026-07-14 |
-| CG-S2-DISC-005 | `VERIFIED` | d587445 (pending push) | `docs/discovery/05_ROUTE_MODULE_INVENTORY.md` | none | 2026-07-14 |
-| CG-S2-DISC-006 | `VERIFIED` | d587445 (pending push) | `docs/discovery/06_SECURITY_BASELINE.md` | none | 2026-07-14 |
-| CG-S2-DISC-007 | `VERIFIED` | d587445 (pending push) | `docs/discovery/07_TEST_QUALITY_BASELINE.md` | none | 2026-07-14 |
-| CG-S2-DISC-008 | `VERIFIED` | d587445 (pending push) | `docs/discovery/08_PERFORMANCE_BASELINE.md` | none | 2026-07-14 |
-| CG-S2-DISC-009 | `VERIFIED` | d587445 (pending push) | `docs/discovery/09_ACCESSIBILITY_UX_BASELINE.md` | none | 2026-07-14 |
-| CG-S2-DISC-010 | `VERIFIED` | d587445 (pending push) | `docs/discovery/10_PLACEHOLDER_DEAD_CODE_INVENTORY.md` | none | 2026-07-14 |
-| CG-S2-DISC-011 | `VERIFIED` | d587445 (pending push) | `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` | none | 2026-07-14 |
-| CG-S2-DISC-012 | `VERIFIED` | d587445 (pending push) | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | none | 2026-07-14 |
-| CG-S2-DISC-013 | `VERIFIED` | d587445 (pending push) | `docs/discovery/00_EXECUTION_INDEX.md`, `docs/discovery/13_BASELINE_EVIDENCE_INDEX.md` | none | 2026-07-14 |
-| CG-S2-DISC-014 | `VERIFIED` | d587445 (pending push) | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | none | 2026-07-14 |
+| CG-S2-DISC-001 | `VERIFIED` | fc4a2fc | `docs/build-logs/CG-S2-DISC-001_repository_discovery.md` | none | 2026-07-14 |
+| CG-S2-DISC-002 | `VERIFIED` | fc4a2fc | `docs/discovery/02_EXISTING_IMPLEMENTATION_AUDIT.md` | none | 2026-07-14 |
+| CG-S2-DISC-003 | `VERIFIED` | fc4a2fc | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-004 | `VERIFIED` | fc4a2fc | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-005 | `VERIFIED` | fc4a2fc | `docs/discovery/05_ROUTE_MODULE_INVENTORY.md` | none | 2026-07-14 |
+| CG-S2-DISC-006 | `VERIFIED` | fc4a2fc | `docs/discovery/06_SECURITY_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-007 | `VERIFIED` | fc4a2fc | `docs/discovery/07_TEST_QUALITY_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-008 | `VERIFIED` | fc4a2fc | `docs/discovery/08_PERFORMANCE_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-009 | `VERIFIED` | fc4a2fc | `docs/discovery/09_ACCESSIBILITY_UX_BASELINE.md` | none | 2026-07-14 |
+| CG-S2-DISC-010 | `VERIFIED` | fc4a2fc | `docs/discovery/10_PLACEHOLDER_DEAD_CODE_INVENTORY.md` | none | 2026-07-14 |
+| CG-S2-DISC-011 | `VERIFIED` | fc4a2fc | `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` | none | 2026-07-14 |
+| CG-S2-DISC-012 | `VERIFIED` | fc4a2fc | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | none | 2026-07-14 |
+| CG-S2-DISC-013 | `VERIFIED` | fc4a2fc | `docs/discovery/00_EXECUTION_INDEX.md`, `docs/discovery/13_BASELINE_EVIDENCE_INDEX.md` | none | 2026-07-14 |
+| CG-S2-DISC-014 | `VERIFIED` | fc4a2fc | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
