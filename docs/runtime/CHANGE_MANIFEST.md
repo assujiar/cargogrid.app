@@ -15,6 +15,7 @@
 | `CHG-2026-004` | `CG-S3-ARCH-001` | DOCS | Author `docs/architecture/01_MODULE_DEPENDENCY_MAP.md` (Prompt 36) — first Step 3 architecture output; module catalogue, dependency matrix, directed map, cycles/conflicts, shared primitives, external dependencies, ADR candidates, phase implications, validation rules | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-005` | `CG-S3-ARCH-002` | DOCS | Author `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` (Prompt 37) — second Step 3 architecture output; canonical entity register, 6 lifecycle flow maps, lineage table, integration/job/file/report flows, 7 reconciliation points, 9 exception/recovery paths, data classifications, retention/legal-hold table, 2 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-006` | `CG-S3-ARCH-003` | DOCS | Author `docs/architecture/03_DOMAIN_BOUNDARY_MAP.md` (Prompt 38) — third Step 3 architecture output; ownership catalogue, allowed dependency directions, 10 public contracts + anti-corruption rule, shared kernel, access responsibility split, current-to-target mapping, boundary violations, enforcement/test strategy, 2 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-007` | `CG-S3-ARCH-004` | DOCS | Author `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` (Prompt 39) — fourth Step 3 architecture output; concrete + bounded-pattern target tree, directory purpose/owner table, import/dependency rules, contract placement, current-to-target mapping, 10-slice incremental transition sequence, enforcement gates, 3 new ADR candidates | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -281,6 +282,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 #### Approval and closure
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002/005/006/007/008` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-003/004` (deferred to Prompts 39/45). Next eligible task: `CG-S3-ARCH-004` — Repository Target Structure (Prompt 39).
+
+### CHG-2026-007 — Repository Target Structure (Step 3, Prompt 39)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-004` / `39_REPOSITORY_TARGET_STRUCTURE_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`03_*.md` (precondition, VERIFIED); Tech Arch §7.1/7.5/8/25/27/28 |
+| Decisions | No new product decision. Raised 3 new ADR candidates (`ADR-CAND-ARCH-009/010/011`: migration naming convention, `server/contracts/` folder timing, no-empty-stub-domain-folder convention) and resolved `ADR-CAND-ARCH-003` (repository boundary enforcement) directly rather than re-deferring it, per `HANDOFF.md`'s explicit instruction |
+| Baseline evidence | `docs/discovery/02_*`, `03_*`, `05_*` (zero code/workspace topology, confirmed unchanged) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md`: current structure (documentation-only, nothing to preserve/move/wrap at the code level); target structure combining concrete paths (Tech Arch §7.1 App Router tree, §8 Backend Module Layout tree) with bounded patterns marked `ADR_REQUIRED` for migrations/tests/workers/design-system/scripts/observability/infra/runbooks; a directory purpose/owner table mapping every folder onto `03_DOMAIN_BOUNDARY_MAP.md`'s ownership catalogue; an import/dependency rule table encoding `03_*.md`'s boundaries in enforceable physical-path form; contract and generated-code placement; a current-to-target mapping; a 10-slice incremental transition sequence matching the existing phase order with compatibility/rollback/verification per slice; enforcement gates (lint boundary rule, CODEOWNERS-equivalent, architecture tests, CI pipeline mapping); 3 new ADR candidates; and 1 new risk (`MDM-RISK-005`, per-domain-folder naming-drift risk).
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` | ADD | Prompt 39 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-004` → `VERIFIED`, next eligible task → `CG-S3-ARCH-005` (Prompt 40) | `git revert` |
+
+No application/config/migration/dependency file exists or was touched (Step 3 README §7 scope contract) — this document only *plans* where such files will eventually live; it creates no directory and moves no file, per the prompt's own instruction #8.
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL, webhook, job, route, UI, tenant, finance, or PII surface exists or changed.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-001/002/005/006/007/008/009/010/011` (implementation ADRs, non-blocking), `ADR-CAND-ARCH-004` (deferred to Prompt 45). Next eligible task: `CG-S3-ARCH-005` — Database Schema Workstream (Prompt 40).
 
 ## 3. Maintenance rules
 
