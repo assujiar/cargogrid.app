@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14T10:29:19+07:00
+**Updated:** 2026-07-14 (post Step 3 Prompt 43 — API/Integration Workstream)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index
@@ -19,6 +19,7 @@
 | `CHG-2026-008` | `CG-S3-ARCH-005` | DOCS | Author `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` (Prompt 40) — fifth Step 3 architecture output; schema principles, single-`app`-schema ownership catalogue, relationship/constraint plan, finance controls, migration-wave policy, test matrix, atomic workstream backlog. **Amends** `03_DOMAIN_BOUNDARY_MAP.md` (namespace column superseded by evidence). Resolves `ADR-CAND-ARCH-001/005/007/008` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-009` | `CG-S3-ARCH-006` | DOCS | Author `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` (Prompt 41) — sixth Step 3 architecture output; access model, 8-stage evaluation flow, 7-family RLS matrix, 19-action permission catalogue, RPD-022 Supreme Admin enforcement, 15-item negative-test matrix, 9-slice atomic backlog. Resolves `ADR-CAND-ARCH-002/006` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 | `CHG-2026-010` | `CG-S3-ARCH-007` | DOCS | Author `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` (Prompt 42) — seventh Step 3 architecture output; 10 sub-engines, shared metadata/lifecycle, all 91 blueprint-catalogued rules/patterns/use-cases/transitions/exceptions accounted for as config data, 6-level precedence, 4 bypass prohibitions, 9-slice atomic backlog. Resolves `ADR-CAND-ARCH-010` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-011` | `CG-S3-ARCH-008` | DOCS | Author `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` (Prompt 43) — eighth Step 3 architecture output; REST/GraphQL ownership matrix sharing the 8-stage evaluation flow (RPD-033), shared contract/error/pagination/idempotency/concurrency rules, GraphQL-specific controls, auth/security control table, webhook/event architecture, 17-category integration inventory with a binding adapter template (RPD-038), PostgreSQL durable-queue job contract (RPD-012), import/export/file/report paths, compatibility/deprecation policy, performance budgets, 12-row test matrix, 10-slice atomic backlog. Resolves `ADR-CAND-ARCH-016` | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -480,6 +481,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 #### Approval and closure
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-004/011/012/013/014/015` (implementation ADRs, non-blocking). Next eligible task: `CG-S3-ARCH-008` — API/Integration Workstream (Prompt 43).
+
+### CHG-2026-011 — API/Integration Workstream (Step 3, Prompt 43)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-008` / `43_API_INTEGRATION_WORKSTREAM_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no endpoint/resolver/webhook/job/integration code created**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`07_*.md` (precondition, VERIFIED); Tech Arch §17.3, §19, §23.2–23.7, §25, §26, §32.7, §32.11 (full); `03_*.md` §5 (10 public contracts); RPD-012, RPD-033, RPD-038 |
+| Decisions | No new product decision. Resolved 1 prior open bounded pattern (`ADR-CAND-ARCH-016`, integration runbook location). Raised `ADR-CAND-ARCH-017/018/019` (GraphQL limits, webhook/rate-limit numeric values, deprecation overlap window) |
+| Baseline evidence | Zero API/GraphQL/webhook/job/integration implementation, confirmed unchanged |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md`: interface principles establishing one business-service owner per capability shared by REST and GraphQL through the identical `06_*.md` 8-stage evaluation flow (the concrete mechanism behind RPD-033); a REST/GraphQL ownership matrix; shared contract rules (naming/versioning, pagination per `05_*.md` §7's exact table assignments, filter/sort allowlist, error schema, localization, correlation IDs, optimistic concurrency via `record_version`, idempotency keys, batch limits, async responses); GraphQL-specific controls (depth/complexity, persisted operations, resolver batching, field authorization, introspection/environment tiers, subscription realtime allow-listing); an auth/security control table (API keys, OAuth, session, service identities, scopes, rotation, rate limits, CORS/CSRF, sensitive-field redaction); webhook/event architecture (catalogue sourced from `07_*.md`'s 24 transitions + 16 exceptions, signing, retry/backoff/DLQ, delivery logs, auto-disablement, reconciliation, inbound data flow); a 17-category integration inventory with one binding case-by-case adapter template (RPD-038, no generic provider abstraction); the PostgreSQL durable-queue `jobs` table (RPD-012, exact Tech Arch §32.11 field list) bound as the single job contract; import/export/file/report paths mapped to `05_*.md`'s existing tables; compatibility/deprecation policy; performance budgets (500ms/2s, Tech Arch §32.7); a 12-row test matrix; a 10-slice atomic backlog.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` | ADD | Prompt 43 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-008` → `VERIFIED`, next eligible task → `CG-S3-ARCH-009` (Prompt 44) | `git revert` |
+
+No application/config/migration/dependency/route/schema file exists or was touched — this document plans the API/integration layer, it does not create an endpoint (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, REST/GraphQL route, webhook, job, UI, tenant, finance, or PII surface exists or changed. RPD-012/033/038 disclosures preserved and cited; every auth/security control table row is a transport-facing instantiation of the already-ratified `06_*.md` 8-stage evaluation flow — no new privilege surface introduced.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-004/011/012/013/014/015/017/018/019` (implementation ADRs, non-blocking). Next eligible task: `CG-S3-ARCH-009` — UX/Design System Workstream (Prompt 44).
 
 ## 3. Maintenance rules
 

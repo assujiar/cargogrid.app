@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14T10:29:19+07:00
+**Updated:** 2026-07-14 (post Step 3 Prompt 43 — API/Integration Workstream)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
 
 ## 1. Task identity and state model
@@ -35,7 +35,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-005` | Database Schema Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-004` (VERIFIED) | `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-006` |
 | `CG-S3-ARCH-006` | RLS/RBAC Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-005` (VERIFIED) | `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-007` |
 | `CG-S3-ARCH-007` | Configuration Engine Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-006` (VERIFIED) | `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-008` |
-| `CG-S3-ARCH-008` | API/Integration Workstream | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-007` (VERIFIED) | — | 2026-07-14 | Execute Prompt 43 |
+| `CG-S3-ARCH-008` | API/Integration Workstream | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-007` (VERIFIED) | `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-009` |
+| `CG-S3-ARCH-009` | UX/Design System Workstream | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-008` (VERIFIED) | — | 2026-07-14 | Execute Prompt 44 |
 
 ## 3. Task records
 
@@ -248,6 +249,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` §17 completion statement — every configurable catalogue has one engine owner, precedence/version snapshots deterministic, bypasses explicit, bounded implementation slices defined. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-008` — API/Integration Workstream (Prompt 43).
 
+### CG-S3-ARCH-008 — API/Integration Workstream
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 3 — Architecture and Execution Blueprint |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `agent/cargogrid-autonomous-build` |
+| Prompt path/version | `03-architecture-and-plan/43_API_INTEGRATION_WORKSTREAM_PROMPT.md` (`CG-AABPP-ARCH-043` v0.4.0) |
+| Build log path | `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001..007` (all VERIFIED) |
+
+**Objective and outcome:** Defined REST/GraphQL ownership over shared domain services (one business-service owner per capability, both interfaces entering the identical `06_*.md` 8-stage evaluation flow — the concrete mechanism behind RPD-033). Defined shared contract rules: naming/versioning, pagination (offset/cursor/keyset/async-export per `05_*.md` §7's table assignments), filter/sort allowlist, error schema, localization, correlation IDs, optimistic concurrency (`record_version`), idempotency keys, batch limits, async responses. Defined GraphQL depth/complexity limits, persisted operations, resolver batching, field authorization, introspection/environment tiers, and subscription realtime-channel allow-listing. Defined the auth/security control table (API keys, OAuth, session, service identities, scopes, rotation, rate limits, CORS/CSRF, sensitive-field redaction). Defined webhook/event architecture (catalogue sourced from `07_*.md`'s 24 transitions + 16 exceptions, signing, retry/backoff/DLQ, delivery logs, auto-disablement, reconciliation) and inbound-webhook data flow. Planned all 17 Tech Arch §26.1 integration categories under one binding case-by-case adapter template (RPD-038; no generic provider abstraction). Bound the PostgreSQL durable-queue `jobs` table (RPD-012, exact Tech Arch §32.11 field list) as the single job contract for webhooks/notifications/reports/imports/exports/integrations. Mapped import/export/file/report paths to existing `05_*.md` tables (`import_export_jobs`, `import_staging_rows`) and Tech Arch §17 file-security rules. Defined compatibility/deprecation policy (additive-safe, breaking-change overlap window) and performance budgets (500ms/2s from Tech Arch §32.7). Produced a 12-row test matrix. Resolved 1 prior open bounded pattern (`ADR-CAND-ARCH-016` — integration runbook location, `docs/runbooks/<category>.md`); raised 3 new ADR candidates (`017` GraphQL depth/complexity/persisted-operation values, `018` webhook signing/rate-limit numeric values, `019` deprecation overlap-window duration), all non-blocking, deferred to Phase 1 `API-WH` implementation. **No endpoint, resolver, webhook, job handler, or integration adapter code was created.**
+
+**Acceptance and closure:** `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` §16 exit gates — every exposed capability has one business-service owner (verified — REST/GraphQL call the identical function), REST/GraphQL security parity is enforceable (not aspirational), job/integration failure recovery is explicit (DLQ + retry/backoff + sandbox contract tests, no "TBD" failure mode), RPD-038 preserved exactly. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-009` — UX/Design System Workstream (Prompt 44).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -261,7 +278,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-005` | ARCH-004 VERIFIED | CG-S3-ARCH-006 | `docs/architecture/05_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-006` | ARCH-005 VERIFIED | CG-S3-ARCH-007 | `docs/architecture/06_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-007` | ARCH-006 VERIFIED | CG-S3-ARCH-008 | `docs/architecture/07_*` | Done (VERIFIED) |
-| `CG-S3-ARCH-008` | ARCH-007 VERIFIED | CG-S3-ARCH-009 | `docs/architecture/08_*` | YES |
+| `CG-S3-ARCH-008` | ARCH-007 VERIFIED | CG-S3-ARCH-009 | `docs/architecture/08_*` | Done (VERIFIED) |
+| `CG-S3-ARCH-009` | ARCH-008 VERIFIED | CG-S3-ARCH-010 | `docs/architecture/09_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -288,7 +306,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-004` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-005` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-006` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-007` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-007` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-008` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
