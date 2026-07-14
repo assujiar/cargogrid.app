@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 82 — Requirement Traceability Baseline)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
 
 ## 1. Task identity and state model
@@ -46,7 +46,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-016` | Step 3 Closure Verification | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-015` (VERIFIED) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | 2026-07-14 | Step 3 `RUNTIME_ARCHITECTURE_VERIFIED` — proceed to Phase 0 Foundation (Prompt 79) |
 | `CG-S5-PH0-001` | Phase 0 WBS and Runtime Kickoff | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-016` (VERIFIED) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-002` (Prompt 81) |
 | `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-001` (VERIFIED) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-003` (Prompt 82) |
-| `CG-S5-PH0-003` | Requirement Traceability Baseline | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-002` (VERIFIED) | — | 2026-07-14 | Execute `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md` |
+| `CG-S5-PH0-003` | Requirement Traceability Baseline | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-002` (VERIFIED) | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-004` (Prompt 83) |
+| `CG-S5-PH0-004` | Repository Audit Adoption and Gap Closure | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-003` (VERIFIED) | — | 2026-07-14 | Execute `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` |
 
 ## 3. Task records
 
@@ -437,6 +438,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` §11 — repository-native context complete and independently reconstructable; zero hidden source conflict; no runtime file outside allowed docs changed; task/change/checkpoint/handoff records agree. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82).
 
+### CG-S5-PH0-003 — Requirement Traceability Baseline (Prompt 82)
+
+| Field | Value |
+|---|---|
+| Parent phase | Phase 0 — Discovery and Foundation |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `05-phase-00-discovery-foundation/82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md` (`CG-AABPP-PH0-082` v0.6.0) |
+| Build log path | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` |
+| Dependency | `CG-S5-PH0-002` (VERIFIED) |
+
+**Objective and outcome:** Formally adopted `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (401 traced items, 0 `NOT_COVERED`, already independently re-verified by `16_STEP3_CLOSURE_REPORT.md` §4) as the **repository-native requirement traceability baseline** for Phase 0, rather than re-authoring a second, driftable copy of the same matrix — consistent with this repository's own evidence-precedence discipline. Defined 5 document-level validation rules as the new artifact this task contributes: (V1) ID uniqueness across every requirement/decision/gap/catalogue ID family; (V2) count reconciliation against the primary control files; (V3) bidirectional WBS-ID/requirement-family link verification; (V4) orphan/duplicate/conflict/partial/external/accepted-risk state-coverage check; (V5) fresh-context requirement lookup test. All 5 run manually this checkpoint (no test-runner exists yet) and all pass — spot-checked with `RPD-016`, `GAP-017`, `CPD-022` as fresh-context lookup samples, each fully resolvable from `14_*.md` alone. **No application/schema/API/UI file was touched** (confirmed by this checkpoint's own `git status`).
+
+**Acceptance and closure:** `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` §11 — all authoritative items mapped or explicitly blocking/external with owner (inherited from `14_*.md`, re-verified this checkpoint); traceability is machine-reviewable via the 5 new validation rules, no coverage fabricated; mandatory manual checks pass, worktree reconciled. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -461,7 +478,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-016` | ARCH-015 VERIFIED | Phase 0 kickoff (Prompts 79+) | `docs/architecture/16_*` | Done (VERIFIED) |
 | `CG-S5-PH0-001` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | CG-S5-PH0-002 | `docs/build-logs/CG-S5-PH0-001_*` | Done (VERIFIED) |
 | `CG-S5-PH0-002` | PH0-001 VERIFIED | CG-S5-PH0-003 | `docs/build-logs/CG-S5-PH0-002_*` | Done (VERIFIED) |
-| `CG-S5-PH0-003` | PH0-002 VERIFIED | CG-S5-PH0-004 | `05-phase-00-discovery-foundation/82_*` | YES |
+| `CG-S5-PH0-003` | PH0-002 VERIFIED | CG-S5-PH0-004 | `docs/build-logs/CG-S5-PH0-003_*` | Done (VERIFIED) |
+| `CG-S5-PH0-004` | PH0-003 VERIFIED | CG-S5-PH0-005 | `05-phase-00-discovery-foundation/83_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -499,7 +517,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-015` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-016` | `VERIFIED` (`RUNTIME_ARCHITECTURE_VERIFIED`) | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-14 |
 | `CG-S5-PH0-001` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | none | 2026-07-14 |
-| `CG-S5-PH0-002` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | none | 2026-07-14 |
+| `CG-S5-PH0-002` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | none | 2026-07-14 |
+| `CG-S5-PH0-003` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 

@@ -47,20 +47,20 @@ Every task below shares checkpoint `claude/sleepy-ride-4vxsk6` @ `7b241b8a8b96f0
 ### PH0-082 — Requirement Traceability Baseline
 - **Task ID:** `CG-S5-PH0-003` | **WBS ID:** `CG-WBS-082`
 - **Hierarchy:** Governance and Traceability → Requirement Control → Requirement-to-architecture/WBS/test mapping → Bootstrap repository traceability matrix
-- **Status:** `READY` — sole upstream (`PH0-081`) now `VERIFIED`
+- **Status:** `VERIFIED` — `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` complete; formally adopts `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` as the repository-native traceability baseline (401 items, 0 `NOT_COVERED`) and defines 5 document-level validation rules (ID uniqueness, count reconciliation, bidirectional link, orphan/duplicate/conflict-state coverage, fresh-context lookup), all passing
 - **Dependencies:** `PH0-081` — satisfied
 - **Allowed paths:** traceability, governance, build-log and validation-script paths explicitly approved
-- **Outputs:** repository traceability baseline; build log `docs/build-logs/CG-S5-PH0-003_*.md`
-- **Baseline/final gate:** baseline = `PH0-081` output; final = own acceptance criteria
+- **Outputs:** repository traceability baseline (adopted, not re-authored); build log `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md`
+- **Baseline/final gate:** baseline = `PH0-081` output; final = own acceptance criteria — satisfied, see build log §11
 - **Owner:** Runtime build agent, `claude/sleepy-ride-4vxsk6`
-- **Evidence:** `PH0-081` = `VERIFIED` (`docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md`)
-- **Next action:** execute `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md`
+- **Evidence:** `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` (this task's own build log, `VERIFIED`)
+- **Next action:** complete — proceed to `PH0-083`
 
 ### PH0-083 — Repository Audit Adoption and Gap Closure
 - **Task ID:** `CG-S5-PH0-004` | **WBS ID:** `CG-WBS-083`
 - **Hierarchy:** Repository Foundation → Brownfield Baseline Adoption → Verified discovery integration → Adopt discovery findings into implementation controls
-- **Status:** `BLOCKED` — upstream `PH0-081..082` not yet `VERIFIED`
-- **Dependencies:** `PH0-081..082`
+- **Status:** `READY` — upstream `PH0-081..082` now `VERIFIED`
+- **Dependencies:** `PH0-081..082` — satisfied
 - **Allowed paths:** discovery-derived context/status/issues/WBS/build-log documentation and validation scripts
 - **Outputs:** adopted gap/debt/ownership register updates; build log `docs/build-logs/CG-S5-PH0-004_*.md`
 - **Baseline/final gate:** baseline = `PH0-082` output; final = own acceptance criteria

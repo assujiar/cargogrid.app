@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 82 — Requirement Traceability Baseline)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index
@@ -29,7 +29,8 @@
 | `CHG-2026-018` | `CG-S3-ARCH-015` | DOCS | Author `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` (Prompt 50) — fifteenth Step 3 architecture output; 9-dimension reproducible Composite Risk Score ranking, dependency-depth-ordered critical path, foundation blockers, concurrency lanes, risk burn-down recalculation triggers, no duration/staffing/date invented | NONE | LOW | `COMPLETED` | `678f384` | 2026-07-14 |
 | `CHG-2026-019` | `CG-S3-ARCH-016` | DOCS | Author `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (Prompt 51) — sixteenth and final Step 3 output; independent re-verification of all nine closure conditions against primary sources, closure state `RUNTIME_ARCHITECTURE_VERIFIED`; corrects Findings F1 (`12_*.md`/`13_*.md` pre-merge checkpoint-hash citations) and F2 (this manifest's index table). **Step 3 fully closed, 16/16 outputs.** | NONE | LOW | `COMPLETED` | (checkpoint) | 2026-07-14 |
 | `CHG-2026-020` | `CG-S5-PH0-001` | DOCS | Author `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` + `_phase0_wbs.md` (Prompt 80) — first Phase 0 output; validates all 5 Phase 0 entry-gate conditions, produces full execution register for 22 downstream prompts (18 capabilities + verification/hardening/documentation/closure), single-sequential-lane concurrency model, zero collision risk (independent `git`-based audit). `PH0-081` marked `READY`. **Phase 0 kicked off.** | NONE | LOW | `COMPLETED` | (checkpoint) | 2026-07-14 |
-| `CHG-2026-021` | `CG-S5-PH0-002` | DOCS | Author `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` (Prompt 81) — materializes source hierarchy/decisions/status into repository-native context; adds explicit `GOV-010..019` governance-instance-register citation to `CARGOGRID_CONTEXT.md` §2; fresh-context reconstruction test passed; zero application/config/migration file touched. `PH0-082` marked `READY`. | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
+| `CHG-2026-021` | `CG-S5-PH0-002` | DOCS | Author `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` (Prompt 81) — materializes source hierarchy/decisions/status into repository-native context; adds explicit `GOV-010..019` governance-instance-register citation to `CARGOGRID_CONTEXT.md` §2; fresh-context reconstruction test passed; zero application/config/migration file touched. `PH0-082` marked `READY`. | NONE | LOW | `COMPLETED` | (checkpoint) | 2026-07-14 |
+| `CHG-2026-022` | `CG-S5-PH0-003` | DOCS | Author `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` (Prompt 82) — formally adopts `14_REQUIREMENT_PHASE_TRACEABILITY.md` (401 items, 0 `NOT_COVERED`) as the repository-native traceability baseline rather than re-authoring a duplicate; defines 5 document-level validation rules (ID uniqueness, count reconciliation, bidirectional link, orphan/duplicate/conflict-state coverage, fresh-context lookup), all passing. `PH0-083` marked `READY`. | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-14 |
 
 ## 2. Change entries
 
@@ -1028,6 +1029,55 @@ Updated: this manifest, task ledger, build status, context, handoff, Phase 0 exe
 #### Approval and closure
 
 No external approval required (documentation-only, context-bootstrap task). **Next eligible task: `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82)**, confirmed `READY` in the execution index.
+
+### CHG-2026-022 — Requirement Traceability Baseline (Phase 0, Prompt 82)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-003` / `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md` |
+| Phase/workstream | Phase 0 — Governance and Traceability / Requirement Control |
+| Change type | DOCS (baseline adoption + validation-rule specification; no foundation change implemented) |
+| Author/agent | Claude Code (autonomous build agent), branch `claude/sleepy-ride-4vxsk6` |
+| Source requirements | `CTRL-005`; `ARCH-048..050` runtime outputs (`13_*.md`, `14_*.md`, `15_*.md`); all `CPD`/`RPD`/BPR/NFR/catalogue IDs |
+| Decisions | Adoption decision (not a product decision): `14_REQUIREMENT_PHASE_TRACEABILITY.md` formally designated the repository-native Phase 0 traceability baseline, not re-authored; no new ADR candidate |
+| Baseline evidence | Zero application/schema/API/UI file touched, confirmed by this checkpoint's own `git status` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md`: formally adopts the already-produced, twice-independently-verified `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (401 traced items, 0 `NOT_COVERED`) as the repository-native requirement traceability baseline for Phase 0 — explicitly declining to re-author a second, driftable copy of the same matrix, per this repository's evidence-precedence discipline. Contributes the one genuinely new artifact this task adds: 5 document-level validation rules (V1 ID uniqueness, V2 count reconciliation, V3 bidirectional WBS/requirement-family link, V4 orphan/duplicate/conflict/partial/external/accepted-risk state coverage, V5 fresh-context requirement lookup test), each specified with both a manual method (usable today, no toolchain exists) and a future-automation method (for `PH0-088`/`091`). All 5 run manually this checkpoint and pass; V5 spot-checked with `RPD-016`, `GAP-017`, and `CPD-022` as fresh-context lookup samples, each fully resolvable from `14_*.md` alone.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` | ADD | Prompt 82 runtime output (adoption decision + validation rules) | `git revert` |
+| `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` | EDIT | Marked `PH0-082` `VERIFIED`, `PH0-083` `READY` | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S5-PH0-003` → `VERIFIED`, next eligible task → `CG-S5-PH0-004` (Prompt 83) | `git revert` |
+
+No application/domain feature code, schema/data, public contract, or unrelated doc was touched anywhere in the repository — confirmed by this checkpoint's own `git status` (prompt's §12 forbidden-paths requirement, verified directly).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. Schema/API/UI/security/performance mappings already exist in `14_*.md` (citing `05_*.md`–`11_*.md`), preserved verbatim, not altered.
+
+#### Tests and quality evidence
+
+No toolchain exists yet. The 5 validation rules (§5 of the build log) are this task's contributed test specification; all 5 run manually this checkpoint and pass (V1–V4 zero failures found; V5 three spot-check lookups all resolvable).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch `claude/sleepy-ride-4vxsk6`).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is the `CG-S5-PH0-002` checkpoint.
+- Recovery verification: `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff, Phase 0 execution index. No new issue/error IDs opened; no new ADR candidate raised; no product decision reopened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, baseline-adoption task). **Next eligible task: `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83)**, confirmed `READY` in the execution index.
 
 ## 3. Maintenance rules
 

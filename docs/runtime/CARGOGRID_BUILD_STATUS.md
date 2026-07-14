@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 82 — Requirement Traceability Baseline)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `claude/sleepy-ride-4vxsk6` (continuation of `agent/cargogrid-autonomous-build`, merged forward; cut from `origin/main`@`39d923e`)
 **Build trust:** `TRUSTED`
@@ -13,20 +13,20 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16); Phase 0 **IN_PROGRESS** (2/22 downstream prompts) |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16); Phase 0 **IN_PROGRESS** (3/22 downstream prompts) |
 | Current phase/workstream | Phase 0 — Discovery and Foundation (`PHASE_0_IN_PROGRESS`) |
-| Active task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81) |
-| Active task status | `VERIFIED` — `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` complete |
+| Active task | `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82) |
+| Active task status | `VERIFIED` — `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` complete |
 | Branch | `claude/sleepy-ride-4vxsk6` (continuation branch; picked up `agent/cargogrid-autonomous-build`'s 3 unmerged commits by merge; cut from `origin/main`@`39d923e`) |
 | HEAD | this checkpoint's commit on `claude/sleepy-ride-4vxsk6` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — this checkpoint is a context-bootstrap/verification task, no foundation change performed) |
+| Schema/migration head | NONE (no database — this checkpoint adopts/validates an existing baseline, no foundation change performed) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82) |
+| Next eligible task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83) |
 
-Checkpoint summary: Step 2 discovery closed prior; **Step 3 (Architecture and Execution Blueprint) fully closed** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 outputs). **Phase 0 — Discovery and Foundation underway** (kickoff `CG-S5-PH0-001` `VERIFIED`; `CG-S5-PH0-002` now also `VERIFIED`). Prompt 81 materialized the approved source hierarchy/decisions/status into repository-native context: `CARGOGRID_CONTEXT.md` §2 now explicitly cites the `GOV-010..019` governance-instance register (10 template IDs mapped to their repository-native files, all verified by direct header read, zero mismatch); a fresh-context reconstruction test (a hypothetical fresh agent reading `AGENTS.md`→`CARGOGRID_CONTEXT.md`→`CARGOGRID_BUILD_STATUS.md`→`TASK_LEDGER.md`→`HANDOFF.md` can reconstruct full product/repository/checkpoint state without chat history) passed with no gap found. No application/test/config/migration/database/environment file was touched. `PH0-082` (Requirement Traceability Baseline) now `READY`. Repository remains 100% documentation outside `docs/build-logs/**`.
+Checkpoint summary: Step 2 discovery closed prior; **Step 3 (Architecture and Execution Blueprint) fully closed** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 outputs). **Phase 0 — Discovery and Foundation underway** (`CG-S5-PH0-001..002` `VERIFIED`; `CG-S5-PH0-003` now also `VERIFIED`). Prompt 82 formally adopted `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (401 items, 0 `NOT_COVERED`) as the repository-native requirement traceability baseline rather than re-authoring a duplicate copy, and defined 5 document-level validation rules (ID uniqueness, count reconciliation, bidirectional link, orphan/duplicate/conflict-state coverage, fresh-context lookup) — all 5 run manually and passing, spot-checked with `RPD-016`/`GAP-017`/`CPD-022`. No application/schema/API/UI file was touched. `PH0-083` (Repository Audit Adoption and Gap Closure) now `READY`. Repository remains 100% documentation outside `docs/build-logs/**`.
 
 **Branch note (carried forward):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. Earlier in this run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48). Those were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical), so no progress was lost. All checkpoints continue on `claude/sleepy-ride-4vxsk6`.
 
@@ -51,7 +51,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation-build sub-phase 2/22 downstream prompts done) | ~60% (Step 2 done; Step 3 done 16/16; Phase 0 kickoff + context bootstrap done, capability prompts 82–102 not started) | Phase 0: `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md` |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation-build sub-phase 3/22 downstream prompts done) | ~62% (Step 2 done; Step 3 done 16/16; Phase 0 kickoff + context bootstrap + traceability baseline done, capability prompts 83–102 not started) | Phase 0: `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -110,11 +110,11 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82).
-- Entry conditions: `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` marks `PH0-082` `READY` (met — `PH0-081` `VERIFIED` this checkpoint).
-- Required prompt/output: `05-phase-00-discovery-foundation/82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md` → per that prompt's own required-output field (confirm exact path when executing; do not assume).
-- If blocked, resume: re-read `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md` and `CG-S5-PH0-002_source_alignment_context_bootstrap.md` in full, then `82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md`, before continuing Phase 0 work.
-- Authorized command: read-only inspection + `docs/runtime/**`/`docs/build-logs/**` writes per `PH0-082`'s allowed-path list (traceability/governance/build-log/validation-script paths); later Phase 0 capabilities (`085`+) authorize toolchain/environment/CI scaffolding outside `docs/` — confirm each capability's own allowed-path list before writing outside `docs/`.
+- Next eligible task: `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83).
+- Entry conditions: `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` marks `PH0-083` `READY` (met — `PH0-081..082` `VERIFIED`).
+- Required prompt/output: `05-phase-00-discovery-foundation/83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` → per that prompt's own required-output field (confirm exact path when executing; do not assume).
+- If blocked, resume: re-read `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md`, `CG-S5-PH0-002_source_alignment_context_bootstrap.md`, and `CG-S5-PH0-003_requirement_traceability_baseline.md` in full, then `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md`, before continuing Phase 0 work.
+- Authorized command: read-only inspection + `docs/runtime/**`/`docs/build-logs/**` writes per `PH0-083`'s allowed-path list; later Phase 0 capabilities (`085`+) authorize toolchain/environment/CI scaffolding outside `docs/` — confirm each capability's own allowed-path list before writing outside `docs/`.
 
 ## 10. Update rules
 
