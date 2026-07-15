@@ -3,6 +3,7 @@
 **Instance of:** `CG-AABPP-GOV-015`
 **Instance version:** `0.2.0`
 **Updated:** 2026-07-14 (post Phase 0 Prompt 82 — Requirement Traceability Baseline)
+**Updated:** 2026-07-14 (post Step 3 Prompt 48 — Full Work Breakdown Structure)
 **Policy:** Append one traceable entry per atomic task, rollback, hotfix, or documentation-only change. Never silently rewrite historical entries.
 
 ## 1. Change index

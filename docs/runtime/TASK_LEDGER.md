@@ -48,6 +48,7 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-001` (VERIFIED) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-003` (Prompt 82) |
 | `CG-S5-PH0-003` | Requirement Traceability Baseline | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-002` (VERIFIED) | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-004` (Prompt 83) |
 | `CG-S5-PH0-004` | Repository Audit Adoption and Gap Closure | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-003` (VERIFIED) | — | 2026-07-14 | Execute `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` |
+| `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-013` (VERIFIED) | — | 2026-07-14 | Execute Prompt 49 |
 
 ## 3. Task records
 
@@ -480,6 +481,7 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S5-PH0-002` | PH0-001 VERIFIED | CG-S5-PH0-003 | `docs/build-logs/CG-S5-PH0-002_*` | Done (VERIFIED) |
 | `CG-S5-PH0-003` | PH0-002 VERIFIED | CG-S5-PH0-004 | `docs/build-logs/CG-S5-PH0-003_*` | Done (VERIFIED) |
 | `CG-S5-PH0-004` | PH0-003 VERIFIED | CG-S5-PH0-005 | `05-phase-00-discovery-foundation/83_*` | YES |
+| `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -519,6 +521,7 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S5-PH0-001` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | none | 2026-07-14 |
 | `CG-S5-PH0-002` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | none | 2026-07-14 |
 | `CG-S5-PH0-003` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-013` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
