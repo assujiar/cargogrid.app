@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-005` — ADR Baseline and Decision Governance (Prompt 84) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-004` (Prompt 83) `VERIFIED` this checkpoint (Step 2 evidence adopted, greenfield re-confirmed at `7866f22`, `ADR-CAND-ARCH-011` resolved) |
+| Active task | `CG-S5-PH0-006` — Development Environment Foundation (Prompt 85) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-005` (Prompt 84) `VERIFIED` this checkpoint (`docs/adr/` framework + register of 27 candidates + `ADR-0001` accepted). `PH0-085` first materializes toolchain and adds root `.gitignore` |
 | Branch | `agent/cargogrid-autonomous-build` (this run recreated it from `origin/main`@`b7653cb`, since the branch's own prior lineage is now fully contained in `main` via PR #11 — see `HANDOFF.md` for why) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |
