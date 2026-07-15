@@ -21,7 +21,8 @@ Statuses: `OPEN`, `INVESTIGATING`, `ROOT_CAUSE_CONFIRMED`, `RECOVERY_IN_PROGRESS
 | Error ID | Task ID | Severity | Environment | Summary | Status | Root cause | Last good checkpoint | Owner | Record link |
 |---|---|---|---|---|---|---|---|---|---|
 | `ERR-2026-001` | `CG-S2-DISC-001-R1` | Sev-3/Medium | Repository / git `main` | Parallel-session merge corrupted the discovery baseline and duplicated persistent context | `RECOVERED` (verification VERIFIED) | Two concurrent agent branches ran Prompt 21 with no single-writer lock; merge concatenated both reports and both context sets | `d587445` | Runtime agent | this file §3 |
-| `ERR-2026-002` | `CG-S3-ARCH-013..016`, `CG-S5-PH0-001..003` | Sev-2/High | Repository / GitHub PR #10 (open, unmerged) | A fully independent parallel session (branch `claude/sleepy-ride-4vxsk6`) redid Prompts 46–51, Phase 0 kickoff (80), and Prompts 81–82 with materially different content (different traceability item counts, different build-log directory convention) after diverging from the shared lineage at PR #8; its output sits in **open, unmerged** PR #10, not yet reconciled with this branch's (`agent/cargogrid-autonomous-build`) independent redo of the same range | `OPEN` — **runtime execution halted pending operator decision** | No enforced single-writer lock (`ISS-2026-002`) across scheduled/parallel routine invocations; two agent instances both continued the same autonomous build task from a shared ancestor without coordinating | `1802400` (this branch, current HEAD) | Runtime agent / repo owner | this file §3 |
+| `ERR-2026-002` | `CG-S3-ARCH-013..016`, `CG-S5-PH0-001..003` | Sev-2/High | Repository / GitHub PR #10 (was open, unmerged at detection) | A fully independent parallel session (branch `claude/sleepy-ride-4vxsk6`) redid Prompts 46–51, Phase 0 kickoff (80), and Prompts 81–82 with materially different content (different traceability item counts, different build-log directory convention) after diverging from the shared lineage at PR #8; its output sat in PR #10, not yet reconciled with this branch's (`agent/cargogrid-autonomous-build`) independent redo of the same range | `SUPERSEDED` by `ERR-2026-003` — **both PR #10 and PR #11 were subsequently merged into `main` without the operator ever recording a reconciliation decision here or in `HANDOFF.md`; see `ERR-2026-003`** | No enforced single-writer lock (`ISS-2026-002`) across scheduled/parallel routine invocations; two agent instances both continued the same autonomous build task from a shared ancestor without coordinating | `1802400` (this branch's HEAD at detection time) | Runtime agent / repo owner | this file §3 |
+| `ERR-2026-003` | `CG-S3-ARCH-014..016`, `CG-S5-PH0-001..003` | Sev-1/Critical | Repository / `main`@`b7653cb` (and every branch cut from it since, including this one) | PR #10 and PR #11 were both merged into `main` (merge commits `a8a197f` then `b7653cb`) while `ERR-2026-002` was still `OPEN` and unresolved — no reconciliation decision was ever recorded. The merges did not conflict at the git level (each lineage inserted content the other side's history didn't touch line-for-line at the merge point), so git silently **concatenated** both divergent lineages' full deliverables into single files instead of reconciling them. Confirmed by direct inspection, not inference. | `OPEN` — **build execution halted; this is a `BLOCKED_DECISION`, see `HANDOFF.md` §1** | Same root cause as `ERR-2026-002` (`ISS-2026-002`, no enforced single-writer lock), compounded by merging both divergent PRs into `main` without performing the manual reconciliation `ERR-2026-002` explicitly said was required first | `origin/main`@`27389a4` (PR #8, last point both lineages agree) | Runtime agent / repo owner | this file §3 |
 
 ## 3. Error record
 
@@ -117,7 +118,46 @@ This is **not** resolved by this session. Per this routine's own instruction to 
 
 No option is safe for an autonomous agent to select without operator input — option 1 or 2 discards real completed work either way, and option 3 requires judgment about which lineage's specific factual claims (e.g., 607 vs. 401 traced items) are correct.
 
-Status: `OPEN`. Resume only after an operator selects and records one of the three options above in this ledger and in `HANDOFF.md`.
+Status: `SUPERSEDED` by `ERR-2026-003` (below) — the situation this record describes (an unreconciled open PR) no longer exists; both PRs were merged, but without ever performing the reconciliation this record said was required. The corruption that resulted is now tracked as a distinct, more severe error.
+
+### ERR-2026-003 — Post-divergence merge corruption (PR #10 + PR #11 both merged into `main` without reconciliation)
+
+| Field | Value |
+|---|---|
+| Detected by/date | Runtime agent, this session / 2026-07-15 |
+| Severity/status | Sev-1/Critical / `OPEN` |
+| Environment | Repository; `main`@`b7653cb`; every branch cut from `main` after that commit, including this run's branch `agent/cargogrid-autonomous-build` (recreated from `origin/main` this session, since the old same-named branch's lineage is now fully contained in `main`) |
+| Related tasks/changes | `CG-S3-ARCH-014..016`, `CG-S5-PH0-001..003`, `CHG-2026-016..022` |
+
+#### What happened
+
+`ERR-2026-002` (above) recorded that two divergent lineages — this repo's `agent/cargogrid-autonomous-build` branch and the independent `claude/sleepy-ride-4vxsk6` branch (PR #10) — had each independently redone Prompts 46–51 (Step 3 closure) and Phase 0 Prompts 80–82, producing materially different content for the same task IDs (e.g. 607 vs. 401 traced requirement items), and explicitly said this required an **operator** decision among three reconciliation options before either branch resumed.
+
+Before any such decision was recorded, both PRs were merged into `main` by the repository owner directly on GitHub:
+1. `a8a197f` — merged PR #10 (`claude/sleepy-ride-4vxsk6`) into `main`.
+2. `b7653cb` — merged PR #11 (`agent/cargogrid-autonomous-build`, which had itself merged `main` at `b777bb2`, picking up PR #10's content) into `main`.
+
+Neither merge produced git conflict markers, because each lineage's edits landed as pure insertions relative to the merge base rather than overlapping line-for-line edits. Git therefore auto-resolved both merges by **concatenating** the two lineages' full content, one after another, inside the same files — not a reconciliation, a literal duplication.
+
+#### Evidence
+
+- `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (1,465 lines) contains **two** complete copies of the document back-to-back: `## 1. Scope and method` appears at line 29 *and* line 760. The first copy states `**Total traced items** | **607**` (line 662); the second states counts against a `401` total (line 1396, "Percentage of 401 total traced items").
+- `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` and `docs/architecture/16_STEP3_CLOSURE_REPORT.md` show the identical pattern — each has two `## 1.` sections (`grep -c '^## 1\.'` → 2 in both files).
+- `docs/runtime/HANDOFF.md`, `docs/runtime/CARGOGRID_BUILD_STATUS.md`, and `docs/runtime/TASK_LEDGER.md` similarly contain multiple stacked, mutually contradictory "current checkpoint" sections/rows (different branch names, different task statuses, different "Active blockers" fields) from both lineages, appended rather than reconciled.
+- `git show --stat a8a197f` and `git show --stat b7653cb` confirm each merge purely *added* lines to these files (no deletions), consistent with silent concatenation rather than resolution.
+- `git log --graph --oneline` confirms both `d7b695d` (PR #9) → `a8a197f` (PR #10) → `b7653cb` (PR #11) landed sequentially on `main`, and that `ERR-2026-002`/`HANDOFF.md` §7 "Handoff accepted by/date: PENDING (operator)" was never updated to reflect an actual decision.
+
+#### Impact
+
+- The Step 3 closure claim (`RUNTIME_ARCHITECTURE_VERIFIED`, `docs/architecture/16_*.md`) and the Phase 0 traceability baseline (`CG-S5-PH0-003`, `docs/architecture/14_*.md`) that many downstream Phase 0 capability prompts (`PH0-084` onward) are supposed to build on are **not currently a single trustworthy artifact** — they are two incompatible drafts concatenated into one file, with contradictory totals (607 vs. 401 traced items) and no indication which is authoritative.
+- No secret exposure, no data mutation outside `docs/**`, no production/database impact (still a documentation-only repository).
+- Continuing Phase 0 execution (`PH0-084` onward) on top of this corrupted baseline would compound the problem and make eventual reconciliation harder, exactly as `ERR-2026-002` warned.
+
+#### Recovery — NOT performed this session, requires operator decision
+
+Choosing which lineage's content is factually correct (607 vs. 401 traced items, and any other divergent claims in `15_*.md`/`16_*.md`) is a substantive judgment this session is not authorized to make unilaterally — the same reasoning `ERR-2026-002` already recorded still applies, now to content that is sitting in `main` rather than in an open PR. See `HANDOFF.md` §1 for the exact question and options put to the operator.
+
+Status: `OPEN`. Resume only after an operator selects one of the reconciliation options in `HANDOFF.md` §1 and records it there.
 
 ## 4. Notes
 
