@@ -5,7 +5,7 @@
 **Updated:** 2026-07-15 (consolidated after discovering `ERR-2026-003` — corrupted merge of PR #10 + PR #11 into `main`)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `origin/main`@`b7653cb` (merge of PR #11, which itself already contained PR #10's content)
-**Build trust:** `TRUSTED` (repository/process), **content trust on `docs/architecture/14..16_*.md`: `NOT_TRUSTED` — see blocker below**
+**Build trust:** `TRUSTED` (repository/process and content — `docs/architecture/14..16_*.md` reconciled to authoritative Lineage A this checkpoint; `ERR-2026-003` `RECOVERED`)
 
 > Single current-state dashboard. Allowed states: `NOT_STARTED`, `READY`, `IN_PROGRESS`, `BLOCKED`, `FAILED`, `PARTIALLY_COMPLETE`, `COMPLETED`, `VERIFIED`, `ROLLED_BACK`, `SUPERSEDED`.
 >
@@ -15,18 +15,18 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **claims closed but content is corrupted** (see blocker); Phase 0 kicked off, then **halted** |
-| Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, but **runtime execution halted** pending operator reconciliation decision |
-| Active task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83) — **would be next, but is BLOCKED** |
-| Active task status | `BLOCKED` — its upstream (`CG-S5-PH0-002..003`, and transitively `CG-S3-ARCH-014..016`) is content-corrupted, not a single trustworthy artifact |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
+| Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
+| Active task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83) — **READY, next to execute** |
+| Active task status | `READY` — upstream (`CG-S5-PH0-002..003`, transitively `CG-S3-ARCH-014..016`) reconciled to a single trustworthy 607-item baseline |
 | Branch | `agent/cargogrid-autonomous-build` (this run recreated it from `origin/main`@`b7653cb`, since the branch's own prior lineage is now fully contained in `main` via PR #11 — see `HANDOFF.md` for why) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |
 | Schema/migration head | NONE (no database — still greenfield) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist yet) |
-| **Active blockers** | **`BLOCKED_DECISION` — `ERR-2026-003` (Sev-1/Critical): `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`, `15_RISK_RANKED_CRITICAL_PATH.md`, `16_STEP3_CLOSURE_REPORT.md` each contain two complete, concatenated, contradictory copies of the same document (two divergent lineages' output merged without reconciliation — confirmed by direct inspection: two `## 1.` sections in each file, 607 vs. 401 traced-item totals). See `HANDOFF.md` §1 for the exact question and options.** |
-| Next eligible task | **NONE until `ERR-2026-003` is resolved by the operator** |
+| **Active blockers** | **NONE.** `ERR-2026-003` (Sev-1/Critical) is `RECOVERED` this checkpoint — the three files were rewritten as single coherent Lineage A documents (607-item authoritative baseline), Prompt 82 re-verified, duplicate Phase 0 build logs consolidated. See `ERROR_LEDGER.md` `ERR-2026-003` recovery record and `HANDOFF.md` §1 decision. |
+| Next eligible task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83) |
 
 Checkpoint summary: Step 2 discovery is genuinely closed and trustworthy (`RUNTIME_DISCOVERY_VERIFIED`, single lineage, no divergence). Step 3 (Prompts 36–48, `docs/architecture/01_*.md`–`13_*.md`) is also genuinely closed and trustworthy — the divergence only affects Prompts 49–51 (`14_*.md`–`16_*.md`) and Phase 0 Prompts 80–82. Two independent agent sessions ran those six task IDs in parallel from the same shared ancestor, producing materially different content (e.g. 607 vs. 401 traced requirement items). This was correctly detected and halted by a prior session (`ERR-2026-002`, `HANDOFF.md` `HO-20260715-021`), which asked an operator to choose one of three reconciliation options before any further work continued. Before that decision was recorded, both branches' pull requests (PR #10, then PR #11) were merged into `main` directly. Because the two lineages' edits did not overlap line-for-line, git resolved both merges without conflict markers by **silently concatenating** the divergent content — not reconciling it. This session (this checkpoint) discovered and documented that outcome as `ERR-2026-003`, consolidated the previously-stacked `docs/runtime/*.md` ledgers into single coherent documents, and halted rather than build further Phase 0 capability prompts on top of an unreliable Step 3/Phase 0 baseline. No product/business decision was reopened — this is a process/governance issue about which of two already-produced documents is authoritative, plus a mechanical cleanup of two duplicated documents.
 
@@ -36,7 +36,7 @@ Checkpoint summary: Step 2 discovery is genuinely closed and trustworthy (`RUNTI
 |---|---|---|---|---|
 | Source and decision controls | `VERIFIED` (package) | `00-control/06_PACKAGE_BUILD_STATUS.md` | Product | All work |
 | Repository discovery (14/14 prompts) | `VERIFIED` | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | Architecture | Feature code (still blocked pending Phase 0) |
-| Architecture and Execution Blueprint (16/16 prompts) | Prompts 36–48 `VERIFIED` and trustworthy; Prompts 49–51 **content-corrupted**, claims `RUNTIME_ARCHITECTURE_VERIFIED` but not currently a single reliable artifact | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (corrupted — two copies) | Architecture | Feature code (blocked pending `PHASE_0_VERIFIED`, itself blocked on this reconciliation) |
+| Architecture and Execution Blueprint (16/16 prompts) | `VERIFIED` and trustworthy — Prompts 36–48 single-lineage; Prompts 49–51 reconciled to authoritative Lineage A (`RUNTIME_ARCHITECTURE_VERIFIED`, single reliable artifact each) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (single coherent Lineage A copy) | Architecture | Feature code (blocked pending `PHASE_0_VERIFIED`) |
 | Greenfield/brownfield decision | `VERIFIED` — `GREENFIELD`, High confidence | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | Architecture | Target plan (unblocked, unaffected by the corruption) |
 | Environment/toolchain baseline | `VERIFIED` (absence confirmed) | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | DevEx | Reliable gates (pending Phase 0 build-out) |
 | Database/migration baseline | `VERIFIED` (absence confirmed) | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` | Data | Schema changes (pending Phase 0) |

@@ -4,14 +4,18 @@
 **Handoff ID:** `HO-20260715-023` (supersedes `HO-20260715-021`, `HO-20260714-022`, `HO-20260714-016`, and every earlier stacked entry previously appended below them in this file)
 **Created:** 2026-07-15
 **From/To:** Runtime build agent (Claude Code) → next runtime agent / **operator**
-**Trust status:** `TRUSTED` (process); **content trust on `docs/architecture/14..16_*.md`: `NOT_TRUSTED`**
-**Run status:** `BLOCKED_DECISION` — **runtime execution halted, requires operator decision before resuming**
+**Trust status:** `TRUSTED` (process and content — `docs/architecture/14..16_*.md` reconciled to single coherent Lineage A documents this checkpoint)
+**Run status:** `RESUMED` — **`ERR-2026-003` `RECOVERED`; Phase 0 execution resumes at `CG-S5-PH0-004` (Prompt 83)**
 
 > This file previously accumulated multiple stacked, contradictory handoff entries (different branch names, different "Active blockers," different resume instructions) because two divergent lineages were both merged into `main` without reconciliation. It has been rewritten this checkpoint as a single coherent handoff. No information was discarded — the full history is in `docs/runtime/CHANGE_MANIFEST.md` and `docs/runtime/ERROR_LEDGER.md` (`ERR-2026-001`, `ERR-2026-002`, `ERR-2026-003`).
 
 ## 1. Outcome first — READ THIS BEFORE DOING ANYTHING ELSE
 
-**This run is halted on a real blocker, not a normal checkpoint.**
+**RESOLVED THIS CHECKPOINT.** The blocker described below (`ERR-2026-003`) has been reconciled: the operator authorized adopting **Lineage A**, the three corrupted files were rewritten as single coherent documents, Prompt 82 was re-verified against the 607-item baseline, and the duplicate Phase 0 build logs were consolidated. `ERR-2026-003` is `RECOVERED`. The next runtime agent resumes normally at `CG-S5-PH0-004` (Prompt 83) — see §4 and §9. The incident narrative below is retained as the historical record; it is no longer an active blocker.
+
+---
+
+**[HISTORICAL — now resolved] This run was halted on a real blocker, not a normal checkpoint.**
 
 Prior context (fully recorded in `ERROR_LEDGER.md` `ERR-2026-002`): two independent agent sessions — this repo's `agent/cargogrid-autonomous-build` branch, and a separate `claude/sleepy-ride-4vxsk6` branch (GitHub PR #10) — diverged from the same shared ancestor (`origin/main`@`27389a4`, PR #8) and both independently executed Prompts 46–51 (Step 3 closure, `docs/architecture/14_*.md`–`16_*.md`) and Phase 0 Prompts 80–82, producing materially different content for the same task IDs — most concretely, 607 vs. 401 traced requirement items in what was supposed to be one traceability baseline. A prior session detected this, halted immediately without starting Prompt 82 or any further work, and recorded three reconciliation options in `HANDOFF.md`/`ERROR_LEDGER.md`, explicitly stating that none of them was safe for an autonomous agent to select without operator authorization.
 
@@ -36,7 +40,7 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 **What this session deliberately did NOT do:** it did not edit `docs/architecture/14_*.md`, `15_*.md`, or `16_*.md` themselves, and did not start `CG-S5-PH0-004`/Prompt 83 or any further Phase 0 capability prompt. Picking which of the two concatenated copies (607-item vs. 401-item traceability, and whatever else differs in `15_*.md`/`16_*.md`) is factually correct — or manually merging them fact-by-fact — is a substantive content judgment, not a mechanical cleanup, and the prior session's own reasoning for requiring operator authorization on exactly this kind of choice still applies.
 
-**Safe to continue automatically: `NO`.** An operator must choose one of the options below and record the choice in this section before the next runtime agent resumes Phase 0 execution.
+**Safe to continue automatically: `YES` (as of this checkpoint).** The operator decision is recorded below; the reconciliation is complete and verified. The next runtime agent resumes Phase 0 execution at `CG-S5-PH0-004`.
 
 ### The exact question for the operator
 
@@ -46,7 +50,7 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 2. **Adopt lineage B** — the second copy in each file (originally produced on `claude/sleepy-ride-4vxsk6`/PR #10; `14_*.md` lines 760–1465, 401 traced items, plus its own completed Prompt 82). Discard the first copy.
 3. **Reconcile manually** — compare both copies of all three files section-by-section (precedent: `CG-S2-DISC-001-R1`, `ERROR_LEDGER.md` `ERR-2026-001`), produce one merged authoritative version per file, and document which specific facts/counts from each lineage were kept and why. Highest effort, most likely to preserve the most accurate combined analysis; if chosen, should probably also re-run Prompt 82 (Requirement Traceability Baseline adoption) fresh against the reconciled `14_*.md` rather than trusting either lineage's already-completed Prompt 82 output, since both were built on top of one specific copy.
 
-**Record the choice here** (operator: replace this line with your decision, date, and rationale) before the next agent proceeds.
+**DECISION RECORDED (2026-07-15, operator-authorized via runtime session):** **Option 1 — adopt Lineage A** as the single authoritative version of all three files. Rationale: a fresh evidence-based re-analysis found Lineage A's 607-item total internally self-consistent (by-source and by-state tables both cross-foot to 607), while Lineage B's 401-item total was internally *inconsistent* (its own breakdown formula summed to 469 and its by-state row to 385 — an arithmetic defect), and Lineage B's `16_*.md` copy carried a raw git-diff artifact as a heading. Both lineages' per-catalogue counts agree where they overlap, so adopting A discards no correct mapping. Full analysis and the executed recovery steps are in `ERROR_LEDGER.md` `ERR-2026-003` (now `RECOVERED`). Prompt 82 was re-verified against the 607 baseline (`docs/build-log/phase-00/PH0-82.md`); Phase 0 build logs were standardized on the prompt-package-prescribed singular path and the plural Lineage B duplicates removed. **This blocker is resolved — the sections below are retained as the historical record of the incident.**
 
 ## 2. Mandatory reading order (before any resumption)
 
@@ -58,7 +62,7 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 6. If a decision has already been recorded in §1 above by an operator or a later agent, follow it exactly. If not, **stop and surface this to a human** — do not guess.
 7. Repository `AGENTS.md` (root) — confirms `docs/runtime/` is canonical.
 8. `docs/runtime/CARGOGRID_CONTEXT.md`.
-9. `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` and `_phase0_wbs.md` — the authoritative Phase 0 dependency graph (unaffected by the corruption; still trustworthy).
+9. `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` and `00_PHASE0_WBS.md` — the authoritative Phase 0 dependency graph (canonical singular path after `ERR-2026-003` consolidation; the plural Lineage B duplicates were removed).
 
 **Feature/application code remains forbidden** until Phase 0's own closure prompt (`102_PHASE0_CLOSURE_VERIFICATION_PROMPT.md`) sets `PHASE_0_VERIFIED`. Do not edit `docs/blueprint/**` or `docs/ai-agent-build-prompt-package/**` except to read.
 
@@ -79,9 +83,9 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 |---|---|
 | Task ID/name | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure |
 | Prompt | `05-phase-00-discovery-foundation/83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` |
-| Status | `BLOCKED` — **do not start on this or any other branch until `ERR-2026-003` is resolved** |
-| Reason | Its transitive upstream (`CG-S5-PH0-002..003` → `CG-S3-ARCH-014..016`) is content-corrupted; starting work on top of an unreliable baseline compounds the reconciliation cost |
-| Upstream | `CG-S5-PH0-003` (nominally `VERIFIED` on both lineages, but see blocker) |
+| Status | `READY` — `ERR-2026-003` is `RECOVERED`; upstream baseline is now a single trustworthy artifact |
+| Reason | Its transitive upstream (`CG-S5-PH0-002..003` → `CG-S3-ARCH-014..016`) is reconciled to authoritative Lineage A (607-item baseline); safe to build on |
+| Upstream | `CG-S5-PH0-003` (`VERIFIED` against the 607-item baseline — `docs/build-log/phase-00/PH0-82.md`) |
 
 ## 5. Work completed (all runs to date, summarized)
 
@@ -132,10 +136,10 @@ Migration state: `NOT_CREATED`. Pre-existing/change-caused test failures: NONE (
 
 1. Confirm repo `/home/user/cargogrid.app`, branch `agent/cargogrid-autonomous-build`, worktree clean apart from this checkpoint.
 2. Read §2's mandatory reading order in full.
-3. Check whether §1's "Record the choice here" line has been replaced with an actual operator decision. If not, **stop, do not execute any Phase 0 prompt or edit `docs/architecture/14..16_*.md`, and surface this handoff to a human operator.**
-4. If a decision has been recorded: rewrite `docs/architecture/14_*.md`, `15_*.md`, `16_*.md` per the chosen option (single coherent document each, no duplication), update `ERROR_LEDGER.md` `ERR-2026-003` to `RECOVERED` with the exact steps taken, re-verify Step 3 closure, then resume Phase 0 at `CG-S5-PH0-004` (Prompt 83) and continue looping through subsequent Phase 0 capability prompts in strict sequential order as usage/context allow — completing one prompt is not a stop condition.
+3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative.
+4. Resume Phase 0 at `CG-S5-PH0-004` (Prompt 83, `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (84–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the prompt-package-prescribed singular path `docs/build-log/phase-00/PH0-NN.md`.
 
-**First safe action for anyone picking this up: read `ERROR_LEDGER.md` `ERR-2026-003` in full, then check whether an operator decision has been recorded in §1 above. Do not proceed with any Phase 0 prompt execution, or any edit to `docs/architecture/14..16_*.md`, before that.**
+**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` for the Phase 0 dependency graph, then execute `CG-S5-PH0-004` (Prompt 83). The `ERR-2026-003` blocker is resolved.**
 
 ## 10. Handoff validation
 
