@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-15 (post Step 3 Prompt 50 — Risk-Ranked Critical Path)
+**Updated:** 2026-07-15 (post Step 3 Prompt 51 — Step 3 Closure Verification; Step 3 = `RUNTIME_ARCHITECTURE_VERIFIED`)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `agent/cargogrid-autonomous-build` cut from `origin/main`@`39d923e`
 **Build trust:** `TRUSTED`
@@ -13,20 +13,20 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (15/16 prompts) |
-| Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`) |
-| Active task | `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50) |
-| Active task status | `VERIFIED` — `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` complete |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 prompts) |
+| Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_VERIFIED`) → Phase 0 foundation kickoff next |
+| Active task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51) |
+| Active task status | `VERIFIED` — `docs/architecture/16_STEP3_CLOSURE_REPORT.md` complete; closure state `RUNTIME_ARCHITECTURE_VERIFIED` |
 | Branch | `agent/cargogrid-autonomous-build` (cut from `origin/main`@`39d923e`; tracked by GitHub PR #7) |
 | HEAD | this checkpoint's commit on `agent/cargogrid-autonomous-build` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — this checkpoint is a risk-ranking *plan*, no implementation task was started) |
+| Schema/migration head | NONE (no database — Step 3 was planning-only; zero application/config/migration file touched, independently git-diff-audited by `16_*.md` §7) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51) |
+| Next eligible task | Phase 0 foundation kickoff — `05-phase-00-discovery-foundation/79_PHASE0_README.md` onward (Prompt 79+) |
 
-Checkpoint summary: Step 2 discovery closed prior. Step 3 has now produced 15 of 16 outputs, most recently `15_RISK_RANKED_CRITICAL_PATH.md`: a reproducible 9-dimension ordinal ranking method (unweighted sum, range 9–36) applied to the WBS/traceability-bound work; an 11-depth dependency-ordinal critical path (Phase 0 → Platform Core → Commercial → Operations/Portal basic → Finance → {Advanced TMS/WMS ∥ Procurement} → HRIS/Ticketing → Portal full/Loyalty → Intelligence/Enterprise → Hardening → Release/Go-Live → Direct GA); top-ranked risks RPD-022 Supreme Admin overlay (29), tenant isolation/RLS foundation (28), RPD-034/036 direct-GA convergence gate and configuration-engine guardrails (tie, 26), Finance posting integrity (25); one genuine parallel lane (Phase 5/6) plus five further concurrency lanes; accepted-risk overlay showing RPD-022/034/036/031/037/038 and the two Indonesia SME evidence gates (`FIN-195`, `HRT-282`) each visibly affecting sequencing/gate placement, surfacing that the two SME gates become hard GA blockers once combined with the all-modules-before-GA rule. No calendar dates or durations fabricated throughout. No new ADR candidate raised; no product decision was reopened; every claim is sourced. Repository remains 100% documentation.
+Checkpoint summary: Step 2 discovery closed prior. Step 3 is now **fully closed**: `16_STEP3_CLOSURE_REPORT.md` independently verified all 15 prior architecture documents against the prompt's 9 required verification tasks (not by re-trusting each document's own completion claim) — cross-document consistency spot-checks, a `grep`-confirmed package-gap-ID count, and a read-only `git diff --stat`/`git status` audit confirming zero non-`docs/architecture|runtime` file was touched anywhere across the entire Step 3 build. Result: zero cycles/orphans/duplicate ownership/oversized tasks/silently-narrowed accepted risks; two genuine non-blocking findings surfaced honestly (a schema-namespace recommendation already self-amended in `03_*.md`, and a one-digit clerical overstatement in `13_*.md`'s prose — both traced content is fully correct). Closure state: **`RUNTIME_ARCHITECTURE_VERIFIED`**. Runtime implementation is now eligible subject to Phase 0 foundation kickoff's own entry gate; no Phase 1+ business-domain feature code is authorized by this closure alone. Package-generation eligibility (`LANJUT STEP 4`) is separately confirmed and kept distinct. No new ADR candidate raised; no product decision was reopened; every claim is sourced. Repository remains 100% documentation — Phase 0 (environment/CI/toolchain setup) is the first checkpoint where that changes.
 
 ## 2. Discovery and foundation readiness
 
@@ -48,7 +48,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~48% (Step 2 done; Step 3 15/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 51), then Phase 0 foundation prompts |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase **closed**; Phase 0 foundation sub-phase not started) | ~50% (Step 2 done; Step 3 16/16 prompts done, `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation prompts 79–102 not started) | Phase 0 foundation kickoff (Prompt 79) |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -74,8 +74,9 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 | DevOps/environments/observability/DR | `IN_PROGRESS` | DevOps Workstream planned (`docs/architecture/11_*.md`) | `docs/architecture/11_*.md` | none |
 | Release/delivery sequencing | `IN_PROGRESS` | Release Train planned (`docs/architecture/12_*.md`) | `docs/architecture/12_*.md` | none |
 | Work breakdown structure | `IN_PROGRESS` | Full WBS planned (`docs/architecture/13_*.md`) | `docs/architecture/13_*.md` | none |
-| Requirement/phase traceability | `IN_PROGRESS` | Full traceability bound (`docs/architecture/14_*.md`) | `docs/architecture/14_*.md` | none |
-| Risk-ranked critical path | `IN_PROGRESS` | Critical path ranked (`docs/architecture/15_*.md`) | `docs/architecture/15_*.md` | none |
+| Requirement/phase traceability | `VERIFIED` (Step 3 closed) | Full traceability bound (`docs/architecture/14_*.md`) | `docs/architecture/14_*.md` | none |
+| Risk-ranked critical path | `VERIFIED` (Step 3 closed) | Critical path ranked (`docs/architecture/15_*.md`) | `docs/architecture/15_*.md` | none |
+| Step 3 closure verification | `VERIFIED` | `RUNTIME_ARCHITECTURE_VERIFIED` (`docs/architecture/16_*.md`) | `docs/architecture/16_*.md` | none |
 | Documentation/onboarding/support | `IN_PROGRESS` | Canonical context reconciled; Step 2 fully documented | `docs/runtime/`, `CHANGE_MANIFEST.md` | none |
 | All other workstreams | `NOT_STARTED` | — | — | none |
 
@@ -109,10 +110,10 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification.
-- Entry conditions: `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` `VERIFIED` (met); every critical-path/ranked item sourced, ranking reproducible, uncertainty explicit, no fabricated dates (met — §17 of that document).
-- Required prompt/output: `03-architecture-and-plan/51_STEP3_CLOSURE_VERIFICATION_PROMPT.md` → `docs/architecture/16_STEP3_CLOSURE_REPORT.md`.
-- If blocked, resume: re-read `docs/architecture/01_*.md` through `15_*.md` in full before starting Prompt 51.
+- Next eligible task: Phase 0 foundation kickoff (`CG-P0-FOUND-001`).
+- Entry conditions: `docs/architecture/16_STEP3_CLOSURE_REPORT.md` `RUNTIME_ARCHITECTURE_VERIFIED` (met — §10); Step 2 `RUNTIME_DISCOVERY_VERIFIED` still holds (met, unchanged since Step 2 closure).
+- Required prompt/output: `05-phase-00-discovery-foundation/79_PHASE0_README.md` (read first, in full) → then Prompt 80 kickoff and capability prompts 81–98.
+- If blocked, resume: re-read `docs/architecture/16_STEP3_CLOSURE_REPORT.md` §11–§13 (Step 4/runtime eligibility, exact resume action) before starting Phase 0 execution — this is a different kind of work (environment/CI/toolchain/repository-scaffold setup) than Step 3's architecture-planning prompts and should be scoped as its own checkpoint.
 - Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules
