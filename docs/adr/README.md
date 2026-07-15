@@ -90,7 +90,7 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-021` | Design-token mechanism + token file location | Phase 0 `PH0-090` | `BLOCKED` — due at `PH0-090` |
 | `ADR-CAND-ARCH-022` | Test-tooling/coverage-gate specifics | Phase 0 `PH0-091` (Testing) | `BLOCKED` — due at `PH0-091` |
 | `ADR-CAND-ARCH-023` | DR-rehearsal cadence | Phase 15 (`HDN-384`) | `BLOCKED` — deferred, non-blocking |
-| `ADR-CAND-ARCH-024` | CI/CD platform + package manager | Phase 0 `PH0-085..088` | **Package-manager component ACCEPTED → `ADR-0002`** (this checkpoint); CI/CD-platform-product component `BLOCKED` — due at `PH0-088` |
+| `ADR-CAND-ARCH-024` | CI/CD platform + package manager | Phase 0 `PH0-085..088` | **Fully `ACCEPTED`** — package-manager component → `ADR-0002` (`PH0-085`); CI/CD-platform-product component → `ADR-0004` (`PH0-088`, GitHub Actions) |
 | `ADR-CAND-ARCH-025` | Secret-manager product | Phase 0 `PH0-085..088`/`094` | `BLOCKED` — due at environment/security |
 | `ADR-CAND-ARCH-026` | Observability/APM tool | Phase 0 `PH0-093` | `BLOCKED` — due at Observability |
 | `ADR-CAND-ARCH-027` | Hosting/CDN platform | Phase 0 `PH0-085..088` | `BLOCKED` — due at environment |
@@ -104,3 +104,4 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-0001` | No empty domain-folder stubs | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-011` |
 | `ADR-0002` | Package manager and initial toolchain version pins | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-024` (package-manager component only) |
 | `ADR-0003` | Runtime validation library for the environment schema | `ACCEPTED` (2026-07-15) | None (new, operationalizes the existing "Zod-or-equivalent" pattern from `04_*.md`/`08_*.md`) |
+| `ADR-0004` | CI/CD platform | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-024` (CI/CD-platform-product component — fully closes this candidate together with `ADR-0002`) |

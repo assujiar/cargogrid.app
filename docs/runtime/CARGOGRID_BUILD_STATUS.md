@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-009` — CI/CD Baseline (Prompt 88) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-008` (Prompt 87) `VERIFIED` this checkpoint. `docs/git/GIT_STRATEGY.md` established; `scripts/git/` local validation (24 passing tests, `pnpm run git:check`/`git:check-paths`). `ISS-2026-002` `RESOLVED` — real pre-flight collision check executed (0 open PRs, no genuine fork). `pnpm run typecheck/test/lint/git:check/preflight` all pass. |
+| Active task | `CG-S5-PH0-010` — Coding Standards and Architecture Enforcement (Prompt 89) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-009` (Prompt 88) `VERIFIED` this checkpoint. `.github/workflows/ci.yml` live (GitHub Actions, `ADR-0004`); `ADR-CAND-ARCH-024` fully closed. Every N/A-scoped pipeline gate (RLS/build/migration/deploy — no schema/app exists yet) explicitly disclosed with its unblocking condition. Live-runner confirmation is a disclosed, honestly-scoped gap (no CI runner in this sandbox) closing on the first real PR. |
 | Branch | `agent/cargogrid-autonomous-build` (this run recreated it from `origin/main`@`b7653cb`, since the branch's own prior lineage is now fully contained in `main` via PR #11 — see `HANDOFF.md` for why) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |

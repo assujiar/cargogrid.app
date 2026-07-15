@@ -83,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-009` — CI/CD Baseline |
-| Prompt | `05-phase-00-discovery-foundation/88_CICD_BASELINE_PROMPT.md` |
-| Status | `READY` — upstream `PH0-081..087` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
-| Reason | Resolves the CI/CD-platform-product half of `ADR-CAND-ARCH-024` (package-manager half already `ACCEPTED` at `ADR-0002`). Can wire `pnpm run typecheck/test/lint/git:check/git:check-paths/preflight` (all real, passing) into an actual pipeline. |
-| Upstream | `CG-S5-PH0-008` (`VERIFIED` — `docs/build-log/phase-00/PH0-87.md`; Git strategy, `scripts/git/` validation, `ISS-2026-002` closed) |
+| Task ID/name | `CG-S5-PH0-010` — Coding Standards and Architecture Enforcement |
+| Prompt | `05-phase-00-discovery-foundation/89_CODING_STANDARDS_ARCHITECTURE_ENFORCEMENT_PROMPT.md` |
+| Status | `READY` — upstream `PH0-081..088` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED`; `ADR-CAND-ARCH-024` fully `ACCEPTED` |
+| Reason | Formalizes coding standards and module-boundary enforcement (e.g. import-direction rules from `03_DOMAIN_BOUNDARY_MAP.md`) — a natural extension of `.github/workflows/ci.yml` (`PH0-088`), per `ADR-0004`'s "one pipeline, extended, not duplicated" consequence. |
+| Upstream | `CG-S5-PH0-009` (`VERIFIED` — `docs/build-log/phase-00/PH0-88.md`; GitHub Actions CI baseline live, `ADR-0004` accepted) |
 
 ## 5. Work completed (all runs to date, summarized)
 

@@ -1,0 +1,103 @@
+# CargoGrid CI baseline — Phase 0 (CG-S5-PH0-009, Prompt 88).
+#
+# Platform choice: docs/adr/ADR-0004-cicd-platform.md (GitHub Actions —
+# "integrated with this repository's Git host," ADR-CAND-ARCH-024).
+# Policy this workflow implements: docs/git/GIT_STRATEGY.md §3 (mandatory PR,
+# trunk-based) and §7 (this is the mandatory, not merely recommended, path
+# once branch protection requires it — see docs/build-log/phase-00/PH0-88.md).
+#
+# Scope note: this is the MINIMUM trusted baseline for the current
+# repository state (100% toolchain/config, no app/ code, no schema, no
+# migrations, no RLS, no UI — Phase 1+ scope). Gates that require any of
+# those (migration check, RLS/security tests, accessibility, E2E, build)
+# are deliberately NOT wired here — there is nothing yet for them to run
+# against. Adding a fabricated passing step for a gate with no real subject
+# would be worse than omitting it. See docs/build-log/phase-00/PH0-88.md §3
+# for the exact "N/A for now, wired when X lands" table.
+#
+# No secret is defined or required by any step below — nothing in this
+# repository yet needs one. Triggered by `pull_request` (not
+# `pull_request_target`), so a fork's PR runs with GitHub's default
+# read-only token and no repository secrets (docs/build-log/phase-00/PH0-88.md
+# §4 explains this choice explicitly).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel a superseded run for the same ref — avoids burning runner time on
+# stale pushes to the same PR/branch (Prompt 88 §3 "concurrency/cancellation").
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege (§26): read-only, no write/deploy/secret access. No other
+# permission is requested because no step below needs one.
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality gates (typecheck, lint, test, policy checks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history, not a shallow clone — required for the base-ref
+          # diffing check-protected-paths.ts performs below (git diff
+          # origin/<base>...HEAD only resolves with real history present).
+          fetch-depth: 0
+
+      - name: Enable Corepack (pins pnpm to package.json's "packageManager" field)
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile — deterministic install)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Branch name check (PR only)
+        if: github.event_name == 'pull_request'
+        run: node --experimental-strip-types scripts/git/check-branch-name.ts "${{ github.head_ref }}"
+
+      - name: Commit message check (PR head commit only)
+        if: github.event_name == 'pull_request'
+        run: node --experimental-strip-types scripts/git/check-commit-message.ts --message "$(git log -1 --format=%s ${{ github.event.pull_request.head.sha }})"
+
+      - name: Protected-path check (PR diff against base branch)
+        if: github.event_name == 'pull_request'
+        run: node --experimental-strip-types scripts/git/check-protected-paths.ts "origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }}"
+
+      - name: Evidence summary
+        if: always()
+        run: |
+          {
+            echo "### CI evidence — commit \`${{ github.sha }}\`"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Node | $(node --version) |"
+            echo "| pnpm | $(pnpm --version) |"
+            echo "| Event | ${{ github.event_name }} |"
+            echo "| Ref | ${{ github.ref }} |"
+            echo "| Workflow run | ${{ github.run_id }} (attempt ${{ github.run_attempt }}) |"
+          } >> "$GITHUB_STEP_SUMMARY"
