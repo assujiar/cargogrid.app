@@ -823,6 +823,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
 
+### CHG-2026-018 — Risk-Ranked Critical Path (Step 3, Prompt 50)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-015` / `50_RISK_RANKED_CRITICAL_PATH_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no implementation task created or started**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`14_*.md` (precondition, VERIFIED); `12_RELEASE_TRAIN.md`, `11_DEVOPS_WORKSTREAM.md`, `06_RLS_RBAC_WORKSTREAM.md`, `05_DATABASE_SCHEMA_WORKSTREAM.md`, `07_CONFIGURATION_ENGINE_WORKSTREAM.md`, `08_API_INTEGRATION_WORKSTREAM.md`; `docs/discovery/11_TECHNICAL_DEBT_RISK_REGISTER.md` |
+| Decisions | No new product decision; no new ADR candidate |
+| Baseline evidence | Zero implementation task started, confirmed against `git status` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md`: a reproducible 9-dimension ordinal ranking method (severity, likelihood, blast radius, tenant/security/finance/data exposure, dependency centrality, reversibility, detection strength, uncertainty, remediation complexity; unweighted sum, range 9–36, tie-break on dependency centrality) applied to the WBS/traceability-bound work. Restated the phase-level dependency graph as an 11-depth ordinal ladder with zero fabricated calendar dates or durations. Named foundation-blocker owners for all 11 required categories. Scored 16 top items (top 5: RPD-022 Supreme Admin overlay 29; tenant isolation/RLS foundation 28; RPD-034/036 direct-GA convergence gate and configuration-engine guardrails tied at 26; Finance posting integrity 25). Identified one genuine parallel lane (Phase 5/6) plus five further concurrency lanes with integration checkpoints. Overlaid RPD-022/034/036/031/037/038 and the two Indonesia SME evidence gates (`FIN-195`, `HRT-282`) with the exact sequencing/gate mechanism each uses, surfacing a previously-unstated interaction: the two SME gates become hard GA blockers once combined with RPD-034/036's all-modules-before-GA rule. Defined risk burn-down evidence, stop/rollback triggers, assumptions, sensitivity analysis, and recalculation rules.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | ADD | Prompt 50 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-015` → `VERIFIED`, next eligible task → `CG-S3-ARCH-016` (Prompt 51) | `git revert` |
+
+No implementation task, code, or migration exists or was touched — this document ranks and sequences already-existing WBS/traceability work, it does not execute a task from it (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. RPD-001/022/034/036/031/037/038 and every phase's own binding rules are cited, never restated with a weaker criterion.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -42,7 +42,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-012` | Release Train | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-011` (VERIFIED) | `docs/architecture/12_RELEASE_TRAIN.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-013` |
 | `CG-S3-ARCH-013` | Full Work Breakdown Structure | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-012` (VERIFIED) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-014` |
 | `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-013` (VERIFIED) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | 2026-07-15 | Complete — proceed to `CG-S3-ARCH-015` |
-| `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-014` (VERIFIED) | — | 2026-07-15 | Execute Prompt 50 |
+| `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-014` (VERIFIED) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | 2026-07-15 | Complete — proceed to `CG-S3-ARCH-016` |
+| `CG-S3-ARCH-016` | Step 3 Closure Verification | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-015` (VERIFIED) | — | 2026-07-15 | Execute Prompt 51 |
 
 ## 3. Task records
 
@@ -369,6 +370,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` §28 completion statement — nothing `NOT_COVERED`, every partial/external item has a named owner and gate, every WBS ID cited traces to `13_*.md` (no invented IDs), totals reconcile. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
 
+### CG-S3-ARCH-015 — Risk-Ranked Critical Path
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 3 — Architecture and Execution Blueprint |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `agent/cargogrid-autonomous-build` |
+| Prompt path/version | `03-architecture-and-plan/50_RISK_RANKED_CRITICAL_PATH_PROMPT.md` (`CG-AABPP-ARCH-050` v0.4.0) |
+| Build log path | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001..014` (all VERIFIED) |
+
+**Objective and outcome:** Produced the fifteenth Step 3 output — a risk-adjusted, dependency-constrained ordering of the already-existing WBS/traceability-bound work. Defined a reproducible 9-dimension ordinal ranking method (severity, likelihood, blast radius, tenant/security/finance/data exposure, dependency centrality, reversibility, detection strength, uncertainty, remediation complexity; unweighted sum, range 9–36, tie-break on dependency centrality). Restated the phase-level dependency graph (from `13_*.md`/`12_*.md`) as an 11-depth ordinal ladder (no calendar dates or durations fabricated, per the prompt's explicit prohibition). Named foundation-blocker owners for all 11 required categories (repository strategy, target boundaries, schema/migrations, RLS/RBAC, config engine, API/contracts/jobs, CI/environments, test data, observability, backup/recovery, compliance evidence). Scored 16 top items; ranked #1 RPD-022 Supreme Admin accepted-risk overlay (29), #2 tenant isolation/RLS foundation (28), #3 tie RPD-034/036 direct-GA convergence gate and configuration-engine guardrails (26), #5 Finance posting integrity (25). Identified one genuine parallel lane (Phase 5/6) plus five further concurrency lanes with integration checkpoints. Overlaid RPD-022/034/036/031/037/038 and the two Indonesia SME evidence gates (`FIN-195`, `HRT-282`) with the exact mechanism each uses to affect sequencing/gates, surfacing a previously-unstated interaction: the two SME gates become hard GA blockers once combined with RPD-034/036's all-modules-before-GA rule. Defined risk burn-down evidence, stop/rollback triggers, assumptions, sensitivity analysis, and recalculation rules.
+
+**Acceptance and closure:** `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` §17 exit gates — every critical-path/ranked item traces to an existing WBS/traceability/ADR/accepted-risk ID (zero fabricated), ranking method reproducible, uncertainty explicit on every ranked row, no unverified date claimed, all four target accepted risks plus the SME gates visibly affect sequencing/gate placement. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -389,7 +406,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-012` | ARCH-011 VERIFIED | CG-S3-ARCH-013 | `docs/architecture/12_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-013` | ARCH-012 VERIFIED | CG-S3-ARCH-014 | `docs/architecture/13_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | Done (VERIFIED) |
-| `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | YES |
+| `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | Done (VERIFIED) |
+| `CG-S3-ARCH-016` | ARCH-015 VERIFIED | Step 3 closure → Phase 0 kickoff | `docs/architecture/16_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -423,7 +441,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-011` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/11_DEVOPS_WORKSTREAM.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-012` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/12_RELEASE_TRAIN.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-013` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
-| `CG-S3-ARCH-014` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-15 |
+| `CG-S3-ARCH-014` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-15 |
+| `CG-S3-ARCH-015` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-15 |
 
 ## 6. Ledger maintenance rules
 
