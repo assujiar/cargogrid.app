@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-15 (post Step 3 Prompt 51 — Step 3 Closure Verification; Step 3 = `RUNTIME_ARCHITECTURE_VERIFIED`)
+**Updated:** 2026-07-15 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `agent/cargogrid-autonomous-build` cut from `origin/main`@`39d923e`
 **Build trust:** `TRUSTED`
@@ -13,20 +13,20 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 prompts) |
-| Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_VERIFIED`) → Phase 0 foundation kickoff next |
-| Active task | `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51) |
-| Active task status | `VERIFIED` — `docs/architecture/16_STEP3_CLOSURE_REPORT.md` complete; closure state `RUNTIME_ARCHITECTURE_VERIFIED` |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`); Phase 0 **kicked off** (1/23 tasks VERIFIED) |
+| Current phase/workstream | Phase 0 — Discovery and Foundation (`PHASE_0_IN_PROGRESS`) |
+| Active task | `CG-S5-PH0-001` — Phase 0 WBS and Runtime Kickoff (Prompt 80) |
+| Active task status | `VERIFIED` — `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`, `00_PHASE0_WBS.md` complete |
 | Branch | `agent/cargogrid-autonomous-build` (cut from `origin/main`@`39d923e`; tracked by GitHub PR #7) |
 | HEAD | this checkpoint's commit on `agent/cargogrid-autonomous-build` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — Step 3 was planning-only; zero application/config/migration file touched, independently git-diff-audited by `16_*.md` §7) |
+| Schema/migration head | NONE (no database — kickoff is index/planning-only; zero application/config/migration file touched) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
 | Active blockers | none |
-| Next eligible task | Phase 0 foundation kickoff — `05-phase-00-discovery-foundation/79_PHASE0_README.md` onward (Prompt 79+) |
+| Next eligible task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81) |
 
-Checkpoint summary: Step 2 discovery closed prior. Step 3 is now **fully closed**: `16_STEP3_CLOSURE_REPORT.md` independently verified all 15 prior architecture documents against the prompt's 9 required verification tasks (not by re-trusting each document's own completion claim) — cross-document consistency spot-checks, a `grep`-confirmed package-gap-ID count, and a read-only `git diff --stat`/`git status` audit confirming zero non-`docs/architecture|runtime` file was touched anywhere across the entire Step 3 build. Result: zero cycles/orphans/duplicate ownership/oversized tasks/silently-narrowed accepted risks; two genuine non-blocking findings surfaced honestly (a schema-namespace recommendation already self-amended in `03_*.md`, and a one-digit clerical overstatement in `13_*.md`'s prose — both traced content is fully correct). Closure state: **`RUNTIME_ARCHITECTURE_VERIFIED`**. Runtime implementation is now eligible subject to Phase 0 foundation kickoff's own entry gate; no Phase 1+ business-domain feature code is authorized by this closure alone. Package-generation eligibility (`LANJUT STEP 4`) is separately confirmed and kept distinct. No new ADR candidate raised; no product decision was reopened; every claim is sourced. Repository remains 100% documentation — Phase 0 (environment/CI/toolchain setup) is the first checkpoint where that changes.
+Checkpoint summary: Step 2 discovery and Step 3 architecture are both closed (`RUNTIME_DISCOVERY_VERIFIED`, `RUNTIME_ARCHITECTURE_VERIFIED`). Phase 0 (Discovery and Foundation, Step 5 of the prompt package) is now kicked off: `00_PHASE0_EXECUTION_INDEX.md`/`00_PHASE0_WBS.md` verified the five-condition Phase 0 entry gate (all pass — package manager/baseline commands correctly deferred to Prompts 85–88 as their own deliverable, not a precondition), reconciled the Phase 0 capability range against the master WBS (no second numbering scheme), and produced a full 23-task execution index plus the mandatory 10-level hierarchy/9-workstream WBS. Result: 1 task `READY` (`PH0-081`, Source Alignment and Context Bootstrap), 20 `BLOCKED` on their own strictly-sequential upstream (expected, not a defect) — every open ADR candidate (`011`, `020..027`) confirmed scoped to resolve inside its own owning capability, not as an external precondition. Zero collision, cycle, or orphan found. Outputs land in a new `docs/build-log/phase-00/` directory (singular, per the package's own literal path convention), distinct from the pre-existing plural `docs/build-logs/`. No new ADR candidate raised beyond those already tracked; no product decision was reopened. Repository is still 100% documentation — first non-`docs/` file (e.g. `.gitignore`) is expected around `PH0-087` Git strategy foundation.
 
 ## 2. Discovery and foundation readiness
 
@@ -48,7 +48,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase **closed**; Phase 0 foundation sub-phase not started) | ~50% (Step 2 done; Step 3 16/16 prompts done, `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation prompts 79–102 not started) | Phase 0 foundation kickoff (Prompt 79) |
+| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase **closed**; Phase 0 foundation sub-phase kicked off, 1/23 tasks VERIFIED) | ~52% (Step 2 done; Step 3 done; Phase 0 kickoff `PH0-080` done, `PH0-081` `READY`, 20 tasks `BLOCKED` on sequential upstream) | Execute Prompt 81 (`PH0-081` Source Alignment and Context Bootstrap) |
 | 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
 | 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
 | 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
@@ -110,10 +110,10 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: Phase 0 foundation kickoff (`CG-P0-FOUND-001`).
-- Entry conditions: `docs/architecture/16_STEP3_CLOSURE_REPORT.md` `RUNTIME_ARCHITECTURE_VERIFIED` (met — §10); Step 2 `RUNTIME_DISCOVERY_VERIFIED` still holds (met, unchanged since Step 2 closure).
-- Required prompt/output: `05-phase-00-discovery-foundation/79_PHASE0_README.md` (read first, in full) → then Prompt 80 kickoff and capability prompts 81–98.
-- If blocked, resume: re-read `docs/architecture/16_STEP3_CLOSURE_REPORT.md` §11–§13 (Step 4/runtime eligibility, exact resume action) before starting Phase 0 execution — this is a different kind of work (environment/CI/toolchain/repository-scaffold setup) than Step 3's architecture-planning prompts and should be scoped as its own checkpoint.
+- Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap.
+- Entry conditions: `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` marks `PH0-081` `READY` (met — row `002`); `CG-S5-PH0-001` recorded `VERIFIED` in this ledger (met, this checkpoint).
+- Required prompt/output: `05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` → `docs/build-log/phase-00/PH0-81.md` + updated `docs/runtime/CARGOGRID_CONTEXT.md` and sibling ledgers per that prompt's own §11 allowed-paths and §33 acceptance criteria.
+- If blocked, resume: re-read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (per-task status) and `00_PHASE0_WBS.md` (hierarchy/concurrency) before starting the next Phase 0 capability prompt.
 - Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules

@@ -919,6 +919,55 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint — deferred to their respective Phase 0/1 implementation checkpoints per `HANDOFF.md` §6). **Step 3 is closed.** Next eligible task: Phase 0 foundation kickoff — `05-phase-00-discovery-foundation/79_PHASE0_README.md` onward (Prompt 79+), a different kind of work (environment/CI/toolchain/repository-scaffold setup) than Step 3's architecture-planning prompts.
 
+### CHG-2026-020 — Phase 0 WBS and Runtime Kickoff (Step 5, Prompt 80) — Phase 0 started
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-001` / `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation (kickoff) |
+| Change type | DOCS (documentation-only; **no implementation task created or started**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `05-phase-00-discovery-foundation/79_PHASE0_README.md`, `80_*.md`; `docs/architecture/16_STEP3_CLOSURE_REPORT.md`, `docs/discovery/14_STEP2_CLOSURE_REPORT.md` (entry-gate evidence); `docs/architecture/13_*.md` §4, `15_*.md` §4/§5/§8; `00-control/06_PACKAGE_BUILD_STATUS.md` (Step 4/Step 5 package-level state) |
+| Decisions | No new product decision; no new ADR candidate (existing `ADR-CAND-ARCH-011,020..027` confirmed scoped to their owning Phase 0 capability, not resolved here) |
+| Baseline evidence | Zero implementation task started, confirmed against `git status`; new `docs/build-log/phase-00/` directory only |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` and `00_PHASE0_WBS.md`: verified the five-condition Phase 0 runtime entry gate (Step 2/Step 3 runtime closure, Step 4 package-level verification, ledger agreement, task authority/ownership known — package manager/baseline commands correctly deferred to `PH0-085..088`); reconciled the Phase 0 capability range against the master WBS with no second numbering scheme; produced a full 23-task execution index (hierarchy, status, dependencies, allowed paths, owner, next action) and the mandatory 10-level hierarchy/9-workstream WBS covering all 18 capabilities plus verification/hardening/documentation/closure. Result: `PH0-081` `READY`, 20 remaining tasks `BLOCKED` on their own sequential upstream (expected). Zero file/schema/environment collision, zero cycle/orphan. Outputs land in a new singular `docs/build-log/phase-00/` directory (distinct from the pre-existing plural `docs/build-logs/`), per the package's own literal path convention in every Phase 0 prompt file's header — verified by direct grep, not assumed.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | ADD | Prompt 80 runtime output | `git revert` |
+| `docs/build-log/phase-00/00_PHASE0_WBS.md` | ADD | Prompt 80 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S5-PH0-001` → `VERIFIED`, next eligible task → `CG-S5-PH0-002` (Prompt 81) | `git revert` |
+
+No implementation task, code, or migration exists or was touched — this is a Phase 0 index/kickoff task, forbidden from implementing any foundation change per its own completion gate (verified against `git status`: only the two new index files exist under the new directory).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. RPD-022, direct-GA/no-pilot, contract-silent recovery, and custom-integration policy remain visible per `79_*.md` §5's universal operational rules, not weakened.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain yet — `PH0-085..088` establish this). Unchanged from Step 2/3 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: both index files exist, non-empty, self-consistent with `docs/runtime/*` next-task pointers; `git status` confirms no forbidden-scope file was touched.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011,020..027`, now confirmed due at their named Phase 0 capability (`083/087`, `090`, `091`, `085..088` respectively) — none resolved this checkpoint, none newly raised. Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

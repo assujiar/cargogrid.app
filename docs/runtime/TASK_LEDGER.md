@@ -44,7 +44,8 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-013` (VERIFIED) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | 2026-07-15 | Complete — proceed to `CG-S3-ARCH-015` |
 | `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-014` (VERIFIED) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | 2026-07-15 | Complete — proceed to `CG-S3-ARCH-016` |
 | `CG-S3-ARCH-016` | Step 3 Closure Verification | Step 3 / Architecture | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-015` (VERIFIED) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | 2026-07-15 | Complete — Step 3 = `RUNTIME_ARCHITECTURE_VERIFIED`; proceed to Phase 0 foundation kickoff |
-| `CG-P0-FOUND-001` | Phase 0 README / kickoff | Phase 0 / Foundation | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-016` (VERIFIED) | — | 2026-07-15 | Read `05-phase-00-discovery-foundation/79_PHASE0_README.md`, execute Prompt 79 |
+| `CG-S5-PH0-001` | Phase 0 WBS and Runtime Kickoff | Phase 0 / Foundation | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-016` (VERIFIED) | `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`, `00_PHASE0_WBS.md` | 2026-07-15 | Complete — `CG-S5-PH0-002` (`PH0-081`) is `READY`, 20 remaining tasks `BLOCKED` on their own sequential upstream |
+| `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S5-PH0-001` (VERIFIED) | — | 2026-07-15 | Execute Prompt 81 |
 
 ## 3. Task records
 
@@ -405,6 +406,22 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 
 **Acceptance and closure:** `docs/architecture/16_STEP3_CLOSURE_REPORT.md` §10 closure rationale — all 16 artifact-checklist items pass, all 9 verification tasks pass, cycles/orphans/duplicates zero, atomic sizing holds, accepted risks consistently disclosed, forbidden-change audit clean, all seven runtime records reconciled. Final status `VERIFIED`. **Step 3 as a whole is now `RUNTIME_ARCHITECTURE_VERIFIED`.** Next eligible task: Phase 0 foundation kickoff — `05-phase-00-discovery-foundation/79_PHASE0_README.md` onward (a different kind of work: environment/CI/toolchain/repository-scaffold setup, not architecture planning).
 
+### CG-S5-PH0-001 — Phase 0 WBS and Runtime Kickoff
+
+| Field | Value |
+|---|---|
+| Parent phase | Step 5 / Phase 0 — Discovery and Foundation |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `agent/cargogrid-autonomous-build` |
+| Prompt path/version | `05-phase-00-discovery-foundation/80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` (`CG-AABPP-PH0-080` v0.6.0) |
+| Build log path | `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`, `docs/build-log/phase-00/00_PHASE0_WBS.md` (self-documenting; new `docs/build-log/` directory, distinct from the pre-existing plural `docs/build-logs/` per every Phase 0 prompt's own literal header path) |
+| Dependency | `CG-S3-ARCH-016` (`RUNTIME_ARCHITECTURE_VERIFIED`), `CG-S2-DISC-014` (`RUNTIME_DISCOVERY_VERIFIED`), Step 4 package `PACKAGE_STEP_4_VERIFIED` |
+
+**Objective and outcome:** First Phase 0 checkpoint. Verified the five-condition Phase 0 runtime entry gate (`79_PHASE0_README.md` §2) — Step 2/Step 3 runtime closure both hold at the current checkpoint, Step 4 package-level verification confirmed, `AGENTS.md`/runtime ledgers agree, task authority/branch ownership known (package manager/baseline commands correctly deferred to `PH0-085..088` as their own deliverable, not a precondition). Reconciled the Phase 0 capability range against the master WBS (`13_*.md` §4) — no second numbering scheme introduced. Produced a full execution index for all 23 `CG-S5-PH0-<NNN>` tasks (80 kickoff + 18 capabilities `081..098` + verification/hardening/documentation/closure `099..102`) with hierarchy, status, dependencies, allowed paths, owner, and next action per row. Produced the companion WBS document instantiating the mandatory 10-level hierarchy, 9-workstream/epic grouping covering all 18 capabilities, concurrency lanes, integration checkpoints, stale-evidence triggers, and recovery order. Ran collision inspection (zero file/schema/environment collision — confirmed greenfield) and cycle/orphan check (zero found). **Result: 1 task `READY` (`PH0-081`), 20 `BLOCKED`** — every block is the expected sequential-upstream-not-yet-`VERIFIED` reason, not missing evidence or an unresolved ADR; each open ADR candidate (`011`, `020..027`) is confirmed scoped to resolve inside its own owning capability prompt's execution, not as an external precondition.
+
+**Acceptance and closure:** `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` §7 completion gate — one authoritative checkpoint/dependency graph exists, `PH0-081`'s variables are concretely resolvable, no unowned cycle/orphan/collision, zero runtime source/config/data/environment file touched (only the two specified index documents were written). Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
+
 ## 4. Dependency and sequencing index
 
 | Task ID | Requires | Enables | Shared files | Ready? |
@@ -427,7 +444,9 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-015` | ARCH-014 VERIFIED | CG-S3-ARCH-016 | `docs/architecture/15_*` | Done (VERIFIED) |
 | `CG-S3-ARCH-016` | ARCH-015 VERIFIED | Step 3 closure → Phase 0 kickoff | `docs/architecture/16_*` | Done (VERIFIED) |
-| `CG-P0-FOUND-001` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | Phase 0 capability prompts 80–102 | `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/**` | YES |
+| `CG-S5-PH0-001` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | `CG-S5-PH0-002..023` (Phase 0 capability prompts 81–102) | `docs/build-log/phase-00/00_*` | Done (VERIFIED) |
+| `CG-S5-PH0-002` | PH0-001 VERIFIED | `CG-S5-PH0-003` (`PH0-082`) | `docs/build-log/phase-00/PH0-81.md`, `docs/runtime/**` | YES |
+| `CG-S5-PH0-003..023` | Strictly sequential per `79_*.md` §4 (each on its immediate predecessor(s)) | Phase 0 closure (`PHASE_0_VERIFIED`) | `docs/build-log/phase-00/**`, `docs/runtime/**` | BLOCKED (pending predecessor) |
 
 ## 5. Completed and superseded index
 
@@ -463,7 +482,8 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-013` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
 | `CG-S3-ARCH-014` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-15 |
 | `CG-S3-ARCH-015` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-15 |
-| `CG-S3-ARCH-016` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-15 |
+| `CG-S3-ARCH-016` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-15 |
+| `CG-S5-PH0-001` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`, `00_PHASE0_WBS.md` | none | 2026-07-15 |
 
 ## 6. Ledger maintenance rules
 
