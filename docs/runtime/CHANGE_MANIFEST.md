@@ -775,6 +775,54 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-014` — Requirement/Phase Traceability (Prompt 49).
 
+### CHG-2026-017 — Requirement/Phase Traceability (Step 3, Prompt 49)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S3-ARCH-014` / `49_REQUIREMENT_PHASE_TRACEABILITY_PROMPT.md` |
+| Phase/workstream | Step 3 — Architecture and Execution Blueprint |
+| Change type | DOCS (documentation-only; **no implementation task created or started**, prompt precondition verified) |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `01_*.md`–`13_*.md` (precondition, VERIFIED); `00-control/02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md`, `04_CONFLICT_REGISTER.md`, `05_REQUIREMENT_COVERAGE_MATRIX.md`; `docs/blueprint/02_*.md` §9–§16; `docs/blueprint/05_*.md` §19/§22/§23 |
+| Decisions | No new product decision; no new ADR candidate |
+| Baseline evidence | Zero implementation task started, confirmed against `git status` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`: a full bidirectional traceability binding of 607 source catalogue items — CPD-001..023, RPD-001..040, 184 functional requirement IDs across 46 families, 10 explicit NFR IDs, 13 package-generated gap IDs, 92 assumption-register rows, 60 conflict/gap/duplicate-register rows, 24 business rules, 13 approval patterns, 14 approval use cases, 24 status transitions, 16 exception types, 12 report categories, 20 NFR catalogue areas, 20 UAT E2E scenarios, 18 tenant isolation scenarios, and 24 financial scenarios — each bound via a 9-field schema to a parent phase, WBS capability ID (sourced from `13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §4/§5, no invented IDs), architecture-artifact citation, test/evidence binding, hardening/release gate, owner, and one of five coverage states. Preserved RPD-022 risk disclosure, the direct-GA all-module gate, contract-silent recovery semantics, and custom-integration policy as a standing cross-row overlay. Ran orphan/duplicate/conflict/cycle checks — zero findings. Coverage totals: 568 `COVERED`, 20 `ACCEPTED_RISK`, 15 `EXTERNAL_VERIFICATION`, 4 `PARTIAL_BLOCKED`, 0 `NOT_COVERED` (607 total, reconciled by direct row tally); reconciles exactly against the Step 0 inventory (194 = 184 functional + 10 NFR; 23 CPD; 40 RPD). Blockers consolidated to the two pre-existing evidence gates (`FIN-195` tax/legal SME, `HRT-282` payroll/tax SME); every other partial/external row is a scheduled, already-tracked, non-blocking item.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | ADD | Prompt 49 runtime output | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md`, `CARGOGRID_CONTEXT.md` | EDIT | Checkpoint update: `CG-S3-ARCH-014` → `VERIFIED`, next eligible task → `CG-S3-ARCH-015` (Prompt 50) | `git revert` |
+
+No implementation task, code, or migration exists or was touched — this document is a traceability binding over the existing package/architecture registers, it does not execute a task from them (prompt completion gate, verified against `git status`).
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. RPD-001/034/036 and every phase's own binding rules (e.g. Finance's tax/SME gate, HRIS's payroll/SME gate) are cited, never restated with a weaker criterion.
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain) — unchanged from Step 2 baseline (`UNKNOWN`, not `RED`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; single-writer branch).
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`39d923e`.
+- Recovery verification: `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` exists, non-empty, self-consistent with `docs/runtime/*` next-task pointers.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, handoff. No new issue/error IDs opened.
+
+#### Approval and closure
+
+No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011/012/013/014/015/017/018/019/020/021/022/023/024/025/026/027` (implementation ADRs, non-blocking; none newly raised or resolved this checkpoint). Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
