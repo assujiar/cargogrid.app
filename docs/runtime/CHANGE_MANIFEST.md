@@ -1235,6 +1235,58 @@ Updated: this manifest, task ledger, build status, context, handoff, Phase 0 exe
 
 No external approval required (documentation-only, baseline-adoption task). **Next eligible task: `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83)**, confirmed `READY` in the execution index.
 
+### CHG-2026-023 — Discover and record `ERR-2026-003`; consolidate stacked runtime ledgers
+
+| Field | Value |
+|---|---|
+| Task/prompt | None (governance/blocker-recording checkpoint, no Phase 0 capability prompt executed) |
+| Phase/workstream | Phase 0 — Discovery and Foundation (halted) / Documentation-onboarding-support workstream |
+| Change type | DOCS only (`docs/runtime/**`); no application/schema/API/UI file touched |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` (recreated from `origin/main`@`b7653cb` this checkpoint) |
+| Source requirements | N/A — process/governance finding, not a product requirement |
+| Decisions | None reopened. Confirmed a real blocker (`ERR-2026-003`) rather than resolving it unilaterally; did not choose between the two divergent lineages' content |
+| Baseline evidence | `docs/architecture/14_*.md`/`15_*.md`/`16_*.md` untouched this checkpoint (deliberately — the reconciliation choice is not this session's to make) |
+| Final status | `COMPLETED` (this checkpoint's own scope); overall run status `BLOCKED_DECISION` |
+
+#### Outcome
+
+At start-of-run, discovered that `ERR-2026-002` (an operator-decision-pending divergence between two lineages that both completed Prompts 46–51/80–82 with materially different content) had not actually been reconciled — instead, both GitHub PR #10 and PR #11 had been merged into `main` directly, and because neither merge conflicted at the git level, both merges silently concatenated the two lineages' full content into `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`, `15_RISK_RANKED_CRITICAL_PATH.md`, and `16_STEP3_CLOSURE_REPORT.md` (each now containing two complete, contradictory copies — confirmed via direct line-number inspection, not inference). `docs/runtime/HANDOFF.md`, `CARGOGRID_BUILD_STATUS.md`, and `TASK_LEDGER.md` showed the equivalent pattern for narrative/status content. Recorded this as `ERR-2026-003` (Sev-1/Critical) in `ERROR_LEDGER.md`, marked `ERR-2026-002` `SUPERSEDED`, added a 5th-occurrence entry to `KNOWN_ISSUES.md` `ISS-2026-002` (escalated to Critical), rewrote `HANDOFF.md` and `CARGOGRID_BUILD_STATUS.md` as single coherent documents (previously each had accumulated multiple stacked, contradictory sections), and added a `BLOCKED_DECISION` banner to `TASK_LEDGER.md` §2 without deleting its historical duplicate rows. Did not edit `docs/architecture/14..16_*.md` themselves and did not start `CG-S5-PH0-004`/Prompt 83 — choosing which lineage's content is authoritative (or manually merging them) is a substantive judgment this session is not authorized to make unilaterally, consistent with the reasoning the prior session already recorded for `ERR-2026-002`. Recorded the exact operator decision needed, with three concrete options, in `HANDOFF.md` §1.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/runtime/ERROR_LEDGER.md` | EDIT | Added `ERR-2026-003` record; marked `ERR-2026-002` `SUPERSEDED` | `git revert` |
+| `docs/runtime/KNOWN_ISSUES.md` | EDIT | Added 5th-occurrence entry to `ISS-2026-002`; escalated severity to Critical | `git revert` |
+| `docs/runtime/HANDOFF.md` | REWRITE | Consolidated multiple stacked/contradictory handoff entries into one coherent document; recorded `BLOCKED_DECISION` and the exact operator question | `git revert` |
+| `docs/runtime/CARGOGRID_BUILD_STATUS.md` | REWRITE | Consolidated multiple stacked/contradictory checkpoint sections into one coherent dashboard | `git revert` |
+| `docs/runtime/TASK_LEDGER.md` | EDIT | Added `BLOCKED_DECISION` banner to §2; historical rows (§2 duplicates, §3, §5) left untouched as evidence | `git revert` |
+| `docs/runtime/CHANGE_MANIFEST.md` | EDIT | This entry | `git revert` |
+
+No application/domain feature code, schema/data, public contract, or `docs/architecture/**`/`docs/blueprint/**`/`docs/ai-agent-build-prompt-package/**` file was touched — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, code, or task-execution artifact exists or changed.
+
+#### Tests and quality evidence
+
+No toolchain exists yet. This checkpoint's own evidence: `grep -c '^## 1\.'` returns 2 for each of `docs/architecture/14_*.md`, `15_*.md`, `16_*.md` (confirms duplication); `grep -n '## 1. Scope and method'` on `14_*.md` returns lines 29 and 760 (confirms exact duplication boundary); `git log origin/agent/cargogrid-autonomous-build ^origin/main` (before this checkpoint's branch recreation) returned empty (confirms the old branch's lineage was fully contained in `main`, so recreating it from `main` lost no work).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (documentation-only, no consumers).
+- Rollback: `git revert` this checkpoint's commit(s); last known good (both lineages agree) is `origin/main`@`27389a4`.
+- Recovery verification: `docs/runtime/HANDOFF.md` and `CARGOGRID_BUILD_STATUS.md` are now each a single coherent document (verified by reading them in full after the rewrite); `ERROR_LEDGER.md` and `KNOWN_ISSUES.md` contain the new records without loss of prior history.
+
+#### Documentation and traceability
+
+Updated: this manifest, error ledger, known issues, handoff, build status, task ledger banner. No product decision was reopened. This is the first checkpoint to require a Sev-1/Critical error record.
+
+#### Approval and closure
+
+**External approval IS required before any further Phase 0 work.** An operator must select one of `ERR-2026-003`'s three reconciliation options (`HANDOFF.md` §1) before `CG-S5-PH0-004`/Prompt 83 or any subsequent Phase 0 capability prompt executes. This checkpoint's own scope (discover, record, consolidate ledgers) is complete. Next eligible task: **none — blocked**, see `HANDOFF.md` §1/§9.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

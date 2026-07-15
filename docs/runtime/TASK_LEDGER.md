@@ -2,8 +2,10 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Phase 0 Prompt 82 — Requirement Traceability Baseline)
+**Updated:** 2026-07-15 (`ERR-2026-003` corruption discovered — see banner below)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
+
+> **BLOCKED_DECISION banner (2026-07-15):** the rows below for `CG-S3-ARCH-014..016` and `CG-S5-PH0-001..003` are duplicated because two independent lineages (`agent/cargogrid-autonomous-build` and `claude/sleepy-ride-4vxsk6`/PR #10) both completed these tasks with materially different content, and both were merged into `main` without reconciliation. The underlying documents (`docs/architecture/14..16_*.md`) now each contain two concatenated, contradictory copies. **Do not treat any `VERIFIED` status below for these seven task IDs as reliable until `ERR-2026-003` is resolved** — see `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` and `docs/runtime/HANDOFF.md` §1 for the exact operator decision required. All Phase 0 execution is halted at `CG-S5-PH0-004` pending that decision.
 
 ## 1. Task identity and state model
 

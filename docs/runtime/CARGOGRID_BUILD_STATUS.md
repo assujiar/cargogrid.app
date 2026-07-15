@@ -2,53 +2,33 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-15 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap; **BLOCKED_WORKTREE on parallel-session collision, see `ERR-2026-002`**)
-**Updated:** 2026-07-14 (post Phase 0 Prompt 82 — Requirement Traceability Baseline)
-**Updated:** 2026-07-14 (post Step 3 Prompt 48 — Full Work Breakdown Structure)
+**Updated:** 2026-07-15 (consolidated after discovering `ERR-2026-003` — corrupted merge of PR #10 + PR #11 into `main`)
 **Updated by:** Claude Code (autonomous build agent)
-**Last verified commit:** `claude/sleepy-ride-4vxsk6` (continuation of `agent/cargogrid-autonomous-build`, merged forward; cut from `origin/main`@`39d923e`)
-**Build trust:** `TRUSTED`
+**Last verified commit:** `origin/main`@`b7653cb` (merge of PR #11, which itself already contained PR #10's content)
+**Build trust:** `TRUSTED` (repository/process), **content trust on `docs/architecture/14..16_*.md`: `NOT_TRUSTED` — see blocker below**
 
 > Single current-state dashboard. Allowed states: `NOT_STARTED`, `READY`, `IN_PROGRESS`, `BLOCKED`, `FAILED`, `PARTIALLY_COMPLETE`, `COMPLETED`, `VERIFIED`, `ROLLED_BACK`, `SUPERSEDED`.
+>
+> This file previously accumulated multiple stacked, contradictory "current checkpoint" sections from two divergent lineages that were merged into `main` without reconciliation. It has been rewritten this checkpoint as a single coherent dashboard. No historical information was discarded — see `docs/runtime/CHANGE_MANIFEST.md` and `docs/runtime/ERROR_LEDGER.md` (`ERR-2026-001..003`) for the full history.
 
 ## 1. Current checkpoint
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`); Phase 0 **kicked off, then HALTED** (2/23 tasks VERIFIED on this branch) |
-| Current phase/workstream | Phase 0 — Discovery and Foundation (`PHASE_0_IN_PROGRESS` on this branch; **runtime execution halted**, see blocker) |
-| Active task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81) |
-| Active task status | `VERIFIED` on this branch — `docs/build-log/phase-00/PH0-81.md` complete — **but see blocker below before starting `CG-S5-PH0-003`** |
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16); Phase 0 **IN_PROGRESS** (3/22 downstream prompts) |
-| Current phase/workstream | Phase 0 — Discovery and Foundation (`PHASE_0_IN_PROGRESS`) |
-| Active task | `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82) |
-| Active task status | `VERIFIED` — `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` complete |
-| Branch | `claude/sleepy-ride-4vxsk6` (continuation branch; picked up `agent/cargogrid-autonomous-build`'s 3 unmerged commits by merge; cut from `origin/main`@`39d923e`) |
-| HEAD | this checkpoint's commit on `claude/sleepy-ride-4vxsk6` |
-| Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — this checkpoint adopts/validates an existing baseline, no foundation change performed) |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **claims closed but content is corrupted** (see blocker); Phase 0 kicked off, then **halted** |
+| Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, but **runtime execution halted** pending operator reconciliation decision |
+| Active task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83) — **would be next, but is BLOCKED** |
+| Active task status | `BLOCKED` — its upstream (`CG-S5-PH0-002..003`, and transitively `CG-S3-ARCH-014..016`) is content-corrupted, not a single trustworthy artifact |
+| Branch | `agent/cargogrid-autonomous-build` (this run recreated it from `origin/main`@`b7653cb`, since the branch's own prior lineage is now fully contained in `main` via PR #11 — see `HANDOFF.md` for why) |
+| HEAD | this checkpoint's commit |
+| Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |
+| Schema/migration head | NONE (no database — still greenfield) |
 | Latest environment verified | local sandbox (read-only) |
-| Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
-| Active blockers | none |
-| Next eligible task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83) |
+| Last full green gate | none (no gates exist yet) |
+| **Active blockers** | **`BLOCKED_DECISION` — `ERR-2026-003` (Sev-1/Critical): `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`, `15_RISK_RANKED_CRITICAL_PATH.md`, `16_STEP3_CLOSURE_REPORT.md` each contain two complete, concatenated, contradictory copies of the same document (two divergent lineages' output merged without reconciliation — confirmed by direct inspection: two `## 1.` sections in each file, 607 vs. 401 traced-item totals). See `HANDOFF.md` §1 for the exact question and options.** |
+| Next eligible task | **NONE until `ERR-2026-003` is resolved by the operator** |
 
-Checkpoint summary: Step 2 discovery closed prior; **Step 3 (Architecture and Execution Blueprint) fully closed** (`RUNTIME_ARCHITECTURE_VERIFIED`, 16/16 outputs). **Phase 0 — Discovery and Foundation underway** (`CG-S5-PH0-001..002` `VERIFIED`; `CG-S5-PH0-003` now also `VERIFIED`). Prompt 82 formally adopted `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (401 items, 0 `NOT_COVERED`) as the repository-native requirement traceability baseline rather than re-authoring a duplicate copy, and defined 5 document-level validation rules (ID uniqueness, count reconciliation, bidirectional link, orphan/duplicate/conflict-state coverage, fresh-context lookup) — all 5 run manually and passing, spot-checked with `RPD-016`/`GAP-017`/`CPD-022`. No application/schema/API/UI file was touched. `PH0-083` (Repository Audit Adoption and Gap Closure) now `READY`. Repository remains 100% documentation outside `docs/build-logs/**`.
-
-**Branch note (carried forward):** the session's designated continuation branch is `claude/sleepy-ride-4vxsk6`, not `agent/cargogrid-autonomous-build`. Earlier in this run, `claude/sleepy-ride-4vxsk6` was reconciled to `origin/main`@`27389a4` (PR #8 already merged) while `origin/agent/cargogrid-autonomous-build` carried 3 further unmerged commits (Prompts 46–48). Those were merged forward into `claude/sleepy-ride-4vxsk6` (no conflicts, content-identical), so no progress was lost. All checkpoints continue on `claude/sleepy-ride-4vxsk6`.
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **in progress** (13/16 prompts) |
-| Current phase/workstream | Runtime Step 3 — Architecture and Execution Blueprint (`RUNTIME_ARCHITECTURE_IN_PROGRESS`) |
-| Active task | `CG-S3-ARCH-013` — Full Work Breakdown Structure (Prompt 48) |
-| Active task status | `VERIFIED` — `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` complete |
-| Branch | `agent/cargogrid-autonomous-build` (cut from `origin/main`@`39d923e`; tracked by GitHub PR #7) |
-| HEAD | this checkpoint's commit on `agent/cargogrid-autonomous-build` |
-| Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — Phase 0 so far is index/planning-only; zero application/config/migration file touched) |
-| Latest environment verified | local sandbox (read-only) |
-| Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
-| **Active blockers** | **`BLOCKED_WORKTREE` — `ERR-2026-002` / `ISS-2026-002` (4th recurrence, unresolved): an independent parallel session (branch `claude/sleepy-ride-4vxsk6`, GitHub PR #10, open/unmerged) redid Prompts 46–51, Phase 0 kickoff, and Prompts 81–82 with materially different content. Runtime execution halted on this branch pending an explicit operator reconciliation decision — do NOT start `CG-S5-PH0-003` (Prompt 82) or any further Phase 0 prompt on any branch until resolved.** |
-| Next eligible task | **NONE until `ERR-2026-002` is resolved by the operator** — see `docs/runtime/HANDOFF.md` §1/§4 for the three reconciliation options |
-
-Checkpoint summary: Step 2 discovery and Step 3 architecture are both closed (`RUNTIME_DISCOVERY_VERIFIED`, `RUNTIME_ARCHITECTURE_VERIFIED`). Phase 0 (Discovery and Foundation) was kicked off (Prompt 80) and its first capability prompt executed (Prompt 81, Source Alignment and Context Bootstrap — found and fixed one genuine drift: a stale "Last verified commit" header in `CARGOGRID_CONTEXT.md` that had not advanced across 17 prior checkpoints). **While verifying Prompt 81's own preconditions, this checkpoint discovered a fourth occurrence of `ISS-2026-002`** (parallel-session collision, no enforced single-writer lock): an independent session on branch `claude/sleepy-ride-4vxsk6` diverged from the same shared ancestor and independently completed Prompts 46–51, Phase 0 kickoff, and Prompts 81 **and 82**, opening GitHub PR #10 (still open, unmerged) 15 seconds after this branch's own PR #9 merged — confirming near-simultaneous parallel execution. The two lineages' outputs for the same task IDs materially differ (e.g. 607 vs. 401 traced requirement items for "the same" Prompt 49 output). Per this routine's own stop-condition rule ("conflicting repo state"), **this session halted further prompt execution rather than compounding the divergence** by also completing Prompt 82. Full evidence and three reconciliation options (adopt this branch / adopt PR #10 / manually reconcile) are recorded in `ERROR_LEDGER.md` `ERR-2026-002` and `HANDOFF.md`. This is not resolved by this session — it requires an explicit operator decision. No product decision was reopened; the collision is a process/governance issue, not a content dispute.
+Checkpoint summary: Step 2 discovery is genuinely closed and trustworthy (`RUNTIME_DISCOVERY_VERIFIED`, single lineage, no divergence). Step 3 (Prompts 36–48, `docs/architecture/01_*.md`–`13_*.md`) is also genuinely closed and trustworthy — the divergence only affects Prompts 49–51 (`14_*.md`–`16_*.md`) and Phase 0 Prompts 80–82. Two independent agent sessions ran those six task IDs in parallel from the same shared ancestor, producing materially different content (e.g. 607 vs. 401 traced requirement items). This was correctly detected and halted by a prior session (`ERR-2026-002`, `HANDOFF.md` `HO-20260715-021`), which asked an operator to choose one of three reconciliation options before any further work continued. Before that decision was recorded, both branches' pull requests (PR #10, then PR #11) were merged into `main` directly. Because the two lineages' edits did not overlap line-for-line, git resolved both merges without conflict markers by **silently concatenating** the divergent content — not reconciling it. This session (this checkpoint) discovered and documented that outcome as `ERR-2026-003`, consolidated the previously-stacked `docs/runtime/*.md` ledgers into single coherent documents, and halted rather than build further Phase 0 capability prompts on top of an unreliable Step 3/Phase 0 baseline. No product/business decision was reopened — this is a process/governance issue about which of two already-produced documents is authoritative, plus a mechanical cleanup of two duplicated documents.
 
 ## 2. Discovery and foundation readiness
 
@@ -56,8 +36,8 @@ Checkpoint summary: Step 2 discovery and Step 3 architecture are both closed (`R
 |---|---|---|---|---|
 | Source and decision controls | `VERIFIED` (package) | `00-control/06_PACKAGE_BUILD_STATUS.md` | Product | All work |
 | Repository discovery (14/14 prompts) | `VERIFIED` | `docs/discovery/14_STEP2_CLOSURE_REPORT.md` | Architecture | Feature code (still blocked pending Phase 0) |
-| Architecture and Execution Blueprint (16/16 prompts) | `RUNTIME_ARCHITECTURE_VERIFIED` | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | Architecture | Feature code (still blocked pending `PHASE_0_VERIFIED`) |
-| Greenfield/brownfield decision | `VERIFIED` — `GREENFIELD`, High confidence | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | Architecture | Target plan (now unblocked) |
+| Architecture and Execution Blueprint (16/16 prompts) | Prompts 36–48 `VERIFIED` and trustworthy; Prompts 49–51 **content-corrupted**, claims `RUNTIME_ARCHITECTURE_VERIFIED` but not currently a single reliable artifact | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (corrupted — two copies) | Architecture | Feature code (blocked pending `PHASE_0_VERIFIED`, itself blocked on this reconciliation) |
+| Greenfield/brownfield decision | `VERIFIED` — `GREENFIELD`, High confidence | `docs/discovery/12_GREENFIELD_BROWNFIELD_DECISION.md` | Architecture | Target plan (unblocked, unaffected by the corruption) |
 | Environment/toolchain baseline | `VERIFIED` (absence confirmed) | `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md` | DevEx | Reliable gates (pending Phase 0 build-out) |
 | Database/migration baseline | `VERIFIED` (absence confirmed) | `docs/discovery/04_DATABASE_MIGRATION_BASELINE.md` | Data | Schema changes (pending Phase 0) |
 | Security/access baseline | `VERIFIED` (absence confirmed) | `docs/discovery/06_SECURITY_BASELINE.md` | Security | Tenant features (pending Phase 0/1) |
@@ -71,38 +51,36 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase **closed**; Phase 0 foundation sub-phase kicked off, 1/23 tasks VERIFIED) | ~52% (Step 2 done; Step 3 done; Phase 0 kickoff `PH0-080` done, `PH0-081` `READY`, 20 tasks `BLOCKED` on sequential upstream) | Execute Prompt 81 (`PH0-081` Source Alignment and Context Bootstrap) |
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase `RUNTIME_ARCHITECTURE_VERIFIED`; Phase 0 foundation-build sub-phase 3/22 downstream prompts done) | ~62% (Step 2 done; Step 3 done 16/16; Phase 0 kickoff + context bootstrap + traceability baseline done, capability prompts 83–102 not started) | Phase 0: `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` |
-| 0 | Discovery and Foundation | `IN_PROGRESS` (discovery sub-phase done; Step 3 architecture sub-phase in progress) | ~44% (Step 2 done; Step 3 13/16 prompts done; Phase 0 foundation prompts 80–102 not started) | Step 3 architecture (Prompt 49), then Phase 0 foundation prompts |
-| 1 | Platform Core | `NOT_STARTED` | 0% | after PHASE_0_VERIFIED |
-| 2 | Commercial | `NOT_STARTED` | 0% | after PHASE_1_VERIFIED |
-| 3 | Operations | `NOT_STARTED` | 0% | after PHASE_2_VERIFIED |
-| 4 | Finance | `NOT_STARTED` | 0% | after PHASE_3_VERIFIED |
-| 5 | Advanced TMS/WMS | `NOT_STARTED` | 0% | after PHASE_4_VERIFIED |
-| 6 | Procurement/Vendor | `NOT_STARTED` | 0% | after PHASE_5_VERIFIED |
-| 7 | HRIS/Ticketing | `NOT_STARTED` | 0% | after PHASE_6_VERIFIED |
-| 8 | Customer Portal/Loyalty | `NOT_STARTED` | 0% | after PHASE_7_VERIFIED |
-| 9 | Intelligence/Enterprise | `NOT_STARTED` | 0% | after PHASE_8_VERIFIED |
-| 15 | Full-system hardening | `NOT_STARTED` | 0% | after PHASE_9_VERIFIED |
-| 16 | RC and Go-live | `NOT_STARTED` | 0% | after hardening VERIFIED |
+| 0 | Discovery and Foundation | `BLOCKED` (discovery sub-phase done and trustworthy; Step 3 architecture sub-phase content-corrupted; Phase 0 foundation sub-phase halted at 3/23 tasks) | ~62% by task count, but the Step 3/Phase 0 baseline is not currently reliable | Resolve `ERR-2026-003` (operator decision, `HANDOFF.md` §1), then `PH0-004`/Prompt 83 |
+| 1 | Platform Core | `NOT_STARTED` | 0% | after `PHASE_0_VERIFIED` |
+| 2 | Commercial | `NOT_STARTED` | 0% | after `PHASE_1_VERIFIED` |
+| 3 | Operations | `NOT_STARTED` | 0% | after `PHASE_2_VERIFIED` |
+| 4 | Finance | `NOT_STARTED` | 0% | after `PHASE_3_VERIFIED` |
+| 5 | Advanced TMS/WMS | `NOT_STARTED` | 0% | after `PHASE_4_VERIFIED` |
+| 6 | Procurement/Vendor | `NOT_STARTED` | 0% | after `PHASE_5_VERIFIED` |
+| 7 | HRIS/Ticketing | `NOT_STARTED` | 0% | after `PHASE_6_VERIFIED` |
+| 8 | Customer Portal/Loyalty | `NOT_STARTED` | 0% | after `PHASE_7_VERIFIED` |
+| 9 | Intelligence/Enterprise | `NOT_STARTED` | 0% | after `PHASE_8_VERIFIED` |
+| 15 | Full-system hardening | `NOT_STARTED` | 0% | after `PHASE_9_VERIFIED` |
+| 16 | RC and Go-live | `NOT_STARTED` | 0% | after hardening `VERIFIED` |
 
 ## 4. Workstream status
 
 | Workstream | Status | Last verified capability | Evidence | Blocker |
 |---|---|---|---|---|
 | Product/requirements/traceability | `IN_PROGRESS` | Discovery evidence complete | `docs/discovery/02,11,12_*.md` | none |
-| Architecture/repository | `IN_PROGRESS` | Step 2 discovery closed; GREENFIELD decision made | `docs/discovery/14_*.md`, `12_*.md` | none |
+| Architecture/repository | `IN_PROGRESS` | Step 2 discovery closed; `GREENFIELD` decision made | `docs/discovery/14_*.md`, `12_*.md` | none |
 | Database/RLS/RBAC | `NOT_STARTED` | Absence confirmed | `docs/discovery/04,06_*.md` | none |
-| REST/GraphQL/integration/jobs | `IN_PROGRESS` | API/Integration Workstream planned (`docs/architecture/08_*.md`) | `docs/architecture/08_*.md` | none |
-| UX/design/accessibility | `IN_PROGRESS` | UX/Design System Workstream planned (`docs/architecture/09_*.md`) | `docs/architecture/09_*.md` | none |
-| QA/regression/performance | `IN_PROGRESS` | Testing Workstream planned (`docs/architecture/10_*.md`); baseline `UNKNOWN` | `docs/architecture/10_*.md`, `docs/discovery/07,08_*.md` | none |
-| DevOps/environments/observability/DR | `IN_PROGRESS` | DevOps Workstream planned (`docs/architecture/11_*.md`) | `docs/architecture/11_*.md` | none |
-| Release/delivery sequencing | `IN_PROGRESS` | Release Train planned (`docs/architecture/12_*.md`) | `docs/architecture/12_*.md` | none |
-| Work breakdown structure | `IN_PROGRESS` | Full WBS planned (`docs/architecture/13_*.md`) | `docs/architecture/13_*.md` | none |
-| Requirement/phase traceability | `VERIFIED` (Step 3 closed) | Full traceability bound (`docs/architecture/14_*.md`) | `docs/architecture/14_*.md` | none |
-| Risk-ranked critical path | `VERIFIED` (Step 3 closed) | Critical path ranked (`docs/architecture/15_*.md`) | `docs/architecture/15_*.md` | none |
-| Step 3 closure verification | `VERIFIED` | `RUNTIME_ARCHITECTURE_VERIFIED` (`docs/architecture/16_*.md`) | `docs/architecture/16_*.md` | none |
-| Documentation/onboarding/support | `IN_PROGRESS` | Canonical context reconciled; Step 2 fully documented | `docs/runtime/`, `CHANGE_MANIFEST.md` | none |
+| REST/GraphQL/integration/jobs | `IN_PROGRESS` | API/Integration Workstream planned | `docs/architecture/08_*.md` | none |
+| UX/design/accessibility | `IN_PROGRESS` | UX/Design System Workstream planned | `docs/architecture/09_*.md` | none |
+| QA/regression/performance | `IN_PROGRESS` | Testing Workstream planned; baseline `UNKNOWN` | `docs/architecture/10_*.md`, `docs/discovery/07,08_*.md` | none |
+| DevOps/environments/observability/DR | `IN_PROGRESS` | DevOps Workstream planned | `docs/architecture/11_*.md` | none |
+| Release/delivery sequencing | `IN_PROGRESS` | Release Train planned | `docs/architecture/12_*.md` | none |
+| Work breakdown structure | `IN_PROGRESS` | Full WBS planned | `docs/architecture/13_*.md` | none |
+| Requirement/phase traceability | `BLOCKED` | Content corrupted (two contradictory copies) | `docs/architecture/14_*.md` | `ERR-2026-003` |
+| Risk-ranked critical path | `BLOCKED` | Content corrupted (two contradictory copies) | `docs/architecture/15_*.md` | `ERR-2026-003` |
+| Step 3 closure verification | `BLOCKED` | Claims `RUNTIME_ARCHITECTURE_VERIFIED`, content corrupted | `docs/architecture/16_*.md` | `ERR-2026-003` |
+| Documentation/onboarding/support | `IN_PROGRESS` | Runtime ledgers consolidated this checkpoint | `docs/runtime/` | none |
 | All other workstreams | `NOT_STARTED` | — | — | none |
 
 ## 5. Current gate results
@@ -117,17 +95,19 @@ No environment deployed; no migration head. All environments `NOT_STARTED`. Prod
 
 | ID | Type | Severity | Scope | Workaround/recovery | Release effect | Ledger |
 |---|---|---|---|---|---|---|
-| ERR-2026-001 | Error (RESOLVED) | Sev-3 | Parallel-session merge corruption | Reconciled by CG-S2-DISC-001-R1; recurred a third time on a branch cut before `-R1` merged, resolved by this merge | none (cleared) | `ERROR_LEDGER.md` |
-| ISS-2026-002 | Issue | Medium | No single-writer discipline across agent branches — **occurred twice** | One authoritative branch per runtime step (still not enforced) | Recurrence risk (demonstrated) | `KNOWN_ISSUES.md` |
-| ISS-2026-003 | Risk | Medium (future) | No root `.gitignore` before scaffolding | Add before code | Safe secret/artifact handling | `KNOWN_ISSUES.md` |
-| ISS-2026-001 | Issue (RESOLVED) | — | Source docs now tracked in `docs/blueprint/`; `tes.md` classified `CONFIRMED_PLACEHOLDER` (`PH-001`), pending owner-approved deletion | — | none | `KNOWN_ISSUES.md` |
+| `ERR-2026-001` | Error (`RECOVERED`) | Sev-3 | Parallel-session merge corruption (Step 2, Prompt 21) | Reconciled by `CG-S2-DISC-001-R1` | none (cleared) | `ERROR_LEDGER.md` |
+| `ERR-2026-002` | Error (`SUPERSEDED` by `ERR-2026-003`) | Sev-2/High | Two divergent lineages both completed Prompts 46–51/80–82 | Was `OPEN` pending operator decision; superseded when both PRs were merged anyway | see `ERR-2026-003` | `ERROR_LEDGER.md` |
+| `ERR-2026-003` | Error (`OPEN`, **blocking**) | Sev-1/Critical | `docs/architecture/14..16_*.md` each contain two concatenated, contradictory copies | Requires operator reconciliation decision — see `HANDOFF.md` §1 | Blocks all further Phase 0/Step 3-derived work | `ERROR_LEDGER.md` |
+| `ISS-2026-002` | Issue, `OPEN`, **Critical, blocking** | Critical | No single-writer discipline — 5th occurrence, this one resulted in committed corruption | One authoritative branch per runtime step, plus an enforced pre-flight check (still not built) | Recurrence risk (demonstrated 5×) | `KNOWN_ISSUES.md` |
+| `ISS-2026-003` | Risk | Medium (future) | No root `.gitignore` before scaffolding | Add before code | Safe secret/artifact handling | `KNOWN_ISSUES.md` |
+| `ISS-2026-001` | Issue (`RESOLVED`) | — | Source docs tracked in `docs/blueprint/`; `tes.md` classified `CONFIRMED_PLACEHOLDER` | — | none | `KNOWN_ISSUES.md` |
 
 ## 8. Release-readiness summary
 
 | Readiness domain | Status |
 |---|---|
 | All ten module suites | `NOT_STARTED` |
-| Requirement traceability | `NOT_STARTED` (discovery-level evidence complete) |
+| Requirement traceability | `NOT_STARTED` (discovery-level evidence complete; Step 3-level traceability corrupted, pending reconciliation) |
 | Tenant/security · Finance/data · E2E/regression · Migration/backup/DR · Performance/accessibility · Observability/docs | `NOT_STARTED` (baselines confirmed absent/`UNKNOWN`) |
 | Go/no-go approval | `NOT_STARTED` |
 
@@ -135,21 +115,11 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- **Next eligible task: NONE — blocked.** `CG-S5-PH0-003` (Prompt 82) would normally be next, but MUST NOT start until `ERR-2026-002` is resolved.
-- Entry conditions for resuming: an operator has read `ERROR_LEDGER.md` `ERR-2026-002` and `HANDOFF.md` §1/§4, selected one of the three reconciliation options (adopt this branch / adopt PR #10 / manually reconcile), and recorded that decision in both documents.
-- Required action before any further Phase 0 prompt: reconcile `agent/cargogrid-autonomous-build` and `claude/sleepy-ride-4vxsk6`/PR #10 per the selected option; only then does a single unambiguous "next eligible task" exist again.
+- **Next eligible task: NONE — blocked on `ERR-2026-003`.**
+- Entry conditions for resuming: an operator has read `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` and `docs/runtime/HANDOFF.md` §1, selected one of the reconciliation options, and recorded that decision in both documents.
+- Required action before any further Phase 0 prompt: rewrite `docs/architecture/14_*.md`, `15_*.md`, `16_*.md` as single, non-duplicated, internally consistent documents reflecting the chosen option; re-verify Step 3 closure; then resume Phase 0 at `CG-S5-PH0-004` (Prompt 83).
 - If resuming without operator input by mistake: stop immediately, re-read this section and `HANDOFF.md` §1 in full first.
-- Next eligible task: `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83).
-- Entry conditions: `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md` marks `PH0-083` `READY` (met — `PH0-081..082` `VERIFIED`).
-- Required prompt/output: `05-phase-00-discovery-foundation/83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` → per that prompt's own required-output field (confirm exact path when executing; do not assume).
-- If blocked, resume: re-read `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`/`_phase0_wbs.md`, `CG-S5-PH0-002_source_alignment_context_bootstrap.md`, and `CG-S5-PH0-003_requirement_traceability_baseline.md` in full, then `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md`, before continuing Phase 0 work.
-- Authorized command: read-only inspection + `docs/runtime/**`/`docs/build-logs/**` writes per `PH0-083`'s allowed-path list; later Phase 0 capabilities (`085`+) authorize toolchain/environment/CI scaffolding outside `docs/` — confirm each capability's own allowed-path list before writing outside `docs/`.
-- Next eligible task: `CG-S3-ARCH-014` — Requirement/Phase Traceability.
-- Entry conditions: `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` `VERIFIED` (met); every requirement/control has a delivery/verification owner and cycles/orphans are zero (met — §15 of that document).
-- Required prompt/output: `03-architecture-and-plan/49_REQUIREMENT_PHASE_TRACEABILITY_PROMPT.md` → `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`.
-- If blocked, resume: re-read `docs/architecture/01_*.md` through `13_*.md` in full before starting Prompt 49.
-- Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules
 
-Update after every atomic task, rollback, gate change, blocker change, or checkpoint. Reconcile with `TASK_LEDGER.md`, build logs, change manifest, error/issue ledgers. Status is controlled by the evidence link.
+Update after every atomic task, rollback, gate change, blocker change, or checkpoint. Reconcile with `TASK_LEDGER.md`, build logs, change manifest, error/issue ledgers. Status is controlled by the evidence link. Keep this file as **one** current-state dashboard — if a future merge produces stacked/duplicate sections again, consolidate them in the same checkpoint that discovers them rather than leaving them stacked.
