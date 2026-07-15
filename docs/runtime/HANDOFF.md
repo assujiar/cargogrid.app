@@ -75,7 +75,7 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 | Repository/working dir | `/home/user/cargogrid.app` (origin `assujiar/cargogrid.app`) |
 | Branch | `agent/cargogrid-autonomous-build`, recreated this checkpoint from `origin/main`@`b7653cb` (the branch's prior lineage is fully contained in `main` via PR #11 — confirmed via `git log origin/agent/cargogrid-autonomous-build ^HEAD` returning empty before the reset) |
 | Dirty worktree | This checkpoint's changes only (documentation, `docs/runtime/**` only) |
-| Package manager/runtime/schema/env | NONE (still greenfield; Phase 0 capability prompts from `PH0-085` onward are the first to create real toolchain/environment artifacts) |
+| Package manager/runtime/schema/env | pnpm `10.33.0` + Node `>=22.11.0` pinned at `PH0-085` (`package.json`/`pnpm-lock.yaml`, real `pnpm install` verified); no database/schema yet (Phase 1 scope) |
 | Canonical context location | `docs/runtime/` (do not recreate root duplicates) |
 | Trust boundary | Repository + package + sources trusted; `docs/architecture/14..16_*.md` content **not trusted** pending reconciliation |
 
@@ -83,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-006` — Development Environment Foundation |
-| Prompt | `05-phase-00-discovery-foundation/85_DEVELOPMENT_ENVIRONMENT_FOUNDATION_PROMPT.md` |
-| Status | `READY` — upstream `PH0-081..084` all `VERIFIED`; `ERR-2026-003` `RECOVERED` |
-| Reason | First task to materialize the toolchain and write non-documentation files; must resolve `ADR-CAND-ARCH-024..027` and add root `.gitignore` (`ISS-2026-003`) before the first non-doc file lands. Governed by `ADR-0001` (no empty domain-folder stubs). |
-| Upstream | `CG-S5-PH0-005` (`VERIFIED` — `docs/build-log/phase-00/PH0-84.md`, ADR framework); `CG-S5-PH0-004` (`VERIFIED` — `PH0-83.md`) |
+| Task ID/name | `CG-S5-PH0-007` — Environment Validation Foundation |
+| Prompt | `05-phase-00-discovery-foundation/86_ENVIRONMENT_VALIDATION_FOUNDATION_PROMPT.md` |
+| Status | `READY` — upstream `PH0-081..085` all `VERIFIED`; `ERR-2026-003` `RECOVERED` |
+| Reason | Validates the fail-fast environment contract `PH0-085` established (`scripts/preflight-env-check.ts`, `.env.example`) — e.g. across a genuinely clean checkout, not just the authoring session. |
+| Upstream | `CG-S5-PH0-006` (`VERIFIED` — `docs/build-log/phase-00/PH0-85.md`; toolchain pinned, `ADR-0002` accepted, `ISS-2026-003` closed) |
 
 ## 5. Work completed (all runs to date, summarized)
 

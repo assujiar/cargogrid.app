@@ -90,7 +90,7 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-021` | Design-token mechanism + token file location | Phase 0 `PH0-090` | `BLOCKED` — due at `PH0-090` |
 | `ADR-CAND-ARCH-022` | Test-tooling/coverage-gate specifics | Phase 0 `PH0-091` (Testing) | `BLOCKED` — due at `PH0-091` |
 | `ADR-CAND-ARCH-023` | DR-rehearsal cadence | Phase 15 (`HDN-384`) | `BLOCKED` — deferred, non-blocking |
-| `ADR-CAND-ARCH-024` | CI/CD platform + package manager | Phase 0 `PH0-085..088` | `BLOCKED` — due at environment/CI |
+| `ADR-CAND-ARCH-024` | CI/CD platform + package manager | Phase 0 `PH0-085..088` | **Package-manager component ACCEPTED → `ADR-0002`** (this checkpoint); CI/CD-platform-product component `BLOCKED` — due at `PH0-088` |
 | `ADR-CAND-ARCH-025` | Secret-manager product | Phase 0 `PH0-085..088`/`094` | `BLOCKED` — due at environment/security |
 | `ADR-CAND-ARCH-026` | Observability/APM tool | Phase 0 `PH0-093` | `BLOCKED` — due at Observability |
 | `ADR-CAND-ARCH-027` | Hosting/CDN platform | Phase 0 `PH0-085..088` | `BLOCKED` — due at environment |
@@ -102,3 +102,4 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | ADR | Title | Status | Source candidate |
 |---|---|---|---|
 | `ADR-0001` | No empty domain-folder stubs | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-011` |
+| `ADR-0002` | Package manager and initial toolchain version pins | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-024` (package-manager component only) |

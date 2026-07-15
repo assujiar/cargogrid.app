@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-006` — Development Environment Foundation (Prompt 85) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-005` (Prompt 84) `VERIFIED` this checkpoint (`docs/adr/` framework + register of 27 candidates + `ADR-0001` accepted). `PH0-085` first materializes toolchain and adds root `.gitignore` |
+| Active task | `CG-S5-PH0-007` — Environment Validation Foundation (Prompt 86) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-006` (Prompt 85) `VERIFIED` this checkpoint. Repository now has its first non-documentation files: toolchain (pnpm 10.33.0, Node >=22.11, Next.js 16.2.10/React 19.2.7/TypeScript 5.9.3/Supabase JS+SSR pinned and installed for real), `.gitignore`, `supabase/config.toml`, `.env.example`, preflight safeguard script. `ADR-0002` accepted. `ISS-2026-003` closed. |
 | Branch | `agent/cargogrid-autonomous-build` (this run recreated it from `origin/main`@`b7653cb`, since the branch's own prior lineage is now fully contained in `main` via PR #11 — see `HANDOFF.md` for why) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |

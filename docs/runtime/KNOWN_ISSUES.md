@@ -23,7 +23,7 @@ Statuses: `OPEN`, `TRIAGED`, `PLANNED`, `IN_PROGRESS`, `MONITORING`, `ACCEPTED_R
 | Issue ID | Title | Severity | Status | Owner | Workaround | Release blocker |
 |---|---|---|---|---|---|---|
 | `ISS-2026-002` | No single-writer discipline across concurrent agent branches | **Critical** (escalated, 5th occurrence) | `OPEN` — not blocking (5th-occurrence corruption `ERR-2026-003` now `RECOVERED`); enforcement still not adopted | Runtime agent / repo owner | Run each runtime step on one authoritative branch only; **the 5th occurrence corrupted `main` (`ERR-2026-003`), now reconciled by adopting Lineage A. An *enforced* pre-flight lock is still strongly recommended (see recurrence note) to prevent a 6th occurrence** | No longer blocking — `docs/architecture/14..16_*.md` reconciled to single authoritative Lineage A documents this checkpoint. Underlying process gap remains `OPEN` pending an enforced lock. |
-| `ISS-2026-003` | No repository-root `.gitignore` before application scaffolding | Medium (future) | `PLANNED` | DevEx | Add ignore policy before any code/secrets | No (blocks safe scaffolding at Phase 0) |
+| `ISS-2026-003` | No repository-root `.gitignore` before application scaffolding | Medium (future) | `RESOLVED` (2026-07-15) | DevEx | Added at `CG-S5-PH0-006` (Prompt 85), before any other non-doc file landed | No |
 | `ISS-2026-001` | Primary source documents not tracked in repository | Medium | `RESOLVED` | Product / Build agent | — | No |
 
 ## 4. Issue records
@@ -40,9 +40,9 @@ Two sessions ran Prompt 21 concurrently on separate branches (`…-oanf5a`, `…
 
 **Resolution of the 5th-occurrence corruption (2026-07-15):** the operator authorized adopting **Lineage A** as authoritative. `docs/architecture/14..16_*.md` were rewritten as single coherent Lineage A documents (607-item baseline), Prompt 82 was re-verified against it, and the duplicate Phase 0 build logs were consolidated onto the singular prompt-package path. `ERR-2026-003` is `RECOVERED`. This clears the *content* corruption and unblocks Phase 0. The *process* gap (`ISS-2026-002` itself) remains `OPEN`: no enforced single-writer lock exists yet, so a 6th occurrence is still possible if two sessions run the same task-ID range in parallel. Recommended enforcement is unchanged from the note above.
 
-### ISS-2026-003 — No root `.gitignore`
+### ISS-2026-003 — No root `.gitignore` (RESOLVED)
 
-No `.gitignore` is tracked. Harmless while the repo is documentation-only, but before Phase 0 introduces application code, secrets, and build artifacts an ignore policy must exist so generated/secret paths are never committed. **Handling:** add `.gitignore` during Phase 0 environment setup (Prompt 85/87). Status `PLANNED`.
+Reported during Step 2 discovery: no `.gitignore` tracked, harmless while documentation-only but required before application code/secrets/build artifacts land. **Resolved 2026-07-15** at `CG-S5-PH0-006` (Prompt 85, `docs/build-log/phase-00/PH0-85.md`): root `.gitignore` was the first file added this checkpoint, before `package.json`, `pnpm-lock.yaml`, or any other file — covers `node_modules/`, `.next/`, `.env*.local`, Supabase local runtime state, build/test caches, editor/OS files. Verified: `git check-ignore -v .env.local` confirmed the rule fires; a real secret scan across every file added this checkpoint found none. **Status `RESOLVED`** — no further action.
 
 ### ISS-2026-001 — Primary source documents not tracked (RESOLVED)
 

@@ -1,0 +1,50 @@
+# CargoGrid — root .gitignore
+# Established at Phase 0 Development Environment Foundation (CG-S5-PH0-006, Prompt 85),
+# before the first non-documentation file lands, per ISS-2026-003.
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js build output
+.next/
+out/
+build/
+dist/
+
+# Environment / secrets — never commit real values, only .env.example
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# Supabase local runtime state (not the tracked supabase/config.toml or migrations)
+supabase/.branches/
+supabase/.temp/
+supabase/logs/
+
+# TypeScript / build caches
+*.tsbuildinfo
+.turbo/
+
+# Test / coverage output
+coverage/
+playwright-report/
+test-results/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Vercel
+.vercel/
