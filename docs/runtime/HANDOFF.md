@@ -11,7 +11,9 @@
 
 ## 1. Outcome first — READ THIS BEFORE DOING ANYTHING ELSE
 
-**RESOLVED THIS CHECKPOINT.** The blocker described below (`ERR-2026-003`) has been reconciled: the operator authorized adopting **Lineage A**, the three corrupted files were rewritten as single coherent documents, Prompt 82 was re-verified against the 607-item baseline, and the duplicate Phase 0 build logs were consolidated. `ERR-2026-003` is `RECOVERED`. The next runtime agent resumes normally at `CG-S5-PH0-004` (Prompt 83) — see §4 and §9. The incident narrative below is retained as the historical record; it is no longer an active blocker.
+**RESOLVED, AND TWO FURTHER CHECKPOINTS COMPLETED.** The blocker described below (`ERR-2026-003`) was reconciled (operator authorized adopting **Lineage A**; the three corrupted files were rewritten as single coherent documents, Prompt 82 re-verified against the 607-item baseline, duplicate Phase 0 build logs consolidated; `ERR-2026-003` is `RECOVERED`). The build then resumed and completed **Prompt 83** (`CG-S5-PH0-004`, repository-audit adoption — `docs/build-log/phase-00/PH0-83.md`) and **Prompt 84** (`CG-S5-PH0-005`, ADR baseline — `docs/adr/` framework + `ADR-0001`, `PH0-84.md`). **The next runtime agent resumes at `CG-S5-PH0-006` (Prompt 85, Development Environment Foundation) — see §4 and §9.** The incident narrative below is retained as historical record; it is no longer an active blocker.
+
+> **Run note (2026-07-15):** this run stopped after Prompt 84 as a deliberate clean checkpoint, not a blocker. Prompt 85 is the first task that writes non-documentation files (toolchain manifests, `tsconfig`, root `.gitignore`) and must resolve four tool-product ADRs (`ADR-CAND-ARCH-024..027`: CI/CD platform + package manager, secret manager, observability/APM, hosting/CDN — see `docs/adr/README.md` §5.2). It deserves a fresh context budget for careful evidence-based tool selection. Stop reason: `BLOCKED_CONTEXT` (clean checkpoint), not a decision/build blocker.
 
 ---
 
@@ -81,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure |
-| Prompt | `05-phase-00-discovery-foundation/83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` |
-| Status | `READY` — `ERR-2026-003` is `RECOVERED`; upstream baseline is now a single trustworthy artifact |
-| Reason | Its transitive upstream (`CG-S5-PH0-002..003` → `CG-S3-ARCH-014..016`) is reconciled to authoritative Lineage A (607-item baseline); safe to build on |
-| Upstream | `CG-S5-PH0-003` (`VERIFIED` against the 607-item baseline — `docs/build-log/phase-00/PH0-82.md`) |
+| Task ID/name | `CG-S5-PH0-006` — Development Environment Foundation |
+| Prompt | `05-phase-00-discovery-foundation/85_DEVELOPMENT_ENVIRONMENT_FOUNDATION_PROMPT.md` |
+| Status | `READY` — upstream `PH0-081..084` all `VERIFIED`; `ERR-2026-003` `RECOVERED` |
+| Reason | First task to materialize the toolchain and write non-documentation files; must resolve `ADR-CAND-ARCH-024..027` and add root `.gitignore` (`ISS-2026-003`) before the first non-doc file lands. Governed by `ADR-0001` (no empty domain-folder stubs). |
+| Upstream | `CG-S5-PH0-005` (`VERIFIED` — `docs/build-log/phase-00/PH0-84.md`, ADR framework); `CG-S5-PH0-004` (`VERIFIED` — `PH0-83.md`) |
 
 ## 5. Work completed (all runs to date, summarized)
 
@@ -136,10 +138,10 @@ Migration state: `NOT_CREATED`. Pre-existing/change-caused test failures: NONE (
 
 1. Confirm repo `/home/user/cargogrid.app`, branch `agent/cargogrid-autonomous-build`, worktree clean apart from this checkpoint.
 2. Read §2's mandatory reading order in full.
-3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative.
-4. Resume Phase 0 at `CG-S5-PH0-004` (Prompt 83, `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (84–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the prompt-package-prescribed singular path `docs/build-log/phase-00/PH0-NN.md`.
+3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative. Prompts 83 (`PH0-83.md`) and 84 (`docs/adr/**`, `PH0-84.md`) are `VERIFIED`.
+4. Resume Phase 0 at `CG-S5-PH0-006` (Prompt 85, `85_DEVELOPMENT_ENVIRONMENT_FOUNDATION_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (86–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the singular path `docs/build-log/phase-00/PH0-NN.md`. **Prompt 85 is the first task that writes non-documentation files** — read `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md`, `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md`/`11_DEVOPS_WORKSTREAM.md`, and `docs/adr/README.md` §5.2 (`ADR-CAND-ARCH-024..027`) in full first, add the root `.gitignore` before any code/secret can land (`ISS-2026-003`), and honor `ADR-0001` (no empty domain-folder stubs).
 
-**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` for the Phase 0 dependency graph, then execute `CG-S5-PH0-004` (Prompt 83). The `ERR-2026-003` blocker is resolved.**
+**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (row `006`) for the Phase 0 dependency graph, then execute `CG-S5-PH0-006` (Prompt 85). Prompts 83–84 and the `ERR-2026-003` blocker are resolved.**
 
 ## 10. Handoff validation
 
