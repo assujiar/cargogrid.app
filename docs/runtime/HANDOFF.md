@@ -83,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-007` — Environment Validation Foundation |
-| Prompt | `05-phase-00-discovery-foundation/86_ENVIRONMENT_VALIDATION_FOUNDATION_PROMPT.md` |
-| Status | `READY` — upstream `PH0-081..085` all `VERIFIED`; `ERR-2026-003` `RECOVERED` |
-| Reason | Validates the fail-fast environment contract `PH0-085` established (`scripts/preflight-env-check.ts`, `.env.example`) — e.g. across a genuinely clean checkout, not just the authoring session. |
-| Upstream | `CG-S5-PH0-006` (`VERIFIED` — `docs/build-log/phase-00/PH0-85.md`; toolchain pinned, `ADR-0002` accepted, `ISS-2026-003` closed) |
+| Task ID/name | `CG-S5-PH0-008` — Git Strategy Foundation |
+| Prompt | `05-phase-00-discovery-foundation/87_GIT_STRATEGY_FOUNDATION_PROMPT.md` |
+| Status | `READY` — upstream `PH0-081..086` all `VERIFIED`; `ERR-2026-003` `RECOVERED` |
+| Reason | Establishes branching/merge/release strategy. Recommended site to finally close `ISS-2026-002` (single-writer discipline, 5 occurrences, still `OPEN` at the process level) with an enforced pre-flight lock — see `docs/runtime/KNOWN_ISSUES.md`. |
+| Upstream | `CG-S5-PH0-007` (`VERIFIED` — `docs/build-log/phase-00/PH0-86.md`; typed env validation, `ADR-0003` accepted) |
 
 ## 5. Work completed (all runs to date, summarized)
 

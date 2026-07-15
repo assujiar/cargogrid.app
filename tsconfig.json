@@ -9,6 +9,8 @@
     "noImplicitOverride": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

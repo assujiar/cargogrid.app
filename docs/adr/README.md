@@ -103,3 +103,4 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 |---|---|---|---|
 | `ADR-0001` | No empty domain-folder stubs | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-011` |
 | `ADR-0002` | Package manager and initial toolchain version pins | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-024` (package-manager component only) |
+| `ADR-0003` | Runtime validation library for the environment schema | `ACCEPTED` (2026-07-15) | None (new, operationalizes the existing "Zod-or-equivalent" pattern from `04_*.md`/`08_*.md`) |
