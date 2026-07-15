@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-014`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-14 (post Step 3 Prompt 43 — API/Integration Workstream)
+**Updated:** 2026-07-14 (post Phase 0 Prompt 82 — Requirement Traceability Baseline)
 **Ledger mode:** Append task records; update current status in place; never erase failed/rolled-back history.
 
 ## 1. Task identity and state model
@@ -47,6 +47,14 @@ Step 2 discovery tasks use `CG-S2-DISC-<NNN>`; reconciliation tasks append `-R<n
 | `CG-S5-PH0-001` | Phase 0 WBS and Runtime Kickoff | Phase 0 / Foundation | `VERIFIED` | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-016` (VERIFIED) | `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`, `00_PHASE0_WBS.md` | 2026-07-15 | Complete — `CG-S5-PH0-002` (`PH0-081`) is `READY`, 20 remaining tasks `BLOCKED` on their own sequential upstream |
 | `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `VERIFIED` (⚠ pending reconciliation) | Claude Code | `agent/cargogrid-autonomous-build` | `CG-S5-PH0-001` (VERIFIED) | `docs/build-log/phase-00/PH0-81.md` | 2026-07-15 | Complete on this branch — but see `ERR-2026-002`: an independent parallel session (PR #10) also completed this task with different content and additionally completed `CG-S5-PH0-003` |
 | `CG-S5-PH0-003` | Requirement Traceability Baseline (Phase 0) | Phase 0 / Foundation | `BLOCKED` | — | `agent/cargogrid-autonomous-build` | `CG-S5-PH0-002` (VERIFIED, this branch) | — | 2026-07-15 | **DO NOT START** — `ERR-2026-002`/`ISS-2026-002` blocking: PR #10 (`claude/sleepy-ride-4vxsk6`) already completed this task independently with different content (401 vs 607 traced items). Requires operator reconciliation decision before any further Phase 0 prompt executes on any branch |
+| `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-013` (VERIFIED) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-015` |
+| `CG-S3-ARCH-015` | Risk-Ranked Critical Path | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-014` (VERIFIED) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | 2026-07-14 | Complete — proceed to `CG-S3-ARCH-016` |
+| `CG-S3-ARCH-016` | Step 3 Closure Verification | Step 3 / Architecture | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-015` (VERIFIED) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | 2026-07-14 | Step 3 `RUNTIME_ARCHITECTURE_VERIFIED` — proceed to Phase 0 Foundation (Prompt 79) |
+| `CG-S5-PH0-001` | Phase 0 WBS and Runtime Kickoff | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S3-ARCH-016` (VERIFIED) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-002` (Prompt 81) |
+| `CG-S5-PH0-002` | Source Alignment and Context Bootstrap | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-001` (VERIFIED) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-003` (Prompt 82) |
+| `CG-S5-PH0-003` | Requirement Traceability Baseline | Phase 0 / Foundation | `VERIFIED` | Claude Code | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-002` (VERIFIED) | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` | 2026-07-14 | Complete — proceed to `CG-S5-PH0-004` (Prompt 83) |
+| `CG-S5-PH0-004` | Repository Audit Adoption and Gap Closure | Phase 0 / Foundation | `READY` | — | `claude/sleepy-ride-4vxsk6` | `CG-S5-PH0-003` (VERIFIED) | — | 2026-07-14 | Execute `83_REPOSITORY_AUDIT_ADOPTION_GAP_CLOSURE_PROMPT.md` |
+| `CG-S3-ARCH-014` | Requirement/Phase Traceability | Step 3 / Architecture | `READY` | — | `agent/cargogrid-autonomous-build` | `CG-S3-ARCH-013` (VERIFIED) | — | 2026-07-14 | Execute Prompt 49 |
 
 ## 3. Task records
 
@@ -363,6 +371,7 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | Status | `VERIFIED` |
 | Owner/agent | Claude Code (autonomous build agent) |
 | Branch | `agent/cargogrid-autonomous-build` |
+| Branch | `claude/sleepy-ride-4vxsk6` (continuation of `agent/cargogrid-autonomous-build` progress, merged forward) |
 | Prompt path/version | `03-architecture-and-plan/49_REQUIREMENT_PHASE_TRACEABILITY_PROMPT.md` (`CG-AABPP-ARCH-049` v0.4.0) |
 | Build log path | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (self-documenting) |
 | Dependency | `CG-S3-ARCH-001..013` (all VERIFIED) |
@@ -372,6 +381,9 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 **Coverage totals:** 568 `COVERED`, 20 `ACCEPTED_RISK`, 15 `EXTERNAL_VERIFICATION`, 4 `PARTIAL_BLOCKED`, 0 `NOT_COVERED` — 607 total, reconciled by direct row tally (§24). Totals reconcile exactly against Step 0 inventory (194 = 184 functional + 10 NFR; 23 CPD; 40 RPD).
 
 **Acceptance and closure:** `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` §28 completion statement — nothing `NOT_COVERED`, every partial/external item has a named owner and gate, every WBS ID cited traces to `13_*.md` (no invented IDs), totals reconcile. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
+**Objective and outcome:** Produced a full bidirectional requirement↔phase↔test traceability matrix tracing `CPD-001..023` (23), `RPD-001..040` (40), all 184 functional IDs at their 46-family granularity plus 10 explicit NFR IDs, the 13 package-generated gap requirements (`00-control/05_*.md` §5 — a discrepancy against `13_*.md` §0's stated "14" was found and resolved in favor of the matrix's verified count of 13, documented rather than silently corrected), 24 business rules, 13 approval patterns, 14 approval use cases, 24 status transitions, 16 exception types, 12 report categories, 20 NFR catalogue rows, 20 `UAT-E2E-*`, 18 `TI-*`, 24 `FINTEST-*` scenarios, all 92 assumption-register rows, and the full conflict/gap/duplicate/decision-closure register (14 `CON-*`, 18 `GAP-*`, 12 `DUP-*`, 16 `OD-PKG-*`) — 401 total traced items. Every row cites a WBS ID already registered in `13_*.md` §4 (no invented IDs, verified by range-membership spot-check). Coverage totals: 362 `COVERED` (90.3%), 9 `PARTIAL_BLOCKED`, 7 `EXTERNAL_VERIFICATION`, 7 `ACCEPTED_RISK`, 0 `NOT_COVERED` at document close — every partial/external item carries a named owner and gate (§23's closure-task table). `GAP-017` (SaaS billing vs. tenant-finance ID separation) was found transiently unowned during analysis and closed same-document with a Phase 1 Platform Core closure task. RPD-022's risk disclosure, the direct-GA all-module gate, contract-silent recovery semantics, and the custom-integration policy are preserved and cross-cited at every occurrence. **No new ADR candidate raised; no product decision was reopened; no implementation task was created or started.**
+
+**Acceptance and closure:** `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` §27 exit gates — zero `NOT_COVERED` rows, every partial/external row has an owner and gate, every WBS task cited is source-verified, totals reconcile with `00-control/05_REQUIREMENT_COVERAGE_MATRIX.md` (one discrepancy found and resolved, not silently assumed), RPD-022/direct-GA/contract-silent-recovery/custom-integration policy preserved, cross-phase items have exactly one primary owner. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-015` — Risk-Ranked Critical Path (Prompt 50).
 
 ### CG-S3-ARCH-015 — Risk-Ranked Critical Path
 
@@ -381,6 +393,7 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | Status | `VERIFIED` |
 | Owner/agent | Claude Code (autonomous build agent) |
 | Branch | `agent/cargogrid-autonomous-build` |
+| Branch | `claude/sleepy-ride-4vxsk6` |
 | Prompt path/version | `03-architecture-and-plan/50_RISK_RANKED_CRITICAL_PATH_PROMPT.md` (`CG-AABPP-ARCH-050` v0.4.0) |
 | Build log path | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` (self-documenting) |
 | Dependency | `CG-S3-ARCH-001..014` (all VERIFIED) |
@@ -390,6 +403,11 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 **Acceptance and closure:** `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` §17 exit gates — every critical-path/ranked item traces to an existing WBS/traceability/ADR/accepted-risk ID (zero fabricated), ranking method reproducible, uncertainty explicit on every ranked row, no unverified date claimed, all four target accepted risks plus the SME gates visibly affect sequencing/gate placement. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51).
 
 ### CG-S3-ARCH-016 — Step 3 Closure Verification
+**Objective and outcome:** Produced a risk-ranked, dependency-depth-ordered critical path over the full WBS (`13_*.md`) and traceability matrix (`14_*.md`): defined 9 ranking dimensions (severity, likelihood, blast radius, tenant/security/finance/data exposure, dependency centrality, reversibility, detection-strength gap, uncertainty, remediation complexity), each on a reproducible 1–5 scale, combined into a Composite Risk Score (`CRS = Sev×Lik + Rad+Exp+Dep+Rev+Det+Unc+Rem`, range 8–60) with full arithmetic shown per row so ranking is independently recomputable — no duration, staffing figure, or calendar date invented anywhere. Critical path: `Phase 0 → 1 (Platform Core) → 2 (Commercial) → 3 (Operations/Portal basic) → 4 (Finance) → {5 (Advanced TMS/WMS) ‖ 6 (Procurement)} → 7 (HRIS/Ticketing) → 8 (Portal full/Loyalty) → 9 (Intelligence/Enterprise) → 15 (hardening) → 16 (RC/Go-Live) → direct GA`, matching `12_RELEASE_TRAIN.md` §9 exactly (Phase 5/6 the one genuine parallel-eligible fork). Top-ranked risks: Finance tax/legal SME gate (`FIN-195`, CRS 49), payroll SME gate (`HRT-282`, CRS 47), Supreme Admin absolute-CRUD disclosure (RPD-022, CRS 46), direct-GA/zero-critical-defect gate (`RGL-412`, CRS 43), penetration test (`RGL-402`, CRS 42) — 26 real, cited items scored in full. Foundation blockers (repo strategy, boundaries, schema/migrations, RLS/RBAC, config engine, API/jobs/files, CI/environments, test data, observability, backup/recovery, compliance evidence) dominate the top half of the ranking. Risk-adjusted (not phase-reordering) recommendation: pull the `FIN-195`/`HRT-282` external SME *engagement* forward into Phase 0/1 (their capability-prompt WBS position stays at Phase 4/7) since SME review needs only reviewable policy content, not built schema, and external-party lead time is the least controllable variable in the plan. Concurrency lanes: Phase 5/6 fork; four independent Phase-0 tooling ADRs; SME engagement parallel to Phase 0–3 build; design-system foundation parallel to schema/RLS foundation. Risk burn-down plan and 5 recalculation triggers (ADR resolution, runtime facts, estimate change, failure, requirement change) bind this document to re-derivation, not hand-patching. **No new ADR candidate raised; no product decision reopened; no implementation task created or started.**
+
+**Acceptance and closure:** `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` §15 exit gates — every critical-path/risk-table item cites a real ID already registered in `13_*.md`/`14_*.md` (spot-checked, none invented), ranking is reproducible (component scores + arithmetic shown per row), uncertainty is explicit (dimension 8 scored per-row, all assumptions separately labeled in §13), no unverified date is claimed anywhere, all four accepted risks (RPD-022, RPD-031/034/036/037, RPD-038) plus both SME gates visibly affect a concrete sequencing/gate mechanism (§7), not just narrative mention. Final status `VERIFIED`. Next eligible task: `CG-S3-ARCH-016` — Step 3 Closure Verification (Prompt 51, the final Step 3 output).
+
+### CG-S3-ARCH-016 — Step 3 Closure Verification (final Step 3 output)
 
 | Field | Value |
 |---|---|
@@ -422,6 +440,66 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 **Objective and outcome:** First Phase 0 checkpoint. Verified the five-condition Phase 0 runtime entry gate (`79_PHASE0_README.md` §2) — Step 2/Step 3 runtime closure both hold at the current checkpoint, Step 4 package-level verification confirmed, `AGENTS.md`/runtime ledgers agree, task authority/branch ownership known (package manager/baseline commands correctly deferred to `PH0-085..088` as their own deliverable, not a precondition). Reconciled the Phase 0 capability range against the master WBS (`13_*.md` §4) — no second numbering scheme introduced. Produced a full execution index for all 23 `CG-S5-PH0-<NNN>` tasks (80 kickoff + 18 capabilities `081..098` + verification/hardening/documentation/closure `099..102`) with hierarchy, status, dependencies, allowed paths, owner, and next action per row. Produced the companion WBS document instantiating the mandatory 10-level hierarchy, 9-workstream/epic grouping covering all 18 capabilities, concurrency lanes, integration checkpoints, stale-evidence triggers, and recovery order. Ran collision inspection (zero file/schema/environment collision — confirmed greenfield) and cycle/orphan check (zero found). **Result: 1 task `READY` (`PH0-081`), 20 `BLOCKED`** — every block is the expected sequential-upstream-not-yet-`VERIFIED` reason, not missing evidence or an unresolved ADR; each open ADR candidate (`011`, `020..027`) is confirmed scoped to resolve inside its own owning capability prompt's execution, not as an external precondition.
 
 **Acceptance and closure:** `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` §7 completion gate — one authoritative checkpoint/dependency graph exists, `PH0-081`'s variables are concretely resolvable, no unowned cycle/orphan/collision, zero runtime source/config/data/environment file touched (only the two specified index documents were written). Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
+| Status | `VERIFIED` — closure state `RUNTIME_ARCHITECTURE_VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `03-architecture-and-plan/51_STEP3_CLOSURE_VERIFICATION_PROMPT.md` (`CG-AABPP-ARCH-051` v0.4.0) |
+| Build log path | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` (self-documenting) |
+| Dependency | `CG-S3-ARCH-001..015` (all VERIFIED); `docs/discovery/14_STEP2_CLOSURE_REPORT.md` = `RUNTIME_DISCOVERY_VERIFIED` |
+
+**Objective and outcome:** Independently re-verified (not re-stated) all nine required Step 3 closure conditions against primary sources — full re-read of all 15 architecture files, direct `grep`/count re-derivation of every requirement/decision/gap/conflict total against `00-control/05_REQUIREMENT_COVERAGE_MATRIX.md`/`02_CONFIRMED_DECISION_REGISTER.md`/`04_CONFLICT_REGISTER.md`, independent git-history verification of every file's cited checkpoint hash, and an independent `git status`/`git ls-files` forbidden-change audit rather than trusting prior claims. Confirmed: all 15 Step 3 deliverables present/non-empty/evidence-citing; cross-document ownership/cycle/schema/contract/access-enforcement consistency (zero new disagreement); all 194 requirements + 63 protected decisions (40 RPD + 23 CPD) + 13 gap requirements + full `CON`/`GAP`/`DUP`/`OD-PKG` catalogues have delivery and evidence owners (independently reconciled, matching `14_*.md`); WBS hierarchy/atomic-sizing/dependency/rollback confirmed; 12 named control areas (tenant/RLS/RBAC, finance, REST/GraphQL, jobs/files, UX/WCAG, performance, testing, DevOps, migration, observability, backup/DR, release) all mapped; RPD-022/034/036/031/037/038 disclosed consistently everywhere cited; repository independently confirmed 100% documentation (zero app/test/config/migration/dependency/database/environment/deployment file); all runtime docs reconcile against actual architecture-doc content. Surfaced two new, non-blocking findings: **F1** — `12_*.md`/`13_*.md` cited pre-branch-merge-reconciliation commit hashes in their §0 HEAD field (content verified byte-identical; corrected this checkpoint to the actual `claude/sleepy-ride-4vxsk6` parent hashes). **F2** — `CHANGE_MANIFEST.md`'s §1 summary index table was two rows behind its own accurate detailed `CHG-2026-017`/`018` entries (corrected this checkpoint). Neither finding reopened a decision, broke an evidence chain, or misstated a substantive fact. **Closure state: `RUNTIME_ARCHITECTURE_VERIFIED`.** Step 4 (`04-reusable-prompts/`, 25 templates) confirmed to be a template library consumed opportunistically starting inside Phase 0 capability prompts, not a sequential phase of its own. Feature/application implementation remains forbidden until `PHASE_0_VERIFIED` is also achieved. **No implementation task was created or started.**
+
+**Acceptance and closure:** `docs/architecture/16_STEP3_CLOSURE_REPORT.md` §11 — all nine verification items pass on independent re-check. Final status `VERIFIED`, closure state `RUNTIME_ARCHITECTURE_VERIFIED`. **Step 3 (Architecture and Execution Blueprint) is now fully closed — 16/16 outputs `VERIFIED`.** Next eligible task: Phase 0 Foundation, entry point `docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/79_PHASE0_README.md` → `80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` → capability prompts `81`–`98` → `99`–`102` (verification/hardening/documentation/closure, the only prompt authorized to set `PHASE_0_VERIFIED`).
+
+### CG-S5-PH0-001 — Phase 0 WBS and Runtime Kickoff (Prompt 80, first Phase 0 task)
+
+| Field | Value |
+|---|---|
+| Parent phase | Phase 0 — Discovery and Foundation |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `05-phase-00-discovery-foundation/80_PHASE0_WBS_RUNTIME_KICKOFF_PROMPT.md` (`CG-AABPP-PH0-080` v0.6.0) |
+| Build log path | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` |
+| Dependency | `CG-S3-ARCH-016` (VERIFIED, `RUNTIME_ARCHITECTURE_VERIFIED`); `docs/discovery/14_STEP2_CLOSURE_REPORT.md` (`RUNTIME_DISCOVERY_VERIFIED`); Step 4 reusable library (`PACKAGE_STEP_4_VERIFIED`, package-level, confirmed via `00-control/06_PACKAGE_BUILD_STATUS.md`) |
+
+**Naming-convention note:** Prompt 80's own text names its outputs `docs/build-log/phase-00/...` (singular, phase-nested). This repository's established Step 2 convention — one flat file per task under `docs/build-logs/` (plural) — takes priority per this repo's evidence-precedence rule; both output files use that path, and the substitution rule is documented in each file's header for every future `PH0-081..102` build log.
+
+**Objective and outcome:** Validated the Phase 0 runtime entry gate (all 5 conditions in `79_PHASE0_README.md` §2 independently re-checked, not accepted from prior headers); reconciled the mandatory 10-level hierarchy for all 18 Phase 0 capabilities against `13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §4's Phase 0 row; produced a full execution register for all 22 downstream prompts (`PH0-081..098` = 18 capabilities + `PH0-099` verification + `PH0-100` hardening + `PH0-101` documentation + `PH0-102` closure), each with task/WBS ID, hierarchy, dependencies, allowed paths, outputs, owner, and status. Ran an independent worktree/branch/migration/schema collision audit (`git status`, `git branch -a`, `git ls-files` extension scan) — zero collision risk, repository confirmed greenfield. Defined the concurrency model: the dependency graph is a strict single sequential lane (`081→082→…→098→099→100→101→102`) since every downstream capability's dependency range grows monotonically to "all prior," combined with the standing single-writer rule (`ISS-2026-002`) — no parallel lane opened. Defined 4 integration checkpoints (after `084` governance, after `089` engineering-foundation cluster, after `098` before verification, after `102` Phase 1 entry), 4 stale-evidence triggers, and reverse-order recovery/rollback rules. Result: `PH0-081` (Source Alignment and Context Bootstrap) marked `READY` with every variable resolvable (no unresolved `{{VARIABLE}}`); `PH0-082..102` correctly `BLOCKED` on their exact unmet upstream ranges, per the linear-chain structure — expected at this point, not a defect. **No runtime source/config/data/environment change occurred** (index/planning only, confirmed by this checkpoint's own `git status`).
+
+**Acceptance and closure:** Both build-log files' own §6/closing self-checks — one authoritative checkpoint and dependency graph exist; zero cycles/orphans/collisions (verified by direct graph construction); `PH0-081`'s variables fully resolvable; no runtime file outside `docs/build-logs/**` was touched. All four completion-gate conditions satisfied. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
+
+### CG-S5-PH0-002 — Source Alignment and Context Bootstrap (Prompt 81)
+
+| Field | Value |
+|---|---|
+| Parent phase | Phase 0 — Discovery and Foundation |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` (`CG-AABPP-PH0-081` v0.6.0) |
+| Build log path | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` |
+| Dependency | `CG-S5-PH0-001` (VERIFIED) |
+
+**Objective and outcome:** Materialized the approved CargoGrid source hierarchy, `CPD-001..023`/`RPD-001..040` decisions, and package/runtime status into repository-native context. `CARGOGRID_CONTEXT.md` was already current from prior checkpoints' ongoing maintenance discipline; this task added an explicit `GOV-010..019` governance-instance-register citation (§2) mapping each of the 10 governance template IDs — `AGENTS.md` (`GOV-010`/`011`), `CARGOGRID_CONTEXT.md` (`GOV-012`), `CARGOGRID_BUILD_STATUS.md` (`GOV-013`), `TASK_LEDGER.md` (`GOV-014`), `CHANGE_MANIFEST.md` (`GOV-015`), `02_CONFIRMED_DECISION_REGISTER.md` (`GOV-016`), `ERROR_LEDGER.md` (`GOV-017`), `KNOWN_ISSUES.md` (`GOV-018`), `HANDOFF.md` (`GOV-019`) — to its repository-native instance, verified by direct header read of all 10 files (zero mismatch). Performed a fresh-context reconstruction test (a hypothetical fresh agent reading `AGENTS.md` → `CARGOGRID_CONTEXT.md` → `CARGOGRID_BUILD_STATUS.md` → `TASK_LEDGER.md` → `HANDOFF.md` can reconstruct product identity, source hierarchy, ratified snapshot, repository baseline, Step 2/3 closure states, Phase 0 progress, and the exact next task without chat history — traced manually, complete, no gap found). Confirmed zero duplicate/contradictory register copy exists in `docs/runtime/`. **No application/test/config/migration/lockfile/database/environment file was touched** (confirmed by this checkpoint's own `git status`).
+
+**Acceptance and closure:** `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` §11 — repository-native context complete and independently reconstructable; zero hidden source conflict; no runtime file outside allowed docs changed; task/change/checkpoint/handoff records agree. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-003` — Requirement Traceability Baseline (Prompt 82).
+
+### CG-S5-PH0-003 — Requirement Traceability Baseline (Prompt 82)
+
+| Field | Value |
+|---|---|
+| Parent phase | Phase 0 — Discovery and Foundation |
+| Status | `VERIFIED` |
+| Owner/agent | Claude Code (autonomous build agent) |
+| Branch | `claude/sleepy-ride-4vxsk6` |
+| Prompt path/version | `05-phase-00-discovery-foundation/82_REQUIREMENT_TRACEABILITY_BASELINE_PROMPT.md` (`CG-AABPP-PH0-082` v0.6.0) |
+| Build log path | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` |
+| Dependency | `CG-S5-PH0-002` (VERIFIED) |
+
+**Objective and outcome:** Formally adopted `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` (401 traced items, 0 `NOT_COVERED`, already independently re-verified by `16_STEP3_CLOSURE_REPORT.md` §4) as the **repository-native requirement traceability baseline** for Phase 0, rather than re-authoring a second, driftable copy of the same matrix — consistent with this repository's own evidence-precedence discipline. Defined 5 document-level validation rules as the new artifact this task contributes: (V1) ID uniqueness across every requirement/decision/gap/catalogue ID family; (V2) count reconciliation against the primary control files; (V3) bidirectional WBS-ID/requirement-family link verification; (V4) orphan/duplicate/conflict/partial/external/accepted-risk state-coverage check; (V5) fresh-context requirement lookup test. All 5 run manually this checkpoint (no test-runner exists yet) and all pass — spot-checked with `RPD-016`, `GAP-017`, `CPD-022` as fresh-context lookup samples, each fully resolvable from `14_*.md` alone. **No application/schema/API/UI file was touched** (confirmed by this checkpoint's own `git status`).
+
+**Acceptance and closure:** `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` §11 — all authoritative items mapped or explicitly blocking/external with owner (inherited from `14_*.md`, re-verified this checkpoint); traceability is machine-reviewable via the 5 new validation rules, no coverage fabricated; mandatory manual checks pass, worktree reconciled. Final status `VERIFIED`. Next eligible task: `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83).
 
 ## 4. Dependency and sequencing index
 
@@ -448,6 +526,12 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S5-PH0-001` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | `CG-S5-PH0-002..023` (Phase 0 capability prompts 81–102) | `docs/build-log/phase-00/00_*` | Done (VERIFIED) |
 | `CG-S5-PH0-002` | PH0-001 VERIFIED | `CG-S5-PH0-003` (`PH0-082`) | `docs/build-log/phase-00/PH0-81.md`, `docs/runtime/**` | YES |
 | `CG-S5-PH0-003..023` | Strictly sequential per `79_*.md` §4 (each on its immediate predecessor(s)) | Phase 0 closure (`PHASE_0_VERIFIED`) | `docs/build-log/phase-00/**`, `docs/runtime/**` | BLOCKED (pending predecessor) |
+| `CG-S3-ARCH-016` | ARCH-015 VERIFIED | Phase 0 kickoff (Prompts 79+) | `docs/architecture/16_*` | Done (VERIFIED) |
+| `CG-S5-PH0-001` | ARCH-016 VERIFIED (`RUNTIME_ARCHITECTURE_VERIFIED`) | CG-S5-PH0-002 | `docs/build-logs/CG-S5-PH0-001_*` | Done (VERIFIED) |
+| `CG-S5-PH0-002` | PH0-001 VERIFIED | CG-S5-PH0-003 | `docs/build-logs/CG-S5-PH0-002_*` | Done (VERIFIED) |
+| `CG-S5-PH0-003` | PH0-002 VERIFIED | CG-S5-PH0-004 | `docs/build-logs/CG-S5-PH0-003_*` | Done (VERIFIED) |
+| `CG-S5-PH0-004` | PH0-003 VERIFIED | CG-S5-PH0-005 | `05-phase-00-discovery-foundation/83_*` | YES |
+| `CG-S3-ARCH-014` | ARCH-013 VERIFIED | CG-S3-ARCH-015 | `docs/architecture/14_*` | YES |
 
 ## 5. Completed and superseded index
 
@@ -485,6 +569,14 @@ Produce the authoritative dependency model for CargoGrid platform primitives and
 | `CG-S3-ARCH-015` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-15 |
 | `CG-S3-ARCH-016` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-15 |
 | `CG-S5-PH0-001` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`, `00_PHASE0_WBS.md` | none | 2026-07-15 |
+| `CG-S3-ARCH-013` | `VERIFIED` | (checkpoint, `agent/cargogrid-autonomous-build`, merged forward) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-014` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-015` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-016` | `VERIFIED` (`RUNTIME_ARCHITECTURE_VERIFIED`) | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/architecture/16_STEP3_CLOSURE_REPORT.md` | none | 2026-07-14 |
+| `CG-S5-PH0-001` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `docs/build-logs/CG-S5-PH0-001_phase0_wbs.md` | none | 2026-07-14 |
+| `CG-S5-PH0-002` | `VERIFIED` | (checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` | none | 2026-07-14 |
+| `CG-S5-PH0-003` | `VERIFIED` | (this checkpoint, `claude/sleepy-ride-4vxsk6`) | `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` | none | 2026-07-14 |
+| `CG-S3-ARCH-013` | `VERIFIED` | (this checkpoint, `agent/cargogrid-autonomous-build`) | `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` | none | 2026-07-14 |
 
 ## 6. Ledger maintenance rules
 
