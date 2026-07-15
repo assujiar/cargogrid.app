@@ -83,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-010` — Coding Standards and Architecture Enforcement |
-| Prompt | `05-phase-00-discovery-foundation/89_CODING_STANDARDS_ARCHITECTURE_ENFORCEMENT_PROMPT.md` |
-| Status | `READY` — upstream `PH0-081..088` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED`; `ADR-CAND-ARCH-024` fully `ACCEPTED` |
-| Reason | Formalizes coding standards and module-boundary enforcement (e.g. import-direction rules from `03_DOMAIN_BOUNDARY_MAP.md`) — a natural extension of `.github/workflows/ci.yml` (`PH0-088`), per `ADR-0004`'s "one pipeline, extended, not duplicated" consequence. |
-| Upstream | `CG-S5-PH0-009` (`VERIFIED` — `docs/build-log/phase-00/PH0-88.md`; GitHub Actions CI baseline live, `ADR-0004` accepted) |
+| Task ID/name | `CG-S5-PH0-011` — Design System Foundation |
+| Prompt | `05-phase-00-discovery-foundation/90_DESIGN_SYSTEM_FOUNDATION_PROMPT.md` |
+| Status | `READY` — upstream `PH0-081..089` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
+| Reason | Resolves `ADR-CAND-ARCH-020/021` (component-library foundation, design-token mechanism) — `docs/standards/CODING_STANDARDS.md` §9 explicitly defers UX/component conventions to this task. |
+| Upstream | `CG-S5-PH0-010` (`VERIFIED` — `docs/build-log/phase-00/PH0-89.md`; coding standards + 2 real ESLint boundary zones + suppression governance) |
 
 ## 5. Work completed (all runs to date, summarized)
 
