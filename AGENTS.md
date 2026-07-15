@@ -34,6 +34,8 @@ Before any edit, read the repository-native persistent context under `docs/runti
 
 The canonical decision/assumption/conflict registers live under `docs/ai-agent-build-prompt-package/00-control/` (`02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md`, `04_CONFLICT_REGISTER.md`).
 
+**Pre-flight collision check (`ISS-2026-002`, mandatory before starting any Phase 0+ prompt — see `docs/git/GIT_STRATEGY.md` §7):** list open pull requests and branches for this repository (GitHub API/MCP); if another open PR or a branch with unmerged commits targets the same task-ID range this session is about to work on, stop and surface it — do not proceed in parallel. This exact check was skipped 5 times in this repository's history (`docs/runtime/KNOWN_ISSUES.md` `ISS-2026-002`) and caused real content corruption (`ERR-2026-001..003`). Locally, `pnpm run git:check` covers the checkable half (diverged local branches, dirty worktree) — it does not replace the GitHub-side check.
+
 Then:
 
 - Read the relevant build log, requirement IDs, decision rows, ADRs, schema/API/data-flow records, and task prompt.

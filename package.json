@@ -1,0 +1,34 @@
+{
+  "name": "cargogrid",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --experimental-strip-types --test scripts/**/*.test.ts",
+    "preflight": "node --experimental-strip-types scripts/preflight-env-check.ts",
+    "git:check": "node --experimental-strip-types scripts/git/check-worktree-collision.ts && node --experimental-strip-types scripts/git/check-branch-name.ts",
+    "git:check-paths": "node --experimental-strip-types scripts/git/check-protected-paths.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "0.12.3",
+    "@supabase/supabase-js": "2.110.5",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.19.0",
+    "eslint-config-next": "16.2.10",
+    "typescript": "5.9.3"
+  }
+}

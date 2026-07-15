@@ -22,7 +22,7 @@ Statuses: `OPEN`, `INVESTIGATING`, `ROOT_CAUSE_CONFIRMED`, `RECOVERY_IN_PROGRESS
 |---|---|---|---|---|---|---|---|---|---|
 | `ERR-2026-001` | `CG-S2-DISC-001-R1` | Sev-3/Medium | Repository / git `main` | Parallel-session merge corrupted the discovery baseline and duplicated persistent context | `RECOVERED` (verification VERIFIED) | Two concurrent agent branches ran Prompt 21 with no single-writer lock; merge concatenated both reports and both context sets | `d587445` | Runtime agent | this file §3 |
 | `ERR-2026-002` | `CG-S3-ARCH-013..016`, `CG-S5-PH0-001..003` | Sev-2/High | Repository / GitHub PR #10 (was open, unmerged at detection) | A fully independent parallel session (branch `claude/sleepy-ride-4vxsk6`) redid Prompts 46–51, Phase 0 kickoff (80), and Prompts 81–82 with materially different content (different traceability item counts, different build-log directory convention) after diverging from the shared lineage at PR #8; its output sat in PR #10, not yet reconciled with this branch's (`agent/cargogrid-autonomous-build`) independent redo of the same range | `SUPERSEDED` by `ERR-2026-003` — **both PR #10 and PR #11 were subsequently merged into `main` without the operator ever recording a reconciliation decision here or in `HANDOFF.md`; see `ERR-2026-003`** | No enforced single-writer lock (`ISS-2026-002`) across scheduled/parallel routine invocations; two agent instances both continued the same autonomous build task from a shared ancestor without coordinating | `1802400` (this branch's HEAD at detection time) | Runtime agent / repo owner | this file §3 |
-| `ERR-2026-003` | `CG-S3-ARCH-014..016`, `CG-S5-PH0-001..003` | Sev-1/Critical | Repository / `main`@`b7653cb` (and every branch cut from it since, including this one) | PR #10 and PR #11 were both merged into `main` (merge commits `a8a197f` then `b7653cb`) while `ERR-2026-002` was still `OPEN` and unresolved — no reconciliation decision was ever recorded. The merges did not conflict at the git level (each lineage inserted content the other side's history didn't touch line-for-line at the merge point), so git silently **concatenated** both divergent lineages' full deliverables into single files instead of reconciling them. Confirmed by direct inspection, not inference. | `OPEN` — **build execution halted; this is a `BLOCKED_DECISION`, see `HANDOFF.md` §1** | Same root cause as `ERR-2026-002` (`ISS-2026-002`, no enforced single-writer lock), compounded by merging both divergent PRs into `main` without performing the manual reconciliation `ERR-2026-002` explicitly said was required first | `origin/main`@`27389a4` (PR #8, last point both lineages agree) | Runtime agent / repo owner | this file §3 |
+| `ERR-2026-003` | `CG-S3-ARCH-014..016`, `CG-S5-PH0-001..003` | Sev-1/Critical | Repository / `main`@`b7653cb` (and every branch cut from it since, including this one) | PR #10 and PR #11 were both merged into `main` (merge commits `a8a197f` then `b7653cb`) while `ERR-2026-002` was still `OPEN` and unresolved — no reconciliation decision was ever recorded. The merges did not conflict at the git level (each lineage inserted content the other side's history didn't touch line-for-line at the merge point), so git silently **concatenated** both divergent lineages' full deliverables into single files instead of reconciling them. Confirmed by direct inspection, not inference. | `RECOVERED` (2026-07-15) — operator authorized adoption of the internally-consistent Lineage A (607-item) copy; `docs/architecture/14..16_*.md` rewritten as single coherent documents, Lineage B duplicates removed, Prompt 82 re-verified against the 607 baseline. See §3 recovery record. | Same root cause as `ERR-2026-002` (`ISS-2026-002`, no enforced single-writer lock), compounded by merging both divergent PRs into `main` without performing the manual reconciliation `ERR-2026-002` explicitly said was required first | `origin/main`@`27389a4` (PR #8, last point both lineages agree) | Runtime agent / repo owner | this file §3 |
 
 ## 3. Error record
 
@@ -153,11 +153,29 @@ Neither merge produced git conflict markers, because each lineage's edits landed
 - No secret exposure, no data mutation outside `docs/**`, no production/database impact (still a documentation-only repository).
 - Continuing Phase 0 execution (`PH0-084` onward) on top of this corrupted baseline would compound the problem and make eventual reconciliation harder, exactly as `ERR-2026-002` warned.
 
-#### Recovery — NOT performed this session, requires operator decision
+#### Recovery — performed 2026-07-15 (operator-authorized, Lineage A adopted)
 
-Choosing which lineage's content is factually correct (607 vs. 401 traced items, and any other divergent claims in `15_*.md`/`16_*.md`) is a substantive judgment this session is not authorized to make unilaterally — the same reasoning `ERR-2026-002` already recorded still applies, now to content that is sitting in `main` rather than in an open PR. See `HANDOFF.md` §1 for the exact question and options put to the operator.
+**Operator decision (recorded in `HANDOFF.md` §1):** adopt **Lineage A** (option 1) as the single authoritative version of `docs/architecture/14..16_*.md`. The decision was reached after a fresh evidence-based re-analysis comparing both concatenated copies against the primary source (`00-control/05_REQUIREMENT_COVERAGE_MATRIX.md`) and the originating prompts (49–51):
 
-Status: `OPEN`. Resume only after an operator selects one of the reconciliation options in `HANDOFF.md` §1 and records it there.
+- **Lineage A's 607-item total is internally self-consistent:** `14_*.md` §24.1 by-source table sums to 607, and §24.4 by-state table (568 `COVERED` + 20 `ACCEPTED_RISK` + 15 `EXTERNAL_VERIFICATION` + 4 `PARTIAL_BLOCKED` + 0 `NOT_COVERED`) also sums to 607.
+- **Lineage B's 401-item total is internally inconsistent:** its own parenthetical breakdown formula summed to 469 and its by-state row summed to 385 — three different "totals" in one document, an arithmetic defect, not a methodological difference. Lineage B's copy of `16_*.md` additionally contained a raw git-diff artifact pasted as a section heading (`## claude/sleepy-ride-4vxsk6...origin/claude/sleepy-ride-4vxsk6`).
+- Both lineages' per-catalogue counts agree where they overlap (194 explicit requirements, 92 assumptions, 13 package-gap IDs, 60 conflict-register rows); the 401 was the same catalogues mis-totalled, not a narrower scope. Adopting Lineage A loses no correct requirement mapping.
+
+**Recovery steps performed:**
+1. `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md` truncated to its Lineage A copy (lines 1–739, ending §28); Lineage B duplicate (former lines 740–1465) removed.
+2. `docs/architecture/15_RISK_RANKED_CRITICAL_PATH.md` truncated to Lineage A (lines 1–290); Lineage B duplicate removed.
+3. `docs/architecture/16_STEP3_CLOSURE_REPORT.md` truncated to Lineage A (lines 1–190); Lineage B duplicate + git-diff artifact removed. Closure state `RUNTIME_ARCHITECTURE_VERIFIED` preserved.
+4. Prompt 82 (`CG-S5-PH0-003`) re-verified against the authoritative 607-item baseline; new log `docs/build-log/phase-00/PH0-82.md` written; discarded Lineage B log `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` (401-based) removed.
+5. Phase 0 build logs standardized on the prompt-package-prescribed singular path `docs/build-log/phase-00/PH0-NN.md`; the plural Lineage B Phase 0 duplicates (`CG-S5-PH0-001_*`, `CG-S5-PH0-002_*`, `CG-S5-PH0-003_*`) removed to eliminate the duplicate source of truth. Trusted Step 2 `docs/build-logs/CG-S2-*` logs retained (unaffected, closed).
+
+#### Verification
+
+- `grep -c '^## 1\. Scope and method'` → 1 in each of `14/15_*.md`; `grep -c '^## 1\.'` → 1 in `16_*.md`.
+- `grep -c 401` → 0 in all three files; `grep -c 607` → 5 in `14_*.md` (all consistent).
+- `grep -c '^## claude/sleepy-ride'` → 0 in `16_*.md`.
+- No secret exposure, no data mutation outside `docs/**`.
+
+Status: `RECOVERED`. Next runtime work resumes at `CG-S5-PH0-004` (Prompt 83) against the reconciled, non-corrupted baseline.
 
 ## 4. Notes
 
