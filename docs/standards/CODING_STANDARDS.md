@@ -62,7 +62,7 @@ Every rule above was proven to fire against a real, intentional fixture violatio
 
 ## 6. Test conventions
 
-Deferred in full to `PH0-091` (Testing Foundation, `ADR-CAND-ARCH-022` — test-runner/factory tooling choice). Until then, this repository's established, working pattern (`scripts/env/validate.test.ts`, `scripts/git/*.test.ts`, 35 passing tests) is: Node's built-in `node:test` + `node:assert/strict`, one `.test.ts` colocated next to the module it tests, positive cases first then negative/failure cases, and — where a fix was made during authoring — a named regression test pinning the fix (e.g. `check-worktree-collision.test.ts`'s "regression guard for the origin/main-vs-stale-local-main bug"). This is provisional, not a preemption of `PH0-091`'s own ADR.
+Ratified at `PH0-091` (Testing Foundation, `ADR-0007`/`ADR-0008`) — see `docs/standards/TESTING_STANDARDS.md` for the full runner/naming/isolation/flake/factory convention. Summary: Node's built-in `node:test` + `node:assert/strict` for unit/integration/component (server-side), one `.test.ts` colocated next to the module it tests, positive cases first then negative/failure cases, a named regression test pinning any fix made during authoring (e.g. `check-worktree-collision.test.ts`'s "regression guard for the origin/main-vs-stale-local-main bug"); `@playwright/test` + `@axe-core/playwright` for E2E/visual-regression/accessibility (`e2e/*.spec.ts`). No longer provisional.
 
 ## 7. Migration conventions
 

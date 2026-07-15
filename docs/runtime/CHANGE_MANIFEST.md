@@ -1296,6 +1296,66 @@ Updated: this manifest, error ledger, known issues, handoff, build status, task 
 
 **External approval IS required before any further Phase 0 work.** An operator must select one of `ERR-2026-003`'s three reconciliation options (`HANDOFF.md` §1) before `CG-S5-PH0-004`/Prompt 83 or any subsequent Phase 0 capability prompt executes. This checkpoint's own scope (discover, record, consolidate ledgers) is complete. Next eligible task: **none — blocked**, see `HANDOFF.md` §1/§9.
 
+### CHG-2026-024 — Testing Foundation (Phase 0, Prompt 91)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-012`, `05-phase-00-discovery-foundation/91_TESTING_FOUNDATION_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / Quality Foundation, Test Infrastructure |
+| Change type | DOCS + tooling/config (`docs/**`, `package.json`/lockfile, `playwright.config.ts`, `e2e/**`, `tests/factories/**`, `.github/workflows/ci.yml`); one out-of-literal-scope test fixture fix (`scripts/git/check-worktree-collision.test.ts`, see Outcome) |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `docs/architecture/10_TESTING_WORKSTREAM.md` §11 (`ADR-CAND-ARCH-022/023`), `docs/standards/CODING_STANDARDS.md` §6 (deferred runner choice) |
+| Decisions | `ADR-0007` (test-runner/framework stack), `ADR-0008` (DR-rehearsal cadence + accessibility-checker tool) — both `ACCEPTED` with real registry evidence |
+| Baseline evidence | `docs/build-log/phase-00/PH0-90.md` (upstream `VERIFIED`); pre-flight collision check clean (zero open PRs, `pnpm run git:check` clean after correcting a stale local `origin/main` ref) |
+| Final status | `COMPLETED` — `CG-S5-PH0-012` `VERIFIED` in `TASK_LEDGER.md` this checkpoint |
+
+#### Outcome
+
+Resolved both open Phase 0 testing ADR candidates with real evidence (`npm view` registry checks, not presumed versions): `node:test`/`node:assert/strict` ratified as the unit/integration/component runner (was provisional since `PH0-086`), `@playwright/test@1.61.1` selected for E2E/visual-regression/browser automation, `@axe-core/playwright@4.12.1` selected as the automated accessibility checker, quarterly DR-rehearsal cadence policy fixed (execution gated on Staging infrastructure that does not yet exist). Implemented the shared testing *foundation* only — a deterministic-seed primitive (`tests/factories/seed.ts`, no domain shape), Playwright config, a real smoke suite (`e2e/smoke.spec.ts`) proving the Playwright+axe-core layer is genuinely wired (caught and fixed a real accessibility issue in its own "accessible" fixture during authoring — evidence the checker is not vacuously passing), a new parallel `e2e` CI job, and `docs/standards/TESTING_STANDARDS.md` codifying naming/isolation/flake/coverage/`NOT_RUN`-layer conventions for every layer this checkpoint deliberately does not implement (RLS, contract, component-in-browser, real accessibility, performance, DR execution — all correctly `NOT_RUN` pending Phase 1 schema/UI, not fabricated). Zero domain schema, `server/contracts/<domain>/`, or `components/ui/` code created (Phase 1 scope, same boundary `ADR-0001`/`PH0-90.md` established). Also: corrected a stale `docs/adr/README.md` §5.2 row (`ADR-CAND-ARCH-023` had been narrowed to "DR cadence only, Phase 15" in an earlier checkpoint with no recorded rationale — disclosed and corrected in `ADR-0008`, not silently overwritten); fixed one out-of-literal-scope but disclosed test fragility (`scripts/git/check-worktree-collision.test.ts` hardcoded a branch name, `ISS-2026-004`) that would otherwise have left the shared `quality` CI gate red on any branch not literally named `agent/cargogrid-autonomous-build`; recorded a second, unrelated, pre-existing documentation gap found while authoring this very entry (`ISS-2026-005` — `CHANGE_MANIFEST.md` was never actually appended for Prompts 83–90 despite their own build logs claiming otherwise), left unfixed for a dedicated backfill task per the same "fix only task-caused failures" discipline.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/adr/ADR-0007-test-runner-and-framework-stack.md` | ADD | Resolves `ADR-CAND-ARCH-022` | `git revert` |
+| `docs/adr/ADR-0008-dr-rehearsal-cadence-and-accessibility-tooling.md` | ADD | Resolves `ADR-CAND-ARCH-023` | `git revert` |
+| `docs/standards/TESTING_STANDARDS.md` | ADD | Testing foundation conventions | `git revert` |
+| `docs/adr/README.md` | EDIT | Candidates marked `ACCEPTED`, index updated, §5.2 row corrected | `git revert` |
+| `docs/standards/CODING_STANDARDS.md` | EDIT | §6 provisional → ratified | `git revert` |
+| `package.json`, `pnpm-lock.yaml` | EDIT | `@playwright/test`, `@axe-core/playwright` devDependencies; `test:coverage`/`test:e2e` scripts | `git revert` |
+| `playwright.config.ts` | ADD | E2E harness config | `git revert` |
+| `e2e/smoke.spec.ts` | ADD | Proves Playwright+axe-core wiring | `git revert` |
+| `tests/factories/seed.ts`, `tests/factories/seed.test.ts` | ADD | Deterministic-seed foundation | `git revert` |
+| `.github/workflows/ci.yml` | EDIT | New `e2e` job | `git revert` |
+| `scripts/git/check-worktree-collision.test.ts` | EDIT | `ISS-2026-004` fix (branch-name hardcoding) | `git revert` |
+| `docs/runtime/KNOWN_ISSUES.md` | EDIT | `ISS-2026-004` (resolved), `ISS-2026-005` (open) recorded | `git revert` |
+| `docs/build-log/phase-00/PH0-91.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. `e2e/smoke.spec.ts` uses only synthetic inline HTML (no tenant/app data, no external network call).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 58/58 PASS (was 57/58 before this checkpoint's `ISS-2026-004` fix — reproduced, explained, fixed, not hidden); `pnpm run test:coverage` PASS (signal only, no gate); `pnpm run test:e2e` (Playwright+axe-core) 3/3 PASS (first run correctly failed 1/3 on a real accessibility defect in its own fixture, then fixed — real evidence, not a fabricated pass); `pnpm run standards:check` PASS; `pnpm run git:check` PASS after correcting a stale local `origin/main` ref; `npm view @playwright/test`/`@axe-core/playwright` version/dist-tags confirmed current stable, not presumed.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing test, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `origin/main`@`92d698f` (PR #14).
+- Recovery verification: full gate suite re-run green after every fix during authoring (§ above), not merely at the end.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `KNOWN_ISSUES.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent ADR authority (`docs/adr/README.md` §3). `CG-S5-PH0-012` is `VERIFIED`. Next eligible task: `CG-S5-PH0-013` (Prompt 92, Documentation Foundation).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

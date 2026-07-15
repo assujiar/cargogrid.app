@@ -88,8 +88,8 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-019` | Deployment ordering / API-consumer compatibility | DevOps (Phase 0 CI + release) | `PROPOSED` |
 | `ADR-CAND-ARCH-020` | Component-library foundation | Phase 0 `PH0-090` (Design System) | **ACCEPTED → `ADR-0005`** (Radix UI primitives, copy-in pattern) |
 | `ADR-CAND-ARCH-021` | Design-token mechanism + token file location | Phase 0 `PH0-090` | **ACCEPTED → `ADR-0006`** (CSS custom properties + Tailwind v4 `@theme`) |
-| `ADR-CAND-ARCH-022` | Test-tooling/coverage-gate specifics | Phase 0 `PH0-091` (Testing) | `BLOCKED` — due at `PH0-091` |
-| `ADR-CAND-ARCH-023` | DR-rehearsal cadence | Phase 15 (`HDN-384`) | `BLOCKED` — deferred, non-blocking |
+| `ADR-CAND-ARCH-022` | Test-tooling/coverage-gate specifics | Phase 0 `PH0-091` (Testing) | **ACCEPTED → `ADR-0007`** (`node:test` unit/integration/component, Playwright E2E/visual-regression, `tests/factories/<domain>.ts`) |
+| `ADR-CAND-ARCH-023` | DR-rehearsal cadence + automated-accessibility-checker tool | Phase 0 `PH0-091` (Testing) | **ACCEPTED → `ADR-0008`** (quarterly cadence, `@axe-core/playwright`). *Correction (`PH0-91`, `ADR-0008` "Scope discrepancy" section): this row previously read "DR-rehearsal cadence" only, reassigned to "Phase 15 (`HDN-384`)," dropping the accessibility-checker half — an unintended narrowing during this register's transcription from `docs/architecture/10_TESTING_WORKSTREAM.md` §11, not a deliberate re-scoping recorded anywhere. Both halves are resolved here, at the phase/task `10_*.md` §11 and the current `HANDOFF.md`/`TASK_LEDGER.md` always specified.* |
 | `ADR-CAND-ARCH-024` | CI/CD platform + package manager | Phase 0 `PH0-085..088` | **Fully `ACCEPTED`** — package-manager component → `ADR-0002` (`PH0-085`); CI/CD-platform-product component → `ADR-0004` (`PH0-088`, GitHub Actions) |
 | `ADR-CAND-ARCH-025` | Secret-manager product | Phase 0 `PH0-085..088`/`094` | `BLOCKED` — due at environment/security |
 | `ADR-CAND-ARCH-026` | Observability/APM tool | Phase 0 `PH0-093` | `BLOCKED` — due at Observability |
@@ -107,3 +107,5 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-0004` | CI/CD platform | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-024` (CI/CD-platform-product component — fully closes this candidate together with `ADR-0002`) |
 | `ADR-0005` | Component library foundation | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-020` |
 | `ADR-0006` | Design-token mechanism | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-021` |
+| `ADR-0007` | Test-runner and framework stack | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-022` |
+| `ADR-0008` | DR-rehearsal cadence and automated-accessibility-checker tool | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-023` |

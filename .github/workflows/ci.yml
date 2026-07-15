@@ -9,11 +9,20 @@
 # Scope note: this is the MINIMUM trusted baseline for the current
 # repository state (100% toolchain/config, no app/ code, no schema, no
 # migrations, no RLS, no UI — Phase 1+ scope). Gates that require any of
-# those (migration check, RLS/security tests, accessibility, E2E, build)
-# are deliberately NOT wired here — there is nothing yet for them to run
-# against. Adding a fabricated passing step for a gate with no real subject
-# would be worse than omitting it. See docs/build-log/phase-00/PH0-88.md §3
-# for the exact "N/A for now, wired when X lands" table.
+# those (migration check, RLS/security tests, accessibility-against-real-UI,
+# build) are deliberately NOT wired here — there is nothing yet for them to
+# run against. Adding a fabricated passing step for a gate with no real
+# subject would be worse than omitting it. See docs/build-log/phase-00/PH0-88.md
+# §3 for the exact "N/A for now, wired when X lands" table.
+#
+# `e2e` job added at CG-S5-PH0-012 (Prompt 91, Testing Foundation —
+# ADR-0007/ADR-0008): runs the real Playwright + @axe-core/playwright smoke
+# suite (e2e/smoke.spec.ts) against synthetic inline content only — proves
+# the browser-automation/accessibility-checker layer is wired, not a test of
+# any real CargoGrid page (none exists yet, docs/standards/TESTING_STANDARDS.md
+# §7's NOT_RUN table). Runs in parallel with `quality`, not serialized after
+# it (docs/standards/TESTING_STANDARDS.md §3 — no shared migrated-schema
+# dependency exists yet to force ordering).
 #
 # No secret is defined or required by any step below — nothing in this
 # repository yet needs one. Triggered by `pull_request` (not
@@ -104,3 +113,37 @@ jobs:
             echo "| Ref | ${{ github.ref }} |"
             echo "| Workflow run | ${{ github.run_id }} (attempt ${{ github.run_attempt }}) |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  e2e:
+    name: E2E/accessibility smoke (Playwright + axe-core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack (pins pnpm to package.json's "packageManager" field)
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile — deterministic install)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium (matches playwright.config.ts's single chromium project)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E/accessibility smoke
+        run: pnpm run test:e2e
+
+      - name: Upload Playwright report (only on failure — no real tenant/app data, synthetic fixtures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

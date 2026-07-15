@@ -73,30 +73,29 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 | Field | Value |
 |---|---|
 | Repository/working dir | `/home/user/cargogrid.app` (origin `assujiar/cargogrid.app`) |
-| Branch | `agent/cargogrid-autonomous-build`, recreated this checkpoint from `origin/main`@`b7653cb` (the branch's prior lineage is fully contained in `main` via PR #11 — confirmed via `git log origin/agent/cargogrid-autonomous-build ^HEAD` returning empty before the reset) |
-| Dirty worktree | This checkpoint's changes only (documentation, `docs/runtime/**` only) |
-| Package manager/runtime/schema/env | pnpm `10.33.0` + Node `>=22.11.0` pinned at `PH0-085` (`package.json`/`pnpm-lock.yaml`, real `pnpm install` verified); no database/schema yet (Phase 1 scope) |
+| Branch | `claude/lanjut-btusq6` — this session's harness-assigned/designated branch (2026-07-15), first Phase 0 checkpoint not run on `agent/cargogrid-autonomous-build`; branched from `origin/main`@`92d698f` (PR #14), which already fully contains the prior `agent/cargogrid-autonomous-build` lineage through `PH0-90` |
+| Dirty worktree | This checkpoint's changes only (`docs/**`, `package.json`/`pnpm-lock.yaml`, `playwright.config.ts`, `e2e/**`, `tests/factories/**`, `.github/workflows/ci.yml`, one line of `scripts/git/check-worktree-collision.test.ts` — see `docs/build-log/phase-00/PH0-91.md` §8) |
+| Package manager/runtime/schema/env | pnpm `10.33.0` + Node `>=22.11.0` pinned at `PH0-085`; `node:test` + Playwright `1.61.1`/`@axe-core/playwright@4.12.1` ratified at `PH0-91` (`ADR-0007`/`ADR-0008`); no database/schema yet (Phase 1 scope) |
 | Canonical context location | `docs/runtime/` (do not recreate root duplicates) |
-| Trust boundary | Repository + package + sources trusted; `docs/architecture/14..16_*.md` content **not trusted** pending reconciliation |
+| Trust boundary | Repository + package + sources trusted; `docs/architecture/14..16_*.md` **reconciled and trusted** (Lineage A, 607-item baseline, `ERR-2026-003` `RECOVERED` — the "not trusted pending reconciliation" line that stood here through `PH0-83`–`PH0-90` is corrected as of this checkpoint) |
 
-## 4. Active task (next) — BLOCKED, do not execute
+## 4. Active task (next)
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-012` — Testing Foundation |
-| Prompt | `05-phase-00-discovery-foundation/91_TESTING_FOUNDATION_PROMPT.md` |
-| Status | `READY` — upstream `PH0-081..090` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
-| Reason | Resolves `ADR-CAND-ARCH-022/023` (test-runner/factory tooling, DR-cadence/accessibility-checker tooling) — including the visual-regression tool `PH0-090` explicitly deferred here. `node:test` has been used provisionally since `PH0-086` (35+ tests); this task makes the formal, repository-wide choice. |
-| Upstream | `CG-S5-PH0-011` (`VERIFIED` — `docs/build-log/phase-00/PH0-90.md`; `ADR-0005`/`ADR-0006` resolve component-library/design-token mechanism) |
+| Task ID/name | `CG-S5-PH0-013` — Documentation Foundation |
+| Prompt | `05-phase-00-discovery-foundation/92_DOCUMENTATION_FOUNDATION_PROMPT.md` |
+| Status | `READY` — upstream `PH0-082..091` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
+| Reason | Next sequential Phase 0 capability prompt per `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` row `013`. Read `92_DOCUMENTATION_FOUNDATION_PROMPT.md` in full before resolving its exact allowed-file scope. |
+| Upstream | `CG-S5-PH0-012` (`VERIFIED` — `docs/build-log/phase-00/PH0-91.md`; `ADR-0007`/`ADR-0008` resolve test-runner/framework stack and DR-cadence/accessibility-checker tooling) |
 
 ## 5. Work completed (all runs to date, summarized)
 
 - **Prompts 36–48** (`docs/architecture/01_*.md`–`13_*.md`): completed cleanly, single lineage, no divergence. Trustworthy.
-- **Prompts 49–51** (`14_*.md`–`16_*.md`): completed **twice**, independently, with materially different content (607 vs. 401 traced items and other divergent claims). Both copies now sit concatenated in the same files on `main`. **Not currently trustworthy as a single artifact.**
-- **Phase 0 Prompt 80** (kickoff/execution index/WBS): completed twice; both lineages' versions exist (different directory conventions: `docs/build-log/phase-00/` vs. `docs/build-logs/`). The `docs/build-logs/CG-S5-PH0-001_*.md` files (plural convention) are present and appear to be the ones actually referenced going forward — confirm against `docs/build-log/phase-00/` (singular) if it still exists before trusting either exclusively.
-- **Phase 0 Prompt 81** (source alignment/context bootstrap): completed twice; `docs/build-logs/CG-S5-PH0-002_source_alignment_context_bootstrap.md` (plural convention) is present.
-- **Phase 0 Prompt 82** (requirement traceability baseline adoption): completed **once**, only on the `claude/sleepy-ride-4vxsk6`/PR #10 lineage, against **its own** copy of `14_*.md` (the 401-item version). `docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md` exists. If the operator chooses reconciliation option 1 (adopt the 607-item lineage) or option 3 (manual merge), this Prompt 82 output should be treated as provisional and likely needs to be redone against whichever `14_*.md` becomes authoritative.
-- **This checkpoint**: discovered and documented `ERR-2026-003`; consolidated `docs/runtime/HANDOFF.md`, `CARGOGRID_BUILD_STATUS.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, `TASK_LEDGER.md` (banner only, historical rows preserved). No product decision was reopened.
+- **Prompts 49–51** (`14_*.md`–`16_*.md`): originally completed twice by two divergent lineages (`ERR-2026-002`/`ERR-2026-003`); **reconciled to a single coherent Lineage A document per file** at a prior checkpoint (operator-authorized, §1 above) — now trustworthy.
+- **Phase 0 Prompts 80–82** (kickoff/WBS, source alignment, requirement-traceability baseline): reconciled onto the singular `docs/build-log/phase-00/` path and re-verified against the Lineage A 607-item baseline at a prior checkpoint — trustworthy.
+- **Phase 0 Prompts 83–90** (`CG-S5-PH0-004..011`): repository audit adoption, ADR baseline, development environment, environment validation, Git strategy, CI/CD baseline, coding standards, design system foundation — all `VERIFIED`, single lineage, no divergence. See `docs/build-log/phase-00/PH0-83.md`–`PH0-90.md`.
+- **Phase 0 Prompt 91** (`CG-S5-PH0-012`, this checkpoint): Testing Foundation — `ADR-0007` (`node:test` + Playwright), `ADR-0008` (quarterly DR cadence + `@axe-core/playwright`), `docs/standards/TESTING_STANDARDS.md`, deterministic-seed factory foundation, real Playwright/axe-core smoke suite, new CI `e2e` job. Full detail: `docs/build-log/phase-00/PH0-91.md`. Also found+fixed one unrelated pre-existing test fragility (`ISS-2026-004`) and recorded one unrelated pre-existing documentation gap (`ISS-2026-005`, `CHANGE_MANIFEST.md` never actually appended for Prompts 83–90 despite their own build logs claiming otherwise — see `KNOWN_ISSUES.md`).
 
 ## 6. Remaining work
 
@@ -138,10 +137,10 @@ Migration state: `NOT_CREATED`. Pre-existing/change-caused test failures: NONE (
 
 1. Confirm repo `/home/user/cargogrid.app`, branch `agent/cargogrid-autonomous-build`, worktree clean apart from this checkpoint.
 2. Read §2's mandatory reading order in full.
-3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative. Prompts 83 (`PH0-83.md`) and 84 (`docs/adr/**`, `PH0-84.md`) are `VERIFIED`.
-4. Resume Phase 0 at `CG-S5-PH0-006` (Prompt 85, `85_DEVELOPMENT_ENVIRONMENT_FOUNDATION_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (86–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the singular path `docs/build-log/phase-00/PH0-NN.md`. **Prompt 85 is the first task that writes non-documentation files** — read `docs/discovery/03_TOOLCHAIN_DEPENDENCY_BASELINE.md`, `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md`/`11_DEVOPS_WORKSTREAM.md`, and `docs/adr/README.md` §5.2 (`ADR-CAND-ARCH-024..027`) in full first, add the root `.gitignore` before any code/secret can land (`ISS-2026-003`), and honor `ADR-0001` (no empty domain-folder stubs).
+3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative. Prompts 83–91 (`CG-S5-PH0-004..012`) are all `VERIFIED` — see `docs/build-log/phase-00/PH0-83.md`–`PH0-91.md`.
+4. Resume Phase 0 at `CG-S5-PH0-013` (Prompt 92, `92_DOCUMENTATION_FOUNDATION_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (93–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the singular path `docs/build-log/phase-00/PH0-NN.md`. *(This numbered list previously pointed to Prompt 85 as the resume point — stale since `PH0-85.md`, seven checkpoints ago, not corrected at each intervening checkpoint the way §3/§4 above were. Corrected 2026-07-15 at `CG-S5-PH0-012` — see `KNOWN_ISSUES.md` for this and two related staleness/gap findings from the same checkpoint.)*
 
-**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (row `006`) for the Phase 0 dependency graph, then execute `CG-S5-PH0-006` (Prompt 85). Prompts 83–84 and the `ERR-2026-003` blocker are resolved.**
+**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (row `013`) for the Phase 0 dependency graph, then execute `CG-S5-PH0-013` (Prompt 92). Prompts 83–91 and the `ERR-2026-003` blocker are resolved.**
 
 ## 10. Handoff validation
 
