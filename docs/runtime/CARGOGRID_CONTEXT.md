@@ -3,8 +3,8 @@
 **Instance of:** `CG-AABPP-GOV-012`
 **Instance version:** `0.2.0`
 **Instance owner:** Runtime build agent (repository owner: asujiar@gmail.com / SAIKI Group)
-**Last updated:** 2026-07-15 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
-**Last verified commit:** `d58744500a55c267ddf7447c6518fc86c1323912` (main, reconciled)
+**Last updated:** 2026-07-15 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap; corrected stale "Last verified commit" per PH0-81 drift check)
+**Last verified commit:** `1802400baaaa464c1110660ebe663bd50d57302e` (`agent/cargogrid-autonomous-build`, Phase 0 kickoff — Prompt 80; corrects a header field that had not been advanced since the Step 2 reconciliation checkpoint despite 17 subsequent checkpoints updating this document's body — see `docs/build-log/phase-00/PH0-81.md` §"CARGOGRID_CONTEXT.md correction")
 **Context status:** `CURRENT`
 **Canonical context location:** `docs/runtime/` (decision CHG-2026-002; duplicate root-level set removed)
 

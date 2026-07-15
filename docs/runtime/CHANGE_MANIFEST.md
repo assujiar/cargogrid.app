@@ -968,6 +968,61 @@ Updated: this manifest, task ledger, build status, context, handoff. No new issu
 
 No external approval required (documentation-only, single-branch task). Residual items: `ADR-CAND-ARCH-011,020..027`, now confirmed due at their named Phase 0 capability (`083/087`, `090`, `091`, `085..088` respectively) — none resolved this checkpoint, none newly raised. Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81).
 
+### CHG-2026-021 — Source Alignment Bootstrap (Phase 0, Prompt 81) + halt on parallel-session collision (`ERR-2026-002`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-002` / `81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md`; halt decision is process-governance, not a numbered prompt |
+| Phase/workstream | Phase 0 — Discovery and Foundation; halted mid-phase |
+| Change type | DOCS (documentation-only) + governance halt |
+| Author/agent | Claude Code (autonomous build agent), branch `agent/cargogrid-autonomous-build` |
+| Source requirements | `81_*.md` (full 36-field prompt); `docs/runtime/CARGOGRID_CONTEXT.md` and sibling ledgers (validated for drift); GitHub `list_pull_requests`/`git log`/`git merge-base` (read-only collision investigation) |
+| Decisions | No product decision changed. **Process decision: halt further Phase 0 execution pending operator reconciliation of `ERR-2026-002`.** |
+| Baseline evidence | `git status`, `git diff --stat` confirm only the two allowed-path files changed for Prompt 81 itself; collision evidence gathered read-only |
+| Final status | Prompt 81: `COMPLETED`. Overall checkpoint: `BLOCKED_WORKTREE` |
+
+#### Outcome
+
+Executed Prompt 81 (`CG-S5-PH0-002`) fully: produced `docs/build-log/phase-00/PH0-81.md`, validated `CARGOGRID_CONTEXT.md` against every source-of-truth register (CPD/RPD, cross-ledger consistency, closure-state fidelity, package-vs-runtime distinction, greenfield/preserved-assets statement, GOV-010..019 alignment) and found/fixed one genuine drift: a stale `**Last verified commit:**` header field frozen at the old Step 2 checkpoint across 17 prior checkpoints despite the document body being correctly refreshed each time — corrected to cite current HEAD.
+
+While verifying Prompt 81's own upstream preconditions, discovered **`ERR-2026-002`**: an independent parallel agent session (branch `claude/sleepy-ride-4vxsk6`, GitHub PR #10, open/unmerged) diverged from the same shared ancestor and independently completed Prompts 46–51, Phase 0 kickoff, and Prompts 81 **and 82**, with materially different content for the same task IDs (607 vs. 401 traced requirement items for "the same" Prompt 49 output). PR #10 was opened 15 seconds after this branch's own PR #9 merged, confirming near-simultaneous parallel execution — the fourth occurrence of the `ISS-2026-002` root cause (no enforced single-writer lock), and by far the largest in scope.
+
+**Per this routine's own stop-condition rule for conflicting repo state, this session halted further Phase 0 execution rather than compounding the divergence** by also completing Prompt 82. Recorded full evidence and three non-autonomous reconciliation options in `ERROR_LEDGER.md` `ERR-2026-002`; escalated `KNOWN_ISSUES.md` `ISS-2026-002` to High/blocking; set `BLOCKED_WORKTREE` in `HANDOFF.md` and `CARGOGRID_BUILD_STATUS.md`.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/build-log/phase-00/PH0-81.md` | ADD | Prompt 81 runtime output | `git revert` |
+| `docs/runtime/CARGOGRID_CONTEXT.md` | EDIT | Fixed stale `Last verified commit` header (Prompt 81's own finding) | `git revert` |
+| `docs/runtime/ERROR_LEDGER.md` | EDIT | New `ERR-2026-002` record, full evidence and reconciliation options | `git revert` |
+| `docs/runtime/KNOWN_ISSUES.md` | EDIT | `ISS-2026-002` escalated to High/blocking, 4th recurrence documented | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`, `HANDOFF.md` | EDIT | Checkpoint update: `CG-S5-PH0-002` `VERIFIED` (⚠ pending reconciliation), `CG-S5-PH0-003` `BLOCKED` with explicit DO-NOT-START note, overall status `BLOCKED_WORKTREE` | `git revert` |
+
+No implementation task, code, or migration exists or was touched. No action was taken on PR #10 or branch `claude/sleepy-ride-4vxsk6` (read-only investigation only) — per the constraint that closing/merging/resetting either branch requires operator authorization, not an autonomous decision.
+
+#### Database / contracts / UI / security
+
+No database, migration, code, or task-execution artifact exists or changed. No secret/credential/token exposed in the collision investigation (only commit metadata, file paths, and PR metadata were inspected).
+
+#### Tests and quality evidence
+
+No application gates exist (no toolchain yet). Unchanged from prior baseline.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: N/A (no consumers; but branch state is now a genuine unreconciled fork — see `ERR-2026-002`).
+- Rollback: `git revert` this checkpoint's commit(s) is safe (documentation-only); does NOT resolve `ERR-2026-002`, which requires an operator decision on the branch/PR level, not a commit revert.
+- Recovery verification: N/A until `ERR-2026-002` is resolved.
+
+#### Documentation and traceability
+
+Updated: this manifest, task ledger, build status, context, error ledger, known issues, handoff. This is the first checkpoint this run that required an error-ledger entry.
+
+#### Approval and closure
+
+**External approval IS required this checkpoint** — an operator must select one of `ERR-2026-002`'s three reconciliation options before any further Phase 0 work proceeds on any branch. This checkpoint's own scope (Prompt 81 + halt decision) is otherwise complete and reviewable. Next eligible task: **none — blocked**, see `HANDOFF.md` §1/§9.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

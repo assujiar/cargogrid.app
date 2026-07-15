@@ -2,7 +2,7 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-15 (post Phase 0 Prompt 80 — Phase 0 WBS and Runtime Kickoff)
+**Updated:** 2026-07-15 (post Phase 0 Prompt 81 — Source Alignment and Context Bootstrap; **BLOCKED_WORKTREE on parallel-session collision, see `ERR-2026-002`**)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** `agent/cargogrid-autonomous-build` cut from `origin/main`@`39d923e`
 **Build trust:** `TRUSTED`
@@ -13,20 +13,20 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`); Phase 0 **kicked off** (1/23 tasks VERIFIED) |
-| Current phase/workstream | Phase 0 — Discovery and Foundation (`PHASE_0_IN_PROGRESS`) |
-| Active task | `CG-S5-PH0-001` — Phase 0 WBS and Runtime Kickoff (Prompt 80) |
-| Active task status | `VERIFIED` — `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`, `00_PHASE0_WBS.md` complete |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **CLOSED** (`RUNTIME_ARCHITECTURE_VERIFIED`); Phase 0 **kicked off, then HALTED** (2/23 tasks VERIFIED on this branch) |
+| Current phase/workstream | Phase 0 — Discovery and Foundation (`PHASE_0_IN_PROGRESS` on this branch; **runtime execution halted**, see blocker) |
+| Active task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81) |
+| Active task status | `VERIFIED` on this branch — `docs/build-log/phase-00/PH0-81.md` complete — **but see blocker below before starting `CG-S5-PH0-003`** |
 | Branch | `agent/cargogrid-autonomous-build` (cut from `origin/main`@`39d923e`; tracked by GitHub PR #7) |
 | HEAD | this checkpoint's commit on `agent/cargogrid-autonomous-build` |
 | Last known good commit | `origin/main`@`39d923e` |
-| Schema/migration head | NONE (no database — kickoff is index/planning-only; zero application/config/migration file touched) |
+| Schema/migration head | NONE (no database — Phase 0 so far is index/planning-only; zero application/config/migration file touched) |
 | Latest environment verified | local sandbox (read-only) |
 | Last full green gate | none (no gates exist — confirmed `UNKNOWN` baseline, not a failure) |
-| Active blockers | none |
-| Next eligible task | `CG-S5-PH0-002` — Source Alignment and Context Bootstrap (Prompt 81) |
+| **Active blockers** | **`BLOCKED_WORKTREE` — `ERR-2026-002` / `ISS-2026-002` (4th recurrence, unresolved): an independent parallel session (branch `claude/sleepy-ride-4vxsk6`, GitHub PR #10, open/unmerged) redid Prompts 46–51, Phase 0 kickoff, and Prompts 81–82 with materially different content. Runtime execution halted on this branch pending an explicit operator reconciliation decision — do NOT start `CG-S5-PH0-003` (Prompt 82) or any further Phase 0 prompt on any branch until resolved.** |
+| Next eligible task | **NONE until `ERR-2026-002` is resolved by the operator** — see `docs/runtime/HANDOFF.md` §1/§4 for the three reconciliation options |
 
-Checkpoint summary: Step 2 discovery and Step 3 architecture are both closed (`RUNTIME_DISCOVERY_VERIFIED`, `RUNTIME_ARCHITECTURE_VERIFIED`). Phase 0 (Discovery and Foundation, Step 5 of the prompt package) is now kicked off: `00_PHASE0_EXECUTION_INDEX.md`/`00_PHASE0_WBS.md` verified the five-condition Phase 0 entry gate (all pass — package manager/baseline commands correctly deferred to Prompts 85–88 as their own deliverable, not a precondition), reconciled the Phase 0 capability range against the master WBS (no second numbering scheme), and produced a full 23-task execution index plus the mandatory 10-level hierarchy/9-workstream WBS. Result: 1 task `READY` (`PH0-081`, Source Alignment and Context Bootstrap), 20 `BLOCKED` on their own strictly-sequential upstream (expected, not a defect) — every open ADR candidate (`011`, `020..027`) confirmed scoped to resolve inside its own owning capability, not as an external precondition. Zero collision, cycle, or orphan found. Outputs land in a new `docs/build-log/phase-00/` directory (singular, per the package's own literal path convention), distinct from the pre-existing plural `docs/build-logs/`. No new ADR candidate raised beyond those already tracked; no product decision was reopened. Repository is still 100% documentation — first non-`docs/` file (e.g. `.gitignore`) is expected around `PH0-087` Git strategy foundation.
+Checkpoint summary: Step 2 discovery and Step 3 architecture are both closed (`RUNTIME_DISCOVERY_VERIFIED`, `RUNTIME_ARCHITECTURE_VERIFIED`). Phase 0 (Discovery and Foundation) was kicked off (Prompt 80) and its first capability prompt executed (Prompt 81, Source Alignment and Context Bootstrap — found and fixed one genuine drift: a stale "Last verified commit" header in `CARGOGRID_CONTEXT.md` that had not advanced across 17 prior checkpoints). **While verifying Prompt 81's own preconditions, this checkpoint discovered a fourth occurrence of `ISS-2026-002`** (parallel-session collision, no enforced single-writer lock): an independent session on branch `claude/sleepy-ride-4vxsk6` diverged from the same shared ancestor and independently completed Prompts 46–51, Phase 0 kickoff, and Prompts 81 **and 82**, opening GitHub PR #10 (still open, unmerged) 15 seconds after this branch's own PR #9 merged — confirming near-simultaneous parallel execution. The two lineages' outputs for the same task IDs materially differ (e.g. 607 vs. 401 traced requirement items for "the same" Prompt 49 output). Per this routine's own stop-condition rule ("conflicting repo state"), **this session halted further prompt execution rather than compounding the divergence** by also completing Prompt 82. Full evidence and three reconciliation options (adopt this branch / adopt PR #10 / manually reconcile) are recorded in `ERROR_LEDGER.md` `ERR-2026-002` and `HANDOFF.md`. This is not resolved by this session — it requires an explicit operator decision. No product decision was reopened; the collision is a process/governance issue, not a content dispute.
 
 ## 2. Discovery and foundation readiness
 
@@ -110,10 +110,10 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 
 ## 9. Next action
 
-- Next eligible task: `CG-S5-PH0-002` — Source Alignment and Context Bootstrap.
-- Entry conditions: `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` marks `PH0-081` `READY` (met — row `002`); `CG-S5-PH0-001` recorded `VERIFIED` in this ledger (met, this checkpoint).
-- Required prompt/output: `05-phase-00-discovery-foundation/81_SOURCE_ALIGNMENT_CONTEXT_BOOTSTRAP_PROMPT.md` → `docs/build-log/phase-00/PH0-81.md` + updated `docs/runtime/CARGOGRID_CONTEXT.md` and sibling ledgers per that prompt's own §11 allowed-paths and §33 acceptance criteria.
-- If blocked, resume: re-read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (per-task status) and `00_PHASE0_WBS.md` (hierarchy/concurrency) before starting the next Phase 0 capability prompt.
+- **Next eligible task: NONE — blocked.** `CG-S5-PH0-003` (Prompt 82) would normally be next, but MUST NOT start until `ERR-2026-002` is resolved.
+- Entry conditions for resuming: an operator has read `ERROR_LEDGER.md` `ERR-2026-002` and `HANDOFF.md` §1/§4, selected one of the three reconciliation options (adopt this branch / adopt PR #10 / manually reconcile), and recorded that decision in both documents.
+- Required action before any further Phase 0 prompt: reconcile `agent/cargogrid-autonomous-build` and `claude/sleepy-ride-4vxsk6`/PR #10 per the selected option; only then does a single unambiguous "next eligible task" exist again.
+- If resuming without operator input by mistake: stop immediately, re-read this section and `HANDOFF.md` §1 in full first.
 - Authorized command: read-only inspection + `docs/architecture/**` writes only (Step 3 README §7).
 
 ## 10. Update rules
