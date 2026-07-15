@@ -74,20 +74,20 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 |---|---|
 | Repository/working dir | `/home/user/cargogrid.app` (origin `assujiar/cargogrid.app`) |
 | Branch | `claude/lanjut-btusq6` — this session's harness-assigned/designated branch (2026-07-15), first Phase 0 checkpoint not run on `agent/cargogrid-autonomous-build`; branched from `origin/main`@`92d698f` (PR #14), which already fully contains the prior `agent/cargogrid-autonomous-build` lineage through `PH0-90` |
-| Dirty worktree | This checkpoint's changes only (`docs/**`, `package.json`/`pnpm-lock.yaml`, `playwright.config.ts`, `e2e/**`, `tests/factories/**`, `.github/workflows/ci.yml`, one line of `scripts/git/check-worktree-collision.test.ts` — see `docs/build-log/phase-00/PH0-91.md` §8) |
-| Package manager/runtime/schema/env | pnpm `10.33.0` + Node `>=22.11.0` pinned at `PH0-085`; `node:test` + Playwright `1.61.1`/`@axe-core/playwright@4.12.1` ratified at `PH0-91` (`ADR-0007`/`ADR-0008`); no database/schema yet (Phase 1 scope) |
+| Dirty worktree | This checkpoint's changes only (`docs/standards/DOCUMENTATION_STANDARDS.md`, `docs/templates/**`, `scripts/docs/**`, `docs/standards/CODING_STANDARDS.md` typo fix, `docs/runtime/KNOWN_ISSUES.md`, `package.json`, `.github/workflows/ci.yml` — see `docs/build-log/phase-00/PH0-92.md`) |
+| Package manager/runtime/schema/env | pnpm `10.33.0` + Node `>=22.11.0` pinned at `PH0-085`; `node:test` + Playwright `1.61.1`/`@axe-core/playwright@4.12.1` ratified at `PH0-91` (`ADR-0007`/`ADR-0008`); documentation validator (`pnpm run docs:check`) added at `PH0-92`; no database/schema yet (Phase 1 scope) |
 | Canonical context location | `docs/runtime/` (do not recreate root duplicates) |
-| Trust boundary | Repository + package + sources trusted; `docs/architecture/14..16_*.md` **reconciled and trusted** (Lineage A, 607-item baseline, `ERR-2026-003` `RECOVERED` — the "not trusted pending reconciliation" line that stood here through `PH0-83`–`PH0-90` is corrected as of this checkpoint) |
+| Trust boundary | Repository + package + sources trusted; `docs/architecture/14..16_*.md` **reconciled and trusted** (Lineage A, 607-item baseline, `ERR-2026-003` `RECOVERED`) |
 
 ## 4. Active task (next)
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-013` — Documentation Foundation |
-| Prompt | `05-phase-00-discovery-foundation/92_DOCUMENTATION_FOUNDATION_PROMPT.md` |
-| Status | `READY` — upstream `PH0-082..091` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
-| Reason | Next sequential Phase 0 capability prompt per `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` row `013`. Read `92_DOCUMENTATION_FOUNDATION_PROMPT.md` in full before resolving its exact allowed-file scope. |
-| Upstream | `CG-S5-PH0-012` (`VERIFIED` — `docs/build-log/phase-00/PH0-91.md`; `ADR-0007`/`ADR-0008` resolve test-runner/framework stack and DR-cadence/accessibility-checker tooling) |
+| Task ID/name | `CG-S5-PH0-014` — Observability Baseline |
+| Prompt | `05-phase-00-discovery-foundation/93_OBSERVABILITY_BASELINE_PROMPT.md` |
+| Status | `READY` — upstream `PH0-082..092` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
+| Reason | Resolves `ADR-CAND-ARCH-026` (observability/APM tool). Next sequential Phase 0 capability prompt per `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` row `014`. Read `93_OBSERVABILITY_BASELINE_PROMPT.md` in full before resolving its exact allowed-file scope. |
+| Upstream | `CG-S5-PH0-013` (`VERIFIED` — `docs/build-log/phase-00/PH0-92.md`; `docs/standards/DOCUMENTATION_STANDARDS.md` + `scripts/docs/check-doc-links.ts` establish the documentation foundation) |
 
 ## 5. Work completed (all runs to date, summarized)
 
@@ -95,7 +95,8 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 - **Prompts 49–51** (`14_*.md`–`16_*.md`): originally completed twice by two divergent lineages (`ERR-2026-002`/`ERR-2026-003`); **reconciled to a single coherent Lineage A document per file** at a prior checkpoint (operator-authorized, §1 above) — now trustworthy.
 - **Phase 0 Prompts 80–82** (kickoff/WBS, source alignment, requirement-traceability baseline): reconciled onto the singular `docs/build-log/phase-00/` path and re-verified against the Lineage A 607-item baseline at a prior checkpoint — trustworthy.
 - **Phase 0 Prompts 83–90** (`CG-S5-PH0-004..011`): repository audit adoption, ADR baseline, development environment, environment validation, Git strategy, CI/CD baseline, coding standards, design system foundation — all `VERIFIED`, single lineage, no divergence. See `docs/build-log/phase-00/PH0-83.md`–`PH0-90.md`.
-- **Phase 0 Prompt 91** (`CG-S5-PH0-012`, this checkpoint): Testing Foundation — `ADR-0007` (`node:test` + Playwright), `ADR-0008` (quarterly DR cadence + `@axe-core/playwright`), `docs/standards/TESTING_STANDARDS.md`, deterministic-seed factory foundation, real Playwright/axe-core smoke suite, new CI `e2e` job. Full detail: `docs/build-log/phase-00/PH0-91.md`. Also found+fixed one unrelated pre-existing test fragility (`ISS-2026-004`) and recorded one unrelated pre-existing documentation gap (`ISS-2026-005`, `CHANGE_MANIFEST.md` never actually appended for Prompts 83–90 despite their own build logs claiming otherwise — see `KNOWN_ISSUES.md`).
+- **Phase 0 Prompt 91** (`CG-S5-PH0-012`): Testing Foundation — `ADR-0007` (`node:test` + Playwright), `ADR-0008` (quarterly DR cadence + `@axe-core/playwright`), `docs/standards/TESTING_STANDARDS.md`, deterministic-seed factory foundation, real Playwright/axe-core smoke suite, new CI `e2e` job. Full detail: `docs/build-log/phase-00/PH0-91.md`. Also found+fixed one unrelated pre-existing test fragility (`ISS-2026-004`) and recorded one unrelated pre-existing documentation gap (`ISS-2026-005`).
+- **Phase 0 Prompt 92** (`CG-S5-PH0-013`, this checkpoint): Documentation Foundation — `docs/standards/DOCUMENTATION_STANDARDS.md` (taxonomy/ownership/lifecycle), 5 new templates for the only doc types with zero real instance, `scripts/docs/check-doc-links.ts` validator proved against real content (found+fixed 2 real typos, disclosed `ISS-2026-006` — 4 broken historical citations from the `ERR-2026-003` consolidation, excused via a named allowlist rather than rewriting append-only evidence). Full detail: `docs/build-log/phase-00/PH0-92.md`.
 
 ## 6. Remaining work
 
@@ -137,10 +138,10 @@ Migration state: `NOT_CREATED`. Pre-existing/change-caused test failures: NONE (
 
 1. Confirm repo `/home/user/cargogrid.app`, branch `agent/cargogrid-autonomous-build`, worktree clean apart from this checkpoint.
 2. Read §2's mandatory reading order in full.
-3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative. Prompts 83–91 (`CG-S5-PH0-004..012`) are all `VERIFIED` — see `docs/build-log/phase-00/PH0-83.md`–`PH0-91.md`.
-4. Resume Phase 0 at `CG-S5-PH0-013` (Prompt 92, `92_DOCUMENTATION_FOUNDATION_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (93–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the singular path `docs/build-log/phase-00/PH0-NN.md`. *(This numbered list previously pointed to Prompt 85 as the resume point — stale since `PH0-85.md`, seven checkpoints ago, not corrected at each intervening checkpoint the way §3/§4 above were. Corrected 2026-07-15 at `CG-S5-PH0-012` — see `KNOWN_ISSUES.md` for this and two related staleness/gap findings from the same checkpoint.)*
+3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative. Prompts 83–92 (`CG-S5-PH0-004..013`) are all `VERIFIED` — see `docs/build-log/phase-00/PH0-83.md`–`PH0-92.md`.
+4. Resume Phase 0 at `CG-S5-PH0-014` (Prompt 93, `93_OBSERVABILITY_BASELINE_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (94–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the singular path `docs/build-log/phase-00/PH0-NN.md`.
 
-**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (row `013`) for the Phase 0 dependency graph, then execute `CG-S5-PH0-013` (Prompt 92). Prompts 83–91 and the `ERR-2026-003` blocker are resolved.**
+**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (row `014`) for the Phase 0 dependency graph, then execute `CG-S5-PH0-014` (Prompt 93). Prompts 83–92 and the `ERR-2026-003` blocker are resolved.**
 
 ## 10. Handoff validation
 

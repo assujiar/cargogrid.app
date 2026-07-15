@@ -87,6 +87,9 @@ jobs:
       - name: Suppression governance check
         run: pnpm run standards:check
 
+      - name: Documentation checks (link resolution, canonical files, ADR index, HANDOFF coherence)
+        run: pnpm run docs:check
+
       - name: Branch name check (PR only)
         if: github.event_name == 'pull_request'
         run: node --experimental-strip-types scripts/git/check-branch-name.ts "${{ github.head_ref }}"

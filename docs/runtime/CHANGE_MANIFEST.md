@@ -1356,6 +1356,61 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent ADR authority (`docs/adr/README.md` §3). `CG-S5-PH0-012` is `VERIFIED`. Next eligible task: `CG-S5-PH0-013` (Prompt 92, Documentation Foundation).
 
+### CHG-2026-025 — Documentation Foundation (Phase 0, Prompt 92)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-013`, `05-phase-00-discovery-foundation/92_DOCUMENTATION_FOUNDATION_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / Documentation and Knowledge, Repository Knowledge System |
+| Change type | DOCS + tooling (`docs/standards/DOCUMENTATION_STANDARDS.md`, `docs/templates/**`, `scripts/docs/**`, `package.json`, `.github/workflows/ci.yml`); two one-line typo fixes found by the new validator |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `92_DOCUMENTATION_FOUNDATION_PROMPT.md` §20–26 |
+| Decisions | None requiring an ADR (confirmed via grep — no `ADR-CAND-ARCH-0NN` names this task) |
+| Baseline evidence | `docs/build-log/phase-00/PH0-91.md` (upstream `VERIFIED`); pre-flight collision check clean |
+| Final status | `COMPLETED` — `CG-S5-PH0-013` `VERIFIED` in `TASK_LEDGER.md` this checkpoint |
+
+#### Outcome
+
+Inventoried every existing doc location (`docs/standards/DOCUMENTATION_STANDARDS.md` §1) and found 13 of the 18 doc types Prompt 92 names already have a real, working format — created new structure-only templates only for the 5 with zero real instance (user/admin/API-reference/support-runbook/release-notes, none of which have ever had a real subject in this repository). Documented the taxonomy, audience classes, lifecycle states, one-authoritative-location-per-fact rule (with concrete already-in-force examples), and update-trigger/ownership table. Built `scripts/docs/check-doc-links.ts` — a real validator (internal-reference resolution, canonical-runtime-file presence, ADR-index consistency, HANDOFF/TASK_LEDGER coherence) that proved itself by catching two real typos before this checkpoint's own commit (one in `CODING_STANDARDS.md`, one in this checkpoint's own new `DOCUMENTATION_STANDARDS.md`) and surfacing 4 broken historical citations from the `ERR-2026-003` consolidation, recorded as `ISS-2026-006` (`ACCEPTED_RISK`, excused via a named allowlist rather than rewriting append-only historical evidence) rather than silently patched or hidden.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/standards/DOCUMENTATION_STANDARDS.md` | ADD | Taxonomy/ownership/lifecycle/validator scope | `git revert` |
+| `docs/templates/USER_GUIDE_TEMPLATE.md`, `ADMIN_GUIDE_TEMPLATE.md`, `API_REFERENCE_TEMPLATE.md`, `SUPPORT_RUNBOOK_TEMPLATE.md`, `RELEASE_NOTES_TEMPLATE.md` | ADD | Structure-only templates for doc types with zero real instance | `git revert` |
+| `scripts/docs/check-doc-links.ts`, `scripts/docs/check-doc-links.test.ts` | ADD | Documentation validator + 22 tests | `git revert` |
+| `docs/standards/CODING_STANDARDS.md` | EDIT | One-line stale-path typo fix | `git revert` |
+| `docs/runtime/KNOWN_ISSUES.md` | EDIT | `ISS-2026-006` recorded | `git revert` |
+| `package.json` | EDIT | `docs:check` script | `git revert` |
+| `.github/workflows/ci.yml` | EDIT | New "Documentation checks" CI step | `git revert` |
+| `docs/build-log/phase-00/PH0-92.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched — confirmed by this checkpoint's own `git status`. No historical build-log/`CHANGE_MANIFEST.md`/`ERROR_LEDGER.md` prose rewritten (§ Outcome — `ISS-2026-006` handling).
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 80/80 PASS (58 carried + 22 new); `pnpm run docs:check` (new) PASS — 0 issues after fixing 2 real typos this checkpoint found; `pnpm run test:e2e` 3/3 PASS (unchanged); `pnpm run standards:check` PASS; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`95df258`.
+- Recovery verification: full gate suite re-run green after every fix during authoring.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `KNOWN_ISSUES.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-013` is `VERIFIED`. Next eligible task: `CG-S5-PH0-014` (Prompt 93, Observability Baseline).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

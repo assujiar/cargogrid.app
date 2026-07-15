@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-013` — Documentation Foundation (Prompt 92) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-012` (Prompt 91) `VERIFIED` this checkpoint. `ADR-0007`/`ADR-0008` resolve test-runner/framework stack and DR-cadence/accessibility-checker tooling (`node:test` + Playwright + `@axe-core/playwright`); `docs/standards/TESTING_STANDARDS.md` established; `node:test` 58/58, Playwright/axe-core 3/3. Zero domain schema/UI code created (Phase 1 scope). |
+| Active task | `CG-S5-PH0-014` — Observability Baseline (Prompt 93) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-013` (Prompt 92) `VERIFIED` this checkpoint. `docs/standards/DOCUMENTATION_STANDARDS.md` (taxonomy/ownership/lifecycle) established; 5 new templates for doc types with zero real instance; `scripts/docs/check-doc-links.ts` validator proved itself against real content (2 typos found+fixed, `ISS-2026-006` disclosed); `node:test` 80/80. Zero domain schema/UI/audience-facing content created (Phase 1+ scope). |
 | Branch | `claude/lanjut-btusq6` (this session's harness-assigned/designated branch — first Phase 0 checkpoint run on a branch name other than `agent/cargogrid-autonomous-build`; surfaced and fixed `ISS-2026-004`, a hardcoded-branch-name test fragility) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |
