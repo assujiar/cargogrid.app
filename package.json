@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test scripts/**/*.test.ts",
-    "preflight": "node --experimental-strip-types scripts/preflight-env-check.ts"
+    "preflight": "node --experimental-strip-types scripts/preflight-env-check.ts",
+    "git:check": "node --experimental-strip-types scripts/git/check-worktree-collision.ts && node --experimental-strip-types scripts/git/check-branch-name.ts",
+    "git:check-paths": "node --experimental-strip-types scripts/git/check-protected-paths.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.3",

@@ -83,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-008` — Git Strategy Foundation |
-| Prompt | `05-phase-00-discovery-foundation/87_GIT_STRATEGY_FOUNDATION_PROMPT.md` |
-| Status | `READY` — upstream `PH0-081..086` all `VERIFIED`; `ERR-2026-003` `RECOVERED` |
-| Reason | Establishes branching/merge/release strategy. Recommended site to finally close `ISS-2026-002` (single-writer discipline, 5 occurrences, still `OPEN` at the process level) with an enforced pre-flight lock — see `docs/runtime/KNOWN_ISSUES.md`. |
-| Upstream | `CG-S5-PH0-007` (`VERIFIED` — `docs/build-log/phase-00/PH0-86.md`; typed env validation, `ADR-0003` accepted) |
+| Task ID/name | `CG-S5-PH0-009` — CI/CD Baseline |
+| Prompt | `05-phase-00-discovery-foundation/88_CICD_BASELINE_PROMPT.md` |
+| Status | `READY` — upstream `PH0-081..087` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
+| Reason | Resolves the CI/CD-platform-product half of `ADR-CAND-ARCH-024` (package-manager half already `ACCEPTED` at `ADR-0002`). Can wire `pnpm run typecheck/test/lint/git:check/git:check-paths/preflight` (all real, passing) into an actual pipeline. |
+| Upstream | `CG-S5-PH0-008` (`VERIFIED` — `docs/build-log/phase-00/PH0-87.md`; Git strategy, `scripts/git/` validation, `ISS-2026-002` closed) |
 
 ## 5. Work completed (all runs to date, summarized)
 
