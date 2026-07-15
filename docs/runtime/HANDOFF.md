@@ -83,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-011` — Design System Foundation |
-| Prompt | `05-phase-00-discovery-foundation/90_DESIGN_SYSTEM_FOUNDATION_PROMPT.md` |
-| Status | `READY` — upstream `PH0-081..089` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
-| Reason | Resolves `ADR-CAND-ARCH-020/021` (component-library foundation, design-token mechanism) — `docs/standards/CODING_STANDARDS.md` §9 explicitly defers UX/component conventions to this task. |
-| Upstream | `CG-S5-PH0-010` (`VERIFIED` — `docs/build-log/phase-00/PH0-89.md`; coding standards + 2 real ESLint boundary zones + suppression governance) |
+| Task ID/name | `CG-S5-PH0-012` — Testing Foundation |
+| Prompt | `05-phase-00-discovery-foundation/91_TESTING_FOUNDATION_PROMPT.md` |
+| Status | `READY` — upstream `PH0-081..090` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
+| Reason | Resolves `ADR-CAND-ARCH-022/023` (test-runner/factory tooling, DR-cadence/accessibility-checker tooling) — including the visual-regression tool `PH0-090` explicitly deferred here. `node:test` has been used provisionally since `PH0-086` (35+ tests); this task makes the formal, repository-wide choice. |
+| Upstream | `CG-S5-PH0-011` (`VERIFIED` — `docs/build-log/phase-00/PH0-90.md`; `ADR-0005`/`ADR-0006` resolve component-library/design-token mechanism) |
 
 ## 5. Work completed (all runs to date, summarized)
 

@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-011` — Design System Foundation (Prompt 90) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-010` (Prompt 89) `VERIFIED` this checkpoint. `docs/standards/CODING_STANDARDS.md` established; 2 real ESLint boundary zones + 2 banned-pattern rules (all proven against fixtures, wired into CI); `scripts/standards/check-suppressions.ts` (governance for exception metadata). `pnpm run typecheck/test/lint/standards:check/git:check` all pass. |
+| Active task | `CG-S5-PH0-012` — Testing Foundation (Prompt 91) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-011` (Prompt 90) `VERIFIED` this checkpoint. `ADR-0005`/`ADR-0006` resolve component-library/design-token mechanism (Radix UI copy-in + CSS custom properties/Tailwind v4); `docs/standards/DESIGN_SYSTEM.md` established. CargoGrid's own base brand color/logo/typography is an explicitly disclosed open item (Product/Design owner), not blocking. Zero `components/ui/` code created (Phase 1 scope). |
 | Branch | `agent/cargogrid-autonomous-build` (this run recreated it from `origin/main`@`b7653cb`, since the branch's own prior lineage is now fully contained in `main` via PR #11 — see `HANDOFF.md` for why) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |
