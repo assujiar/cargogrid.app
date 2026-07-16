@@ -2043,6 +2043,35 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per this repository's established runtime-build-agent authority. `CG-S6-PLT-002` is `VERIFIED`. Next eligible task: `CG-S6-PLT-003` (Prompt 106, Subscription/Module/Feature Entitlement).
 
+### CHG-2026-038 — Subscription/Module/Feature Entitlement (Phase 1, Prompt 106)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-003` / `106_SUBSCRIPTION_MODULE_FEATURE_ENTITLEMENT_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-106.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716094432_create_entitlements.sql`: versioned package/module/feature entitlement model — `app.entitlement_modules`/`app.entitlement_features` (catalogue seeded from real `01_MODULE_DEPENDENCY_MAP.md` §3.2 data, 9 modules/41 features, not fabricated), `app.entitlement_packages` (versioned, `granted_modules`/`feature_limits`), `app.tenant_entitlements` (trigger-enforced `trial→active→suspended→active→expired|cancelled` lifecycle), `app.tenant_entitlement_overrides` (reasoned, mandatorily-expiring), `app.entitlement_assignment_history`, and the fail-closed `app.evaluate_entitlement()` evaluator (stage 1 of `06_RLS_RBAC_WORKSTREAM.md` §3's 8-stage access flow). `server/queries/entitlement.ts` (evaluator wrapper + `EntitlementCache` with explicit `invalidate()`, proven distinct from Phase 0's `FlagCache`/`FLAG` concept) and `server/mutations/entitlement.ts` (assign/transition, invalidates cache on write — proven end-to-end, not just each module in isolation).
+
+#### Scope and files
+
+`supabase/migrations/20260716094432_create_entitlements.sql`; `scripts/db-tests/entitlement-evaluation.sql`; `server/contracts/entitlement/entitlement.ts`(+test); `server/queries/entitlement.ts`(+test); `server/mutations/entitlement.ts`(+test); `docs/build-log/phase-01/PLT-106.md`; standard runtime-ledger set. No `docs/architecture/**`, domain module, billing/finance implementation, or hard-coded tenant exception touched (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 261/261 PASS (248 carried + 13 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — both `PLT-105` and `PLT-106` test files run against a fresh database in migration order, 19 total scenario groups.
+
+#### Compatibility, rollout, recovery
+
+Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`5310baa`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-003` is `VERIFIED`. Next: `CG-S6-PLT-004` (Prompt 107, Supabase Auth Integration).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
