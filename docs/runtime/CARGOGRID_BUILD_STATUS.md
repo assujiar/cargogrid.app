@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-019` — Feature Flag Foundation (Prompt 98) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-018` (Prompt 97) `VERIFIED` this checkpoint. `docs/standards/PRODUCT_ANALYTICS_STANDARDS.md` established (event taxonomy, consent/prohibited-field rejection, real HMAC pseudonymization); `scripts/product-analytics/analytics.ts` (safe-disablement + safe-degrade proven under real failure injection). `node:test` 195/195. No analytics provider integrated — none approved, explicitly deferred. |
+| Active task | `CG-S5-PH0-020` — Phase 0 Integrated Verification (Prompt 99) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-019` (Prompt 98) `VERIFIED` this checkpoint. `docs/standards/FEATURE_FLAG_STANDARDS.md` established (8-dimension taxonomy, deterministic precedence, `DUP-012` enforced structurally); `scripts/feature-flags/flags.ts` (kill-switch/rollout/cohort/tenant-override all tested). `node:test` 226/226. **All 18 Phase 0 capability tasks (`081`-`098`) are now `VERIFIED`** — Prompt 99 is the first of Phase 0's four closing/verification prompts (`99`-`102`), not another isolated foundation slice. |
 | Branch | `claude/lanjut-btusq6` (this session's harness-assigned/designated branch — first Phase 0 checkpoint run on a branch name other than `agent/cargogrid-autonomous-build`; surfaced and fixed `ISS-2026-004`, a hardcoded-branch-name test fragility) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |

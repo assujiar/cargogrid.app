@@ -1679,6 +1679,56 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-018` is `VERIFIED`. Next eligible task: `CG-S5-PH0-019` (Prompt 98, Feature Flag Foundation).
 
+### CHG-2026-031 — Feature Flag Foundation (Phase 0, Prompt 98)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-019`, `05-phase-00-discovery-foundation/98_FEATURE_FLAG_FOUNDATION_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / Platform Configuration, Safe Change Exposure |
+| Change type | DOCS + zero-dependency tooling (`docs/standards/FEATURE_FLAG_STANDARDS.md`, `scripts/feature-flags/**`) |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `98_FEATURE_FLAG_FOUNDATION_PROMPT.md` §20–26; `docs/architecture/11_DEVOPS_WORKSTREAM.md` §9.2; `docs/architecture/12_RELEASE_TRAIN.md` §6; `01_MODULE_DEPENDENCY_MAP.md` `DUP-012` |
+| Decisions | None requiring an ADR (confirmed via grep — the 8 dimensions and `DUP-012` are already fully specified, no open product decision) |
+| Baseline evidence | `docs/build-log/phase-00/PH0-97.md` (upstream `VERIFIED`); pre-flight collision check clean |
+| Final status | `COMPLETED` — `CG-S5-PH0-019` `VERIFIED` in `TASK_LEDGER.md` this checkpoint — **all 18 Phase 0 capability tasks (`081`–`098`) are now `VERIFIED`** |
+
+#### Outcome
+
+Built a deterministic, server-authoritative feature-flag evaluation engine covering all 8 Tech Arch §27.4 targeting dimensions (tenant, module/feature, environment, role/user cohort, rollout percentage, effective date, rollback). Fixed and disclosed a genuine construction — an explicit precedence order (`docs/standards/FEATURE_FLAG_STANDARDS.md` §2) — since neither `11_*.md` §9.2 nor `12_*.md` §6 names one. `DUP-012` ("flags never bypass security") is enforced structurally: the module has no import path to anything RLS/RBAC/session-related and returns only `boolean`/`unknown`/`degraded`, never a permission grant. Rollout bucketing uses a real deterministic SHA-256 hash, not `Math.random()`, so the same tenant always lands in the same bucket for the same flag. No persistence, admin UI, or CI-wired repository checker was added — no database exists yet, no UI is authorized, and no real flag exists yet to validate against, all explicitly disclosed rather than fabricated. Found and fixed one real authoring-time defect: a TypeScript constructor parameter-property is incompatible with this repository's `--experimental-strip-types` toolchain (type-erasure only, no transform) — the first time this specific syntax was used in the repository, caught by `pnpm run test` failing with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, fixed by an explicit field assignment.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/standards/FEATURE_FLAG_STANDARDS.md` | ADD | Taxonomy, precedence, bucketing, unknown/stale/unavailable semantics, security invariant | `git revert` |
+| `scripts/feature-flags/flags.ts`, `flags.test.ts` | ADD | Evaluation engine + 31 tests | `git revert` |
+| `docs/build-log/phase-00/PH0-98.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. No domain feature flag/behavior added (Prompt 98 §12's explicit forbidden-scope item).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS (after fixing the parameter-property incompatibility); `pnpm run lint` PASS; `pnpm run test` (`node:test`) 226/226 PASS (195 carried + 31 new); `pnpm run docs:check` PASS; `pnpm run security:check` PASS; `pnpm run data-classification:check` PASS; `pnpm run threat-model:check` PASS (unchanged); `pnpm run test:e2e` 3/3 PASS (unchanged); `pnpm run standards:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`0e09240`.
+- Recovery verification: full gate suite re-run green after every fix during authoring, including the parameter-property fix.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-019` is `VERIFIED`. **All 18 Phase 0 capability tasks are now `VERIFIED`.** Next eligible task: `CG-S5-PH0-020` (Prompt 99, Phase 0 Integrated Verification).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
