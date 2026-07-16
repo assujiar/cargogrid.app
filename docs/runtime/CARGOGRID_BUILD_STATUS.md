@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-015` — Security Baseline Controls (Prompt 94) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-014` (Prompt 93) `VERIFIED` this checkpoint. `ADR-0009` (Better Stack, real web evidence) resolves observability-platform tooling; `docs/standards/OBSERVABILITY_STANDARDS.md` established; `scripts/observability/logger.ts` (structured logging, redaction, correlation ID, safe-degrade proven under real failure injection); first real `docs/runbooks/` instance. `node:test` 100/100. Zero vendor account/credential/dashboard/alert created (Phase 1 scope). |
+| Active task | `CG-S5-PH0-016` — Data Classification Foundation (Prompt 95) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-015` (Prompt 94) `VERIFIED` this checkpoint. `ADR-0010` (Vercel env vars + Supabase project secrets) resolves secret-manager mechanism; `docs/standards/SECURITY_STANDARDS.md` established; `scripts/security/check-secrets.ts` real secret scanner (0 findings against this repository); second real `docs/runbooks/` instance; dependency-audit gap disclosed (`ISS-2026-007`). `node:test` 117/117. Zero auth/session/upload/header code created (Phase 1 scope). |
 | Branch | `claude/lanjut-btusq6` (this session's harness-assigned/designated branch — first Phase 0 checkpoint run on a branch name other than `agent/cargogrid-autonomous-build`; surfaced and fixed `ISS-2026-004`, a hardcoded-branch-name test fragility) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |

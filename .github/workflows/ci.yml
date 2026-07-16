@@ -90,6 +90,9 @@ jobs:
       - name: Documentation checks (link resolution, canonical files, ADR index, HANDOFF coherence)
         run: pnpm run docs:check
 
+      - name: Secret scan (docs/standards/SECURITY_STANDARDS.md §3)
+        run: pnpm run security:check
+
       - name: Branch name check (PR only)
         if: github.event_name == 'pull_request'
         run: node --experimental-strip-types scripts/git/check-branch-name.ts "${{ github.head_ref }}"

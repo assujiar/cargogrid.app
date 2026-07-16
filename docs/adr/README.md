@@ -91,7 +91,7 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-022` | Test-tooling/coverage-gate specifics | Phase 0 `PH0-091` (Testing) | **ACCEPTED → `ADR-0007`** (`node:test` unit/integration/component, Playwright E2E/visual-regression, `tests/factories/<domain>.ts`) |
 | `ADR-CAND-ARCH-023` | DR-rehearsal cadence + automated-accessibility-checker tool | Phase 0 `PH0-091` (Testing) | **ACCEPTED → `ADR-0008`** (quarterly cadence, `@axe-core/playwright`). *Correction (`PH0-91`, `ADR-0008` "Scope discrepancy" section): this row previously read "DR-rehearsal cadence" only, reassigned to "Phase 15 (`HDN-384`)," dropping the accessibility-checker half — an unintended narrowing during this register's transcription from `docs/architecture/10_TESTING_WORKSTREAM.md` §11, not a deliberate re-scoping recorded anywhere. Both halves are resolved here, at the phase/task `10_*.md` §11 and the current `HANDOFF.md`/`TASK_LEDGER.md` always specified.* |
 | `ADR-CAND-ARCH-024` | CI/CD platform + package manager | Phase 0 `PH0-085..088` | **Fully `ACCEPTED`** — package-manager component → `ADR-0002` (`PH0-085`); CI/CD-platform-product component → `ADR-0004` (`PH0-088`, GitHub Actions) |
-| `ADR-CAND-ARCH-025` | Secret-manager product | Phase 0 `PH0-085..088`/`094` | `BLOCKED` — due at environment/security |
+| `ADR-CAND-ARCH-025` | Secret-manager product | Phase 0 `PH0-085..088`/`094` | **ACCEPTED → `ADR-0010`** (Vercel Environment Variables + Supabase project secrets — native platform mechanism, no dedicated secret-manager service at MVP) |
 | `ADR-CAND-ARCH-026` | Observability/APM tool | Phase 0 `PH0-093` | **ACCEPTED → `ADR-0009`** (Better Stack — logs/metrics/traces/alerting/incident-management in one product, OpenTelemetry-native) |
 | `ADR-CAND-ARCH-027` | Hosting/CDN platform | Phase 0 `PH0-085..088` | `BLOCKED` — due at environment |
 
@@ -110,3 +110,4 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-0007` | Test-runner and framework stack | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-022` |
 | `ADR-0008` | DR-rehearsal cadence and automated-accessibility-checker tool | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-023` |
 | `ADR-0009` | Observability platform | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-026` |
+| `ADR-0010` | Secret-manager mechanism | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-025` |

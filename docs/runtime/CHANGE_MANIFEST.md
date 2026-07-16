@@ -1467,6 +1467,63 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-014` is `VERIFIED`. Next eligible task: `CG-S5-PH0-015` (Prompt 94, Security Baseline Controls).
 
+### CHG-2026-027 — Security Baseline Controls (Phase 0, Prompt 94)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-015`, `05-phase-00-discovery-foundation/94_SECURITY_BASELINE_CONTROLS_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / Security Engineering, Secure-by-Default Foundation |
+| Change type | DOCS + zero-dependency tooling (`docs/adr/ADR-0010-*.md`, `docs/standards/SECURITY_STANDARDS.md`, `scripts/security/**`, `docs/runbooks/**`); one citation-accuracy fix in `OBSERVABILITY_STANDARDS.md` |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `94_SECURITY_BASELINE_CONTROLS_PROMPT.md` §20–26; `docs/discovery/06_SECURITY_BASELINE.md` (`SEC-2026-001`); `docs/architecture/11_DEVOPS_WORKSTREAM.md` §5 |
+| Decisions | `ADR-0010` (secret-manager mechanism: Vercel env vars + Supabase project secrets) — `ACCEPTED` |
+| Baseline evidence | `docs/build-log/phase-00/PH0-93.md` (upstream `VERIFIED`); pre-flight collision check clean |
+| Final status | `COMPLETED` — `CG-S5-PH0-015` `VERIFIED` in `TASK_LEDGER.md` this checkpoint |
+
+#### Outcome
+
+Resolved `ADR-CAND-ARCH-025` (ratifying the already-implicit platform-native secret mechanism `scripts/env/schema.ts`/`ADR-0003` assumed since `PH0-86`). Built and wired a real secret scanner (`scripts/security/check-secrets.ts`) covering five well-known secret shapes (AWS access key, PEM private key block, Stripe live key, JWT-shaped token, generic hardcoded-secret assignment), proven against synthetic fixtures and a real zero-findings run across this repository's actual tracked files, with output deliberately redacted (never prints a matched value). Fixed the full threat/control mapping and every contract Phase 1 needs (headers/CORS/CSRF/session/upload/validation), each explicitly `NOT_RUN` with a named owner rather than fabricated. Attempted a real dependency/supply-chain audit (`pnpm audit`), found it genuinely broken upstream (npm's classic advisory endpoints return `410 Gone`), and disclosed this as `ISS-2026-007` rather than wiring a hard-fail-on-unrelated-infra or a silently-passing fake gate. Instantiated a second real `docs/runbooks/` file (secret-leak incident response) tied directly to the new scanner. Caught and fixed one citation-accuracy error in `PH0-93`'s `OBSERVABILITY_STANDARDS.md` (cited a nonexistent test file) via this checkpoint's own `docs:check` run — evidence the Prompt-92 validator keeps catching real errors across unrelated later checkpoints.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/adr/ADR-0010-secret-manager-mechanism.md` | ADD | Resolves `ADR-CAND-ARCH-025` | `git revert` |
+| `docs/standards/SECURITY_STANDARDS.md` | ADD | Security baseline: threat/control mapping, contracts, residual risks | `git revert` |
+| `scripts/security/check-secrets.ts`, `scripts/security/check-secrets.test.ts` | ADD | Real secret scanner + 17 tests | `git revert` |
+| `docs/runbooks/secret-leak-incident-response.md` | ADD | Second real runbook instance | `git revert` |
+| `docs/adr/README.md` | EDIT | `ADR-CAND-ARCH-025` marked `ACCEPTED`, index updated | `git revert` |
+| `docs/standards/OBSERVABILITY_STANDARDS.md` | EDIT | Citation-accuracy fix (§9) | `git revert` |
+| `package.json` | EDIT | `security:check` script | `git revert` |
+| `.github/workflows/ci.yml` | EDIT | New "Secret scan" CI step | `git revert` |
+| `docs/runtime/KNOWN_ISSUES.md` | EDIT | `ISS-2026-007` recorded | `git revert` |
+| `docs/build-log/phase-00/PH0-94.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched, and no auth/session/upload/header code created — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. No production alert/service/vendor resource was mutated (Prompt 94 §12's explicit forbidden-scope item); no real exploit was run against anything (nothing to exploit yet).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 117/117 PASS (100 carried + 17 new); `pnpm run docs:check` PASS (after the one citation fix); `pnpm run security:check` (new) PASS — 0 findings; `pnpm run test:e2e` 3/3 PASS (unchanged); `pnpm run standards:check` PASS; `pnpm run git:check` PASS. `pnpm audit` attempted and genuinely failed on a real upstream `410 Gone` — disclosed (`ISS-2026-007`), not hidden, not faked.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`c70ccec`.
+- Recovery verification: full gate suite re-run green after every fix during authoring.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-015` is `VERIFIED`. Next eligible task: `CG-S5-PH0-016` (Prompt 95, Data Classification Foundation).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

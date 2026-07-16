@@ -17,7 +17,8 @@
     "git:check": "node --experimental-strip-types scripts/git/check-worktree-collision.ts && node --experimental-strip-types scripts/git/check-branch-name.ts",
     "git:check-paths": "node --experimental-strip-types scripts/git/check-protected-paths.ts",
     "standards:check": "node --experimental-strip-types scripts/standards/check-suppressions.ts",
-    "docs:check": "node --experimental-strip-types scripts/docs/check-doc-links.ts"
+    "docs:check": "node --experimental-strip-types scripts/docs/check-doc-links.ts",
+    "security:check": "node --experimental-strip-types scripts/security/check-secrets.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.3",
