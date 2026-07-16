@@ -2275,6 +2275,35 @@ Additive only (new functions, grants, policy objects; no table/column change). R
 
 Self-closing. `CG-S6-PLT-010` is `VERIFIED`. Next: `CG-S6-PLT-011` (Prompt 114, Field-Level and Record-Level Access).
 
+### CHG-2026-046 — Field-Level and Record-Level Access (Phase 1, Prompt 114)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-011` / `114_FIELD_RECORD_ACCESS_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-114.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716110430_create_field_record_access.sql`: `app.can_access_record()` (the exact real function name `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` already fixes) evaluates record-scope access via ownership, shared org-unit, or customer-account scope, composed entirely from already-`VERIFIED` primitives; proven exhaustively by direct call since no business-domain table with `owner_user_id` exists yet in Phase 1. `app.users_directory` is the field-masking foundation example — the real PII `email` column on `app.users` is masked unless the caller holds the seeded `HRS:View personal data` permission. Two real bugs were found and fixed during authoring by actually running the tests: a column-level `REVOKE` is a no-op against a prior table-level `GRANT` (Postgres ACLs are additive, not layered) — fixed by narrowing via table-level revoke + explicit column re-grant; and a view calling a `SECURITY INVOKER` function requires the querying role to hold every privilege that function needs internally — fixed with a narrow `SECURITY DEFINER` wrapper (`app.has_view_personal_data()`) rather than widening `PLT-113`'s catalogue-table scope decision.
+
+#### Scope and files
+
+`supabase/migrations/20260716110430_create_field_record_access.sql`; `scripts/db-tests/field-record-access.sql`; `server/contracts/field-access/field-access.ts`(+test); `server/queries/field-access.ts`(+test); `docs/build-log/phase-01/PLT-114.md`; standard runtime-ledger set. No business-domain policy, client-only authorization, or broad RLS change added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 342/342 PASS (337 carried + 5 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 106 total scenario groups across all 10 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only (new functions, a view, and a reversible privilege narrowing on `app.users`). Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`fa8e1f6`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-011` is `VERIFIED`. Next: `CG-S6-PLT-012` (Prompt 115, Support Access and Impersonation).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
