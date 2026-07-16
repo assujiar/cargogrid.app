@@ -2130,6 +2130,35 @@ Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`0
 
 Self-closing. `CG-S6-PLT-005` is `VERIFIED`. Next: `CG-S6-PLT-006` (Prompt 109, Organization Hierarchy).
 
+### CHG-2026-041 — Organization and Operational Hierarchy (Phase 1, Prompt 109)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-006` / `109_ORGANIZATION_HIERARCHY_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-109.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716101726_create_org_units.sql`: `app.org_units` models tenant-scoped company/branch/department/business_unit nodes with a materialized `path uuid[]` ancestry column (GIN-indexed, no recursive CTE for ancestor/descendant reads) and a single trigger enforcing the allowed-parent-type matrix, cross-tenant-parent rejection, and cycle prevention together. `app.move_org_unit()` cascades path/depth to every descendant in one bounded update, proven against a 3-level tree. All mutating functions (`move`/`rename`/`set_org_unit_status`) carry real optimistic concurrency via `expected_version`, rejecting a stale value outright. Deactivation is blocked while any active child exists — nodes are never hard-deleted. The allowed-parent-type matrix is this checkpoint's own disclosed construction (no ratified document fixes one beyond a flat four-type list).
+
+#### Scope and files
+
+`supabase/migrations/20260716101726_create_org_units.sql`; `scripts/db-tests/org-hierarchy.sql`; `server/contracts/org-hierarchy/org-hierarchy.ts`(+test); `server/queries/org-hierarchy.ts`(+test); `server/mutations/org-hierarchy.ts`(+test); `docs/build-log/phase-01/PLT-109.md`; standard runtime-ledger set. No employee/HR table, portal UI, or bulk-restructuring tool added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 304/304 PASS (291 carried + 13 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 47 total scenario groups across all 5 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`0d891b4`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-006` is `VERIFIED`. Next: `CG-S6-PLT-007` (Prompt 110, User Lifecycle).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
