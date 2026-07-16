@@ -27,6 +27,10 @@ const AWS_ACCESS_KEY_ID = /\bAKIA[0-9A-Z]{16}\b/;
 const PRIVATE_KEY_BLOCK = /-----BEGIN\s+(RSA|EC|OPENSSH|DSA|ENCRYPTED)?\s?PRIVATE KEY-----/;
 const STRIPE_LIVE_KEY = /\bsk_live_[0-9a-zA-Z]{16,}\b/;
 const JWT_SHAPED_TOKEN = /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/;
+// Deliberately credential-shaped only (not PII key names like npwp/bank/salary
+// — that is scripts/observability/logger.ts's / scripts/product-analytics/
+// analytics.ts's job for runtime data, not this static source scanner's;
+// see docs/standards/SECURITY_STANDARDS.md §3, ISS-2026-008 resolution).
 const GENERIC_HARDCODED_SECRET_ASSIGNMENT = /\b(secret|password|token|api[_-]?key|private[_-]?key)\b\s*[:=]\s*["']([A-Za-z0-9+/=_.-]{20,})["']/i;
 
 // Always-checked patterns (unambiguous, low-false-positive-risk shapes) —

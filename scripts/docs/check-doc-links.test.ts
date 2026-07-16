@@ -75,6 +75,11 @@ describe("checkLinks", () => {
     const issues = checkLinks(["docs/runtime/CHANGE_MANIFEST.md", "docs/runtime/ERROR_LEDGER.md"]);
     assert.deepEqual(issues, []);
   });
+
+  test("excuses PH0-99.md's failure-matrix quote of a not-yet-created runbook path (ISS-2026-008-adjacent, file-scoped not global)", () => {
+    const issues = checkLinks(["docs/build-log/phase-00/PH0-99.md"]);
+    assert.deepEqual(issues, []);
+  });
 });
 
 describe("checkCanonicalRuntimeFiles", () => {

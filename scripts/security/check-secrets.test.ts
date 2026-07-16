@@ -99,6 +99,12 @@ describe("scanContent — GENERIC_HARDCODED_SECRET_ASSIGNMENT", () => {
   test("does not flag a non-suspicious key name with a long value", () => {
     assert.deepEqual(scanContent("server/config.ts", 'description = "this is just a long human-readable description field"'), []);
   });
+
+  test("does not flag PII-shaped key names (npwp/bank/salary) — intentional scope boundary, ISS-2026-008 resolution, docs/standards/SECURITY_STANDARDS.md §3", () => {
+    for (const key of ["npwp", "bankAccountNumber", "salary"]) {
+      assert.deepEqual(scanContent("server/config.ts", `${key} = "raw-value-long-enough-to-trip-the-generic-rule"`), []);
+    }
+  });
 });
 
 describe("scanContent — findings never include the matched value", () => {

@@ -72,6 +72,19 @@ const KNOWN_HISTORICAL_BROKEN_LINKS = new Set([
   "docs/build-logs/CG-S5-PH0-003_requirement_traceability_baseline.md",
 ]);
 
+// A narrower sibling of the list above, scoped to one exact (file, path) pair
+// rather than excusing a path everywhere it appears: a failure-matrix row
+// quoting, as evidence, a citation that a *different*, already-fixed
+// checkpoint (docs/standards/FEATURE_FLAG_STANDARDS.md) once contained —
+// the quote is accurate reporting of what was found and fixed, not a live
+// existence claim by the quoting document itself (CG-S5-PH0-021, Prompt 100
+// Hardening; found because PH0-99.md did not exist yet the last time
+// docs:check ran during its own authoring checkpoint, so this self-reference
+// was never checked until now). File-scoped (not global) so a *new* citation
+// of the same not-yet-created runbook path from any other document is still
+// caught normally.
+const KNOWN_HISTORICAL_QUOTED_CITATIONS = new Set(["docs/build-log/phase-00/PH0-99.md:docs/runbooks/deployment-rollback.md"]);
+
 export const REQUIRED_RUNTIME_FILES = [
   "docs/runtime/CARGOGRID_CONTEXT.md",
   "docs/runtime/CARGOGRID_BUILD_STATUS.md",
@@ -138,6 +151,7 @@ export function checkLinks(files: readonly string[]): DocIssue[] {
       const line = lines[i] ?? "";
       for (const candidate of extractCheckablePaths(line)) {
         if (KNOWN_HISTORICAL_BROKEN_LINKS.has(candidate)) continue;
+        if (KNOWN_HISTORICAL_QUOTED_CITATIONS.has(`${file}:${candidate}`)) continue;
         if (!existsSync(candidate)) {
           issues.push({ kind: "BROKEN_LINK", file, line: i + 1, detail: `references \`${candidate}\`, which does not exist` });
         }

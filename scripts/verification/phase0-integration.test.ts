@@ -175,18 +175,25 @@ describe("cross-foundation: sensitive-key-pattern consistency (three independent
   });
 
   test(
-    "REAL, DISCLOSED GAP (ISS-2026-008): check-secrets.ts's GENERIC_HARDCODED_SECRET_ASSIGNMENT pattern is narrower " +
-      "than logger.ts's/analytics.ts's — it does not currently flag npwp/bank/salary-shaped key names, only " +
-      "secret/password/token/api_key/private_key. This test documents the verified current behavior (found by this " +
-      "integrated-verification checkpoint, not caught by any single module's own isolated test suite) rather than " +
-      "asserting a false cross-module guarantee. See docs/build-log/phase-00/PH0-99.md's failure matrix for the " +
-      "recovery-task recommendation — not fixed in this checkpoint (Prompt 99 §11: default no repair).",
+    "RESOLVED (ISS-2026-008, CG-S5-PH0-021/Prompt 100): check-secrets.ts's GENERIC_HARDCODED_SECRET_ASSIGNMENT " +
+      "intentionally does NOT flag npwp/bank/salary-shaped key names — an explicit scope boundary, not a gap. " +
+      "logger.ts's/analytics.ts's broader PII-key patterns cover runtime data flows (log fields, event properties); " +
+      "check-secrets.ts covers hardcoded-credential-shaped source literals only (docs/standards/SECURITY_STANDARDS.md " +
+      "§3). This test proves the boundary holds in both directions — it is not merely undocumented, it is by design.",
     () => {
-      const stillUncovered = ["npwp", "bankAccountNumber", "salary"].filter((key) => {
+      const piiShapedKeysCheckSecretsIntentionallyIgnores = ["npwp", "bankAccountNumber", "salary"].filter((key) => {
         const findings = scanContent("integration-check.ts", `${key} = "raw-value-long-enough-to-trip-the-generic-rule"`);
         return !findings.some((f) => f.kind === "GENERIC_HARDCODED_SECRET_ASSIGNMENT");
       });
-      assert.deepEqual(stillUncovered, ["npwp", "bankAccountNumber", "salary"], "expected this documented gap to still be present — update this test and the failure matrix together if it is ever closed");
+      assert.deepEqual(
+        piiShapedKeysCheckSecretsIntentionallyIgnores,
+        ["npwp", "bankAccountNumber", "salary"],
+        "check-secrets.ts must stay scoped to credential shapes — if this ever starts matching, the scope boundary documented in SECURITY_STANDARDS.md §3 has silently changed",
+      );
+      for (const key of piiShapedKeysCheckSecretsIntentionallyIgnores) {
+        const redacted = redact({ [key]: "raw-value-for-consistency-check" });
+        assert.notEqual(redacted[key], "raw-value-for-consistency-check", `logger.ts must still redact "${key}" even though check-secrets.ts does not scan for it — the PII-handling responsibility must land somewhere`);
+      }
     },
   );
 });

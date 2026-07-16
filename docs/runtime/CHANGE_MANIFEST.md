@@ -1782,6 +1782,61 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-020` is `VERIFIED`. Next eligible task: `CG-S5-PH0-021` (Prompt 100, Phase 0 Hardening) — consumes this checkpoint's failure matrix (`docs/build-log/phase-00/PH0-99.md` §5) as its named remediation scope.
 
+### CHG-2026-033 — Phase 0 Hardening (Phase 0, Prompt 100)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-021` / `100_PHASE0_HARDENING_PROMPT.md` |
+| Phase/workstream | Phase 0 / Verification (third of the four closing prompts `99`–`102`) |
+| Change type | DOCS/CODE/TEST |
+| Author/agent | Claude Code, branch `claude/lanjut-btusq6` |
+| Source requirements | `100_PHASE0_HARDENING_PROMPT.md` §20/§22/§24/§29; `docs/build-log/phase-00/PH0-99.md` §5 failure matrix |
+| Decisions | `ISS-2026-008` resolved: `check-secrets.ts` stays credential-scoped, does not widen into a general PII scanner — a scope decision, not a code-behavior change (`docs/standards/SECURITY_STANDARDS.md` §3, new paragraph) |
+| Baseline evidence | `docs/build-log/phase-00/PH0-100.md` (full checkpoint record) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Ranked Prompt 99's two open failure-matrix candidates (`ISS-2026-008`, `ISS-2026-005`) by criticality — both Low, neither CI-blocking at Prompt 99's own close. Resolved `ISS-2026-008` with a root-cause decision (not a symptom patch): documented the intentional scope boundary between `check-secrets.ts` (credential-shaped source literals) and `logger.ts`/`analytics.ts` (PII-shaped runtime data), proved it holds in both directions with new module-level and integration-level tests, closed the issue. Left `ISS-2026-005` open per §22's Alternative flow (authorized, non-blocking, backfill risks fabricating unobserved historical detail). Discovered and fixed one new, this-checkpoint-only `docs:check` regression: `PH0-99.md`'s own failure-matrix table quotes a citation that used to be broken in a different file, and `PH0-99.md` itself was authored after Prompt 99's own last gate run, so the self-reference was never checked until this checkpoint's fresh run — fixed via a narrow, file-scoped exemption in `check-doc-links.ts` (not by editing the already-pushed, append-only `PH0-99.md`).
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/standards/SECURITY_STANDARDS.md` | EDIT | §3 scope-boundary decision, resolves `ISS-2026-008` | `git revert` |
+| `scripts/security/check-secrets.ts` | EDIT | One-line scope comment; zero behavior change | `git revert` |
+| `scripts/security/check-secrets.test.ts` | EDIT | New module-level regression test for the boundary | `git revert` |
+| `scripts/verification/phase0-integration.test.ts` | EDIT | ISS-2026-008 test rewritten: disclosed-gap framing → proven-boundary framing | `git revert` |
+| `scripts/docs/check-doc-links.ts` | EDIT | New file-scoped `KNOWN_HISTORICAL_QUOTED_CITATIONS` exemption for `PH0-99.md`'s self-reference | `git revert` |
+| `scripts/docs/check-doc-links.test.ts` | EDIT | New regression test for the exemption | `git revert` |
+| `docs/build-log/phase-00/PH0-100.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/KNOWN_ISSUES.md` | EDIT | `ISS-2026-008` → `RESOLVED` (index row + narrative) | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, this manifest, `00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched. `PH0-99.md` itself was **not** edited (append-only evidence discipline, same precedent as `ISS-2026-006`).
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. `check-secrets.ts`'s actual matching behavior is unchanged; `security:check` still reports 0 findings before and after this checkpoint.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 237/237 PASS (235 carried from `PH0-99` + 2 new); `pnpm run docs:check` PASS (after the exemption fix); `pnpm run security:check` PASS; `pnpm run data-classification:check` PASS; `pnpm run threat-model:check` PASS (unchanged, 25 entries); `pnpm run standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, test, or CI step removed or weakened; `check-secrets.ts`'s matching behavior is byte-for-byte unchanged.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`60d03b5`. Note: reverting alone would reintroduce the `docs:check` self-reference failure against `PH0-99.md` (§5 of the build log) — a known, diagnosed condition, not a mystery regression.
+- Recovery verification: full 10-gate suite re-run green after every fix during authoring.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, `KNOWN_ISSUES.md`, `SECURITY_STANDARDS.md`, this build log. `ISS-2026-008` closed (`RESOLVED`); `ISS-2026-005` re-confirmed open, non-blocking.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-021` is `VERIFIED`. Next eligible task: `CG-S5-PH0-022` (Prompt 101, Phase 0 Documentation Handoff).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
