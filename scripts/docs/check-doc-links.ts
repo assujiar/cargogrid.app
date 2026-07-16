@@ -20,6 +20,7 @@ const DOC_SCAN_PREFIXES = [
   "docs/build-logs/",
   "docs/git/",
   "docs/templates/",
+  "docs/runbooks/",
 ];
 const DOC_SCAN_ROOT_FILES = new Set(["AGENTS.md", "README.md"]);
 

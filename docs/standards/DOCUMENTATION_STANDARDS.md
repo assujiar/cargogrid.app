@@ -40,7 +40,7 @@ Every document belongs to exactly one class; a document serving two audiences is
 | User-facing *(no content yet — template only, §4)* | End user (tenant staff/customer portal) | `docs/user/` (created when Phase 1+ ships a real user-facing flow) |
 | Admin-facing *(no content yet)* | Tenant Admin / Supreme Admin | `docs/admin/` |
 | API reference *(no content yet)* | External integrator | `docs/api/` |
-| Support/runbook *(no content yet)* | Support, DevOps/on-call | `docs/runbooks/` |
+| Support/runbook | Support, DevOps/on-call | `docs/runbooks/` — first real instance created at `PH0-93` (`observability-exporter-outage.md`, `NOT_YET_REHEARSED` against a live vendor outage, disclosed not hidden) |
 | Release notes *(no content yet)* | All | `docs/releases/` |
 
 ## 3. Lifecycle, ownership, one-authoritative-location rule
@@ -65,7 +65,7 @@ Every document belongs to exactly one class; a document serving two audiences is
 
 `scripts/docs/check-doc-links.ts` (this checkpoint, `pnpm run docs:check`, wired into CI) checks what is mechanically checkable without false positives:
 
-1. **Internal link resolution:** every relative Markdown link and backtick-quoted repository-relative path across `docs/runtime/`, `docs/adr/`, `docs/standards/`, `docs/build-log/`, `docs/build-logs/`, `docs/git/`, `docs/templates/`, root `AGENTS.md`/`README.md` resolves to a real file (anchors stripped before the existence check; `http(s)://`/`mailto:` links skipped — external, not this repository's to verify).
+1. **Internal link resolution:** every relative Markdown link and backtick-quoted repository-relative path across `docs/runtime/`, `docs/adr/`, `docs/standards/`, `docs/build-log/`, `docs/build-logs/`, `docs/git/`, `docs/templates/`, `docs/runbooks/`, root `AGENTS.md`/`README.md` resolves to a real file (anchors stripped before the existence check; `http(s)://`/`mailto:` links skipped — external, not this repository's to verify).
 2. **Canonical runtime-file presence:** the exact 7 files `AGENTS.md`'s "Required pre-flight" section names all exist and are non-empty — the mechanical half of the "fresh agent can reconstruct without chat" contract (§21 "Main flow").
 3. **ADR index consistency:** every `ADR-NNNN` cited in `docs/adr/README.md` §6's index has a matching `docs/adr/ADR-NNNN-*.md` file.
 4. **HANDOFF/TASK_LEDGER coherence:** `HANDOFF.md` §4's "Task ID/name" value is a real row in `TASK_LEDGER.md` — catches exactly the class of drift a future checkpoint could introduce by updating one and not the other.

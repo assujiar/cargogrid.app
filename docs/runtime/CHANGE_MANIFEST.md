@@ -1411,6 +1411,62 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-013` is `VERIFIED`. Next eligible task: `CG-S5-PH0-014` (Prompt 93, Observability Baseline).
 
+### CHG-2026-026 — Observability Baseline (Phase 0, Prompt 93)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-014`, `05-phase-00-discovery-foundation/93_OBSERVABILITY_BASELINE_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / DevOps and Observability, Operational Evidence |
+| Change type | DOCS + zero-dependency tooling (`docs/adr/ADR-0009-*.md`, `docs/standards/OBSERVABILITY_STANDARDS.md`, `scripts/observability/**`, `docs/runbooks/**`); minor cross-checkpoint doc-tooling extension (`check-doc-links.ts` now scans `docs/runbooks/`) |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `93_OBSERVABILITY_BASELINE_PROMPT.md` §20–26; `docs/architecture/11_DEVOPS_WORKSTREAM.md` §6 |
+| Decisions | `ADR-0009` (observability platform: Better Stack) — `ACCEPTED` with real web evidence (vendor product/pricing pages, comparison sources, official Next.js/Vercel OpenTelemetry docs, all fetched this checkpoint) |
+| Baseline evidence | `docs/build-log/phase-00/PH0-92.md` (upstream `VERIFIED`); pre-flight collision check clean |
+| Final status | `COMPLETED` — `CG-S5-PH0-014` `VERIFIED` in `TASK_LEDGER.md` this checkpoint |
+
+#### Outcome
+
+Resolved `ADR-CAND-ARCH-026` with real, fetched web evidence rather than assumed vendor knowledge: Better Stack selected over Grafana Cloud, Axiom, Datadog, and a composed multi-tool stack, on the specific, attributable trade-offs cited in `ADR-0009`. Fixed the vendor-neutral observability contract (`docs/standards/OBSERVABILITY_STANDARDS.md`): the 5-signal/11-dashboard/8-alert catalogue reproduced from `11_*.md` by reference, structured log event shape, `X-CargoGrid-Request-Id`/`correlation_id` contract, redaction rules (extending `scripts/env/redact.ts`'s existing fingerprint pattern), tenant-safe cardinality rules distinguishing log fields from metric labels, RPD-025 retention application, and an explicit `NOT_RUN` table for every layer with no real subject yet (dashboards, alerts, health endpoints, DB/queue metrics — no app/server/DB exists). Implemented `scripts/observability/logger.ts`, a real, zero-dependency, tested utility (redaction, severity ordering, correlation-ID generation, bounded-dimension guard, and a safe-degrade `emit()` proven under real failure injection — not merely documented). Instantiated the first real `docs/runbooks/` file from `PH0-92`'s template, honestly marked `NOT_YET_REHEARSED` against a live vendor outage. Extended `scripts/docs/check-doc-links.ts` to scan the new `docs/runbooks/` directory, and made one cosmetic (zero-semantic-change) fix to `PH0-92.md`'s own prose after the extended validator correctly flagged an illustrative "before" path quoted in backticks.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/adr/ADR-0009-observability-platform.md` | ADD | Resolves `ADR-CAND-ARCH-026` | `git revert` |
+| `docs/standards/OBSERVABILITY_STANDARDS.md` | ADD | Observability foundation contract | `git revert` |
+| `scripts/observability/logger.ts`, `scripts/observability/logger.test.ts` | ADD | Vendor-neutral structured logger + 20 tests | `git revert` |
+| `docs/runbooks/observability-exporter-outage.md` | ADD | First real runbook instance | `git revert` |
+| `docs/adr/README.md` | EDIT | `ADR-CAND-ARCH-026` marked `ACCEPTED`, index updated | `git revert` |
+| `docs/standards/DOCUMENTATION_STANDARDS.md` | EDIT | `docs/runbooks/` added to scan scope + audience table | `git revert` |
+| `scripts/docs/check-doc-links.ts` | EDIT | `docs/runbooks/` added to `DOC_SCAN_PREFIXES` | `git revert` |
+| `docs/build-log/phase-00/PH0-92.md` | EDIT | Cosmetic backtick-formatting fix, zero semantic change | `git revert` |
+| `docs/build-log/phase-00/PH0-93.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched, and no vendor account/credential created — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. No production alert/service/vendor resource was mutated (Prompt 93 §12's explicit forbidden-scope item).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 100/100 PASS (80 carried + 20 new, including 3 real failure-injection tests proving the safe-degrade rule); `pnpm run docs:check` PASS; `pnpm run test:e2e` 3/3 PASS (unchanged); `pnpm run standards:check` PASS; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`8caebb9`.
+- Recovery verification: full gate suite re-run green after every fix during authoring.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-014` is `VERIFIED`. Next eligible task: `CG-S5-PH0-015` (Prompt 94, Security Baseline Controls).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
