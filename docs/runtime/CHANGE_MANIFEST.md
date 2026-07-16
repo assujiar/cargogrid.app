@@ -1989,6 +1989,60 @@ Updated: this manifest, `TASK_LEDGER.md`, the two new Phase 1 planning documents
 
 Self-closing per this repository's established runtime-build-agent authority. `CG-S6-PLT-001` is `VERIFIED`. Next eligible task: `CG-S6-PLT-002` (Prompt 105, Tenant Provisioning and Lifecycle) — the first Platform Core capability implementation task.
 
+### CHG-2026-037 — Tenant Provisioning and Lifecycle (Phase 1, Prompt 105) — first real migration
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-002` / `105_TENANT_PROVISIONING_LIFECYCLE_PROMPT.md` |
+| Phase/workstream | Phase 1 / Platform Core — Multi-Tenancy / Tenant Control Plane |
+| Change type | CODE/SCHEMA/CI/DOCS |
+| Author/agent | Claude Code, branch `claude/lanjut-btusq6` |
+| Source requirements | `105_*.md` §20/§24/§26/§30; `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` §2/§3/§12; `04_REPOSITORY_TARGET_STRUCTURE.md` §8 row 2 |
+| Decisions | None new — adopts `server/contracts/` convention already decided at `CG-S6-PLT-001` |
+| Baseline evidence | `docs/build-log/phase-01/PLT-105.md` (full checkpoint record) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+First real migration and first `server/`/`lib/` code in this repository. `supabase/migrations/20260716075355_create_tenants.sql`: `app` schema, `app.tenants` (canonical lifecycle `provisioning→active→suspended→active→terminated`, trigger-enforced, terminal-state and legal-hold guards), `app.tenant_status_history` (bounded lifecycle transition trail), `app.provision_tenant()` (idempotent), `app.transition_tenant_status()` (guarded), RLS enabled on both tables with schema-privilege defense in depth (`anon`/`authenticated` denied before RLS is even evaluated; `service_role` explicitly granted). `server/contracts/tenant/tenant.ts` (Zod contract) + `server/mutations/tenant.ts` (thin RPC wrapper, dependency-injected client, typed errors). New `pnpm run db:test` gate (`scripts/db-tests/run.sh` + `tenant-lifecycle.sql`) proves 8 real scenario groups against a disposable Postgres database; wired into a new `db` job in `.github/workflows/ci.yml` with a real `postgres:17` service container.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `supabase/migrations/20260716075355_create_tenants.sql` | ADD | First real migration | `git revert` (additive-only, no destructive statement) |
+| `scripts/db-tests/tenant-lifecycle.sql`, `scripts/db-tests/run.sh` | ADD | Real database test evidence + runner | `git revert` |
+| `server/contracts/tenant/tenant.ts`(+test) | ADD | Typed contract | `git revert` |
+| `server/mutations/tenant.ts`(+test) | ADD | Service layer | `git revert` |
+| `package.json` | EDIT | New `db:test` script; test glob extended to `server/**/*.test.ts` | `git revert` |
+| `.github/workflows/ci.yml` | EDIT | New `db` job with a real Postgres service container | `git revert` |
+| `docs/build-log/phase-01/PLT-105.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, this manifest, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PLATFORM_CORE_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain module (Commercial/Operations/Finance/etc.), unrelated auth/UI file, or destructive data-cleanup statement touched. No applied migration was modified (only ever additive; no environment exists yet for a migration to be "applied" to beyond this checkpoint's own disposable local test).
+
+#### Database / contracts / UI / security
+
+**Database:** first real schema — see Outcome. **Contracts:** `server/contracts/tenant/tenant.ts` is the first `server/contracts/` file, matching the Platform Core WBS convention. **UI:** none (foundation states only, per `105_*.md` §15). **Security:** RLS + schema-privilege defense in depth; `service_role`-only direct access; no client-side secret exposure (no env var read in the new TS files at all — the Supabase client itself is injected by the caller, not constructed here).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS (import-boundary zones now live for real, zero violation); `pnpm run test` (`node:test`) 248/248 PASS (241 carried + 7 new); `pnpm run docs:check` PASS; `pnpm run security:check` PASS; `pnpm run data-classification:check` PASS; `pnpm run threat-model:check` PASS (unchanged); `pnpm run standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS (new gate, 8 real scenario groups against local Postgres 16; CI runs the identical script against `postgres:17`).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, test, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`e6bd5f8`. The migration itself has no destructive statement, so a revert is safe even if it had already been applied to a real environment (none exists).
+- Recovery verification: `pnpm run db:test` re-run twice in a row this checkpoint with identical results (idempotent test harness, drop/recreate/reapply each run).
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PLATFORM_CORE_EXECUTION_INDEX.md` (row `002` → `VERIFIED`, row `003` → `READY`), this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per this repository's established runtime-build-agent authority. `CG-S6-PLT-002` is `VERIFIED`. Next eligible task: `CG-S6-PLT-003` (Prompt 106, Subscription/Module/Feature Entitlement).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

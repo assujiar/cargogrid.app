@@ -7,13 +7,17 @@
 # once branch protection requires it — see docs/build-log/phase-00/PH0-88.md).
 #
 # Scope note: this is the MINIMUM trusted baseline for the current
-# repository state (100% toolchain/config, no app/ code, no schema, no
-# migrations, no RLS, no UI — Phase 1+ scope). Gates that require any of
-# those (migration check, RLS/security tests, accessibility-against-real-UI,
-# build) are deliberately NOT wired here — there is nothing yet for them to
-# run against. Adding a fabricated passing step for a gate with no real
+# repository state. Gates that require a real subject (accessibility-against-
+# real-UI, build) are deliberately NOT wired here — there is nothing yet for
+# them to run against. Adding a fabricated passing step for a gate with no real
 # subject would be worse than omitting it. See docs/build-log/phase-00/PH0-88.md
 # §3 for the exact "N/A for now, wired when X lands" table.
+#
+# `db` job added at CG-S6-PLT-002 (Prompt 105, Tenant Provisioning and
+# Lifecycle) — the first Platform Core capability to ship a real migration.
+# Runs every supabase/migrations/*.sql file plus scripts/db-tests/*.sql
+# against a real, disposable Postgres service container (not a fabricated
+# always-pass gate) — see scripts/db-tests/run.sh.
 #
 # `e2e` job added at CG-S5-PH0-012 (Prompt 91, Testing Foundation —
 # ADR-0007/ADR-0008): runs the real Playwright + @axe-core/playwright smoke
@@ -125,6 +129,31 @@ jobs:
             echo "| Ref | ${{ github.ref }} |"
             echo "| Workflow run | ${{ github.run_id }} (attempt ${{ github.run_attempt }}) |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  db:
+    name: Database migrations + RLS tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Migrations and RLS tests (scripts/db-tests/run.sh)
+        env:
+          DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: bash scripts/db-tests/run.sh
 
   e2e:
     name: E2E/accessibility smoke (Playwright + axe-core)
