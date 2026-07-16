@@ -93,6 +93,9 @@ jobs:
       - name: Secret scan (docs/standards/SECURITY_STANDARDS.md §3)
         run: pnpm run security:check
 
+      - name: Data-classification registry check (docs/standards/DATA_CLASSIFICATION_STANDARDS.md §6/§7)
+        run: pnpm run data-classification:check
+
       - name: Branch name check (PR only)
         if: github.event_name == 'pull_request'
         run: node --experimental-strip-types scripts/git/check-branch-name.ts "${{ github.head_ref }}"

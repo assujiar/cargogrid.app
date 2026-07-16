@@ -1524,6 +1524,59 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-015` is `VERIFIED`. Next eligible task: `CG-S5-PH0-016` (Prompt 95, Data Classification Foundation).
 
+### CHG-2026-028 — Data Classification Foundation (Phase 0, Prompt 95)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-016`, `05-phase-00-discovery-foundation/95_DATA_CLASSIFICATION_FOUNDATION_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / Data Governance and Security, Information Protection |
+| Change type | DOCS + zero-dependency tooling (`docs/standards/DATA_CLASSIFICATION_STANDARDS.md`, `scripts/data-classification/**`); minor CI/`package.json` wiring |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `95_DATA_CLASSIFICATION_FOUNDATION_PROMPT.md` §20–26; `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` §10/§11 |
+| Decisions | None requiring an ADR (confirmed via grep — no `ADR-CAND-ARCH-0NN` names this task, same as `PH0-92`) |
+| Baseline evidence | `docs/build-log/phase-00/PH0-94.md` (upstream `VERIFIED`); pre-flight collision check clean |
+| Final status | `COMPLETED` — `CG-S5-PH0-016` `VERIFIED` in `TASK_LEDGER.md` this checkpoint |
+
+#### Outcome
+
+Constructed a `public`/`internal`/`confidential`/`restricted`/`credential` sensitivity scale from `docs/architecture/02_CANONICAL_DATA_FLOW_MAP.md` §10's 6 field-group prose defaults (disclosed as this checkpoint's own synthesis, not a direct quotation of an already-named scale) and mapped `02_*.md`'s categories, 8-dimension handling matrix, and RPD-025 retention classes onto it in `docs/standards/DATA_CLASSIFICATION_STANDARDS.md`. Implemented `scripts/data-classification/registry.ts` (a real, tested `strongest()` resolver implementing Prompt 95 §22's precedence rule, a `validateRegistry()` enforcing owner/level-floor/no-duplicate rules) and `scripts/data-classification/check-registry.ts`, which cross-checks this repository's real `scripts/env/schema.ts` and confirms its one `secret`-classified variable (`SUPABASE_SERVICE_ROLE_KEY`) is registered — a real, CI-enforced instance of Prompt 95's "no unclassified sensitive field ships" rule, not merely documented. Disclosed one genuine gap (payroll's retention class is not itemized in RPD-025's own table; inferred as Finance/tax pending Phase 4/7 SME confirmation) rather than silently asserting it.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/standards/DATA_CLASSIFICATION_STANDARDS.md` | ADD | Two-axis taxonomy, handling matrix, retention mapping, adoption gate | `git revert` |
+| `scripts/data-classification/registry.ts`, `registry.test.ts` | ADD | Registry mechanism + 25 tests | `git revert` |
+| `scripts/data-classification/check-registry.ts`, `check-registry.test.ts` | ADD | Real adoption-gate cross-check + 5 tests | `git revert` |
+| `package.json` | EDIT | `data-classification:check` script | `git revert` |
+| `.github/workflows/ci.yml` | EDIT | New CI step | `git revert` |
+| `docs/build-log/phase-00/PH0-95.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. No business data classified/transformed (Prompt 95 §12's explicit forbidden-scope item).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 147/147 PASS (117 carried + 30 new); `pnpm run docs:check` PASS; `pnpm run security:check` PASS; `pnpm run data-classification:check` (new) PASS — 0 issues; `pnpm run test:e2e` 3/3 PASS (unchanged); `pnpm run standards:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`c5f2da4`.
+- Recovery verification: full gate suite re-run green after every fix during authoring.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-016` is `VERIFIED`. Next eligible task: `CG-S5-PH0-017` (Prompt 96, Initial Threat Model).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
