@@ -1577,6 +1577,58 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-016` is `VERIFIED`. Next eligible task: `CG-S5-PH0-017` (Prompt 96, Initial Threat Model).
 
+### CHG-2026-029 — Initial Threat Model (Phase 0, Prompt 96)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-017`, `05-phase-00-discovery-foundation/96_INITIAL_THREAT_MODEL_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / Security Architecture, Threat and Abuse Analysis |
+| Change type | DOCS + zero-dependency tooling (`docs/security/THREAT_MODEL.md`, `scripts/security/threat-model.ts`(+test)); minor CI/`package.json` wiring |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `96_INITIAL_THREAT_MODEL_PROMPT.md` §20–26; `06_RLS_RBAC_WORKSTREAM.md` §10; `10_TESTING_WORKSTREAM.md` §5.2/§5.3; `08_API_INTEGRATION_WORKSTREAM.md` §13 |
+| Decisions | None requiring an ADR (confirmed via grep) |
+| Baseline evidence | `docs/build-log/phase-00/PH0-95.md` (upstream `VERIFIED`); pre-flight collision check clean |
+| Final status | `COMPLETED` — `CG-S5-PH0-017` `VERIFIED` in `TASK_LEDGER.md` this checkpoint |
+
+#### Outcome
+
+Applied STRIDE categorization and a reproducible, monotonic risk-ranking function to threats already catalogued across `06_*.md` §10, `10_*.md` §5.2/§5.3, and `08_*.md` §13 (not a competing, independently-invented list) — 25 typed entries across the 9 areas Prompt 96 names, each citing a real source and owner. Found and fixed a real design defect during authoring: a first-draft multiplicative likelihood×impact score capped every threat at `high` rank regardless of impact severity, contradicting already-`VERIFIED` Critical-severity source ratings (e.g. `TI-001`); replaced with an explicit, exhaustively-tested monotonic lookup table before commit. All 4 resulting `critical`-ranked entries are fully specified by existing architecture with a named Phase 1 owner — none is unowned or blocking (Prompt 96 §23's exception-flow trigger did not fire).
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/security/THREAT_MODEL.md` | ADD | Scope/assets/actors/trust boundaries/register/accepted risks/update triggers | `git revert` |
+| `scripts/security/threat-model.ts`, `threat-model.test.ts` | ADD | Typed threat register + reproducible risk matrix + 19 tests | `git revert` |
+| `package.json` | EDIT | `threat-model:check` script | `git revert` |
+| `.github/workflows/ci.yml` | EDIT | New CI step | `git revert` |
+| `docs/build-log/phase-00/PH0-96.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched; no active exploitation or runtime change performed (Prompt 96 §12/§24) — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. This document's entire subject is security modeling, performed passively against already-ratified architecture.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 166/166 PASS (147 carried + 19 new); `pnpm run docs:check` PASS; `pnpm run security:check` PASS; `pnpm run data-classification:check` PASS; `pnpm run threat-model:check` (new) PASS — 25/25 valid, 4 critical/11 high/9 medium/1 low; `pnpm run test:e2e` 3/3 PASS (unchanged); `pnpm run standards:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`8570385`.
+- Recovery verification: full gate suite re-run green after every fix during authoring, including the risk-matrix redesign.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-017` is `VERIFIED`. Next eligible task: `CG-S5-PH0-018` (Prompt 97, Product Analytics Baseline).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

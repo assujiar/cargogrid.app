@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-017` — Initial Threat Model (Prompt 96) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-016` (Prompt 95) `VERIFIED` this checkpoint. `docs/standards/DATA_CLASSIFICATION_STANDARDS.md` established (two-axis taxonomy, 8-dimension handling matrix, RPD-025 retention mapping); `scripts/data-classification/registry.ts` + `check-registry.ts` (real, CI-enforced adoption gate — 0 unclassified secret env vars). `node:test` 147/147. Zero domain schema/API field classified beyond this repository's one existing secret (Phase 1 scope). |
+| Active task | `CG-S5-PH0-018` — Product Analytics Baseline (Prompt 97) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-017` (Prompt 96) `VERIFIED` this checkpoint. `docs/security/THREAT_MODEL.md` established (25-entry STRIDE register, reproducible+monotonic risk ranking, 4 critical entries all fully specified by existing architecture). `node:test` 166/166. Zero active exploitation or runtime change performed (passive modeling only). |
 | Branch | `claude/lanjut-btusq6` (this session's harness-assigned/designated branch — first Phase 0 checkpoint run on a branch name other than `agent/cargogrid-autonomous-build`; surfaced and fixed `ISS-2026-004`, a hardcoded-branch-name test fragility) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |
