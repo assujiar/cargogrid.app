@@ -178,18 +178,24 @@ begin
 end;
 $$;
 
+-- Updated at PLT-113 (RLS Tenant Policy Foundation): `authenticated` now has a real,
+-- narrow SELECT grant + RLS policy on app.tenants (docs/build-log/phase-01/PLT-113.md).
+-- With no `request.jwt.claims` set in this ad-hoc role switch, auth.uid() resolves to
+-- null, so app.has_active_tenant_membership() is false for every row -- the query now
+-- succeeds (no more insufficient_privilege) but correctly returns zero rows, RLS itself
+-- doing the denial rather than the schema-privilege layer. This is a real security
+-- improvement this checkpoint's own migration introduces, not a weakened assertion --
+-- see scripts/db-tests/rls-tenant-policy.sql for the full authenticated-session coverage
+-- (tenant isolation, Supreme Admin cross-tenant visibility, zero-membership denial).
 do $$
 declare
   v_count integer;
 begin
   set local role authenticated;
-  begin
-    select count(*) into v_count from app.tenants;
-    raise exception 'assertion failed: authenticated must be denied at the schema-privilege layer (no USAGE grant on app for this table -- Prompt 113 designs the general tenant-scoped exposure model for business tables, a separate later concern), but the query succeeded with count=%', v_count;
-  exception
-    when insufficient_privilege then
-      null; -- expected
-  end;
+  select count(*) into v_count from app.tenants;
+  if v_count <> 0 then
+    raise exception 'assertion failed: authenticated with no JWT claims set must see zero tenants via RLS (not an error, just an empty result), saw %', v_count;
+  end if;
   reset role;
 end;
 $$;

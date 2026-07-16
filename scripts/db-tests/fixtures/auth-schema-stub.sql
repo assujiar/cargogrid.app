@@ -18,3 +18,26 @@ create table if not exists auth.users (
   email text unique,
   created_at timestamptz not null default now()
 );
+
+-- Real Supabase auth.uid()/auth.role(), reproduced verbatim from Supabase's own published
+-- reference implementation (both read the `request.jwt.claims` GUC PostgREST/Supabase's
+-- real request layer sets per request) -- added at PLT-113 (RLS Tenant Policy Foundation)
+-- so this checkpoint's RLS policies can be exercised against a simulated authenticated
+-- session (`set local role authenticated; set local request.jwt.claims = '{"sub": "...",
+-- "role": "authenticated"}';`), the same mechanism a real Supabase/PostgREST deployment
+-- uses, not a stand-in behavior invented for this repository.
+create or replace function auth.uid()
+returns uuid
+language sql
+stable
+as $$
+  select nullif(current_setting('request.jwt.claims', true)::json->>'sub', '')::uuid
+$$;
+
+create or replace function auth.role()
+returns text
+language sql
+stable
+as $$
+  select nullif(current_setting('request.jwt.claims', true)::json->>'role', '')::text
+$$;

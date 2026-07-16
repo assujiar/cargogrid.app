@@ -2246,6 +2246,35 @@ Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`9
 
 Self-closing. `CG-S6-PLT-009` is `VERIFIED`. Next: `CG-S6-PLT-010` (Prompt 113, RLS Tenant Policy Foundation).
 
+### CHG-2026-045 — RLS Tenant Policy Foundation (Phase 1, Prompt 113)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-010` / `113_RLS_TENANT_POLICY_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-113.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716105512_create_rls_tenant_policies.sql`: `authenticated` receives `USAGE` on schema `app` for the first time (previously zero grant since `PLT-105`) plus narrow `SELECT`-only grants and RLS policies on 10 primary tenant-scoped tables, governed by two `STABLE`/`SECURITY DEFINER` helper functions (`app.is_supreme_admin()`, `app.has_active_tenant_membership()`). A real cross-identity information-disclosure bug in the first draft of the `principal_memberships` policy (any authenticated caller could see every other identity's global Supreme Admin row) was found and fixed during authoring. Writes remain fully denied for `authenticated` (all writes stay RPC-mediated via already-`VERIFIED` `service_role`-only functions); `anon` is unaffected. `*_history` audit tables and global catalogues are deliberately out of scope, deferred to `PLT-116`.
+
+#### Scope and files
+
+`supabase/migrations/20260716105512_create_rls_tenant_policies.sql`; `scripts/db-tests/fixtures/auth-schema-stub.sql` (extended with real `auth.uid()`/`auth.role()`); `scripts/db-tests/rls-tenant-policy.sql`; `scripts/db-tests/tenant-lifecycle.sql` (one stale `PLT-105` assertion updated to match the new, legitimate grant); `docs/build-log/phase-01/PLT-113.md`; standard runtime-ledger set. No RLS disabled, no business-domain table, no applied-migration file edited (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 337/337 PASS (unchanged — no new TypeScript surface); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 96 total scenario groups across all 9 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only (new functions, grants, policy objects; no table/column change). Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`903844d`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-010` is `VERIFIED`. Next: `CG-S6-PLT-011` (Prompt 114, Field-Level and Record-Level Access).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
