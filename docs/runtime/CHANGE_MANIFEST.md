@@ -2159,6 +2159,35 @@ Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`0
 
 Self-closing. `CG-S6-PLT-006` is `VERIFIED`. Next: `CG-S6-PLT-007` (Prompt 110, User Lifecycle).
 
+### CHG-2026-042 — User Lifecycle (Phase 1, Prompt 110)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-007` / `110_USER_LIFECYCLE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-110.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716102620_create_users.sql`: `app.users` is a tenant-scoped user profile layered on top of `PLT-107`'s `app.tenant_user_identities` and `PLT-108`'s `app.principal_memberships`, not a replacement for either. `app.invite_user()` composes `app.link_auth_identity()` to guarantee the identity linkage exists, then idempotently creates the profile. `app.transition_user_status()` is the canonical lifecycle transition (`invited→active|revoked`, `active→suspended|revoked`, `suspended→active|revoked`) with two real integration behaviors proven, not just documented: a last-critical-admin guard blocking suspend/revoke of the tenant's only active `tenant_admin`, and a revoke cascade that revokes the underlying identity link and every active principal membership. `app.reassign_user_org_unit()` validates cross-tenant safety with real optimistic concurrency, matching `PLT-109`'s discipline.
+
+#### Scope and files
+
+`supabase/migrations/20260716102620_create_users.sql`; `scripts/db-tests/user-lifecycle.sql`; `server/contracts/user-lifecycle/user-lifecycle.ts`(+test); `server/queries/user-lifecycle.ts`(+test); `server/mutations/user-lifecycle.ts`(+test); `docs/build-log/phase-01/PLT-110.md`; standard runtime-ledger set. No role/permission builder, HR table, or broad email-provider integration added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 314/314 PASS (304 carried + 10 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 60 total scenario groups across all 6 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`bec4925`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-007` is `VERIFIED`. Next: `CG-S6-PLT-008` (Prompt 111, Role and Permission Builder).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
