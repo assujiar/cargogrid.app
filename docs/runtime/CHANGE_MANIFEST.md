@@ -40,6 +40,7 @@
 | `CHG-2026-028` | `CG-S5-PH0-008` | DOCS/CODE | Author `docs/git/GIT_STRATEGY.md` (branching/naming §1, review/approval §2, merge strategy §3, protected-path table §4, release/hotfix/rollback §5, dirty-worktree/checkpoint/recovery model §6, pre-flight collision check §7, validation-script index §8 — every rule cited to an already-ratified source in `11_DEVOPS_WORKSTREAM.md`/`12_RELEASE_TRAIN.md`/`AGENTS.md`, none invented, per §25's "does not invent unavailable protection"). Author `scripts/git/` non-destructive local validation: `check-commit-message.ts`, `check-branch-name.ts`, `check-protected-paths.ts`, `check-worktree-collision.ts` (+ 24 tests, all passing). Two real bugs found and fixed during authoring: a stale-local-`main`-ref false collision positive (fixed by comparing against `origin/main` + pairwise `git merge-base` genuine-fork detection), and a `.env` protected-path regex that also matched the safe `.env.example` (fixed with a negative-lookahead allowlist). `package.json` adds `git:check`/`git:check-paths` scripts. **Closes `ISS-2026-002`** (5 occurrences, `RECOVERED` process gap since `ERR-2026-003`): `AGENTS.md`'s "Required pre-flight" section now mandates a two-part collision check; executed for real this checkpoint via `mcp__github__list_pull_requests`/`list_branches` — 0 open PRs, no genuine fork (confirmed `claude/sleepy-ride-8pg1em` is fully contained in `origin/main`, not an active parallel lineage). No GitHub branch-protection/CODEOWNERS/hosting-platform configuration was performed (explicitly out of scope, external-mutation forbidden). No git hook auto-installed. `CG-S5-PH0-009` marked `READY`. | NONE — pure documentation/code, no schema/data/service/deployment/hosting-platform mutation | LOW | `COMPLETED` | `ccc9300` | 2026-07-15 |
 | `CHG-2026-029` | `CG-S5-PH0-009` | CI/DOCS | Author `.github/workflows/ci.yml` (GitHub Actions — `ADR-0004`, closes `ADR-CAND-ARCH-024`'s remaining CI/CD-platform-product component): full-history checkout, Corepack, cached Node/pnpm setup, frozen-lockfile install, typecheck/lint/test, PR-only branch-name/commit-message/protected-path checks (`scripts/git/**` from `CHG-2026-028`, now wired into real CI), `$GITHUB_STEP_SUMMARY` evidence. `permissions: contents: read` only, zero secrets, `pull_request` (not `pull_request_target`) for fork-PR safety. Every pipeline gate that has no real subject yet (RLS/security tests, build, migration check, deploy stages — no schema/app/hosting exists) is explicitly disclosed as N/A with its unblocking condition, not silently omitted or faked. Structural validation: YAML parses, every embedded shell command re-run locally with real exit codes; live GitHub-Actions-runner execution explicitly disclosed as unverifiable from this sandbox (closes on first real PR). `CG-S5-PH0-010` marked `READY`. | NONE — pure CI config/docs, no production deployment/IaC/secret/domain-code/shared-database mutation | LOW | `COMPLETED` | `ca4bca1` | 2026-07-15 |
 | `CHG-2026-030` | `CG-S5-PH0-010` | DOCS/CODE/CI | Author `docs/standards/CODING_STANDARDS.md` (naming, module/import boundaries citing `01_MODULE_DEPENDENCY_MAP.md`/`03_DOMAIN_BOUNDARY_MAP.md`, backend layering, error/logging/redaction, test/migration/API/UX conventions, security/performance bans, exception/suppression governance — every convention cited to already-ratified evidence, none re-derived). `eslint.config.js`: 2 real `import/no-restricted-paths` zones (platform-kernel-never-imports-domain; no-domain-imports-CPT/REP — inert until `lib/`/`server/` exist, same "establish now" pattern as `ADR-0001`) + 2 `no-restricted-syntax` bans (no wildcard `SELECT`, NFR-PERF-002; no raw `process.env.SUPABASE_SERVICE_ROLE_KEY` access) — every rule proven against a real fixture violation and a real compliant-code negative case, fixtures deleted before commit. `scripts/standards/check-suppressions.ts` (+10 tests): scans tracked source for `eslint-disable*`/`@ts-expect-error`/`@ts-ignore` requiring `SUPPRESS(owner=,reason=,expires=,adr=)` metadata. **Four real bugs found and fixed during authoring**: `eslint-plugin-import` needed promotion from transitive to direct dependency (pnpm's strict non-hoisting correctly caught the gap); ESLint flat config silently discards (not merges) a repeated rule key across config objects — combined two `no-restricted-syntax` objects into one; the `SELECT *` rule's own error-message text triggered its own selector — reworded; `check-suppressions.ts` flagged its own docstring — added an explicit self-exclusion. `package.json` adds `eslint-plugin-import` + `standards:check` script; `.github/workflows/ci.yml` gains one step extending the existing pipeline (`ADR-0004`'s "one pipeline, extended" consequence). No broad reformat/refactor; all 35 pre-existing tests pass unchanged (45 total after +10 new). `CG-S5-PH0-011` marked `READY`. | NONE — pure docs/lint-config/CI-config, no schema/data/feature-code/production mutation | LOW | `COMPLETED` | `191a9cf` | 2026-07-15 |
+| `CHG-2026-032` | `CG-S5-PH0-020` | DOCS/TEST | Author `docs/build-log/phase-00/PH0-99.md` (Prompt 99, Phase 0 Integrated Verification) — fresh install + full 11-gate re-run (`node:test` 235/235, `test:e2e` 3/3), requirement/WBS/ADR/docs traceability audit (zero orphan), 9-test cross-foundation integration suite (`scripts/verification/phase0-integration.test.ts`); 2 bounded repairs (`FEATURE_FLAG_STANDARDS.md` broken citation, execution-index stale rows `001`–`003`); 1 disclosed-not-fixed gap (`ISS-2026-008`, `check-secrets.ts` pattern narrower than `logger.ts`/`analytics.ts`); ID chosen as the lowest unused number in this manifest, not the next-sequential-given-content convention `CHG-2026-024` used — see `ISS-2026-005` update | NONE | LOW | `COMPLETED` | (this checkpoint) | 2026-07-16 |
 | `CHG-2026-031` | `CG-S5-PH0-011` | DOCS | Author `docs/adr/ADR-0005-component-library-foundation.md` (`ACCEPTED` — Radix UI primitives (`radix-ui@1.6.2`, verified current), copy-in pattern into `components/ui/`, resolves `ADR-CAND-ARCH-020`) and `docs/adr/ADR-0006-design-token-mechanism.md` (`ACCEPTED` — CSS custom properties for runtime per-tenant override, authored via Tailwind v4's `@theme` CSS-first config (`tailwindcss@4.3.2`, verified current), resolves `ADR-CAND-ARCH-021`; visual-regression tooling deliberately deferred to `PH0-091` per `09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §13's own "test-infrastructure, not design decision" framing). Author `docs/standards/DESIGN_SYSTEM.md`: token category structure, proposed (not-yet-contrast-certified) reference values for `neutral`/`success`/`warning`/`danger`/`info` roles, 11-state component contract and WCAG 2.2 AA acceptance criteria (both cited from already-`VERIFIED` `09_*.md`, not re-derived), component ownership rule, theming/white-label rules (RPD-019). **Explicitly discloses, rather than invents, that CargoGrid's own base brand color/logo/typography has no value anywhere in `docs/blueprint/**`** (verified via full six-document grep) — recorded as an open item with owner (Product/Design) and exact resolution point (before Phase 1's White-label Studio needs a default theme), not blocking. **Zero `components/ui/`/`lib/`/token files created** — both paths are Phase 1 Platform Core scope per `04_REPOSITORY_TARGET_STRUCTURE.md`'s wave-2 boundary, the same discipline `PH0-085`/`086`/`089` applied elsewhere; creating component code now with no real consumer would be exactly the premature-scaffold class `ADR-0001` exists to prevent. `pnpm run typecheck/lint/test` identical to `PH0-89.md`'s baseline (zero code added). `CG-S5-PH0-012` marked `READY`. | NONE — pure documentation/decision, no code/schema/data/production mutation | LOW | `COMPLETED` | (this checkpoint) | 2026-07-15 |
 
 ## 2. Change entries
@@ -1728,6 +1729,58 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 #### Approval and closure
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-019` is `VERIFIED`. **All 18 Phase 0 capability tasks are now `VERIFIED`.** Next eligible task: `CG-S5-PH0-020` (Prompt 99, Phase 0 Integrated Verification).
+
+### CHG-2026-032 — Phase 0 Integrated Verification (Phase 0, Prompt 99)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-020` / `99_PHASE0_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Phase/workstream | Phase 0 / Verification (first of the four closing prompts `99`–`102`, not another capability slice) |
+| Change type | DOCS/TEST |
+| Author/agent | Claude Code, branch `claude/lanjut-btusq6` |
+| Source requirements | `99_PHASE0_INTEGRATED_VERIFICATION_PROMPT.md` §5/§11/§14/§20/§23/§24/§28 |
+| Decisions | None — no ADR candidate touched. Chose `CHG-2026-032` (lowest unused ID in this manifest) instead of the `CHG-2026-024`-style "next sequential given real content" convention `ISS-2026-005` describes, specifically to avoid adding a tenth duplicate ID to that already-open issue — see the `ISS-2026-005` update this checkpoint added |
+| Baseline evidence | `docs/build-log/phase-00/PH0-99.md` (full checkpoint record) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Ran a fresh `rm -rf node_modules && pnpm install --frozen-lockfile` followed by all 11 quality gates (typecheck, lint, test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, test:e2e, preflight, git:check) — all green. Authored `scripts/verification/phase0-integration.test.ts` (9 new tests) proving three cross-foundation scenarios that no single module's own isolated suite exercises: a flag→analytics→observability pipeline with redaction verified across the module boundary, two-tenant isolation (flag deny-list + pseudonymization non-collision + data-classification↔env-schema consistency), and sensitive-key-pattern consistency across three independently-authored modules (which surfaced a real, disclosed gap — `ISS-2026-008`). Ran a requirement/WBS/ADR/docs traceability audit finding zero orphans beyond two bounded-repaired staleness items and two already-tracked open issues.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `scripts/verification/phase0-integration.test.ts` | ADD | 9 cross-foundation integration tests | `git revert` |
+| `docs/standards/FEATURE_FLAG_STANDARDS.md` | EDIT | Bounded repair #1 — removed a broken backtick-path citation to a not-yet-authored runbook | `git revert` |
+| `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Bounded repair #2 — rows `001`–`003` status corrected from stale `IN_PROGRESS`/`READY`/`BLOCKED` to `VERIFIED`, matching `TASK_LEDGER.md`; also row `020`→done, `021`→`READY` | `git revert` |
+| `docs/runtime/KNOWN_ISSUES.md` | EDIT | `ISS-2026-008` added (disclosed, not fixed); `ISS-2026-005` updated with the ID-collision detail found during this checkpoint's traceability audit | `git revert` |
+| `docs/build-log/phase-00/PH0-99.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, this manifest | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched — confirmed by this checkpoint's own `git status`. No fix applied outside the two bounded-repair items named above (Prompt 99 §11's "default no repair").
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. `ISS-2026-008` (secret-pattern coverage gap) does not affect any real secret today — this repository still has zero live credentials in tracked content (confirmed by `security:check`'s own 0-finding result).
+
+#### Tests and quality evidence
+
+Fresh install (`rm -rf node_modules && pnpm install --frozen-lockfile`) + full gate re-run, all PASS: `typecheck`, `lint`, `test` (`node:test` 235/235 — 226 carried + 9 new), `docs:check`, `security:check`, `data-classification:check`, `threat-model:check`, `standards:check`, `test:e2e` (3/3), `preflight` (fails closed as expected — no real environment provisioned), `git:check`.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`5b7f138`.
+- Recovery verification: full gate suite re-run green after every fix during authoring.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, `KNOWN_ISSUES.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened. `ISS-2026-008` opened; `ISS-2026-005` updated (not closed).
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-020` is `VERIFIED`. Next eligible task: `CG-S5-PH0-021` (Prompt 100, Phase 0 Hardening) — consumes this checkpoint's failure matrix (`docs/build-log/phase-00/PH0-99.md` §5) as its named remediation scope.
 
 ## 3. Maintenance rules
 

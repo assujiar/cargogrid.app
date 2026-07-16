@@ -48,7 +48,7 @@ Neither `11_*.md` §9.2 nor `12_*.md` §6 names an explicit order when multiple 
 | Distributed cache invalidation | No `config_versions` mechanism is wired yet | Phase 1, `07_CONFIGURATION_ENGINE_WORKSTREAM.md` |
 | Real flag definitions for a real feature | No feature exists to flag yet | Each Phase 1+ capability prompt that ships behind a flag, per `12_RELEASE_TRAIN.md` §6 |
 | CI-wired repository checker (the pattern `check-secrets.ts`/`check-doc-links.ts`/`check-registry.ts` established) | No real flag registry content exists yet to validate — a checker with nothing real to check would be the same "fabricated gate" anti-pattern `PH0-88.md` §3 already rejected | Added once Phase 1's first real `FlagDefinition` exists |
-| `docs/runbooks/deployment-rollback.md` (feature-flag-disable row) | Not yet authored — `11_DEVOPS_WORKSTREAM.md` §8.5's 9-runbook catalogue already names it; this checkpoint does not invent a second, competing flag-specific runbook | Phase 0/1 DevOps environment task (`11_*.md` §11's "Deployment pipeline + rollback runbooks" backlog slice) |
+"deployment-rollback.md" runbook (feature-flag-disable row) | Not yet authored — `11_DEVOPS_WORKSTREAM.md` §8.5's 9-runbook catalogue already names its future path (`docs/runbooks/`); this checkpoint does not invent a second, competing flag-specific runbook | Phase 0/1 DevOps environment task (`11_*.md` §11's "Deployment pipeline + rollback runbooks" backlog slice) |
 
 ## 8. Test evidence this checkpoint
 
