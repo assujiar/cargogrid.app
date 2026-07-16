@@ -16,17 +16,17 @@
 | Field | Value |
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed** (`RUNTIME_DISCOVERY_VERIFIED`); Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); **Phase 0 closed (`PHASE_0_VERIFIED`)**; **Phase 1 — Platform Core `PHASE_1_IN_PROGRESS`** |
-| Current phase/workstream | Phase 1 — Platform Core. Kickoff + 2 capabilities `VERIFIED` (Tenant Provisioning/Lifecycle; Subscription/Module/Feature Entitlement). |
-| Active task | `CG-S6-PLT-004` — Supabase Auth Integration (Prompt 107) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S6-PLT-003` (Prompt 106, Subscription/Module/Feature Entitlement) `VERIFIED` this checkpoint. Versioned entitlement model (packages/tenant assignment/overrides), catalogue seeded from real architecture evidence (9 modules/41 features), fail-closed evaluator (stage 1 of the 8-stage access flow) with an explicit-invalidation cache. `node:test` 261/261, `db:test` 19 scenario groups, all 12 gates green. |
+| Current phase/workstream | Phase 1 — Platform Core. Kickoff + 3 capabilities `VERIFIED` (Tenant Provisioning/Lifecycle; Subscription/Module/Feature Entitlement; Supabase Auth Integration). |
+| Active task | `CG-S6-PLT-005` — Four-Layer Identity/Access Context (Prompt 108) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S6-PLT-004` (Prompt 107, Supabase Auth Integration) `VERIFIED` this checkpoint. `app.tenant_user_identities` links `auth.users.id` to tenants (idempotent, multi-tenant-per-identity, cross-tenant-isolated); pure secure-cookie/redirect-allowlist primitives; live GoTrue wiring disclosed `NOT_RUN` (no live Supabase project). `node:test` 282/282, `db:test` 26 scenario groups, all 12 gates green. |
 | Branch | `claude/lanjut-btusq6` (this session's harness-assigned/designated branch — first Phase 0 checkpoint run on a branch name other than `agent/cargogrid-autonomous-build`; surfaced and fixed `ISS-2026-004`, a hardcoded-branch-name test fragility) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) — historical; current last-known-good is this checkpoint's own commit |
 | Schema/migration head | NONE (no database — still greenfield; Phase 1 Platform Core is the first phase expected to introduce one) |
 | Latest environment verified | local sandbox (read-only); no deployed environment exists yet (`preflight` correctly fails closed) |
-| Last full green gate | This checkpoint — `node:test` 261/261, `db:test` 19 scenario groups, all 12 gates green |
+| Last full green gate | This checkpoint — `node:test` 282/282, `db:test` 26 scenario groups, all 12 gates green |
 | **Active blockers** | **NONE.** `ERR-2026-001..003` all `RECOVERED`/`SUPERSEDED`. Zero `OPEN` error, zero Critical/High-severity issue. |
-| Next eligible task | `CG-S6-PLT-004` — Supabase Auth Integration (Prompt 107), per `docs/runtime/TASK_LEDGER.md` and `docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md` row `004`, both current as of this checkpoint. |
+| Next eligible task | `CG-S6-PLT-005` — Four-Layer Identity/Access Context (Prompt 108), per `docs/runtime/TASK_LEDGER.md` and `docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md` row `005`, both current as of this checkpoint. |
 
 Checkpoint summary: Step 2 discovery is genuinely closed and trustworthy (`RUNTIME_DISCOVERY_VERIFIED`, single lineage, no divergence). Step 3 (Prompts 36–48, `docs/architecture/01_*.md`–`13_*.md`) is also genuinely closed and trustworthy — the divergence only affects Prompts 49–51 (`14_*.md`–`16_*.md`) and Phase 0 Prompts 80–82. Two independent agent sessions ran those six task IDs in parallel from the same shared ancestor, producing materially different content (e.g. 607 vs. 401 traced requirement items). This was correctly detected and halted by a prior session (`ERR-2026-002`, `HANDOFF.md` `HO-20260715-021`), which asked an operator to choose one of three reconciliation options before any further work continued. Before that decision was recorded, both branches' pull requests (PR #10, then PR #11) were merged into `main` directly. Because the two lineages' edits did not overlap line-for-line, git resolved both merges without conflict markers by **silently concatenating** the divergent content — not reconciling it. This session (this checkpoint) discovered and documented that outcome as `ERR-2026-003`, consolidated the previously-stacked `docs/runtime/*.md` ledgers into single coherent documents, and halted rather than build further Phase 0 capability prompts on top of an unreliable Step 3/Phase 0 baseline. No product/business decision was reopened — this is a process/governance issue about which of two already-produced documents is authoritative, plus a mechanical cleanup of two duplicated documents.
 
@@ -52,7 +52,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
 | 0 | Discovery and Foundation | **`VERIFIED`** (`PHASE_0_VERIFIED` set at `CG-S5-PH0-023`, Prompt 102, `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md`) — the `ERR-2026-003` corruption this row previously described is `RECOVERED` and long since superseded by 23/23 tasks `VERIFIED` | 100% (23/23 tasks) | `CG-S6-PLT-001` — Platform Core WBS and Runtime Kickoff (Prompt 104) |
-| 1 | Platform Core | `IN_PROGRESS` (kickoff + 2/32 capabilities `VERIFIED`) | ~8% (3/37 tasks) | `CG-S6-PLT-004` — Supabase Auth Integration (Prompt 107) |
+| 1 | Platform Core | `IN_PROGRESS` (kickoff + 3/32 capabilities `VERIFIED`) | ~11% (4/37 tasks) | `CG-S6-PLT-005` — Four-Layer Identity/Access Context (Prompt 108) |
 | 2 | Commercial | `NOT_STARTED` | 0% | after `PHASE_1_VERIFIED` |
 | 3 | Operations | `NOT_STARTED` | 0% | after `PHASE_2_VERIFIED` |
 | 4 | Finance | `NOT_STARTED` | 0% | after `PHASE_3_VERIFIED` |

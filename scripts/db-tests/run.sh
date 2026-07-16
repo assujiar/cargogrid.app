@@ -45,6 +45,16 @@ end
 "
 
 shopt -s nullglob
+
+fixtures=("$SCRIPT_DIR"/fixtures/*.sql)
+if [ ${#fixtures[@]} -gt 0 ]; then
+  echo "==> db-tests: loading ${#fixtures[@]} local-only test fixture(s) (never real migrations -- see each file's own header)"
+  for fixture in "${fixtures[@]}"; do
+    echo "  -- $(basename "$fixture")"
+    psql "$TEST_DB_URL" -v ON_ERROR_STOP=1 -f "$fixture"
+  done
+fi
+
 migrations=("$MIGRATIONS_DIR"/*.sql)
 if [ ${#migrations[@]} -eq 0 ]; then
   echo "==> db-tests: no migrations found under $MIGRATIONS_DIR -- nothing to test"

@@ -2072,6 +2072,35 @@ Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`5
 
 Self-closing. `CG-S6-PLT-003` is `VERIFIED`. Next: `CG-S6-PLT-004` (Prompt 107, Supabase Auth Integration).
 
+### CHG-2026-039 — Supabase Auth Integration (Phase 1, Prompt 107)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-004` / `107_SUPABASE_AUTH_INTEGRATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-107.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716095343_link_auth_identities.sql`: `app.tenant_user_identities` links `auth.users.id` (Supabase-managed, never created/altered by this repository's migrations) to `app.tenants` — idempotent invite, guarded `invited→active→revoked` lifecycle, one identity provably linkable to multiple tenants, cross-tenant isolation proven. A local-only `auth.users` test fixture (`scripts/db-tests/fixtures/auth-schema-stub.sql`, never a real migration) lets this be proven against real Postgres without a live Supabase project. `lib/auth/session-cookie-options.ts`/`redirect-allowlist.ts` are real, tested, pure security primitives (secure cookie attributes; open-redirect defense against both the `//` and `/\` bypass classes). Live GoTrue wiring (server client, email delivery, session refresh/logout/MFA challenge) is explicitly disclosed `NOT_RUN` — no live Supabase project exists, matching the disclosure discipline `SECURITY_STANDARDS.md` §1 established at Phase 0.
+
+#### Scope and files
+
+`supabase/migrations/20260716095343_link_auth_identities.sql`; `scripts/db-tests/fixtures/auth-schema-stub.sql`; `scripts/db-tests/auth-identity.sql`; `scripts/db-tests/run.sh` (extended); `lib/auth/session-cookie-options.ts`(+test); `lib/auth/redirect-allowlist.ts`(+test); `server/contracts/auth/identity.ts`(+test); `server/queries/auth-identity.ts`(+test); `server/mutations/auth-identity.ts`(+test); `package.json`; `docs/build-log/phase-01/PLT-107.md`; standard runtime-ledger set. No role/permission logic, real identity/secret, or broad portal redesign added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (one real fix: `LinkAuthIdentityInputSchema`'s Zod default required `z.input<>` not `z.infer<>` for the input type); `pnpm run test` 282/282 PASS (261 carried + 21 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 26 total scenario groups across all 3 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`06143df`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-004` is `VERIFIED`. Next: `CG-S6-PLT-005` (Prompt 108, Four-Layer Identity/Access Context).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
