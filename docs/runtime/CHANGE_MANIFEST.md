@@ -1837,6 +1837,57 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-021` is `VERIFIED`. Next eligible task: `CG-S5-PH0-022` (Prompt 101, Phase 0 Documentation Handoff).
 
+### CHG-2026-034 — Phase 0 Documentation and Handoff (Phase 0, Prompt 101)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-022` / `101_PHASE0_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Phase/workstream | Phase 0 / Verification (third of the four closing prompts `99`–`102`) |
+| Change type | DOCS/CODE |
+| Author/agent | Claude Code, branch `claude/lanjut-btusq6` |
+| Source requirements | `101_PHASE0_DOCUMENTATION_HANDOFF_PROMPT.md` §20/§21/§24/§28 |
+| Decisions | None — no ADR candidate touched |
+| Baseline evidence | `docs/build-log/phase-00/PH0-101.md` (full checkpoint record) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/build-log/phase-00/PHASE0_HANDOFF_PACKAGE.md` — a new, self-contained "Phase 1 entry package" distinct from `docs/runtime/HANDOFF.md`, written for an independent Phase 1 agent with zero prior session context: verified dependencies, an inventory of every real preserved asset, the exact contingent-not-yet-active first Phase 1 prompt, carried-forward known issues/risks, verified environment commands, and a rehearsed fresh-context reconstruction check. Found and fixed a second-order `docs:check` self-reference regression: `PH0-100.md` quotes `PH0-99.md`'s own already-fixed finding inside a code block, one generation removed, which was never checked until this checkpoint's fresh gate run — fixed via a second file-scoped exemption entry, `PH0-99.md`/`PH0-100.md` themselves left untouched.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/build-log/phase-00/PHASE0_HANDOFF_PACKAGE.md` | ADD | The Phase 1 entry package (§20 task 3) | `git revert` |
+| `docs/build-log/phase-00/PH0-101.md` | ADD | This checkpoint's build log | `git revert` |
+| `scripts/docs/check-doc-links.ts` | EDIT | Second `KNOWN_HISTORICAL_QUOTED_CITATIONS` entry for `PH0-100.md`'s self-reference | `git revert` |
+| `scripts/docs/check-doc-links.test.ts` | EDIT | 2 new regression tests (exemption proof + no-false-positive-elsewhere proof) | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, this manifest, `00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched — confirmed by this checkpoint's own `git status`. No runtime source/config/schema/data/deployment file touched (§12 forbidden-scope compliance).
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. The new handoff package was scanned with `pnpm run security:check` (0 findings) before close, per §16's redaction requirement.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 239/239 PASS (237 carried + 2 new); `pnpm run docs:check` PASS (after the exemption fix); `pnpm run security:check` PASS; `pnpm run data-classification:check` PASS; `pnpm run threat-model:check` PASS (unchanged); `pnpm run standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, test, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`92a4958`.
+- Recovery verification: full 10-gate suite re-run green after the exemption fix.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log, and the new `PHASE0_HANDOFF_PACKAGE.md`. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-022` is `VERIFIED`. Next eligible task: `CG-S5-PH0-023` (Prompt 102, Phase 0 Closure Verification) — the final Phase 0 prompt, the only one authorized to set `PHASE_0_VERIFIED`.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

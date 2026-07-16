@@ -80,6 +80,16 @@ describe("checkLinks", () => {
     const issues = checkLinks(["docs/build-log/phase-00/PH0-99.md"]);
     assert.deepEqual(issues, []);
   });
+
+  test("excuses PH0-100.md's quote-of-a-quote of the same not-yet-created runbook path", () => {
+    const issues = checkLinks(["docs/build-log/phase-00/PH0-100.md"]);
+    assert.deepEqual(issues, []);
+  });
+
+  test("does NOT excuse the same not-yet-created runbook path from a document with no historical-quote exemption (regression guard)", () => {
+    const issues = checkLinks(["docs/standards/FEATURE_FLAG_STANDARDS.md"]);
+    assert.deepEqual(issues, [], "FEATURE_FLAG_STANDARDS.md was already fixed at PH0-99 to not cite the path in backtick form — this must stay clean, not pass only because of a blanket exemption");
+  });
 });
 
 describe("checkCanonicalRuntimeFiles", () => {

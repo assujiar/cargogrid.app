@@ -83,7 +83,13 @@ const KNOWN_HISTORICAL_BROKEN_LINKS = new Set([
 // was never checked until now). File-scoped (not global) so a *new* citation
 // of the same not-yet-created runbook path from any other document is still
 // caught normally.
-const KNOWN_HISTORICAL_QUOTED_CITATIONS = new Set(["docs/build-log/phase-00/PH0-99.md:docs/runbooks/deployment-rollback.md"]);
+const KNOWN_HISTORICAL_QUOTED_CITATIONS = new Set([
+  "docs/build-log/phase-00/PH0-99.md:docs/runbooks/deployment-rollback.md",
+  // PH0-100.md quotes PH0-99.md's own finding (including the error line
+  // above) verbatim as evidence while explaining and fixing it — the same
+  // one-generation-removed quoting pattern, not a new independent claim.
+  "docs/build-log/phase-00/PH0-100.md:docs/runbooks/deployment-rollback.md",
+]);
 
 export const REQUIRED_RUNTIME_FILES = [
   "docs/runtime/CARGOGRID_CONTEXT.md",
