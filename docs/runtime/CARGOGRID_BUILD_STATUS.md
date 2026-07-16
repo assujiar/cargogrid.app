@@ -17,8 +17,8 @@
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
 | Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-018` — Product Analytics Baseline (Prompt 97) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-017` (Prompt 96) `VERIFIED` this checkpoint. `docs/security/THREAT_MODEL.md` established (25-entry STRIDE register, reproducible+monotonic risk ranking, 4 critical entries all fully specified by existing architecture). `node:test` 166/166. Zero active exploitation or runtime change performed (passive modeling only). |
+| Active task | `CG-S5-PH0-019` — Feature Flag Foundation (Prompt 98) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S5-PH0-018` (Prompt 97) `VERIFIED` this checkpoint. `docs/standards/PRODUCT_ANALYTICS_STANDARDS.md` established (event taxonomy, consent/prohibited-field rejection, real HMAC pseudonymization); `scripts/product-analytics/analytics.ts` (safe-disablement + safe-degrade proven under real failure injection). `node:test` 195/195. No analytics provider integrated — none approved, explicitly deferred. |
 | Branch | `claude/lanjut-btusq6` (this session's harness-assigned/designated branch — first Phase 0 checkpoint run on a branch name other than `agent/cargogrid-autonomous-build`; surfaced and fixed `ISS-2026-004`, a hardcoded-branch-name test fragility) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |

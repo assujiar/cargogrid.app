@@ -74,8 +74,8 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 |---|---|
 | Repository/working dir | `/home/user/cargogrid.app` (origin `assujiar/cargogrid.app`) |
 | Branch | `claude/lanjut-btusq6` — this session's harness-assigned/designated branch (2026-07-15), first Phase 0 checkpoint not run on `agent/cargogrid-autonomous-build`; branched from `origin/main`@`92d698f` (PR #14), which already fully contains the prior `agent/cargogrid-autonomous-build` lineage through `PH0-90` |
-| Dirty worktree | This checkpoint's changes only (`docs/security/THREAT_MODEL.md`, `scripts/security/threat-model.ts`(+test), plus small edits to `package.json`/`ci.yml` — see `docs/build-log/phase-00/PH0-96.md`) |
-| Package manager/runtime/schema/env | pnpm `10.33.0` + Node `>=22.11.0` pinned at `PH0-085`; `node:test` + Playwright `1.61.1`/`@axe-core/playwright@4.12.1` ratified at `PH0-91` (`ADR-0007`/`ADR-0008`); documentation validator (`pnpm run docs:check`) added at `PH0-92`; observability platform decided at `PH0-93` (`ADR-0009`, Better Stack); secret-manager mechanism decided + real secret scanner (`pnpm run security:check`) added at `PH0-94` (`ADR-0010`); data-classification registry + adoption gate (`pnpm run data-classification:check`) added at `PH0-95`; 25-entry threat model + reproducible risk-ranking (`pnpm run threat-model:check`) added at `PH0-96`; no database/schema yet (Phase 1 scope) |
+| Dirty worktree | This checkpoint's changes only (`docs/standards/PRODUCT_ANALYTICS_STANDARDS.md`, `scripts/product-analytics/**` — see `docs/build-log/phase-00/PH0-97.md`) |
+| Package manager/runtime/schema/env | pnpm `10.33.0` + Node `>=22.11.0` pinned at `PH0-085`; `node:test` + Playwright `1.61.1`/`@axe-core/playwright@4.12.1` ratified at `PH0-91` (`ADR-0007`/`ADR-0008`); documentation validator (`pnpm run docs:check`) added at `PH0-92`; observability platform decided at `PH0-93` (`ADR-0009`, Better Stack); secret-manager mechanism decided + real secret scanner (`pnpm run security:check`) added at `PH0-94` (`ADR-0010`); data-classification registry + adoption gate (`pnpm run data-classification:check`) added at `PH0-95`; 25-entry threat model + reproducible risk-ranking (`pnpm run threat-model:check`) added at `PH0-96`; vendor-neutral product-analytics foundation added at `PH0-97` (no provider integrated — none approved); no database/schema yet (Phase 1 scope) |
 | Canonical context location | `docs/runtime/` (do not recreate root duplicates) |
 | Trust boundary | Repository + package + sources trusted; `docs/architecture/14..16_*.md` **reconciled and trusted** (Lineage A, 607-item baseline, `ERR-2026-003` `RECOVERED`) |
 
@@ -83,11 +83,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S5-PH0-018` — Product Analytics Baseline |
-| Prompt | `05-phase-00-discovery-foundation/97_PRODUCT_ANALYTICS_BASELINE_PROMPT.md` |
-| Status | `READY` — upstream `PH0-082..096` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
-| Reason | Next sequential Phase 0 capability prompt per `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` row `018`. Read `97_PRODUCT_ANALYTICS_BASELINE_PROMPT.md` in full before resolving its exact allowed-file scope. |
-| Upstream | `CG-S5-PH0-017` (`VERIFIED` — `docs/build-log/phase-00/PH0-96.md`; `docs/security/THREAT_MODEL.md` + `scripts/security/threat-model.ts` establish the initial threat model) |
+| Task ID/name | `CG-S5-PH0-019` — Feature Flag Foundation |
+| Prompt | `05-phase-00-discovery-foundation/98_FEATURE_FLAG_FOUNDATION_PROMPT.md` |
+| Status | `READY` — upstream `PH0-084..097` all `VERIFIED`; `ERR-2026-003` `RECOVERED`; `ISS-2026-002` `RESOLVED` |
+| Reason | Next sequential Phase 0 capability prompt per `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` row `019`. Read `98_FEATURE_FLAG_FOUNDATION_PROMPT.md` in full before resolving its exact allowed-file scope. |
+| Upstream | `CG-S5-PH0-018` (`VERIFIED` — `docs/build-log/phase-00/PH0-97.md`; `docs/standards/PRODUCT_ANALYTICS_STANDARDS.md` + `scripts/product-analytics/analytics.ts` establish the product-analytics foundation) |
 
 ## 5. Work completed (all runs to date, summarized)
 
@@ -100,7 +100,8 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 - **Phase 0 Prompt 93** (`CG-S5-PH0-014`): Observability Baseline — `ADR-0009` (Better Stack, resolved with real fetched web evidence, not assumed vendor knowledge), `docs/standards/OBSERVABILITY_STANDARDS.md` (signals/dashboards/alerts by reference, structured log/correlation/redaction/cardinality/retention contract), `scripts/observability/logger.ts` (vendor-neutral, zero-dependency, safe-degrade proven under real failure injection), first real `docs/runbooks/` instance. Full detail: `docs/build-log/phase-00/PH0-93.md`.
 - **Phase 0 Prompt 94** (`CG-S5-PH0-015`): Security Baseline Controls — `ADR-0010` (secret-manager mechanism: Vercel env vars + Supabase project secrets), `docs/standards/SECURITY_STANDARDS.md` (threat/control mapping tied to `SEC-2026-001`, headers/CORS/session/upload contracts fixed and explicitly `NOT_RUN`), `scripts/security/check-secrets.ts` (real secret scanner, 0 findings against this repository, 5 pattern kinds, redacted output), second real `docs/runbooks/` instance, dependency-audit gap disclosed not faked (`ISS-2026-007` — `pnpm audit` hits a retired npm endpoint). Full detail: `docs/build-log/phase-00/PH0-94.md`.
 - **Phase 0 Prompt 95** (`CG-S5-PH0-016`): Data Classification Foundation — `docs/standards/DATA_CLASSIFICATION_STANDARDS.md` (two-axis sensitivity-level/category taxonomy, constructed and disclosed from `02_CANONICAL_DATA_FLOW_MAP.md` §10's prose defaults; 8-dimension handling matrix; RPD-025 retention mapping), `scripts/data-classification/registry.ts`/`check-registry.ts` (real, CI-enforced adoption gate confirming this repository's one real secret-classified env var is registered). Full detail: `docs/build-log/phase-00/PH0-95.md`.
-- **Phase 0 Prompt 96** (`CG-S5-PH0-017`, this checkpoint): Initial Threat Model — `docs/security/THREAT_MODEL.md` (scope/assets/actors/7-layer trust-boundary chain, applying STRIDE + a reproducible risk rank to threats already catalogued in `06_*.md` §10/`10_*.md` §5.2–5.3/`08_*.md` §13, not a competing invented list), `scripts/security/threat-model.ts` (25-entry typed register; found+fixed a real risk-matrix design defect during authoring, disclosed in the build log). Full detail: `docs/build-log/phase-00/PH0-96.md`.
+- **Phase 0 Prompt 96** (`CG-S5-PH0-017`): Initial Threat Model — `docs/security/THREAT_MODEL.md` (scope/assets/actors/7-layer trust-boundary chain, applying STRIDE + a reproducible risk rank to threats already catalogued in `06_*.md` §10/`10_*.md` §5.2–5.3/`08_*.md` §13, not a competing invented list), `scripts/security/threat-model.ts` (25-entry typed register; found+fixed a real risk-matrix design defect during authoring, disclosed in the build log). Full detail: `docs/build-log/phase-00/PH0-96.md`.
+- **Phase 0 Prompt 97** (`CG-S5-PH0-018`, this checkpoint): Product Analytics Baseline — `docs/standards/PRODUCT_ANALYTICS_STANDARDS.md` (event taxonomy, consent/prohibited-field rules tied to `DATA_CLASSIFICATION_STANDARDS.md`, real HMAC pseudonymization, delivery/dedup/safe-degrade), `scripts/product-analytics/analytics.ts` (vendor-neutral, reuses `logger.ts`'s proven safe-disablement/safe-degrade design). No analytics provider integrated — none is named/approved anywhere and no ADR candidate exists for one, explicitly disclosed as deferred rather than invented (Prompt 97 §12 forbids unapproved vendor integration). Full detail: `docs/build-log/phase-00/PH0-97.md`.
 
 ## 6. Remaining work
 
@@ -142,10 +143,10 @@ Migration state: `NOT_CREATED`. Pre-existing/change-caused test failures: NONE (
 
 1. Confirm repo `/home/user/cargogrid.app`, branch `agent/cargogrid-autonomous-build`, worktree clean apart from this checkpoint.
 2. Read §2's mandatory reading order in full.
-3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative. Prompts 83–96 (`CG-S5-PH0-004..017`) are all `VERIFIED` — see `docs/build-log/phase-00/PH0-83.md`–`PH0-96.md`.
-4. Resume Phase 0 at `CG-S5-PH0-018` (Prompt 97, `97_PRODUCT_ANALYTICS_BASELINE_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (98–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the singular path `docs/build-log/phase-00/PH0-NN.md`.
+3. `ERR-2026-003` is `RECOVERED` (§1 decision recorded, `ERROR_LEDGER.md` §3 recovery + verification). `docs/architecture/14..16_*.md` are single coherent Lineage A documents; the 607-item baseline is authoritative. Prompts 83–97 (`CG-S5-PH0-004..018`) are all `VERIFIED` — see `docs/build-log/phase-00/PH0-83.md`–`PH0-97.md`.
+4. Resume Phase 0 at `CG-S5-PH0-019` (Prompt 98, `98_FEATURE_FLAG_FOUNDATION_PROMPT.md`) and continue looping through subsequent Phase 0 capability prompts (99–102) in strict sequential order as usage/context allow — completing one prompt is not a stop condition. Write each Phase 0 build log to the singular path `docs/build-log/phase-00/PH0-NN.md`.
 
-**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (row `018`) for the Phase 0 dependency graph, then execute `CG-S5-PH0-018` (Prompt 97). Prompts 83–96 and the `ERR-2026-003` blocker are resolved.**
+**First safe action for anyone picking this up: confirm the worktree is clean, read `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` (row `019`) for the Phase 0 dependency graph, then execute `CG-S5-PH0-019` (Prompt 98). Prompts 83–97 and the `ERR-2026-003` blocker are resolved.**
 
 ## 10. Handoff validation
 

@@ -1629,6 +1629,56 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-017` is `VERIFIED`. Next eligible task: `CG-S5-PH0-018` (Prompt 97, Product Analytics Baseline).
 
+### CHG-2026-030 — Product Analytics Baseline (Phase 0, Prompt 97)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-018`, `05-phase-00-discovery-foundation/97_PRODUCT_ANALYTICS_BASELINE_PROMPT.md` |
+| Phase/workstream | Phase 0 — Discovery and Foundation / Product Analytics, Ethical Product Measurement |
+| Change type | DOCS + zero-dependency tooling (`docs/standards/PRODUCT_ANALYTICS_STANDARDS.md`, `scripts/product-analytics/**`) |
+| Author/agent | Claude Code (runtime build agent), branch `claude/lanjut-btusq6` |
+| Source requirements | `97_PRODUCT_ANALYTICS_BASELINE_PROMPT.md` §20–26; `docs/blueprint/01_CargoGrid_Project_Product_Charter.md` (Phase 0 deliverable, risk `R-18`) |
+| Decisions | None — no ADR candidate names an analytics provider; provider selection explicitly deferred (Prompt 97 §12 forbids unapproved vendor integration) |
+| Baseline evidence | `docs/build-log/phase-00/PH0-96.md` (upstream `VERIFIED`); pre-flight collision check clean |
+| Final status | `COMPLETED` — `CG-S5-PH0-018` `VERIFIED` in `TASK_LEDGER.md` this checkpoint |
+
+#### Outcome
+
+Grepped every `docs/blueprint/**`/`docs/architecture/**` document and found product analytics referenced only as a Phase 0 deliverable name and a Charter risk row — no specific provider is named, and no `ADR-CAND-ARCH-0NN` was ever raised for one (unlike secrets/observability, both already resolved this build with real evidence). Built the complete vendor-neutral foundation instead: event-name schema (`docs/standards/PRODUCT_ANALYTICS_STANDARDS.md` §2), consent gating and prohibited-field rejection tied to `docs/standards/DATA_CLASSIFICATION_STANDARDS.md`'s categories (§3), real `HMAC-SHA256` pseudonymization (not a placeholder), an in-memory dedup guard, and a `track()` wrapper reusing the exact safe-disablement/safe-degrade design `scripts/observability/logger.ts` already proved at `PH0-93`. Provider selection is disclosed as an open `ADR_REQUIRED` item owned by whichever Phase 1 prompt first needs real delivery, not silently invented or deferred without a trace.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/standards/PRODUCT_ANALYTICS_STANDARDS.md` | ADD | Taxonomy, consent/prohibited-field rules, pseudonymization, delivery/dedup/safe-degrade, deferred-provider disclosure | `git revert` |
+| `scripts/product-analytics/analytics.ts`, `analytics.test.ts` | ADD | Vendor-neutral foundation + 29 tests | `git revert` |
+| `docs/build-log/phase-00/PH0-97.md` | ADD | This checkpoint's build log | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched; no analytics provider/vendor integrated (Prompt 97 §12) — confirmed by this checkpoint's own `git status`.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. No business feature instrumented (Prompt 97 §12's explicit forbidden-scope item).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 195/195 PASS (166 carried + 29 new); `pnpm run docs:check` PASS; `pnpm run security:check` PASS (0 findings, including across new HMAC-digest test fixtures); `pnpm run data-classification:check` PASS; `pnpm run threat-model:check` PASS (unchanged); `pnpm run test:e2e` 3/3 PASS (unchanged); `pnpm run standards:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`3c1b613`.
+- Recovery verification: full gate suite re-run green after every fix during authoring.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md`, this build log. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-018` is `VERIFIED`. Next eligible task: `CG-S5-PH0-019` (Prompt 98, Feature Flag Foundation).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
