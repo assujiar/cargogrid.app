@@ -2304,6 +2304,35 @@ Additive only (new functions, a view, and a reversible privilege narrowing on `a
 
 Self-closing. `CG-S6-PLT-011` is `VERIFIED`. Next: `CG-S6-PLT-012` (Prompt 115, Support Access and Impersonation).
 
+### CHG-2026-047 — Support Access and Impersonation Control (Phase 1, Prompt 115)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-012` / `115_SUPPORT_ACCESS_IMPERSONATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-115.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716111315_create_support_access.sql`: `app.support_access_grants`/`app.support_access_sessions`/`app.support_access_events` model a time/purpose-bound support grant lifecycle (`pending_approval → approved | denied`, `approved → revoked`), a discrete activate→end session window with 5-minute re-authentication freshness, and this capability's own append-only event trail. The `support_access_gated` policy family (`docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §4) is implemented as an additive `OR`-branch on `PLT-113`'s already-shipped `app.has_active_tenant_membership()`, transparently extending every tenant-scoped RLS policy that helper already gates — proven in the real database tests to compose correctly with `PLT-114`'s `app.can_access_record()` (a support grant satisfies only the tenant-membership prerequisite, never the ownership/share/customer-scope OR-branches, the concrete "layers over, does not bypass" proof, Prompt 115 §26). The kill switch (`app.revoke_support_access()`) is usable by either Supreme Admin or the target tenant's own `tenant_admin`; emergency access requires a recorded higher authority and carries a structurally shorter expiry cap (2h vs. 24h, enforced by a `CHECK` constraint) plus mandatory Supreme-Admin-only post-review.
+
+#### Scope and files
+
+`supabase/migrations/20260716111315_create_support_access.sql`; `scripts/db-tests/support-access.sql`; `server/contracts/support-access/support-access.ts`(+test); `server/queries/support-access.ts`(+test); `server/mutations/support-access.ts`(+test); `docs/build-log/phase-01/PLT-115.md`; standard runtime-ledger set. No unapproved standing access, direct service-role browser use, or domain admin feature added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 361/361 PASS (342 carried + 19 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 138 total scenario groups across all 11 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive-only except one function `CREATE OR REPLACE` (`app.has_active_tenant_membership()`), itself purely additive at the SQL level (one new `OR` branch) — reverting that statement alone fully restores `PLT-113`'s exact prior behavior. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`f3ba30c`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-012` is `VERIFIED`. This is the final prompt in the user's explicitly requested "sd prompt 115" range — next (`CG-S6-PLT-013`, Prompt 116, Audit Trail Foundation) requires user confirmation before proceeding.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
