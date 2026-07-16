@@ -2101,6 +2101,35 @@ Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`0
 
 Self-closing. `CG-S6-PLT-004` is `VERIFIED`. Next: `CG-S6-PLT-005` (Prompt 108, Four-Layer Identity/Access Context).
 
+### CHG-2026-040 — Four-Layer Identity and Access Context (Phase 1, Prompt 108)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-005` / `108_FOUR_LAYER_ACCESS_CONTEXT_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-108.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716100825_create_principal_memberships.sql`: `app.principal_memberships` models the four canonical principal layers (`supreme_admin`/`tenant_admin`/`org_user`/`customer_user`) as a grant tied to `PLT-107`'s identity linkage via composite FK, with a `layer_scope_shape` check constraint enforcing exactly which scope dimensions each layer may carry (proven to reject malformed rows at insert time). `app.resolve_access_context()` always returns exactly one resolved context or fails closed — ambiguous multi-membership, inactive tenant, inactive (merely-invited) identity linkage, and no-membership are all proven negative paths, never a silent/partial result. Deliberately excludes companies/branches (owned by `PLT-109`, next), a live `customers` table (business-domain, later phase — `customer_account_ref` is a reserved scope placeholder, not a live FK), and Supreme Admin's tenant-scoped support access (owned by `PLT-115`'s separate time-bound grant mechanism).
+
+#### Scope and files
+
+`supabase/migrations/20260716100825_create_principal_memberships.sql`; `scripts/db-tests/access-context.sql`; `server/contracts/access-context/access-context.ts`(+test); `server/queries/access-context.ts`(+test); `server/mutations/access-context.ts`(+test); `docs/build-log/phase-01/PLT-108.md`; standard runtime-ledger set. No RBAC/RLS policy, companies/branches/customers table, or portal UI added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 291/291 PASS (282 carried + 9 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 35 total scenario groups across all 4 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`03dcd67`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-005` is `VERIFIED`. Next: `CG-S6-PLT-006` (Prompt 109, Organization Hierarchy).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
