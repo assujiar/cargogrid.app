@@ -2188,6 +2188,35 @@ Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`b
 
 Self-closing. `CG-S6-PLT-007` is `VERIFIED`. Next: `CG-S6-PLT-008` (Prompt 111, Role and Permission Builder).
 
+### CHG-2026-043 — Role and Permission Builder (Phase 1, Prompt 111)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-008` / `111_ROLE_PERMISSION_BUILDER_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-111.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716103445_create_roles_permissions.sql`: `app.permissions` is a real, sourced catalogue (64 rows, the 19 permission actions from `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §5.1 crossed with `PLT-106`'s real 9-module catalogue, not a fabricated resource taxonomy) with `protected=true` matching §5.2's field-masking-gated actions exactly. `app.roles`/`app.role_versions` implement a versioned draft→publish→archive lifecycle where a version's bindings are immutable once published (publishing archives the role's prior published version, the same supersession pattern `PLT-106` established). `app.assign_role()` carries a real self-escalation guard: an actor may not assign to themselves a role version carrying any protected permission, using a distinct real-identity parameter (`p_actor_auth_user_id`) rather than a spoofable text field. Roles are never seeded — every row is tenant-created. RBAC *enforcement* against these bindings is explicitly deferred to `PLT-112`.
+
+#### Scope and files
+
+`supabase/migrations/20260716103445_create_roles_permissions.sql`; `scripts/db-tests/role-permission.sql`; `server/contracts/role-permission/role-permission.ts`(+test); `server/queries/role-permission.ts`(+test); `server/mutations/role-permission.ts`(+test); `docs/build-log/phase-01/PLT-111.md`; standard runtime-ledger set. No portal page, RLS policy, or hard-coded tenant role added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 328/328 PASS (314 carried + 14 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 72 total scenario groups across all 7 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`96e24dd`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-008` is `VERIFIED`. Next: `CG-S6-PLT-009` (Prompt 112, RBAC Enforcement).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
