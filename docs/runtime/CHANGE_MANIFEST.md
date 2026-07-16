@@ -2217,6 +2217,35 @@ Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`9
 
 Self-closing. `CG-S6-PLT-008` is `VERIFIED`. Next: `CG-S6-PLT-009` (Prompt 112, RBAC Enforcement).
 
+### CHG-2026-044 — RBAC Enforcement (Phase 1, Prompt 112)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-009` / `112_RBAC_ENFORCEMENT_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-112.md` |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+`supabase/migrations/20260716104519_create_rbac_evaluator.sql`: `app.evaluate_permission()` implements stage 3 of the 8-stage access flow — the first capability to actually read `PLT-111`'s role/permission bindings to permit or deny. Deny-by-default proven on every negative path (unknown permission, no assignment, revoked assignment, and a stale assignment pointing at a since-archived/superseded role version). Role names structurally never authorize (proven by a role literally named to sound like a bypass, still denying). The Supreme Admin exception (RPD-022) and additive multi-role combination (union, no explicit-deny concept exists at the role layer) are both real and proven. `server/policies/permission-check.ts` is the shared guard at the exact module path `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §3 already names; `RbacDecisionCache` mirrors `PLT-106`'s explicit-invalidation pattern as a deliberately separate cache instance.
+
+#### Scope and files
+
+`supabase/migrations/20260716104519_create_rbac_evaluator.sql`; `scripts/db-tests/rbac-enforcement.sql`; `server/contracts/rbac/rbac.ts`(+test); `server/queries/rbac.ts`(+test); `server/policies/permission-check.ts`(+test); `docs/build-log/phase-01/PLT-112.md`; standard runtime-ledger set. No RLS policy, domain table, or portal UI added (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 337/337 PASS (328 carried + 9 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 84 total scenario groups across all 8 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Additive only. Rollback: `git revert`; last known good `claude/lanjut-btusq6`@`9ac20a3`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-009` is `VERIFIED`. Next: `CG-S6-PLT-010` (Prompt 113, RLS Tenant Policy Foundation).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
