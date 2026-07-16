@@ -183,6 +183,50 @@ begin
 end;
 $$;
 
+-- Regression test (real bug found and fixed at PLT-116, see
+-- supabase/migrations/20260716113048_create_audit_trail.sql's own comment): a
+-- non-security-invoker view's row-level-security posture is its OWNER's, not the
+-- caller's, so app.users_directory originally leaked every tenant's users to any
+-- authenticated caller regardless of PLT-113's own users_select_own_tenant RLS
+-- policy -- masked in earlier test runs purely because not enough foreign-tenant
+-- app.users data happened to exist yet at this point in file-execution order. This
+-- test is self-contained (creates its own extra foreign tenant right here, rather
+-- than depending on incidental cross-file ordering) so the fix can never regress
+-- silently again.
+\echo '>> regression: app.users_directory stays correctly tenant-scoped even with other tenants'' real user data present (PLT-116''s empirically-found and fixed cross-tenant leak)'
+do $$
+declare
+  v_regression_tenant_id uuid;
+  v_org_unit_id uuid;
+  v_count integer;
+begin
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000000607', 'foreigntenantuser@example.test');
+  perform app.provision_tenant('foreignfra', 'Foreign Field/Record Co', 'idem-foreignfra', 'tester');
+  v_regression_tenant_id := (select id from app.tenants where slug = 'foreignfra');
+  perform app.transition_tenant_status(v_regression_tenant_id, 'active', 'setup', 'tester');
+  perform app.create_org_unit(v_regression_tenant_id, 'company', null, 'FOREIGNFRA-CO', 'Foreign Co', 'tester');
+  v_org_unit_id := (select id from app.org_units where tenant_id = v_regression_tenant_id and code = 'FOREIGNFRA-CO');
+  perform app.invite_user(v_regression_tenant_id, '00000000-0000-0000-0000-000000000607', 'foreigntenantuser@example.test', 'Foreign User', v_org_unit_id, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'foreigntenantuser@example.test'), 'active', 'onboarded', 'tester');
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000603", "role": "authenticated"}';
+  select count(*) into v_count from app.users_directory;
+  reset role;
+  if v_count <> 4 then
+    raise exception 'assertion failed: expected the outsider to still see exactly their own tenant''s 4 directory rows after a brand-new foreign tenant''s users were created, saw %', v_count;
+  end if;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000607", "role": "authenticated"}';
+  select count(*) into v_count from app.users_directory;
+  reset role;
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected the foreign tenant''s own user to see exactly their own 1 directory row, saw %', v_count;
+  end if;
+end;
+$$;
+
 \echo '>> defense in depth: anon still denied entirely; service_role still bypasses everything, including the mask (its own direct query, not the view)'
 do $$
 begin

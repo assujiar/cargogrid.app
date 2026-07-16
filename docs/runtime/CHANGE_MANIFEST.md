@@ -2333,6 +2333,38 @@ Additive-only except one function `CREATE OR REPLACE` (`app.has_active_tenant_me
 
 Self-closing. `CG-S6-PLT-012` is `VERIFIED`. This is the final prompt in the user's explicitly requested "sd prompt 115" range — next (`CG-S6-PLT-013`, Prompt 116, Audit Trail Foundation) requires user confirmation before proceeding.
 
+### CHG-2026-048 — Audit Trail Foundation (Phase 1, Prompt 116)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-013` / `116_AUDIT_TRAIL_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/SECURITY-FIX |
+| Baseline evidence | `docs/build-log/phase-01/PLT-116.md` |
+| Final status | `COMPLETED` |
+| Authorization | User explicitly authorized continuing past the "sd prompt 115" range with "lanjut" in response to a direct confirmation question, per `HANDOFF.md`'s own standing note |
+
+#### Outcome
+
+`supabase/migrations/20260716113048_create_audit_trail.sql`: `app.audit_logs` is the canonical, tenant-aware compliance trail — `app.capture_audit_event()` is the single real write path, with deterministic redaction (`app.redact_audit_payload()`, reproducing `scripts/observability/logger.ts`'s sensitive-key list) applied unconditionally to `before_value`/`after_value`. `app.query_audit_logs()`/`app.export_audit_logs()` are permission-aware (reusing `PLT-115`'s `app.is_support_grant_authority()`), keyset-paginated, and unconditionally self-log their own invocation — the structural form of "privileged access itself audited." RPD-022's Supreme Admin exception is implemented via `app.supreme_admin_mutate_audit_log()`/`app.supreme_admin_delete_audit_log()`, both self-capturing before/after evidence (`docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §10 test #9). `PLT-115`'s `revoke_support_access()` kill switch is extended (additive `CREATE OR REPLACE`) to also emit a canonical audit entry — the required "representative platform-event integration."
+
+**A real, pre-existing cross-tenant PII leak in `PLT-114`'s `app.users_directory` was found and fixed during this checkpoint's authoring**: a non-`security_invoker` view's RLS posture is its *owner's*, not the caller's, and the migration-applying role has `BYPASSRLS` — so the view silently returned every tenant's users to any authenticated caller, undetected until this checkpoint's own test file happened to add enough foreign-tenant data early enough in execution order to expose it. Fixed via an explicit `WHERE app.has_active_tenant_membership(u.tenant_id)` predicate inside the view (`CREATE OR REPLACE VIEW`), with a permanent, self-contained regression test added to `PLT-114`'s own `field-record-access.sql`.
+
+#### Scope and files
+
+`supabase/migrations/20260716113048_create_audit_trail.sql`; `scripts/db-tests/audit-trail.sql`; `scripts/db-tests/field-record-access.sql` (regression test); `server/contracts/audit-trail/audit-trail.ts`(+test); `server/queries/audit-trail.ts`(+test); `server/mutations/audit-trail.ts`(+test); `docs/build-log/phase-01/PLT-116.md`; one unrelated broken-link citation fixed in `PLT-115.md` §3.4; standard runtime-ledger set. No immutable/tamper-proof claim made, no sensitive payload dumping, no domain-wide instrumentation outside scope (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 373/373 PASS (361 carried + 12 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS; `pnpm run db:test` PASS — 153 total scenario groups across all 12 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Mostly additive, plus two `CREATE OR REPLACE` statements on already-shipped artifacts: `app.revoke_support_access()` (additive-only, safe to revert in isolation) and `app.users_directory` (the security fix — **NOT safe to revert in isolation**, since doing so would reintroduce the real cross-tenant leak). Rollback: `git revert`, preserving the view fix; last known good `claude/lanjut-btusq6`@`2177484`.
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-013` is `VERIFIED`. Next: `CG-S6-PLT-014` (Prompt 117, White-Label Foundation) — continuing beyond the originally-requested range under the user's explicit authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
