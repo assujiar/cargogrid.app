@@ -55,7 +55,15 @@ const PLACEHOLDER_MARKERS = ["*", "{{", "}}", "{", "}", "<", ">", "NN", "..", " 
 // reasoning scripts/standards/check-suppressions.ts already applies to
 // itself (that checker's own docstring/fixtures mention suppression syntax
 // as prose, not real usage — found for real, PH0-89.md §5).
-const PLANNING_DOCUMENT_EXCLUSIONS = new Set(["docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md", "docs/build-log/phase-00/00_PHASE0_WBS.md"]);
+const PLANNING_DOCUMENT_EXCLUSIONS = new Set([
+  "docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md",
+  "docs/build-log/phase-00/00_PHASE0_WBS.md",
+  // Same forward-referencing kickoff pair, one phase later (CG-S6-PLT-001,
+  // Prompt 104 Platform Core WBS/Runtime Kickoff) — names PLT-105..140's
+  // not-yet-created build-log paths for the same structural reason.
+  "docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md",
+  "docs/build-log/phase-01/00_PLATFORM_CORE_WBS.md",
+]);
 
 // Historical, append-only evidence records (build logs, and the checkpoints
 // of docs/runtime/CHANGE_MANIFEST.md / ERROR_LEDGER.md written before it)
@@ -108,6 +116,12 @@ const KNOWN_HISTORICAL_QUOTED_CITATIONS = new Set([
   // PH0-101.md's own §6 narrative quotes the runbook path a fourth time
   // while re-explaining the PH0-99/PH0-100 finding chain.
   "docs/build-log/phase-00/PH0-101.md:docs/runbooks/deployment-rollback.md",
+  // PHASE0_CLOSURE_REPORT.md's own §5 recaps the full PH0-99..101 finding
+  // chain (fifth generation of the same quote) while documenting that it
+  // fixed the third/fourth instances above — already-committed, append-only
+  // (CG-S6-PLT-001, Prompt 104 Platform Core Kickoff; found because this
+  // checkpoint's own fresh docs:check run was the first to check it).
+  "docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md:docs/runbooks/deployment-rollback.md",
 ]);
 
 export const REQUIRED_RUNTIME_FILES = [

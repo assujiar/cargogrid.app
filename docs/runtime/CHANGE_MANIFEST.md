@@ -1938,6 +1938,57 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority, exercising the authority Prompt 102 itself grants ("only this prompt may set `PHASE_0_VERIFIED`"). `CG-S5-PH0-023` is `VERIFIED`. **Phase 0 is closed.** Next eligible task: `CG-S6-PLT-001` (Prompt 104, Platform Core WBS and Runtime Kickoff) — Phase 1's own kickoff, which re-confirms this closure at its own first required task before proceeding.
 
+### CHG-2026-036 — Platform Core WBS and Runtime Kickoff (Phase 1, Prompt 104)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-001` / `104_PLATFORM_CORE_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Phase/workstream | Phase 1 — Platform Core (first task; analogous to Phase 0's Prompt 80) |
+| Change type | DOCS/CODE |
+| Author/agent | Claude Code, branch `claude/lanjut-btusq6` |
+| Source requirements | `103_PLATFORM_CORE_README.md` §2/§3/§4; `104_*.md` §"Required tasks" 1–7; `01_MODULE_DEPENDENCY_MAP.md` §2.1/§3.1; `13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §5.2/line 67; `04_REPOSITORY_TARGET_STRUCTURE.md` §8/§11; `05_DATABASE_SCHEMA_WORKSTREAM.md` §1/§3 |
+| Decisions | Adopted `04_REPOSITORY_TARGET_STRUCTURE.md` §11's own already-reasoned recommendation that `server/contracts/` exists as a first-class folder from Phase 1 (a WBS-level convention, not a new ADR — see `00_PLATFORM_CORE_WBS.md` §3); disclosed a pre-existing local/master `ADR-CAND-ARCH-010` numbering divergence between `04_*.md` §11's local list and the master register at `docs/adr/README.md` §5.1 (two different topics sharing one locally-scoped number, predating this session) |
+| Baseline evidence | `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md` (`PHASE_0_VERIFIED`, precondition); `docs/ai-agent-build-prompt-package/00-control/06_PACKAGE_BUILD_STATUS.md` line 29 (Step 4 package-verified) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Produced `docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md` (37-row execution index, entry-gate re-verification, master-WBS reconciliation, collision inspection — mirrors `docs/build-log/phase-00/00_PHASE0_EXECUTION_INDEX.md`'s structure) and `docs/build-log/phase-01/00_PLATFORM_CORE_WBS.md` (10-level hierarchy, 32-capability coverage table with real allowed-scope/DB-impact evidence extracted from each capability's own prompt file, workstream/epic grouping against the 18 platform primitives, 7 safe-concurrency lanes, 5 integration checkpoints, stale-evidence triggers, recovery order, cycle/orphan/duplicate checks — mirrors `00_PHASE0_WBS.md`). Confirmed zero oversized capability profile (re-verifying `13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §5.2's own finding against the live prompt files, not merely citing it). Marked `PLT-105` (Tenant Provisioning and Lifecycle) `READY`; all other 35 operational prompts + closure `BLOCKED` on their own named upstream dependency, per `103_*.md` §4's dependency chain — no capability marked `READY` without every prerequisite actually `VERIFIED`.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md` | ADD | Prompt 104 runtime output | `git revert` |
+| `docs/build-log/phase-01/00_PLATFORM_CORE_WBS.md` | ADD | Prompt 104 runtime output | `git revert` |
+| `scripts/docs/check-doc-links.ts` | EDIT | New `PLANNING_DOCUMENT_EXCLUSIONS` pair for the two new forward-referencing planning documents; one more `KNOWN_HISTORICAL_QUOTED_CITATIONS` entry (`PHASE0_CLOSURE_REPORT.md`'s own fifth-generation runbook-path quote, found by this checkpoint's fresh gate run) | `git revert` |
+| `scripts/docs/check-doc-links.test.ts` | EDIT | New regression test for the Phase 1 planning-document exclusion | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, this manifest | EDIT | New Phase 1 rows; `CG-S6-PLT-002` marked `READY` | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched — confirmed by this checkpoint's own `git status`. No runtime source/config/schema/data/deployment file touched (`104_*.md` §12's "do not implement Platform Core" honored).
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. Repository remains fully greenfield.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run lint` PASS; `pnpm run test` (`node:test`) 241/241 PASS (240 carried + 1 new); `pnpm run docs:check` PASS (after adding the new planning-document exclusions and one more historical-quote exemption); `pnpm run security:check` PASS; `pnpm run data-classification:check` PASS; `pnpm run threat-model:check` PASS (unchanged); `pnpm run standards:check` PASS; `pnpm run test:e2e` 3/3 PASS; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, test, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`c6b08f5`.
+- Recovery verification: full 11-gate suite re-run green after the docs:check fixes.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, the two new Phase 1 planning documents. No CPD/RPD or `docs/architecture/**` decision reopened; the `server/contracts/` folder-timing item was a documented recommendation already present in `04_*.md`, adopted as a WBS convention, not a new architectural decision.
+
+#### Approval and closure
+
+Self-closing per this repository's established runtime-build-agent authority. `CG-S6-PLT-001` is `VERIFIED`. Next eligible task: `CG-S6-PLT-002` (Prompt 105, Tenant Provisioning and Lifecycle) — the first Platform Core capability implementation task.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

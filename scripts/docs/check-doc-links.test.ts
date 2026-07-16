@@ -75,6 +75,11 @@ describe("checkLinks", () => {
     assert.deepEqual(issues, []);
   });
 
+  test("excludes the two forward-referencing Phase 1 planning documents (CG-S6-PLT-001, Prompt 104)", () => {
+    const issues = checkLinks(["docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md", "docs/build-log/phase-01/00_PLATFORM_CORE_WBS.md"]);
+    assert.deepEqual(issues, []);
+  });
+
   test("excuses the known, disclosed historical docs/build-logs/ references without hiding a genuinely new break", () => {
     const issues = checkLinks(["docs/runtime/CHANGE_MANIFEST.md", "docs/runtime/ERROR_LEDGER.md"]);
     assert.deepEqual(issues, []);
