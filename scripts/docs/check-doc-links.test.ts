@@ -33,6 +33,10 @@ describe("extractCheckablePaths", () => {
     assert.deepEqual(extractCheckablePaths("Per-domain factory: `tests/factories/<domain>.ts`."), []);
   });
 
+  test("skips a single-brace shorthand for multiple files (not a real path)", () => {
+    assert.deepEqual(extractCheckablePaths("Read `docs/runtime/{TASK_LEDGER,CHANGE_MANIFEST,HANDOFF}.md`."), []);
+  });
+
   test("skips an npm/node module specifier", () => {
     assert.deepEqual(extractCheckablePaths("Uses `node:test` and `@playwright/test`."), []);
   });

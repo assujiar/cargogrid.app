@@ -41,7 +41,12 @@ const CHECKABLE_ROOT_FILES = new Set([
   "eslint.config.js",
   ".gitignore",
 ]);
-const PLACEHOLDER_MARKERS = ["*", "{{", "}}", "<", ">", "NN", "..", " "];
+// Single braces (not just the "{{"/"}}" template-placeholder pair) also skip
+// checking — a legitimate shell/prose brace-expansion shorthand for "one of
+// these N files" (e.g. `docs/runtime/{TASK_LEDGER,CHANGE_MANIFEST}.md`), not
+// a real path any filesystem would ever contain (CG-S5-PH0-023, Prompt 102
+// Closure Verification, found via PH0-101.md's own §3 prose).
+const PLACEHOLDER_MARKERS = ["*", "{{", "}}", "{", "}", "<", ">", "NN", "..", " "];
 
 // Forward-referencing planning documents: their whole job is to name a
 // future task's not-yet-created evidence path (e.g. "PH0-99" before Prompt 99
@@ -89,6 +94,20 @@ const KNOWN_HISTORICAL_QUOTED_CITATIONS = new Set([
   // above) verbatim as evidence while explaining and fixing it — the same
   // one-generation-removed quoting pattern, not a new independent claim.
   "docs/build-log/phase-00/PH0-100.md:docs/runbooks/deployment-rollback.md",
+  // PH0-101.md quotes the exemption entry above verbatim (a "file:path"
+  // Set-key string that itself ends in ".md" and so is extracted as a
+  // path-shaped candidate) while describing the PH0-100 fix — third
+  // generation of the same quoting pattern (CG-S5-PH0-023, Prompt 102
+  // Closure Verification).
+  "docs/build-log/phase-00/PH0-101.md:docs/build-log/phase-00/PH0-100.md:docs/runbooks/deployment-rollback.md",
+  // PH0-101.md also names Prompt 102's own future output path in its §6
+  // narrative describing an unrelated HANDOFF.md forward-reference fix —
+  // a forward reference of its own, in an already-committed, append-only
+  // build log (not editable after the fact, same discipline as above).
+  "docs/build-log/phase-00/PH0-101.md:docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md",
+  // PH0-101.md's own §6 narrative quotes the runbook path a fourth time
+  // while re-explaining the PH0-99/PH0-100 finding chain.
+  "docs/build-log/phase-00/PH0-101.md:docs/runbooks/deployment-rollback.md",
 ]);
 
 export const REQUIRED_RUNTIME_FILES = [

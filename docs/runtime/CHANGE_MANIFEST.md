@@ -1888,6 +1888,56 @@ Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.
 
 Self-closing per Phase 0's established runtime-build-agent authority. `CG-S5-PH0-022` is `VERIFIED`. Next eligible task: `CG-S5-PH0-023` (Prompt 102, Phase 0 Closure Verification) — the final Phase 0 prompt, the only one authorized to set `PHASE_0_VERIFIED`.
 
+### CHG-2026-035 — Phase 0 Closure Verification (Phase 0, Prompt 102) — `PHASE_0_VERIFIED`
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S5-PH0-023` / `102_PHASE0_CLOSURE_VERIFICATION_PROMPT.md` |
+| Phase/workstream | Phase 0 / Verification (fourth and final closing prompt) |
+| Change type | DOCS/CODE |
+| Author/agent | Claude Code, branch `claude/lanjut-btusq6` |
+| Source requirements | `102_PHASE0_CLOSURE_VERIFICATION_PROMPT.md`, all 8 required-verification items |
+| Decisions | **`PHASE_0_VERIFIED`** — Phase 0 closure state set this checkpoint, the only prompt authorized to set it |
+| Baseline evidence | `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md` (full independent verification record) |
+| Final status | `COMPLETED` |
+
+#### Outcome
+
+Independently re-verified all 8 of Prompt 102's required checks against fresh evidence gathered this checkpoint (not carried forward from any prior checkpoint's self-report): a fresh `pnpm install --frozen-lockfile`, all 11 gate scripts green, zero open Critical/High-severity issue or error, zero orphan/cycle in the 23-row Phase 0 execution index, and confirmation that no domain feature, schema, or production mutation exists anywhere in the repository. Found and fixed 4 more citation-hygiene findings during the fresh gate run, the same recursive "each closing checkpoint's build log quotes the prior one's finding" class already established at `PH0-99`/`100`/`101` — 3 more file-scoped exemption entries plus one generic fix (recognizing single-brace shorthand as a placeholder, not just the double-brace `{{`/`}}` form). Produced `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md`, setting closure state `PHASE_0_VERIFIED`.
+
+#### Scope and files
+
+| Path | Action | Reason | Rollback |
+|---|---|---|---|
+| `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md` | ADD | The closure report itself — sets `PHASE_0_VERIFIED` | `git revert` |
+| `scripts/docs/check-doc-links.ts` | EDIT | 3 more `KNOWN_HISTORICAL_QUOTED_CITATIONS` entries; generic single-brace `PLACEHOLDER_MARKERS` fix | `git revert` |
+| `scripts/docs/check-doc-links.test.ts` | EDIT | New regression test for the single-brace shorthand skip | `git revert` |
+| `docs/runtime/TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, this manifest, `00_PHASE0_EXECUTION_INDEX.md` | EDIT | Ledger reconciliation, Phase 0 closure | `git revert` |
+
+No `docs/architecture/**`, `docs/blueprint/**`, `docs/ai-agent-build-prompt-package/**`, domain schema, `server/`, `lib/`, `app/`, or `components/` file touched.
+
+#### Database / contracts / UI / security
+
+N/A — no database, migration, contract, or UI code exists or changed. `security:check` re-confirmed 0 findings on the fresh install.
+
+#### Tests and quality evidence
+
+Fresh install (`rm -rf node_modules && pnpm install --frozen-lockfile`) + full 11-gate re-run, all PASS: `typecheck`, `lint`, `test` (`node:test` 240/240), `docs:check` (after the citation-hygiene fixes), `security:check`, `data-classification:check`, `threat-model:check` (25 entries, unchanged), `standards:check`, `test:e2e` (3/3), `git:check`, `preflight` (fails closed as designed, no environment provisioned).
+
+#### Compatibility, rollout, recovery
+
+- Compatibility: additive only — no existing doc, script, test, or CI step removed or weakened.
+- Rollback: `git revert` this checkpoint's commit(s); last known good is `claude/lanjut-btusq6`@`5479049`.
+- Recovery verification: full 11-gate suite re-run green after the citation-hygiene fixes.
+
+#### Documentation and traceability
+
+Updated: this manifest, `TASK_LEDGER.md`, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md`, `00_PHASE0_EXECUTION_INDEX.md` (row `023` → `VERIFIED`), the new closure report. No CPD/RPD or `docs/architecture/**` decision reopened.
+
+#### Approval and closure
+
+Self-closing per Phase 0's established runtime-build-agent authority, exercising the authority Prompt 102 itself grants ("only this prompt may set `PHASE_0_VERIFIED`"). `CG-S5-PH0-023` is `VERIFIED`. **Phase 0 is closed.** Next eligible task: `CG-S6-PLT-001` (Prompt 104, Platform Core WBS and Runtime Kickoff) — Phase 1's own kickoff, which re-confirms this closure at its own first required task before proceeding.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
