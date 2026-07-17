@@ -2365,6 +2365,36 @@ Mostly additive, plus two `CREATE OR REPLACE` statements on already-shipped arti
 
 Self-closing. `CG-S6-PLT-013` is `VERIFIED`. Next: `CG-S6-PLT-014` (Prompt 117, White-Label Foundation) — continuing beyond the originally-requested range under the user's explicit authorization.
 
+### CHG-2026-049 — White-Label Foundation (Phase 1, Prompt 117)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-014` / `117_WHITE_LABEL_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-117.md` |
+| Final status | `COMPLETED` |
+| Authorization | Continues the standing "lanjut" authorization recorded at `PLT-116` (`HANDOFF.md` §4: no further explicit-range gate active) |
+
+#### Outcome
+
+`supabase/migrations/20260717090512_create_white_label.sql`: `app.tenant_brand_versions` is a versioned tenant white-label configuration (draft -> published -> archived, mirroring `PLT-111`'s `app.role_versions`), covering four of RPD-019's five tenant-override items (logo, colors, email presentation, document-template references — custom domain is `PLT-118`'s own capability, next in sequence). Every token/asset/template value is structurally validated by `CHECK` constraints (`app.validate_brand_tokens()`/`app.validate_brand_asset_url()`/`app.validate_document_template_refs()`) — a database guarantee against injection, not an application convention. A real WCAG 2.2 contrast-ratio implementation (`app.hex_color_contrast_ratio()`) enforces a 4.5:1 minimum at publish/rollback time; a version with no primary color always publishes (the accessible-default alternative flow). `app.evaluate_tenant_brand()` resolves a tenant's effective brand — its own published version, or the accessible CargoGrid default composed only from `docs/standards/DESIGN_SYSTEM.md` §2.1's one already-sourced neutral-900 reference value, never a fabricated brand color — and is deliberately granted to `anon` as well as `authenticated` (public, pre-authentication presentation data). No bespoke `*_history` table: every lifecycle mutation routes through `PLT-116`'s canonical `app.capture_audit_event()` instead, the first capability to adopt that convention. Two real defects found and fixed during authoring: an ambiguous-column bug inside `evaluate_tenant_brand()` itself (its own `RETURNS TABLE` output column shadowed a real table column) and a systemic `plpgsql` composite-assignment syntax mistake across this checkpoint's own test file — both caught by actually running `pnpm run db:test`.
+
+#### Scope and files
+
+`supabase/migrations/20260717090512_create_white_label.sql`; `scripts/db-tests/white-label.sql`; `server/contracts/white-label/white-label.ts`(+test); `server/queries/white-label.ts`(+test); `server/mutations/white-label.ts`(+test); `docs/build-log/phase-01/PLT-117.md`; standard runtime-ledger set. No tenant code fork, no arbitrary CSS/JS, no unscanned-asset claim (§12 forbidden-scope compliance — actual malware scanning is disclosed `NOT_RUN`, `DOC`/`PLT-128` not yet built).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 390/390 PASS (373 carried + 17 new) net of one unrelated pre-existing environment-caused failure; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (Playwright browser-binary revision skew, disclosed, unrelated to this checkpoint's diff); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 169 total scenario groups across all 13 migrations + fixture (153 carried + 16 new).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — one new table, thirteen new functions, zero modification to any existing migration/function/view. Rollback: `git revert` is safe and complete; last known good `claude/lanjut-i0o5bt`@(prior commit, `origin/main`@`7a2d431`).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-014` is `VERIFIED`. Next: `CG-S6-PLT-015` (Prompt 118, Custom Domain).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
