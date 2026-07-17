@@ -15,18 +15,18 @@
 
 | Field | Value |
 |---|---|
-| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed**; Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); Phase 0 in progress |
-| Current phase/workstream | Phase 0 — Discovery and Foundation. `PHASE_0_IN_PROGRESS`, execution **resumed** after `ERR-2026-003` recovery |
-| Active task | `CG-S5-PH0-012` — Testing Foundation (Prompt 91) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S5-PH0-011` (Prompt 90) `VERIFIED` this checkpoint. `ADR-0005`/`ADR-0006` resolve component-library/design-token mechanism (Radix UI copy-in + CSS custom properties/Tailwind v4); `docs/standards/DESIGN_SYSTEM.md` established. CargoGrid's own base brand color/logo/typography is an explicitly disclosed open item (Product/Design owner), not blocking. Zero `components/ui/` code created (Phase 1 scope). |
-| Branch | `agent/cargogrid-autonomous-build` (this run recreated it from `origin/main`@`b7653cb`, since the branch's own prior lineage is now fully contained in `main` via PR #11 — see `HANDOFF.md` for why) |
+| Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed** (`RUNTIME_DISCOVERY_VERIFIED`); Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); **Phase 0 closed (`PHASE_0_VERIFIED`)**; **Phase 1 — Platform Core `PHASE_1_IN_PROGRESS`** |
+| Current phase/workstream | Phase 1 — Platform Core. Kickoff + 12 capabilities `VERIFIED` (Tenant Provisioning/Lifecycle; Subscription/Module/Feature Entitlement; Supabase Auth Integration; Four-Layer Identity/Access Context; Organization Hierarchy; User Lifecycle; Role and Permission Builder; RBAC Enforcement; RLS Tenant Policy Foundation; Field-Level and Record-Level Access; Support Access and Impersonation; Audit Trail Foundation). |
+| Active task | `CG-S6-PLT-005` — Four-Layer Identity/Access Context (Prompt 108) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S6-PLT-004` (Prompt 107, Supabase Auth Integration) `VERIFIED` this checkpoint. `app.tenant_user_identities` links `auth.users.id` to tenants (idempotent, multi-tenant-per-identity, cross-tenant-isolated); pure secure-cookie/redirect-allowlist primitives; live GoTrue wiring disclosed `NOT_RUN` (no live Supabase project). `node:test` 282/282, `db:test` 26 scenario groups, all 12 gates green. |
+| Branch | `claude/lanjut-btusq6` (this session's harness-assigned/designated branch — first Phase 0 checkpoint run on a branch name other than `agent/cargogrid-autonomous-build`; surfaced and fixed `ISS-2026-004`, a hardcoded-branch-name test fragility) |
 | HEAD | this checkpoint's commit |
-| Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) |
-| Schema/migration head | NONE (no database — still greenfield) |
-| Latest environment verified | local sandbox (read-only) |
-| Last full green gate | none (no gates exist yet) |
-| **Active blockers** | **NONE.** `ERR-2026-003` (Sev-1/Critical) is `RECOVERED` this checkpoint — the three files were rewritten as single coherent Lineage A documents (607-item authoritative baseline), Prompt 82 re-verified, duplicate Phase 0 build logs consolidated. See `ERROR_LEDGER.md` `ERR-2026-003` recovery record and `HANDOFF.md` §1 decision. |
-| Next eligible task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure (Prompt 83) |
+| Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) — historical; current last-known-good is this checkpoint's own commit |
+| Schema/migration head | NONE (no database — still greenfield; Phase 1 Platform Core is the first phase expected to introduce one) |
+| Latest environment verified | local sandbox (read-only); no deployed environment exists yet (`preflight` correctly fails closed) |
+| Last full green gate | This checkpoint — `node:test` 373/373, `db:test` 153 scenario groups, all 12 gates green |
+| **Active blockers** | **NONE.** `ERR-2026-001..003` all `RECOVERED`/`SUPERSEDED`. Zero `OPEN` error, zero Critical/High-severity issue. User explicitly authorized continuing past the "sd prompt 115" range this checkpoint ("lanjut"); no further process gate is currently active. |
+| Next eligible task | `CG-S6-PLT-014` — White-Label Foundation (Prompt 117), per `docs/runtime/TASK_LEDGER.md` and `docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md` row `014`, both current as of this checkpoint. |
 
 Checkpoint summary: Step 2 discovery is genuinely closed and trustworthy (`RUNTIME_DISCOVERY_VERIFIED`, single lineage, no divergence). Step 3 (Prompts 36–48, `docs/architecture/01_*.md`–`13_*.md`) is also genuinely closed and trustworthy — the divergence only affects Prompts 49–51 (`14_*.md`–`16_*.md`) and Phase 0 Prompts 80–82. Two independent agent sessions ran those six task IDs in parallel from the same shared ancestor, producing materially different content (e.g. 607 vs. 401 traced requirement items). This was correctly detected and halted by a prior session (`ERR-2026-002`, `HANDOFF.md` `HO-20260715-021`), which asked an operator to choose one of three reconciliation options before any further work continued. Before that decision was recorded, both branches' pull requests (PR #10, then PR #11) were merged into `main` directly. Because the two lineages' edits did not overlap line-for-line, git resolved both merges without conflict markers by **silently concatenating** the divergent content — not reconciling it. This session (this checkpoint) discovered and documented that outcome as `ERR-2026-003`, consolidated the previously-stacked `docs/runtime/*.md` ledgers into single coherent documents, and halted rather than build further Phase 0 capability prompts on top of an unreliable Step 3/Phase 0 baseline. No product/business decision was reopened — this is a process/governance issue about which of two already-produced documents is authoritative, plus a mechanical cleanup of two duplicated documents.
 
@@ -51,8 +51,8 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
-| 0 | Discovery and Foundation | `BLOCKED` (discovery sub-phase done and trustworthy; Step 3 architecture sub-phase content-corrupted; Phase 0 foundation sub-phase halted at 3/23 tasks) | ~62% by task count, but the Step 3/Phase 0 baseline is not currently reliable | Resolve `ERR-2026-003` (operator decision, `HANDOFF.md` §1), then `PH0-004`/Prompt 83 |
-| 1 | Platform Core | `NOT_STARTED` | 0% | after `PHASE_0_VERIFIED` |
+| 0 | Discovery and Foundation | **`VERIFIED`** (`PHASE_0_VERIFIED` set at `CG-S5-PH0-023`, Prompt 102, `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md`) — the `ERR-2026-003` corruption this row previously described is `RECOVERED` and long since superseded by 23/23 tasks `VERIFIED` | 100% (23/23 tasks) | `CG-S6-PLT-001` — Platform Core WBS and Runtime Kickoff (Prompt 104) |
+| 1 | Platform Core | `IN_PROGRESS` (kickoff + 12/32 capabilities `VERIFIED`) | ~35% (13/37 tasks) | `CG-S6-PLT-014` — White-Label Foundation (Prompt 117) |
 | 2 | Commercial | `NOT_STARTED` | 0% | after `PHASE_1_VERIFIED` |
 | 3 | Operations | `NOT_STARTED` | 0% | after `PHASE_2_VERIFIED` |
 | 4 | Finance | `NOT_STARTED` | 0% | after `PHASE_3_VERIFIED` |
@@ -85,39 +85,53 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 
 ## 5. Current gate results
 
-No executable gates exist (no toolchain). Lint/Typecheck/Unit/Build/DB/RLS/API/E2E/Performance-accessibility-security all `NOT_RUN` — absence of an application, not suppression.
+**[Corrected `2026-07-16` at `CG-S5-PH0-023`, Phase 0 closure — this section previously read "No executable gates exist," stale since the toolchain was first added at `PH0-085` (fifteen checkpoints ago) and never updated in the interim; `TASK_LEDGER.md`/individual build logs remained the live source of truth throughout.]**
+
+All 11 real gate scripts exist, are wired into `.github/workflows/ci.yml`, and passed on a fresh install at this checkpoint's own independent re-verification (`docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md` §3): `typecheck`, `lint`, `test` (`node:test` 240/240), `docs:check`, `security:check`, `data-classification:check`, `threat-model:check`, `standards:check`, `test:e2e` (3/3), `git:check`. `preflight` fails closed as designed — no real environment is provisioned yet, expected and disclosed, not a defect. `DB`/`RLS`/`API`/build/migration gates remain `NOT_RUN` — absence of an application/database (still greenfield), not suppression; each is named with its Phase 1+ unblocking condition in `docs/standards/SECURITY_STANDARDS.md` §1 and `docs/build-log/phase-00/PHASE0_HANDOFF_PACKAGE.md` §6.
 
 ## 6. Schema and deployment state
 
-No environment deployed; no migration head. All environments `NOT_STARTED`. Production recovery: best effort per RPD-031/037 (no environment exists).
+No environment deployed; no migration head. All environments `NOT_STARTED`. Production recovery: best effort per RPD-031/037 (no environment exists). Phase 1 Platform Core is the first phase expected to introduce a real schema/migration/environment.
 
 ## 7. Blockers, errors, and known issues
+
+**[Corrected `2026-07-16` at `CG-S5-PH0-023` — this table previously described `ERR-2026-003` as `OPEN, blocking`; it has been `RECOVERED` since `2026-07-15`, stale here for the same reason as §5.]**
 
 | ID | Type | Severity | Scope | Workaround/recovery | Release effect | Ledger |
 |---|---|---|---|---|---|---|
 | `ERR-2026-001` | Error (`RECOVERED`) | Sev-3 | Parallel-session merge corruption (Step 2, Prompt 21) | Reconciled by `CG-S2-DISC-001-R1` | none (cleared) | `ERROR_LEDGER.md` |
-| `ERR-2026-002` | Error (`SUPERSEDED` by `ERR-2026-003`) | Sev-2/High | Two divergent lineages both completed Prompts 46–51/80–82 | Was `OPEN` pending operator decision; superseded when both PRs were merged anyway | see `ERR-2026-003` | `ERROR_LEDGER.md` |
-| `ERR-2026-003` | Error (`OPEN`, **blocking**) | Sev-1/Critical | `docs/architecture/14..16_*.md` each contain two concatenated, contradictory copies | Requires operator reconciliation decision — see `HANDOFF.md` §1 | Blocks all further Phase 0/Step 3-derived work | `ERROR_LEDGER.md` |
-| `ISS-2026-002` | Issue, `OPEN`, **Critical, blocking** | Critical | No single-writer discipline — 5th occurrence, this one resulted in committed corruption | One authoritative branch per runtime step, plus an enforced pre-flight check (still not built) | Recurrence risk (demonstrated 5×) | `KNOWN_ISSUES.md` |
-| `ISS-2026-003` | Risk | Medium (future) | No root `.gitignore` before scaffolding | Add before code | Safe secret/artifact handling | `KNOWN_ISSUES.md` |
+| `ERR-2026-002` | Error (`SUPERSEDED` by `ERR-2026-003`) | Sev-2/High | Two divergent lineages both completed Prompts 46–51/80–82 | Superseded when both PRs were merged; see `ERR-2026-003` | none (cleared) | `ERROR_LEDGER.md` |
+| `ERR-2026-003` | Error (`RECOVERED`) | Sev-1/Critical | `docs/architecture/14..16_*.md` each contained two concatenated, contradictory copies | Reconciled to single coherent Lineage A documents (`2026-07-15`); Prompt 82 re-verified against the 607-item baseline | none (cleared) | `ERROR_LEDGER.md` |
+| `ISS-2026-002` | Issue (`RESOLVED`) | Critical (5 occurrences, enforcement now adopted) | No single-writer discipline | Enforced pre-flight collision check (`AGENTS.md` + `pnpm run git:check`), adopted at `CG-S5-PH0-008` | none | `KNOWN_ISSUES.md` |
+| `ISS-2026-003` | Issue (`RESOLVED`) | Medium (future) | No root `.gitignore` before scaffolding | Added at `CG-S5-PH0-006`, before any other non-doc file landed | none | `KNOWN_ISSUES.md` |
 | `ISS-2026-001` | Issue (`RESOLVED`) | — | Source docs tracked in `docs/blueprint/`; `tes.md` classified `CONFIRMED_PLACEHOLDER` | — | none | `KNOWN_ISSUES.md` |
+| `ISS-2026-005` | Issue (`OPEN`, Low) | Low | `CHANGE_MANIFEST.md` gap for Prompts 83–90's historical entries | Owner DevEx, opportunistic backfill; does not affect any code/decision | none — non-blocking | `KNOWN_ISSUES.md` |
+| `ISS-2026-006` | Issue (`ACCEPTED_RISK`, Low) | Low | 4 historical citations to deleted plural build-log paths | Named allowlist in `check-doc-links.ts` | none | `KNOWN_ISSUES.md` |
+| `ISS-2026-007` | Issue (`OPEN`, Medium) | Medium | No working automated dependency/supply-chain audit gate (`pnpm audit` endpoint retired) | `pnpm install --frozen-lockfile` remains the real working install control; re-attempt once pnpm ships bulk-endpoint support | none — non-blocking | `KNOWN_ISSUES.md` |
+| `ISS-2026-008` | Issue (`RESOLVED`) | Low | `check-secrets.ts` scope boundary vs. PII-handling modules | Documented as intentional (`SECURITY_STANDARDS.md` §3), proven by tests | none | `KNOWN_ISSUES.md` |
+
+**Zero `OPEN` error. Zero Critical/High-severity issue.** Two Low/Medium issues remain `OPEN`, both explicitly non-blocking — full detail in `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md` §4.
 
 ## 8. Release-readiness summary
 
+Unchanged in substance from every prior checkpoint — Phase 0 closure is a **foundation** milestone, not a release milestone. No business-domain module exists yet.
+
 | Readiness domain | Status |
 |---|---|
-| All ten module suites | `NOT_STARTED` |
-| Requirement traceability | `NOT_STARTED` (discovery-level evidence complete; Step 3-level traceability corrupted, pending reconciliation) |
-| Tenant/security · Finance/data · E2E/regression · Migration/backup/DR · Performance/accessibility · Observability/docs | `NOT_STARTED` (baselines confirmed absent/`UNKNOWN`) |
+| All ten module suites | `NOT_STARTED` — Phase 0 introduced zero domain code by design |
+| Requirement traceability | Discovery- and Step-3-level evidence complete and trustworthy (`RUNTIME_DISCOVERY_VERIFIED`, `RUNTIME_ARCHITECTURE_VERIFIED`); Phase-0-level traceability (`PHASE_0_VERIFIED`) also now complete. Phase 1+ requirement traceability is `NOT_STARTED`. |
+| Tenant/security · Finance/data · E2E/regression · Migration/backup/DR · Performance/accessibility · Observability/docs | `NOT_STARTED` at the product level — foundation-level contracts and tooling for these are real and tested (§5), but no domain surface exists yet for them to protect |
 | Go/no-go approval | `NOT_STARTED` |
 
-External pilot is not a release stage. Direct GA requires the entire table `VERIFIED` with zero open Sev-1/critical defects.
+External pilot is not a release stage. Direct GA requires the entire table `VERIFIED` with zero open Sev-1/critical defects. **Phase 0 closing does not change this — it only unblocks Phase 1 to begin building toward it.**
 
 ## 9. Next action
 
-- **Next eligible task: NONE — blocked on `ERR-2026-003`.**
-- Entry conditions for resuming: an operator has read `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` and `docs/runtime/HANDOFF.md` §1, selected one of the reconciliation options, and recorded that decision in both documents.
-- Required action before any further Phase 0 prompt: rewrite `docs/architecture/14_*.md`, `15_*.md`, `16_*.md` as single, non-duplicated, internally consistent documents reflecting the chosen option; re-verify Step 3 closure; then resume Phase 0 at `CG-S5-PH0-004` (Prompt 83).
+**[HISTORICAL — superseded, corrected 2026-07-15 at `CG-S5-PH0-012`]** This section describes the `ERR-2026-003` blocker's own resume plan as of its own checkpoint; it was never updated across the eight Phase 0 checkpoints (`PH0-83`–`PH0-91`) completed since. `ERR-2026-003` is `RECOVERED` (§1, `ERROR_LEDGER.md`). Retained below verbatim as historical record only — **do not follow it**; use §1's "Next eligible task" row and `docs/runtime/TASK_LEDGER.md` instead.
+
+- ~~Next eligible task: NONE — blocked on `ERR-2026-003`.~~
+- ~~Entry conditions for resuming: an operator has read `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` and `docs/runtime/HANDOFF.md` §1, selected one of the reconciliation options, and recorded that decision in both documents.~~
+- ~~Required action before any further Phase 0 prompt: rewrite `docs/architecture/14_*.md`, `15_*.md`, `16_*.md` as single, non-duplicated, internally consistent documents reflecting the chosen option; re-verify Step 3 closure; then resume Phase 0 at `CG-S5-PH0-004` (Prompt 83).~~
 - If resuming without operator input by mistake: stop immediately, re-read this section and `HANDOFF.md` §1 in full first.
 
 ## 10. Update rules

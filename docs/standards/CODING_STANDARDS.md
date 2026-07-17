@@ -9,7 +9,7 @@ This document distills **normative, enforceable conventions** from architecture 
 
 ## 1. Naming conventions
 
-- **Files:** `kebab-case.ts` (matches this repository's own `scripts/env/check-worktree-collision.ts` etc.); one file per domain query/mutation set once a domain exists (`server/queries/<domain>.ts`, per Tech Arch §8's Backend Module Layout, reproduced in §3 below).
+- **Files:** `kebab-case.ts` (matches this repository's own `scripts/git/check-worktree-collision.ts` etc.); one file per domain query/mutation set once a domain exists (`server/queries/<domain>.ts`, per Tech Arch §8's Backend Module Layout, reproduced in §3 below).
 - **Variables/functions:** `camelCase`. **Types/interfaces/classes:** `PascalCase`. **Constants (module-level, immutable registry/config):** `SCREAMING_SNAKE_CASE` (e.g. `ENV_REGISTRY`, `PROTECTED_PATH_RULES` — this repository's own established pattern from `PH0-086`/`PH0-087`).
 - **Custom error classes:** `<Domain>Error` extending `Error`, with a `name` field set in the constructor (this repository's own `EnvValidationError` pattern, `scripts/env/validate.ts`) — never a bare `throw new Error(string)` for a condition a caller needs to distinguish programmatically.
 - **WBS/capability IDs:** never invented ad hoc — always the exact `CG-WBS-<n>`/phase-short-code form already registered in `docs/architecture/13_FULL_WORK_BREAKDOWN_STRUCTURE.md` §4 (already-binding rule, restated here for the coding-standards context).
@@ -62,7 +62,7 @@ Every rule above was proven to fire against a real, intentional fixture violatio
 
 ## 6. Test conventions
 
-Deferred in full to `PH0-091` (Testing Foundation, `ADR-CAND-ARCH-022` — test-runner/factory tooling choice). Until then, this repository's established, working pattern (`scripts/env/validate.test.ts`, `scripts/git/*.test.ts`, 35 passing tests) is: Node's built-in `node:test` + `node:assert/strict`, one `.test.ts` colocated next to the module it tests, positive cases first then negative/failure cases, and — where a fix was made during authoring — a named regression test pinning the fix (e.g. `check-worktree-collision.test.ts`'s "regression guard for the origin/main-vs-stale-local-main bug"). This is provisional, not a preemption of `PH0-091`'s own ADR.
+Ratified at `PH0-091` (Testing Foundation, `ADR-0007`/`ADR-0008`) — see `docs/standards/TESTING_STANDARDS.md` for the full runner/naming/isolation/flake/factory convention. Summary: Node's built-in `node:test` + `node:assert/strict` for unit/integration/component (server-side), one `.test.ts` colocated next to the module it tests, positive cases first then negative/failure cases, a named regression test pinning any fix made during authoring (e.g. `check-worktree-collision.test.ts`'s "regression guard for the origin/main-vs-stale-local-main bug"); `@playwright/test` + `@axe-core/playwright` for E2E/visual-regression/accessibility (`e2e/*.spec.ts`). No longer provisional.
 
 ## 7. Migration conventions
 
