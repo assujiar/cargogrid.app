@@ -2,10 +2,10 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-07-17 (`CG-S6-PLT-015`, Prompt 118, Custom Domain `VERIFIED`)
+**Updated:** 2026-07-17 (`CG-S6-PLT-016`, Prompt 119, Localization `VERIFIED`)
 **Updated by:** Claude Code (autonomous build agent)
 **Last verified commit:** this checkpoint's own commit, branch `claude/lanjut-i0o5bt`
-**Build trust:** `TRUSTED` (repository/process and content — `docs/architecture/14..16_*.md` reconciled to authoritative Lineage A; `ERR-2026-003` `RECOVERED`; `ERR-2026-004` — repository-wide function-privilege gap — found and `RECOVERED` this checkpoint)
+**Build trust:** `TRUSTED` (repository/process and content — `docs/architecture/14..16_*.md` reconciled to authoritative Lineage A; `ERR-2026-003` `RECOVERED`; `ERR-2026-004` — repository-wide function-privilege gap, found at `PLT-118` — `RECOVERED`, its new per-migration convention proven to hold at this checkpoint)
 
 > Single current-state dashboard. Allowed states: `NOT_STARTED`, `READY`, `IN_PROGRESS`, `BLOCKED`, `FAILED`, `PARTIALLY_COMPLETE`, `COMPLETED`, `VERIFIED`, `ROLLED_BACK`, `SUPERSEDED`.
 >
@@ -16,17 +16,17 @@
 | Field | Value |
 |---|---|
 | Package/repository version | Package `0.18.0-step17` (`FINAL_PACKAGE_VALIDATED`); runtime Step 2 **closed** (`RUNTIME_DISCOVERY_VERIFIED`); Step 3 **closed and reconciled** (`RUNTIME_ARCHITECTURE_VERIFIED`, Lineage A authoritative); **Phase 0 closed (`PHASE_0_VERIFIED`)**; **Phase 1 — Platform Core `PHASE_1_IN_PROGRESS`** |
-| Current phase/workstream | Phase 1 — Platform Core. Kickoff + 14 capabilities `VERIFIED` (Tenant Provisioning/Lifecycle; Subscription/Module/Feature Entitlement; Supabase Auth Integration; Four-Layer Identity/Access Context; Organization Hierarchy; User Lifecycle; Role and Permission Builder; RBAC Enforcement; RLS Tenant Policy Foundation; Field-Level and Record-Level Access; Support Access and Impersonation; Audit Trail Foundation; White-Label Foundation; Custom Domain). |
-| Active task | `CG-S6-PLT-016` — Localization (Prompt 119) — **READY, next to execute** |
-| Active task status | `READY` — `CG-S6-PLT-015` (Prompt 118, Custom Domain) `VERIFIED` this checkpoint. `app.tenant_custom_domains` request→verify→activate→disable lifecycle with a real database-enforced takeover/rebinding-prevention guarantee; `app.resolve_tenant_by_domain()` safe public resolver. **`ERR-2026-004`** (Sev-1/Critical, repository-wide function-privilege gap since `PLT-105`) found and `RECOVERED` this checkpoint — see `ERROR_LEDGER.md`. `node:test` 408/408, `db:test` 185 scenario groups, 10/11 gates green (`test:e2e` `NOT_RUN` — sandbox Playwright browser-binary revision skew, disclosed). |
+| Current phase/workstream | Phase 1 — Platform Core. Kickoff + 15 capabilities `VERIFIED` (Tenant Provisioning/Lifecycle; Subscription/Module/Feature Entitlement; Supabase Auth Integration; Four-Layer Identity/Access Context; Organization Hierarchy; User Lifecycle; Role and Permission Builder; RBAC Enforcement; RLS Tenant Policy Foundation; Field-Level and Record-Level Access; Support Access and Impersonation; Audit Trail Foundation; White-Label Foundation; Custom Domain; Localization). |
+| Active task | `CG-S6-PLT-017` — Master Data Foundation (Prompt 120) — **READY, next to execute** |
+| Active task status | `READY` — `CG-S6-PLT-016` (Prompt 119, Localization) `VERIFIED` this checkpoint. `app.tenant_locale_versions` versioned draft/publish/rollback locale/timezone/currency-display config; `app.canonical_terms` (24 real sourced terms) backs tenant terminology overrides; `app.resolve_locale_context()` implements the real 3-tier user→tenant→platform-default fallback. `node:test` 424/424, `db:test` 199 scenario groups, 10/11 gates green (`test:e2e` `NOT_RUN` — sandbox Playwright browser-binary revision skew, disclosed). |
 | Branch | `claude/lanjut-i0o5bt` (this session's harness-assigned/designated branch) |
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) — historical; current last-known-good is this checkpoint's own commit |
-| Schema/migration head | 15 migrations applied (`app.tenants` through `app.tenant_custom_domains`, including the `ERR-2026-004` corrective migration) |
+| Schema/migration head | 16 migrations applied (`app.tenants` through `app.tenant_locale_versions`/`app.canonical_terms`, including the `ERR-2026-004` corrective migration) |
 | Latest environment verified | local sandbox (read-only); no deployed environment exists yet (`preflight` correctly fails closed) |
-| Last full green gate | This checkpoint — `node:test` 408/408, `db:test` 185 scenario groups, 10/11 gates green (`test:e2e` sandbox-`NOT_RUN`, disclosed) |
-| **Active blockers** | **NONE.** `ERR-2026-001..004` all `RECOVERED`/`SUPERSEDED`. Zero `OPEN` error, zero Critical/High-severity issue. The user explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120"); no further process gate is currently active short of that range. |
-| Next eligible task | `CG-S6-PLT-016` — Localization (Prompt 119), per `docs/runtime/TASK_LEDGER.md` and `docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md` row `016`, both current as of this checkpoint. |
+| Last full green gate | This checkpoint — `node:test` 424/424, `db:test` 199 scenario groups, 10/11 gates green (`test:e2e` sandbox-`NOT_RUN`, disclosed) |
+| **Active blockers** | **NONE.** `ERR-2026-001..004` all `RECOVERED`/`SUPERSEDED`. Zero `OPEN` error, zero Critical/High-severity issue. The user explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120"); `CG-S6-PLT-017` (Prompt 120) is the final task in that range. |
+| Next eligible task | `CG-S6-PLT-017` — Master Data Foundation (Prompt 120), per `docs/runtime/TASK_LEDGER.md` and `docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md` row `017`, both current as of this checkpoint. |
 
 Checkpoint summary: Step 2 discovery is genuinely closed and trustworthy (`RUNTIME_DISCOVERY_VERIFIED`, single lineage, no divergence). Step 3 (Prompts 36–48, `docs/architecture/01_*.md`–`13_*.md`) is also genuinely closed and trustworthy — the divergence only affects Prompts 49–51 (`14_*.md`–`16_*.md`) and Phase 0 Prompts 80–82. Two independent agent sessions ran those six task IDs in parallel from the same shared ancestor, producing materially different content (e.g. 607 vs. 401 traced requirement items). This was correctly detected and halted by a prior session (`ERR-2026-002`, `HANDOFF.md` `HO-20260715-021`), which asked an operator to choose one of three reconciliation options before any further work continued. Before that decision was recorded, both branches' pull requests (PR #10, then PR #11) were merged into `main` directly. Because the two lineages' edits did not overlap line-for-line, git resolved both merges without conflict markers by **silently concatenating** the divergent content — not reconciling it. This session (this checkpoint) discovered and documented that outcome as `ERR-2026-003`, consolidated the previously-stacked `docs/runtime/*.md` ledgers into single coherent documents, and halted rather than build further Phase 0 capability prompts on top of an unreliable Step 3/Phase 0 baseline. No product/business decision was reopened — this is a process/governance issue about which of two already-produced documents is authoritative, plus a mechanical cleanup of two duplicated documents.
 
@@ -52,7 +52,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 | Phase | Scope | Status | Completion | Next task |
 |---:|---|---|---:|---|
 | 0 | Discovery and Foundation | **`VERIFIED`** (`PHASE_0_VERIFIED` set at `CG-S5-PH0-023`, Prompt 102, `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md`) — the `ERR-2026-003` corruption this row previously described is `RECOVERED` and long since superseded by 23/23 tasks `VERIFIED` | 100% (23/23 tasks) | `CG-S6-PLT-001` — Platform Core WBS and Runtime Kickoff (Prompt 104) |
-| 1 | Platform Core | `IN_PROGRESS` (kickoff + 14/32 capabilities `VERIFIED`) | ~41% (15/37 tasks) | `CG-S6-PLT-016` — Localization (Prompt 119) |
+| 1 | Platform Core | `IN_PROGRESS` (kickoff + 15/32 capabilities `VERIFIED`) | ~43% (16/37 tasks) | `CG-S6-PLT-017` — Master Data Foundation (Prompt 120) |
 | 2 | Commercial | `NOT_STARTED` | 0% | after `PHASE_1_VERIFIED` |
 | 3 | Operations | `NOT_STARTED` | 0% | after `PHASE_2_VERIFIED` |
 | 4 | Finance | `NOT_STARTED` | 0% | after `PHASE_3_VERIFIED` |

@@ -2427,6 +2427,36 @@ Self-closing. `CG-S6-PLT-014` is `VERIFIED`. Next: `CG-S6-PLT-015` (Prompt 118, 
 
 Self-closing. `CG-S6-PLT-015` is `VERIFIED`; `ERR-2026-004` is `RECOVERED`. Next: `CG-S6-PLT-016` (Prompt 119, Localization).
 
+### CHG-2026-051 — Localization (Phase 1, Prompt 119)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-016` / `119_LOCALIZATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-119.md` |
+| Final status | `COMPLETED` |
+| Authorization | User explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120") |
+
+#### Outcome
+
+`supabase/migrations/20260717112000_create_localization.sql`: `app.tenant_locale_versions` is a versioned tenant locale/timezone/currency-display default and terminology-override configuration (draft→published→archived, mirroring `PLT-117`'s `app.tenant_brand_versions`). `app.canonical_terms` seeds 24 real terminology codes sourced directly from this repository's own already-shipped `CHECK`-constrained enums (`PLT-105`/`108`/`109`/`110`/`117`/`118`); tenant overrides are validated against it via a trigger (unknown codes and unsafe/oversized text rejected structurally). `app.resolve_locale_context()` implements the real three-tier fallback Prompt 119 §22 requires — per-user preference (three new nullable `CHECK`-constrained columns added to `PLT-110`'s already-shipped `app.users`) → tenant's published config → the Indonesia-first platform default (`id`/`Asia/Jakarta`/`IDR`, a reasoned inference from ratified RPD-016 sequencing) — each field resolved independently. Currency is display-formatting metadata only, never exchange-rate/financial logic (a dedicated Phase 4 capability, `M-194`, owns that). This migration adopts `PLT-118`'s new `ERR-2026-004` per-migration convention (explicit `REVOKE EXECUTE ... FROM PUBLIC`), proven correct directly in `db:test`.
+
+#### Scope and files
+
+`supabase/migrations/20260717112000_create_localization.sql`; `scripts/db-tests/localization.sql`; `server/contracts/localization/localization.ts`(+test); `server/queries/localization.ts`(+test); `server/mutations/localization.ts`(+test); `docs/build-log/phase-01/PLT-119.md`; standard runtime-ledger set. No mass feature-page translation, no statutory logic, no tenant-specific code fork (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 424/424 PASS (25 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117`/`118`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 199 total scenario groups across all 16 migrations + fixture (185 carried + 14 new).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, eleven new functions, three new nullable `CHECK`-constrained columns on `app.users`. `git revert` safe and complete; no other capability's data or behavior is affected. Last known good `claude/lanjut-i0o5bt`@(`PLT-118` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-016` is `VERIFIED`. Next: `CG-S6-PLT-017` (Prompt 120, Master Data Foundation) — final task in the user's "lanjut sd prompt 120" range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
