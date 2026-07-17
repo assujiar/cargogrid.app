@@ -2457,6 +2457,36 @@ Purely additive — two new tables, eleven new functions, three new nullable `CH
 
 Self-closing. `CG-S6-PLT-016` is `VERIFIED`. Next: `CG-S6-PLT-017` (Prompt 120, Master Data Foundation) — final task in the user's "lanjut sd prompt 120" range.
 
+### CHG-2026-052 — Master Data Foundation (Phase 1, Prompt 120)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-017` / `120_MASTER_DATA_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-120.md` |
+| Final status | `COMPLETED` |
+| Authorization | User explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120") — this is the final task in that range |
+
+#### Outcome
+
+`supabase/migrations/20260717120000_create_master_data.sql`: `app.master_types`/`app.master_records` form a reusable master-data registry — global/tenant scope, stable codes, bounded plain-text aliases, optimistic-concurrency versioning — seeded with exactly one real, sourced initial type (`vendor_rate`, tenant-scoped, `PRC`-owned, per `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` §4/§11's `ADR-CAND-ARCH-001` resolution; no sample data, matching that document's own "empty, no Procurement UI yet" framing). `app.merge_master_records()` implements lineage-preserving dedupe: the source row is never deleted, only marked `canonical_status='merged'` and pointed at its survivor via `merged_into_id`, with its former code/aliases folded forward. `app.resolve_master_record()` resolves a code or alias to its live canonical record, transparently following a bounded merge chain, structurally never ambiguous or cross-tenant. `app.master_records`' RLS policy is the first in this repository to add a global-visibility branch (`tenant_id is null OR has_active_tenant_membership() OR is_supreme_admin()`) alongside strict per-tenant isolation. Adopts `PLT-118`'s `ERR-2026-004` per-migration convention, proven correct.
+
+#### Scope and files
+
+`supabase/migrations/20260717120000_create_master_data.sql`; `scripts/db-tests/master-data.sql`; `server/contracts/master-data/master-data.ts`(+test); `server/queries/master-data.ts`(+test); `server/mutations/master-data.ts`(+test); `docs/build-log/phase-01/PLT-120.md`; standard runtime-ledger set. No full domain masters beyond the one approved initial type, no destructive dedupe, no full admin portal (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 439/439 PASS (23 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117`/`118`/`119`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 212 total scenario groups across all 17 migrations + fixture (199 carried + 13 new). First Phase 1 checkpoint this session to pass every gate on the first full run, no fix-and-rerun cycle needed.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, one new view, nine new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-119` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-017` is `VERIFIED`. **This is the final task in the user's explicitly requested "lanjut sd prompt 120" range** — next eligible task `CG-S6-PLT-018` (Prompt 121, Configuration Engine) requires explicit user confirmation before starting, per this file's own standing discipline at the end of an explicit-range authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
