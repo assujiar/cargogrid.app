@@ -2395,6 +2395,38 @@ Purely additive — one new table, thirteen new functions, zero modification to 
 
 Self-closing. `CG-S6-PLT-014` is `VERIFIED`. Next: `CG-S6-PLT-015` (Prompt 118, Custom Domain).
 
+### CHG-2026-050 — Custom Domain (Phase 1, Prompt 118) + `ERR-2026-004` privilege-gap remediation
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-015` / `118_CUSTOM_DOMAIN_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/SECURITY-FIX |
+| Baseline evidence | `docs/build-log/phase-01/PLT-118.md`, `docs/runtime/ERROR_LEDGER.md` `ERR-2026-004` |
+| Final status | `COMPLETED` |
+| Authorization | User explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120") |
+
+#### Outcome
+
+`supabase/migrations/20260717103015_create_custom_domain.sql`: `app.tenant_custom_domains` models a tenant custom-domain lifecycle (request→verify→activate→disable, plus reject/expire), with a real database-enforced takeover/rebinding-prevention guarantee (a partial unique index spanning the "claim is live" states, not application logic). `app.verify_tenant_domain()` implements a provider-independent DNS-TXT verification interface. `app.resolve_tenant_by_domain()` is the safe public hostname→tenant resolver, deliberately `anon`-callable (needed pre-authentication for inbound routing), returning zero rows unless the domain is active and its tenant is active — structurally never an authorization decision.
+
+**A real, severe, repository-wide privilege defect was found and fixed during this checkpoint's authoring**: PostgreSQL grants `EXECUTE` to `PUBLIC` on every function by default; no migration since `PLT-105` had ever revoked it, so every "service_role-only" function across 12 prior migrations (90+ functions, including `provision_tenant`, `assign_role`, every audit/support/white-label mutation) was actually directly callable by `anon`. Fixed via `supabase/migrations/20260717095000_revoke_default_public_function_execute.sql` (`REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA app FROM PUBLIC` + `ALTER DEFAULT PRIVILEGES` to prevent recurrence), re-verified against the full 185-scenario-group db-test suite; one real casualty (`app.mask_email()`, relying on the same default for `authenticated` callers via `app.users_directory`) found and re-granted explicitly. Full detail: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-004`.
+
+#### Scope and files
+
+`supabase/migrations/20260717095000_revoke_default_public_function_execute.sql`; `supabase/migrations/20260717103015_create_custom_domain.sql`; `scripts/db-tests/custom-domain.sql`; `server/contracts/custom-domain/custom-domain.ts`(+test); `server/queries/custom-domain.ts`(+test); `server/mutations/custom-domain.ts`(+test); `docs/build-log/phase-01/PLT-118.md`; `docs/runtime/ERROR_LEDGER.md` (`ERR-2026-004`, new); standard runtime-ledger set. No live DNS/cert mutation, no generic integration hub, no auth bypass (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 408/408 PASS (27 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 185 total scenario groups across all 15 migrations + fixture (169 carried + 16 new).
+
+#### Compatibility, rollout, recovery
+
+`create_custom_domain.sql` is purely additive — `git revert` safe and complete in isolation. `revoke_default_public_function_execute.sql` is a privilege-only correction with **no safe partial revert**: reverting it would silently reopen `ERR-2026-004` across every prior capability's functions — any rollback must preserve this migration even if `custom-domain.sql` itself is reverted. Last known good `claude/lanjut-i0o5bt`@(`PLT-117` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-015` is `VERIFIED`; `ERR-2026-004` is `RECOVERED`. Next: `CG-S6-PLT-016` (Prompt 119, Localization).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

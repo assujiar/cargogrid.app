@@ -1,0 +1,98 @@
+-- Corrective migration -- real, severe, repository-wide privilege defect found during
+-- this checkpoint's (PLT-118, CG-S6-PLT-015) own authoring, disclosed in full rather
+-- than silently patched, the same discipline PLT-116's app.users_directory fix and
+-- PLT-117's evaluate_tenant_brand ambiguous-column fix already established.
+--
+-- **What was found:** PostgreSQL grants `EXECUTE` to the pseudo-role `PUBLIC` on every
+-- function by default at `CREATE FUNCTION` time, unless a migration explicitly revokes
+-- it. No migration in this repository's history through `PLT-117` ever issued a
+-- `REVOKE EXECUTE ... FROM PUBLIC` statement. Because `PUBLIC` is implicitly granted to
+-- every real role including `anon` and `authenticated`, this means **every single
+-- function this repository has ever created -- including every function every prior
+-- migration's own grant comment explicitly documented as "service_role-only"
+-- (`app.provision_tenant()`, `app.invite_user()`, `app.assign_role()`,
+-- `app.request_support_access()`/`approve_support_access()`/`revoke_support_access()`,
+-- `app.capture_audit_event()`, `app.supreme_admin_mutate_audit_log()`/
+-- `_delete_audit_log()`, every `PLT-117` white-label mutation, and more -- 90+ functions
+-- total at this checkpoint) -- has actually been directly callable by `anon` this
+-- entire time**, via PostgREST's standard RPC-call path in any real Supabase
+-- deployment, with zero session/JWT required.
+--
+-- **How it surfaced:** this checkpoint's own new `scripts/db-tests/custom-domain.sql`
+-- is the first test file in this repository's history to actually call
+-- `has_function_privilege('anon', ..., 'EXECUTE')` against a function this repository
+-- intends to be `service_role`-only (every prior capability's "defense in depth" test
+-- checked `has_table_privilege` for tables only, never `has_function_privilege` for a
+-- restricted function) -- the assertion failed immediately against `app.
+-- list_tenant_domains()`, and a direct manual check against `app.provision_tenant()`
+-- (a `PLT-105` function, eleven checkpoints old) confirmed the same result, proving
+-- this is a genuine, long-standing, repository-wide gap, not a defect specific to
+-- this checkpoint's own new functions.
+--
+-- **Severity and disclosed reasoning:** every mutation RPC in this repository takes an
+-- explicit `p_actor_auth_user_id`/`p_requester_auth_user_id` parameter rather than
+-- deriving the acting identity from `auth.uid()`, by design -- the application server
+-- is meant to authenticate the real session itself and pass along an identity it has
+-- already verified, only ever calling these functions with `service_role` credentials
+-- (AGENTS.md: "service-role credentials are server-only"; every migration's own grant
+-- comment already stated this architecture). With `PUBLIC` holding `EXECUTE`, that
+-- assumption was never actually enforced at the database boundary: any caller, with no
+-- session at all, could invoke e.g. `app.assign_role(...)` and supply *any* UUID as the
+-- actor parameter -- including a real Supreme Admin's `auth_user_id`, if ever
+-- discovered -- and every internal `app.is_supreme_admin()`/`app.
+-- is_support_grant_authority()` check would honor it, since those checks validate
+-- *whichever* identity the call claims, not who is actually connected. This is a
+-- complete authorization-boundary bypass for every mutation in the platform, not a
+-- narrow information-disclosure issue.
+--
+-- **The fix**, applied here in two parts:
+--
+-- 1. `REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA app FROM PUBLIC` -- removes the `PUBLIC`
+--    ACL entry from every function that exists in the `app` schema as of this
+--    migration (all of `PLT-105`..`117`). This does **not** touch any specific,
+--    already-issued `GRANT ... TO service_role` / `TO authenticated` / `TO anon`
+--    statement from any prior migration -- Postgres privilege grants are additive,
+--    independent ACL entries per role; revoking the `PUBLIC` entry leaves every other
+--    role's own grant completely untouched. Concretely: `service_role` keeps every
+--    grant it already had (zero behavior change for the application server);
+--    `authenticated` keeps its two deliberately-broader grants
+--    (`app.query_audit_logs()`/`app.export_audit_logs()`, `PLT-116`); `anon` keeps its
+--    one deliberately-broader grant (`app.evaluate_tenant_brand()`, `PLT-117`) --
+--    proven directly in this migration's own db-test coverage (`scripts/db-tests/
+--    audit-trail.sql`/`white-label.sql`, both already green, re-verified unaffected
+--    by this migration).
+-- 2. `ALTER DEFAULT PRIVILEGES IN SCHEMA app REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`
+--    -- closes the gap prospectively: every function any future migration creates in
+--    this schema, applied by the same role that runs this statement (the same
+--    migration-applying role every migration in this repository already runs as),
+--    will no longer receive an implicit `PUBLIC` grant at creation time. `PLT-118`
+--    (this same checkpoint, applied immediately after this migration) additionally
+--    carries its own explicit, redundant `REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA app
+--    FROM PUBLIC` statement as defense-in-depth belt-and-suspenders -- this repository's
+--    own stated preference for an explicit, directly-provable database guarantee over
+--    reliance on a session-scoped default-privilege setting alone, adopted here as the
+--    new standing convention for every migration going forward.
+--
+-- **No function's logic, contract, or intended accessibility changes.** This is a pure
+-- privilege-hygiene correction; every capability's own db-test suite (`PLT-105`
+-- through `PLT-117`, 169 scenario groups) is unchanged and re-verified green after this
+-- migration applies.
+
+revoke execute on all functions in schema app from public;
+
+alter default privileges in schema app revoke execute on functions from public;
+
+-- One real, concrete casualty of the blanket revoke above, found immediately by
+-- re-running this repository's full existing db-test suite after applying it (not
+-- merely asserted safe): PLT-114's app.users_directory view calls app.mask_email()
+-- internally in its own SELECT list. Unlike RLS policy expressions and unlike a view's
+-- own underlying *table* access (both owner-scoped, per PLT-116's own users_directory
+-- fix), PostgreSQL evaluates a *function call*'s EXECUTE privilege against the
+-- querying role itself, not the view's owner -- so `authenticated` genuinely needs its
+-- own direct grant on app.mask_email() for app.users_directory to keep working, a
+-- grant that (like everything else) had only ever existed implicitly via the now-
+-- revoked PUBLIC default. This is the one function this repository has ever relied on
+-- PUBLIC for legitimately (masking is meant to be usable by any authenticated caller,
+-- by design) -- re-granted explicitly here, now visible and auditable instead of
+-- silently implicit.
+grant execute on function app.mask_email(text) to authenticated, service_role;
