@@ -2577,6 +2577,36 @@ Purely additive — four new tables, twelve new functions, zero modification to 
 
 Self-closing. `CG-S6-PLT-020` is `VERIFIED`. Next: `CG-S6-PLT-021` (Prompt 124, Status Engine).
 
+### CHG-2026-056 — Status Engine (Phase 1, Prompt 124)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-021` / `124_STATUS_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-124.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — third task in that still-open range |
+
+#### Outcome
+
+`supabase/migrations/20260719100000_create_status_engine.sql`: a permanent canonical status registry (`app.status_sets`/`app.canonical_statuses`) with versioned tenant presentation layered on `PLT-121`'s own config engine -- one dedicated `status:<code>` config_type minted per status set via `app.register_status_set()` (composing `app.register_config_type()`, since the single shared seeded `'status'` type cannot host more than one tenant-scoped object at a time). `app.validate_status_presentation()` structurally requires a non-color accessible cue on every labeled status. `app.resolve_status_presentation()` composes `PLT-121`'s own 6-level precedence resolver with a safe structural fallback. `app.status_legacy_mappings` has a real `unique(status_set_code, legacy_value)` collision guarantee. Zero real domain status sets seeded -- the one safe example (the real, sourced 6-state Quotation shape) is proven only in `scripts/db-tests/status.sql`.
+
+#### Scope and files
+
+`supabase/migrations/20260719100000_create_status_engine.sql`; `scripts/db-tests/status.sql`; `server/contracts/status/status.ts`(+test); `server/queries/status.ts`(+test); `server/mutations/status.ts`(+test); `docs/build-log/phase-01/PLT-124.md`; standard runtime-ledger set. No domain transition logic, no client authorization, no destructive status rewrite (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 504/504 PASS (17 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..123`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 258 total scenario groups across all 21 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — three new tables, eight new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-123` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-021` is `VERIFIED`. Next: `CG-S6-PLT-022` (Prompt 125, Numbering Engine).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
