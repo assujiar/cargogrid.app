@@ -2667,6 +2667,36 @@ Purely additive — two new tables, eight new functions, zero modification to an
 
 Self-closing. `CG-S6-PLT-023` is `VERIFIED`. **This is the final task in the user's explicitly requested "lanjut sd prompt 126" range (Prompts 122–126, all now `VERIFIED`).** Next eligible prompt per the execution index: `CG-S6-PLT-024` (Prompt 127) — requires fresh explicit user authorization before starting, per this file's own standing discipline at the end of an explicit-range authorization.
 
+### CHG-2026-059 — Notification Engine (Phase 1, Prompt 127)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-024` / `127_NOTIFICATION_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-127.md` |
+| Final status | `COMPLETED` |
+| Authorization | User re-authorized with a single, unscoped "lanjut" after the "lanjut sd prompt 126" range closed at `PLT-126` |
+
+#### Outcome
+
+`supabase/migrations/20260719130000_create_notification_engine.sql`: tenant-aware in-app/email-ready notification primitives -- templates, preferences, dedupe, retries, audit -- layered on `PLT-121`'s own config engine (`app.register_notification_type()` mints a dedicated `notification:<code>` config_type per type). No real provider send exists anywhere -- `in_app` delivery is real and immediate, `email` stops at `status=queued`, `app.record_notification_delivery_attempt()` is the real bounded adapter interface a future provider integration would call. Template escaping is real at both write and render time; a real link-scheme allowlist/blocklist rejects unsafe URIs. Recipient authorization fails safely (a wrong-tenant/deactivated recipient is refused outright). Preference-aware channel fallback proven end-to-end. Two real defects (a `javascript:`-scheme link check that missed real `javascript:` URIs since they carry no `://`; an audit-result literal mismatch, `'failed'` vs. the real `'failure'` vocabulary) caught and fixed via actual failing `db:test` runs, not self-review.
+
+#### Scope and files
+
+`supabase/migrations/20260719130000_create_notification_engine.sql`; `scripts/db-tests/notification.sql`; `server/contracts/notification/notification.ts`(+test); `server/queries/notification.ts`(+test); `server/mutations/notification.ts`(+test); `docs/build-log/phase-01/PLT-127.md`; standard runtime-ledger set. No bulk marketing campaigns, no live provider sends without authority, no generic integration hub (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 550/550 PASS (17 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..126`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 286 total scenario groups across all 24 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — four new tables, twelve new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-126` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-024` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-025` (Prompt 128, Document/File Engine) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
