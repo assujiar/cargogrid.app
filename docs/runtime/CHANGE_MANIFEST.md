@@ -2487,6 +2487,36 @@ Purely additive — two new tables, one new view, nine new functions, zero modif
 
 Self-closing. `CG-S6-PLT-017` is `VERIFIED`. **This is the final task in the user's explicitly requested "lanjut sd prompt 120" range** — next eligible task `CG-S6-PLT-018` (Prompt 121, Configuration Engine) requires explicit user confirmation before starting, per this file's own standing discipline at the end of an explicit-range authorization.
 
+### CHG-2026-053 — Configuration Engine (Phase 1, Prompt 121)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-018` / `121_CONFIGURATION_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-121.md` |
+| Final status | `COMPLETED` |
+| Authorization | User re-authorized with "lanjut" after the "lanjut sd prompt 120" range closed at `PLT-120` |
+
+#### Outcome
+
+`supabase/migrations/20260717130000_create_configuration_engine.sql`: `app.config_types`/`app.config_objects`/`app.config_versions`/`app.config_items`/`app.config_dependencies` implement the shared versioned configuration foundation every later engine/module builds on (Tech Arch §13). 10 sourced Phase-1 config types seeded empty/template only (`workflow`/`approval`/`status`/`numbering`/`form`/`field`/`notification`/`feature`/`branding`/`terminology`, per `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` §13's own Module Adoption Map). `app.resolve_config()` is the real 6-level override precedence resolver (user→role→branch→company→tenant→global), proven with a role-level override beating a tenant-level default. `app.detect_config_dependency_cycle()` is a real, bounded recursive-CTE cycle detector gating `app.publish_config_version()`, proven against both a genuine cycle and a non-circular chain. `app.verify_config_version_current()` is `EXC-CFG-001`'s concrete "stale configuration version" mechanism. The 8-state Tech Arch lifecycle is deliberately condensed onto this repository's own established draft/published/archived pattern (`PLT-111`/`117`/`119`) rather than a one-off state machine. One real defect (missing `SECURITY DEFINER` on the resolver functions, the same privilege-model class `ERR-2026-004` found) caught and fixed before any gate ran.
+
+#### Scope and files
+
+`supabase/migrations/20260717130000_create_configuration_engine.sql`; `scripts/db-tests/config.sql`; `server/contracts/config/config.ts`(+test); `server/queries/config.ts`(+test); `server/mutations/config.ts`(+test); `docs/build-log/phase-01/PLT-121.md`; standard runtime-ledger set. No full workflow/approval/forms modules, no arbitrary scripts, no mass hard-code migration (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 457/457 PASS (24 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..120`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 225 total scenario groups across all 18 migrations + fixture (212 carried + 13 new).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — five new tables, twelve new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-120` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-018` is `VERIFIED`. Next: `CG-S6-PLT-019` (Prompt 122, Workflow Engine).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
