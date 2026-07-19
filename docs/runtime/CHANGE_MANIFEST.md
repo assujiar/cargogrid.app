@@ -2547,6 +2547,36 @@ Purely additive — three new tables, eight new functions, zero modification to 
 
 Self-closing. `CG-S6-PLT-019` is `VERIFIED`. Next: `CG-S6-PLT-020` (Prompt 123, Approval Engine).
 
+### CHG-2026-055 — Approval Engine (Phase 1, Prompt 123)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-020` / `123_APPROVAL_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-123.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — second task in that still-open range |
+
+#### Outcome
+
+`supabase/migrations/20260719090000_create_approval_engine.sql`: an approval *definition* is not a new table family -- it is `PLT-121`'s own `config_type_code='approval'` config_object/config_version/config_items, reused directly. This migration adds `app.validate_approval_definition()` (publish-time structural gate -- 9 distinct failure modes proven individually), and the runtime `app.approval_requests`/`app.approval_request_steps`/`app.approval_decisions`/`app.approval_delegations` tables with request/decide/cancel/escalate/delegate lifecycle functions. All three routing patterns (`sequential`/`parallel`/`threshold`) proven as genuinely distinct algorithms. Approver resolution reuses `PLT-112`'s own disclosed role-assignment-join-to-published-version convention. Separation-of-duties self-approval denial proven against a requester who is also a genuinely eligible approver. Delegation is bounded (<=90 days) and proven to fail safely on revocation. `app.request_approval()` proactively refuses a request against a step with zero eligible approvers.
+
+#### Scope and files
+
+`supabase/migrations/20260719090000_create_approval_engine.sql`; `scripts/db-tests/approval.sql`; `server/contracts/approval/approval.ts`(+test); `server/queries/approval.ts`(+test); `server/mutations/approval.ts`(+test); `docs/build-log/phase-01/PLT-123.md`; standard runtime-ledger set. No domain-specific approval policies beyond the one isolated example, no full inbox UI, no finance overrides (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 487/487 PASS (15 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..122`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 249 total scenario groups across all 20 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — four new tables, twelve new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-122` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-020` is `VERIFIED`. Next: `CG-S6-PLT-021` (Prompt 124, Status Engine).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
