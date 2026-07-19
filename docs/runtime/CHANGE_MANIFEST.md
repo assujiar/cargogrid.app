@@ -2637,6 +2637,36 @@ Purely additive — two new tables, eleven new functions, zero modification to a
 
 Self-closing. `CG-S6-PLT-022` is `VERIFIED`. Next: `CG-S6-PLT-023` (Prompt 126, Form and Custom-Field Builder) — the final task in the user's "lanjut sd prompt 126" range.
 
+### CHG-2026-058 — Form and Custom-Field Builder (Phase 1, Prompt 126)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-023` / `126_FORM_CUSTOM_FIELD_BUILDER_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-126.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — fifth and final task in that range, now closed |
+
+#### Outcome
+
+`supabase/migrations/20260719120000_create_form_custom_field_builder.sql`: governed, versioned form/custom-field definitions layered on `PLT-121`'s own config engine (`app.register_form()` mints a dedicated `form:<code>` config_type per form, the same registry composition `PLT-124`'s Status Engine established). `app.custom_field_values` holds exactly one row per (tenant, entity_type, entity_id) -- EAV query explosion structurally avoided, proven to stay at one row even across updates. Field types/validators are real bounded allowlists (`file` deliberately excluded -- no storage plumbing exists yet); a field's visibility condition may only reference an earlier-declared field, making condition cycles impossible by construction. `app.validate_custom_field_values()` runs the real submission-time gate before any write ever happens -- proven that an invalid submission leaves zero rows. Sensitive custom-field values get a real, narrower read gate (submitter or definition-admin-grade authority only), proven against a genuinely denied third party.
+
+#### Scope and files
+
+`supabase/migrations/20260719120000_create_form_custom_field_builder.sql`; `scripts/db-tests/form.sql`; `server/contracts/form/form.ts`(+test); `server/queries/form.ts`(+test); `server/mutations/form.ts`(+test); `docs/build-log/phase-01/PLT-126.md`; standard runtime-ledger set. No domain forms/pages, no arbitrary code/SQL, no uncontrolled EAV, no full builder portal (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 533/533 PASS (12 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..125`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 277 total scenario groups across all 23 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, eight new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-125` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-023` is `VERIFIED`. **This is the final task in the user's explicitly requested "lanjut sd prompt 126" range (Prompts 122–126, all now `VERIFIED`).** Next eligible prompt per the execution index: `CG-S6-PLT-024` (Prompt 127) — requires fresh explicit user authorization before starting, per this file's own standing discipline at the end of an explicit-range authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
