@@ -2607,6 +2607,36 @@ Purely additive — three new tables, eight new functions, zero modification to 
 
 Self-closing. `CG-S6-PLT-021` is `VERIFIED`. Next: `CG-S6-PLT-022` (Prompt 125, Numbering Engine).
 
+### CHG-2026-057 — Numbering Engine (Phase 1, Prompt 125)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-022` / `125_NUMBERING_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-125.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — fourth task in that still-open range |
+
+#### Outcome
+
+`supabase/migrations/20260719110000_create_numbering_engine.sql`: configurable, collision-safe numbering with versioned formats/scopes/reservations/audit, layered on `PLT-121`'s own config engine. `app.validate_numbering_definition()` requires exactly one `{SEQ}` token over a real bounded token allowlist. `app.allocate_numbering_seq()` is a single atomic `INSERT ... ON CONFLICT ... DO UPDATE` upsert. `app.numbering_allocations`' own `unique(tenant_id, formatted_number)` constraint is the real, final collision guarantee -- proven to have caught a genuine would-be collision during this checkpoint's own test authoring (two independent scope-key counters both reaching seq=1 rendered identically until the representative format was corrected to include `{SCOPE_CODE}`), disclosed directly in the build log rather than silently reworked. Allocated numbers are never silently recycled; `app.bootstrap_numbering_counter()` structurally refuses to lower an existing counter, so legacy import never renumbers history.
+
+#### Scope and files
+
+`supabase/migrations/20260719110000_create_numbering_engine.sql`; `scripts/db-tests/numbering.sql`; `server/contracts/numbering/numbering.ts`(+test); `server/queries/numbering.ts`(+test); `server/mutations/numbering.ts`(+test); `docs/build-log/phase-01/PLT-125.md`; standard runtime-ledger set. No renumbering of historical records, no client-side allocation, no module-specific hard-coded format (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 521/521 PASS (17 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..124`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 268 total scenario groups across all 22 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, eleven new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-124` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-022` is `VERIFIED`. Next: `CG-S6-PLT-023` (Prompt 126, Form and Custom-Field Builder) — the final task in the user's "lanjut sd prompt 126" range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
