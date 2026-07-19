@@ -2517,6 +2517,36 @@ Purely additive — five new tables, twelve new functions, zero modification to 
 
 Self-closing. `CG-S6-PLT-018` is `VERIFIED`. Next: `CG-S6-PLT-019` (Prompt 122, Workflow Engine).
 
+### CHG-2026-054 — Workflow Engine (Phase 1, Prompt 122)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-019` / `122_WORKFLOW_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-122.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") |
+
+#### Outcome
+
+`supabase/migrations/20260717140000_create_workflow_engine.sql`: a workflow *definition* is not a new table family — it is `PLT-121`'s own `config_type_code='workflow'` config_object/config_version/config_items, reused directly. This migration adds `app.workflow_hooks` (a real guard/effect allowlist, seeded `always_true`/`noop`), `app.validate_workflow_definition()` (publish-time structural/reachability/dead-end gate — all 7 distinct failure modes proven individually: `workflow_missing_states`, `_invalid_initial_state`, `_invalid_terminal_state`, `_invalid_transition_from`/`_to`, `_unknown_guard`/`_effect`, `_unreachable_state`, `_dead_end_state`), `app.publish_workflow_definition()` (composes `PLT-121`'s own `app.publish_config_version()`), and the runtime `app.workflow_instances`/`app.workflow_transition_history` tables with start/transition/cancel/history lifecycle functions. A running instance binds the exact published `config_version_id` snapshot at start time; a later republish never mutates it (structural, by construction). Fail-closed guard evaluation is proven through a real blocked transition (a registered-but-unimplemented `never_true` guard), not merely asserted. The one safe synthetic example (`draft -> submitted -> approved|rejected`) is built and proven entirely inside `scripts/db-tests/workflow.sql` — no example row seeded in the migration itself. Two real defects (a stray premature `comment on function` statement; a missing `SECURITY DEFINER` on `app.get_workflow_instance_history()`, the same privilege-model class `ERR-2026-004` found) caught and fixed before any gate ran.
+
+#### Scope and files
+
+`supabase/migrations/20260717140000_create_workflow_engine.sql`; `scripts/db-tests/workflow.sql`; `server/contracts/workflow/workflow.ts`(+test); `server/queries/workflow.ts`(+test); `server/mutations/workflow.ts`(+test); `docs/build-log/phase-01/PLT-122.md`; standard runtime-ledger set. No domain workflows beyond the one isolated example, no arbitrary script execution, no broad module adoption (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 472/472 PASS (15 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..121`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 235 total scenario groups across all 19 migrations + fixture (225 carried + 11 new, minor reconciliation in exact count per PLT-122.md §5 note).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — three new tables, eight new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-121` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-019` is `VERIFIED`. Next: `CG-S6-PLT-020` (Prompt 123, Approval Engine).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
