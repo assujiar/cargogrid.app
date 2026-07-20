@@ -83,7 +83,7 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-013` | `shipments` wide-table vs. linked-table split | Phase 3 schema (Prompt 168+) | `BLOCKED` — needs Phase 3 schema slice |
 | `ADR-CAND-ARCH-014` | Rule-evaluation timeout (≈500ms) | Config engine (Phase 1 `07_*.md`) | `PROPOSED` — value signalled, ratify at build |
 | `ADR-CAND-ARCH-015` | Config-engine bounded-evaluator sandbox | Config engine (Phase 1) | `PROPOSED` |
-| `ADR-CAND-ARCH-017` | GraphQL depth/complexity limits + persisted-op registry | API workstream (Phase 1+) | `BLOCKED` — needs enforcement surface |
+| `ADR-CAND-ARCH-017` | GraphQL depth/complexity limits + persisted-op registry | API workstream (Phase 1+) | **Partially `ACCEPTED` → `ADR-0012`** (depth/complexity numeric limits only, `CG-S6-PLT-027`/Prompt 130) — persisted-operation registration mechanism remains open, due at the future live GraphQL-server capability |
 | `ADR-CAND-ARCH-018` | Webhook retry/backoff/DLQ numeric values | API workstream | **Partially `ACCEPTED` → `ADR-0011`** (signature/timestamp/auto-disable sub-questions only, `CG-S6-PLT-026`/Prompt 129) — rate-limit numeric thresholds remain `PROPOSED`, non-blocking, due at the future live API-gateway/rate-enforcement capability |
 | `ADR-CAND-ARCH-019` | Deployment ordering / API-consumer compatibility | DevOps (Phase 0 CI + release) | `PROPOSED` |
 | `ADR-CAND-ARCH-020` | Component-library foundation | Phase 0 `PH0-090` (Design System) | **ACCEPTED → `ADR-0005`** (Radix UI primitives, copy-in pattern) |
@@ -112,3 +112,4 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-0009` | Observability platform | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-026` |
 | `ADR-0010` | Secret-manager mechanism | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-025` |
 | `ADR-0011` | Webhook signature scheme, timestamp tolerance, and auto-disable threshold | `ACCEPTED` (2026-07-19) | `ADR-CAND-ARCH-018` (partial) |
+| `ADR-0012` | GraphQL depth and complexity limit values | `ACCEPTED` (2026-07-19) | `ADR-CAND-ARCH-017` (partial) |

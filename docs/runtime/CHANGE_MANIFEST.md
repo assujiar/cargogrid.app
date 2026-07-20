@@ -2757,6 +2757,36 @@ Purely additive — six new tables, nineteen new functions, one new ADR, zero mo
 
 Self-closing. `CG-S6-PLT-026` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-027` (Prompt 130, REST/GraphQL Platform API Foundation) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-062 — REST and GraphQL Platform API Foundation (Phase 1, Prompt 130)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-027` / `130_REST_GRAPHQL_PLATFORM_API_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR |
+| Baseline evidence | `docs/build-log/phase-01/PLT-130.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a fourth, separate, unscoped "lanjut" after `PLT-129` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719160000_create_api_foundation.sql`: `app.api_logs`, the last of the five canonical append-only observability tables `05_DATABASE_SCHEMA_WORKSTREAM.md` §6 names, plus `app.record_api_request()`, the real bounded adapter interface a future request-handling middleware would call. `server/contracts/api/api.ts`/`server/policies/pagination.ts`/`server/policies/graphql-complexity.ts`/`server/policies/api-request-context.ts`/`server/mutations/api-log.ts`: the shared REST/GraphQL contract and policy foundation -- a real Tech Arch §25.6 error shape, bounded cursor pagination (opaque base64url cursors, keyset-ordered, capped at 100 items), idempotency-key/correlation-id contracts, and `resolveApiRequestContext()`, the composed 8-stage access-evaluation pipeline (`docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §3) built entirely from already-tested `PLT-106`/`108`/`112`/`114` primitives with zero new authority logic -- the physical form of "Neither interface is secondary or may bypass common service/access rules" (§24). No live HTTP route or GraphQL server exists anywhere in this repository, and building one is explicitly out of this prompt's own scope per `08_API_INTEGRATION_WORKSTREAM.md`'s own atomic-backlog sequencing (the actual route scaffold and GraphQL server are separate, later tasks this checkpoint's slice unblocks). **`ADR-0012` newly ratified** (`docs/adr/ADR-0012-graphql-depth-complexity-limits.md`), resolving `ADR-CAND-ARCH-017`'s depth/complexity numeric-limit sub-question (depth 8, complexity budget 1000 units via a per-field-type cost table) -- the scoring algorithm is real and fully tested against a minimal field-selection tree shape, deliberately not depending on a `graphql` package this repository does not install. **No real defect was found or fixed this checkpoint** -- every gate, including the full `db:test` suite, passed on its first complete run, the second time this session that has happened (`PLT-128` was the first).
+
+#### Scope and files
+
+`supabase/migrations/20260719160000_create_api_foundation.sql`; `scripts/db-tests/api-foundation.sql`; `server/contracts/api/api.ts`(+test); `server/policies/pagination.ts`(+test); `server/policies/graphql-complexity.ts`(+test); `server/policies/api-request-context.ts`(+test); `server/mutations/api-log.ts`(+test); `docs/adr/ADR-0012-graphql-depth-complexity-limits.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `docs/build-log/phase-01/PLT-130.md`; standard runtime-ledger set. No broad domain APIs, no duplicated interface business logic, no unbounded queries (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 629/629 PASS (28 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..129`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 322 total scenario groups across all 27 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — one new table, one new function, two new ADRs, zero modification to any existing migration/function/view/table's own behavior. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-129` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-027` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-028` (Prompt 131, Import/Export Job Framework) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
