@@ -2697,6 +2697,36 @@ Purely additive — four new tables, twelve new functions, zero modification to 
 
 Self-closing. `CG-S6-PLT-024` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-025` (Prompt 128, Document/File Engine) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-060 — Document and File Engine (Phase 1, Prompt 128)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-025` / `128_DOCUMENT_FILE_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-128.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a second, separate, unscoped "lanjut" after `PLT-127` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719140000_create_document_file_engine.sql`: tenant/record-aware private file metadata with mandatory malware scanning before availability, signed-delivery authorization, versioning, and retention/legal hold -- layered on `PLT-121`'s own config engine (`app.register_document_type()` mints a dedicated `document:<code>` config_type per type; unlike status/form/notification, no generic `'document'` placeholder was ever seeded in the first place). No real storage/malware-scan provider exists anywhere -- `storage_path` is a real, unguessable, server-generated key (tenant_id + document_type_code + a fresh random uuid, never derived from the client filename, structurally ruling out path traversal); `app.record_file_scan_result()` is the real bounded scan adapter interface a future provider would call. This capability is deliberately server-mediated only -- every mutation is `service_role`-only (real signed-URL issuance inherently needs storage credentials only server code holds), and reads are direct-table RLS rather than a resolver function; consequently none of its functions needs `SECURITY DEFINER`. `app.authorize_file_access()` composes two independent gates (malware-scan: infected blocks everyone, not-yet-clean blocks everyone but the uploader; record/sensitivity access: `app.can_access_record()` plus a stricter restricted/credential check) and fails safely -- a zero-standing actor is refused outright with no log row, a merely-denied tenant member gets a real logged denial in the new `app.file_access_logs`. `classification` is wired to `scripts/data-classification/registry.ts`'s `SENSITIVITY_LEVELS` scale via a literal CHECK match, resolving that standard's own previously-named `files.classification` gap (`docs/standards/DATA_CLASSIFICATION_STANDARDS.md` §8, updated this checkpoint). Legal hold genuinely blocks deletion until released; versioning always inserts a new row (never overwrites) and keeps exactly one `is_latest_version` row per lineage via a partial unique index. An additive grant (`app.is_support_grant_authority()` to `authenticated`) was needed for the new RLS policy on `app.files` -- its first real RLS consumer, verified safe. **No real defect was found or fixed this checkpoint** -- the full `db:test` suite and all TypeScript gates passed on the first complete run, disclosed honestly as a first for this session's PLT-12x sequence (every prior engine checkpoint found and fixed at least one real bug via a failing test) rather than implying extra rigor was applied; the design deliberately reused more already-proven primitives and lessons (`can_access_record`, `capture_audit_event`, the config engine, PLT-127's `SECURITY DEFINER`/`audit_logs.result` lessons) applied proactively than any prior checkpoint.
+
+#### Scope and files
+
+`supabase/migrations/20260719140000_create_document_file_engine.sql`; `scripts/db-tests/document-file.sql`; `server/contracts/document/document.ts`(+test); `server/queries/document.ts`(+test); `server/mutations/document.ts`(+test); `docs/standards/DATA_CLASSIFICATION_STANDARDS.md` (§8 gap resolved); `docs/build-log/phase-01/PLT-128.md`; standard runtime-ledger set. No public bucket/default URLs, no scan bypass, no real sensitive files, no domain document workflows (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 572/572 PASS (28 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..127`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 300 total scenario groups across all 25 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — three new tables, twelve new functions, two additive grants, zero modification to any existing migration/function/view/table's own behavior. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-127` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-025` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-026` (Prompt 129) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

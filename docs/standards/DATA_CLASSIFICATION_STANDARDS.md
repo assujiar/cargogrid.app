@@ -68,6 +68,7 @@ Every Phase 1+ capability prompt that adds a `server/contracts/<domain>/` field,
 | Item | Why not real yet | Owning future task |
 |---|---|---|
 | Field-level policy engine enforcing §4's 8-dimension matrix at query/API time | No schema/API exists | Phase 1 Platform Core, `06_RLS_RBAC_WORKSTREAM.md` §4 |
-| `files.classification` column values wired to this registry | No `files` table exists yet | Phase 1, `05_*.md`'s file-metadata slice |
 | Per-domain `server/contracts/<domain>/` registry entries | No contract exists yet | Each domain's own owning Phase 1+ prompt (§7's adoption gate) |
 | Payroll retention class confirmation | No Finance/HRIS SME evidence exists yet (§5's disclosed gap) | Phase 4 Finance / Phase 7 HRIS |
+
+**Resolved at `PLT-128` (Prompt 128, Document and File Engine, `CG-S6-PLT-025`):** `app.files.classification` (`supabase/migrations/20260719140000_create_document_file_engine.sql`) is wired to this registry's `SENSITIVITY_LEVELS` scale via a literal `CHECK`-constraint match against the same five values (`public`/`internal`/`confidential`/`restricted`/`credential`), not a static `ClassificationEntry` — a file's classification is a dynamic per-row value chosen at upload time, not a fixed schema-field sensitivity the `ClassificationEntry` model classifies once at author time. `app.classification_level_rank()` mirrors this file's `LEVEL_ORDER` (§2) exactly, so a file's classification can never be set weaker than its document type's configured default (the same strongest-or-equal rule `validateRegistry()` enforces for static entries) — the SQL and TypeScript scales cannot literally share code across that boundary, so the mirroring is disclosed rather than assumed automatic.
