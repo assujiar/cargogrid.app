@@ -84,7 +84,7 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-014` | Rule-evaluation timeout (≈500ms) | Config engine (Phase 1 `07_*.md`) | `PROPOSED` — value signalled, ratify at build |
 | `ADR-CAND-ARCH-015` | Config-engine bounded-evaluator sandbox | Config engine (Phase 1) | `PROPOSED` |
 | `ADR-CAND-ARCH-017` | GraphQL depth/complexity limits + persisted-op registry | API workstream (Phase 1+) | `BLOCKED` — needs enforcement surface |
-| `ADR-CAND-ARCH-018` | Webhook retry/backoff/DLQ numeric values | API workstream | `PROPOSED` |
+| `ADR-CAND-ARCH-018` | Webhook retry/backoff/DLQ numeric values | API workstream | **Partially `ACCEPTED` → `ADR-0011`** (signature/timestamp/auto-disable sub-questions only, `CG-S6-PLT-026`/Prompt 129) — rate-limit numeric thresholds remain `PROPOSED`, non-blocking, due at the future live API-gateway/rate-enforcement capability |
 | `ADR-CAND-ARCH-019` | Deployment ordering / API-consumer compatibility | DevOps (Phase 0 CI + release) | `PROPOSED` |
 | `ADR-CAND-ARCH-020` | Component-library foundation | Phase 0 `PH0-090` (Design System) | **ACCEPTED → `ADR-0005`** (Radix UI primitives, copy-in pattern) |
 | `ADR-CAND-ARCH-021` | Design-token mechanism + token file location | Phase 0 `PH0-090` | **ACCEPTED → `ADR-0006`** (CSS custom properties + Tailwind v4 `@theme`) |
@@ -111,3 +111,4 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-0008` | DR-rehearsal cadence and automated-accessibility-checker tool | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-023` |
 | `ADR-0009` | Observability platform | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-026` |
 | `ADR-0010` | Secret-manager mechanism | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-025` |
+| `ADR-0011` | Webhook signature scheme, timestamp tolerance, and auto-disable threshold | `ACCEPTED` (2026-07-19) | `ADR-CAND-ARCH-018` (partial) |

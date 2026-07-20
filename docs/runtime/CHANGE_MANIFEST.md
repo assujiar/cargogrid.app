@@ -2727,6 +2727,36 @@ Purely additive — three new tables, twelve new functions, two additive grants,
 
 Self-closing. `CG-S6-PLT-025` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-026` (Prompt 129) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-061 — API Key and Webhook Primitives (Phase 1, Prompt 129)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-026` / `129_API_KEY_WEBHOOK_PRIMITIVES_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR |
+| Baseline evidence | `docs/build-log/phase-01/PLT-129.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a third, separate, unscoped "lanjut" after `PLT-128` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719150000_create_api_key_webhook_primitives.sql`: tenant-scoped hashed API key lifecycle (create-once-display, overlap-window rotation, revoke, real scope-narrowing enforcement) plus webhook endpoint/signed-delivery primitives (HMAC-SHA256 signing, timestamp-tolerance replay protection, retry/backoff/DLQ, consecutive-failure auto-disable). `app.create_api_key()` validates every requested scope (`<resource_module_code>:<action>`, `app.permissions`'s own natural key) against the actor's own currently-granted RBAC permissions via `app.evaluate_permission()` -- can only narrow what the actor already holds, never widen it, proven with a real role/permission/assignment chain in the db-test, not merely asserted. Neither a raw API key nor a raw webhook secret is ever stored in a form the tenant could re-request -- keys as a one-way sha256 digest (`key_hash`), webhook secrets stored directly but with zero `authenticated` grant on the table (HMAC verification is symmetric, so the platform's own delivery worker genuinely needs the raw secret to sign outgoing requests, unlike a key comparison) -- both return exactly once from their create/rotate RPC. **`ADR-0011` newly ratified** (`docs/adr/ADR-0011-webhook-signature-and-auto-disable-thresholds.md`), resolving `ADR-CAND-ARCH-018`'s signature/timestamp/auto-disable sub-questions with the candidate's own recommended defaults (HMAC-SHA256, 5-minute tolerance, 10-consecutive-failure auto-disable) -- all real, tested, provable without any live HTTP call since HMAC computation is pure cryptographic computation. A bounded, disclosed-partial SSRF check (`app.validate_webhook_url()`) rejects a literal `localhost`/loopback/private/link-local IPv4/IPv6 host at registration time; disclosed as unable to defend against DNS-rebinding SSRF, which requires live delivery-time resolution. This capability is deliberately server-mediated only (every mutation `service_role`-only), so none of its functions needs `SECURITY DEFINER` except the two authenticated-facing listing functions, which exclude `key_hash`/`secret_value` from their result shape entirely. **One real bug found and fixed via an actual failing test, not self-review**: `app.rotate_api_key()`/`app.rotate_webhook_secret()` initially used a bare `where id = ...` inside functions whose `RETURNS TABLE(id uuid, ...)` clause auto-declares `id` as a PL/pgSQL variable -- the exact ambiguous-column class `PLT-117` found in `evaluate_tenant_brand()` -- fixed by table-qualifying every affected reference.
+
+#### Scope and files
+
+`supabase/migrations/20260719150000_create_api_key_webhook_primitives.sql`; `scripts/db-tests/api-key-webhook.sql`; `server/contracts/api-key-webhook/api-key-webhook.ts`(+test); `server/queries/api-key-webhook.ts`(+test); `server/mutations/api-key-webhook.ts`(+test); `docs/adr/ADR-0011-webhook-signature-and-auto-disable-thresholds.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `docs/build-log/phase-01/PLT-129.md`; standard runtime-ledger set. No live third-party endpoints without authority, no plaintext keys, no generic provider integration hub (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (a stray gitignored `playwright-report/` artifact from an earlier `test:e2e` attempt tripped a transient lint failure on an unrelated bundled file; deleted, not tracked, not part of this diff); `pnpm run test` 601/601 PASS (29 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS (confirmed the `cgk_`/`whsec_`-prefixed db-test literals do not trip `check-secrets.ts`, since PL/pgSQL's `:=` operator never matches its generic-secret-assignment regex); `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..128`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 317 total scenario groups across all 26 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — six new tables, nineteen new functions, one new ADR, zero modification to any existing migration/function/view/table's own behavior. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-128` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-026` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-027` (Prompt 130, REST/GraphQL Platform API Foundation) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
