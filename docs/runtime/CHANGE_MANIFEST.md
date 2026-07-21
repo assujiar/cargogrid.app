@@ -2849,6 +2849,36 @@ Additive with two narrow, disclosed, backward-compatible alterations to `PLT-131
 
 Self-closing. `CG-S6-PLT-029` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-030` (Prompt 133, Feature Flags) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-065 — Feature Flags (Phase 1, Prompt 133)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-030` / `133_FEATURE_FLAGS_PLATFORM_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-133.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-132` closed `BLOCKED_ON_AUTHORIZATION` naming exactly `CG-S6-PLT-030` as the next task pending a fresh, unscoped "lanjut"; this checkpoint was opened by exactly that, in a fresh session on the harness-assigned branch `claude/lanjut-0kwbyt` |
+
+#### Outcome
+
+`supabase/migrations/20260721090000_create_feature_flags_platform.sql`: extends `PLT-121`'s Configuration Engine (`config_type`/`config_object`/`config_version`/`config_item`, reused directly, not forked) with a flag catalogue (`app.feature_flags`, optionally FK'd to `PLT-106`'s `app.entitlement_modules` for entitlement-aware evaluation) and the flag-specific mechanics the Configuration Engine does not already provide: `app.register_feature_flag()` (Supreme-only, idempotent, mints a dedicated `'feature:<flag_key>'` config_type -- the same pattern `PLT-124`'s status sets already established), `app.create_feature_flag_draft()`/`app.set_feature_flag_items()` (structural validation restricting scope to global/tenant only, rollout `[0,100]`, known environments, and -- the checkpoint's own considered design -- **`kill_switch`/`environments` are database-enforced global-only, non-overridable-at-tenant-scope dimensions**, so no tenant override can ever resurrect a platform-wide kill), `app.feature_flag_bucket()` (deterministic `md5`-based `[0,99]` bucketing), `app.evaluate_feature_flag()` (`SECURITY DEFINER`, the fixed 10-reason precedence order: unknown flag → entitlement → unconfigured → kill_switch → environment_gate → tenant deny/allow → cohort_mismatch → rollout_bucket → default -- structurally incapable of granting any permission/entitlement/RLS bypass), `app.kill_feature_flag()` (Supreme-only panic-button, preserves other published dimensions, reversible via `PLT-121`'s own unmodified `app.rollback_config_version()`), `app.debug_feature_flag()` (privileged, self-audited explain path). Publish/discard/rollback are not re-declared -- `PLT-121`'s own functions operate on a flag's draft `version_id` unchanged. `server/contracts+queries+mutations/feature-flag(s).ts` (new) -- `FeatureFlagCache` keyed by flag/tenant/environment/cohort-set with explicit `invalidate()`-driven "prompt invalidation" on every mutation (Prompt 133 §17). One real defect found and fixed in this checkpoint's own db-test authoring: a raw `jsonb` array passed to `PLT-116`'s `capture_audit_event()` broke `app.redact_audit_payload()`'s `jsonb_each()` call (it requires an object) -- fixed by wrapping in `jsonb_build_object('items', ...)`, the same shape every other Configuration-Engine-derived capability's own audit call already uses.
+
+#### Scope and files
+
+`supabase/migrations/20260721090000_create_feature_flags_platform.sql`; `scripts/db-tests/feature-flags.sql`; `server/contracts/feature-flag/feature-flag.ts`(+test); `server/mutations/feature-flags.ts`(+test); `server/queries/feature-flags.ts`(+test); `docs/build-log/phase-01/PLT-133.md`; standard runtime-ledger set. No domain feature behavior, authorization weakening, or tenant code fork introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 893/893 PASS (27 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..132`); `pnpm run git:check` PASS; `pnpm run db:test` PASS -- 365 total scenario groups across all 30 migrations + 29 db-test files (13 new), including cross-tenant isolation and the global-kill-beats-tenant-allow guarantee proven end-to-end through the evaluator.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one new migration, zero alteration to any existing table/column/function; every `PLT-121` Configuration Engine dependency is called unmodified. `git revert` of this checkpoint's commit is safe and complete; every other `config_type`'s consumer (`workflow`/`approval`/`status`/`numbering`/`form`/`notification`/`branding`/`terminology`/`document`) is unaffected. Last known good `claude/lanjut-0kwbyt`@(`PLT-133` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-030` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-031` (Prompt 134, PostGIS/Spatial Foundation) — dependency-`READY` (this checkpoint corrected the execution index's own stale `BLOCKED` row, whose five named dependencies were in fact already `VERIFIED`) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
