@@ -10,15 +10,26 @@
  * app.record_job_failure / app.requeue_dead_letter_job /
  * app.sanitize_formula_injection RPCs.
  *
- * job_type is deliberately narrowed to ('import','export') here, matching the
- * migration's own disclosed scope boundary -- Prompt 132 (Background Job Framework)
- * will widen app.jobs' own CHECK constraint (and this contract) in its own migration.
+ * job_type was originally narrowed to ('import','export') here, matching this
+ * migration's own disclosed scope boundary -- PLT-132 (Background Job Framework)
+ * widened app.jobs' own CHECK constraint to add eight generic job_type codes
+ * (supabase/migrations/20260719180000_create_background_job_framework.sql), and this
+ * contract's IMPORT_EXPORT_JOB_TYPES/ImportExportJobTypeSchema/ImportExportJob are
+ * widened and reused directly for those generic jobs too -- app.jobs is one table with
+ * one row shape regardless of job_type, so PLT-132 reuses this contract rather than
+ * forking an identically-shaped duplicate under a new name (see
+ * server/contracts/background-job/background-job.ts's own header for the new
+ * job_type-agnostic queue-mechanics contract this widening supports).
  */
 
 import { z } from "zod";
 import { ConfigVersionSchema, type ConfigVersion } from "../config/config.ts";
 
-export const IMPORT_EXPORT_JOB_TYPES = ["import", "export"] as const;
+export const IMPORT_EXPORT_JOB_TYPES = [
+  "import", "export", "report_generation", "notification_batch", "webhook_retry",
+  "document_generation", "dashboard_refresh", "loyalty_expiration", "recurring_billing",
+  "integration_sync",
+] as const;
 export const ImportExportJobTypeSchema = z.enum(IMPORT_EXPORT_JOB_TYPES);
 export type ImportExportJobType = z.infer<typeof ImportExportJobTypeSchema>;
 
@@ -81,7 +92,7 @@ export const ImportExportJobSchema = z.object({
   createdBy: z.string().nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
-  requestedByAuthUserId: z.string().uuid(),
+  requestedByAuthUserId: z.string().uuid().nullable(),
   idempotencyKey: z.string().nullable(),
   importExportSchemaCode: z.string().nullable(),
   sourceFileId: z.string().uuid().nullable(),

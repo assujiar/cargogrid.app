@@ -9,6 +9,7 @@ import {
   parseImportJobPreview,
   CreateImportExportJobInputSchema,
   StageImportRowsInputSchema,
+  ImportExportJobTypeSchema,
 } from "./import-export.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -156,6 +157,29 @@ describe("CreateImportExportJobInputSchema", () => {
         actorLabel: "requester",
       }),
     );
+  });
+});
+
+describe("ImportExportJobTypeSchema", () => {
+  test("accepts the eight generic job_type codes PLT-132 widened this enum with, not just import/export", () => {
+    for (const jobType of [
+      "import",
+      "export",
+      "report_generation",
+      "notification_batch",
+      "webhook_retry",
+      "document_generation",
+      "dashboard_refresh",
+      "loyalty_expiration",
+      "recurring_billing",
+      "integration_sync",
+    ]) {
+      assert.equal(ImportExportJobTypeSchema.parse(jobType), jobType);
+    }
+  });
+
+  test("still rejects an unknown job_type", () => {
+    assert.throws(() => ImportExportJobTypeSchema.parse("sync"));
   });
 });
 

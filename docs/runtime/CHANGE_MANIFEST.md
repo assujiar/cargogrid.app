@@ -2819,6 +2819,36 @@ Self-closing. `CG-S6-PLT-027` is `VERIFIED`. This checkpoint was authorized by a
 
 Self-closing. `CG-S6-PLT-028` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-029` (Prompt 132, Background Job Framework) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-064 — Background Job Framework (Phase 1, Prompt 132)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-029` / `132_BACKGROUND_JOB_FRAMEWORK_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR |
+| Baseline evidence | `docs/build-log/phase-01/PLT-132.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a sixth, separate, unscoped "lanjut" after `PLT-131` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719180000_create_background_job_framework.sql`: widens `PLT-131`'s `app.jobs.job_type` CHECK to a ten-code allowlist (the eight new codes are the real, sourced use-case list `02_CANONICAL_DATA_FLOW_MAP.md` §5.3 names -- report generation, notification batch, webhook retry, document generation, dashboard refresh, loyalty expiration, recurring billing, integration sync -- with zero business logic implemented for any of them, only the generic queue mechanics, matching §12's "no domain batch implementation" prohibition); adds `next_attempt_at` (backoff scheduling) and drops `requested_by_auth_user_id`'s `NOT NULL` (a system-dispatched job has no human requester). New: `app.compute_job_backoff_seconds()` (equal-jitter exponential backoff), `app.claim_next_job()` (`SELECT ... FOR UPDATE SKIP LOCKED` -- PostgreSQL's own standard mechanism since 9.5 for "no two workers claim the same row," genuinely provable without a live multi-process worker fleet), `app.heartbeat_job()`, `app.complete_job()`, `app.append_event_log()`/`app.dispatch_event_as_job()`/`app.mark_event_dispatch_failed()` (the new `app.event_logs` outbox-pattern table, closing a three-document-deep deferral chain traced back to `PLT-116`). Three `PLT-131` functions (`record_job_failure`/`requeue_dead_letter_job`/`acknowledge_job_cancellation`) extended via `CREATE OR REPLACE FUNCTION` with identical signatures/exception-message prefixes -- reused directly for the generic job lifecycle since none of their bodies ever inspected `job_type`, proven non-breaking by re-running `PLT-131`'s own unmodified db-test suite against this checkpoint's migration before writing any new test. **`ADR-0013` newly ratified** (`docs/adr/ADR-0013-job-queue-retry-lease-defaults.md`), resolving a freshly-minted `ADR-CAND-ARCH-028` -- this checkpoint's own research confirmed no existing candidate covered job-queue backoff/lease/DLQ numeric thresholds -- with equal-jitter exponential backoff (base 30s, 2x multiplier, capped at 3600s) and a 300s default worker lease, the same "reasoned default absent blueprint-mandated numbers" class `ADR-0002`/`ADR-0004`/`ADR-0011`/`ADR-0012` already used. `server/contracts/import-export/import-export.ts`'s `ImportExportJobTypeSchema`/`ImportExportJob` are widened and reused directly for generic jobs too (one table, one row shape, reuse not fork) rather than forked under a new name; `server/contracts+mutations+queries/background-job.ts` (new) cover the queue-mechanics-specific concepts (event logs, backoff, lease params). One real defect found and fixed in this checkpoint's own db-test authoring (a scenario-group cross-contamination from an earlier group's deliberately-left-pending job -- not a migration bug).
+
+#### Scope and files
+
+`supabase/migrations/20260719180000_create_background_job_framework.sql`; `scripts/db-tests/background-job.sql`; `server/contracts/import-export/import-export.ts` (widened, +test); `server/contracts/background-job/background-job.ts`(+test); `server/mutations/background-job.ts`(+test); `server/queries/background-job.ts`(+test); `docs/adr/ADR-0013-job-queue-retry-lease-defaults.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `docs/build-log/phase-01/PLT-132.md`; standard runtime-ledger set. No external queue replacement, no unmeasured worker split, no domain batch implementation (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 866/866 PASS (23 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..131`); `pnpm run git:check` PASS; `pnpm run db:test` PASS -- 350 total scenario groups across all 29 migrations + fixture, including `PLT-131`'s own unmodified `import-export.sql` suite re-verified green against this checkpoint's migration.
+
+#### Compatibility, rollout, recovery
+
+Additive with two narrow, disclosed, backward-compatible alterations to `PLT-131`'s own `app.jobs` table (a widened CHECK constraint, a loosened NOT NULL) plus three `CREATE OR REPLACE FUNCTION` extensions (identical signatures/exception prefixes, proven non-breaking directly). `git revert` of this checkpoint's commit is safe and complete; `PLT-131`'s own import/export lifecycle continues to function identically. Last known good `claude/lanjut-i0o5bt`@(`PLT-131` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-029` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-030` (Prompt 133, Feature Flags) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
