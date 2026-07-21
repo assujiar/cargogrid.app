@@ -79,9 +79,9 @@ export const SetTenantBrandTokensInputSchema = z.object({
   versionId: z.string().uuid(),
   actorAuthUserId: z.string().uuid(),
   tokens: BrandTokensSchema.default({}),
-  logoAssetUrl: z.string().nullable().default(null),
+  logoAssetUrl: BrandAssetUrlSchema.default(null),
   emailSenderName: z.string().max(120).regex(/^[^<>]*$/, "must not contain < or >").nullable().default(null),
-  emailLogoAssetUrl: z.string().nullable().default(null),
+  emailLogoAssetUrl: BrandAssetUrlSchema.default(null),
   documentTemplateRefs: DocumentTemplateRefsSchema.default({}),
   actorLabel: z.string().min(1),
 });

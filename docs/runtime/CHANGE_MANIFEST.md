@@ -2787,6 +2787,38 @@ Purely additive — one new table, one new function, two new ADRs, zero modifica
 
 Self-closing. `CG-S6-PLT-027` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-028` (Prompt 131, Import/Export Job Framework) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-063 — Import/Export Job Framework (Phase 1, Prompt 131)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-028` / `131_IMPORT_EXPORT_JOB_FRAMEWORK_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/TOOLING (see Outcome — this checkpoint also fixed a session-wide, pre-existing tooling defect out of band) |
+| Baseline evidence | `docs/build-log/phase-01/PLT-131.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a fifth, separate, unscoped "lanjut" after `PLT-130` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719170000_create_import_export_job_framework.sql`: `app.import_export_schemas` (registry), `app.jobs` (Tech Arch §32.11's generic async job table, created here since Prompt 132/Background Job Framework is itself `BLOCKED` on this task, `job_type` deliberately narrowed to `('import','export')` for this checkpoint's own scope), `app.import_staging_rows`; seventeen new functions covering schema registration/publishing, job creation/staging/validation/preview/commit, two-phase cooperative cancellation, export completion, retry/dead-letter/requeue, and a real OWASP-style `sanitize_formula_injection()`. Row validation is structural-only (never a domain write, no business-domain table exists yet); commit is all-or-nothing unless `p_allow_partial`; malware scanning composed directly from `PLT-128`. `server/contracts/import-export/import-export.ts`, `server/mutations/import-export.ts`, `server/queries/import-export.ts` (+tests each): the full typed RPC-wrapper layer. One real defect found and fixed in this checkpoint's own db-test fixture (an empty-string probe for "missing required" corrected to a genuinely-absent key; no migration change needed) — the idempotent-safe delta-counting re-validation logic in `validate_staging_row()` proved correct on the first full run.
+
+**Significant out-of-band finding and fix, discovered while running this checkpoint's own mandatory `pnpm run test` gate (full detail: `docs/build-log/phase-01/PLT-131.md` §5.1/§8):** `package.json`'s `test`/`test:coverage` scripts' unquoted `**` globs silently never executed any `server/contracts/<domain>/<domain>.test.ts` file (26 files, every capability built this entire session) because the invoking shell has no `globstar` enabled in this environment, degrading `**` to a single directory level. Every prior checkpoint's "`pnpm run test`: PASS" gate result was accurate for the tests it actually ran, but that set was smaller than believed. **Fixed** by quoting the globs in `package.json` so Node's own test-runner glob engine resolves `**` recursively regardless of shell state. Running the corrected glob surfaced exactly one real, previously-undetected regression: `server/contracts/white-label/white-label.ts`'s `SetTenantBrandTokensInputSchema.logoAssetUrl`/`emailLogoAssetUrl` fields were bare `z.string().nullable()` rather than the already-existing, already-correct `BrandAssetUrlSchema` (an https-only, injection-safe regex mirroring the database's own `app.validate_brand_asset_url()`, correctly wired into the same file's `DocumentTemplateRefsSchema` at `PLT-117` but overlooked for the two top-level logo fields). **Fixed** by pointing both fields at `BrandAssetUrlSchema`. The database `CHECK` constraint was never at risk — this was a missing TypeScript-layer fail-fast/defense-in-depth guarantee only. All 25 other previously-unexecuted contract test files passed cleanly on their first-ever real execution; no other regression was found.
+
+#### Scope and files
+
+`supabase/migrations/20260719170000_create_import_export_job_framework.sql`; `scripts/db-tests/import-export.sql`; `server/contracts/import-export/import-export.ts`(+test); `server/mutations/import-export.ts`(+test); `server/queries/import-export.ts`(+test); `docs/build-log/phase-01/PLT-131.md`; standard runtime-ledger set. **Out-of-band (disclosed above, not this prompt's own nominal scope, but a direct correctness finding made while running this checkpoint's own mandatory gate):** `package.json` (`test`/`test:coverage` glob quoting fix); `server/contracts/white-label/white-label.ts` (`BrandAssetUrlSchema` fix, the one regression the glob fix surfaced). No full domain imports/exports, no real tenant files, no synchronous heavy processing (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 843/843 PASS (corrected, accurate baseline — see Outcome; previously reported baseline of 629/629 was itself accurate only for the smaller, incompletely-globbed test set); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..130`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 338 total scenario groups across all 28 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+`supabase/migrations/20260719170000_create_import_export_job_framework.sql` and the new TypeScript layer are purely additive — three new tables, seventeen new functions, zero modification to any existing migration/function/view/table's own behavior. The `package.json` and `white-label.ts` out-of-band fixes are narrowly scoped and low-risk but should be reverted only together with the rest of this checkpoint's commit (see `docs/build-log/phase-01/PLT-131.md` §9 for the reasoning). `git revert` of the full commit is safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-130` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-028` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-029` (Prompt 132, Background Job Framework) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
