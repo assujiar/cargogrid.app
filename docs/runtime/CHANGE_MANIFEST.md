@@ -2365,6 +2365,490 @@ Mostly additive, plus two `CREATE OR REPLACE` statements on already-shipped arti
 
 Self-closing. `CG-S6-PLT-013` is `VERIFIED`. Next: `CG-S6-PLT-014` (Prompt 117, White-Label Foundation) — continuing beyond the originally-requested range under the user's explicit authorization.
 
+### CHG-2026-049 — White-Label Foundation (Phase 1, Prompt 117)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-014` / `117_WHITE_LABEL_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-117.md` |
+| Final status | `COMPLETED` |
+| Authorization | Continues the standing "lanjut" authorization recorded at `PLT-116` (`HANDOFF.md` §4: no further explicit-range gate active) |
+
+#### Outcome
+
+`supabase/migrations/20260717090512_create_white_label.sql`: `app.tenant_brand_versions` is a versioned tenant white-label configuration (draft -> published -> archived, mirroring `PLT-111`'s `app.role_versions`), covering four of RPD-019's five tenant-override items (logo, colors, email presentation, document-template references — custom domain is `PLT-118`'s own capability, next in sequence). Every token/asset/template value is structurally validated by `CHECK` constraints (`app.validate_brand_tokens()`/`app.validate_brand_asset_url()`/`app.validate_document_template_refs()`) — a database guarantee against injection, not an application convention. A real WCAG 2.2 contrast-ratio implementation (`app.hex_color_contrast_ratio()`) enforces a 4.5:1 minimum at publish/rollback time; a version with no primary color always publishes (the accessible-default alternative flow). `app.evaluate_tenant_brand()` resolves a tenant's effective brand — its own published version, or the accessible CargoGrid default composed only from `docs/standards/DESIGN_SYSTEM.md` §2.1's one already-sourced neutral-900 reference value, never a fabricated brand color — and is deliberately granted to `anon` as well as `authenticated` (public, pre-authentication presentation data). No bespoke `*_history` table: every lifecycle mutation routes through `PLT-116`'s canonical `app.capture_audit_event()` instead, the first capability to adopt that convention. Two real defects found and fixed during authoring: an ambiguous-column bug inside `evaluate_tenant_brand()` itself (its own `RETURNS TABLE` output column shadowed a real table column) and a systemic `plpgsql` composite-assignment syntax mistake across this checkpoint's own test file — both caught by actually running `pnpm run db:test`.
+
+#### Scope and files
+
+`supabase/migrations/20260717090512_create_white_label.sql`; `scripts/db-tests/white-label.sql`; `server/contracts/white-label/white-label.ts`(+test); `server/queries/white-label.ts`(+test); `server/mutations/white-label.ts`(+test); `docs/build-log/phase-01/PLT-117.md`; standard runtime-ledger set. No tenant code fork, no arbitrary CSS/JS, no unscanned-asset claim (§12 forbidden-scope compliance — actual malware scanning is disclosed `NOT_RUN`, `DOC`/`PLT-128` not yet built).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 390/390 PASS (373 carried + 17 new) net of one unrelated pre-existing environment-caused failure; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (Playwright browser-binary revision skew, disclosed, unrelated to this checkpoint's diff); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 169 total scenario groups across all 13 migrations + fixture (153 carried + 16 new).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — one new table, thirteen new functions, zero modification to any existing migration/function/view. Rollback: `git revert` is safe and complete; last known good `claude/lanjut-i0o5bt`@(prior commit, `origin/main`@`7a2d431`).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-014` is `VERIFIED`. Next: `CG-S6-PLT-015` (Prompt 118, Custom Domain).
+
+### CHG-2026-050 — Custom Domain (Phase 1, Prompt 118) + `ERR-2026-004` privilege-gap remediation
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-015` / `118_CUSTOM_DOMAIN_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/SECURITY-FIX |
+| Baseline evidence | `docs/build-log/phase-01/PLT-118.md`, `docs/runtime/ERROR_LEDGER.md` `ERR-2026-004` |
+| Final status | `COMPLETED` |
+| Authorization | User explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120") |
+
+#### Outcome
+
+`supabase/migrations/20260717103015_create_custom_domain.sql`: `app.tenant_custom_domains` models a tenant custom-domain lifecycle (request→verify→activate→disable, plus reject/expire), with a real database-enforced takeover/rebinding-prevention guarantee (a partial unique index spanning the "claim is live" states, not application logic). `app.verify_tenant_domain()` implements a provider-independent DNS-TXT verification interface. `app.resolve_tenant_by_domain()` is the safe public hostname→tenant resolver, deliberately `anon`-callable (needed pre-authentication for inbound routing), returning zero rows unless the domain is active and its tenant is active — structurally never an authorization decision.
+
+**A real, severe, repository-wide privilege defect was found and fixed during this checkpoint's authoring**: PostgreSQL grants `EXECUTE` to `PUBLIC` on every function by default; no migration since `PLT-105` had ever revoked it, so every "service_role-only" function across 12 prior migrations (90+ functions, including `provision_tenant`, `assign_role`, every audit/support/white-label mutation) was actually directly callable by `anon`. Fixed via `supabase/migrations/20260717095000_revoke_default_public_function_execute.sql` (`REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA app FROM PUBLIC` + `ALTER DEFAULT PRIVILEGES` to prevent recurrence), re-verified against the full 185-scenario-group db-test suite; one real casualty (`app.mask_email()`, relying on the same default for `authenticated` callers via `app.users_directory`) found and re-granted explicitly. Full detail: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-004`.
+
+#### Scope and files
+
+`supabase/migrations/20260717095000_revoke_default_public_function_execute.sql`; `supabase/migrations/20260717103015_create_custom_domain.sql`; `scripts/db-tests/custom-domain.sql`; `server/contracts/custom-domain/custom-domain.ts`(+test); `server/queries/custom-domain.ts`(+test); `server/mutations/custom-domain.ts`(+test); `docs/build-log/phase-01/PLT-118.md`; `docs/runtime/ERROR_LEDGER.md` (`ERR-2026-004`, new); standard runtime-ledger set. No live DNS/cert mutation, no generic integration hub, no auth bypass (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 408/408 PASS (27 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 185 total scenario groups across all 15 migrations + fixture (169 carried + 16 new).
+
+#### Compatibility, rollout, recovery
+
+`create_custom_domain.sql` is purely additive — `git revert` safe and complete in isolation. `revoke_default_public_function_execute.sql` is a privilege-only correction with **no safe partial revert**: reverting it would silently reopen `ERR-2026-004` across every prior capability's functions — any rollback must preserve this migration even if `custom-domain.sql` itself is reverted. Last known good `claude/lanjut-i0o5bt`@(`PLT-117` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-015` is `VERIFIED`; `ERR-2026-004` is `RECOVERED`. Next: `CG-S6-PLT-016` (Prompt 119, Localization).
+
+### CHG-2026-051 — Localization (Phase 1, Prompt 119)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-016` / `119_LOCALIZATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-119.md` |
+| Final status | `COMPLETED` |
+| Authorization | User explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120") |
+
+#### Outcome
+
+`supabase/migrations/20260717112000_create_localization.sql`: `app.tenant_locale_versions` is a versioned tenant locale/timezone/currency-display default and terminology-override configuration (draft→published→archived, mirroring `PLT-117`'s `app.tenant_brand_versions`). `app.canonical_terms` seeds 24 real terminology codes sourced directly from this repository's own already-shipped `CHECK`-constrained enums (`PLT-105`/`108`/`109`/`110`/`117`/`118`); tenant overrides are validated against it via a trigger (unknown codes and unsafe/oversized text rejected structurally). `app.resolve_locale_context()` implements the real three-tier fallback Prompt 119 §22 requires — per-user preference (three new nullable `CHECK`-constrained columns added to `PLT-110`'s already-shipped `app.users`) → tenant's published config → the Indonesia-first platform default (`id`/`Asia/Jakarta`/`IDR`, a reasoned inference from ratified RPD-016 sequencing) — each field resolved independently. Currency is display-formatting metadata only, never exchange-rate/financial logic (a dedicated Phase 4 capability, `M-194`, owns that). This migration adopts `PLT-118`'s new `ERR-2026-004` per-migration convention (explicit `REVOKE EXECUTE ... FROM PUBLIC`), proven correct directly in `db:test`.
+
+#### Scope and files
+
+`supabase/migrations/20260717112000_create_localization.sql`; `scripts/db-tests/localization.sql`; `server/contracts/localization/localization.ts`(+test); `server/queries/localization.ts`(+test); `server/mutations/localization.ts`(+test); `docs/build-log/phase-01/PLT-119.md`; standard runtime-ledger set. No mass feature-page translation, no statutory logic, no tenant-specific code fork (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 424/424 PASS (25 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117`/`118`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 199 total scenario groups across all 16 migrations + fixture (185 carried + 14 new).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, eleven new functions, three new nullable `CHECK`-constrained columns on `app.users`. `git revert` safe and complete; no other capability's data or behavior is affected. Last known good `claude/lanjut-i0o5bt`@(`PLT-118` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-016` is `VERIFIED`. Next: `CG-S6-PLT-017` (Prompt 120, Master Data Foundation) — final task in the user's "lanjut sd prompt 120" range.
+
+### CHG-2026-052 — Master Data Foundation (Phase 1, Prompt 120)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-017` / `120_MASTER_DATA_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-120.md` |
+| Final status | `COMPLETED` |
+| Authorization | User explicitly authorized continuing through Prompt 120 ("lanjut sd prompt 120") — this is the final task in that range |
+
+#### Outcome
+
+`supabase/migrations/20260717120000_create_master_data.sql`: `app.master_types`/`app.master_records` form a reusable master-data registry — global/tenant scope, stable codes, bounded plain-text aliases, optimistic-concurrency versioning — seeded with exactly one real, sourced initial type (`vendor_rate`, tenant-scoped, `PRC`-owned, per `docs/architecture/05_DATABASE_SCHEMA_WORKSTREAM.md` §4/§11's `ADR-CAND-ARCH-001` resolution; no sample data, matching that document's own "empty, no Procurement UI yet" framing). `app.merge_master_records()` implements lineage-preserving dedupe: the source row is never deleted, only marked `canonical_status='merged'` and pointed at its survivor via `merged_into_id`, with its former code/aliases folded forward. `app.resolve_master_record()` resolves a code or alias to its live canonical record, transparently following a bounded merge chain, structurally never ambiguous or cross-tenant. `app.master_records`' RLS policy is the first in this repository to add a global-visibility branch (`tenant_id is null OR has_active_tenant_membership() OR is_supreme_admin()`) alongside strict per-tenant isolation. Adopts `PLT-118`'s `ERR-2026-004` per-migration convention, proven correct.
+
+#### Scope and files
+
+`supabase/migrations/20260717120000_create_master_data.sql`; `scripts/db-tests/master-data.sql`; `server/contracts/master-data/master-data.ts`(+test); `server/queries/master-data.ts`(+test); `server/mutations/master-data.ts`(+test); `docs/build-log/phase-01/PLT-120.md`; standard runtime-ledger set. No full domain masters beyond the one approved initial type, no destructive dedupe, no full admin portal (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 439/439 PASS (23 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117`/`118`/`119`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 212 total scenario groups across all 17 migrations + fixture (199 carried + 13 new). First Phase 1 checkpoint this session to pass every gate on the first full run, no fix-and-rerun cycle needed.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, one new view, nine new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-119` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-017` is `VERIFIED`. **This is the final task in the user's explicitly requested "lanjut sd prompt 120" range** — next eligible task `CG-S6-PLT-018` (Prompt 121, Configuration Engine) requires explicit user confirmation before starting, per this file's own standing discipline at the end of an explicit-range authorization.
+
+### CHG-2026-053 — Configuration Engine (Phase 1, Prompt 121)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-018` / `121_CONFIGURATION_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-121.md` |
+| Final status | `COMPLETED` |
+| Authorization | User re-authorized with "lanjut" after the "lanjut sd prompt 120" range closed at `PLT-120` |
+
+#### Outcome
+
+`supabase/migrations/20260717130000_create_configuration_engine.sql`: `app.config_types`/`app.config_objects`/`app.config_versions`/`app.config_items`/`app.config_dependencies` implement the shared versioned configuration foundation every later engine/module builds on (Tech Arch §13). 10 sourced Phase-1 config types seeded empty/template only (`workflow`/`approval`/`status`/`numbering`/`form`/`field`/`notification`/`feature`/`branding`/`terminology`, per `docs/architecture/07_CONFIGURATION_ENGINE_WORKSTREAM.md` §13's own Module Adoption Map). `app.resolve_config()` is the real 6-level override precedence resolver (user→role→branch→company→tenant→global), proven with a role-level override beating a tenant-level default. `app.detect_config_dependency_cycle()` is a real, bounded recursive-CTE cycle detector gating `app.publish_config_version()`, proven against both a genuine cycle and a non-circular chain. `app.verify_config_version_current()` is `EXC-CFG-001`'s concrete "stale configuration version" mechanism. The 8-state Tech Arch lifecycle is deliberately condensed onto this repository's own established draft/published/archived pattern (`PLT-111`/`117`/`119`) rather than a one-off state machine. One real defect (missing `SECURITY DEFINER` on the resolver functions, the same privilege-model class `ERR-2026-004` found) caught and fixed before any gate ran.
+
+#### Scope and files
+
+`supabase/migrations/20260717130000_create_configuration_engine.sql`; `scripts/db-tests/config.sql`; `server/contracts/config/config.ts`(+test); `server/queries/config.ts`(+test); `server/mutations/config.ts`(+test); `docs/build-log/phase-01/PLT-121.md`; standard runtime-ledger set. No full workflow/approval/forms modules, no arbitrary scripts, no mass hard-code migration (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 457/457 PASS (24 new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..120`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 225 total scenario groups across all 18 migrations + fixture (212 carried + 13 new).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — five new tables, twelve new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-120` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-018` is `VERIFIED`. Next: `CG-S6-PLT-019` (Prompt 122, Workflow Engine).
+
+### CHG-2026-054 — Workflow Engine (Phase 1, Prompt 122)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-019` / `122_WORKFLOW_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-122.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") |
+
+#### Outcome
+
+`supabase/migrations/20260717140000_create_workflow_engine.sql`: a workflow *definition* is not a new table family — it is `PLT-121`'s own `config_type_code='workflow'` config_object/config_version/config_items, reused directly. This migration adds `app.workflow_hooks` (a real guard/effect allowlist, seeded `always_true`/`noop`), `app.validate_workflow_definition()` (publish-time structural/reachability/dead-end gate — all 7 distinct failure modes proven individually: `workflow_missing_states`, `_invalid_initial_state`, `_invalid_terminal_state`, `_invalid_transition_from`/`_to`, `_unknown_guard`/`_effect`, `_unreachable_state`, `_dead_end_state`), `app.publish_workflow_definition()` (composes `PLT-121`'s own `app.publish_config_version()`), and the runtime `app.workflow_instances`/`app.workflow_transition_history` tables with start/transition/cancel/history lifecycle functions. A running instance binds the exact published `config_version_id` snapshot at start time; a later republish never mutates it (structural, by construction). Fail-closed guard evaluation is proven through a real blocked transition (a registered-but-unimplemented `never_true` guard), not merely asserted. The one safe synthetic example (`draft -> submitted -> approved|rejected`) is built and proven entirely inside `scripts/db-tests/workflow.sql` — no example row seeded in the migration itself. Two real defects (a stray premature `comment on function` statement; a missing `SECURITY DEFINER` on `app.get_workflow_instance_history()`, the same privilege-model class `ERR-2026-004` found) caught and fixed before any gate ran.
+
+#### Scope and files
+
+`supabase/migrations/20260717140000_create_workflow_engine.sql`; `scripts/db-tests/workflow.sql`; `server/contracts/workflow/workflow.ts`(+test); `server/queries/workflow.ts`(+test); `server/mutations/workflow.ts`(+test); `docs/build-log/phase-01/PLT-122.md`; standard runtime-ledger set. No domain workflows beyond the one isolated example, no arbitrary script execution, no broad module adoption (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 472/472 PASS (15 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..121`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 235 total scenario groups across all 19 migrations + fixture (225 carried + 11 new, minor reconciliation in exact count per PLT-122.md §5 note).
+
+#### Compatibility, rollout, recovery
+
+Purely additive — three new tables, eight new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-121` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-019` is `VERIFIED`. Next: `CG-S6-PLT-020` (Prompt 123, Approval Engine).
+
+### CHG-2026-055 — Approval Engine (Phase 1, Prompt 123)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-020` / `123_APPROVAL_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-123.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — second task in that still-open range |
+
+#### Outcome
+
+`supabase/migrations/20260719090000_create_approval_engine.sql`: an approval *definition* is not a new table family -- it is `PLT-121`'s own `config_type_code='approval'` config_object/config_version/config_items, reused directly. This migration adds `app.validate_approval_definition()` (publish-time structural gate -- 9 distinct failure modes proven individually), and the runtime `app.approval_requests`/`app.approval_request_steps`/`app.approval_decisions`/`app.approval_delegations` tables with request/decide/cancel/escalate/delegate lifecycle functions. All three routing patterns (`sequential`/`parallel`/`threshold`) proven as genuinely distinct algorithms. Approver resolution reuses `PLT-112`'s own disclosed role-assignment-join-to-published-version convention. Separation-of-duties self-approval denial proven against a requester who is also a genuinely eligible approver. Delegation is bounded (<=90 days) and proven to fail safely on revocation. `app.request_approval()` proactively refuses a request against a step with zero eligible approvers.
+
+#### Scope and files
+
+`supabase/migrations/20260719090000_create_approval_engine.sql`; `scripts/db-tests/approval.sql`; `server/contracts/approval/approval.ts`(+test); `server/queries/approval.ts`(+test); `server/mutations/approval.ts`(+test); `docs/build-log/phase-01/PLT-123.md`; standard runtime-ledger set. No domain-specific approval policies beyond the one isolated example, no full inbox UI, no finance overrides (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 487/487 PASS (15 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..122`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 249 total scenario groups across all 20 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — four new tables, twelve new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-122` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-020` is `VERIFIED`. Next: `CG-S6-PLT-021` (Prompt 124, Status Engine).
+
+### CHG-2026-056 — Status Engine (Phase 1, Prompt 124)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-021` / `124_STATUS_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-124.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — third task in that still-open range |
+
+#### Outcome
+
+`supabase/migrations/20260719100000_create_status_engine.sql`: a permanent canonical status registry (`app.status_sets`/`app.canonical_statuses`) with versioned tenant presentation layered on `PLT-121`'s own config engine -- one dedicated `status:<code>` config_type minted per status set via `app.register_status_set()` (composing `app.register_config_type()`, since the single shared seeded `'status'` type cannot host more than one tenant-scoped object at a time). `app.validate_status_presentation()` structurally requires a non-color accessible cue on every labeled status. `app.resolve_status_presentation()` composes `PLT-121`'s own 6-level precedence resolver with a safe structural fallback. `app.status_legacy_mappings` has a real `unique(status_set_code, legacy_value)` collision guarantee. Zero real domain status sets seeded -- the one safe example (the real, sourced 6-state Quotation shape) is proven only in `scripts/db-tests/status.sql`.
+
+#### Scope and files
+
+`supabase/migrations/20260719100000_create_status_engine.sql`; `scripts/db-tests/status.sql`; `server/contracts/status/status.ts`(+test); `server/queries/status.ts`(+test); `server/mutations/status.ts`(+test); `docs/build-log/phase-01/PLT-124.md`; standard runtime-ledger set. No domain transition logic, no client authorization, no destructive status rewrite (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 504/504 PASS (17 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..123`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 258 total scenario groups across all 21 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — three new tables, eight new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-123` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-021` is `VERIFIED`. Next: `CG-S6-PLT-022` (Prompt 125, Numbering Engine).
+
+### CHG-2026-057 — Numbering Engine (Phase 1, Prompt 125)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-022` / `125_NUMBERING_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-125.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — fourth task in that still-open range |
+
+#### Outcome
+
+`supabase/migrations/20260719110000_create_numbering_engine.sql`: configurable, collision-safe numbering with versioned formats/scopes/reservations/audit, layered on `PLT-121`'s own config engine. `app.validate_numbering_definition()` requires exactly one `{SEQ}` token over a real bounded token allowlist. `app.allocate_numbering_seq()` is a single atomic `INSERT ... ON CONFLICT ... DO UPDATE` upsert. `app.numbering_allocations`' own `unique(tenant_id, formatted_number)` constraint is the real, final collision guarantee -- proven to have caught a genuine would-be collision during this checkpoint's own test authoring (two independent scope-key counters both reaching seq=1 rendered identically until the representative format was corrected to include `{SCOPE_CODE}`), disclosed directly in the build log rather than silently reworked. Allocated numbers are never silently recycled; `app.bootstrap_numbering_counter()` structurally refuses to lower an existing counter, so legacy import never renumbers history.
+
+#### Scope and files
+
+`supabase/migrations/20260719110000_create_numbering_engine.sql`; `scripts/db-tests/numbering.sql`; `server/contracts/numbering/numbering.ts`(+test); `server/queries/numbering.ts`(+test); `server/mutations/numbering.ts`(+test); `docs/build-log/phase-01/PLT-125.md`; standard runtime-ledger set. No renumbering of historical records, no client-side allocation, no module-specific hard-coded format (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 521/521 PASS (17 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..124`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 268 total scenario groups across all 22 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, eleven new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-124` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-022` is `VERIFIED`. Next: `CG-S6-PLT-023` (Prompt 126, Form and Custom-Field Builder) — the final task in the user's "lanjut sd prompt 126" range.
+
+### CHG-2026-058 — Form and Custom-Field Builder (Phase 1, Prompt 126)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-023` / `126_FORM_CUSTOM_FIELD_BUILDER_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-126.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized continuing through Prompt 126 ("lanjut sd prompt 126") — fifth and final task in that range, now closed |
+
+#### Outcome
+
+`supabase/migrations/20260719120000_create_form_custom_field_builder.sql`: governed, versioned form/custom-field definitions layered on `PLT-121`'s own config engine (`app.register_form()` mints a dedicated `form:<code>` config_type per form, the same registry composition `PLT-124`'s Status Engine established). `app.custom_field_values` holds exactly one row per (tenant, entity_type, entity_id) -- EAV query explosion structurally avoided, proven to stay at one row even across updates. Field types/validators are real bounded allowlists (`file` deliberately excluded -- no storage plumbing exists yet); a field's visibility condition may only reference an earlier-declared field, making condition cycles impossible by construction. `app.validate_custom_field_values()` runs the real submission-time gate before any write ever happens -- proven that an invalid submission leaves zero rows. Sensitive custom-field values get a real, narrower read gate (submitter or definition-admin-grade authority only), proven against a genuinely denied third party.
+
+#### Scope and files
+
+`supabase/migrations/20260719120000_create_form_custom_field_builder.sql`; `scripts/db-tests/form.sql`; `server/contracts/form/form.ts`(+test); `server/queries/form.ts`(+test); `server/mutations/form.ts`(+test); `docs/build-log/phase-01/PLT-126.md`; standard runtime-ledger set. No domain forms/pages, no arbitrary code/SQL, no uncontrolled EAV, no full builder portal (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 533/533 PASS (12 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..125`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 277 total scenario groups across all 23 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — two new tables, eight new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-125` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-023` is `VERIFIED`. **This is the final task in the user's explicitly requested "lanjut sd prompt 126" range (Prompts 122–126, all now `VERIFIED`).** Next eligible prompt per the execution index: `CG-S6-PLT-024` (Prompt 127) — requires fresh explicit user authorization before starting, per this file's own standing discipline at the end of an explicit-range authorization.
+
+### CHG-2026-059 — Notification Engine (Phase 1, Prompt 127)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-024` / `127_NOTIFICATION_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-127.md` |
+| Final status | `COMPLETED` |
+| Authorization | User re-authorized with a single, unscoped "lanjut" after the "lanjut sd prompt 126" range closed at `PLT-126` |
+
+#### Outcome
+
+`supabase/migrations/20260719130000_create_notification_engine.sql`: tenant-aware in-app/email-ready notification primitives -- templates, preferences, dedupe, retries, audit -- layered on `PLT-121`'s own config engine (`app.register_notification_type()` mints a dedicated `notification:<code>` config_type per type). No real provider send exists anywhere -- `in_app` delivery is real and immediate, `email` stops at `status=queued`, `app.record_notification_delivery_attempt()` is the real bounded adapter interface a future provider integration would call. Template escaping is real at both write and render time; a real link-scheme allowlist/blocklist rejects unsafe URIs. Recipient authorization fails safely (a wrong-tenant/deactivated recipient is refused outright). Preference-aware channel fallback proven end-to-end. Two real defects (a `javascript:`-scheme link check that missed real `javascript:` URIs since they carry no `://`; an audit-result literal mismatch, `'failed'` vs. the real `'failure'` vocabulary) caught and fixed via actual failing `db:test` runs, not self-review.
+
+#### Scope and files
+
+`supabase/migrations/20260719130000_create_notification_engine.sql`; `scripts/db-tests/notification.sql`; `server/contracts/notification/notification.ts`(+test); `server/queries/notification.ts`(+test); `server/mutations/notification.ts`(+test); `docs/build-log/phase-01/PLT-127.md`; standard runtime-ledger set. No bulk marketing campaigns, no live provider sends without authority, no generic integration hub (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 550/550 PASS (17 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..126`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 286 total scenario groups across all 24 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — four new tables, twelve new functions, zero modification to any existing migration/function/view/table. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-126` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-024` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-025` (Prompt 128, Document/File Engine) — requires fresh explicit user authorization before starting.
+
+### CHG-2026-060 — Document and File Engine (Phase 1, Prompt 128)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-025` / `128_DOCUMENT_FILE_ENGINE_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-128.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a second, separate, unscoped "lanjut" after `PLT-127` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719140000_create_document_file_engine.sql`: tenant/record-aware private file metadata with mandatory malware scanning before availability, signed-delivery authorization, versioning, and retention/legal hold -- layered on `PLT-121`'s own config engine (`app.register_document_type()` mints a dedicated `document:<code>` config_type per type; unlike status/form/notification, no generic `'document'` placeholder was ever seeded in the first place). No real storage/malware-scan provider exists anywhere -- `storage_path` is a real, unguessable, server-generated key (tenant_id + document_type_code + a fresh random uuid, never derived from the client filename, structurally ruling out path traversal); `app.record_file_scan_result()` is the real bounded scan adapter interface a future provider would call. This capability is deliberately server-mediated only -- every mutation is `service_role`-only (real signed-URL issuance inherently needs storage credentials only server code holds), and reads are direct-table RLS rather than a resolver function; consequently none of its functions needs `SECURITY DEFINER`. `app.authorize_file_access()` composes two independent gates (malware-scan: infected blocks everyone, not-yet-clean blocks everyone but the uploader; record/sensitivity access: `app.can_access_record()` plus a stricter restricted/credential check) and fails safely -- a zero-standing actor is refused outright with no log row, a merely-denied tenant member gets a real logged denial in the new `app.file_access_logs`. `classification` is wired to `scripts/data-classification/registry.ts`'s `SENSITIVITY_LEVELS` scale via a literal CHECK match, resolving that standard's own previously-named `files.classification` gap (`docs/standards/DATA_CLASSIFICATION_STANDARDS.md` §8, updated this checkpoint). Legal hold genuinely blocks deletion until released; versioning always inserts a new row (never overwrites) and keeps exactly one `is_latest_version` row per lineage via a partial unique index. An additive grant (`app.is_support_grant_authority()` to `authenticated`) was needed for the new RLS policy on `app.files` -- its first real RLS consumer, verified safe. **No real defect was found or fixed this checkpoint** -- the full `db:test` suite and all TypeScript gates passed on the first complete run, disclosed honestly as a first for this session's PLT-12x sequence (every prior engine checkpoint found and fixed at least one real bug via a failing test) rather than implying extra rigor was applied; the design deliberately reused more already-proven primitives and lessons (`can_access_record`, `capture_audit_event`, the config engine, PLT-127's `SECURITY DEFINER`/`audit_logs.result` lessons) applied proactively than any prior checkpoint.
+
+#### Scope and files
+
+`supabase/migrations/20260719140000_create_document_file_engine.sql`; `scripts/db-tests/document-file.sql`; `server/contracts/document/document.ts`(+test); `server/queries/document.ts`(+test); `server/mutations/document.ts`(+test); `docs/standards/DATA_CLASSIFICATION_STANDARDS.md` (§8 gap resolved); `docs/build-log/phase-01/PLT-128.md`; standard runtime-ledger set. No public bucket/default URLs, no scan bypass, no real sensitive files, no domain document workflows (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 572/572 PASS (28 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..127`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 300 total scenario groups across all 25 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — three new tables, twelve new functions, two additive grants, zero modification to any existing migration/function/view/table's own behavior. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-127` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-025` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-026` (Prompt 129) — requires fresh explicit user authorization before starting.
+
+### CHG-2026-061 — API Key and Webhook Primitives (Phase 1, Prompt 129)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-026` / `129_API_KEY_WEBHOOK_PRIMITIVES_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR |
+| Baseline evidence | `docs/build-log/phase-01/PLT-129.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a third, separate, unscoped "lanjut" after `PLT-128` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719150000_create_api_key_webhook_primitives.sql`: tenant-scoped hashed API key lifecycle (create-once-display, overlap-window rotation, revoke, real scope-narrowing enforcement) plus webhook endpoint/signed-delivery primitives (HMAC-SHA256 signing, timestamp-tolerance replay protection, retry/backoff/DLQ, consecutive-failure auto-disable). `app.create_api_key()` validates every requested scope (`<resource_module_code>:<action>`, `app.permissions`'s own natural key) against the actor's own currently-granted RBAC permissions via `app.evaluate_permission()` -- can only narrow what the actor already holds, never widen it, proven with a real role/permission/assignment chain in the db-test, not merely asserted. Neither a raw API key nor a raw webhook secret is ever stored in a form the tenant could re-request -- keys as a one-way sha256 digest (`key_hash`), webhook secrets stored directly but with zero `authenticated` grant on the table (HMAC verification is symmetric, so the platform's own delivery worker genuinely needs the raw secret to sign outgoing requests, unlike a key comparison) -- both return exactly once from their create/rotate RPC. **`ADR-0011` newly ratified** (`docs/adr/ADR-0011-webhook-signature-and-auto-disable-thresholds.md`), resolving `ADR-CAND-ARCH-018`'s signature/timestamp/auto-disable sub-questions with the candidate's own recommended defaults (HMAC-SHA256, 5-minute tolerance, 10-consecutive-failure auto-disable) -- all real, tested, provable without any live HTTP call since HMAC computation is pure cryptographic computation. A bounded, disclosed-partial SSRF check (`app.validate_webhook_url()`) rejects a literal `localhost`/loopback/private/link-local IPv4/IPv6 host at registration time; disclosed as unable to defend against DNS-rebinding SSRF, which requires live delivery-time resolution. This capability is deliberately server-mediated only (every mutation `service_role`-only), so none of its functions needs `SECURITY DEFINER` except the two authenticated-facing listing functions, which exclude `key_hash`/`secret_value` from their result shape entirely. **One real bug found and fixed via an actual failing test, not self-review**: `app.rotate_api_key()`/`app.rotate_webhook_secret()` initially used a bare `where id = ...` inside functions whose `RETURNS TABLE(id uuid, ...)` clause auto-declares `id` as a PL/pgSQL variable -- the exact ambiguous-column class `PLT-117` found in `evaluate_tenant_brand()` -- fixed by table-qualifying every affected reference.
+
+#### Scope and files
+
+`supabase/migrations/20260719150000_create_api_key_webhook_primitives.sql`; `scripts/db-tests/api-key-webhook.sql`; `server/contracts/api-key-webhook/api-key-webhook.ts`(+test); `server/queries/api-key-webhook.ts`(+test); `server/mutations/api-key-webhook.ts`(+test); `docs/adr/ADR-0011-webhook-signature-and-auto-disable-thresholds.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `docs/build-log/phase-01/PLT-129.md`; standard runtime-ledger set. No live third-party endpoints without authority, no plaintext keys, no generic provider integration hub (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (a stray gitignored `playwright-report/` artifact from an earlier `test:e2e` attempt tripped a transient lint failure on an unrelated bundled file; deleted, not tracked, not part of this diff); `pnpm run test` 601/601 PASS (29 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS (confirmed the `cgk_`/`whsec_`-prefixed db-test literals do not trip `check-secrets.ts`, since PL/pgSQL's `:=` operator never matches its generic-secret-assignment regex); `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..128`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 317 total scenario groups across all 26 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — six new tables, nineteen new functions, one new ADR, zero modification to any existing migration/function/view/table's own behavior. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-128` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-026` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-027` (Prompt 130, REST/GraphQL Platform API Foundation) — requires fresh explicit user authorization before starting.
+
+### CHG-2026-062 — REST and GraphQL Platform API Foundation (Phase 1, Prompt 130)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-027` / `130_REST_GRAPHQL_PLATFORM_API_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR |
+| Baseline evidence | `docs/build-log/phase-01/PLT-130.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a fourth, separate, unscoped "lanjut" after `PLT-129` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719160000_create_api_foundation.sql`: `app.api_logs`, the last of the five canonical append-only observability tables `05_DATABASE_SCHEMA_WORKSTREAM.md` §6 names, plus `app.record_api_request()`, the real bounded adapter interface a future request-handling middleware would call. `server/contracts/api/api.ts`/`server/policies/pagination.ts`/`server/policies/graphql-complexity.ts`/`server/policies/api-request-context.ts`/`server/mutations/api-log.ts`: the shared REST/GraphQL contract and policy foundation -- a real Tech Arch §25.6 error shape, bounded cursor pagination (opaque base64url cursors, keyset-ordered, capped at 100 items), idempotency-key/correlation-id contracts, and `resolveApiRequestContext()`, the composed 8-stage access-evaluation pipeline (`docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §3) built entirely from already-tested `PLT-106`/`108`/`112`/`114` primitives with zero new authority logic -- the physical form of "Neither interface is secondary or may bypass common service/access rules" (§24). No live HTTP route or GraphQL server exists anywhere in this repository, and building one is explicitly out of this prompt's own scope per `08_API_INTEGRATION_WORKSTREAM.md`'s own atomic-backlog sequencing (the actual route scaffold and GraphQL server are separate, later tasks this checkpoint's slice unblocks). **`ADR-0012` newly ratified** (`docs/adr/ADR-0012-graphql-depth-complexity-limits.md`), resolving `ADR-CAND-ARCH-017`'s depth/complexity numeric-limit sub-question (depth 8, complexity budget 1000 units via a per-field-type cost table) -- the scoring algorithm is real and fully tested against a minimal field-selection tree shape, deliberately not depending on a `graphql` package this repository does not install. **No real defect was found or fixed this checkpoint** -- every gate, including the full `db:test` suite, passed on its first complete run, the second time this session that has happened (`PLT-128` was the first).
+
+#### Scope and files
+
+`supabase/migrations/20260719160000_create_api_foundation.sql`; `scripts/db-tests/api-foundation.sql`; `server/contracts/api/api.ts`(+test); `server/policies/pagination.ts`(+test); `server/policies/graphql-complexity.ts`(+test); `server/policies/api-request-context.ts`(+test); `server/mutations/api-log.ts`(+test); `docs/adr/ADR-0012-graphql-depth-complexity-limits.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `docs/build-log/phase-01/PLT-130.md`; standard runtime-ledger set. No broad domain APIs, no duplicated interface business logic, no unbounded queries (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 629/629 PASS (28 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..129`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 322 total scenario groups across all 27 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+Purely additive — one new table, one new function, two new ADRs, zero modification to any existing migration/function/view/table's own behavior. `git revert` safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-129` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-027` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-028` (Prompt 131, Import/Export Job Framework) — requires fresh explicit user authorization before starting.
+
+### CHG-2026-063 — Import/Export Job Framework (Phase 1, Prompt 131)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-028` / `131_IMPORT_EXPORT_JOB_FRAMEWORK_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/TOOLING (see Outcome — this checkpoint also fixed a session-wide, pre-existing tooling defect out of band) |
+| Baseline evidence | `docs/build-log/phase-01/PLT-131.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a fifth, separate, unscoped "lanjut" after `PLT-130` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719170000_create_import_export_job_framework.sql`: `app.import_export_schemas` (registry), `app.jobs` (Tech Arch §32.11's generic async job table, created here since Prompt 132/Background Job Framework is itself `BLOCKED` on this task, `job_type` deliberately narrowed to `('import','export')` for this checkpoint's own scope), `app.import_staging_rows`; seventeen new functions covering schema registration/publishing, job creation/staging/validation/preview/commit, two-phase cooperative cancellation, export completion, retry/dead-letter/requeue, and a real OWASP-style `sanitize_formula_injection()`. Row validation is structural-only (never a domain write, no business-domain table exists yet); commit is all-or-nothing unless `p_allow_partial`; malware scanning composed directly from `PLT-128`. `server/contracts/import-export/import-export.ts`, `server/mutations/import-export.ts`, `server/queries/import-export.ts` (+tests each): the full typed RPC-wrapper layer. One real defect found and fixed in this checkpoint's own db-test fixture (an empty-string probe for "missing required" corrected to a genuinely-absent key; no migration change needed) — the idempotent-safe delta-counting re-validation logic in `validate_staging_row()` proved correct on the first full run.
+
+**Significant out-of-band finding and fix, discovered while running this checkpoint's own mandatory `pnpm run test` gate (full detail: `docs/build-log/phase-01/PLT-131.md` §5.1/§8):** `package.json`'s `test`/`test:coverage` scripts' unquoted `**` globs silently never executed any `server/contracts/<domain>/<domain>.test.ts` file (26 files, every capability built this entire session) because the invoking shell has no `globstar` enabled in this environment, degrading `**` to a single directory level. Every prior checkpoint's "`pnpm run test`: PASS" gate result was accurate for the tests it actually ran, but that set was smaller than believed. **Fixed** by quoting the globs in `package.json` so Node's own test-runner glob engine resolves `**` recursively regardless of shell state. Running the corrected glob surfaced exactly one real, previously-undetected regression: `server/contracts/white-label/white-label.ts`'s `SetTenantBrandTokensInputSchema.logoAssetUrl`/`emailLogoAssetUrl` fields were bare `z.string().nullable()` rather than the already-existing, already-correct `BrandAssetUrlSchema` (an https-only, injection-safe regex mirroring the database's own `app.validate_brand_asset_url()`, correctly wired into the same file's `DocumentTemplateRefsSchema` at `PLT-117` but overlooked for the two top-level logo fields). **Fixed** by pointing both fields at `BrandAssetUrlSchema`. The database `CHECK` constraint was never at risk — this was a missing TypeScript-layer fail-fast/defense-in-depth guarantee only. All 25 other previously-unexecuted contract test files passed cleanly on their first-ever real execution; no other regression was found.
+
+#### Scope and files
+
+`supabase/migrations/20260719170000_create_import_export_job_framework.sql`; `scripts/db-tests/import-export.sql`; `server/contracts/import-export/import-export.ts`(+test); `server/mutations/import-export.ts`(+test); `server/queries/import-export.ts`(+test); `docs/build-log/phase-01/PLT-131.md`; standard runtime-ledger set. **Out-of-band (disclosed above, not this prompt's own nominal scope, but a direct correctness finding made while running this checkpoint's own mandatory gate):** `package.json` (`test`/`test:coverage` glob quoting fix); `server/contracts/white-label/white-label.ts` (`BrandAssetUrlSchema` fix, the one regression the glob fix surfaced). No full domain imports/exports, no real tenant files, no synchronous heavy processing (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 843/843 PASS (corrected, accurate baseline — see Outcome; previously reported baseline of 629/629 was itself accurate only for the smaller, incompletely-globbed test set); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..130`); `pnpm run git:check` PASS; `pnpm run db:test` PASS — 338 total scenario groups across all 28 migrations + fixture.
+
+#### Compatibility, rollout, recovery
+
+`supabase/migrations/20260719170000_create_import_export_job_framework.sql` and the new TypeScript layer are purely additive — three new tables, seventeen new functions, zero modification to any existing migration/function/view/table's own behavior. The `package.json` and `white-label.ts` out-of-band fixes are narrowly scoped and low-risk but should be reverted only together with the rest of this checkpoint's commit (see `docs/build-log/phase-01/PLT-131.md` §9 for the reasoning). `git revert` of the full commit is safe and complete. Last known good `claude/lanjut-i0o5bt`@(`PLT-130` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-028` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-029` (Prompt 132, Background Job Framework) — requires fresh explicit user authorization before starting.
+
+### CHG-2026-064 — Background Job Framework (Phase 1, Prompt 132)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-029` / `132_BACKGROUND_JOB_FRAMEWORK_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR |
+| Baseline evidence | `docs/build-log/phase-01/PLT-132.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized with a sixth, separate, unscoped "lanjut" after `PLT-131` closed |
+
+#### Outcome
+
+`supabase/migrations/20260719180000_create_background_job_framework.sql`: widens `PLT-131`'s `app.jobs.job_type` CHECK to a ten-code allowlist (the eight new codes are the real, sourced use-case list `02_CANONICAL_DATA_FLOW_MAP.md` §5.3 names -- report generation, notification batch, webhook retry, document generation, dashboard refresh, loyalty expiration, recurring billing, integration sync -- with zero business logic implemented for any of them, only the generic queue mechanics, matching §12's "no domain batch implementation" prohibition); adds `next_attempt_at` (backoff scheduling) and drops `requested_by_auth_user_id`'s `NOT NULL` (a system-dispatched job has no human requester). New: `app.compute_job_backoff_seconds()` (equal-jitter exponential backoff), `app.claim_next_job()` (`SELECT ... FOR UPDATE SKIP LOCKED` -- PostgreSQL's own standard mechanism since 9.5 for "no two workers claim the same row," genuinely provable without a live multi-process worker fleet), `app.heartbeat_job()`, `app.complete_job()`, `app.append_event_log()`/`app.dispatch_event_as_job()`/`app.mark_event_dispatch_failed()` (the new `app.event_logs` outbox-pattern table, closing a three-document-deep deferral chain traced back to `PLT-116`). Three `PLT-131` functions (`record_job_failure`/`requeue_dead_letter_job`/`acknowledge_job_cancellation`) extended via `CREATE OR REPLACE FUNCTION` with identical signatures/exception-message prefixes -- reused directly for the generic job lifecycle since none of their bodies ever inspected `job_type`, proven non-breaking by re-running `PLT-131`'s own unmodified db-test suite against this checkpoint's migration before writing any new test. **`ADR-0013` newly ratified** (`docs/adr/ADR-0013-job-queue-retry-lease-defaults.md`), resolving a freshly-minted `ADR-CAND-ARCH-028` -- this checkpoint's own research confirmed no existing candidate covered job-queue backoff/lease/DLQ numeric thresholds -- with equal-jitter exponential backoff (base 30s, 2x multiplier, capped at 3600s) and a 300s default worker lease, the same "reasoned default absent blueprint-mandated numbers" class `ADR-0002`/`ADR-0004`/`ADR-0011`/`ADR-0012` already used. `server/contracts/import-export/import-export.ts`'s `ImportExportJobTypeSchema`/`ImportExportJob` are widened and reused directly for generic jobs too (one table, one row shape, reuse not fork) rather than forked under a new name; `server/contracts+mutations+queries/background-job.ts` (new) cover the queue-mechanics-specific concepts (event logs, backoff, lease params). One real defect found and fixed in this checkpoint's own db-test authoring (a scenario-group cross-contamination from an earlier group's deliberately-left-pending job -- not a migration bug).
+
+#### Scope and files
+
+`supabase/migrations/20260719180000_create_background_job_framework.sql`; `scripts/db-tests/background-job.sql`; `server/contracts/import-export/import-export.ts` (widened, +test); `server/contracts/background-job/background-job.ts`(+test); `server/mutations/background-job.ts`(+test); `server/queries/background-job.ts`(+test); `docs/adr/ADR-0013-job-queue-retry-lease-defaults.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `docs/build-log/phase-01/PLT-132.md`; standard runtime-ledger set. No external queue replacement, no unmeasured worker split, no domain batch implementation (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 866/866 PASS (23 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..131`); `pnpm run git:check` PASS; `pnpm run db:test` PASS -- 350 total scenario groups across all 29 migrations + fixture, including `PLT-131`'s own unmodified `import-export.sql` suite re-verified green against this checkpoint's migration.
+
+#### Compatibility, rollout, recovery
+
+Additive with two narrow, disclosed, backward-compatible alterations to `PLT-131`'s own `app.jobs` table (a widened CHECK constraint, a loosened NOT NULL) plus three `CREATE OR REPLACE FUNCTION` extensions (identical signatures/exception prefixes, proven non-breaking directly). `git revert` of this checkpoint's commit is safe and complete; `PLT-131`'s own import/export lifecycle continues to function identically. Last known good `claude/lanjut-i0o5bt`@(`PLT-131` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-029` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-030` (Prompt 133, Feature Flags) — requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -83,8 +83,8 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-013` | `shipments` wide-table vs. linked-table split | Phase 3 schema (Prompt 168+) | `BLOCKED` — needs Phase 3 schema slice |
 | `ADR-CAND-ARCH-014` | Rule-evaluation timeout (≈500ms) | Config engine (Phase 1 `07_*.md`) | `PROPOSED` — value signalled, ratify at build |
 | `ADR-CAND-ARCH-015` | Config-engine bounded-evaluator sandbox | Config engine (Phase 1) | `PROPOSED` |
-| `ADR-CAND-ARCH-017` | GraphQL depth/complexity limits + persisted-op registry | API workstream (Phase 1+) | `BLOCKED` — needs enforcement surface |
-| `ADR-CAND-ARCH-018` | Webhook retry/backoff/DLQ numeric values | API workstream | `PROPOSED` |
+| `ADR-CAND-ARCH-017` | GraphQL depth/complexity limits + persisted-op registry | API workstream (Phase 1+) | **Partially `ACCEPTED` → `ADR-0012`** (depth/complexity numeric limits only, `CG-S6-PLT-027`/Prompt 130) — persisted-operation registration mechanism remains open, due at the future live GraphQL-server capability |
+| `ADR-CAND-ARCH-018` | Webhook retry/backoff/DLQ numeric values | API workstream | **Partially `ACCEPTED` → `ADR-0011`** (signature/timestamp/auto-disable sub-questions only, `CG-S6-PLT-026`/Prompt 129) — rate-limit numeric thresholds remain `PROPOSED`, non-blocking, due at the future live API-gateway/rate-enforcement capability |
 | `ADR-CAND-ARCH-019` | Deployment ordering / API-consumer compatibility | DevOps (Phase 0 CI + release) | `PROPOSED` |
 | `ADR-CAND-ARCH-020` | Component-library foundation | Phase 0 `PH0-090` (Design System) | **ACCEPTED → `ADR-0005`** (Radix UI primitives, copy-in pattern) |
 | `ADR-CAND-ARCH-021` | Design-token mechanism + token file location | Phase 0 `PH0-090` | **ACCEPTED → `ADR-0006`** (CSS custom properties + Tailwind v4 `@theme`) |
@@ -94,8 +94,9 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-CAND-ARCH-025` | Secret-manager product | Phase 0 `PH0-085..088`/`094` | **ACCEPTED → `ADR-0010`** (Vercel Environment Variables + Supabase project secrets — native platform mechanism, no dedicated secret-manager service at MVP) |
 | `ADR-CAND-ARCH-026` | Observability/APM tool | Phase 0 `PH0-093` | **ACCEPTED → `ADR-0009`** (Better Stack — logs/metrics/traces/alerting/incident-management in one product, OpenTelemetry-native) |
 | `ADR-CAND-ARCH-027` | Hosting/CDN platform | Phase 0 `PH0-085..088` | `BLOCKED` — due at environment |
+| `ADR-CAND-ARCH-028` | Job queue backoff formula, worker lease duration, DLQ numeric defaults | API and Jobs (Phase 1, `CG-S6-PLT-029`/Prompt 132) | **ACCEPTED → `ADR-0013`** (this checkpoint) — newly minted, not part of the original 27; this checkpoint's own research confirmed no prior candidate covered this dimension (`08_API_INTEGRATION_WORKSTREAM.md`/`04_REPOSITORY_TARGET_STRUCTURE.md` name the adjacent "worker separation" threshold as `ADR_REQUIRED` with no number either, deliberately left open — see `ADR-0013`'s own Consequences) |
 
-*(Count reconciliation: `HANDOFF.md` §7's "10 resolved / 17 open" split is corrected here to **11 resolved / 16 open** — 001–010 + 016 = 11; 011–015 + 017–027 = 16; union = 27. The discrepancy was a one-item miscount, not a missing candidate; every one of the 27 is accounted for above.)*
+*(Count reconciliation: `HANDOFF.md` §7's "10 resolved / 17 open" split is corrected here to **11 resolved / 16 open** — 001–010 + 016 = 11; 011–015 + 017–027 = 16; union = 27. The discrepancy was a one-item miscount, not a missing candidate; every one of the 27 is accounted for above. `ADR-CAND-ARCH-028` is a 28th candidate, minted and resolved in the same checkpoint (`CG-S6-PLT-029`/Prompt 132) — not part of that original 27-item reconciliation.)*
 
 ## 6. Index of accepted/active ADRs
 
@@ -111,3 +112,6 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-0008` | DR-rehearsal cadence and automated-accessibility-checker tool | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-023` |
 | `ADR-0009` | Observability platform | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-026` |
 | `ADR-0010` | Secret-manager mechanism | `ACCEPTED` (2026-07-15) | `ADR-CAND-ARCH-025` |
+| `ADR-0011` | Webhook signature scheme, timestamp tolerance, and auto-disable threshold | `ACCEPTED` (2026-07-19) | `ADR-CAND-ARCH-018` (partial) |
+| `ADR-0012` | GraphQL depth and complexity limit values | `ACCEPTED` (2026-07-19) | `ADR-CAND-ARCH-017` (partial) |
+| `ADR-0013` | Job queue backoff formula, worker lease duration, and DLQ numeric defaults | `ACCEPTED` (2026-07-19) | `ADR-CAND-ARCH-028` (newly minted) |
