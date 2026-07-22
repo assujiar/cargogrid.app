@@ -2969,6 +2969,36 @@ Purely additive -- zero alteration to any existing migration/table/function; the
 
 Self-closing. `CG-S6-PLT-033` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-034` (Prompt 137, Integrated Platform Core Verification) -- dependency-`READY` for the first time this checkpoint (`105..136` are now all `VERIFIED`) -- requires fresh explicit user authorization before starting.
 
+### CHG-2026-069 — Integrated Platform Core Verification (Phase 1, Prompt 137)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-034` / `137_PLATFORM_CORE_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | TEST/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-137.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-136` closed naming `CG-S6-PLT-034` as the next row -- unlike every portal checkpoint since `135`, its dependency (`PLT-105..136`) is an **exact range**, not a "required subset," so no kickoff reconciliation was needed, only a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+The phase-level equivalent of Phase 0's `PH0-99.md` verification-only, default-no-repair checkpoint (`00_PLATFORM_CORE_WBS.md` line 121), scaled from 6 tooling foundations to 32 shipped Platform Core capabilities plus two portals. Composed 12 of the 32 capabilities (Tenant/Entitlement/Auth Identity/Four-Layer Access Context/Org Hierarchy/User Lifecycle/RBAC/RLS/Audit Trail/Config Engine/Workflow Engine/Background Job Framework/Feature Flags/PostGIS) through one continuous two-tenant golden path in a new `scripts/db-tests/platform-core-integrated-verification.sql` (14 scenario groups) -- a disclosed, bounded scope decision mirroring `PH0-99`'s own precedent of representative composition rather than exhaustive re-implementation of all 32 capabilities' own already-proven individual coverage; the remaining 20 capabilities' integration confidence instead rests on the full `db:test` run (389 scenario groups across all 31 files executing together against one disposable, sequentially-migrated database) plus a requirement/WBS/ADR/docs traceability audit finding zero orphan. Real composed proofs found: workflow idempotency is tenant-scoped, not global; feature-flag evaluation correctly composes with real entitlement (a 100%-rollout flag still denies `module_not_entitled` for an unentitled tenant); the `PLT-116` `app.users_directory` tenant-isolation fix (a real historical cross-tenant PII exposure) still holds as a regression guard; a combined RLS sweep across 8 tables spanning both pre-`PLT-113` and post-`PLT-113` capabilities found zero foreign-tenant row visible. One real, fully disclosed, zero-production-impact finding: `app.resolve_access_context`'s own migration comment describes only the `p_tenant_id IS NULL` branch -- an explicit-tenant-id call for a Supreme Admin with no per-tenant identity link fails closed, not silently, and the one real caller (`PLT-136`'s guard) never triggers this path, so no fix was made per this checkpoint's own bounded no-repair mandate. Zero Critical/High/Medium finding -- nothing blocks `PLT-138` Hardening.
+
+#### Scope and files
+
+`scripts/db-tests/platform-core-integrated-verification.sql` (new, 14 scenario groups); `docs/build-log/phase-01/PLT-137.md` (new); standard runtime-ledger set. No new feature, no broad refactor, no production/shared-service/data mutation, no bounded repair was needed (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+A fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS (4.0s, clean/deterministic/reproducible); `pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (unchanged -- this checkpoint's own new evidence is entirely SQL-level); `pnpm run db:test` PASS -- 389 total scenario groups across 31 migrations/31 db-test files (16 net new, up from 373/30); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` re-confirmed the identical disclosed sandbox `chrome-headless-shell` executable-not-found condition present since `PLT-117` (re-read directly, not assumed unchanged), not a regression; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- zero alteration to any existing migration/table/function/route; test-only and documentation changes. `git revert` of this checkpoint's commit is safe and complete, with no data loss. Last known good `claude/lanjut-0kwbyt`@(`PLT-137` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-034` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-035` (Prompt 138, Tenant/Security/Platform Hardening) -- dependency-`READY` (`137` `VERIFIED` this checkpoint), its own remediation scope narrowed by this checkpoint's own narrow failure matrix (one Low, zero-production-impact finding) -- requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
