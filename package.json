@@ -26,9 +26,12 @@
   "dependencies": {
     "@supabase/ssr": "0.12.3",
     "@supabase/supabase-js": "2.110.5",
+    "@tailwindcss/postcss": "^4.3.3",
     "next": "16.2.10",
+    "radix-ui": "^1.6.4",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "tailwindcss": "^4.3.3",
     "zod": "4.4.3"
   },
   "devDependencies": {

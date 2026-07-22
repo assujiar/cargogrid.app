@@ -2909,6 +2909,36 @@ Purely additive -- one extension enabled, five new pure functions, zero alterati
 
 Self-closing. `CG-S6-PLT-031` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-032` (Prompt 135, Tenant Admin Portal) — `BLOCKED`, its own "required subset" of `106..134` not yet reconciled by its own kickoff (`00_PLATFORM_CORE_WBS.md` §6 Lane G) — requires fresh explicit user authorization, and that reconciliation, before starting.
 
+### CHG-2026-067 — Tenant Admin Portal (Phase 1, Prompt 135)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-032` / `135_TENANT_ADMIN_PORTAL_PROMPT.md` |
+| Change type | CODE/UI/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-135.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-134` closed naming `CG-S6-PLT-032` as the next row, but its dependency is a "required subset" of `106..134`, not an exact list — this checkpoint's own first work item was the kickoff reconciliation itself (`docs/build-log/phase-01/PLT-135.md` §2), then execution under a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+The first real UI in this repository. Kickoff reconciliation concluded the required dependency subset (`PLT-105..114`,`116`,`121`) is fully `VERIFIED`; `122..134` are not needed for this checkpoint's own bounded scope. Two real gaps found and reconciled before writing code: (1) `09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §14's own atomic backlog places "Design-system foundation" (`components/ui/` primitives) as a distinct slice never executed as its own capability -- resolved via the same folder-existence-timing convention already adopted for `server/contracts/` (this checkpoint builds only `components/ui/button.tsx`, the one primitive it consumes); (2) CargoGrid's own base brand color/logo/font is an explicitly open Product/Design decision (`docs/standards/DESIGN_SYSTEM.md` §3) -- resolved by building the shell entirely from the already-decided neutral/semantic token set, `primary`/`secondary` mapped to neutral as a disclosed placeholder, never an invented brand color. `app.resolve_access_context` (`PLT-108`) is confirmed `service_role`-only by direct inspection -- the guard (`lib/portal/tenant-admin-guard.ts`, pure, five-outcome discriminated union, fully unit-tested) uses an RLS-scoped client for session/tenant-slug lookup and a service-role client (server-only, never Client-Component-imported) for that one privileged RPC. Zero new migration/schema -- the one bounded child slice (read-only Users list, `server/queries/portal-users.ts`) reads `PLT-114`/`116`'s own `app.users_directory` view directly, paginated and clamped to `pageSize<=100`. `app/(public)/login` is the minimal real entry point (Server Action, `signInWithPassword`, redirect re-validated through `PLT-107`'s own `validateRedirectTarget`). One real defect found and fixed during this checkpoint's own gate-verification: `eslint.config.js` lacked an `ignores` for `.next/`/`playwright-report/`/`test-results/` (invisible until this checkpoint's own `next build` first created them), causing `eslint .` to lint Next's own minified bundle as source -- fixed, proven via a clean re-run after a fresh build. A real `next build` succeeded twice; a live `next dev` instance was probed with `curl`, proving the guard fails safe (redirect, never a 500) even against a fully unreachable Supabase backend.
+
+#### Scope and files
+
+`app/**` (new: `layout.tsx`, `page.tsx`, `globals.css`, `(public)/login/{page,actions}.tsx`, `(tenant)/[tenantSlug]/admin/{layout,page}.tsx`, `admin/users/{page,loading}.tsx`); `components/ui/button.tsx`; `lib/supabase/{server,service-role}.ts`; `lib/portal/{tenant-admin-guard,tenant-admin-guard-deps.server,resolve-tenant-admin-access.server}.ts`(+test); `server/queries/portal-users.ts`(+test); `e2e/tenant-admin-portal.spec.ts`; `postcss.config.mjs`, `next.config.ts`; `package.json`/`pnpm-lock.yaml` (tailwindcss, @tailwindcss/postcss, radix-ui); `eslint.config.js`/`tsconfig.json`/`next-env.d.ts`/`playwright.config.ts` (infra fixes/additions); `docs/build-log/phase-01/PLT-135.md`; standard runtime-ledger set. No Supreme/Customer portal, direct DB access, or all-admin-pages mega-scope introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (lint clean only after the `eslint.config.js` fix); `pnpm run test` 918/918 PASS (14 net new); a real `next build` PASS (run twice); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run db:test` PASS -- unchanged at 373 scenario groups (zero new migrations); `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..134`) -- the new spec's `webServer` wiring was independently confirmed reaching the real dev server via direct `curl` probing before the run failed only at the known missing-browser-binary step; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- zero alteration to any existing migration/table/function; `eslint.config.js`/`tsconfig.json`/`next-env.d.ts` changes are additive-only (new `ignores`, Next.js's own standard App Router additions). `git revert` of this checkpoint's commit is safe and complete; every existing test/gate re-runs clean (proven directly, not merely asserted). Last known good `claude/lanjut-0kwbyt`@(`PLT-135` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-032` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-033` (Prompt 136, Supreme Admin Portal) -- also carries a "required subset" dependency (`105..135`) needing its own kickoff reconciliation (the same work `docs/build-log/phase-01/PLT-135.md` §2 performed for `135`) before it can be confirmed dependency-ready -- requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
