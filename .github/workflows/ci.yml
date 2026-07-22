@@ -135,8 +135,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
+      # PLT-134/ADR-0014: postgis/postgis:17-3.4 (Postgres 17, matching this workflow's
+      # own prior plain postgres:17 pin, plus PostGIS 3.4 — required since
+      # 20260722090000_enable_postgis_spatial_foundation.sql's own `create extension
+      # postgis` needs the extension's control/library files present in the image, not
+      # merely installable at runtime).
       postgres:
-        image: postgres:17
+        image: postgis/postgis:17-3.4
         env:
           POSTGRES_PASSWORD: postgres
         ports:

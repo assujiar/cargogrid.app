@@ -2879,6 +2879,36 @@ Purely additive -- one new migration, zero alteration to any existing table/colu
 
 Self-closing. `CG-S6-PLT-030` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-031` (Prompt 134, PostGIS/Spatial Foundation) — dependency-`READY` (this checkpoint corrected the execution index's own stale `BLOCKED` row, whose five named dependencies were in fact already `VERIFIED`) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-066 — PostGIS and Spatial Foundation (Phase 1, Prompt 134)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-031` / `134_POSTGIS_SPATIAL_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR/CI/ENVIRONMENT |
+| Baseline evidence | `docs/build-log/phase-01/PLT-134.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-133` closed `BLOCKED_ON_AUTHORIZATION` naming exactly `CG-S6-PLT-031` as the next task pending a fresh, unscoped "lanjut"; this checkpoint was opened by exactly that, in the same session |
+
+#### Outcome
+
+`supabase/migrations/20260722090000_enable_postgis_spatial_foundation.sql`: enables PostGIS (RPD-015) and establishes the governed SRID/geometry-vs-geography/validation/indexing/query-limit conventions every later Operations-phase spatial column (`shipments`/`shipment_milestones`/`warehouses`, Phase 3) will build on. **No standalone spatial table is created, structurally** — `05_DATABASE_SCHEMA_WORKSTREAM.md` line 108 already resolved that a future `geography` column belongs directly on its owning-domain table, not a separate geo table; this checkpoint ships only the extension plus five reusable pure/`stable` functions (`app.postgis_max_query_radius_meters`, `app.validate_geography_point`, `app.geojson_point_to_geography`, `app.geography_to_geojson_point`, `app.bounded_st_dwithin`), with the one representative example (Prompt 134 §20 task 3) proven entirely inside `scripts/db-tests/postgis.sql` via a `pg_temp` table created and dropped within that script alone. **`geography`, not `geometry`, is the only endorsed spatial type** — this checkpoint's own direct testing against PostGIS 3.4.2 confirmed casting a non-4326-SRID geometry to `geography` structurally fails, making SRID 4326 (WGS84) impossible to drift from. **A real, concrete defect class found by this checkpoint's own testing, not hypothesized**: PostGIS's own `geometry -> geography` cast silently *coerces* (clamps) an out-of-range latitude/longitude into range rather than rejecting it (`ST_MakePoint(0,95)::geography` succeeds with a `NOTICE`, proven directly) — exactly the "silent axis swap" Prompt 134 §19/§23 forbid; `app.geojson_point_to_geography()` explicitly range-checks and rejects before ever constructing a geography value, the real, tested mitigation. **`ADR-0014` newly ratified** (`docs/adr/ADR-0014-postgis-spatial-conventions.md`), resolving a freshly-minted `ADR-CAND-ARCH-029` — PostGIS `3.4.x`, SRID `4326`, and a 500,000-meter (500km) bounded-radius query cap enforced by `app.bounded_st_dwithin()`, the one governed choke point for any future proximity query, proven with a real `EXPLAIN`-plan check that a GiST index on a `geography` column is actually used, not a sequential scan. Two real, disclosed **environment gaps** were found and fixed before any migration could be tested: this sandbox's Postgres 16 had no PostGIS package at all (fixed via `apt-get install postgresql-16-postgis-3`, confirmed with a direct `CREATE EXTENSION`/`PostGIS_Version()` smoke test first); CI's `db` job used a plain `postgres:17` service image with no PostGIS (fixed — `postgis/postgis:17-3.4`, `.github/workflows/ci.yml`). `server/contracts/spatial/spatial.ts` (new) mirrors the governed GeoJSON/radius conventions client-side (validation-only, fail-fast, the database remains authoritative).
+
+#### Scope and files
+
+`supabase/migrations/20260722090000_enable_postgis_spatial_foundation.sql`; `scripts/db-tests/postgis.sql`; `server/contracts/spatial/spatial.ts`(+test); `docs/adr/ADR-0014-postgis-spatial-conventions.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `.github/workflows/ci.yml` (`db` job service image); `docs/build-log/phase-01/PLT-134.md`; standard runtime-ledger set. No TMS routing/geofence feature, live map provider integration, or broad coordinate backfill introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 904/904 PASS (11 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..133`); `pnpm run git:check` PASS; `pnpm run db:test` PASS -- 373 total scenario groups across all 31 migrations + 30 db-test files (8 new), including a real `EXPLAIN`-plan proof that the GiST index is used for an `ST_DWithin` predicate and a tenant-scoped cross-tenant-isolation proof on the representative example table.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one extension enabled, five new pure functions, zero alteration to any existing table/column/function. `git revert` of this checkpoint's commit is safe and complete; `DROP EXTENSION postgis` (were it ever needed) has no dependent object anywhere in this repository, since no table column uses `geography` yet. The CI service-image change is also safely reversible (adds capability only). Last known good `claude/lanjut-0kwbyt`@(`PLT-134` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-031` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-032` (Prompt 135, Tenant Admin Portal) — `BLOCKED`, its own "required subset" of `106..134` not yet reconciled by its own kickoff (`00_PLATFORM_CORE_WBS.md` §6 Lane G) — requires fresh explicit user authorization, and that reconciliation, before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
