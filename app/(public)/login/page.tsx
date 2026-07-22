@@ -16,13 +16,12 @@ export default function LoginPage() {
       <form action={formAction} className="flex flex-col gap-4" noValidate>
         <div className="flex flex-col gap-1">
           <label htmlFor="tenantSlug" className="text-sm font-medium text-neutral-700">
-            Organization
+            Organization <span className="font-normal text-neutral-500">(leave blank for CargoGrid staff)</span>
           </label>
           <input
             id="tenantSlug"
             name="tenantSlug"
             type="text"
-            required
             autoComplete="organization"
             className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
           />

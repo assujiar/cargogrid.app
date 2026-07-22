@@ -2939,6 +2939,36 @@ Purely additive -- zero alteration to any existing migration/table/function; `es
 
 Self-closing. `CG-S6-PLT-032` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-033` (Prompt 136, Supreme Admin Portal) -- also carries a "required subset" dependency (`105..135`) needing its own kickoff reconciliation (the same work `docs/build-log/phase-01/PLT-135.md` §2 performed for `135`) before it can be confirmed dependency-ready -- requires fresh explicit user authorization before starting.
 
+### CHG-2026-068 — Supreme Admin Portal (Phase 1, Prompt 136)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-033` / `136_SUPREME_ADMIN_PORTAL_PROMPT.md` |
+| Change type | CODE/UI/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-136.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-135` closed naming `CG-S6-PLT-033` as the next row, itself carrying the identical "required subset" pattern -- this checkpoint's own first work item was the kickoff reconciliation (`docs/build-log/phase-01/PLT-136.md` §2), then execution under a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+Kickoff reconciliation concluded the required dependency subset (`PLT-105`,`107`,`108`,`113`) is fully `VERIFIED` -- strictly less than the Tenant Admin portal needed, since a global tenant list reads `app.tenants` directly with no RBAC/audit/config chain behind it. The guard (`lib/portal/supreme-admin-guard.ts`, pure, unit-tested) is simpler than the Tenant Admin portal's own: Supreme Admin membership is tenant-independent, so `app.resolve_access_context(auth_user_id, null)` resolves it directly with no tenant-slug/RLS lookup step. Confirmed by direct inspection that `app.has_active_tenant_membership()` returns true for a Supreme Admin on every tenant row -- the global tenant list (`server/queries/supreme-tenants.ts`) therefore reads `app.tenants` through the RLS-scoped client directly, never service-role; the service-role client is used exactly once, for the guard's own privileged `resolve_access_context` call. Bounded to shell + one read-only child slice (global tenant list) -- package/subscription, platform config, support-grant administration, audit browsing, and system health remain separate, later slices per `09_UX_DESIGN_SYSTEM_WORKSTREAM.md`'s own route map; no re-authentication/impact-preview/confirmation machinery was built, since this checkpoint ships zero mutating action to gate. RPD-022 (Supreme Admin's absolute-CRUD exception) is disclosed structurally -- a persistent `Banner` (new `components/ui/banner.tsx` primitive) renders on every page of this portal. `app/(public)/login` is extended, not forked: the organization field is now optional, redirecting to `/supreme` when blank. Zero new migration/schema. A real `next build` succeeded; a live `next dev` instance was probed with `curl`, proving both `/supreme` and `/supreme/tenants` fail safe (redirect, never a 500) even against a completely unreachable Supabase backend.
+
+#### Scope and files
+
+`app/(supreme)/supreme/{layout,page}.tsx`, `app/(supreme)/supreme/tenants/{page,loading}.tsx`; `components/ui/banner.tsx`; `lib/portal/{supreme-admin-guard,supreme-admin-guard-deps.server,resolve-supreme-admin-access.server}.ts`(+test); `server/queries/supreme-tenants.ts`(+test); `e2e/supreme-admin-portal.spec.ts`; `app/(public)/login/{actions,page}.tsx` (organization field made optional); `docs/build-log/phase-01/PLT-136.md`; standard runtime-ledger set. No direct client service-role/database access, unreviewed destructive bulk action, or domain feature admin introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (11 net new); a real `next build` PASS; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run db:test` PASS -- unchanged at 373 scenario groups (zero new migrations); `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..135`) -- the new spec independently confirmed reaching the real dev server before failing only at the known missing-browser-binary step; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- zero alteration to any existing migration/table/function; the `app/(public)/login` change is backward-compatible (an existing tenant-slug submission behaves identically; only a blank submission's redirect target is new). `git revert` of this checkpoint's commit is safe and complete; every existing test/gate re-runs clean (proven directly). Last known good `claude/lanjut-0kwbyt`@(`PLT-136` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-033` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-034` (Prompt 137, Integrated Platform Core Verification) -- dependency-`READY` for the first time this checkpoint (`105..136` are now all `VERIFIED`) -- requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
