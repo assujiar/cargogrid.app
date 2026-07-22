@@ -2999,6 +2999,36 @@ Purely additive -- zero alteration to any existing migration/table/function/rout
 
 Self-closing. `CG-S6-PLT-034` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-035` (Prompt 138, Tenant/Security/Platform Hardening) -- dependency-`READY` (`137` `VERIFIED` this checkpoint), its own remediation scope narrowed by this checkpoint's own narrow failure matrix (one Low, zero-production-impact finding) -- requires fresh explicit user authorization before starting.
 
+### CHG-2026-070 — Tenant/Security/Platform Hardening (Phase 1, Prompt 138)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-035` / `138_PLATFORM_CORE_TENANT_SECURITY_HARDENING_PROMPT.md` |
+| Change type | DB/DOCS/TEST |
+| Baseline evidence | `docs/build-log/phase-01/PLT-138.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-137` closed naming `CG-S6-PLT-035` as the next row -- its dependency is the single exact task `PLT-137` (`VERIFIED`), no kickoff reconciliation needed -- executed under a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+Closes the single finding `PLT-137`'s own failure matrix recorded (`PLT-137.md` §5) -- no Critical/High/Medium finding existed, so this checkpoint's scope is genuinely narrow. Root-cause repair: `app.resolve_access_context` had never carried a `comment on function` at all -- new migration `20260722130000_harden_resolve_access_context_documentation.sql` adds a purely additive `comment on function` describing both branches accurately, including the exact boundary `PLT-137` found (a global-only Supreme Admin has no shortcut in the tenant-qualified branch). Not an edit to the original migration -- the immutable-migrations convention (already followed at `PLT-116`'s `app.users_directory` fix) is preserved; `COMMENT ON FUNCTION` needs no `REVOKE`/`GRANT` and no function-body rebuild. New `scripts/db-tests/tenant-security-hardening.sql` (5 scenario groups) is this checkpoint's own independent regression evidence: re-proves the underlying fail-closed behavior is unchanged, proves the comment is now non-null and contains the exact finding-closing phrase, and confirms zero regression to tenant_admin resolution or RLS. `PLT-137` re-verified to re-pass in full.
+
+#### Scope and files
+
+`supabase/migrations/20260722130000_harden_resolve_access_context_documentation.sql` (new, comment-only); `scripts/db-tests/tenant-security-hardening.sql` (new, 5 scenario groups); `docs/build-log/phase-01/PLT-138.md` (new); standard runtime-ledger set. No new domain capability, no unrelated debt/refactor, no production mutation, no gate suppression (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (unchanged -- no TypeScript file touched); `pnpm run db:test` PASS -- 394 total scenario groups across 32 migrations/32 db-test files (5 net new, up from 389/31; every one of the 389 pre-existing scenario groups re-ran unmodified and passed); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run git:check` PASS. `test:e2e`/`next build` not applicable -- no UI/API file was touched.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- the new migration contains a single `comment on function` statement with no privilege, data, or behavioral effect. `git revert` of this checkpoint's commit is safe and complete, restoring the function to its prior (correct-but-undocumented) state with no data loss. Last known good `claude/lanjut-0kwbyt`@(`PLT-138` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-035` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-036` (Prompt 139, Documentation and Handoff) -- dependency-`READY` (`138` `VERIFIED` this checkpoint, single exact task) -- requires fresh explicit user authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
