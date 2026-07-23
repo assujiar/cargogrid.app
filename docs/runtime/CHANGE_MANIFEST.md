@@ -3149,6 +3149,36 @@ Additive only -- one new migration (new table + functions + one permissions-seed
 
 Self-closing. `CG-S7-COM-002` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-003` (Prompt 144, Prospect Lifecycle) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-075 — Prospect Lifecycle (Phase 2, Prompt 144)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-003` / `144_PROSPECT_LIFECYCLE_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `003` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Prospect as a governed pre-customer commercial identity: `app.prospects` is unique on `lead_id` ("one conversion idempotency key yields one prospect outcome"), with `contact_name`/`email`/`phone` snapshotted from the source lead at conversion time -- never a live FK, the no-reentry binding rule. `app.convert_lead_to_prospect` (main flow, idempotent including under a concurrent-insert race, requires the lead `status='qualified'` plus record-scope access plus `COM:Create`) and `app.link_lead_to_existing_prospect` (alternative flow, cross-tenant link structurally denied) both set the lead's own `status='converted'`/`converted_prospect_id` (`app.leads` gains this additive column/constraint). `app.get_prospect_conversion_readiness` is a real-time, deterministic evaluator over a fixed, disclosed, non-tenant-configurable rule set -- not the deferred Configuration Engine rule evaluator. `app.disqualify_prospect`/`app.archive_prospect`/`app.merge_prospects` mirror `COM-143`'s own lead functions. Record-scope reuses `COM-143`'s own `app.lead_record_scope_org_unit_ids` directly rather than duplicating it.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723120000_create_commercial_prospect_lifecycle.sql` (1 migration); `scripts/db-tests/commercial-prospect-lifecycle.sql` (9 scenario groups); `server/contracts/prospect/prospect.ts`(`.test.ts`); `server/queries/prospect.ts`(`.test.ts`); `server/mutations/prospect.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/prospects/{page,loading}.tsx`, `prospects/[prospectId]/{page,loading,actions,prospect-actions-panel}.tsx`. Modified: `server/contracts/lead/lead.ts` (adds `convertedProspectId`), `app/(tenant)/[tenantSlug]/commercial/leads/{actions.ts,[leadId]/{page.tsx,lead-actions-panel.tsx}}` (adds the "Convert to prospect" action), `commercial/layout.tsx` (adds a Prospects nav link). 15 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 981/981 PASS (21 net new); `pnpm run db:test` PASS -- 34 migrations/34 db-test files, all green including the new 9-scenario-group `commercial-prospect-lifecycle.sql`; `next build` (Turbopack) PASS -- 11 routes (up from 9); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- one new migration (new table + functions, plus an additive column/constraint on `app.leads`), zero alteration to `COM-143`'s own table/functions. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on `app.prospects`.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-003` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-004` (Prompt 145, Contact and Activity Management) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

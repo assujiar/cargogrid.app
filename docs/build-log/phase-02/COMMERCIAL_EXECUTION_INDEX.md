@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S7-COM-001` (`CG-AABPP-COM-142` v0.8.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/07-phase-02-commercial/142_COMMERCIAL_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_2_IN_PROGRESS` — updated at `COM-143` (Lead Management, `VERIFIED`); this document itself remains index/planning only and performs no Commercial-domain runtime source/schema change (`143`'s own migration/code lives in its own commit, cited in row `002`)
+**Status:** `PHASE_2_IN_PROGRESS` — updated at `COM-144` (Prospect Lifecycle, `VERIFIED`); this document itself remains index/planning only and performs no Commercial-domain runtime source/schema change (each capability's own migration/code lives in its own commit, cited per row)
 
 ## 0. Checkpoint
 
@@ -58,8 +58,8 @@ Hierarchy column format: `Workstream / Epic`, derived from `00_COMMERCIAL_WBS.md
 |---|---|---|---|---|---|---|---|---|---|
 | `001` | `142` WBS and Runtime Kickoff | Governance / Commercial Kickoff | `VERIFIED` | Runtime entry gate (§1) | `claude/lanjut-c6vqse` | This file + `00_COMMERCIAL_WBS.md` + `docs/adr/ADR-0015-*.md` | Runtime build agent | `CG-S7-COM-002` |
 | `002` | `143` Lead management | Growth and Lead / Lead Acquisition | `VERIFIED` | `COM-142` (`VERIFIED`) | `claude/lanjut-c6vqse`@(this checkpoint's commit) | `docs/build-log/phase-02/COM-143.md` | Runtime build agent | `CG-S7-COM-003` |
-| `003` | `144` Prospect lifecycle | Growth and Lead / Qualification Conversion | `READY` | `COM-143` (`VERIFIED`) | — | `docs/build-log/phase-02/COM-144.md` | Runtime build agent | `CG-S7-COM-004` |
-| `004` | `145` Contact and activity management | Customer Relationship / Relationship Workspace | `BLOCKED` | `COM-143..144` | — | `docs/build-log/phase-02/COM-145.md` | Runtime build agent | `CG-S7-COM-005` |
+| `003` | `144` Prospect lifecycle | Growth and Lead / Qualification Conversion | `VERIFIED` | `COM-143` (`VERIFIED`) | `claude/lanjut-c6vqse`@(this checkpoint's commit) | `docs/build-log/phase-02/COM-144.md` | Runtime build agent | `CG-S7-COM-005` |
+| `004` | `145` Contact and activity management | Customer Relationship / Relationship Workspace | `READY` | `COM-143..144` (both `VERIFIED`) | — | `docs/build-log/phase-02/COM-145.md` | Runtime build agent | `CG-S7-COM-005` |
 | `005` | `146` CRM sales plan and pipeline | Customer Relationship / CRM Workspace | `BLOCKED` | `COM-143..145` | — | `docs/build-log/phase-02/COM-146.md` | Runtime build agent | `CG-S7-COM-006` |
 | `006` | `147` Opportunity management | Pipeline / Revenue Opportunity | `BLOCKED` | `COM-144..146` | — | `docs/build-log/phase-02/COM-147.md` | Runtime build agent | `CG-S7-COM-007` |
 | `007` | `148` RFQ and costing request | Costing and Pricing / Commercial Costing | `BLOCKED` | `COM-147` | — | `docs/build-log/phase-02/COM-148.md` | Runtime build agent | `CG-S7-COM-008` |
@@ -81,7 +81,7 @@ Hierarchy column format: `Workstream / Epic`, derived from `00_COMMERCIAL_WBS.md
 | `023` | `164` Documentation and handoff | Phase Closing / Knowledge and Handoff | `BLOCKED` | `COM-163` | — | `docs/build-log/phase-02/COM-164.md` | Runtime build agent | `CG-S7-COM-024` |
 | `024` | `165` Phase 2 closure verification | Phase Closing / Closure | `BLOCKED` | `COM-164` | — | `docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md` | Runtime build agent | `CG-S8-...-001` (Phase 3 Operations kickoff — contingent on fresh explicit user authorization, same standing discipline as the Phase 1→2 boundary) |
 
-**Tally (updated at `COM-143`, row `002` — Lead Management `VERIFIED`):** of the 24 rows in this index (`142`–`165`), **2 are `VERIFIED`** (kickoff, Lead Management) and **1 is `READY`** (`144`, Prospect Lifecycle — its sole dependency, `143`, is now `VERIFIED`). The remaining 21 rows are `BLOCKED` on their own not-yet-started predecessor. [Historical: at the kickoff's own authoring checkpoint, the tally was 1 `VERIFIED`, 1 `READY`, 22 `BLOCKED` — retained here only as a superseded data point, not current state.]
+**Tally (updated at `COM-144`, row `003` — Prospect Lifecycle `VERIFIED`):** of the 24 rows in this index (`142`–`165`), **3 are `VERIFIED`** (kickoff, Lead Management, Prospect Lifecycle) and **1 is `READY`** (`145`, Contact and Activity Management — both dependencies, `143`/`144`, now `VERIFIED`). The remaining 20 rows are `BLOCKED` on their own not-yet-started predecessor. [Historical: at `COM-143`'s own checkpoint, the tally was 2 `VERIFIED`, 1 `READY`, 21 `BLOCKED` — retained here only as a superseded data point, not current state.]
 
 ## 4. Collision inspection (required task 7)
 
@@ -89,9 +89,9 @@ Hierarchy column format: `Workstream / Epic`, derived from `00_COMMERCIAL_WBS.md
 |---|---|---|
 | Worktree | `git status --short --branch` | Clean at HEAD `6293269` except this task's own new files (§0) |
 | Branches/PRs | `mcp__github__list_pull_requests` (state `open`); `git log origin/main..origin/<branch>` for every remote branch | `[]` open PRs; zero unmerged commits on any remote branch — full detail in §0 |
-| Migrations | `supabase/migrations/` listing | 33 migrations as of `COM-143` (32 Platform Core-scoped, `docs/build-log/phase-01/PLATFORM_CORE_HANDOFF_PACKAGE.md` §2.1, plus `20260723090000_create_commercial_lead_management.sql` — the first Commercial-domain migration, additive only). `149` will be the next Commercial task to add one (extending, not competing with, `PLT-120`'s existing `vendor_rate` master-data registration, per `ADR-0015`). |
+| Migrations | `supabase/migrations/` listing | 34 migrations as of `COM-144` (32 Platform Core-scoped plus `20260723090000_create_commercial_lead_management.sql` (`COM-143`) and `20260723120000_create_commercial_prospect_lifecycle.sql` (`COM-144`), both additive only). `149` will be the next Commercial task to add a migration (extending, not competing with, `PLT-120`'s existing `vendor_rate` master-data registration, per `ADR-0015`). |
 | Schema | `05_DATABASE_SCHEMA_WORKSTREAM.md` §3/§4 | Single `app` schema, unchanged — no Commercial table exists yet. No collision possible at this checkpoint. |
-| Application code | `git ls-files app/ lib/ server/ components/ \| grep -iE "customer\|lead\|prospect\|quote\|opportunity"` | As of `COM-143`: real, expected matches under `app/(tenant)/[tenantSlug]/commercial/leads/`, `server/{contracts,queries,mutations}/lead*`, `lib/portal/commercial-guard*` — the first Commercial-domain code in this repository, exactly the scope `143`'s own prompt authorizes. Zero match for `customer`/`prospect`/`quote`/`opportunity` — those remain out of scope until their own capability prompts (`144`–`161`) run. |
+| Application code | `git ls-files app/ lib/ server/ components/ \| grep -iE "customer\|lead\|prospect\|quote\|opportunity"` | As of `COM-144`: real, expected matches under `app/(tenant)/[tenantSlug]/commercial/{leads,prospects}/`, `server/{contracts,queries,mutations}/{lead,prospect}*` — the scope `143`/`144`'s own prompts authorize. Zero match for `customer`/`quote`/`opportunity` — those remain out of scope until their own capability prompts (`147`, `151`, `155`) run. |
 | `docs/build-log/phase-02/` (new directory) | Directory listing | Contains exactly this file and `00_COMMERCIAL_WBS.md`, both newly created by this task. No pre-existing content to collide with. |
 
-**Result: zero file/schema/environment collision found.** `143` (Lead management) is dependency-`READY` and may proceed once a fresh explicit continuation is given.
+**Result: zero file/schema/environment collision found.** `145` (Contact and Activity Management) is dependency-`READY` and may proceed under this session's own open-ended authorization.

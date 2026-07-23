@@ -82,6 +82,7 @@ describe("parseLead", () => {
       merged_at: null,
       merged_by: null,
       converted_at: null,
+      converted_prospect_id: null,
       last_activity_at: "2026-07-23T00:00:00.000Z",
       record_version: 1,
       created_by: "tester",

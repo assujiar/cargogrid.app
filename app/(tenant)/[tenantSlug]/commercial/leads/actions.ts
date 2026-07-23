@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { captureLead, qualifyLead, disqualifyLead, LeadMutationError } from "../../../../../server/mutations/lead.ts";
+import { convertLeadToProspect, ProspectMutationError } from "../../../../../server/mutations/prospect.ts";
 
 export interface LeadFormState {
   readonly error: string | null;
@@ -79,6 +80,37 @@ export async function qualifyLeadAction(tenantSlug: string, leadId: string, expe
 
   revalidatePath(`/${tenantSlug}/commercial/leads/${leadId}`);
   return { error: null };
+}
+
+/** Main flow (COM-144, Prompt 144 §21): a qualified lead converts to a prospect. Redirects to the new prospect's detail page on success -- idempotent, so a retried click after a slow response never creates a second prospect. */
+export async function convertLeadToProspectAction(
+  tenantSlug: string,
+  leadId: string,
+  legalName: string,
+): Promise<LeadFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+  if (!legalName.trim()) {
+    return { error: "A legal name is required to convert this lead to a prospect." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let prospectId: string;
+  try {
+    const prospect = await convertLeadToProspect(supabase, { leadId, legalName, actorAuthUserId: access.authUserId, createdBy: access.authUserId });
+    prospectId = prospect.id;
+  } catch (error) {
+    if (error instanceof ProspectMutationError) {
+      return { error: `Could not convert lead to prospect: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/leads/${leadId}`);
+  revalidatePath(`/${tenantSlug}/commercial/prospects`);
+  redirect(`/${tenantSlug}/commercial/prospects/${prospectId}`);
 }
 
 export async function disqualifyLeadAction(tenantSlug: string, leadId: string, expectedVersion: number, reason: string): Promise<LeadFormState> {

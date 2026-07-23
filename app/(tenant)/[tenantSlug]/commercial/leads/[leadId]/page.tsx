@@ -61,9 +61,19 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ ten
             <dd className="text-neutral-900">{lead.disqualifyReason}</dd>
           </>
         ) : null}
+        {lead.status === "converted" && lead.convertedProspectId ? (
+          <>
+            <dt className="font-medium text-neutral-600">Converted to prospect</dt>
+            <dd className="text-neutral-900">
+              <a href={`/${tenantSlug}/commercial/prospects/${lead.convertedProspectId}`} className="font-medium text-primary underline">
+                View prospect
+              </a>
+            </dd>
+          </>
+        ) : null}
       </dl>
 
-      <LeadActionsPanel tenantSlug={tenantSlug} leadId={lead.id} recordVersion={lead.recordVersion} status={lead.status} />
+      <LeadActionsPanel tenantSlug={tenantSlug} leadId={lead.id} recordVersion={lead.recordVersion} status={lead.status} companyName={lead.companyName} />
     </div>
   );
 }
