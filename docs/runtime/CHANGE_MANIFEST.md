@@ -3029,6 +3029,36 @@ Purely additive -- the new migration contains a single `comment on function` sta
 
 Self-closing. `CG-S6-PLT-035` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-036` (Prompt 139, Documentation and Handoff) -- dependency-`READY` (`138` `VERIFIED` this checkpoint, single exact task) -- requires fresh explicit user authorization before starting.
 
+### CHG-2026-071 — Platform Core Documentation and Handoff (Phase 1, Prompt 139)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-036` / `139_PLATFORM_CORE_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-139.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized this checkpoint under an explicit range -- "lanjut sampe promp 140" -- the first explicit multi-task range this session, distinct from every single-task "lanjut" before it |
+
+#### Outcome
+
+Mirrors Phase 0's own `PH0-101.md` precedent one phase up. Produced `docs/build-log/phase-01/PLATFORM_CORE_HANDOFF_PACKAGE.md` -- a new, self-contained Phase-2-facing artifact -- covering verified dependencies, preserved assets (32 migrations, all real application code, 32 db-test files/394 scenario groups, 14 ADRs), the exact first eligible Phase 2 prompt (`142`, explicitly contingent on `PLT-140`), known issues carried forward (2 `OPEN`, both non-blocking), verified environment commands, residual risks, and a forbidden-scope confirmation. One real staleness gap found and fixed during read-back: three `ADR-CAND-ARCH-*` "owning task" citations (`012`,`014`,`015`) in `docs/adr/README.md` §5.2 named stale Phase 1 references -- corrected with the exact evidence, no candidate status itself changed.
+
+#### Scope and files
+
+`docs/build-log/phase-01/PLATFORM_CORE_HANDOFF_PACKAGE.md` (new); `docs/build-log/phase-01/PLT-139.md` (new); `docs/adr/README.md` (3 citation corrections); standard runtime-ledger set. No runtime source/config/schema/data/deployment file touched, no Phase 2 implementation (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (unchanged); `pnpm run db:test` PASS -- 394 total scenario groups unchanged (documentation-only, zero migration); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` re-confirmed the identical disclosed sandbox condition, not a regression; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- documentation-only change, zero code/schema/behavior effect. `git revert` of this checkpoint's commit is safe and complete, with no data loss. Last known good `claude/lanjut-0kwbyt`@(`PLT-139` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-036` is `VERIFIED`. This checkpoint was authorized under the explicit "lanjut sampe promp 140" range. Next eligible prompt per the execution index: `CG-S6-PLT-037` (Prompt 140, Platform Core Closure Verification) -- dependency-`READY` (`139` `VERIFIED` this checkpoint) -- proceeding directly under the same range authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
