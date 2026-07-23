@@ -3059,6 +3059,36 @@ Purely additive -- documentation-only change, zero code/schema/behavior effect. 
 
 Self-closing. `CG-S6-PLT-036` is `VERIFIED`. This checkpoint was authorized under the explicit "lanjut sampe promp 140" range. Next eligible prompt per the execution index: `CG-S6-PLT-037` (Prompt 140, Platform Core Closure Verification) -- dependency-`READY` (`139` `VERIFIED` this checkpoint) -- proceeding directly under the same range authorization.
 
+### CHG-2026-072 — Platform Core Closure Verification (Phase 1, Prompt 140) — PHASE_1_VERIFIED
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-037` / `140_PLATFORM_CORE_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | DOCS (independent verification only, no code/schema change) |
+| Baseline evidence | `docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md` |
+| Final status | `COMPLETED` -- `PHASE_1_VERIFIED` set |
+| Authorization | Executed under the same explicit "lanjut sampe promp 140" range authorization as `CG-S6-PLT-036` -- the final task in that range |
+
+#### Outcome
+
+Independent verification only -- re-derived every conclusion from live, freshly re-run evidence, not carried forward from prior self-reports, mirroring `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md`'s own precedent one phase up. Fresh install + full 15-gate re-run, all green, including a real `next build` producing all 6 expected routes. Independently confirmed all 8 required-verification items from Prompt 140: task/ledger reconciliation with zero orphan; all 32 capabilities' implementation/evidence/docs/owner; tenant/entitlement/auth/RBAC/RLS/audit/portal controls across database/jobs/storage/search-export; all 7 versioned engines' determinism/access-control/auditability/rollback; files/audit-disclosure/API-keys/webhooks/import-export/jobs/flags/PostGIS controls; both portals' main/alternative/exception states and RPD-022's real structural disclosure (one non-blocking gap disclosed: responsive testing never attempted); clean rebuild/CI/docs, no critical blocker; zero Commercial-domain concept in application code. Zero bounded repair was needed -- the closing sequence's own prior checkpoints (`137`/`138`) had already found and closed Platform Core's one real finding.
+
+#### Scope and files
+
+`docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md` (new); standard runtime-ledger set (`00_PLATFORM_CORE_EXECUTION_INDEX.md` row `037` -> `VERIFIED`, `PHASE_1_VERIFIED` set). No `docs/architecture/**`/`docs/blueprint/**`/`docs/ai-agent-build-prompt-package/**` file written; no Commercial-domain file created; no CPD/RPD decision reopened.
+
+#### Tests and quality evidence
+
+Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS (2.4s); `pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS; `pnpm run db:test` PASS -- 394 total scenario groups across 32 migrations/32 db-test files; `next build` (Turbopack) PASS -- 6 routes; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` PASS; `pnpm run test:e2e`/`preflight` correctly fail-closed/disclosed for known, unchanged, non-blocking sandbox reasons.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- documentation-only change, zero code/schema/behavior effect. `git revert` of this checkpoint's commit is safe and complete, with no data loss (restores the `PLT-139`-verified pre-closure state). Last known good `claude/lanjut-0kwbyt`@(`PLT-140` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-037` is `VERIFIED`. **`PHASE_1_VERIFIED` is set this checkpoint.** This checkpoint was authorized under the explicit "lanjut sampe promp 140" range -- the range ends here. Next eligible prompt per the execution index: `CG-S7-COM-001` (Prompt 142, Commercial WBS and Runtime Kickoff) -- **requires fresh explicit user authorization**; closing Phase 1 does not itself authorize starting Phase 2.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
