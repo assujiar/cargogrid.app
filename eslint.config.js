@@ -86,6 +86,16 @@ const bannedPatterns = {
   },
 };
 
-const config = [...next, boundaryRules, bannedPatterns];
+// PLT-135, CG-S6-PLT-032: `app/`'s first real pages mean `.next/` (the build output
+// directory) now actually gets created locally/in CI -- `eslint-config-next`'s bundled
+// shareable config (consumed directly here as a flat-config array, not through the
+// deprecated `next lint` CLI wrapper that used to inject this ignore automatically)
+// does not exclude it on its own. Explicit and load-bearing, not decorative: without
+// this, `eslint .` lints Next's own minified production bundle as if it were source.
+const ignores = {
+  ignores: [".next/**", "playwright-report/**", "test-results/**"],
+};
+
+const config = [ignores, ...next, boundaryRules, bannedPatterns];
 
 export default config;

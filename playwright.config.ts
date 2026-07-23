@@ -23,6 +23,7 @@ export default defineConfig({
   use: {
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    baseURL: "http://127.0.0.1:3000",
   },
   projects: [
     {
@@ -30,4 +31,22 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
+  // PLT-135, CG-S6-PLT-032: the first real Next.js pages (`app/(public)/login`) land
+  // in this checkpoint — `webServer` starts the app for `e2e/tenant-admin-portal.spec.ts`
+  // (spec-scoped `test.skip` guards keep `e2e/smoke.spec.ts`'s own synthetic-only specs
+  // unaffected, they never navigate anywhere real). Placeholder Supabase env values are
+  // enough for the login page's own static render/accessibility check (no real
+  // sign-in is exercised — no live Supabase project exists yet, disclosed in
+  // docs/build-log/phase-01/PLT-135.md).
+  webServer: {
+    command: "pnpm exec next dev --port 3000",
+    url: "http://127.0.0.1:3000/login",
+    reuseExistingServer: !process.env["CI"],
+    timeout: 60_000,
+    env: {
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "e2e-placeholder-anon-key",
+      SUPABASE_SERVICE_ROLE_KEY: "e2e-placeholder-service-role-key",
+    },
+  },
 });

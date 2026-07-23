@@ -2849,6 +2849,246 @@ Additive with two narrow, disclosed, backward-compatible alterations to `PLT-131
 
 Self-closing. `CG-S6-PLT-029` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-030` (Prompt 133, Feature Flags) — requires fresh explicit user authorization before starting.
 
+### CHG-2026-065 — Feature Flags (Phase 1, Prompt 133)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-030` / `133_FEATURE_FLAGS_PLATFORM_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-133.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-132` closed `BLOCKED_ON_AUTHORIZATION` naming exactly `CG-S6-PLT-030` as the next task pending a fresh, unscoped "lanjut"; this checkpoint was opened by exactly that, in a fresh session on the harness-assigned branch `claude/lanjut-0kwbyt` |
+
+#### Outcome
+
+`supabase/migrations/20260721090000_create_feature_flags_platform.sql`: extends `PLT-121`'s Configuration Engine (`config_type`/`config_object`/`config_version`/`config_item`, reused directly, not forked) with a flag catalogue (`app.feature_flags`, optionally FK'd to `PLT-106`'s `app.entitlement_modules` for entitlement-aware evaluation) and the flag-specific mechanics the Configuration Engine does not already provide: `app.register_feature_flag()` (Supreme-only, idempotent, mints a dedicated `'feature:<flag_key>'` config_type -- the same pattern `PLT-124`'s status sets already established), `app.create_feature_flag_draft()`/`app.set_feature_flag_items()` (structural validation restricting scope to global/tenant only, rollout `[0,100]`, known environments, and -- the checkpoint's own considered design -- **`kill_switch`/`environments` are database-enforced global-only, non-overridable-at-tenant-scope dimensions**, so no tenant override can ever resurrect a platform-wide kill), `app.feature_flag_bucket()` (deterministic `md5`-based `[0,99]` bucketing), `app.evaluate_feature_flag()` (`SECURITY DEFINER`, the fixed 10-reason precedence order: unknown flag → entitlement → unconfigured → kill_switch → environment_gate → tenant deny/allow → cohort_mismatch → rollout_bucket → default -- structurally incapable of granting any permission/entitlement/RLS bypass), `app.kill_feature_flag()` (Supreme-only panic-button, preserves other published dimensions, reversible via `PLT-121`'s own unmodified `app.rollback_config_version()`), `app.debug_feature_flag()` (privileged, self-audited explain path). Publish/discard/rollback are not re-declared -- `PLT-121`'s own functions operate on a flag's draft `version_id` unchanged. `server/contracts+queries+mutations/feature-flag(s).ts` (new) -- `FeatureFlagCache` keyed by flag/tenant/environment/cohort-set with explicit `invalidate()`-driven "prompt invalidation" on every mutation (Prompt 133 §17). One real defect found and fixed in this checkpoint's own db-test authoring: a raw `jsonb` array passed to `PLT-116`'s `capture_audit_event()` broke `app.redact_audit_payload()`'s `jsonb_each()` call (it requires an object) -- fixed by wrapping in `jsonb_build_object('items', ...)`, the same shape every other Configuration-Engine-derived capability's own audit call already uses.
+
+#### Scope and files
+
+`supabase/migrations/20260721090000_create_feature_flags_platform.sql`; `scripts/db-tests/feature-flags.sql`; `server/contracts/feature-flag/feature-flag.ts`(+test); `server/mutations/feature-flags.ts`(+test); `server/queries/feature-flags.ts`(+test); `docs/build-log/phase-01/PLT-133.md`; standard runtime-ledger set. No domain feature behavior, authorization weakening, or tenant code fork introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 893/893 PASS (27 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..132`); `pnpm run git:check` PASS; `pnpm run db:test` PASS -- 365 total scenario groups across all 30 migrations + 29 db-test files (13 new), including cross-tenant isolation and the global-kill-beats-tenant-allow guarantee proven end-to-end through the evaluator.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one new migration, zero alteration to any existing table/column/function; every `PLT-121` Configuration Engine dependency is called unmodified. `git revert` of this checkpoint's commit is safe and complete; every other `config_type`'s consumer (`workflow`/`approval`/`status`/`numbering`/`form`/`notification`/`branding`/`terminology`/`document`) is unaffected. Last known good `claude/lanjut-0kwbyt`@(`PLT-133` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-030` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-031` (Prompt 134, PostGIS/Spatial Foundation) — dependency-`READY` (this checkpoint corrected the execution index's own stale `BLOCKED` row, whose five named dependencies were in fact already `VERIFIED`) — requires fresh explicit user authorization before starting.
+
+### CHG-2026-066 — PostGIS and Spatial Foundation (Phase 1, Prompt 134)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-031` / `134_POSTGIS_SPATIAL_FOUNDATION_PROMPT.md` |
+| Change type | CODE/SCHEMA/DOCS/ADR/CI/ENVIRONMENT |
+| Baseline evidence | `docs/build-log/phase-01/PLT-134.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-133` closed `BLOCKED_ON_AUTHORIZATION` naming exactly `CG-S6-PLT-031` as the next task pending a fresh, unscoped "lanjut"; this checkpoint was opened by exactly that, in the same session |
+
+#### Outcome
+
+`supabase/migrations/20260722090000_enable_postgis_spatial_foundation.sql`: enables PostGIS (RPD-015) and establishes the governed SRID/geometry-vs-geography/validation/indexing/query-limit conventions every later Operations-phase spatial column (`shipments`/`shipment_milestones`/`warehouses`, Phase 3) will build on. **No standalone spatial table is created, structurally** — `05_DATABASE_SCHEMA_WORKSTREAM.md` line 108 already resolved that a future `geography` column belongs directly on its owning-domain table, not a separate geo table; this checkpoint ships only the extension plus five reusable pure/`stable` functions (`app.postgis_max_query_radius_meters`, `app.validate_geography_point`, `app.geojson_point_to_geography`, `app.geography_to_geojson_point`, `app.bounded_st_dwithin`), with the one representative example (Prompt 134 §20 task 3) proven entirely inside `scripts/db-tests/postgis.sql` via a `pg_temp` table created and dropped within that script alone. **`geography`, not `geometry`, is the only endorsed spatial type** — this checkpoint's own direct testing against PostGIS 3.4.2 confirmed casting a non-4326-SRID geometry to `geography` structurally fails, making SRID 4326 (WGS84) impossible to drift from. **A real, concrete defect class found by this checkpoint's own testing, not hypothesized**: PostGIS's own `geometry -> geography` cast silently *coerces* (clamps) an out-of-range latitude/longitude into range rather than rejecting it (`ST_MakePoint(0,95)::geography` succeeds with a `NOTICE`, proven directly) — exactly the "silent axis swap" Prompt 134 §19/§23 forbid; `app.geojson_point_to_geography()` explicitly range-checks and rejects before ever constructing a geography value, the real, tested mitigation. **`ADR-0014` newly ratified** (`docs/adr/ADR-0014-postgis-spatial-conventions.md`), resolving a freshly-minted `ADR-CAND-ARCH-029` — PostGIS `3.4.x`, SRID `4326`, and a 500,000-meter (500km) bounded-radius query cap enforced by `app.bounded_st_dwithin()`, the one governed choke point for any future proximity query, proven with a real `EXPLAIN`-plan check that a GiST index on a `geography` column is actually used, not a sequential scan. Two real, disclosed **environment gaps** were found and fixed before any migration could be tested: this sandbox's Postgres 16 had no PostGIS package at all (fixed via `apt-get install postgresql-16-postgis-3`, confirmed with a direct `CREATE EXTENSION`/`PostGIS_Version()` smoke test first); CI's `db` job used a plain `postgres:17` service image with no PostGIS (fixed — `postgis/postgis:17-3.4`, `.github/workflows/ci.yml`). `server/contracts/spatial/spatial.ts` (new) mirrors the governed GeoJSON/radius conventions client-side (validation-only, fail-fast, the database remains authoritative).
+
+#### Scope and files
+
+`supabase/migrations/20260722090000_enable_postgis_spatial_foundation.sql`; `scripts/db-tests/postgis.sql`; `server/contracts/spatial/spatial.ts`(+test); `docs/adr/ADR-0014-postgis-spatial-conventions.md` (new); `docs/adr/README.md` (§5.2/§6 updated); `.github/workflows/ci.yml` (`db` job service image); `docs/build-log/phase-01/PLT-134.md`; standard runtime-ledger set. No TMS routing/geofence feature, live map provider integration, or broad coordinate backfill introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 904/904 PASS (11 net new); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..133`); `pnpm run git:check` PASS; `pnpm run db:test` PASS -- 373 total scenario groups across all 31 migrations + 30 db-test files (8 new), including a real `EXPLAIN`-plan proof that the GiST index is used for an `ST_DWithin` predicate and a tenant-scoped cross-tenant-isolation proof on the representative example table.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one extension enabled, five new pure functions, zero alteration to any existing table/column/function. `git revert` of this checkpoint's commit is safe and complete; `DROP EXTENSION postgis` (were it ever needed) has no dependent object anywhere in this repository, since no table column uses `geography` yet. The CI service-image change is also safely reversible (adds capability only). Last known good `claude/lanjut-0kwbyt`@(`PLT-134` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-031` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-032` (Prompt 135, Tenant Admin Portal) — `BLOCKED`, its own "required subset" of `106..134` not yet reconciled by its own kickoff (`00_PLATFORM_CORE_WBS.md` §6 Lane G) — requires fresh explicit user authorization, and that reconciliation, before starting.
+
+### CHG-2026-067 — Tenant Admin Portal (Phase 1, Prompt 135)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-032` / `135_TENANT_ADMIN_PORTAL_PROMPT.md` |
+| Change type | CODE/UI/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-135.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-134` closed naming `CG-S6-PLT-032` as the next row, but its dependency is a "required subset" of `106..134`, not an exact list — this checkpoint's own first work item was the kickoff reconciliation itself (`docs/build-log/phase-01/PLT-135.md` §2), then execution under a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+The first real UI in this repository. Kickoff reconciliation concluded the required dependency subset (`PLT-105..114`,`116`,`121`) is fully `VERIFIED`; `122..134` are not needed for this checkpoint's own bounded scope. Two real gaps found and reconciled before writing code: (1) `09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §14's own atomic backlog places "Design-system foundation" (`components/ui/` primitives) as a distinct slice never executed as its own capability -- resolved via the same folder-existence-timing convention already adopted for `server/contracts/` (this checkpoint builds only `components/ui/button.tsx`, the one primitive it consumes); (2) CargoGrid's own base brand color/logo/font is an explicitly open Product/Design decision (`docs/standards/DESIGN_SYSTEM.md` §3) -- resolved by building the shell entirely from the already-decided neutral/semantic token set, `primary`/`secondary` mapped to neutral as a disclosed placeholder, never an invented brand color. `app.resolve_access_context` (`PLT-108`) is confirmed `service_role`-only by direct inspection -- the guard (`lib/portal/tenant-admin-guard.ts`, pure, five-outcome discriminated union, fully unit-tested) uses an RLS-scoped client for session/tenant-slug lookup and a service-role client (server-only, never Client-Component-imported) for that one privileged RPC. Zero new migration/schema -- the one bounded child slice (read-only Users list, `server/queries/portal-users.ts`) reads `PLT-114`/`116`'s own `app.users_directory` view directly, paginated and clamped to `pageSize<=100`. `app/(public)/login` is the minimal real entry point (Server Action, `signInWithPassword`, redirect re-validated through `PLT-107`'s own `validateRedirectTarget`). One real defect found and fixed during this checkpoint's own gate-verification: `eslint.config.js` lacked an `ignores` for `.next/`/`playwright-report/`/`test-results/` (invisible until this checkpoint's own `next build` first created them), causing `eslint .` to lint Next's own minified bundle as source -- fixed, proven via a clean re-run after a fresh build. A real `next build` succeeded twice; a live `next dev` instance was probed with `curl`, proving the guard fails safe (redirect, never a 500) even against a fully unreachable Supabase backend.
+
+#### Scope and files
+
+`app/**` (new: `layout.tsx`, `page.tsx`, `globals.css`, `(public)/login/{page,actions}.tsx`, `(tenant)/[tenantSlug]/admin/{layout,page}.tsx`, `admin/users/{page,loading}.tsx`); `components/ui/button.tsx`; `lib/supabase/{server,service-role}.ts`; `lib/portal/{tenant-admin-guard,tenant-admin-guard-deps.server,resolve-tenant-admin-access.server}.ts`(+test); `server/queries/portal-users.ts`(+test); `e2e/tenant-admin-portal.spec.ts`; `postcss.config.mjs`, `next.config.ts`; `package.json`/`pnpm-lock.yaml` (tailwindcss, @tailwindcss/postcss, radix-ui); `eslint.config.js`/`tsconfig.json`/`next-env.d.ts`/`playwright.config.ts` (infra fixes/additions); `docs/build-log/phase-01/PLT-135.md`; standard runtime-ledger set. No Supreme/Customer portal, direct DB access, or all-admin-pages mega-scope introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (lint clean only after the `eslint.config.js` fix); `pnpm run test` 918/918 PASS (14 net new); a real `next build` PASS (run twice); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run db:test` PASS -- unchanged at 373 scenario groups (zero new migrations); `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..134`) -- the new spec's `webServer` wiring was independently confirmed reaching the real dev server via direct `curl` probing before the run failed only at the known missing-browser-binary step; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- zero alteration to any existing migration/table/function; `eslint.config.js`/`tsconfig.json`/`next-env.d.ts` changes are additive-only (new `ignores`, Next.js's own standard App Router additions). `git revert` of this checkpoint's commit is safe and complete; every existing test/gate re-runs clean (proven directly, not merely asserted). Last known good `claude/lanjut-0kwbyt`@(`PLT-135` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-032` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-033` (Prompt 136, Supreme Admin Portal) -- also carries a "required subset" dependency (`105..135`) needing its own kickoff reconciliation (the same work `docs/build-log/phase-01/PLT-135.md` §2 performed for `135`) before it can be confirmed dependency-ready -- requires fresh explicit user authorization before starting.
+
+### CHG-2026-068 — Supreme Admin Portal (Phase 1, Prompt 136)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-033` / `136_SUPREME_ADMIN_PORTAL_PROMPT.md` |
+| Change type | CODE/UI/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-136.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-135` closed naming `CG-S6-PLT-033` as the next row, itself carrying the identical "required subset" pattern -- this checkpoint's own first work item was the kickoff reconciliation (`docs/build-log/phase-01/PLT-136.md` §2), then execution under a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+Kickoff reconciliation concluded the required dependency subset (`PLT-105`,`107`,`108`,`113`) is fully `VERIFIED` -- strictly less than the Tenant Admin portal needed, since a global tenant list reads `app.tenants` directly with no RBAC/audit/config chain behind it. The guard (`lib/portal/supreme-admin-guard.ts`, pure, unit-tested) is simpler than the Tenant Admin portal's own: Supreme Admin membership is tenant-independent, so `app.resolve_access_context(auth_user_id, null)` resolves it directly with no tenant-slug/RLS lookup step. Confirmed by direct inspection that `app.has_active_tenant_membership()` returns true for a Supreme Admin on every tenant row -- the global tenant list (`server/queries/supreme-tenants.ts`) therefore reads `app.tenants` through the RLS-scoped client directly, never service-role; the service-role client is used exactly once, for the guard's own privileged `resolve_access_context` call. Bounded to shell + one read-only child slice (global tenant list) -- package/subscription, platform config, support-grant administration, audit browsing, and system health remain separate, later slices per `09_UX_DESIGN_SYSTEM_WORKSTREAM.md`'s own route map; no re-authentication/impact-preview/confirmation machinery was built, since this checkpoint ships zero mutating action to gate. RPD-022 (Supreme Admin's absolute-CRUD exception) is disclosed structurally -- a persistent `Banner` (new `components/ui/banner.tsx` primitive) renders on every page of this portal. `app/(public)/login` is extended, not forked: the organization field is now optional, redirecting to `/supreme` when blank. Zero new migration/schema. A real `next build` succeeded; a live `next dev` instance was probed with `curl`, proving both `/supreme` and `/supreme/tenants` fail safe (redirect, never a 500) even against a completely unreachable Supabase backend.
+
+#### Scope and files
+
+`app/(supreme)/supreme/{layout,page}.tsx`, `app/(supreme)/supreme/tenants/{page,loading}.tsx`; `components/ui/banner.tsx`; `lib/portal/{supreme-admin-guard,supreme-admin-guard-deps.server,resolve-supreme-admin-access.server}.ts`(+test); `server/queries/supreme-tenants.ts`(+test); `e2e/supreme-admin-portal.spec.ts`; `app/(public)/login/{actions,page}.tsx` (organization field made optional); `docs/build-log/phase-01/PLT-136.md`; standard runtime-ledger set. No direct client service-role/database access, unreviewed destructive bulk action, or domain feature admin introduced (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (11 net new); a real `next build` PASS; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run db:test` PASS -- unchanged at 373 scenario groups (zero new migrations); `pnpm run test:e2e` `NOT_RUN` in this sandbox (same disclosed Playwright browser-binary revision skew as `PLT-117..135`) -- the new spec independently confirmed reaching the real dev server before failing only at the known missing-browser-binary step; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- zero alteration to any existing migration/table/function; the `app/(public)/login` change is backward-compatible (an existing tenant-slug submission behaves identically; only a blank submission's redirect target is new). `git revert` of this checkpoint's commit is safe and complete; every existing test/gate re-runs clean (proven directly). Last known good `claude/lanjut-0kwbyt`@(`PLT-136` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-033` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-034` (Prompt 137, Integrated Platform Core Verification) -- dependency-`READY` for the first time this checkpoint (`105..136` are now all `VERIFIED`) -- requires fresh explicit user authorization before starting.
+
+### CHG-2026-069 — Integrated Platform Core Verification (Phase 1, Prompt 137)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-034` / `137_PLATFORM_CORE_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | TEST/DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-137.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-136` closed naming `CG-S6-PLT-034` as the next row -- unlike every portal checkpoint since `135`, its dependency (`PLT-105..136`) is an **exact range**, not a "required subset," so no kickoff reconciliation was needed, only a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+The phase-level equivalent of Phase 0's `PH0-99.md` verification-only, default-no-repair checkpoint (`00_PLATFORM_CORE_WBS.md` line 121), scaled from 6 tooling foundations to 32 shipped Platform Core capabilities plus two portals. Composed 12 of the 32 capabilities (Tenant/Entitlement/Auth Identity/Four-Layer Access Context/Org Hierarchy/User Lifecycle/RBAC/RLS/Audit Trail/Config Engine/Workflow Engine/Background Job Framework/Feature Flags/PostGIS) through one continuous two-tenant golden path in a new `scripts/db-tests/platform-core-integrated-verification.sql` (14 scenario groups) -- a disclosed, bounded scope decision mirroring `PH0-99`'s own precedent of representative composition rather than exhaustive re-implementation of all 32 capabilities' own already-proven individual coverage; the remaining 20 capabilities' integration confidence instead rests on the full `db:test` run (389 scenario groups across all 31 files executing together against one disposable, sequentially-migrated database) plus a requirement/WBS/ADR/docs traceability audit finding zero orphan. Real composed proofs found: workflow idempotency is tenant-scoped, not global; feature-flag evaluation correctly composes with real entitlement (a 100%-rollout flag still denies `module_not_entitled` for an unentitled tenant); the `PLT-116` `app.users_directory` tenant-isolation fix (a real historical cross-tenant PII exposure) still holds as a regression guard; a combined RLS sweep across 8 tables spanning both pre-`PLT-113` and post-`PLT-113` capabilities found zero foreign-tenant row visible. One real, fully disclosed, zero-production-impact finding: `app.resolve_access_context`'s own migration comment describes only the `p_tenant_id IS NULL` branch -- an explicit-tenant-id call for a Supreme Admin with no per-tenant identity link fails closed, not silently, and the one real caller (`PLT-136`'s guard) never triggers this path, so no fix was made per this checkpoint's own bounded no-repair mandate. Zero Critical/High/Medium finding -- nothing blocks `PLT-138` Hardening.
+
+#### Scope and files
+
+`scripts/db-tests/platform-core-integrated-verification.sql` (new, 14 scenario groups); `docs/build-log/phase-01/PLT-137.md` (new); standard runtime-ledger set. No new feature, no broad refactor, no production/shared-service/data mutation, no bounded repair was needed (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+A fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS (4.0s, clean/deterministic/reproducible); `pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (unchanged -- this checkpoint's own new evidence is entirely SQL-level); `pnpm run db:test` PASS -- 389 total scenario groups across 31 migrations/31 db-test files (16 net new, up from 373/30); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` re-confirmed the identical disclosed sandbox `chrome-headless-shell` executable-not-found condition present since `PLT-117` (re-read directly, not assumed unchanged), not a regression; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- zero alteration to any existing migration/table/function/route; test-only and documentation changes. `git revert` of this checkpoint's commit is safe and complete, with no data loss. Last known good `claude/lanjut-0kwbyt`@(`PLT-137` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-034` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-035` (Prompt 138, Tenant/Security/Platform Hardening) -- dependency-`READY` (`137` `VERIFIED` this checkpoint), its own remediation scope narrowed by this checkpoint's own narrow failure matrix (one Low, zero-production-impact finding) -- requires fresh explicit user authorization before starting.
+
+### CHG-2026-070 — Tenant/Security/Platform Hardening (Phase 1, Prompt 138)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-035` / `138_PLATFORM_CORE_TENANT_SECURITY_HARDENING_PROMPT.md` |
+| Change type | DB/DOCS/TEST |
+| Baseline evidence | `docs/build-log/phase-01/PLT-138.md` |
+| Final status | `COMPLETED` |
+| Authorization | `PLT-137` closed naming `CG-S6-PLT-035` as the next row -- its dependency is the single exact task `PLT-137` (`VERIFIED`), no kickoff reconciliation needed -- executed under a fresh, separate, unscoped "lanjut" in the same session |
+
+#### Outcome
+
+Closes the single finding `PLT-137`'s own failure matrix recorded (`PLT-137.md` §5) -- no Critical/High/Medium finding existed, so this checkpoint's scope is genuinely narrow. Root-cause repair: `app.resolve_access_context` had never carried a `comment on function` at all -- new migration `20260722130000_harden_resolve_access_context_documentation.sql` adds a purely additive `comment on function` describing both branches accurately, including the exact boundary `PLT-137` found (a global-only Supreme Admin has no shortcut in the tenant-qualified branch). Not an edit to the original migration -- the immutable-migrations convention (already followed at `PLT-116`'s `app.users_directory` fix) is preserved; `COMMENT ON FUNCTION` needs no `REVOKE`/`GRANT` and no function-body rebuild. New `scripts/db-tests/tenant-security-hardening.sql` (5 scenario groups) is this checkpoint's own independent regression evidence: re-proves the underlying fail-closed behavior is unchanged, proves the comment is now non-null and contains the exact finding-closing phrase, and confirms zero regression to tenant_admin resolution or RLS. `PLT-137` re-verified to re-pass in full.
+
+#### Scope and files
+
+`supabase/migrations/20260722130000_harden_resolve_access_context_documentation.sql` (new, comment-only); `scripts/db-tests/tenant-security-hardening.sql` (new, 5 scenario groups); `docs/build-log/phase-01/PLT-138.md` (new); standard runtime-ledger set. No new domain capability, no unrelated debt/refactor, no production mutation, no gate suppression (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (unchanged -- no TypeScript file touched); `pnpm run db:test` PASS -- 394 total scenario groups across 32 migrations/32 db-test files (5 net new, up from 389/31; every one of the 389 pre-existing scenario groups re-ran unmodified and passed); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run git:check` PASS. `test:e2e`/`next build` not applicable -- no UI/API file was touched.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- the new migration contains a single `comment on function` statement with no privilege, data, or behavioral effect. `git revert` of this checkpoint's commit is safe and complete, restoring the function to its prior (correct-but-undocumented) state with no data loss. Last known good `claude/lanjut-0kwbyt`@(`PLT-138` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-035` is `VERIFIED`. This checkpoint was authorized by a single, unscoped "lanjut" (one task, not a range). Next eligible prompt per the execution index: `CG-S6-PLT-036` (Prompt 139, Documentation and Handoff) -- dependency-`READY` (`138` `VERIFIED` this checkpoint, single exact task) -- requires fresh explicit user authorization before starting.
+
+### CHG-2026-071 — Platform Core Documentation and Handoff (Phase 1, Prompt 139)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-036` / `139_PLATFORM_CORE_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | DOCS |
+| Baseline evidence | `docs/build-log/phase-01/PLT-139.md` |
+| Final status | `COMPLETED` |
+| Authorization | User authorized this checkpoint under an explicit range -- "lanjut sampe promp 140" -- the first explicit multi-task range this session, distinct from every single-task "lanjut" before it |
+
+#### Outcome
+
+Mirrors Phase 0's own `PH0-101.md` precedent one phase up. Produced `docs/build-log/phase-01/PLATFORM_CORE_HANDOFF_PACKAGE.md` -- a new, self-contained Phase-2-facing artifact -- covering verified dependencies, preserved assets (32 migrations, all real application code, 32 db-test files/394 scenario groups, 14 ADRs), the exact first eligible Phase 2 prompt (`142`, explicitly contingent on `PLT-140`), known issues carried forward (2 `OPEN`, both non-blocking), verified environment commands, residual risks, and a forbidden-scope confirmation. One real staleness gap found and fixed during read-back: three `ADR-CAND-ARCH-*` "owning task" citations (`012`,`014`,`015`) in `docs/adr/README.md` §5.2 named stale Phase 1 references -- corrected with the exact evidence, no candidate status itself changed.
+
+#### Scope and files
+
+`docs/build-log/phase-01/PLATFORM_CORE_HANDOFF_PACKAGE.md` (new); `docs/build-log/phase-01/PLT-139.md` (new); `docs/adr/README.md` (3 citation corrections); standard runtime-ledger set. No runtime source/config/schema/data/deployment file touched, no Phase 2 implementation (§12 forbidden-scope compliance).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS (unchanged); `pnpm run db:test` PASS -- 394 total scenario groups unchanged (documentation-only, zero migration); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS; `pnpm run test:e2e` re-confirmed the identical disclosed sandbox condition, not a regression; `pnpm run git:check` PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- documentation-only change, zero code/schema/behavior effect. `git revert` of this checkpoint's commit is safe and complete, with no data loss. Last known good `claude/lanjut-0kwbyt`@(`PLT-139` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-036` is `VERIFIED`. This checkpoint was authorized under the explicit "lanjut sampe promp 140" range. Next eligible prompt per the execution index: `CG-S6-PLT-037` (Prompt 140, Platform Core Closure Verification) -- dependency-`READY` (`139` `VERIFIED` this checkpoint) -- proceeding directly under the same range authorization.
+
+### CHG-2026-072 — Platform Core Closure Verification (Phase 1, Prompt 140) — PHASE_1_VERIFIED
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S6-PLT-037` / `140_PLATFORM_CORE_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | DOCS (independent verification only, no code/schema change) |
+| Baseline evidence | `docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md` |
+| Final status | `COMPLETED` -- `PHASE_1_VERIFIED` set |
+| Authorization | Executed under the same explicit "lanjut sampe promp 140" range authorization as `CG-S6-PLT-036` -- the final task in that range |
+
+#### Outcome
+
+Independent verification only -- re-derived every conclusion from live, freshly re-run evidence, not carried forward from prior self-reports, mirroring `docs/build-log/phase-00/PHASE0_CLOSURE_REPORT.md`'s own precedent one phase up. Fresh install + full 15-gate re-run, all green, including a real `next build` producing all 6 expected routes. Independently confirmed all 8 required-verification items from Prompt 140: task/ledger reconciliation with zero orphan; all 32 capabilities' implementation/evidence/docs/owner; tenant/entitlement/auth/RBAC/RLS/audit/portal controls across database/jobs/storage/search-export; all 7 versioned engines' determinism/access-control/auditability/rollback; files/audit-disclosure/API-keys/webhooks/import-export/jobs/flags/PostGIS controls; both portals' main/alternative/exception states and RPD-022's real structural disclosure (one non-blocking gap disclosed: responsive testing never attempted); clean rebuild/CI/docs, no critical blocker; zero Commercial-domain concept in application code. Zero bounded repair was needed -- the closing sequence's own prior checkpoints (`137`/`138`) had already found and closed Platform Core's one real finding.
+
+#### Scope and files
+
+`docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md` (new); standard runtime-ledger set (`00_PLATFORM_CORE_EXECUTION_INDEX.md` row `037` -> `VERIFIED`, `PHASE_1_VERIFIED` set). No `docs/architecture/**`/`docs/blueprint/**`/`docs/ai-agent-build-prompt-package/**` file written; no Commercial-domain file created; no CPD/RPD decision reopened.
+
+#### Tests and quality evidence
+
+Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS (2.4s); `pnpm run typecheck`/`lint` PASS; `pnpm run test` 929/929 PASS; `pnpm run db:test` PASS -- 394 total scenario groups across 32 migrations/32 db-test files; `next build` (Turbopack) PASS -- 6 routes; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` PASS; `pnpm run test:e2e`/`preflight` correctly fail-closed/disclosed for known, unchanged, non-blocking sandbox reasons.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- documentation-only change, zero code/schema/behavior effect. `git revert` of this checkpoint's commit is safe and complete, with no data loss (restores the `PLT-139`-verified pre-closure state). Last known good `claude/lanjut-0kwbyt`@(`PLT-140` commit).
+
+#### Approval and closure
+
+Self-closing. `CG-S6-PLT-037` is `VERIFIED`. **`PHASE_1_VERIFIED` is set this checkpoint.** This checkpoint was authorized under the explicit "lanjut sampe promp 140" range -- the range ends here. Next eligible prompt per the execution index: `CG-S7-COM-001` (Prompt 142, Commercial WBS and Runtime Kickoff) -- **requires fresh explicit user authorization**; closing Phase 1 does not itself authorize starting Phase 2.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

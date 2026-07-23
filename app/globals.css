@@ -1,0 +1,70 @@
+/**
+ * Design-system token source (PLT-135, CG-S6-PLT-032, ADR-0005/ADR-0006,
+ * docs/standards/DESIGN_SYSTEM.md). Tailwind v4's CSS-first `@theme` is the single
+ * runtime token representation -- no separate JS token file exists to drift against.
+ *
+ * `--color-primary`/`--color-secondary` are an EXPLICITLY DISCLOSED PLACEHOLDER, not a
+ * real CargoGrid brand decision: docs/standards/DESIGN_SYSTEM.md §3 records that no hex
+ * color, logo, or typography family for CargoGrid's own default brand identity has been
+ * decided by Product/Design yet -- inventing one here would be exactly the kind of
+ * unauthorized product decision this build's governance has consistently refused to
+ * make. Both are mapped to the already-decided neutral scale (never a fabricated "brand
+ * blue") so the portal shell is fully functional and accessible today; only these two
+ * variable values need to change once Product/Design resolves §3 -- nothing structural.
+ * Every other token below (`neutral`/`success`/`warning`/`danger`/`info`, spacing,
+ * radius, motion) reproduces docs/standards/DESIGN_SYSTEM.md §2/§2.1's own decided
+ * values verbatim, not re-derived here.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* Neutral scale -- docs/standards/DESIGN_SYSTEM.md §2.1, the standard perceptually-even gray scale already vetted there. */
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+
+  /* Semantic roles -- docs/standards/DESIGN_SYSTEM.md §2.1, each proposed value already meets 4.5:1 against white. */
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-danger: #b91c1c;
+  --color-info: #1d4ed8;
+
+  /* PLACEHOLDER -- see this file's own header. Not a brand decision. */
+  --color-primary: var(--color-neutral-900);
+  --color-secondary: var(--color-neutral-600);
+
+  /* Typography -- docs/standards/DESIGN_SYSTEM.md §2's modular scale; family intentionally left at the system stack (also open, §3) rather than an invented brand face. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+
+  /* Radius -- docs/standards/DESIGN_SYSTEM.md §2, decided. */
+  --radius-none: 0px;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 9999px;
+
+  /* Motion -- docs/standards/DESIGN_SYSTEM.md §2, decided. prefers-reduced-motion is respected at the component level, not overridden here. */
+  --default-transition-duration: 200ms;
+}
+
+body {
+  background-color: var(--color-neutral-50);
+  color: var(--color-neutral-900);
+  font-family: var(--font-sans);
+}
