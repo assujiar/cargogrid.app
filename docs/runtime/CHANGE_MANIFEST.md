@@ -3089,6 +3089,66 @@ Purely additive -- documentation-only change, zero code/schema/behavior effect. 
 
 Self-closing. `CG-S6-PLT-037` is `VERIFIED`. **`PHASE_1_VERIFIED` is set this checkpoint.** This checkpoint was authorized under the explicit "lanjut sampe promp 140" range -- the range ends here. Next eligible prompt per the execution index: `CG-S7-COM-001` (Prompt 142, Commercial WBS and Runtime Kickoff) -- **requires fresh explicit user authorization**; closing Phase 1 does not itself authorize starting Phase 2.
 
+### CHG-2026-073 — Commercial WBS and Runtime Kickoff (Phase 2, Prompt 142) — PHASE_2_IN_PROGRESS
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-001` / `142_COMMERCIAL_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Change type | DOCS + one ADR (kickoff/planning only, zero Commercial-domain code/schema change) |
+| Baseline evidence | `docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md` (`PHASE_1_VERIFIED`) |
+| Final status | `COMPLETED` -- `PHASE_2_IN_PROGRESS` set |
+| Authorization | A fresh, explicit, open-ended "lanjut" confirmed via `AskUserQuestion` (option: "Start Phase 2, open-ended") |
+
+#### Outcome
+
+Instantiated the Phase 2 hierarchy/dependency graph/execution index (`docs/build-log/phase-02/00_COMMERCIAL_WBS.md`, `COMMERCIAL_EXECUTION_INDEX.md`) for all 19 Commercial capability prompts (`143`-`161`) plus verification/hardening/documentation/closure (`162`-`165`), reproducing `141_COMMERCIAL_README.md` §4's dependency table by citation. Ratified `ADR-0015` (`ADR-CAND-ARCH-030`, newly minted), formalizing `05_DATABASE_SCHEMA_WORKSTREAM.md` line 93's already-`VERIFIED` Step 3 resolution: Platform Core's existing `app.master_records`/`vendor_rate` registration (`PLT-120`) is confirmed the single source of truth for the canonical vendor/service/rate lookup; Commercial's `149` extends it with a child detail table/read view rather than a competing master; the existing tenant-admin/support-grant write authority already covers the interim period before Procurement (Phase 6) ships. Pre-flight collision check: zero open PRs, every one of 9 remote branches fully merged into `main`.
+
+#### Scope and files
+
+New: `docs/build-log/phase-02/00_COMMERCIAL_WBS.md`, `COMMERCIAL_EXECUTION_INDEX.md`, `docs/adr/ADR-0015-commercial-vendor-service-rate-lookup-ownership.md`. Modified: `docs/adr/README.md` (§5.2/§6, adds `ADR-CAND-ARCH-030`/`ADR-0015`), `docs/runtime/HANDOFF.md`/`CARGOGRID_BUILD_STATUS.md`/`TASK_LEDGER.md` (this checkpoint). No Commercial-domain migration, route, or UI file created -- re-confirmed by direct `git ls-files`/grep.
+
+#### Tests and quality evidence
+
+`pnpm run docs:check`/`security:check`/`standards:check`/`data-classification:check`/`threat-model:check`/`git:check`/`git:check-paths` PASS. No code touched -- `typecheck`/`lint`/`test`/`db:test`/`next build` not applicable to this checkpoint's own scope (unchanged from Platform Core's last green baseline).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- documentation/ADR-only, zero code/schema/behavior effect. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-001` is `VERIFIED`. **`PHASE_2_IN_PROGRESS` is set this checkpoint.** Next eligible prompt: `CG-S7-COM-002` (Prompt 143, Lead Management) -- dependency-`READY`, covered by this checkpoint's own open-ended authorization.
+
+### CHG-2026-074 — Lead Management (Phase 2, Prompt 143)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-002` / `143_LEAD_MANAGEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI (first Commercial-domain and first business-domain capability in this repository) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `002` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Canonical tenant-aware lead lifecycle across manual/import/api/referral/campaign/integration sources: idempotent capture (`app.capture_lead`, unique on `(tenant_id, source, external_reference)`), normalized duplicate-candidate search (`app.find_duplicate_leads`, tenant-scoped, fails closed on missing membership), deterministic capped-at-100 explainable scoring (`app.compute_lead_score`, rule-based only -- no AI/ML call, per the Phase 9 AI-boundary rule), optimistic-concurrency-checked assignment (`app.assign_lead`), qualify/disqualify transitions (`app.qualify_lead`/`app.disqualify_lead`, mandatory non-empty disqualify reason both at the application layer and as a DB `CHECK` constraint), and lineage-preserving merge (`app.merge_leads`, cross-tenant merge structurally denied, duplicate row never deleted). **Record-scope (own/team/department/branch/company) composes two already-`VERIFIED` Platform Core primitives that had never been exercised against a real table before this checkpoint**: `app.can_access_record` (`PLT-114`) and `app.org_unit_ancestor_ids` (`PLT-109`) -- a lead's own org unit plus every ancestor is passed as the "shared scope" set, so whoever sits at the tenant's root org unit already sees every lead beneath it, with zero new authority mechanism invented. A narrow `SECURITY DEFINER` wrapper (`app.lead_record_scope_org_unit_ids`) avoids widening `org_unit_ancestor_ids`' own `service_role`-only grant, the same "answer exactly one bounded question" pattern `PLT-114`'s `has_view_personal_data` already established. Full service layer (Zod contracts, typed query/mutation wrappers) plus a bounded first UI slice (Lead List with a capture form, Lead Detail with qualify/disqualify actions) under the first business-domain route (`app/(tenant)/[tenantSlug]/commercial/`) -- assign/merge remain real, tested mutation-layer capabilities without a dedicated button in this bounded slice, the same "core management, not an all-actions mega task" scoping `PLT-135`'s own Users list precedent used.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723090000_create_commercial_lead_management.sql` (1 migration -- table, 4 pure/helper functions, 7 mutation functions, RLS policy, grants, plus one additive `app.permissions` seed row for `COM:Assign`); `scripts/db-tests/commercial-lead-management.sql` (9 scenario groups); `server/contracts/lead/lead.ts`(`.test.ts`); `server/queries/lead.ts`(`.test.ts`); `server/mutations/lead.ts`(`.test.ts`); `lib/portal/commercial-guard.ts`(`.test.ts`), `commercial-guard-deps.server.ts`, `resolve-commercial-access.server.ts`; `app/(tenant)/[tenantSlug]/commercial/layout.tsx`, `leads/{page,loading,actions,capture-lead-form}.tsx`, `leads/[leadId]/{page,loading,lead-actions-panel}.tsx`. Modified: `scripts/docs/check-doc-links.ts` (added this phase's own kickoff-pair forward-reference exclusion, the same class already applied to Phase 0/Phase 1). 14 new application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors; 5 pre-existing `no-html-link-for-pages` warnings, unrelated to this checkpoint, unchanged); `pnpm run test` 960/960 PASS (31 net new -- 21 contract/query/mutation unit tests plus 6 commercial-guard tests plus pre-existing suite unchanged); `pnpm run db:test` PASS -- 33 migrations/33 db-test files, all green including the new 9-scenario-group `commercial-lead-management.sql` (idempotent capture, RBAC-denial, deterministic scoring, tenant-isolated duplicate search, four-level record-scope read composition, optimistic-concurrency/RBAC/scope-checked assignment, qualify/disqualify transition validity and mandatory reason, lineage-preserving merge with cross-tenant denial, and a full audit-trail check across every mutation); `next build` (Turbopack) PASS -- 9 routes (up from 6), including the two new Commercial routes; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- one new migration (new table + functions + one permissions-seed row), zero alteration to any Platform Core migration/table/function. `git revert` of this checkpoint's commit is safe and complete; `DROP TABLE app.leads` (were it ever needed) has no dependent object anywhere in the repository, since no downstream Commercial capability has run yet.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-002` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-003` (Prompt 144, Prospect Lifecycle) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
