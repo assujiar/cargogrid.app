@@ -6,7 +6,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FindDuplicateContactsInputSchema, parseContact, parseActivity, type FindDuplicateContactsInput, type Contact, type Activity } from "../contracts/contact/contact.ts";
+import { FindDuplicateContactsInputSchema, parseContact, parseActivity, type FindDuplicateContactsInput, type Contact, type Activity, type RelatedType } from "../contracts/contact/contact.ts";
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
@@ -89,10 +89,10 @@ export async function getContactById(client: Pick<SupabaseClient, "from">, conta
   return parseContact(data as Record<string, unknown>);
 }
 
-/** The unified activity timeline for one related record (lead or prospect), most recent first -- RLS (activities_select_scoped) is the real scope gate. */
+/** The unified activity timeline for one related record (lead, prospect, or -- since COM-147 -- opportunity), most recent first -- RLS (activities_select_scoped) is the real scope gate. */
 export async function listActivitiesForRecord(
   client: Pick<SupabaseClient, "from">,
-  relatedType: "lead" | "prospect",
+  relatedType: RelatedType,
   relatedId: string,
 ): Promise<Activity[]> {
   const { data, error } = await client

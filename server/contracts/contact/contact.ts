@@ -2,11 +2,16 @@
  * Contact and Activity Management contract (COM-145, CG-S7-COM-004). Mirrors
  * supabase/migrations/20260723150000_create_commercial_contact_activity_management.sql's
  * app.contacts/app.contact_links/app.activities shape and their RPCs.
+ *
+ * RELATED_TYPES extended by COM-147 to include 'opportunity' (matching the DB's own
+ * contact_links_related_type_check/activities_related_type_check CHECK constraints,
+ * extended in supabase/migrations/20260723210000_create_commercial_opportunity_management.sql)
+ * -- app.opportunities is now a valid polymorphic target for contact links and activities.
  */
 
 import { z } from "zod";
 
-export const RELATED_TYPES = ["lead", "prospect"] as const;
+export const RELATED_TYPES = ["lead", "prospect", "opportunity"] as const;
 export const RelatedTypeSchema = z.enum(RELATED_TYPES);
 export type RelatedType = z.infer<typeof RelatedTypeSchema>;
 

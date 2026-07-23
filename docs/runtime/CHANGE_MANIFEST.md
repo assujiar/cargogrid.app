@@ -3241,6 +3241,40 @@ Additive for every new object. The `app.can_access_record` fix only changes beha
 
 Self-closing. `CG-S7-COM-005` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-006` (Prompt 147, Opportunity Management) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-078 — Opportunity Management (Phase 2, Prompt 147)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-006` / `147_OPPORTUNITY_MANAGEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI + FIELD-MASKING (first consumer of a seeded protected permission) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `006` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Canonical opportunity lifecycle (`app.opportunities`) over a governed stage/probability machine (`qualifying`→`requirements_gathering`→`ready_for_costing`→`won`/`lost`, deterministic per-stage probability defaults), referencing exactly one prospect (the canonical Account entity does not exist until `COM-155`) plus a bounded `requirements` jsonb snapshot (no Operations service-catalogue master exists yet). `app.opportunity_stage_history` gives an explicit, queryable stage timeline alongside `app.audit_logs`. `app.create_opportunity`/`app.update_opportunity` (blocked once closed)/`app.transition_opportunity_stage` (`COM:Approve`-gated closure with mandatory reason)/`app.clone_opportunity` (always new, never idempotent)/`app.get_opportunity_costing_readiness` (fixed deterministic data-completeness check).
+
+**First Commercial consumer of the seeded, protected `COM:View selling price` permission**: new `app.has_view_selling_price` field-masking gate (mirrors `PLT-114`'s `app.has_view_personal_data`) and `app.opportunities_directory`, a field-masked view over `value_amount`/`value_currency`/`probability` -- `authenticated` has no direct column grant on those three columns on `app.opportunities` itself, proven via a real Postgres permission-denied `db:test` assertion. Extended the shared polymorphic resolver `app.resolve_commercial_record_ref` (`COM-145`) and the `contact_links`/`activities` CHECK constraints to accept `'opportunity'`.
+
+**Two real defects found and fixed:** (1) a first `app.opportunities_directory` draft used `security_invoker=true`, which failed with a genuine `permission denied for table opportunities` -- Postgres checks column privileges against the invoker for every referenced column even inside a masking `CASE`; fixed by adopting `PLT-114`'s own proven `security_invoker=false` technique, with this view additionally adding its own explicit `app.can_access_record(...)` row filter (a deliberate strengthening `PLT-114`'s own `app.users_directory` lacks). (2) Extending `RelatedType` to include `'opportunity'` surfaced a hardcoded lead/prospect route-segment ternary in `_shared/activity-actions.ts`'s four Server Actions that would have silently under-revalidated the new Opportunity Detail page; fixed with an exhaustive `relatedTypeRouteSegment()` switch. Full detail: `docs/build-log/phase-02/COM-147.md` §3.3/§3.7/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723210000_create_commercial_opportunity_management.sql` (1 migration -- 2 tables, 1 view, ~7 functions, plus an additive extension of `app.resolve_commercial_record_ref` and two `COM-145` CHECK constraints); `scripts/db-tests/commercial-opportunity-management.sql` (11 scenario groups); `server/contracts/opportunity/opportunity.ts`(`.test.ts`); `server/queries/opportunity.ts`(`.test.ts`); `server/mutations/opportunity.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/opportunities/{page,loading,actions,create-opportunity-form}.tsx`, `opportunities/[opportunityId]/{page,loading,opportunity-actions-panel}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Opportunities nav link); `server/contracts/contact/contact.ts` (`RelatedType` extended); `server/queries/contact.ts` (`listActivitiesForRecord` signature widened); `app/(tenant)/[tenantSlug]/commercial/_shared/activity-actions.ts` (route-segment fix, defect 2 above). 22 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given two related tables plus one view plus a cross-cutting resolver/RelatedType extension).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1049/1049 PASS (43 net new); `pnpm run db:test` PASS -- 37 migrations/37 db-test files, all green including the new 11-scenario-group `commercial-opportunity-management.sql` and every pre-existing test exercising `app.resolve_commercial_record_ref`/`app.contact_links`/`app.activities`; `next build` (Turbopack) PASS -- 17 routes (up from 15); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object. The `app.resolve_commercial_record_ref` extension and the two widened CHECK constraints only add a new accepted value, never remove one -- backward-compatible for every existing caller. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-006` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-007` (Prompt 148, RFQ and Costing Request) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -16,6 +16,18 @@ export interface ActivityFormState {
   readonly error: string | null;
 }
 
+/** Maps a polymorphic related_type to its own route segment (COM-147 added 'opportunity' -- a bare lead/prospect ternary would silently under-revalidate the Opportunity Detail page). */
+function relatedTypeRouteSegment(relatedType: RelatedType): string {
+  switch (relatedType) {
+    case "lead":
+      return "leads";
+    case "prospect":
+      return "prospects";
+    case "opportunity":
+      return "opportunities";
+  }
+}
+
 export async function logActivityAction(
   tenantSlug: string,
   relatedType: RelatedType,
@@ -53,7 +65,7 @@ export async function logActivityAction(
     throw error;
   }
 
-  revalidatePath(`/${tenantSlug}/commercial/${relatedType === "lead" ? "leads" : "prospects"}/${relatedId}`);
+  revalidatePath(`/${tenantSlug}/commercial/${relatedTypeRouteSegment(relatedType)}/${relatedId}`);
   return { error: null };
 }
 
@@ -73,7 +85,7 @@ export async function completeActivityAction(tenantSlug: string, relatedType: Re
     throw error;
   }
 
-  revalidatePath(`/${tenantSlug}/commercial/${relatedType === "lead" ? "leads" : "prospects"}/${relatedId}`);
+  revalidatePath(`/${tenantSlug}/commercial/${relatedTypeRouteSegment(relatedType)}/${relatedId}`);
   return { error: null };
 }
 
@@ -93,7 +105,7 @@ export async function cancelActivityAction(tenantSlug: string, relatedType: Rela
     throw error;
   }
 
-  revalidatePath(`/${tenantSlug}/commercial/${relatedType === "lead" ? "leads" : "prospects"}/${relatedId}`);
+  revalidatePath(`/${tenantSlug}/commercial/${relatedTypeRouteSegment(relatedType)}/${relatedId}`);
   return { error: null };
 }
 
@@ -120,6 +132,6 @@ export async function rescheduleActivityAction(
     throw error;
   }
 
-  revalidatePath(`/${tenantSlug}/commercial/${relatedType === "lead" ? "leads" : "prospects"}/${relatedId}`);
+  revalidatePath(`/${tenantSlug}/commercial/${relatedTypeRouteSegment(relatedType)}/${relatedId}`);
   return { error: null };
 }
