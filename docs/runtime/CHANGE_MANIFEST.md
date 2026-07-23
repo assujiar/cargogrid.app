@@ -3275,6 +3275,40 @@ Additive for every new object. The `app.resolve_commercial_record_ref` extension
 
 Self-closing. `CG-S7-COM-006` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-007` (Prompt 148, RFQ and Costing Request) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-079 — RFQ and Costing Request (Phase 2, Prompt 148)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-007` / `148_RFQ_COSTING_REQUEST_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI + PERMISSION CATALOGUE (new module-scoped row) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `007` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+A bounded Commercial cost-request shell over one canonical opportunity -- explicitly NOT full Procurement RFQ/sourcing/PO/vendor onboarding. `app.costing_requests` (idempotent on `(tenant, opportunity, source_opportunity_version)`, point-in-time requirements snapshot, never a live re-typed reference), `app.costing_request_components`, `app.costing_responses` (componentized, `total_amount` always server-computed as the sum of its own components), `app.costing_response_components`. `app.request_costing`/`app.assign_costing_request`/`app.submit_costing_response` (requires both `COM:Edit` and `COM:View cost`)/`app.revise_costing_request` (pins the opportunity's current version, marks the source `superseded`, raises `no_new_version` if unchanged)/`app.cancel_costing_request`.
+
+**New Commercial-scoped permission:** `('View cost', 'COM', 'sensitive', true)` -- the seeded catalogue already had a `'View cost'` action, but only for `FIN`/`PRC` (permissions are module-scoped); found via a genuine `db:test` failure where an intentionally-permissioned actor was still denied, fixed the same way `COM-143` added `'Assign'` for `'COM'`. `app.costing_responses_directory` applies `COM-147`'s own `security_invoker=false` field-masking lesson from the start (no rediscovery needed); `app.costing_response_components` has no masked-but-visible state (zero rows without `COM:View cost`, full detail with it).
+
+**A second real defect found and fixed:** this capability's own legitimate `qualify_lead`/`create_opportunity` fixture calls broke two sibling db-test files' (`commercial-lead-management.sql`, `commercial-opportunity-management.sql`) bare, unscoped `count(*)` audit-log assertions purely due to alphabetical test-file run order -- the same fragility class `COM-145` first found, but this time the extra calls were legitimate (not removable); fixed durably by scoping both sibling assertions to their own file's tenant_id. Full detail: `docs/build-log/phase-02/COM-148.md` §3.3/§3.7/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724090000_create_commercial_costing_request.sql` (1 migration -- 4 tables, 1 view, 6 functions, plus a new permission-catalogue row); `scripts/db-tests/commercial-costing-request.sql` (11 scenario groups); `server/contracts/costing/costing.ts`(`.test.ts`); `server/queries/costing.ts`(`.test.ts`); `server/mutations/costing.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/{page,loading,actions,costing-request-actions-panel}.tsx`; `app/(tenant)/[tenantSlug]/commercial/opportunities/[opportunityId]/request-costing-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/opportunities/{actions.ts,[opportunityId]/page.tsx}` (Costing Requests section); `scripts/db-tests/commercial-lead-management.sql`/`commercial-opportunity-management.sql` (tenant-scoped audit assertions, defect 2 above). 23 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given four related tables plus one view plus two sibling-test corrections).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1068/1068 PASS (19 net new); `pnpm run db:test` PASS -- 38 migrations/38 db-test files, all green including the new 11-scenario-group `commercial-costing-request.sql` and both corrected sibling files; `next build` (Turbopack) PASS -- 18 routes (up from 17); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object. The new permission-catalogue row is additive and grants nothing retroactively (no existing role was assigned it). `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-007` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-008` (Prompt 149, Rate and Cost Lookup) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

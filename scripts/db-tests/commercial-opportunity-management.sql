@@ -438,18 +438,30 @@ $$;
 \echo '>> audit trail: create/update/transition/clone all recorded real app.audit_logs events'
 do $$
 declare
+  v_tenant1 uuid;
   v_count integer;
 begin
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.opportunities' and action = 'create_opportunity';
+  -- Scoped to this file's own tenant, not a bare global count -- every db-test file
+  -- shares one continuous disposable database, and any later capability whose own
+  -- fixtures legitimately create opportunities (e.g. COM-148's costing-request setup)
+  -- would otherwise silently break an unscoped "exactly N" assertion here purely because
+  -- of alphabetical test-file run order (docs/build-log/phase-02/COM-148.md §8).
+  v_tenant1 := (select id from app.tenants where slug = 'acmeopp');
+
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.opportunities' and action = 'create_opportunity' and tenant_id = v_tenant1;
   if v_count <> 1 then raise exception 'assertion failed: expected exactly 1 create_opportunity audit event (the denied cross-tenant attempt never inserted a row), found %', v_count; end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.opportunities' and action = 'update_opportunity';
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.opportunities' and action = 'update_opportunity' and tenant_id = v_tenant1;
   if v_count < 1 then raise exception 'assertion failed: expected at least 1 update_opportunity audit event, found %', v_count; end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.opportunities' and action = 'transition_opportunity_stage';
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.opportunities' and action = 'transition_opportunity_stage' and tenant_id = v_tenant1;
   if v_count <> 3 then raise exception 'assertion failed: expected exactly 3 transition_opportunity_stage audit events (requirements_gathering, ready_for_costing, won -- every denied/invalid attempt inserted nothing), found %', v_count; end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.opportunities' and action = 'clone_opportunity';
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.opportunities' and action = 'clone_opportunity' and tenant_id = v_tenant1;
   if v_count <> 1 then raise exception 'assertion failed: expected exactly 1 clone_opportunity audit event, found %', v_count; end if;
 end;
 $$;

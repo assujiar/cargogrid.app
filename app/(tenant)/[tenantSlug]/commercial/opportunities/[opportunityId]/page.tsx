@@ -3,7 +3,9 @@ import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getOpportunityById, listOpportunityStageHistory, getOpportunityCostingReadiness, OpportunityQueryError } from "../../../../../../server/queries/opportunity.ts";
 import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
+import { listCostingRequestsForOpportunity } from "../../../../../../server/queries/costing.ts";
 import { OpportunityActionsPanel } from "./opportunity-actions-panel.tsx";
+import { RequestCostingForm } from "./request-costing-form.tsx";
 import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
 
 /**
@@ -42,10 +44,11 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
     notFound();
   }
 
-  const [stageHistory, readiness, activities] = await Promise.all([
+  const [stageHistory, readiness, activities, costingRequests] = await Promise.all([
     listOpportunityStageHistory(supabase, opportunity.id),
     getOpportunityCostingReadiness(supabase, opportunity.id, access.authUserId),
     listActivitiesForRecord(supabase, "opportunity", opportunity.id),
+    listCostingRequestsForOpportunity(supabase, opportunity.id),
   ]);
 
   return (
@@ -112,6 +115,26 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
           </ul>
         )}
       </div>
+
+      <div className="rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Costing requests</h2>
+        {costingRequests.length === 0 ? (
+          <p className="mt-2 text-sm text-neutral-600">No costing requests yet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-1 text-sm">
+            {costingRequests.map((request) => (
+              <li key={request.id}>
+                <a href={`/${tenantSlug}/commercial/costing-requests/${request.id}`} className="font-medium text-primary underline">
+                  {request.status} — v{request.sourceOpportunityVersion}
+                </a>
+                {request.dueAt ? <span className="text-neutral-500"> (due {new Date(request.dueAt).toLocaleDateString()})</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <RequestCostingForm tenantSlug={tenantSlug} opportunityId={opportunity.id} disabled={!readiness.ready} />
 
       <OpportunityActionsPanel
         tenantSlug={tenantSlug}

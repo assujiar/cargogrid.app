@@ -414,29 +414,46 @@ $$;
 \echo '>> audit trail: capture/assign/qualify/disqualify/merge all recorded real app.audit_logs events'
 do $$
 declare
+  v_tenant1 uuid;
   v_count integer;
 begin
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.leads' and action = 'capture_lead';
+  -- Scoped to this file's own tenant, not a bare global count -- every db-test file
+  -- shares one continuous disposable database (docs/build-log/phase-02/COM-145.md §8),
+  -- and any later capability whose own fixtures legitimately need a qualified lead (to
+  -- convert it to a prospect, e.g. COM-148's own setup) will add further qualify_lead
+  -- audit events for *its own* tenant. A bare unscoped count is inherently fragile the
+  -- moment any sibling db-test file that sorts alphabetically before this one needs the
+  -- same lifecycle transition -- found and fixed for real here (COM-148), having already
+  -- been worked around once before (COM-145) by removing an unnecessary call instead of
+  -- fixing the assertion itself.
+  v_tenant1 := (select id from app.tenants where slug = 'acmelead');
+
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.leads' and action = 'capture_lead' and tenant_id = v_tenant1;
   if v_count < 1 then
     raise exception 'assertion failed: expected at least 1 capture_lead audit event, found %', v_count;
   end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.leads' and action = 'assign_lead';
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.leads' and action = 'assign_lead' and tenant_id = v_tenant1;
   if v_count <> 1 then
     raise exception 'assertion failed: expected exactly 1 assign_lead audit event, found %', v_count;
   end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.leads' and action = 'qualify_lead';
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.leads' and action = 'qualify_lead' and tenant_id = v_tenant1;
   if v_count <> 1 then
     raise exception 'assertion failed: expected exactly 1 qualify_lead audit event, found %', v_count;
   end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.leads' and action = 'disqualify_lead';
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.leads' and action = 'disqualify_lead' and tenant_id = v_tenant1;
   if v_count <> 1 then
     raise exception 'assertion failed: expected exactly 1 disqualify_lead audit event, found %', v_count;
   end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.leads' and action = 'merge_leads';
+  select count(*) into v_count from app.audit_logs
+  where resource_type = 'app.leads' and action = 'merge_leads' and tenant_id = v_tenant1;
   if v_count <> 1 then
     raise exception 'assertion failed: expected exactly 1 merge_leads audit event, found %', v_count;
   end if;

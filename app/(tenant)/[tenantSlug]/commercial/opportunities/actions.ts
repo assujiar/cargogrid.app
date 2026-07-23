@@ -13,7 +13,9 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createOpportunity, updateOpportunity, transitionOpportunityStage, cloneOpportunity, OpportunityMutationError } from "../../../../../server/mutations/opportunity.ts";
+import { requestCosting, CostingMutationError } from "../../../../../server/mutations/costing.ts";
 import type { OpportunityStage } from "../../../../../server/contracts/opportunity/opportunity.ts";
+import type { RequestComponentInput } from "../../../../../server/contracts/costing/costing.ts";
 
 export interface OpportunityFormState {
   readonly error: string | null;
@@ -188,4 +190,38 @@ export async function cloneOpportunityAction(tenantSlug: string, opportunityId: 
 
   revalidatePath(`/${tenantSlug}/commercial/opportunities`);
   redirect(`/${tenantSlug}/commercial/opportunities/${cloneId}`);
+}
+
+/** Blocked server-side unless app.get_opportunity_costing_readiness reports ready=true first (COM-148). Idempotent on (opportunity, current version) -- a retry never creates a duplicate request. */
+export async function requestCostingAction(
+  tenantSlug: string,
+  opportunityId: string,
+  components: RequestComponentInput[],
+  dueAt: string | null,
+): Promise<OpportunityFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let requestId: string;
+  try {
+    const request = await requestCosting(supabase, {
+      opportunityId,
+      components,
+      dueAt,
+      actorAuthUserId: access.authUserId,
+      createdBy: access.authUserId,
+    });
+    requestId = request.id;
+  } catch (error) {
+    if (error instanceof CostingMutationError) {
+      return { error: `Could not request costing: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/opportunities/${opportunityId}`);
+  redirect(`/${tenantSlug}/commercial/costing-requests/${requestId}`);
 }
