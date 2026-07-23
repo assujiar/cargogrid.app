@@ -3209,6 +3209,38 @@ Additive only -- one new migration (3 new tables + functions), zero alteration t
 
 Self-closing. `CG-S7-COM-004` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-005` (Prompt 146, CRM Sales Plan and Pipeline) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-077 — CRM Sales Plan and Pipeline (Phase 2, Prompt 146)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-005` / `146_CRM_SALES_PIPELINE_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI + DEFECT FIX (Platform Core primitive) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `005` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Versioned, effective-dated sales plans (`app.sales_plans`) and targets (`app.sales_targets`, four count-based metrics -- no selling-value field exists on any Commercial record until `COM-151`), append-only forecast snapshots with reasoned manual override (`app.forecast_snapshots`), tenant reference lists (`app.pipeline_categories`, `app.win_loss_reasons`), and additive win/loss categorization events (`app.pipeline_outcomes`) -- all scoped to canonical Lead/Prospect records only, since Opportunity does not exist until `COM-147` (disclosed boundary). A governed, RLS-backed pipeline stage summary (`app.commercial_pipeline_view` + `app.get_pipeline_summary`, both `SECURITY INVOKER`) guarantees aggregates never exceed drill-down row visibility by construction. `app.compute_sales_metric_count` is the one `SECURITY DEFINER` reconciliation function, shared by live drill-down and snapshot capture, that explicitly re-states `app.can_access_record`.
+
+**Real defect found and fixed in a Platform Core primitive:** `app.can_access_record` (`PLT-114`) compared `p_owner_user_id = p_auth_user_id` directly, yielding SQL `NULL` (not `false`) whenever `p_owner_user_id` was `NULL` -- `false OR null` is `NULL`, and every existing caller's `if not app.can_access_record(...)` guard treated that as not-true (did not raise), meaning a `NULL`-owner comparison could silently grant access instead of denying it. Latent since `PLT-114`; `app.sales_plans`/`app.sales_targets` are the first tables in this repository to ever pass a `NULL` owner (org-unit-wide plans/targets), which surfaced the gap as a real `db:test` failure. Fixed via `CREATE OR REPLACE FUNCTION app.can_access_record` in this migration (the applied `PLT-114` file is never edited) -- the owner comparison is now deterministically boolean, wrapped in a defense-in-depth `coalesce(..., false)`. Full detail: `docs/build-log/phase-02/COM-146.md` §3.6/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723180000_create_commercial_sales_pipeline.sql` (1 migration -- 6 tables, 1 view, ~17 functions, plus the `app.can_access_record` fix and two additive `app.prospects` columns/`CREATE OR REPLACE` of `app.disqualify_prospect`/`app.archive_prospect`); `scripts/db-tests/commercial-sales-pipeline.sql` (10 scenario groups); `server/contracts/pipeline/pipeline.ts`(`.test.ts`); `server/queries/pipeline.ts`(`.test.ts`); `server/mutations/pipeline.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/pipeline/{page,loading,actions,create-sales-plan-form}.tsx`, `pipeline/[planId]/{page,loading,plan-actions-panel,capture-snapshot-form}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Pipeline nav link). 17 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given six related tables plus one view in one bounded feature slice).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1031/1031 PASS (25 net new); `pnpm run db:test` PASS -- 36 migrations/36 db-test files, all green including the new 10-scenario-group `commercial-sales-pipeline.sql` and every pre-existing file that itself exercises the patched `app.can_access_record`; `next build` (Turbopack) PASS -- 15 routes (up from 13); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object. The `app.can_access_record` fix only changes behavior for a previously-unreached `NULL`-owner code path (backward-compatible for every existing caller). The two new `app.prospects` columns are nullable. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-005` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-006` (Prompt 147, Opportunity Management) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
