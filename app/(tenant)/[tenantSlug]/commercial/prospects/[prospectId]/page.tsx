@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getProspectById, getProspectConversionReadiness, ProspectQueryError } from "../../../../../../server/queries/prospect.ts";
+import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
 import { ProspectActionsPanel } from "./prospect-actions-panel.tsx";
+import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
 
 /**
  * Prospect Detail (COM-144, CG-S7-COM-003). `getProspectById` returns `null` for both
@@ -41,6 +43,8 @@ export default async function ProspectDetailPage({ params }: { params: Promise<{
   if (!prospect || prospect.tenantId !== access.tenant.id) {
     notFound();
   }
+
+  const activities = await listActivitiesForRecord(supabase, "prospect", prospect.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -81,6 +85,8 @@ export default async function ProspectDetailPage({ params }: { params: Promise<{
       </div>
 
       <ProspectActionsPanel tenantSlug={tenantSlug} prospectId={prospect.id} recordVersion={prospect.recordVersion} status={prospect.status} />
+
+      <ActivityTimeline tenantSlug={tenantSlug} relatedType="prospect" relatedId={prospect.id} activities={activities} />
     </div>
   );
 }

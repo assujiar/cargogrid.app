@@ -3179,6 +3179,36 @@ Additive only -- one new migration (new table + functions, plus an additive colu
 
 Self-closing. `CG-S7-COM-003` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-004` (Prompt 145, Contact and Activity Management) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-076 — Contact and Activity Management (Phase 2, Prompt 145)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-004` / `145_CONTACT_ACTIVITY_MANAGEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `004` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Canonical, reusable contacts (`app.contacts`) plus a polymorphic contact-to-record relationship (`app.contact_links`, roles `primary`/`billing`/`technical`/`decision_maker`/`other`) and a unified activity timeline (`app.activities`, `call`/`email`/`meeting`/`visit`/`follow_up`/`task`) against the same polymorphic target. A new shared `app.resolve_commercial_record_ref` resolver backs both polymorphic tables -- the one lookup every later Commercial polymorphic table should extend, not duplicate. All record-scope reuses `app.can_access_record` and `COM-143`'s own `app.lead_record_scope_org_unit_ids` directly. Disclosed scope boundary: a standalone site/address entity (also named in Prompt 145 §13) is deferred to `COM-155`/`156`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723150000_create_commercial_contact_activity_management.sql` (1 migration -- 3 tables + 13 functions); `scripts/db-tests/commercial-contact-activity-management.sql` (8 scenario groups); `server/contracts/contact/contact.ts`(`.test.ts`); `server/queries/contact.ts`(`.test.ts`); `server/mutations/contact.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/contacts/{page,loading,actions,create-contact-form}.tsx`, `contacts/[contactId]/page.tsx`; `app/(tenant)/[tenantSlug]/commercial/_shared/{activity-timeline,activity-actions}.ts(x)` (new shared, non-route folder). Modified: `app/(tenant)/[tenantSlug]/commercial/{layout.tsx,leads/[leadId]/page.tsx,prospects/[prospectId]/page.tsx}` (embed the shared Activity Timeline; add a Contacts nav link). 17 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given three related tables in one bounded feature slice).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1006/1006 PASS (25 net new); `pnpm run db:test` PASS -- 35 migrations/35 db-test files, all green including the new 8-scenario-group `commercial-contact-activity-management.sql`; `next build` (Turbopack) PASS -- 13 routes (up from 11); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- one new migration (3 new tables + functions), zero alteration to any prior Commercial or Platform Core object. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on `app.contacts`/`app.contact_links`/`app.activities`.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-004` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-005` (Prompt 146, CRM Sales Plan and Pipeline) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getLeadById, LeadQueryError } from "../../../../../../server/queries/lead.ts";
+import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
 import { LeadActionsPanel } from "./lead-actions-panel.tsx";
+import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
 
 /**
  * Lead Detail (COM-143, CG-S7-COM-002). `getLeadById` returns `null` for both "does not
@@ -37,6 +39,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ ten
   if (!lead || lead.tenantId !== access.tenant.id) {
     notFound();
   }
+
+  const activities = await listActivitiesForRecord(supabase, "lead", lead.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -74,6 +78,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ ten
       </dl>
 
       <LeadActionsPanel tenantSlug={tenantSlug} leadId={lead.id} recordVersion={lead.recordVersion} status={lead.status} companyName={lead.companyName} />
+
+      <ActivityTimeline tenantSlug={tenantSlug} relatedType="lead" relatedId={lead.id} activities={activities} />
     </div>
   );
 }
