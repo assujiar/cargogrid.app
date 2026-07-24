@@ -63,6 +63,13 @@ const PLANNING_DOCUMENT_EXCLUSIONS = new Set([
   // not-yet-created build-log paths for the same structural reason.
   "docs/build-log/phase-01/00_PLATFORM_CORE_EXECUTION_INDEX.md",
   "docs/build-log/phase-01/00_PLATFORM_CORE_WBS.md",
+  // Same forward-referencing kickoff pair, one phase later still (CG-S7-COM-001,
+  // Prompt 142 Commercial WBS/Runtime Kickoff) — names COM-144..165's not-yet-
+  // created build-log paths for the same structural reason. This phase's own
+  // prompt file names the execution index without a "00_" prefix
+  // (`COMMERCIAL_EXECUTION_INDEX.md`, not `00_COMMERCIAL_EXECUTION_INDEX.md`).
+  "docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md",
+  "docs/build-log/phase-02/00_COMMERCIAL_WBS.md",
 ]);
 
 // Historical, append-only evidence records (build logs, and the checkpoints

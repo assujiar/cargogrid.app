@@ -3089,6 +3089,296 @@ Purely additive -- documentation-only change, zero code/schema/behavior effect. 
 
 Self-closing. `CG-S6-PLT-037` is `VERIFIED`. **`PHASE_1_VERIFIED` is set this checkpoint.** This checkpoint was authorized under the explicit "lanjut sampe promp 140" range -- the range ends here. Next eligible prompt per the execution index: `CG-S7-COM-001` (Prompt 142, Commercial WBS and Runtime Kickoff) -- **requires fresh explicit user authorization**; closing Phase 1 does not itself authorize starting Phase 2.
 
+### CHG-2026-073 — Commercial WBS and Runtime Kickoff (Phase 2, Prompt 142) — PHASE_2_IN_PROGRESS
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-001` / `142_COMMERCIAL_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Change type | DOCS + one ADR (kickoff/planning only, zero Commercial-domain code/schema change) |
+| Baseline evidence | `docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md` (`PHASE_1_VERIFIED`) |
+| Final status | `COMPLETED` -- `PHASE_2_IN_PROGRESS` set |
+| Authorization | A fresh, explicit, open-ended "lanjut" confirmed via `AskUserQuestion` (option: "Start Phase 2, open-ended") |
+
+#### Outcome
+
+Instantiated the Phase 2 hierarchy/dependency graph/execution index (`docs/build-log/phase-02/00_COMMERCIAL_WBS.md`, `COMMERCIAL_EXECUTION_INDEX.md`) for all 19 Commercial capability prompts (`143`-`161`) plus verification/hardening/documentation/closure (`162`-`165`), reproducing `141_COMMERCIAL_README.md` §4's dependency table by citation. Ratified `ADR-0015` (`ADR-CAND-ARCH-030`, newly minted), formalizing `05_DATABASE_SCHEMA_WORKSTREAM.md` line 93's already-`VERIFIED` Step 3 resolution: Platform Core's existing `app.master_records`/`vendor_rate` registration (`PLT-120`) is confirmed the single source of truth for the canonical vendor/service/rate lookup; Commercial's `149` extends it with a child detail table/read view rather than a competing master; the existing tenant-admin/support-grant write authority already covers the interim period before Procurement (Phase 6) ships. Pre-flight collision check: zero open PRs, every one of 9 remote branches fully merged into `main`.
+
+#### Scope and files
+
+New: `docs/build-log/phase-02/00_COMMERCIAL_WBS.md`, `COMMERCIAL_EXECUTION_INDEX.md`, `docs/adr/ADR-0015-commercial-vendor-service-rate-lookup-ownership.md`. Modified: `docs/adr/README.md` (§5.2/§6, adds `ADR-CAND-ARCH-030`/`ADR-0015`), `docs/runtime/HANDOFF.md`/`CARGOGRID_BUILD_STATUS.md`/`TASK_LEDGER.md` (this checkpoint). No Commercial-domain migration, route, or UI file created -- re-confirmed by direct `git ls-files`/grep.
+
+#### Tests and quality evidence
+
+`pnpm run docs:check`/`security:check`/`standards:check`/`data-classification:check`/`threat-model:check`/`git:check`/`git:check-paths` PASS. No code touched -- `typecheck`/`lint`/`test`/`db:test`/`next build` not applicable to this checkpoint's own scope (unchanged from Platform Core's last green baseline).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- documentation/ADR-only, zero code/schema/behavior effect. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-001` is `VERIFIED`. **`PHASE_2_IN_PROGRESS` is set this checkpoint.** Next eligible prompt: `CG-S7-COM-002` (Prompt 143, Lead Management) -- dependency-`READY`, covered by this checkpoint's own open-ended authorization.
+
+### CHG-2026-074 — Lead Management (Phase 2, Prompt 143)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-002` / `143_LEAD_MANAGEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI (first Commercial-domain and first business-domain capability in this repository) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `002` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Canonical tenant-aware lead lifecycle across manual/import/api/referral/campaign/integration sources: idempotent capture (`app.capture_lead`, unique on `(tenant_id, source, external_reference)`), normalized duplicate-candidate search (`app.find_duplicate_leads`, tenant-scoped, fails closed on missing membership), deterministic capped-at-100 explainable scoring (`app.compute_lead_score`, rule-based only -- no AI/ML call, per the Phase 9 AI-boundary rule), optimistic-concurrency-checked assignment (`app.assign_lead`), qualify/disqualify transitions (`app.qualify_lead`/`app.disqualify_lead`, mandatory non-empty disqualify reason both at the application layer and as a DB `CHECK` constraint), and lineage-preserving merge (`app.merge_leads`, cross-tenant merge structurally denied, duplicate row never deleted). **Record-scope (own/team/department/branch/company) composes two already-`VERIFIED` Platform Core primitives that had never been exercised against a real table before this checkpoint**: `app.can_access_record` (`PLT-114`) and `app.org_unit_ancestor_ids` (`PLT-109`) -- a lead's own org unit plus every ancestor is passed as the "shared scope" set, so whoever sits at the tenant's root org unit already sees every lead beneath it, with zero new authority mechanism invented. A narrow `SECURITY DEFINER` wrapper (`app.lead_record_scope_org_unit_ids`) avoids widening `org_unit_ancestor_ids`' own `service_role`-only grant, the same "answer exactly one bounded question" pattern `PLT-114`'s `has_view_personal_data` already established. Full service layer (Zod contracts, typed query/mutation wrappers) plus a bounded first UI slice (Lead List with a capture form, Lead Detail with qualify/disqualify actions) under the first business-domain route (`app/(tenant)/[tenantSlug]/commercial/`) -- assign/merge remain real, tested mutation-layer capabilities without a dedicated button in this bounded slice, the same "core management, not an all-actions mega task" scoping `PLT-135`'s own Users list precedent used.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723090000_create_commercial_lead_management.sql` (1 migration -- table, 4 pure/helper functions, 7 mutation functions, RLS policy, grants, plus one additive `app.permissions` seed row for `COM:Assign`); `scripts/db-tests/commercial-lead-management.sql` (9 scenario groups); `server/contracts/lead/lead.ts`(`.test.ts`); `server/queries/lead.ts`(`.test.ts`); `server/mutations/lead.ts`(`.test.ts`); `lib/portal/commercial-guard.ts`(`.test.ts`), `commercial-guard-deps.server.ts`, `resolve-commercial-access.server.ts`; `app/(tenant)/[tenantSlug]/commercial/layout.tsx`, `leads/{page,loading,actions,capture-lead-form}.tsx`, `leads/[leadId]/{page,loading,lead-actions-panel}.tsx`. Modified: `scripts/docs/check-doc-links.ts` (added this phase's own kickoff-pair forward-reference exclusion, the same class already applied to Phase 0/Phase 1). 14 new application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors; 5 pre-existing `no-html-link-for-pages` warnings, unrelated to this checkpoint, unchanged); `pnpm run test` 960/960 PASS (31 net new -- 21 contract/query/mutation unit tests plus 6 commercial-guard tests plus pre-existing suite unchanged); `pnpm run db:test` PASS -- 33 migrations/33 db-test files, all green including the new 9-scenario-group `commercial-lead-management.sql` (idempotent capture, RBAC-denial, deterministic scoring, tenant-isolated duplicate search, four-level record-scope read composition, optimistic-concurrency/RBAC/scope-checked assignment, qualify/disqualify transition validity and mandatory reason, lineage-preserving merge with cross-tenant denial, and a full audit-trail check across every mutation); `next build` (Turbopack) PASS -- 9 routes (up from 6), including the two new Commercial routes; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- one new migration (new table + functions + one permissions-seed row), zero alteration to any Platform Core migration/table/function. `git revert` of this checkpoint's commit is safe and complete; `DROP TABLE app.leads` (were it ever needed) has no dependent object anywhere in the repository, since no downstream Commercial capability has run yet.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-002` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-003` (Prompt 144, Prospect Lifecycle) -- dependency-`READY`, covered by the same open-ended authorization.
+
+### CHG-2026-075 — Prospect Lifecycle (Phase 2, Prompt 144)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-003` / `144_PROSPECT_LIFECYCLE_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `003` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Prospect as a governed pre-customer commercial identity: `app.prospects` is unique on `lead_id` ("one conversion idempotency key yields one prospect outcome"), with `contact_name`/`email`/`phone` snapshotted from the source lead at conversion time -- never a live FK, the no-reentry binding rule. `app.convert_lead_to_prospect` (main flow, idempotent including under a concurrent-insert race, requires the lead `status='qualified'` plus record-scope access plus `COM:Create`) and `app.link_lead_to_existing_prospect` (alternative flow, cross-tenant link structurally denied) both set the lead's own `status='converted'`/`converted_prospect_id` (`app.leads` gains this additive column/constraint). `app.get_prospect_conversion_readiness` is a real-time, deterministic evaluator over a fixed, disclosed, non-tenant-configurable rule set -- not the deferred Configuration Engine rule evaluator. `app.disqualify_prospect`/`app.archive_prospect`/`app.merge_prospects` mirror `COM-143`'s own lead functions. Record-scope reuses `COM-143`'s own `app.lead_record_scope_org_unit_ids` directly rather than duplicating it.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723120000_create_commercial_prospect_lifecycle.sql` (1 migration); `scripts/db-tests/commercial-prospect-lifecycle.sql` (9 scenario groups); `server/contracts/prospect/prospect.ts`(`.test.ts`); `server/queries/prospect.ts`(`.test.ts`); `server/mutations/prospect.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/prospects/{page,loading}.tsx`, `prospects/[prospectId]/{page,loading,actions,prospect-actions-panel}.tsx`. Modified: `server/contracts/lead/lead.ts` (adds `convertedProspectId`), `app/(tenant)/[tenantSlug]/commercial/leads/{actions.ts,[leadId]/{page.tsx,lead-actions-panel.tsx}}` (adds the "Convert to prospect" action), `commercial/layout.tsx` (adds a Prospects nav link). 15 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 981/981 PASS (21 net new); `pnpm run db:test` PASS -- 34 migrations/34 db-test files, all green including the new 9-scenario-group `commercial-prospect-lifecycle.sql`; `next build` (Turbopack) PASS -- 11 routes (up from 9); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- one new migration (new table + functions, plus an additive column/constraint on `app.leads`), zero alteration to `COM-143`'s own table/functions. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on `app.prospects`.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-003` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-004` (Prompt 145, Contact and Activity Management) -- dependency-`READY`, covered by the same open-ended authorization.
+
+### CHG-2026-076 — Contact and Activity Management (Phase 2, Prompt 145)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-004` / `145_CONTACT_ACTIVITY_MANAGEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `004` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Canonical, reusable contacts (`app.contacts`) plus a polymorphic contact-to-record relationship (`app.contact_links`, roles `primary`/`billing`/`technical`/`decision_maker`/`other`) and a unified activity timeline (`app.activities`, `call`/`email`/`meeting`/`visit`/`follow_up`/`task`) against the same polymorphic target. A new shared `app.resolve_commercial_record_ref` resolver backs both polymorphic tables -- the one lookup every later Commercial polymorphic table should extend, not duplicate. All record-scope reuses `app.can_access_record` and `COM-143`'s own `app.lead_record_scope_org_unit_ids` directly. Disclosed scope boundary: a standalone site/address entity (also named in Prompt 145 §13) is deferred to `COM-155`/`156`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723150000_create_commercial_contact_activity_management.sql` (1 migration -- 3 tables + 13 functions); `scripts/db-tests/commercial-contact-activity-management.sql` (8 scenario groups); `server/contracts/contact/contact.ts`(`.test.ts`); `server/queries/contact.ts`(`.test.ts`); `server/mutations/contact.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/contacts/{page,loading,actions,create-contact-form}.tsx`, `contacts/[contactId]/page.tsx`; `app/(tenant)/[tenantSlug]/commercial/_shared/{activity-timeline,activity-actions}.ts(x)` (new shared, non-route folder). Modified: `app/(tenant)/[tenantSlug]/commercial/{layout.tsx,leads/[leadId]/page.tsx,prospects/[prospectId]/page.tsx}` (embed the shared Activity Timeline; add a Contacts nav link). 17 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given three related tables in one bounded feature slice).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1006/1006 PASS (25 net new); `pnpm run db:test` PASS -- 35 migrations/35 db-test files, all green including the new 8-scenario-group `commercial-contact-activity-management.sql`; `next build` (Turbopack) PASS -- 13 routes (up from 11); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- one new migration (3 new tables + functions), zero alteration to any prior Commercial or Platform Core object. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on `app.contacts`/`app.contact_links`/`app.activities`.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-004` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-005` (Prompt 146, CRM Sales Plan and Pipeline) -- dependency-`READY`, covered by the same open-ended authorization.
+
+### CHG-2026-077 — CRM Sales Plan and Pipeline (Phase 2, Prompt 146)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-005` / `146_CRM_SALES_PIPELINE_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI + DEFECT FIX (Platform Core primitive) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `005` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Versioned, effective-dated sales plans (`app.sales_plans`) and targets (`app.sales_targets`, four count-based metrics -- no selling-value field exists on any Commercial record until `COM-151`), append-only forecast snapshots with reasoned manual override (`app.forecast_snapshots`), tenant reference lists (`app.pipeline_categories`, `app.win_loss_reasons`), and additive win/loss categorization events (`app.pipeline_outcomes`) -- all scoped to canonical Lead/Prospect records only, since Opportunity does not exist until `COM-147` (disclosed boundary). A governed, RLS-backed pipeline stage summary (`app.commercial_pipeline_view` + `app.get_pipeline_summary`, both `SECURITY INVOKER`) guarantees aggregates never exceed drill-down row visibility by construction. `app.compute_sales_metric_count` is the one `SECURITY DEFINER` reconciliation function, shared by live drill-down and snapshot capture, that explicitly re-states `app.can_access_record`.
+
+**Real defect found and fixed in a Platform Core primitive:** `app.can_access_record` (`PLT-114`) compared `p_owner_user_id = p_auth_user_id` directly, yielding SQL `NULL` (not `false`) whenever `p_owner_user_id` was `NULL` -- `false OR null` is `NULL`, and every existing caller's `if not app.can_access_record(...)` guard treated that as not-true (did not raise), meaning a `NULL`-owner comparison could silently grant access instead of denying it. Latent since `PLT-114`; `app.sales_plans`/`app.sales_targets` are the first tables in this repository to ever pass a `NULL` owner (org-unit-wide plans/targets), which surfaced the gap as a real `db:test` failure. Fixed via `CREATE OR REPLACE FUNCTION app.can_access_record` in this migration (the applied `PLT-114` file is never edited) -- the owner comparison is now deterministically boolean, wrapped in a defense-in-depth `coalesce(..., false)`. Full detail: `docs/build-log/phase-02/COM-146.md` §3.6/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723180000_create_commercial_sales_pipeline.sql` (1 migration -- 6 tables, 1 view, ~17 functions, plus the `app.can_access_record` fix and two additive `app.prospects` columns/`CREATE OR REPLACE` of `app.disqualify_prospect`/`app.archive_prospect`); `scripts/db-tests/commercial-sales-pipeline.sql` (10 scenario groups); `server/contracts/pipeline/pipeline.ts`(`.test.ts`); `server/queries/pipeline.ts`(`.test.ts`); `server/mutations/pipeline.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/pipeline/{page,loading,actions,create-sales-plan-form}.tsx`, `pipeline/[planId]/{page,loading,plan-actions-panel,capture-snapshot-form}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Pipeline nav link). 17 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given six related tables plus one view in one bounded feature slice).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1031/1031 PASS (25 net new); `pnpm run db:test` PASS -- 36 migrations/36 db-test files, all green including the new 10-scenario-group `commercial-sales-pipeline.sql` and every pre-existing file that itself exercises the patched `app.can_access_record`; `next build` (Turbopack) PASS -- 15 routes (up from 13); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object. The `app.can_access_record` fix only changes behavior for a previously-unreached `NULL`-owner code path (backward-compatible for every existing caller). The two new `app.prospects` columns are nullable. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-005` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-006` (Prompt 147, Opportunity Management) -- dependency-`READY`, covered by the same open-ended authorization.
+
+### CHG-2026-078 — Opportunity Management (Phase 2, Prompt 147)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-006` / `147_OPPORTUNITY_MANAGEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI + FIELD-MASKING (first consumer of a seeded protected permission) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `006` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Canonical opportunity lifecycle (`app.opportunities`) over a governed stage/probability machine (`qualifying`→`requirements_gathering`→`ready_for_costing`→`won`/`lost`, deterministic per-stage probability defaults), referencing exactly one prospect (the canonical Account entity does not exist until `COM-155`) plus a bounded `requirements` jsonb snapshot (no Operations service-catalogue master exists yet). `app.opportunity_stage_history` gives an explicit, queryable stage timeline alongside `app.audit_logs`. `app.create_opportunity`/`app.update_opportunity` (blocked once closed)/`app.transition_opportunity_stage` (`COM:Approve`-gated closure with mandatory reason)/`app.clone_opportunity` (always new, never idempotent)/`app.get_opportunity_costing_readiness` (fixed deterministic data-completeness check).
+
+**First Commercial consumer of the seeded, protected `COM:View selling price` permission**: new `app.has_view_selling_price` field-masking gate (mirrors `PLT-114`'s `app.has_view_personal_data`) and `app.opportunities_directory`, a field-masked view over `value_amount`/`value_currency`/`probability` -- `authenticated` has no direct column grant on those three columns on `app.opportunities` itself, proven via a real Postgres permission-denied `db:test` assertion. Extended the shared polymorphic resolver `app.resolve_commercial_record_ref` (`COM-145`) and the `contact_links`/`activities` CHECK constraints to accept `'opportunity'`.
+
+**Two real defects found and fixed:** (1) a first `app.opportunities_directory` draft used `security_invoker=true`, which failed with a genuine `permission denied for table opportunities` -- Postgres checks column privileges against the invoker for every referenced column even inside a masking `CASE`; fixed by adopting `PLT-114`'s own proven `security_invoker=false` technique, with this view additionally adding its own explicit `app.can_access_record(...)` row filter (a deliberate strengthening `PLT-114`'s own `app.users_directory` lacks). (2) Extending `RelatedType` to include `'opportunity'` surfaced a hardcoded lead/prospect route-segment ternary in `_shared/activity-actions.ts`'s four Server Actions that would have silently under-revalidated the new Opportunity Detail page; fixed with an exhaustive `relatedTypeRouteSegment()` switch. Full detail: `docs/build-log/phase-02/COM-147.md` §3.3/§3.7/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260723210000_create_commercial_opportunity_management.sql` (1 migration -- 2 tables, 1 view, ~7 functions, plus an additive extension of `app.resolve_commercial_record_ref` and two `COM-145` CHECK constraints); `scripts/db-tests/commercial-opportunity-management.sql` (11 scenario groups); `server/contracts/opportunity/opportunity.ts`(`.test.ts`); `server/queries/opportunity.ts`(`.test.ts`); `server/mutations/opportunity.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/opportunities/{page,loading,actions,create-opportunity-form}.tsx`, `opportunities/[opportunityId]/{page,loading,opportunity-actions-panel}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Opportunities nav link); `server/contracts/contact/contact.ts` (`RelatedType` extended); `server/queries/contact.ts` (`listActivitiesForRecord` signature widened); `app/(tenant)/[tenantSlug]/commercial/_shared/activity-actions.ts` (route-segment fix, defect 2 above). 22 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given two related tables plus one view plus a cross-cutting resolver/RelatedType extension).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1049/1049 PASS (43 net new); `pnpm run db:test` PASS -- 37 migrations/37 db-test files, all green including the new 11-scenario-group `commercial-opportunity-management.sql` and every pre-existing test exercising `app.resolve_commercial_record_ref`/`app.contact_links`/`app.activities`; `next build` (Turbopack) PASS -- 17 routes (up from 15); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object. The `app.resolve_commercial_record_ref` extension and the two widened CHECK constraints only add a new accepted value, never remove one -- backward-compatible for every existing caller. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-006` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-007` (Prompt 148, RFQ and Costing Request) -- dependency-`READY`, covered by the same open-ended authorization.
+
+### CHG-2026-079 — RFQ and Costing Request (Phase 2, Prompt 148)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-007` / `148_RFQ_COSTING_REQUEST_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI + PERMISSION CATALOGUE (new module-scoped row) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `007` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+A bounded Commercial cost-request shell over one canonical opportunity -- explicitly NOT full Procurement RFQ/sourcing/PO/vendor onboarding. `app.costing_requests` (idempotent on `(tenant, opportunity, source_opportunity_version)`, point-in-time requirements snapshot, never a live re-typed reference), `app.costing_request_components`, `app.costing_responses` (componentized, `total_amount` always server-computed as the sum of its own components), `app.costing_response_components`. `app.request_costing`/`app.assign_costing_request`/`app.submit_costing_response` (requires both `COM:Edit` and `COM:View cost`)/`app.revise_costing_request` (pins the opportunity's current version, marks the source `superseded`, raises `no_new_version` if unchanged)/`app.cancel_costing_request`.
+
+**New Commercial-scoped permission:** `('View cost', 'COM', 'sensitive', true)` -- the seeded catalogue already had a `'View cost'` action, but only for `FIN`/`PRC` (permissions are module-scoped); found via a genuine `db:test` failure where an intentionally-permissioned actor was still denied, fixed the same way `COM-143` added `'Assign'` for `'COM'`. `app.costing_responses_directory` applies `COM-147`'s own `security_invoker=false` field-masking lesson from the start (no rediscovery needed); `app.costing_response_components` has no masked-but-visible state (zero rows without `COM:View cost`, full detail with it).
+
+**A second real defect found and fixed:** this capability's own legitimate `qualify_lead`/`create_opportunity` fixture calls broke two sibling db-test files' (`commercial-lead-management.sql`, `commercial-opportunity-management.sql`) bare, unscoped `count(*)` audit-log assertions purely due to alphabetical test-file run order -- the same fragility class `COM-145` first found, but this time the extra calls were legitimate (not removable); fixed durably by scoping both sibling assertions to their own file's tenant_id. Full detail: `docs/build-log/phase-02/COM-148.md` §3.3/§3.7/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724090000_create_commercial_costing_request.sql` (1 migration -- 4 tables, 1 view, 6 functions, plus a new permission-catalogue row); `scripts/db-tests/commercial-costing-request.sql` (11 scenario groups); `server/contracts/costing/costing.ts`(`.test.ts`); `server/queries/costing.ts`(`.test.ts`); `server/mutations/costing.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/{page,loading,actions,costing-request-actions-panel}.tsx`; `app/(tenant)/[tenantSlug]/commercial/opportunities/[opportunityId]/request-costing-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/opportunities/{actions.ts,[opportunityId]/page.tsx}` (Costing Requests section); `scripts/db-tests/commercial-lead-management.sql`/`commercial-opportunity-management.sql` (tenant-scoped audit assertions, defect 2 above). 23 new/modified application files, 1 migration -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, given four related tables plus one view plus two sibling-test corrections).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1068/1068 PASS (19 net new); `pnpm run db:test` PASS -- 38 migrations/38 db-test files, all green including the new 11-scenario-group `commercial-costing-request.sql` and both corrected sibling files; `next build` (Turbopack) PASS -- 18 routes (up from 17); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object. The new permission-catalogue row is additive and grants nothing retroactively (no existing role was assigned it). `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-007` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-008` (Prompt 149, Rate and Cost Lookup) -- dependency-`READY`, covered by the same open-ended authorization.
+
+### CHG-2026-080 — Rate and Cost Lookup (Phase 2, Prompt 149)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-008` / `149_RATE_COST_LOOKUP_PROMPT.md` |
+| Change type | SCHEMA (extends `PLT-120` master-data foundation) + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `008` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+The canonical vendor/service/rate and internal-cost lookup foundation consumed by Commercial, per the controlling `ADR-0015`. Exactly one new child table on top of `PLT-120`'s master-data foundation -- `app.vendor_rate_versions` (keyed by `master_record_id references app.master_records(id)`, `master_type_code` constrained to `'vendor_rate'`) -- plus `app.rate_selections` (a point-in-time snapshot of the rate detail selected for one costing request, never a live reference) -- never a second, independently-writable rate master. Write authority (`app.create_rate_version`/`approve`/`reject`/`withdraw_rate_version`) reuses `app.is_support_grant_authority` unchanged, per `ADR-0015`'s own mandate ("must not invent a parallel authority model"), not ordinary `COM` RBAC.
+
+`app.v_active_vendor_rates` (seeded empty at `PLT-120`) is dropped and recreated to be validity/approval-aware, composed on a new `app.vendor_rate_versions_directory` view that reuses `COM-148`'s `app.has_view_cost` directly for cost masking -- no new permission-catalogue row. Unlike every prior Commercial table, vendor rates are tenant-wide reference data (visibility mirrors `app.master_records`' own RLS shape, not `app.can_access_record`). `app.search_vendor_rates` (bounded ≤200-row lookup, `COM:View`-gated) and `app.select_vendor_rate` (dual `COM:Edit`+`COM:View cost` gate, mirroring `COM-148`'s `app.submit_costing_response`) complete the lookup/selection path.
+
+**Three real defects found and fixed:** (1) the mutation TypeScript layer's first draft parsed base-table RPC results (`app.vendor_rate_versions`, no `vendor_code`/`vendor_name`/`cost_masked`) through the read-path's directory-shaped schema and failed real unit tests -- fixed with a distinct `RateVersionRecordSchema` for mutation returns; (2) `scripts/db-tests/master-data.sql`'s own pre-existing `app.v_active_vendor_rates` assertion broke against this checkpoint's real approved rows and the view's changed column shape -- fixed, proactively tenant-scoped (applying the `COM-145`/`COM-148` cross-file-fragility lesson to a new class before it could be rediscovered a third time); (3) `app.search_vendor_rates` silently returned zero rows when composed on the auth.uid()-keyed directory view despite its own explicit-actor `COM:View` gate passing -- a real design gap (any caller without a live session JWT would see zero results regardless of entitlement), fixed by querying the base tables directly with explicit-actor cost masking instead. Full detail: `docs/build-log/phase-02/COM-149.md` §3.3/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724150000_create_commercial_rate_cost_lookup.sql` (1 migration -- 2 tables, 3 new/enhanced views, 6 functions); `scripts/db-tests/commercial-rate-cost-lookup.sql`; `server/contracts/rate/rate.ts`(`.test.ts`); `server/queries/rate.ts`(`.test.ts`); `server/mutations/rate.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/rates/{page,loading,actions,create-rate-form}.tsx`; `app/(tenant)/[tenantSlug]/commercial/rates/[rateVersionId]/{page,loading,actions,rate-actions-panel}.tsx`; `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/select-rate-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/{actions.ts,page.tsx}` (Rate Selections section), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Rates nav link), `scripts/db-tests/master-data.sql` (tenant-scoped `v_active_vendor_rates` assertion, defect 2 above). 17 new application/test files, 1 migration, 4 modified files -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, matching `COM-148`'s own precedent for a multi-table capability with a new UI section).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1094/1094 PASS (26 net new); `pnpm run db:test` PASS -- 39 migrations/39 db-test files, all green including the new `commercial-rate-cost-lookup.sql` and the corrected `master-data.sql`; `next build` (Turbopack) PASS -- 20 routes (up from 18); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new table/function. `app.v_active_vendor_rates`'s redefinition is a disclosed, intentional behavior change per `ADR-0015` -- its one pre-existing consumer (`master-data.sql`'s own assertion) was updated to match, and the view had zero real rows under its prior definition (per `PLT-120`'s own disclosure), so no existing data or caller could regress. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-008` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-009` (Prompt 150, Margin Calculation) -- dependency-`READY`, covered by the same open-ended authorization.
+
+### CHG-2026-081 — Margin Calculation (Phase 2, Prompt 150)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-009` / `150_MARGIN_CALCULATION_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `009` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Exact, versioned, explainable margin/markup calculation over a selected cost snapshot (`app.rate_selections`, `COM-149`) and selling inputs. Money stays PostgreSQL `numeric` end to end -- never binary floating point -- with explicit `round(..., 2)` at every money-producing step in `app.calculate_margin`. No FX/multi-currency conversion (fails closed with `mixed_currency` unless the selling currency exactly matches the pinned cost snapshot's own currency); margin rules are tenant-wide only in this bounded slice.
+
+`app.margin_rule_versions` (a versioned, tenant-wide minimum-margin-percentage policy, `draft`->`published`->`archived`, `app.publish_margin_rule_version`'s `p_supersedes_version_id` archives the prior published rule exactly like `app.publish_sales_plan`, `COM-146` -- at most one published rule per tenant via a partial unique index). `app.margin_calculations` (pins the exact cost snapshot and the exact rule version/minimum/rounding in effect at calculation time -- a later edit to either never silently reprices a past calculation; a recalculation for the same `rate_selection_id` creates a new row and marks the prior one `is_current=false`/`superseded_by_id`, mirroring `app.pipeline_outcomes`'s own chain, `COM-146`). `app.calculate_margin` (dual `COM:Edit`+`COM:View cost` gate, mirroring `COM-148`'s `app.submit_costing_response`/`COM-149`'s `app.select_vendor_rate`) and `app.override_margin_threshold` (`COM:Approve`-gated, mandatory reason, only valid against an un-overridden `requires_approval` result, never changes the source figures).
+
+`app.margin_calculations_directory` masks two independent dimensions -- cost/margin/markup behind `COM:View cost` (`COM-148`), sell/discount/net-sell behind `COM:View selling price` (`COM-147`) -- no new permission-catalogue row. `app.margin_rule_versions` itself stays tenant-wide visible without masking (policy config, not a specific deal's financial figure, mirroring `app.win_loss_reasons`).
+
+**Two real defects found and fixed:** (1) `app.calculate_margin`'s own recalculation-supersede logic initially set the prior current row's `superseded_by_id` to the new row's id *before* inserting that new row -- a foreign-key violation, found via a genuine `db:test` failure; fixed with the correct three-step order (mark prior non-current first, insert the new row, only then link `superseded_by_id`). (2) A pre-existing, latent cross-file lookup ambiguity in `COM-149`'s own `scripts/db-tests/commercial-rate-cost-lookup.sql` (unscoped `origin_lane`/`destination_lane`/`mode` lookups, safe only until another capability's fixture reused the same lane name) was exposed for the first time by this checkpoint's own fixture (which legitimately creates a rate under the identical `Jakarta`/`Surabaya`/`FCL`/`ocean_freight` combination) -- root-caused via direct data inspection (ruling out a session-state/RLS explanation first, since each db-test file runs in its own fresh connection) and fixed durably by tenant-scoping every affected lookup across five scenario groups in that file -- the same class of fix `COM-145`/`148` established for unscoped audit-log counts, applied here to unscoped entity lookups. Full detail: `docs/build-log/phase-02/COM-150.md` §8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724180000_create_commercial_margin_calculation.sql` (1 migration -- 2 tables, 1 view, 4 functions); `scripts/db-tests/commercial-margin-calculation.sql`; `server/contracts/margin/margin.ts`(`.test.ts`); `server/queries/margin.ts`(`.test.ts`); `server/mutations/margin.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/margin-rules/{page,loading,actions,create-margin-rule-form}.tsx`; `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/calculate-margin-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/{actions.ts,page.tsx}` (Margin Calculation section), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Margin Rules nav link), `scripts/db-tests/commercial-rate-cost-lookup.sql` (tenant-scoped rate/rate-selection lookups, defect 2 above). 16 new application/test files, 1 migration, 3 modified files -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, matching prior multi-table capabilities' own precedent).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1115/1115 PASS (21 net new); `pnpm run db:test` PASS -- 40 migrations/40 db-test files, all green including the new `commercial-margin-calculation.sql` and the corrected `commercial-rate-cost-lookup.sql`; `next build` (Turbopack) PASS -- 21 routes (up from 20); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new table/function. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-009` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-010` (Prompt 151, Quotation Builder) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
