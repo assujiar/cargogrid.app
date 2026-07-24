@@ -46,6 +46,8 @@ function makeQuotation(overrides: Partial<Quotation> = {}): Quotation {
     approvalRequestId: null,
     approvalRuleVersionId: null,
     approvalRequiredReasons: [],
+    customerDecision: null,
+    customerDecisionAt: null,
     ...overrides,
   };
 }

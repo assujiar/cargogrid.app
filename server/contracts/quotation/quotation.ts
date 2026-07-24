@@ -119,6 +119,9 @@ export const QuotationSchema = z.object({
   approvalRuleVersionId: z.string().uuid().nullable(),
   /** COM-153: reason codes only (e.g. "below_minimum_margin"), never a dollar figure -- safe regardless of COM:View cost/selling price. */
   approvalRequiredReasons: z.array(z.string()),
+  /** COM-154: synced by app.record_quotation_customer_decision once the customer explicitly accepts/rejects via a secure token -- see server/contracts/quotation/quotation-acceptance.ts. */
+  customerDecision: z.enum(["accepted", "rejected"]).nullable(),
+  customerDecisionAt: z.string().nullable(),
 });
 export type Quotation = z.infer<typeof QuotationSchema>;
 
@@ -160,6 +163,8 @@ export function parseQuotation(row: Record<string, unknown>): Quotation {
     approvalRequestId: row.approval_request_id ?? null,
     approvalRuleVersionId: row.approval_rule_version_id ?? null,
     approvalRequiredReasons: row.approval_required_reasons ?? [],
+    customerDecision: row.customer_decision ?? null,
+    customerDecisionAt: row.customer_decision_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });

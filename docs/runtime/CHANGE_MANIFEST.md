@@ -3533,6 +3533,44 @@ Additive/widening for every object. Zero prior migration file edited; zero prior
 
 Self-closing. `CG-S7-COM-012` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-013` (Prompt 154, Customer Acceptance) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `153`. A fresh explicit user authorization is required before `154` proceeds.
 
+### CHG-2026-086 — Customer Acceptance (Phase 2, Prompt 154)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-013` / `154_CUSTOMER_ACCEPTANCE_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `013` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Secure quotation delivery and explicit customer accept/reject evidence bound to one exact quotation version, for a customer who holds no CargoGrid account (no Customer Portal exists yet, `COM-155` has not run). Reuses, not reinvents: the hashed-bearer-secret shape is `PLT-129`'s own `app.api_keys`/`app.authenticate_api_key` (raw value returned exactly once, sha256 digest stored, lazy expiry-flip-on-read); the public consumption route reuses `PLT-135`'s own `createSupabaseServiceRoleClient()` (`lib/supabase/service-role.ts`) -- the first time that already-established factory is exercised from a public route.
+
+New `app.quotation_acceptance_tokens` (mirrors `app.api_keys`: `token_hash` one-way sha256, raw value returned exactly once by `app.send_quotation_for_acceptance`, never stored; at most one active row per quotation via a partial unique index -- "send"/"resend" are one function, calling it again revokes the prior active token and mints a fresh one) and `app.quotation_customer_decisions` (append-only, `unique(quotation_id)` -- one final decision per exact version, mandatory reason when rejected). Widens `app.quotations` (never edits `COM-151..153`'s own migration files, per `AGENTS.md`) with `customer_decision`/`customer_decision_at` -- a third axis alongside `status` (`COM-151`) and `approval_status` (`COM-153`).
+
+`app.send_quotation_for_acceptance` (`COM:Edit` + record access gated, requires status=submitted + approval_status approved/not_required + is_current + no existing decision + validity_to not yet passed) and `app.revoke_quotation_acceptance_token` (explicit seller-initiated revoke, mandatory reason) are the internal, authenticated operations. `app.get_quotation_for_customer_decision` (public, unauthenticated, service_role-only, mirrors `app.authenticate_api_key`'s own posture -- never raises for an expired/revoked/consumed token) and `app.record_quotation_customer_decision` (the one customer-facing decision write; atomic single-use token consumption is the real replay guard, the same "stale record fails safely" pattern `app.decide_approval_step`, PLT-123, already established; audits with a null `actor_auth_user_id` since no `auth.users` identity exists for a customer) are the public operations.
+
+**Scope boundaries disclosed up front** (migration header, `docs/build-log/phase-02/COM-154.md` §3.1): token expiry is bound to the quotation's own `validity_to`, never a separately invented policy; no scheduled expiry/reminder job (`PLT-132`'s Background Job Framework has no live worker anywhere in this repository) and no real email/SMTP delivery (no provider wired anywhere) -- both disclosed, the seller relays the real, secure, returned link through their own channel; no rate limiting on the public route (no live gateway infrastructure exists yet); customer identity is bearer-token possession, not a verified account (no customer login exists yet).
+
+**Three real defects found and fixed during authoring, all via genuine `db:test` failures**: (1) two `plpgsql` functions whose `RETURNS TABLE` declared an output column literally named `quotation_id` produced "column reference is ambiguous" against bare `quotation_id` references inside their own bodies -- fixed by table-aliasing every such reference; (2) `gen_random_bytes`/`digest` (pgcrypto, installed in `public`) were unreachable from two `SECURITY DEFINER` functions whose `search_path` excluded `public` -- fixed by widening those two functions' `search_path` to `app, public, pg_temp` (disclosed as a real, narrower-than-`PLT-129`'s-own-precedent restriction, not a regression); (3) the customer-decision function's expiry check did not handle a token already lazily flipped to `expired` by a prior read -- fixed by adding an explicit branch covering both paths uniformly.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724280000_create_commercial_quotation_customer_acceptance.sql` (1 migration -- 2 new tables, 4 new functions, 2 new columns + 1 CHECK on `app.quotations`, 1 widened view); `scripts/db-tests/commercial-quotation-customer-acceptance.sql`; `server/contracts/quotation/quotation-acceptance.ts`(`.test.ts`); `server/queries/quotation-acceptance.ts`(`.test.ts`); `server/mutations/quotation-acceptance.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{customer-acceptance-panel,send-acceptance-form}.tsx`; `app/(public)/quote-decision/[token]/{page,decision-form,actions}.tsx` (the first public route this repository adds beyond `/login`). Modified: `server/contracts/quotation/quotation.ts` (2 new fields), `server/contracts/quotation/quotation-diff.test.ts` (fixture update), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (acceptance panel wiring). 11 new files, 1 migration, 3 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1216/1216 PASS (20 net new); `pnpm run db:test` PASS -- 44 migrations/44 db-test files, all green including the new `commercial-quotation-customer-acceptance.sql` and `COM-150`/`151`/`152`/`153`'s own test files running unmodified against the widened schema; `next build` (Turbopack) PASS -- 26 routes (up from 25, the new `/quote-decision/[token]` route); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151`/`152`/`153` once this checkpoint's own new migration file is staged -- not a real protected-path violation.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- a pre-existing quotation simply has no acceptance token/decision history). `git revert` of this checkpoint's commit is safe and complete; `app.quotations_directory` reverts to its exact `COM-153` behavior. No downstream Commercial capability (`COM-155` Customer and Account Conversion) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-013` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-014` (Prompt 155, Customer and Account Conversion) -- dependency-`READY` (`144..146`,`154` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `154`. A fresh explicit user authorization is required before `155` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

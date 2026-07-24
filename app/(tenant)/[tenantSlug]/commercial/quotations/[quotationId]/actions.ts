@@ -21,7 +21,9 @@ import {
   QuotationMutationError,
 } from "../../../../../../server/mutations/quotation.ts";
 import { decideQuotationApprovalStep, QuotationApprovalMutationError } from "../../../../../../server/mutations/quotation-approval.ts";
+import { sendQuotationForAcceptance, revokeQuotationAcceptanceToken, QuotationAcceptanceMutationError } from "../../../../../../server/mutations/quotation-acceptance.ts";
 import type { QuotationLineType, QuotationTerms } from "../../../../../../server/contracts/quotation/quotation.ts";
+import type { QuotationAcceptanceChannel } from "../../../../../../server/contracts/quotation/quotation-acceptance.ts";
 
 export interface QuotationFormState {
   readonly error: string | null;
@@ -220,4 +222,56 @@ export async function decideQuotationApprovalStepAction(tenantSlug: string, quot
   revalidatePath(`/${tenantSlug}/commercial/quotations/${quotationId}`);
   revalidatePath(`/${tenantSlug}/commercial/approvals`);
   return { error: null };
+}
+
+export interface SendQuotationForAcceptanceState {
+  readonly error: string | null;
+  readonly rawToken: string | null;
+}
+
+/** COM-154: mints (or re-mints) a hashed acceptance token. rawToken is returned to the caller exactly once -- never persisted, never retrievable again after this response. */
+export async function sendQuotationForAcceptanceAction(
+  tenantSlug: string,
+  quotationId: string,
+  recipientContactId: string | null,
+  channel: QuotationAcceptanceChannel,
+  _prevState: SendQuotationForAcceptanceState,
+  _formData: FormData,
+): Promise<SendQuotationForAcceptanceState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace.", rawToken: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const result = await sendQuotationForAcceptance(supabase, { quotationId, recipientContactId, channel, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    revalidatePath(`/${tenantSlug}/commercial/quotations/${quotationId}`);
+    return { error: null, rawToken: result.rawToken };
+  } catch (error) {
+    if (error instanceof QuotationAcceptanceMutationError) {
+      return { error: `Could not send quotation for acceptance: ${error.message}`, rawToken: null };
+    }
+    throw error;
+  }
+}
+
+/** Bound directly to a <form action={...}> -- every argument this action needs is already bound. */
+export async function revokeQuotationAcceptanceTokenAction(tenantSlug: string, quotationId: string, tokenId: string, reason: string, _formData: FormData): Promise<void> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await revokeQuotationAcceptanceToken(supabase, { tokenId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId, reason });
+  } catch (error) {
+    if (error instanceof QuotationAcceptanceMutationError) {
+      return;
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/quotations/${quotationId}`);
 }

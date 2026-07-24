@@ -6,6 +6,7 @@ import { listCostingRequestsForOpportunity } from "../../../../../../server/quer
 import { listMarginCalculationsForRequest } from "../../../../../../server/queries/margin.ts";
 import { listContacts } from "../../../../../../server/queries/contact.ts";
 import { getQuotationApprovalOverview } from "../../../../../../server/queries/quotation-approval.ts";
+import { listQuotationAcceptanceTokens } from "../../../../../../server/queries/quotation-acceptance.ts";
 import { diffQuotationVersions } from "../../../../../../server/contracts/quotation/quotation-diff.ts";
 import { removeQuotationLineAction } from "./actions.ts";
 import { AddLineForm } from "./add-line-form.tsx";
@@ -15,6 +16,7 @@ import { VersionHistory } from "./version-history.tsx";
 import { RevisionForm } from "./revision-form.tsx";
 import { ComparisonPanel } from "./comparison-panel.tsx";
 import { ApprovalPanel } from "./approval-panel.tsx";
+import { CustomerAcceptancePanel } from "./customer-acceptance-panel.tsx";
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
 
 /**
@@ -71,13 +73,14 @@ export default async function QuotationDetailPage({
     notFound();
   }
 
-  const [lines, readiness, costingRequests, contacts, versions, approvalOverview] = await Promise.all([
+  const [lines, readiness, costingRequests, contacts, versions, approvalOverview, acceptanceTokens] = await Promise.all([
     listQuotationLines(supabase, quotation.id),
     getQuotationSubmissionReadiness(supabase, quotation.id, access.authUserId),
     listCostingRequestsForOpportunity(supabase, quotation.opportunityId),
     listContacts(supabase, { tenantId: access.tenant.id, page: 1, pageSize: 50 }),
     listQuotationVersions(supabase, quotation.rootQuotationId),
     getQuotationApprovalOverview(supabase, quotation, access.authUserId),
+    listQuotationAcceptanceTokens(supabase, quotation.id),
   ]);
 
   const calculationsByRequest = await Promise.all(costingRequests.map((request) => listMarginCalculationsForRequest(supabase, request.id)));
@@ -208,6 +211,8 @@ export default async function QuotationDetailPage({
       {quotation.isCurrent ? <SubmitAndCloneActions tenantSlug={tenantSlug} quotationId={quotation.id} recordVersion={quotation.recordVersion} status={quotation.status} readiness={readiness} /> : null}
 
       <ApprovalPanel tenantSlug={tenantSlug} quotationId={quotation.id} approvalStatus={quotation.approvalStatus} approvalRequiredReasons={quotation.approvalRequiredReasons} overview={approvalOverview} />
+
+      <CustomerAcceptancePanel tenantSlug={tenantSlug} quotation={quotation} tokens={acceptanceTokens} contacts={contacts.contacts} />
 
       <RevisionForm tenantSlug={tenantSlug} sourceQuotationId={quotation.id} isCurrent={quotation.isCurrent} />
 
