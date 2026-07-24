@@ -17,6 +17,7 @@ import {
   RemoveQuotationLineInputSchema,
   UpdateQuotationTermsInputSchema,
   SubmitQuotationInputSchema,
+  CreateQuotationRevisionInputSchema,
   toTermsJson,
   parseQuotation,
   type CreateQuotationDraftInput,
@@ -25,6 +26,7 @@ import {
   type RemoveQuotationLineInput,
   type UpdateQuotationTermsInput,
   type SubmitQuotationInput,
+  type CreateQuotationRevisionInput,
   type Quotation,
 } from "../contracts/quotation/quotation.ts";
 
@@ -53,6 +55,8 @@ export const QUOTATION_KNOWN_MUTATION_ERROR_CODES = [
   "invalid_terms",
   "unknown_terms_key",
   "submission_not_ready",
+  "reason_required",
+  "concurrent_revision",
 ] as const;
 type KnownQuotationMutationErrorCode = (typeof QUOTATION_KNOWN_MUTATION_ERROR_CODES)[number];
 export type QuotationMutationErrorCode = KnownQuotationMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -164,6 +168,17 @@ export async function submitQuotation(client: QuotationMutationRpcClient, input:
   return callAndParseQuotation(client, "submit_quotation", {
     p_quotation_id: parsedInput.quotationId,
     p_expected_version: parsedInput.expectedVersion,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_actor_label: parsedInput.actorLabel,
+  });
+}
+
+/** COM-152: creates the next version from sourceQuotationId (current version -> ordinary "revise" flow; a historical version -> "restore as new draft" flow, identical mechanism). Mandatory reason. Supersedes whichever version was current via server-side row locking. */
+export async function createQuotationRevision(client: QuotationMutationRpcClient, input: CreateQuotationRevisionInput): Promise<Quotation> {
+  const parsedInput = CreateQuotationRevisionInputSchema.parse(input);
+  return callAndParseQuotation(client, "create_quotation_revision", {
+    p_source_quotation_id: parsedInput.sourceQuotationId,
+    p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
   });

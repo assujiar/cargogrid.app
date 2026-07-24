@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   getQuotationById,
+  listQuotationVersions,
   listQuotationsForOpportunity,
   listQuotationsForTenant,
   listQuotationLines,
@@ -46,6 +47,11 @@ const VALID_QUOTATION_ROW = {
   created_by: "tester",
   created_at: "2026-07-24T00:00:00.000Z",
   updated_at: "2026-07-24T00:00:00.000Z",
+  root_quotation_id: QUOTATION_ID,
+  version_number: 1,
+  is_current: true,
+  superseded_by_id: null,
+  revision_reason: null,
 };
 
 function fakeTableClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): QuotationQueryTableClient {
@@ -96,6 +102,19 @@ describe("getQuotationById", () => {
         return true;
       },
     );
+  });
+});
+
+describe("listQuotationVersions", () => {
+  test("filters by root_quotation_id, ordered oldest-version-first", async () => {
+    const capture = { calls: {} as Record<string, unknown> };
+    const client = fakeTableClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
+    const versions = await listQuotationVersions(client, QUOTATION_ID);
+    const eqCalls = capture.calls.eqCalls as { column: string; value: unknown }[];
+    assert.deepEqual(eqCalls, [{ column: "root_quotation_id", value: QUOTATION_ID }]);
+    assert.equal(capture.calls.orderColumn, "version_number");
+    assert.equal(capture.calls.ascending, true);
+    assert.equal(versions[0]?.versionNumber, 1);
   });
 });
 

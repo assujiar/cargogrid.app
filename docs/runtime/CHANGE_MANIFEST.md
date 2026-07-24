@@ -3455,6 +3455,44 @@ Additive for every new object (3 tables, 2 views, 8 functions). Zero prior migra
 
 Self-closing. `CG-S7-COM-010` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-011` (Prompt 152, Quotation Versioning) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was scoped to exactly Prompt 151. A fresh explicit user authorization is required before `152` proceeds.
 
+### CHG-2026-084 — Quotation Versioning (Phase 2, Prompt 152)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-011` / `152_QUOTATION_VERSIONING_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `011` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Real business versioning on top of `COM-151`'s quotation root. Widens `app.quotations` (never edits `COM-151`'s own migration file, per `AGENTS.md`) with `root_quotation_id` (the version-1 row's own id), `version_number` (monotonic per root), `is_current` (true for exactly one row per root -- a partial-unique-index guarantee, `quotations_root_current_unique`, mirroring `app.margin_calculations_current_unique`), `superseded_by_id`, `revision_reason`. Replaces `COM-151`'s `unique(tenant_id, quote_number)` with `unique(tenant_id, quote_number, version_number)` (multiple versions now legitimately share one quote_number) and adds `unique(root_quotation_id, version_number)`.
+
+`app.create_quotation_revision(p_source_quotation_id, p_reason, p_actor_auth_user_id, p_actor_label)` serves both Prompt 152's main flow (revise the latest version) and alternative flow (restore an older version as a new latest draft) identically -- the source may be current or historical, both cases copy header/lines into a new version and supersede whichever row was current beforehand. `COM:Edit` + record access gated, mandatory non-empty reason. Concurrency: real row-level locking (`SELECT ... FOR UPDATE` on the root's current-version row), not merely optimistic concurrency -- a genuinely concurrent second call blocks until the first commits, then proceeds correctly against the fresh current row.
+
+Six `COM-151` functions (`create_quotation_draft`, `clone_quotation`, `add_quotation_line`, `remove_quotation_line`, `update_quotation_terms`, `submit_quotation`, `get_quotation_submission_readiness`) plus `app.quotations_directory` widened via `CREATE OR REPLACE FUNCTION`/`VIEW` with identical signatures (the same technique `COM-149` used on `app.can_access_record` and `COM-132` used on three `PLT-131` functions). The four mutation functions now additionally require `is_current=true` -- closing a real gap: without this widening, a superseded historical version whose own `status` column still literally read `draft` (revised before ever being submitted) would have remained directly editable.
+
+**Five scope boundaries disclosed up front** (migration header, `docs/build-log/phase-02/COM-152.md` §3.1): no "issued"/"accepted" status values invented ahead of real evidence (`COM-153`/`154` have not run) -- the lock rule is bounded to `is_current` + `status <> 'cancelled'`, with the extension point named for those future capabilities; "supersede" is the internal side-effect of `create_quotation_revision`, never a separate action; "compare" is computed in TypeScript (`server/contracts/quotation/quotation-diff.ts`, pure and unit-tested) rather than a third SQL function with no real rule left to enforce; RPD-022 disclosed, not newly implemented; legacy data migration not applicable (greenfield).
+
+**No defect found in the migration itself.** Two real test-authoring mistakes were found and fixed before the db-test suite passed: (1) the initial setup used the tenant_admin identity (holding neither `COM:Create` nor `COM:Approve`) to create/publish the margin rule, fixed by using the rep instead; (2) an incorrect assertion expected the freshly-revised version 2 to be "not yet ready," when it had in fact correctly inherited a satisfied contact/line state from version 1, fixed to expect `ready=true`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724240000_create_commercial_quotation_versioning.sql` (1 migration -- 5 new columns, 2 new indexes, 2 new constraints, 1 new function, 6 widened functions, 1 widened view); `scripts/db-tests/commercial-quotation-versioning.sql`; `server/contracts/quotation/quotation-diff.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{version-history,revision-form,comparison-panel}.tsx`. Modified: `server/contracts/quotation/quotation.ts` (5 new fields), `server/queries/quotation.ts` (`listQuotationVersions`), `server/mutations/quotation.ts` (`createQuotationRevision`), `server/{contracts,queries,mutations}/quotation*.test.ts` (fixture/coverage updates), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions,terms-form}.tsx` (version-aware locking, history, revise/restore, compare). 5 new files, 1 migration, 8 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1172/1172 PASS (14 net new); `pnpm run db:test` PASS -- 42 migrations/42 db-test files, all green including the new `commercial-quotation-versioning.sql` and `COM-151`'s own test file running unmodified against the widened schema; `next build` (Turbopack) PASS -- 23 routes (unchanged count); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151` (confirmed to fire identically against `COM-151`'s own historical commit too) -- not a real protected-path violation.
+
+#### Compatibility, rollout, recovery
+
+Additive/widening for every object. Zero prior migration file edited; zero prior table's data altered (one backfill statement for `root_quotation_id`, not exercised against real data -- greenfield, no live environment). `git revert` of this checkpoint's commit is safe and complete; the widened functions/view revert to their exact `COM-151` behavior. No downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-011` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-012` (Prompt 153, Quotation Approval) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `152`. A fresh explicit user authorization is required before `153` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

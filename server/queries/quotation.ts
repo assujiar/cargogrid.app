@@ -38,6 +38,19 @@ export async function getQuotationById(client: QuotationQueryTableClient, quotat
   return parseQuotation(data as Record<string, unknown>);
 }
 
+/** COM-152: every version sharing one root_quotation_id, oldest (version 1) first -- the version history list. */
+export async function listQuotationVersions(client: QuotationQueryTableClient, rootQuotationId: string): Promise<Quotation[]> {
+  const { data, error } = await client
+    .from("quotations_directory")
+    .select("*")
+    .eq("root_quotation_id", rootQuotationId)
+    .order("version_number", { ascending: true });
+  if (error) {
+    throw new QuotationQueryError(error.message);
+  }
+  return (data ?? []).map((row: Record<string, unknown>) => parseQuotation(row));
+}
+
 /** Field-masked quotations for one opportunity, most recently created first. */
 export async function listQuotationsForOpportunity(client: QuotationQueryTableClient, opportunityId: string): Promise<Quotation[]> {
   const { data, error } = await client

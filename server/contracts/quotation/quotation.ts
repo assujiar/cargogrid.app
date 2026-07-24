@@ -96,6 +96,15 @@ export const QuotationSchema = z.object({
   createdBy: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** COM-152: the version-1 row's own id -- every version sharing one quote_number shares this value. */
+  rootQuotationId: z.string().uuid(),
+  /** COM-152: 1 for the first version, monotonically incremented per root by app.create_quotation_revision. */
+  versionNumber: z.number().int().positive(),
+  /** COM-152: true for exactly one row per rootQuotationId -- the latest version. Line/term mutation and submit all require this. */
+  isCurrent: z.boolean(),
+  supersededById: z.string().uuid().nullable(),
+  /** COM-152: why this version was created -- null only for the original version-1 row. */
+  revisionReason: z.string().nullable(),
 });
 export type Quotation = z.infer<typeof QuotationSchema>;
 
@@ -128,6 +137,11 @@ export function parseQuotation(row: Record<string, unknown>): Quotation {
     orgUnitId: row.org_unit_id,
     recordVersion: row.record_version,
     createdBy: row.created_by,
+    rootQuotationId: row.root_quotation_id,
+    versionNumber: row.version_number,
+    isCurrent: row.is_current,
+    supersededById: row.superseded_by_id,
+    revisionReason: row.revision_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -264,3 +278,12 @@ export const SubmitQuotationInputSchema = z.object({
   actorLabel: z.string().min(1),
 });
 export type SubmitQuotationInput = z.input<typeof SubmitQuotationInputSchema>;
+
+/** COM-152: sourceQuotationId may be the current version (the ordinary "revise" flow) or any historical version of the same root (the "restore as new draft" alternative flow) -- app.create_quotation_revision handles both identically. */
+export const CreateQuotationRevisionInputSchema = z.object({
+  sourceQuotationId: z.string().uuid(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+});
+export type CreateQuotationRevisionInput = z.input<typeof CreateQuotationRevisionInputSchema>;

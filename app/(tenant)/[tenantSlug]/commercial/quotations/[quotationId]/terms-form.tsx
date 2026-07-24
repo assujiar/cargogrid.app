@@ -55,7 +55,7 @@ export function TermsForm({ tenantSlug, quotation, contacts }: { tenantSlug: str
       <Button
         type="button"
         variant="secondary"
-        disabled={quotation.status !== "draft" || !/^[A-Z]{3}$/.test(currency)}
+        disabled={quotation.status !== "draft" || !quotation.isCurrent || !/^[A-Z]{3}$/.test(currency)}
         loading={pending}
         loadingLabel="Saving…"
         onClick={() =>

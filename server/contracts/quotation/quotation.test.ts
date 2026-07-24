@@ -47,6 +47,11 @@ const QUOTATION_ROW = {
   created_by: "tester",
   created_at: "2026-07-24T00:00:00.000Z",
   updated_at: "2026-07-24T00:00:00.000Z",
+  root_quotation_id: QUOTATION_ID,
+  version_number: 1,
+  is_current: true,
+  superseded_by_id: null,
+  revision_reason: null,
 };
 
 describe("parseQuotation", () => {

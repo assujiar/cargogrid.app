@@ -7,6 +7,7 @@ import {
   removeQuotationLine,
   updateQuotationTerms,
   submitQuotation,
+  createQuotationRevision,
   QuotationMutationError,
   type QuotationMutationRpcClient,
 } from "./quotation.ts";
@@ -45,6 +46,11 @@ const VALID_QUOTATION_ROW = {
   created_by: "tester",
   created_at: "2026-07-24T00:00:00.000Z",
   updated_at: "2026-07-24T00:00:00.000Z",
+  root_quotation_id: QUOTATION_ID,
+  version_number: 1,
+  is_current: true,
+  superseded_by_id: null,
+  revision_reason: null,
 };
 
 function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, calls: { fn: string; args: Record<string, unknown> }[]): QuotationMutationRpcClient {
@@ -219,6 +225,55 @@ describe("submitQuotation", () => {
       (err: unknown) => {
         assert.ok(err instanceof QuotationMutationError);
         assert.equal(err.code, "submission_not_ready");
+        return true;
+      },
+    );
+  });
+});
+
+describe("createQuotationRevision", () => {
+  test("calls create_quotation_revision with the exact snake_case params", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeRpcClient({ data: { ...VALID_QUOTATION_ROW, version_number: 2, revision_reason: "Customer requested a discount" }, error: null }, calls);
+    const revision = await createQuotationRevision(client, {
+      sourceQuotationId: QUOTATION_ID,
+      reason: "Customer requested a discount",
+      actorAuthUserId: ACTOR_ID,
+      actorLabel: "tester",
+    });
+    assert.equal(calls[0]?.fn, "create_quotation_revision");
+    assert.equal(calls[0]?.args.p_source_quotation_id, QUOTATION_ID);
+    assert.equal(calls[0]?.args.p_reason, "Customer requested a discount");
+    assert.equal(revision.versionNumber, 2);
+    assert.equal(revision.revisionReason, "Customer requested a discount");
+  });
+
+  test("classifies reason_required", async () => {
+    const client = fakeRpcClient({ data: null, error: { message: "reason_required: creating a quotation revision requires a non-empty reason" } }, []);
+    await assert.rejects(
+      () => createQuotationRevision(client, { sourceQuotationId: QUOTATION_ID, reason: "x", actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof QuotationMutationError);
+        assert.equal(err.code, "reason_required");
+        return true;
+      },
+    );
+  });
+
+  test("rejects an empty reason at the schema layer before any RPC call", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeRpcClient({ data: VALID_QUOTATION_ROW, error: null }, calls);
+    await assert.rejects(() => createQuotationRevision(client, { sourceQuotationId: QUOTATION_ID, reason: "", actorAuthUserId: ACTOR_ID, actorLabel: "tester" }));
+    assert.equal(calls.length, 0);
+  });
+
+  test("classifies concurrent_revision", async () => {
+    const client = fakeRpcClient({ data: null, error: { message: "concurrent_revision: another revision was created concurrently for quotation root x" } }, []);
+    await assert.rejects(
+      () => createQuotationRevision(client, { sourceQuotationId: QUOTATION_ID, reason: "Retry", actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof QuotationMutationError);
+        assert.equal(err.code, "concurrent_revision");
         return true;
       },
     );

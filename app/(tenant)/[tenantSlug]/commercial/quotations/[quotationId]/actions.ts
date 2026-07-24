@@ -17,6 +17,7 @@ import {
   updateQuotationTerms,
   submitQuotation,
   cloneQuotation,
+  createQuotationRevision,
   QuotationMutationError,
 } from "../../../../../../server/mutations/quotation.ts";
 import type { QuotationLineType, QuotationTerms } from "../../../../../../server/contracts/quotation/quotation.ts";
@@ -174,4 +175,26 @@ export async function cloneQuotationAction(tenantSlug: string, sourceQuotationId
   }
 
   redirect(`/${tenantSlug}/commercial/quotations/${cloneId}`);
+}
+
+/** COM-152: creates the next version from sourceQuotationId -- the current version (ordinary "revise") or any historical version of the same root ("restore as new draft"), identical mechanism, and redirects to the new version's own builder page. */
+export async function createQuotationRevisionAction(tenantSlug: string, sourceQuotationId: string, reason: string): Promise<QuotationFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let revisionId: string;
+  try {
+    const revision = await createQuotationRevision(supabase, { sourceQuotationId, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    revisionId = revision.id;
+  } catch (error) {
+    if (error instanceof QuotationMutationError) {
+      return { error: `Could not create revision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  redirect(`/${tenantSlug}/commercial/quotations/${revisionId}`);
 }
