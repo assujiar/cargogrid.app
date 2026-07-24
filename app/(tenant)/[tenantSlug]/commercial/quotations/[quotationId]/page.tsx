@@ -5,6 +5,7 @@ import { getQuotationById, listQuotationVersions, listQuotationLines, getQuotati
 import { listCostingRequestsForOpportunity } from "../../../../../../server/queries/costing.ts";
 import { listMarginCalculationsForRequest } from "../../../../../../server/queries/margin.ts";
 import { listContacts } from "../../../../../../server/queries/contact.ts";
+import { getQuotationApprovalOverview } from "../../../../../../server/queries/quotation-approval.ts";
 import { diffQuotationVersions } from "../../../../../../server/contracts/quotation/quotation-diff.ts";
 import { removeQuotationLineAction } from "./actions.ts";
 import { AddLineForm } from "./add-line-form.tsx";
@@ -13,16 +14,17 @@ import { SubmitAndCloneActions } from "./submit-and-clone-actions.tsx";
 import { VersionHistory } from "./version-history.tsx";
 import { RevisionForm } from "./revision-form.tsx";
 import { ComparisonPanel } from "./comparison-panel.tsx";
+import { ApprovalPanel } from "./approval-panel.tsx";
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
 
 /**
- * Quotation Builder detail page (COM-151/152, CG-S7-COM-010/011). `getQuotationById`
- * returns `null` for both "does not exist" and "exists but RLS denies it," matching every
- * prior Commercial detail page's posture. Available sourcing margin calculations are
- * gathered across every costing request under the quotation's own opportunity (there is
- * no direct quotation-to-margin-calculation link table -- app.quotation_lines.
- * margin_calculation_id is set per line at add time), filtered to isCurrent so a
- * stale/superseded calculation is never offered as a new line's source.
+ * Quotation Builder detail page (COM-151/152/153, CG-S7-COM-010/011/012).
+ * `getQuotationById` returns `null` for both "does not exist" and "exists but RLS denies
+ * it," matching every prior Commercial detail page's posture. Available sourcing margin
+ * calculations are gathered across every costing request under the quotation's own
+ * opportunity (there is no direct quotation-to-margin-calculation link table --
+ * app.quotation_lines.margin_calculation_id is set per line at add time), filtered to
+ * isCurrent so a stale/superseded calculation is never offered as a new line's source.
  *
  * COM-152: this page renders any version of a root, current or historical -- line/term
  * editing is only offered when `quotation.status === "draft" && quotation.isCurrent`
@@ -30,6 +32,10 @@ import type { MarginCalculation } from "../../../../../../server/contracts/margi
  * only for UI affordance -- a direct RPC call against a locked version is still denied
  * regardless of what this page renders). `?compareWith=<versionId>` renders a computed
  * diff against another version of the same root.
+ *
+ * COM-153: `getQuotationApprovalOverview` composes the Approval Engine's own
+ * history/pending-inbox view models for this quotation's bound request (null when
+ * approvalStatus is not_required, i.e. never routed) -- rendered by ApprovalPanel.
  */
 export default async function QuotationDetailPage({
   params,
@@ -65,12 +71,13 @@ export default async function QuotationDetailPage({
     notFound();
   }
 
-  const [lines, readiness, costingRequests, contacts, versions] = await Promise.all([
+  const [lines, readiness, costingRequests, contacts, versions, approvalOverview] = await Promise.all([
     listQuotationLines(supabase, quotation.id),
     getQuotationSubmissionReadiness(supabase, quotation.id, access.authUserId),
     listCostingRequestsForOpportunity(supabase, quotation.opportunityId),
     listContacts(supabase, { tenantId: access.tenant.id, page: 1, pageSize: 50 }),
     listQuotationVersions(supabase, quotation.rootQuotationId),
+    getQuotationApprovalOverview(supabase, quotation, access.authUserId),
   ]);
 
   const calculationsByRequest = await Promise.all(costingRequests.map((request) => listMarginCalculationsForRequest(supabase, request.id)));
@@ -99,6 +106,12 @@ export default async function QuotationDetailPage({
         </dd>
         <dt className="font-medium text-neutral-600">Status</dt>
         <dd className="text-neutral-900">{quotation.status}</dd>
+        {quotation.approvalStatus !== "not_required" ? (
+          <>
+            <dt className="font-medium text-neutral-600">Approval</dt>
+            <dd className="text-neutral-900">{quotation.approvalStatus}</dd>
+          </>
+        ) : null}
         <dt className="font-medium text-neutral-600">Customer</dt>
         <dd className="text-neutral-900">{quotation.customerSnapshot.legalName ?? "—"}</dd>
         <dt className="font-medium text-neutral-600">Currency</dt>
@@ -193,6 +206,8 @@ export default async function QuotationDetailPage({
       <TermsForm tenantSlug={tenantSlug} quotation={quotation} contacts={contacts.contacts} />
 
       {quotation.isCurrent ? <SubmitAndCloneActions tenantSlug={tenantSlug} quotationId={quotation.id} recordVersion={quotation.recordVersion} status={quotation.status} readiness={readiness} /> : null}
+
+      <ApprovalPanel tenantSlug={tenantSlug} quotationId={quotation.id} approvalStatus={quotation.approvalStatus} approvalRequiredReasons={quotation.approvalRequiredReasons} overview={approvalOverview} />
 
       <RevisionForm tenantSlug={tenantSlug} sourceQuotationId={quotation.id} isCurrent={quotation.isCurrent} />
 

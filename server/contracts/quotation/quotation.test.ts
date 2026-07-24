@@ -52,6 +52,10 @@ const QUOTATION_ROW = {
   is_current: true,
   superseded_by_id: null,
   revision_reason: null,
+  approval_status: "not_required",
+  approval_request_id: null,
+  approval_rule_version_id: null,
+  approval_required_reasons: [],
 };
 
 describe("parseQuotation", () => {
@@ -68,6 +72,22 @@ describe("parseQuotation", () => {
     const quotation = parseQuotation({ ...QUOTATION_ROW, sell_masked: true, subtotal_amount: null, discount_amount: null, tax_amount: null, total_amount: null });
     assert.equal(quotation.sellMasked, true);
     assert.equal(quotation.totalAmount, null);
+  });
+
+  test("defaults approvalStatus to not_required with no bound request when the raw row omits COM-153's columns entirely", () => {
+    const { approval_status: _s, approval_request_id: _r, approval_rule_version_id: _v, approval_required_reasons: _reasons, ...rowWithoutApprovalColumns } = QUOTATION_ROW;
+    const quotation = parseQuotation(rowWithoutApprovalColumns);
+    assert.equal(quotation.approvalStatus, "not_required");
+    assert.equal(quotation.approvalRequestId, null);
+    assert.deepEqual(quotation.approvalRequiredReasons, []);
+  });
+
+  test("maps a pending approval routing outcome with reason codes", () => {
+    const requestId = "923e4567-e89b-12d3-a456-426614174000";
+    const quotation = parseQuotation({ ...QUOTATION_ROW, approval_status: "pending", approval_request_id: requestId, approval_required_reasons: ["below_minimum_margin"] });
+    assert.equal(quotation.approvalStatus, "pending");
+    assert.equal(quotation.approvalRequestId, requestId);
+    assert.deepEqual(quotation.approvalRequiredReasons, ["below_minimum_margin"]);
   });
 });
 

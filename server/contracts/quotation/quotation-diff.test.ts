@@ -42,6 +42,10 @@ function makeQuotation(overrides: Partial<Quotation> = {}): Quotation {
     isCurrent: true,
     supersededById: null,
     revisionReason: null,
+    approvalStatus: "not_required",
+    approvalRequestId: null,
+    approvalRuleVersionId: null,
+    approvalRequiredReasons: [],
     ...overrides,
   };
 }

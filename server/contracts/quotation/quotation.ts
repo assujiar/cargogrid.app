@@ -1,9 +1,12 @@
 /**
- * Quotation Builder contract (COM-151, CG-S7-COM-010). Mirrors
- * supabase/migrations/20260724210000_create_commercial_quotation_builder.sql's
+ * Quotation Builder contract (COM-151/152/153, CG-S7-COM-010/011/012). Mirrors
+ * supabase/migrations/20260724210000_create_commercial_quotation_builder.sql,
+ * supabase/migrations/20260724240000_create_commercial_quotation_versioning.sql, and
+ * supabase/migrations/20260724270000_create_commercial_quotation_approval.sql's combined
  * app.quotations/app.quotation_lines/app.quotations_directory/app.quotation_lines_directory
- * shape and their RPCs. Versioning (Prompt 152) and approval routing (Prompt 153) are not
- * modeled here -- see the migration's own header for the exact scope boundary.
+ * shape and their RPCs. Approval routing definitions/threshold rules
+ * (app.quotation_approval_rules, the Approval Engine's own request/step/decision rows) are
+ * their own contract -- see server/contracts/quotation/quotation-approval.ts.
  */
 
 import { z } from "zod";
@@ -15,6 +18,11 @@ export type QuotationStatus = z.infer<typeof QuotationStatusSchema>;
 export const QUOTATION_LINE_TYPES = ["service", "surcharge", "fee", "discount"] as const;
 export const QuotationLineTypeSchema = z.enum(QUOTATION_LINE_TYPES);
 export type QuotationLineType = z.infer<typeof QuotationLineTypeSchema>;
+
+/** COM-153: the approval-routing outcome for this exact quotation version, independent of QuotationStatus (submission lifecycle). */
+export const QUOTATION_APPROVAL_STATUSES = ["not_required", "pending", "approved", "rejected"] as const;
+export const QuotationApprovalStatusSchema = z.enum(QUOTATION_APPROVAL_STATUSES);
+export type QuotationApprovalStatus = z.infer<typeof QuotationApprovalStatusSchema>;
 
 /** app.quotations.customer_snapshot is a bounded jsonb snapshot copied from app.prospects at creation time (migration header) -- these are the well-known keys app.create_quotation_draft writes. */
 export const CustomerSnapshotSchema = z.object({
@@ -105,6 +113,12 @@ export const QuotationSchema = z.object({
   supersededById: z.string().uuid().nullable(),
   /** COM-152: why this version was created -- null only for the original version-1 row. */
   revisionReason: z.string().nullable(),
+  /** COM-153: set by app.submit_quotation (initial routing) and app.decide_quotation_approval_step (final sync). */
+  approvalStatus: QuotationApprovalStatusSchema,
+  approvalRequestId: z.string().uuid().nullable(),
+  approvalRuleVersionId: z.string().uuid().nullable(),
+  /** COM-153: reason codes only (e.g. "below_minimum_margin"), never a dollar figure -- safe regardless of COM:View cost/selling price. */
+  approvalRequiredReasons: z.array(z.string()),
 });
 export type Quotation = z.infer<typeof QuotationSchema>;
 
@@ -142,6 +156,10 @@ export function parseQuotation(row: Record<string, unknown>): Quotation {
     isCurrent: row.is_current,
     supersededById: row.superseded_by_id,
     revisionReason: row.revision_reason,
+    approvalStatus: row.approval_status ?? "not_required",
+    approvalRequestId: row.approval_request_id ?? null,
+    approvalRuleVersionId: row.approval_rule_version_id ?? null,
+    approvalRequiredReasons: row.approval_required_reasons ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });

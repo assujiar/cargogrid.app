@@ -20,6 +20,7 @@ import {
   createQuotationRevision,
   QuotationMutationError,
 } from "../../../../../../server/mutations/quotation.ts";
+import { decideQuotationApprovalStep, QuotationApprovalMutationError } from "../../../../../../server/mutations/quotation-approval.ts";
 import type { QuotationLineType, QuotationTerms } from "../../../../../../server/contracts/quotation/quotation.ts";
 
 export interface QuotationFormState {
@@ -197,4 +198,26 @@ export async function createQuotationRevisionAction(tenantSlug: string, sourceQu
   }
 
   redirect(`/${tenantSlug}/commercial/quotations/${revisionId}`);
+}
+
+/** COM-153: approve/reject one active step of this quotation's bound approval request. "Request revision" is not a third decision -- reject with a reason, then createQuotationRevisionAction above starts a fresh governed approval path. */
+export async function decideQuotationApprovalStepAction(tenantSlug: string, quotationId: string, requestStepId: string, decision: "approved" | "rejected", reason: string | null): Promise<QuotationFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await decideQuotationApprovalStep(supabase, { requestStepId, decision, actorAuthUserId: access.authUserId, actorLabel: access.authUserId, reason });
+  } catch (error) {
+    if (error instanceof QuotationApprovalMutationError) {
+      return { error: `Could not record decision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/quotations/${quotationId}`);
+  revalidatePath(`/${tenantSlug}/commercial/approvals`);
+  return { error: null };
 }

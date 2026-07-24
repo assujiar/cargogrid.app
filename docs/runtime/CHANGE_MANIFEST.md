@@ -3493,6 +3493,46 @@ Additive/widening for every object. Zero prior migration file edited; zero prior
 
 Self-closing. `CG-S7-COM-011` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-012` (Prompt 153, Quotation Approval) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `152`. A fresh explicit user authorization is required before `153` proceeds.
 
+### CHG-2026-085 — Quotation Approval (Phase 2, Prompt 153)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-012` / `153_QUOTATION_APPROVAL_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `012` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Configurable quotation approval, instantiating two already-`VERIFIED` Platform primitives (`PLT-121` Configuration Engine, `PLT-123` Approval Engine) rather than forking them -- both `COM-151`'s and `COM-152`'s own migration headers had already disclosed this exact boundary in advance ("approval routing is Prompt 153's own scope").
+
+New `app.quotation_approval_rules` -- a versioned, tenant-wide threshold policy (`min_margin_pct`/`max_discount_pct`/`min_value_amount`, each optional but at least one required by CHECK) mirroring `app.margin_rule_versions` (`COM-150`) line for line: draft/published/archived, `supersedes_version_id`, exactly one published row per tenant via a partial unique index. Widens `app.quotations` (never edits `COM-151`/`152`'s own migration files, per `AGENTS.md`) with a second axis independent of submission `status`: `approval_status` (not_required/pending/approved/rejected), `approval_request_id`, `approval_rule_version_id`, `approval_required_reasons` (reason codes only, never a dollar figure).
+
+`app.evaluate_quotation_approval_requirement` is the one deterministic threshold decision (margin via `min(quotation_lines.margin_pct_snapshot)`, discount via the header's own `discount_amount/subtotal_amount`, value via `total_amount` directly). `CREATE OR REPLACE FUNCTION app.submit_quotation` (identical signature) now resolves routing inside the same transaction as the draft→submitted move: no threshold crossed → auto-approved, no request ever created; a threshold crossed → looks up the tenant's published `config_type_code='approval'` routing definition (published via the unmodified generic `PLT-121`/`123` RPCs -- no new SQL) and opens a real routed request via `app.request_approval`, failing closed (`approval_definition_not_configured`) if none is published.
+
+New `app.decide_quotation_approval_step` is the one domain-specific sync wrapper this checkpoint adds over the Approval Engine -- validates the bound request's `entity_type='quotation'`, delegates the real decision to the unmodified `app.decide_approval_step` (eligibility/self-approval-denial/duplicate-decision guards all reused), then syncs `app.quotations.approval_status` only once the request reaches a final state. Delegation/escalation need no such wrapper -- the API layer calls the engine's own functions directly.
+
+**Scope boundaries disclosed up front** (migration header, `docs/build-log/phase-02/COM-153.md` §3.1): thresholds are a bespoke tenant-wide table, not a second Configuration Engine instantiation (customer/service/organizational thresholds out of this bounded slice); the approval routing definition is instantiated via the existing generic Platform RPCs directly, no dedicated Commercial authoring UI built; "request revision" is not a fourth decision verb -- reject with a reason, then `app.create_quotation_revision` (`COM-152`, unmodified) starts a fresh governed approval path; legacy submitted quotations are never retroactively approved (no backfill).
+
+**No defect found in the migration itself.** Two test-authoring mistakes were found and fixed before the db-test suite passed: (1) the rep role initially lacked `COM:Approve` (needed to publish the margin rule reused from setup), fixed by adding it; (2) this checkpoint's own new test file's unscoped `full_name = 'Jane Doe'` contact collided with `commercial-quotation-builder.sql`'s own pre-existing unscoped lookup once alphabetical run order placed this file first, fixed by renaming this checkpoint's own contact to "Jane Doe Appr."
+
+#### Scope and files
+
+New: `supabase/migrations/20260724270000_create_commercial_quotation_approval.sql` (1 migration -- 1 new table, 2 new functions on it, 4 new columns + 1 CHECK on `app.quotations`, 1 new evaluator function, 1 new domain-sync function, 1 widened function, 1 widened view); `scripts/db-tests/commercial-quotation-approval.sql`; `server/contracts/quotation/quotation-approval.ts`(`.test.ts`); `server/queries/quotation-approval.ts`(`.test.ts`); `server/mutations/quotation-approval.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/approval-rules/{page,create-approval-rule-form,actions,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/approvals/{page,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{approval-panel,approval-decision-form}.tsx`. Modified: `server/contracts/quotation/quotation.ts` (4 new fields), `server/contracts/quotation/quotation-diff.test.ts` (fixture update), `server/contracts/quotation/quotation.test.ts` (2 new tests), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (approval panel wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (2 new nav links). 13 new files, 1 migration, 6 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1196/1196 PASS (24 net new); `pnpm run db:test` PASS -- 43 migrations/43 db-test files, all green including the new `commercial-quotation-approval.sql` and `COM-150`/`151`/`152`'s own test files running unmodified against the widened schema; `next build` (Turbopack) PASS -- 25 routes (up from 23); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` will report the same disclosed, pre-existing false positive as `COM-151`/`152` once this checkpoint's own new migration file is staged -- not a real protected-path violation.
+
+#### Compatibility, rollout, recovery
+
+Additive/widening for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- every pre-existing quotation defaults to `approval_status='not_required'` by column default, never retroactively approved). `git revert` of this checkpoint's commit is safe and complete; `app.submit_quotation`/`app.quotations_directory` revert to their exact `COM-152` behavior. No downstream Commercial capability (`COM-154` Customer Acceptance) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-012` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-013` (Prompt 154, Customer Acceptance) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `153`. A fresh explicit user authorization is required before `154` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
