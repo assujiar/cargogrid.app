@@ -3417,6 +3417,44 @@ Additive throughout — no existing token renamed/removed, no existing component
 
 Self-closing (out-of-band task, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-010` (Prompt 151, Quotation Builder). This entry exists so the manifest's append-only history reflects this checkpoint's real changes without disturbing the numbered task-ledger machinery `AGENTS.md` governs.
 
+### CHG-2026-083 — Quotation Builder (Phase 2, Prompt 151)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-010` / `151_QUOTATION_BUILDER_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `010` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message scoped to exactly this task ("lanjut prompt 151") -- distinct from `CG-S7-COM-001`'s own open-ended "lanjut" precedent recorded on the separate `claude/lanjut-c6vqse` branch/session |
+
+#### Outcome
+
+Canonical quotation builder reusing customer/opportunity/cargo/service/rate data (`app.opportunities`, `app.prospects`, `app.contacts`, `app.margin_calculations` -- `COM-144..150`) to produce exact selling lines/terms and a submission-ready offer. `app.quotations` (root -- stable `quote_number` via a real atomic tenant-scoped counter, `source_opportunity_version` pin, `customer_snapshot` copied from the real prospect row, server-computed aggregate money columns, `draft`/`submitted`/`cancelled` status). `app.quotation_lines` (typed lines -- `service`/`surcharge`/`fee`/`discount` -- optionally sourced from a margin calculation, whose cost/margin snapshot is copied at add-time and masked at read-time).
+
+`app.next_quotation_number()` is a disclosed, bounded alternative to the still-unadopted Configurable Numbering Engine (`PLT-125`) -- no Commercial capability has wired that engine up yet. `app.create_quotation_draft`/`app.clone_quotation`/`app.add_quotation_line`/`app.remove_quotation_line`/`app.update_quotation_terms` are all `COM:Create`/`COM:Edit`-gated with record access and optimistic concurrency; every money-producing step is explicit `numeric` arithmetic with `round(..., 2)`. `app.get_quotation_submission_readiness` is a read-only structural gate (no dollar figures, only reason codes) that `app.submit_quotation` calls internally, failing closed with the exact blocking reasons (`submission_not_ready`) rather than a bare rejection.
+
+`app.quotations_directory`/`app.quotation_lines_directory` mask two independent dimensions -- every monetary total behind `COM:View selling price`, the line-level cost/margin snapshot behind `COM:View cost` -- reusing `COM-147`/`148`'s masking predicates directly, no new permission-catalogue row.
+
+**Six scope boundaries disclosed up front** (migration header and `docs/build-log/phase-02/COM-151.md` §3.1): no canonical customer/account/address master yet (reuses `app.prospects`/`app.contacts`); Numbering Engine not adopted; line editing is add/remove, not in-place numeric edit; autosave is an explicit optimistically-concurrent save, not real-time; document generation/private signed-URL preview is `BLOCKED` on the still-missing asset-upload/storage pipeline (confirmed absent during this same session's prior CargoGrid Design System Expansion task); revisioning/versioning (`152`) and approval routing (`153`) are explicitly out of scope here.
+
+**Two real defects found and fixed during authoring, both via genuine `db:test` failures:** (1) `v_reasons := v_reasons || 'code'` (implicit `text[] || text` concatenation) raised a Postgres "malformed array literal" error -- the operator resolved to `anyarray || anyarray` instead of `anyarray || anyelement` for an untyped string literal; fixed with explicit `array_append(v_reasons, 'code')` throughout `app.get_quotation_submission_readiness`. (2) This checkpoint's own db-test file picked "the first quotation for this customer" via `order by created_at asc limit 1`, non-deterministic when two quotations are created inside the same `do $$ ... $$` block (Postgres freezes `now()` for the whole transaction) -- fixed by ordering on the guaranteed-distinct, allocation-ordered `quote_number` instead.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724210000_create_commercial_quotation_builder.sql` (1 migration -- 3 tables, 2 views, 8 functions); `scripts/db-tests/commercial-quotation-builder.sql`; `server/contracts/quotation/quotation.ts`(`.test.ts`); `server/queries/quotation.ts`(`.test.ts`); `server/mutations/quotation.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/quotations/{page,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,loading,actions,add-line-form,terms-form,submit-and-clone-actions}.tsx`; `app/(tenant)/[tenantSlug]/commercial/opportunities/[opportunityId]/create-quotation-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/opportunities/[opportunityId]/page.tsx` (Quotations section), `app/(tenant)/[tenantSlug]/commercial/opportunities/actions.ts` (`createQuotationDraftAction`), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Quotations nav link). 21 new application/test files, 1 migration, 3 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1158/1158 PASS (30 net new); `pnpm run db:test` PASS -- 41 migrations/41 db-test files, all green including the new `commercial-quotation-builder.sql`; `next build` (Turbopack) PASS -- 23 routes (up from 21); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports one `FORBIDDEN` finding on this checkpoint's own new migration file -- a disclosed, pre-existing tool false positive (its regex matches any changed path under `supabase/migrations/`, not only genuine edits to an already-merged file; verified this checkpoint that the identical false positive fires against `COM-150`'s own historical commit run through the same checker) -- not a real protected-path violation, and the tool itself is outside this task's Quotation Lifecycle file scope to fix.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object (3 tables, 2 views, 8 functions). Zero prior migration file edited; zero prior table's data altered. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-010` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-011` (Prompt 152, Quotation Versioning) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was scoped to exactly Prompt 151. A fresh explicit user authorization is required before `152` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
