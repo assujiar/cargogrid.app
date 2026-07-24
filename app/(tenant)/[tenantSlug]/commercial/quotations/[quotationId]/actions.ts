@@ -22,6 +22,7 @@ import {
 } from "../../../../../../server/mutations/quotation.ts";
 import { decideQuotationApprovalStep, QuotationApprovalMutationError } from "../../../../../../server/mutations/quotation-approval.ts";
 import { sendQuotationForAcceptance, revokeQuotationAcceptanceToken, QuotationAcceptanceMutationError } from "../../../../../../server/mutations/quotation-acceptance.ts";
+import { convertQuotationToAccount, AccountMutationError } from "../../../../../../server/mutations/account.ts";
 import type { QuotationLineType, QuotationTerms } from "../../../../../../server/contracts/quotation/quotation.ts";
 import type { QuotationAcceptanceChannel } from "../../../../../../server/contracts/quotation/quotation-acceptance.ts";
 
@@ -274,4 +275,43 @@ export async function revokeQuotationAcceptanceTokenAction(tenantSlug: string, q
   }
 
   revalidatePath(`/${tenantSlug}/commercial/quotations/${quotationId}`);
+}
+
+export interface ConvertQuotationToAccountState {
+  readonly error: string | null;
+  readonly accountId: string | null;
+}
+
+/** COM-155: create-or-link, idempotent on quotationId. targetAccountId set = link to a reviewed duplicate candidate; null/empty = create a brand-new account, optionally under parentAccountId. */
+export async function convertQuotationToAccountAction(
+  tenantSlug: string,
+  quotationId: string,
+  targetAccountId: string | null,
+  parentAccountId: string | null,
+  _prevState: ConvertQuotationToAccountState,
+  _formData: FormData,
+): Promise<ConvertQuotationToAccountState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace.", accountId: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const account = await convertQuotationToAccount(supabase, {
+      quotationId,
+      targetAccountId,
+      parentAccountId,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+    revalidatePath(`/${tenantSlug}/commercial/quotations/${quotationId}`);
+    revalidatePath(`/${tenantSlug}/commercial/accounts`);
+    return { error: null, accountId: account.id };
+  } catch (error) {
+    if (error instanceof AccountMutationError) {
+      return { error: `Could not convert quotation: ${error.message}`, accountId: null };
+    }
+    throw error;
+  }
 }

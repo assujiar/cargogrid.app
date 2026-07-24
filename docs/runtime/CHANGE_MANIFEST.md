@@ -3571,6 +3571,44 @@ Additive for every object. Zero prior migration file edited; zero prior table's 
 
 Self-closing. `CG-S7-COM-013` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-014` (Prompt 155, Customer and Account Conversion) -- dependency-`READY` (`144..146`,`154` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `154`. A fresh explicit user authorization is required before `155` proceeds.
 
+### CHG-2026-087 — Customer and Account Conversion (Phase 2, Prompt 155)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-014` / `155_CUSTOMER_AND_ACCOUNT_CONVERSION_PROMPT.md` |
+| Change type | ADR + SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `014` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+The canonical Customer/Account entity and quotation-to-account conversion, resolving `ADR-CAND-ARCH-012` via a newly ratified **`ADR-0018`**: a flat-column `app.accounts` table -- not built on `PLT-120`'s Master Data Engine (its Supreme-Admin/tenant-admin-grant authority model is the wrong shape for an ordinary `COM:Approve`-gated workflow action), not two separate `app.accounts`/`app.customers` tables (no real requirement drives the split yet). `customer_status` resolves the account/customer naming distinction as one entity, not two.
+
+New `app.accounts` (`legal_name`/`trade_name`/`tax_id`, normalization/fingerprint columns reused directly from `COM-144`'s own `app.normalize_prospect_identifier`/`app.compute_prospect_duplicate_fingerprint` rather than re-authored, `billing_address` jsonb mirroring `app.prospects`'s own shape, `customer_status` active/inactive, `parent_account_id` self-FK for subsidiaries, `status` active/merged) with database-enforced anti-duplication (`accounts_tenant_fingerprint_active_unique`, a partial unique index on `(tenant_id, duplicate_fingerprint) where status='active'`). New `app.account_conversions` (`unique(quotation_id)` -- one final conversion outcome per quotation, ever).
+
+`app.find_duplicate_accounts`/`app.get_account_conversion_readiness` are read-only pre-conversion previews (reason codes only, never a dollar figure). `app.convert_quotation_to_account` is the one atomic, `COM:Approve`-gated, idempotent create-or-link write: early-returns the existing account for an already-converted quotation before any authority re-check (a retry is always safe); creates a new account or links an explicitly chosen target; catches a concurrent `unique_violation` on the fingerprint index and gracefully re-resolves it as "link to the winning row" rather than erroring; re-links every one of the source prospect's existing `app.contact_links` rows onto the resulting account via `app.resolve_commercial_record_ref`'s widened `'account'` branch (contacts reused, never re-created); backfills `app.opportunities.account_ref`, closing `COM-147`'s own disclosed forward-reference.
+
+**Disclosed scope boundary**: Prompt 155 §16 asked to restrict legal/tax/billing fields by permission -- a `COM:View billing` permission action was attempted and rejected by `app.permissions_action_check`'s fixed, closed 19-action enum (widening it is an architecture-level change out of this bounded task's scope). Resolved instead by enforcing the restriction one layer up via the `COM:Approve` gate on conversion itself; `app.accounts` carries no `*_directory` masking view at all (mirrors `app.quotation_approval_rules`'s own "no view when nothing needs masking" precedent) -- `SELECT` is granted directly on the base table. RLS is deliberately tenant-wide, not record-scoped, the same precedent `app.margin_rule_versions`/`app.quotation_approval_rules` already established -- proven directly: a sibling-team outsider with no ownership stake sees every account in the tenant. No credit field/site master (both deferred), no merge-accounts function (structural columns only), no legacy backfill.
+
+**Two real defects found and fixed during authoring**: (1) the attempted `'View billing'` permission insert violated the fixed enum -- fixed by removing the permission insert, the `app.has_view_billing()` function, and all column-masking logic entirely; (2) the db-test's second/third quotations initially reused a single shadowed contact variable and passed `null` for `contact_id` into `create_quotation_draft`, tripping `submission_not_ready (contact_required)` -- fixed by declaring distinct contact variables and creating/linking a real contact per prospect before submission. Also self-caught (not a hard error): an initial `app.accounts_directory` masking view became a redundant pass-through once masking was removed -- deleted entirely in favor of the base-table grant, requiring a rewrite of the db-test's tenant-wide-visibility assertion to query `app.accounts` directly.
+
+#### Scope and files
+
+New: `docs/adr/ADR-0018-canonical-account-entity-shape-and-ownership.md`; `supabase/migrations/20260724290000_create_commercial_customer_account_conversion.sql` (1 migration -- 2 new tables, 3 new functions, 1 widened CHECK constraint on `app.contact_links`, 1 widened function `app.resolve_commercial_record_ref`); `scripts/db-tests/commercial-customer-account-conversion.sql`; `server/contracts/account/account.ts`(`.test.ts`); `server/queries/account.ts`(`.test.ts`); `server/mutations/account.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/accounts/{page,loading}.tsx` and `accounts/[accountId]/{page,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{account-conversion-panel,convert-account-form}.tsx`. Modified: `docs/adr/README.md` (§5.2/§6/§1), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (conversion panel wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Accounts nav link). 13 new files, 1 migration, 4 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1238/1238 PASS (22 net new); `pnpm run db:test` PASS -- 45 migrations/45 db-test files, all green including the new `commercial-customer-account-conversion.sql` and `COM-144..154`'s own test files running unmodified against the widened schema; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..154` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script -- `next build` is not part of this repository's own gate set.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- `app.opportunities.account_ref` stays null for every opportunity whose quotation has never been converted). `git revert` of this checkpoint's commit is safe and complete; the widened `app.contact_links` CHECK and `app.resolve_commercial_record_ref` revert to their exact `COM-154` behavior. No downstream Commercial capability (`COM-156` Contract and Customer Pricing) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-014` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-015` (Prompt 156, Contract and Customer Pricing) -- dependency-`READY` (`150`,`154..155` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `155`. A fresh explicit user authorization is required before `156` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

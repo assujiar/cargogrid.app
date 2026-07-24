@@ -7,6 +7,7 @@ import { listMarginCalculationsForRequest } from "../../../../../../server/queri
 import { listContacts } from "../../../../../../server/queries/contact.ts";
 import { getQuotationApprovalOverview } from "../../../../../../server/queries/quotation-approval.ts";
 import { listQuotationAcceptanceTokens } from "../../../../../../server/queries/quotation-acceptance.ts";
+import { getAccountConversionForQuotation, getAccountConversionReadiness, findDuplicateAccounts } from "../../../../../../server/queries/account.ts";
 import { diffQuotationVersions } from "../../../../../../server/contracts/quotation/quotation-diff.ts";
 import { removeQuotationLineAction } from "./actions.ts";
 import { AddLineForm } from "./add-line-form.tsx";
@@ -17,7 +18,9 @@ import { RevisionForm } from "./revision-form.tsx";
 import { ComparisonPanel } from "./comparison-panel.tsx";
 import { ApprovalPanel } from "./approval-panel.tsx";
 import { CustomerAcceptancePanel } from "./customer-acceptance-panel.tsx";
+import { AccountConversionPanel } from "./account-conversion-panel.tsx";
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
+import type { Account, AccountConversionReadiness } from "../../../../../../server/contracts/account/account.ts";
 
 /**
  * Quotation Builder detail page (COM-151/152/153, CG-S7-COM-010/011/012).
@@ -87,6 +90,20 @@ export default async function QuotationDetailPage({
   const availableCalculations: MarginCalculation[] = calculationsByRequest.flat().filter((calc) => calc.isCurrent);
 
   const editable = quotation.status === "draft" && quotation.isCurrent;
+
+  let existingConversion = null;
+  let conversionReadiness: AccountConversionReadiness | null = null;
+  let duplicateCandidates: Account[] = [];
+  if (quotation.customerDecision === "accepted") {
+    existingConversion = await getAccountConversionForQuotation(supabase, quotation.id);
+    if (!existingConversion) {
+      conversionReadiness = await getAccountConversionReadiness(supabase, { quotationId: quotation.id, actorAuthUserId: access.authUserId });
+      if (conversionReadiness.duplicateCandidateIds.length > 0) {
+        const legalName = quotation.customerSnapshot.legalName ?? "";
+        duplicateCandidates = legalName ? await findDuplicateAccounts(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, legalName }) : [];
+      }
+    }
+  }
 
   let comparisonPanel = null;
   if (compareWith) {
@@ -213,6 +230,14 @@ export default async function QuotationDetailPage({
       <ApprovalPanel tenantSlug={tenantSlug} quotationId={quotation.id} approvalStatus={quotation.approvalStatus} approvalRequiredReasons={quotation.approvalRequiredReasons} overview={approvalOverview} />
 
       <CustomerAcceptancePanel tenantSlug={tenantSlug} quotation={quotation} tokens={acceptanceTokens} contacts={contacts.contacts} />
+
+      <AccountConversionPanel
+        tenantSlug={tenantSlug}
+        quotation={quotation}
+        existingConversion={existingConversion}
+        readiness={conversionReadiness}
+        duplicateCandidates={duplicateCandidates}
+      />
 
       <RevisionForm tenantSlug={tenantSlug} sourceQuotationId={quotation.id} isCurrent={quotation.isCurrent} />
 
