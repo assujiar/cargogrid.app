@@ -14,6 +14,7 @@ import { createSupabaseServerClient } from "../../../../../../lib/supabase/serve
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { assignCostingRequest, submitCostingResponse, reviseCostingRequest, cancelCostingRequest, CostingMutationError } from "../../../../../../server/mutations/costing.ts";
 import { selectVendorRate, RateMutationError } from "../../../../../../server/mutations/rate.ts";
+import { calculateMargin, overrideMarginThreshold, MarginMutationError } from "../../../../../../server/mutations/margin.ts";
 import type { CostingResponseSourceType, ResponseComponentInput } from "../../../../../../server/contracts/costing/costing.ts";
 
 export interface CostingRequestFormState {
@@ -50,6 +51,55 @@ export async function selectVendorRateAction(
   } catch (error) {
     if (error instanceof RateMutationError) {
       return { error: `Could not select a rate: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/costing-requests/${requestId}`);
+  return { error: null };
+}
+
+/** Requires both COM:Edit and COM:View cost. Fails closed on mixed currency or no published margin rule. A repeated call for the same rateSelectionId supersedes the prior current calculation. */
+export async function calculateMarginAction(tenantSlug: string, requestId: string, rateSelectionId: string, sellAmount: number, sellCurrency: string, discountPct: number): Promise<CostingRequestFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await calculateMargin(supabase, {
+      rateSelectionId,
+      sellAmount,
+      sellCurrency,
+      discountPct,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MarginMutationError) {
+      return { error: `Could not calculate margin: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/costing-requests/${requestId}`);
+  return { error: null };
+}
+
+/** Requires COM:Approve, a non-empty reason, and an un-overridden requires_approval result. */
+export async function overrideMarginThresholdAction(tenantSlug: string, requestId: string, marginCalculationId: string, expectedVersion: number, reason: string): Promise<CostingRequestFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await overrideMarginThreshold(supabase, { marginCalculationId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof MarginMutationError) {
+      return { error: `Could not override margin threshold: ${error.message}` };
     }
     throw error;
   }

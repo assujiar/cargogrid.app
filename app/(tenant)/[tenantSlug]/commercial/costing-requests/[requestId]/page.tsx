@@ -10,8 +10,11 @@ import {
 } from "../../../../../../server/queries/costing.ts";
 import { listActiveVendorRates, listRateSelectionsForRequest, RateQueryError } from "../../../../../../server/queries/rate.ts";
 import type { RateVersion, RateSelection } from "../../../../../../server/contracts/rate/rate.ts";
+import { listMarginCalculationsForRequest, MarginQueryError } from "../../../../../../server/queries/margin.ts";
+import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
 import { CostingRequestActionsPanel } from "./costing-request-actions-panel.tsx";
 import { SelectRateForm } from "./select-rate-form.tsx";
+import { CalculateMarginForm } from "./calculate-margin-form.tsx";
 
 /**
  * Costing Request Detail (COM-148, CG-S7-COM-007). `getCostingRequestById` returns `null`
@@ -74,6 +77,17 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
     rateSelections = [];
     candidateRates = [];
   }
+
+  let marginCalculations: MarginCalculation[];
+  try {
+    marginCalculations = await listMarginCalculationsForRequest(supabase, request.id);
+  } catch (error) {
+    if (!(error instanceof MarginQueryError)) {
+      throw error;
+    }
+    marginCalculations = [];
+  }
+  const currentMarginCalculation = marginCalculations.find((calc) => calc.isCurrent) ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -170,6 +184,8 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
       </div>
 
       <SelectRateForm tenantSlug={tenantSlug} requestId={request.id} candidateRates={candidateRates} />
+
+      <CalculateMarginForm tenantSlug={tenantSlug} requestId={request.id} rateSelections={rateSelections} currentCalculation={currentMarginCalculation} />
 
       <CostingRequestActionsPanel tenantSlug={tenantSlug} requestId={request.id} recordVersion={request.recordVersion} status={request.status} requestComponents={components} />
     </div>

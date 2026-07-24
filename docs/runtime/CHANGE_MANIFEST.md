@@ -3343,6 +3343,42 @@ Additive for every new table/function. `app.v_active_vendor_rates`'s redefinitio
 
 Self-closing. `CG-S7-COM-008` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-009` (Prompt 150, Margin Calculation) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-081 — Margin Calculation (Phase 2, Prompt 150)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-009` / `150_MARGIN_CALCULATION_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `009` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+Exact, versioned, explainable margin/markup calculation over a selected cost snapshot (`app.rate_selections`, `COM-149`) and selling inputs. Money stays PostgreSQL `numeric` end to end -- never binary floating point -- with explicit `round(..., 2)` at every money-producing step in `app.calculate_margin`. No FX/multi-currency conversion (fails closed with `mixed_currency` unless the selling currency exactly matches the pinned cost snapshot's own currency); margin rules are tenant-wide only in this bounded slice.
+
+`app.margin_rule_versions` (a versioned, tenant-wide minimum-margin-percentage policy, `draft`->`published`->`archived`, `app.publish_margin_rule_version`'s `p_supersedes_version_id` archives the prior published rule exactly like `app.publish_sales_plan`, `COM-146` -- at most one published rule per tenant via a partial unique index). `app.margin_calculations` (pins the exact cost snapshot and the exact rule version/minimum/rounding in effect at calculation time -- a later edit to either never silently reprices a past calculation; a recalculation for the same `rate_selection_id` creates a new row and marks the prior one `is_current=false`/`superseded_by_id`, mirroring `app.pipeline_outcomes`'s own chain, `COM-146`). `app.calculate_margin` (dual `COM:Edit`+`COM:View cost` gate, mirroring `COM-148`'s `app.submit_costing_response`/`COM-149`'s `app.select_vendor_rate`) and `app.override_margin_threshold` (`COM:Approve`-gated, mandatory reason, only valid against an un-overridden `requires_approval` result, never changes the source figures).
+
+`app.margin_calculations_directory` masks two independent dimensions -- cost/margin/markup behind `COM:View cost` (`COM-148`), sell/discount/net-sell behind `COM:View selling price` (`COM-147`) -- no new permission-catalogue row. `app.margin_rule_versions` itself stays tenant-wide visible without masking (policy config, not a specific deal's financial figure, mirroring `app.win_loss_reasons`).
+
+**Two real defects found and fixed:** (1) `app.calculate_margin`'s own recalculation-supersede logic initially set the prior current row's `superseded_by_id` to the new row's id *before* inserting that new row -- a foreign-key violation, found via a genuine `db:test` failure; fixed with the correct three-step order (mark prior non-current first, insert the new row, only then link `superseded_by_id`). (2) A pre-existing, latent cross-file lookup ambiguity in `COM-149`'s own `scripts/db-tests/commercial-rate-cost-lookup.sql` (unscoped `origin_lane`/`destination_lane`/`mode` lookups, safe only until another capability's fixture reused the same lane name) was exposed for the first time by this checkpoint's own fixture (which legitimately creates a rate under the identical `Jakarta`/`Surabaya`/`FCL`/`ocean_freight` combination) -- root-caused via direct data inspection (ruling out a session-state/RLS explanation first, since each db-test file runs in its own fresh connection) and fixed durably by tenant-scoping every affected lookup across five scenario groups in that file -- the same class of fix `COM-145`/`148` established for unscoped audit-log counts, applied here to unscoped entity lookups. Full detail: `docs/build-log/phase-02/COM-150.md` §8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724180000_create_commercial_margin_calculation.sql` (1 migration -- 2 tables, 1 view, 4 functions); `scripts/db-tests/commercial-margin-calculation.sql`; `server/contracts/margin/margin.ts`(`.test.ts`); `server/queries/margin.ts`(`.test.ts`); `server/mutations/margin.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/margin-rules/{page,loading,actions,create-margin-rule-form}.tsx`; `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/calculate-margin-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/{actions.ts,page.tsx}` (Margin Calculation section), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Margin Rules nav link), `scripts/db-tests/commercial-rate-cost-lookup.sql` (tenant-scoped rate/rate-selection lookups, defect 2 above). 16 new application/test files, 1 migration, 3 modified files -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, matching prior multi-table capabilities' own precedent).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1115/1115 PASS (21 net new); `pnpm run db:test` PASS -- 40 migrations/40 db-test files, all green including the new `commercial-margin-calculation.sql` and the corrected `commercial-rate-cost-lookup.sql`; `next build` (Turbopack) PASS -- 21 routes (up from 20); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new table/function. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-009` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-010` (Prompt 151, Quotation Builder) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

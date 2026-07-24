@@ -197,10 +197,19 @@ $$;
 \echo '>> approve_rate_version / reject_rate_version: authority-gated, optimistic concurrency, pending_approval-only, mandatory reject reason'
 do $$
 declare
+  v_tenant1 uuid;
   v_rate app.vendor_rate_versions;
   v_reject_target app.vendor_rate_versions;
 begin
-  select * into v_rate from app.vendor_rate_versions where origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL';
+  -- Scoped to this file's own tenant, not a bare lane/mode match -- "Jakarta"/"Surabaya"/
+  -- "FCL" is a natural, reusable test lane name a later capability's own fixture may also
+  -- use (e.g. COM-150's own margin-calculation fixture does), which would otherwise make
+  -- this lookup ambiguous across the shared disposable database (the same class of
+  -- cross-file fragility COM-145/148 first found for audit-log counts, applied here to
+  -- an entity lookup instead).
+  v_tenant1 := (select id from app.tenants where slug = 'acmerate');
+
+  select * into v_rate from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL';
 
   begin
     perform app.approve_rate_version(v_rate.id, v_rate.record_version, '00000000-0000-0000-0000-000000009002', 'tester');
@@ -231,7 +240,7 @@ begin
       null; -- expected
   end;
 
-  select * into v_reject_target from app.vendor_rate_versions where origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'LCL';
+  select * into v_reject_target from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'LCL';
 
   begin
     perform app.reject_rate_version(v_reject_target.id, v_reject_target.record_version, '', '00000000-0000-0000-0000-000000009001', 'tester');
@@ -251,9 +260,12 @@ $$;
 \echo '>> withdraw_rate_version: only an approved rate can be withdrawn, mandatory reason'
 do $$
 declare
+  v_tenant1 uuid;
   v_rate app.vendor_rate_versions;
 begin
-  select * into v_rate from app.vendor_rate_versions where origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'LCL';
+  v_tenant1 := (select id from app.tenants where slug = 'acmerate');
+
+  select * into v_rate from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'LCL';
 
   begin
     perform app.withdraw_rate_version(v_rate.id, v_rate.record_version, 'no longer offered', '00000000-0000-0000-0000-000000009001', 'tester');
@@ -263,7 +275,7 @@ begin
       null; -- expected
   end;
 
-  select * into v_rate from app.vendor_rate_versions where origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL';
+  select * into v_rate from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL';
 
   begin
     perform app.withdraw_rate_version(v_rate.id, v_rate.record_version, '', '00000000-0000-0000-0000-000000009001', 'tester');
@@ -278,10 +290,13 @@ $$;
 \echo '>> create_rate_version supersede: inherits the source''s master_record_id, immediately marks the source superseded, cannot supersede an already-terminal version'
 do $$
 declare
+  v_tenant1 uuid;
   v_source app.vendor_rate_versions;
   v_revision app.vendor_rate_versions;
 begin
-  select * into v_source from app.vendor_rate_versions where origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL';
+  v_tenant1 := (select id from app.tenants where slug = 'acmerate');
+
+  select * into v_source from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL';
 
   select * into v_revision from app.create_rate_version(
     v_source.tenant_id, 'VENDOR-OCEAN-1-REVISED', 'Contoso Ocean Line (should be ignored on supersede)', 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', '20ft',
@@ -427,6 +442,7 @@ $$;
 \echo '>> select_vendor_rate: requires COM:Edit + COM:View cost, ad-hoc requires override_reason + valid currency/amount, selecting a non-approved rate requires override_reason, snapshots correctly, tenant mismatch rejected'
 do $$
 declare
+  v_tenant1 uuid;
   v_opportunity app.opportunities;
   v_request app.costing_requests;
   v_active_rate app.vendor_rate_versions;
@@ -434,10 +450,12 @@ declare
   v_selection app.rate_selections;
   v_other_tenant_rate app.vendor_rate_versions;
 begin
+  v_tenant1 := (select id from app.tenants where slug = 'acmerate');
+
   select * into v_opportunity from app.opportunities where name = 'Contoso Jakarta-Surabaya ocean lane';
   select * into v_request from app.costing_requests where opportunity_id = v_opportunity.id;
-  select * into v_active_rate from app.vendor_rate_versions where origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL' and approval_status = 'approved';
-  select * into v_rejected_rate from app.vendor_rate_versions where origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'LCL' and approval_status = 'rejected';
+  select * into v_active_rate from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'FCL' and approval_status = 'approved';
+  select * into v_rejected_rate from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Surabaya' and mode = 'LCL' and approval_status = 'rejected';
 
   begin
     perform app.select_vendor_rate(v_request.id, v_active_rate.id, false, null, null, null, '00000000-0000-0000-0000-000000009003', 'tester');
@@ -506,12 +524,20 @@ $$;
 \echo '>> app.rate_selections_directory: cost masked without COM:View cost, visible with it; record-scoped like app.costing_responses_directory (owner/ancestor see, sibling-team outsider does not)'
 do $$
 declare
+  v_tenant1 uuid;
   v_selection_id uuid;
   v_masked boolean;
   v_amount numeric;
   v_count integer;
 begin
-  select id into v_selection_id from app.rate_selections where is_adhoc = false limit 1;
+  -- Scoped to this file's own tenant -- a bare, unscoped "is_adhoc = false limit 1" (no
+  -- ORDER BY, no tenant filter) is ambiguous the moment any other capability's own
+  -- fixture (e.g. COM-150's margin-calculation.sql) also creates a non-adhoc rate
+  -- selection in the same shared disposable database, the same cross-file-fragility
+  -- class already found and fixed for the vendor_rate_versions lookups above.
+  v_tenant1 := (select id from app.tenants where slug = 'acmerate');
+
+  select id into v_selection_id from app.rate_selections where tenant_id = v_tenant1 and is_adhoc = false limit 1;
 
   set local role authenticated;
   set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000009003", "role": "authenticated"}';
