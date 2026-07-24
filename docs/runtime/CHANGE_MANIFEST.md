@@ -3647,6 +3647,46 @@ Additive for every object. Zero prior migration file edited; zero prior table's 
 
 Self-closing. `CG-S7-COM-015` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-016` (Prompt 157, Credit and Commercial Control) -- dependency-`READY` (`155..156` both `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `156`. A fresh explicit user authorization is required before `157` proceeds.
 
+### CHG-2026-089 — Credit and Commercial Control (Phase 2, Prompt 157)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-016` / `157_CREDIT_COMMERCIAL_CONTROL_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `016` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Commercial credit profile and transaction eligibility controls, deferring AR/GL posting to Phase 4 -- no exposure/balance figure of any kind is modeled or invented anywhere in this migration (Prompt 157 §24's own business rule, structural here, not just documented).
+
+New `app.credit_profiles` (one row per requested/active credit relationship, `status` requested/active/held/expired/rejected, at most one non-terminal row per account via a partial unique index, `supersedes_profile_id` self-FK linking a fresh request to prior rejected/expired history). New `app.credit_profile_overrides` (a bounded, reasoned, always-expiring exception -- never a silent permanent limit change). New `app.credit_check_snapshots` (the deterministic, immutable, append-only pre-conversion evidence record -- the "stable Finance integration contract" Prompt 157 §14 asks this checkpoint to expose).
+
+**Governance routing reuses the Platform Approval Engine (`PLT-121`/`123`) unchanged**, per Prompt 157 §20 task 2's own literal instruction -- unlike `COM-156`'s own deliberately smaller direct-`COM:Approve`-gate choice for contract publish/retire. `app.request_customer_credit_profile` unconditionally opens a routed `entity_type='credit_profile'` request (never conditionally skipped on a threshold, unlike `COM-153`'s own quotation routing -- Prompt 157 §24: "customer creation does not imply credit approval") against the exact same generic, tenant-wide `config_type_code='approval'` config object `COM-153` already resolves for quotations (no new config type registered -- `PLT-123`'s own routing-definition model is entity-type-agnostic). `app.decide_credit_profile_approval_step` wraps `app.decide_approval_step` (unchanged) and syncs the profile only once the bound request reaches a final state, mirroring `app.decide_quotation_approval_step` (`COM-153`) exactly.
+
+**"MFA for privileged approvers" (Prompt 157 §16) reuses `PLT-115`'s own `reauth_confirmed_at`-freshness mechanism** (`app.support_access_sessions`'s "re-authentication must have completed within the last 5 minutes" check, reproduced verbatim) rather than inventing a second, unproven pattern -- no live MFA/IdP challenge provider exists anywhere in this repository, the same disclosed boundary `PLT-115` itself already carries. Applied to every privileged-approver action this capability adds: `app.decide_credit_profile_approval_step`, `app.hold_credit_profile`, `app.release_credit_profile`, `app.create_credit_override`.
+
+`app.check_customer_credit` is the deterministic, reproducible pre-conversion check -- lazily flips an expired profile to `expired` in the same transaction (mirrors `app.quotation_acceptance_tokens`, `COM-154`), evaluates hold/not-active/currency-mismatch/limit against the effective limit (a currently-valid override if any, else the approved limit), always persists an immutable snapshot regardless of outcome, and masks its own *returned row* per-caller (`COM:View selling price`, reused -- not a new permission) directly in the function body rather than gating the whole function -- the same "mask the function's own output, not just a view" technique `app.get_effective_customer_price` (`COM-156`) and `app.search_vendor_rates` (`COM-149`) already established, so an ordinary `COM:View` holder still gets the real allow/hold outcome (Prompt 157 §26) without the raw dollar figures.
+
+**Four real defects found and fixed during authoring**: (1) the `RETURNS TABLE` output-column shadowing bug this session has hit before (`COM-154`'s own two functions) reproduced twice inside `app.check_customer_credit` -- bare `credit_profile_id`/`id` references in `WHERE` clauses were ambiguous against the function's own auto-declared output-column variables of the same names -- fixed by table-aliasing every such reference; (2) `app.credit_profile_overrides.amount` initially had no masked read path at all, not even for an authorized `COM:View selling price` holder (the base-table column grant excluded it and no directory view existed) -- fixed by adding `app.credit_profile_overrides_directory`, matching the masking discipline already applied to the other two tables; (3) a genuine `db:test` failure: backdating a profile's `effective_to` alone (without `effective_from`) violated the validity CHECK constraint -- fixed by backdating both together; (4) a `db:test` actor-UUID-prefix collision with `COM-154`'s own fixtures (`...09701`-`09705` used by both files independently) -- fixed by moving to an unused `...010101`-`010105` range.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724310000_create_commercial_credit_commercial_control.sql` (1 migration -- 3 new tables, 6 new functions, 3 masked directory views, zero new permission-catalogue row); `scripts/db-tests/commercial-credit-commercial-control.sql`; `server/contracts/credit/credit.ts`(`.test.ts`); `server/queries/credit.ts`(`.test.ts`); `server/mutations/credit.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/accounts/[accountId]/{credit-panel,request-credit-form,credit-approval-decision-form,hold-release-form,override-form,credit-check-form,credit-actions}.tsx`; `app/(tenant)/[tenantSlug]/commercial/credit-approvals/{page,loading}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/accounts/[accountId]/page.tsx` (`CreditPanel` wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Credit Approvals nav link). 16 new files, 1 migration, 2 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1292/1292 PASS (27 net new); `pnpm run db:test` PASS -- 47 migrations/47 db-test files, all green including the new `commercial-credit-commercial-control.sql` and `COM-144..156`'s own test files running unmodified against the widened schema; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..156` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- a pre-existing account simply has no credit profile until one is explicitly requested). `git revert` of this checkpoint's commit is safe and complete. No downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-016` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-017` (Prompt 158, Commercial Dashboard) -- dependency-`READY` (`143..157` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `157`. A fresh explicit user authorization is required before `158` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

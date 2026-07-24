@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getAccountById, listAccounts, AccountQueryError } from "../../../../../../server/queries/account.ts";
+import { getCreditProfileForAccount, getCreditProfileApprovalOverview } from "../../../../../../server/queries/credit.ts";
+import { CreditPanel } from "./credit-panel.tsx";
 
 /**
  * Account detail (COM-155, CG-S7-COM-014). Read-only in this bounded slice -- no
@@ -41,6 +43,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const parent = account.parentAccountId ? (allAccounts.find((candidate) => candidate.id === account.parentAccountId) ?? null) : null;
   const subsidiaries = allAccounts.filter((candidate) => candidate.parentAccountId === account.id);
 
+  const creditProfile = await getCreditProfileForAccount(supabase, account.id);
+  const creditApprovalOverview = creditProfile ? await getCreditProfileApprovalOverview(supabase, creditProfile, access.authUserId) : null;
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">{account.legalName}</h1>
@@ -71,6 +76,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
           </>
         ) : null}
       </dl>
+
+      <CreditPanel tenantSlug={tenantSlug} accountId={account.id} profile={creditProfile} overview={creditApprovalOverview} />
 
       {subsidiaries.length > 0 ? (
         <div className="rounded-md border border-neutral-200 p-4">
