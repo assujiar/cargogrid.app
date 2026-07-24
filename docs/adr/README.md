@@ -119,3 +119,5 @@ Reconciled from `docs/architecture/01_*.md`–`13_*.md` and `HANDOFF.md` §7. **
 | `ADR-0013` | Job queue backoff formula, worker lease duration, and DLQ numeric defaults | `ACCEPTED` (2026-07-19) | `ADR-CAND-ARCH-028` (newly minted) |
 | `ADR-0014` | PostGIS extension version, spatial column type, and bounded-radius query cap | `ACCEPTED` (2026-07-22) | `ADR-CAND-ARCH-029` (newly minted) |
 | `ADR-0015` | Commercial vendor/service/rate lookup ownership (Phase 2 vs. Phase 6) | `ACCEPTED` (2026-07-23) | `ADR-CAND-ARCH-030` (newly minted; formalizes `05_DATABASE_SCHEMA_WORKSTREAM.md` line 93's qualitative Step 3 resolution) |
+| `ADR-0016` | CargoGrid default brand identity (color, typography) | `ACCEPTED` (2026-07-24) | None (new; resolves `docs/standards/DESIGN_SYSTEM.md` §3's disclosed open item, out-of-band Design System Expansion task) |
+| `ADR-0017` | CargoGrid Adaptive Industrial UI design language and white-label governance boundary | `ACCEPTED` (2026-07-24) | None (new; formalizes `RPD-019` at implementation precision, out-of-band Design System Expansion task) |

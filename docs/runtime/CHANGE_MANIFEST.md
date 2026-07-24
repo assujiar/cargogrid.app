@@ -3379,6 +3379,44 @@ Additive for every new table/function. `git revert` of this checkpoint's commit 
 
 Self-closing. `CG-S7-COM-009` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-010` (Prompt 151, Quotation Builder) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-082 — CargoGrid Design System Expansion and Implementation (out-of-band, not a numbered `CG-S*-*` prompt)
+
+| Field | Value |
+|---|---|
+| Task/prompt | None — out-of-band design-system documentation/implementation task, explicitly scoped by its own instruction to NOT consume, rename, or renumber Prompt 151 (`CG-S7-COM-010`, Quotation Builder) or any later roadmap prompt |
+| Change type | DOCS + TOKENS + UI |
+| Baseline evidence | `docs/runtime/CARGOGRID_BUILD_STATUS.md` §1 at session start: Phase 2 `IN_PROGRESS`, next eligible task `CG-S7-COM-010` (Prompt 151) — **unchanged by this checkpoint**, verified not edited |
+| Final status | `COMPLETED` for the bounded scope actually attempted (token/brand resolution, 2 new primitives, tenant-shell white-label wiring for one route group, canonical documentation set); `PARTIALLY_COMPLETE`/`DEFERRED` for the full ~70-component catalogue and full portal/screen alignment this task's own instruction enumerated — see `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` for the exact split |
+| Authorization | User-issued task instruction (this session), explicitly out-of-band per its own §17 |
+
+#### Outcome
+
+Resolved `docs/standards/DESIGN_SYSTEM.md` §3's long-disclosed open item — CargoGrid's own default brand identity (color, typography) had never been decided; it now is (`docs/adr/ADR-0016`). Recorded the "CargoGrid Adaptive Industrial UI" design identity and a precision restatement of the white-label tenant-configurable/platform-controlled boundary (`docs/adr/ADR-0017`), given `components/ui/` and the white-label backend (`PLT-117`) both now exist where `RPD-019`/`09_UX_DESIGN_SYSTEM_WORKSTREAM.md` only fixed the boundary at planning precision.
+
+`app/globals.css`: real brand tokens (`--color-primary/-hover`, `--color-secondary/-hover`), a new surface/text/border semantic category, elevation tokens (`--shadow-sm/md/lg`, decided in principle since Prompt 90 but never authored in CSS until now), and density tokens (`--row-height-compact/default/comfortable`) — all additive, none of it removing or renaming an existing token. `components/ui/button.tsx`'s primary variant now uses the named `hover:bg-primary-hover` token instead of a generic opacity dim; `components/ui/banner.tsx` gained `success`/`danger` variants alongside its existing `info`/`warning`. Two new primitives: `components/ui/badge.tsx`, `components/ui/status-badge.tsx` (the latter structurally requires a text label — never a color-only status signal).
+
+First-ever wiring of the white-label backend to a real portal shell: `lib/theme/resolve-portal-theme.ts` (pure, unit-tested) and `lib/portal/resolve-tenant-portal-theme.server.ts` (server wrapper, request-memoized, fails soft to the CargoGrid default on any error) are consumed by `app/(tenant)/[tenantSlug]/admin/layout.tsx`, which now renders a tenant's resolved primary/secondary colors and logo when a published brand exists, and the CargoGrid default otherwise — atomically, never a partial merge. `app/(supreme)/supreme/layout.tsx` was deliberately left unwired, with a comment recording why (`ADR-0017` §4: the Supreme Admin shell's own chrome must never be tenant-branded).
+
+A standalone, unit-tested tenant-brand distinguishability policy (`lib/theme/tenant-brand-policy.ts`) was added to satisfy this task's "red tenant-primary"/"semantic-status distinction" validation requirement, but was **deliberately not wired** into `server/mutations/white-label.ts`'s enforced publish path — doing so would change tested `PLT-117` publish behavior, judged out of this checkpoint's bounded scope and named as a deferred follow-up rather than silently done.
+
+A full canonical documentation set was added under `docs/design-system/` (8 files: index, tokens/theme, components, layout/navigation, data-experience/workflow patterns, AI-assisted interaction, accessibility/performance, gap analysis), each citing rather than re-deriving `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md`'s already-`VERIFIED` planning-precision content, and each honestly marking every one of the ~70 requested components/patterns as `IMPLEMENTED`/`DOCUMENTED_ONLY`/`DEFERRED`/`BLOCKED` rather than claiming a completeness this checkpoint did not achieve. `docs/standards/DESIGN_SYSTEM.md` was reconciled in place (not replaced) — its historical §3 disclosure is preserved with the resolution appended, per the file's own reconciliation discipline.
+
+#### Scope and files
+
+New: `docs/adr/ADR-0016-cargogrid-default-brand-identity.md`, `docs/adr/ADR-0017-adaptive-industrial-ui-and-whitelabel-boundary.md`, `docs/design-system/{00_INDEX,01_TOKENS_AND_THEME,02_COMPONENTS,03_LAYOUT_NAVIGATION,04_DATA_EXPERIENCE_AND_WORKFLOW_PATTERNS,05_AI_ASSISTED_INTERACTION,06_ACCESSIBILITY_PERFORMANCE,07_GAP_ANALYSIS_AND_ROADMAP}.md`, `components/ui/{badge,status-badge}.tsx`, `lib/theme/resolve-portal-theme.ts`(`.test.ts`), `lib/theme/tenant-brand-policy.ts`(`.test.ts`), `lib/portal/resolve-tenant-portal-theme.server.ts`. Modified: `docs/standards/DESIGN_SYSTEM.md`, `docs/adr/README.md` (index), `app/globals.css`, `components/ui/button.tsx`, `components/ui/banner.tsx`, `app/(tenant)/[tenantSlug]/admin/layout.tsx`, `app/(supreme)/supreme/layout.tsx` (comment only). 24 files total (13 new, 11 modified), 0 migrations — larger than the standard 5-15 file atomic-sizing guideline because a design-system checkpoint's unit of coherent work spans docs+tokens+components+one wiring example together; no single file's change is itself large or high-risk (verified individually via `git diff` before staging).
+
+#### Tests and quality evidence
+
+`pnpm install --frozen-lockfile` PASS. `pnpm run typecheck` PASS (0 errors). `pnpm run lint` PASS (0 errors; 35 pre-existing warnings, all `@next/next/no-html-link-for-pages`, none introduced by this checkpoint — confirmed by file/line against `git diff`). `pnpm run test` PASS 1128/1128 (13 net new — 5 for `resolve-portal-theme.test.ts`, 8 for `tenant-brand-policy.test.ts`). `next build` (Turbopack) PASS — 21 routes (unchanged count; no route added or removed). `pnpm run docs:check`/`standards:check`/`security:check`/`data-classification:check`/`threat-model:check`/`git:check-paths` all PASS (`git:check-paths`: 24 files checked, 0 caution flags). **Not run this checkpoint:** `pnpm run db:test` (no migration in this change, nothing new to exercise against the database layer), `pnpm run test:e2e` (Playwright + axe-core — requires a browser-driven server; recommended before this branch merges, not executed in this pass, disclosed in `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §3).
+
+#### Compatibility, rollout, recovery
+
+Additive throughout — no existing token renamed/removed, no existing component's public API changed (only `button.tsx`'s internal hover class and `banner.tsx`'s variant set gained new members), no route added/removed, no migration. `git revert` of this checkpoint's commit is safe and complete. The one behavior-visible change end users would see: `app/globals.css`'s compiled default colors change from the neutral-scale placeholder to CargoGrid's real brand (teal/red) — an intended, requested outcome, not a regression; and the Tenant Admin portal now renders a tenant's logo/brand colors when a tenant has published one (previously rendered CargoGrid-default unconditionally, since no wiring existed) — also an intended, requested outcome.
+
+#### Approval and closure
+
+Self-closing (out-of-band task, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-010` (Prompt 151, Quotation Builder). This entry exists so the manifest's append-only history reflects this checkpoint's real changes without disturbing the numbered task-ledger machinery `AGENTS.md` governs.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
