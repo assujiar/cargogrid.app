@@ -3309,6 +3309,40 @@ Additive for every new object. The new permission-catalogue row is additive and 
 
 Self-closing. `CG-S7-COM-007` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-008` (Prompt 149, Rate and Cost Lookup) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-080 — Rate and Cost Lookup (Phase 2, Prompt 149)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-008` / `149_RATE_COST_LOOKUP_PROMPT.md` |
+| Change type | SCHEMA (extends `PLT-120` master-data foundation) + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `008` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Covered by `CG-S7-COM-001`'s own open-ended "lanjut" -- no further per-task authorization requested |
+
+#### Outcome
+
+The canonical vendor/service/rate and internal-cost lookup foundation consumed by Commercial, per the controlling `ADR-0015`. Exactly one new child table on top of `PLT-120`'s master-data foundation -- `app.vendor_rate_versions` (keyed by `master_record_id references app.master_records(id)`, `master_type_code` constrained to `'vendor_rate'`) -- plus `app.rate_selections` (a point-in-time snapshot of the rate detail selected for one costing request, never a live reference) -- never a second, independently-writable rate master. Write authority (`app.create_rate_version`/`approve`/`reject`/`withdraw_rate_version`) reuses `app.is_support_grant_authority` unchanged, per `ADR-0015`'s own mandate ("must not invent a parallel authority model"), not ordinary `COM` RBAC.
+
+`app.v_active_vendor_rates` (seeded empty at `PLT-120`) is dropped and recreated to be validity/approval-aware, composed on a new `app.vendor_rate_versions_directory` view that reuses `COM-148`'s `app.has_view_cost` directly for cost masking -- no new permission-catalogue row. Unlike every prior Commercial table, vendor rates are tenant-wide reference data (visibility mirrors `app.master_records`' own RLS shape, not `app.can_access_record`). `app.search_vendor_rates` (bounded ≤200-row lookup, `COM:View`-gated) and `app.select_vendor_rate` (dual `COM:Edit`+`COM:View cost` gate, mirroring `COM-148`'s `app.submit_costing_response`) complete the lookup/selection path.
+
+**Three real defects found and fixed:** (1) the mutation TypeScript layer's first draft parsed base-table RPC results (`app.vendor_rate_versions`, no `vendor_code`/`vendor_name`/`cost_masked`) through the read-path's directory-shaped schema and failed real unit tests -- fixed with a distinct `RateVersionRecordSchema` for mutation returns; (2) `scripts/db-tests/master-data.sql`'s own pre-existing `app.v_active_vendor_rates` assertion broke against this checkpoint's real approved rows and the view's changed column shape -- fixed, proactively tenant-scoped (applying the `COM-145`/`COM-148` cross-file-fragility lesson to a new class before it could be rediscovered a third time); (3) `app.search_vendor_rates` silently returned zero rows when composed on the auth.uid()-keyed directory view despite its own explicit-actor `COM:View` gate passing -- a real design gap (any caller without a live session JWT would see zero results regardless of entitlement), fixed by querying the base tables directly with explicit-actor cost masking instead. Full detail: `docs/build-log/phase-02/COM-149.md` §3.3/§8.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724150000_create_commercial_rate_cost_lookup.sql` (1 migration -- 2 tables, 3 new/enhanced views, 6 functions); `scripts/db-tests/commercial-rate-cost-lookup.sql`; `server/contracts/rate/rate.ts`(`.test.ts`); `server/queries/rate.ts`(`.test.ts`); `server/mutations/rate.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/rates/{page,loading,actions,create-rate-form}.tsx`; `app/(tenant)/[tenantSlug]/commercial/rates/[rateVersionId]/{page,loading,actions,rate-actions-panel}.tsx`; `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/select-rate-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/costing-requests/[requestId]/{actions.ts,page.tsx}` (Rate Selections section), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Rates nav link), `scripts/db-tests/master-data.sql` (tenant-scoped `v_active_vendor_rates` assertion, defect 2 above). 17 new application/test files, 1 migration, 4 modified files -- within the 5-15 file / 1-3 migration atomic-sizing rule (at the upper bound, matching `COM-148`'s own precedent for a multi-table capability with a new UI section).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1094/1094 PASS (26 net new); `pnpm run db:test` PASS -- 39 migrations/39 db-test files, all green including the new `commercial-rate-cost-lookup.sql` and the corrected `master-data.sql`; `next build` (Turbopack) PASS -- 20 routes (up from 18); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` PASS.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new table/function. `app.v_active_vendor_rates`'s redefinition is a disclosed, intentional behavior change per `ADR-0015` -- its one pre-existing consumer (`master-data.sql`'s own assertion) was updated to match, and the view had zero real rows under its prior definition (per `PLT-120`'s own disclosure), so no existing data or caller could regress. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-008` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-009` (Prompt 150, Margin Calculation) -- dependency-`READY`, covered by the same open-ended authorization.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

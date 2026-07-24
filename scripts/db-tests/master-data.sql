@@ -361,20 +361,28 @@ begin
 end;
 $$;
 
-\echo '>> app.v_active_vendor_rates: the sourced convenience view returns only active vendor_rate records'
+\echo '>> app.v_active_vendor_rates: queryable, empty for this file''s own tenants (no vendor_rate_versions row -- that is COM-149''s own scope) -- superseded by app.master_records rows alone'
 do $$
 declare
+  v_tenant_id uuid;
   v_active_count integer;
-  v_merged_in_view integer;
 begin
-  select count(*) into v_active_count from app.v_active_vendor_rates;
-  if v_active_count < 1 then
-    raise exception 'assertion failed: expected at least one active vendor_rate row in the view';
-  end if;
+  v_tenant_id := (select id from app.tenants where slug = 'acmemdm');
 
-  select count(*) into v_merged_in_view from app.v_active_vendor_rates where code = 'VR-DUP';
-  if v_merged_in_view <> 0 then
-    raise exception 'assertion failed: expected the merged VR-DUP record to be excluded from the active-only view';
+  -- COM-149 (docs/adr/ADR-0015-...) redefined this view (drop + create, same name) to be
+  -- validity/approval-aware, joined against app.vendor_rate_versions (a table this
+  -- PLT-120 migration does not create) -- it is empty here since this fixture seeds only
+  -- master_type/master_record identity rows, never a priced version. Scoped to this
+  -- file's own tenant (not a bare global count) since
+  -- scripts/db-tests/commercial-rate-cost-lookup.sql (COM-149's own test file) sorts
+  -- alphabetically *before* this file and legitimately creates real approved rows in its
+  -- own, different tenant -- the same cross-file audit-log-count fragility class COM-145/
+  -- COM-148 already found, applied proactively here rather than rediscovered a third
+  -- time. Real, populated coverage of this view's own approved-and-current filtering
+  -- lives in that other file.
+  select count(*) into v_active_count from app.v_active_vendor_rates where tenant_id = v_tenant_id;
+  if v_active_count <> 0 then
+    raise exception 'assertion failed: expected 0 rows for tenant acmemdm (no vendor_rate_versions row exists in this fixture), found %', v_active_count;
   end if;
 end;
 $$;

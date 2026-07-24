@@ -8,7 +8,10 @@ import {
   listCostingResponseComponents,
   CostingQueryError,
 } from "../../../../../../server/queries/costing.ts";
+import { listActiveVendorRates, listRateSelectionsForRequest, RateQueryError } from "../../../../../../server/queries/rate.ts";
+import type { RateVersion, RateSelection } from "../../../../../../server/contracts/rate/rate.ts";
 import { CostingRequestActionsPanel } from "./costing-request-actions-panel.tsx";
+import { SelectRateForm } from "./select-rate-form.tsx";
 
 /**
  * Costing Request Detail (COM-148, CG-S7-COM-007). `getCostingRequestById` returns `null`
@@ -56,6 +59,21 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
       components: response.costMasked ? [] : await listCostingResponseComponents(supabase, response.id),
     })),
   );
+
+  let rateSelections: RateSelection[];
+  let candidateRates: RateVersion[];
+  try {
+    [rateSelections, candidateRates] = await Promise.all([
+      listRateSelectionsForRequest(supabase, request.id),
+      listActiveVendorRates(supabase, access.tenant.id),
+    ]);
+  } catch (error) {
+    if (!(error instanceof RateQueryError)) {
+      throw error;
+    }
+    rateSelections = [];
+    candidateRates = [];
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -133,6 +151,25 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
           </ul>
         )}
       </div>
+
+      <div className="rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Rate selections</h2>
+        {rateSelections.length === 0 ? (
+          <p className="mt-2 text-sm text-neutral-600">No rate selected yet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-1 text-sm">
+            {rateSelections.map((selection) => (
+              <li key={selection.id} className="text-neutral-700">
+                {selection.isAdhoc ? "Ad-hoc" : "Catalog"} —{" "}
+                {selection.costMasked ? "Restricted" : `${selection.amount} ${selection.currency ?? ""}`}
+                {selection.overrideReason ? ` (${selection.overrideReason})` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <SelectRateForm tenantSlug={tenantSlug} requestId={request.id} candidateRates={candidateRates} />
 
       <CostingRequestActionsPanel tenantSlug={tenantSlug} requestId={request.id} recordVersion={request.recordVersion} status={request.status} requestComponents={components} />
     </div>

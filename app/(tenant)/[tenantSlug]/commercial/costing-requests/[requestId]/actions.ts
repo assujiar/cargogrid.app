@@ -13,10 +13,49 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { assignCostingRequest, submitCostingResponse, reviseCostingRequest, cancelCostingRequest, CostingMutationError } from "../../../../../../server/mutations/costing.ts";
+import { selectVendorRate, RateMutationError } from "../../../../../../server/mutations/rate.ts";
 import type { CostingResponseSourceType, ResponseComponentInput } from "../../../../../../server/contracts/costing/costing.ts";
 
 export interface CostingRequestFormState {
   readonly error: string | null;
+}
+
+/** Requires both COM:Edit and COM:View cost (the same dual gate app.submit_costing_response uses). Snapshots the selected rate (or an ad-hoc entry) into app.rate_selections. */
+export async function selectVendorRateAction(
+  tenantSlug: string,
+  requestId: string,
+  rateVersionId: string | null,
+  isAdhoc: boolean,
+  adhocCurrency: string | null,
+  adhocAmount: number | null,
+  overrideReason: string | null,
+): Promise<CostingRequestFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await selectVendorRate(supabase, {
+      costingRequestId: requestId,
+      rateVersionId,
+      isAdhoc,
+      adhocCurrency,
+      adhocAmount,
+      overrideReason,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof RateMutationError) {
+      return { error: `Could not select a rate: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/costing-requests/${requestId}`);
+  return { error: null };
 }
 
 export async function assignCostingRequestAction(tenantSlug: string, requestId: string, expectedVersion: number, assigneeUserId: string): Promise<CostingRequestFormState> {
