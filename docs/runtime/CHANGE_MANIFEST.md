@@ -3609,6 +3609,44 @@ Additive for every object. Zero prior migration file edited; zero prior table's 
 
 Self-closing. `CG-S7-COM-014` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-015` (Prompt 156, Contract and Customer Pricing) -- dependency-`READY` (`150`,`154..155` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `155`. A fresh explicit user authorization is required before `156` proceeds.
 
+### CHG-2026-088 — Contract and Customer Pricing (Phase 2, Prompt 156)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-015` / `156_CONTRACT_CUSTOMER_PRICING_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `015` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Versioned customer contracts and pricing derived from accepted, converted (`COM-155`) quotations, with effective dates, service/lane price components, and a deterministic, reproducible effective-price lookup.
+
+New `app.customer_contracts` -- one row per contract/pricelist version, reusing `app.quotations`' own `root_quotation_id`/`version_number` self-referencing-insert identity technique (`COM-152`). Unlike a quotation's single `is_current` row, multiple versions of one root may be simultaneously `status=published` as long as their `[effective_from, effective_to)` windows do not overlap -- enforced at publish time via `SELECT ... FOR UPDATE` row locking against every other published sibling under the same root, the same concurrency-safety technique `app.create_quotation_revision` (`COM-152`) already established for its own analogous invariant, not a partial-unique index. New `app.customer_contract_price_components` -- one priced service/lane condition per row; a unique index on `(contract_id, service_type, mode, origin_lane, destination_lane, equipment_type)` structurally guarantees `app.get_effective_customer_price` resolves to at most one row.
+
+`app.create_customer_contract_draft` serves both flows identically: the main flow (`p_source_quotation_id` set) requires `customer_decision='accepted'` and an existing account conversion -- one contract root per source quotation, ever; the alternative flow (`p_source_contract_id` set) is a renewal/amendment, copying the source version's own price components into a new future-dated draft, mandatory reason. `app.publish_customer_contract` (`COM:Approve`-gated, requires >=1 component, rejects a date-overlapping already-published sibling) and `app.retire_customer_contract` (`COM:Approve`-gated, mandatory reason) are direct governance gates on the contract itself, **not** a second Approval Engine (`PLT-121`/`123`) routing instantiation -- a deliberately smaller-scope choice than `COM-153`'s own quotation approval, disclosed in the migration header as staying within Prompt 156's own file-count boundary (5-15 files, 1-3 migrations). `app.get_effective_customer_price` is the deterministic, reproducible lookup Prompt 156's own objective names -- exact-match on every identity dimension (`IS NOT DISTINCT FROM`, never a wildcard), raises `no_effective_price` explicitly on zero rows rather than returning an empty set silently.
+
+**`COM:View margin` newly seeded for the `COM` module** -- reusing the already-real `'View margin'` enum value from `app.permissions_action_check` (currently seeded only for `FIN`/`PRC`), the same bounded `(module, action)`-pair mechanism `COM-148` already used to add `COM:View cost`, unlike `COM-155`'s own blocked `'View billing'` attempt (an enum value that does not exist at all). Selling price and discount figures on `app.customer_contract_price_components` are masked via the already-established `COM:View selling price` instead, since no separate margin figure is computed or stored by this capability -- `COM:View margin` is seeded now, unused by any masked column yet, so a future capability that does compute one has a real permission ready.
+
+**Three real defects found and fixed during authoring**: (1) `app.get_effective_customer_price`'s initial body checked `if v_row is null` on a `record`-typed variable after a `select into` to detect a zero-row match -- a `record` variable does not reliably evaluate as `IS NULL` that way; fixed by checking the implicit `FOUND` boolean immediately after the select, the correct plpgsql idiom; (2) `app.add_customer_contract_price_component` initially gated only `COM:Edit` while returning the raw, unmasked price-component row directly -- an actor holding `Edit` but not `View selling price` could round-trip a selling price back to themselves through the RPC's own return value; caught by comparing against `app.select_vendor_rate`'s own established dual-gate precedent (`COM-149`) before any test was written, fixed by adding an explicit `has_view_selling_price` check alongside `Edit`; (3) a real `react/no-unescaped-entities` lint error in `renewal-form.tsx`'s help text, fixed.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724300000_create_commercial_customer_contract_pricing.sql` (1 migration -- 2 new tables, 1 new `COM:View margin` permission row + 1 gate function, 5 new functions, 1 masked view); `scripts/db-tests/commercial-customer-contract-pricing.sql`; `server/contracts/contract/contract.ts`(`.test.ts`); `server/queries/contract.ts`(`.test.ts`); `server/mutations/contract.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/contracts/{page,loading}.tsx` and `contracts/[contractId]/{page,loading,actions,add-component-form,renewal-form,retire-form}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{contract-creation-panel,create-contract-form}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (contract-creation panel wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Contracts nav link). 15 new files, 1 migration, 3 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors -- one real `react/no-unescaped-entities` error caught and fixed during authoring); `pnpm run test` 1265/1265 PASS (29 net new); `pnpm run db:test` PASS -- 46 migrations/46 db-test files, all green including the new `commercial-customer-contract-pricing.sql` and `COM-144..155`'s own test files running unmodified against the widened schema; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..155` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- a pre-existing accepted quotation simply has no contract until one is explicitly created). `git revert` of this checkpoint's commit is safe and complete. No downstream Commercial capability (`COM-157` Credit and Commercial Control) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-015` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-016` (Prompt 157, Credit and Commercial Control) -- dependency-`READY` (`155..156` both `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `156`. A fresh explicit user authorization is required before `157` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

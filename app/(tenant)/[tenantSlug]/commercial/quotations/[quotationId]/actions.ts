@@ -23,6 +23,7 @@ import {
 import { decideQuotationApprovalStep, QuotationApprovalMutationError } from "../../../../../../server/mutations/quotation-approval.ts";
 import { sendQuotationForAcceptance, revokeQuotationAcceptanceToken, QuotationAcceptanceMutationError } from "../../../../../../server/mutations/quotation-acceptance.ts";
 import { convertQuotationToAccount, AccountMutationError } from "../../../../../../server/mutations/account.ts";
+import { createCustomerContractDraft, ContractMutationError } from "../../../../../../server/mutations/contract.ts";
 import type { QuotationLineType, QuotationTerms } from "../../../../../../server/contracts/quotation/quotation.ts";
 import type { QuotationAcceptanceChannel } from "../../../../../../server/contracts/quotation/quotation-acceptance.ts";
 
@@ -314,4 +315,35 @@ export async function convertQuotationToAccountAction(
     }
     throw error;
   }
+}
+
+export interface CreateContractFromQuotationState {
+  readonly error: string | null;
+}
+
+/** COM-156: the main flow's own entry point -- creates the first draft contract version sourced from this accepted, already-converted (COM-155) quotation, then redirects to the new contract's own detail page. */
+export async function createContractFromQuotationAction(tenantSlug: string, quotationId: string, effectiveFrom: string, _prevState: CreateContractFromQuotationState, _formData: FormData): Promise<CreateContractFromQuotationState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let contractId: string;
+  try {
+    const draft = await createCustomerContractDraft(supabase, {
+      sourceQuotationId: quotationId,
+      effectiveFrom,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+    contractId = draft.id;
+  } catch (error) {
+    if (error instanceof ContractMutationError) {
+      return { error: `Could not create contract: ${error.message}` };
+    }
+    throw error;
+  }
+
+  redirect(`/${tenantSlug}/commercial/contracts/${contractId}`);
 }
