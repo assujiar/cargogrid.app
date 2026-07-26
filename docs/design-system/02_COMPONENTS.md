@@ -1,5 +1,7 @@
 # Component Catalogue
 
+**Updated by:** CargoGrid UI Modernization checkpoint (2026-07-26, out-of-band, see `07_GAP_ANALYSIS_AND_ROADMAP.md` §8) — added `DataTable`/`Pagination` as `IMPLEMENTED` (roadmap item 3). Original authoring below (CargoGrid Design System Expansion, 2026-07-24) preserved as-is except the specific rows/sections this update touches.
+
 Source of decisions: `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §4/§5 (inventory, 11-state contract — cited, not re-derived), `ADR-0005` (Radix copy-in mechanism), `ADR-0017` (design identity, white-label boundary). Every component below is documented against the same spec shape this task's own instruction requires: purpose, when to use, when not to use, anatomy, variants, sizes, states, keyboard behavior, accessibility, responsive behavior, white-label behavior, density behavior, anti-patterns, implementation notes. `IMPLEMENTED` components get the full shape; `DOCUMENTED_ONLY` components get a compact version of the same shape (enough for a future checkpoint to build against without re-deriving the pattern) — building all ~70 to full production detail in one checkpoint is out of this task's bounded scope (`AGENTS.md` atomic-sizing discipline), named honestly rather than rushed.
 
 ## 1. Implemented primitives (full spec)
@@ -69,6 +71,43 @@ Source of decisions: `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §4/�
 - **Anti-patterns:** do not bind `tone` from a tenant-configurable value; `tone` must always derive from the canonical status/severity, never from tenant preference.
 - **Implementation notes:** this component does not itself implement the `canonical_ref`-to-tone mapping (that mapping is domain-specific — e.g. Commercial's lead statuses vs. Ticketing's — and belongs in a future `components/domain/` composition per `09_*.md` §4.1/§4.2, not yet built).
 
+### DataTable — `components/tables/data-table.tsx` — `IMPLEMENTED`
+
+**Implemented by:** CargoGrid UI Modernization checkpoint (2026-07-26) — the first shared table implementation, built against its first two real consumers (`commercial/leads/page.tsx`, `supreme/tenants/page.tsx`) per `09_*.md` §4.2's "one owner, many consumers" rule, replacing each screen's own raw `<table>`.
+
+- **Purpose:** the single shared implementation every list screen's tabular data renders through — "never implement table behavior separately for each module."
+- **When to use:** any server-rendered list of rows with a fixed, known column set.
+- **When not to use:** a screen needing client-side sort/filter/column-config/row-selection/bulk actions today — those remain `DOCUMENTED_ONLY` (below) since no real consumer has server-side support for them yet; building the UI ahead of a real backing capability would be a speculative abstraction (`AGENTS.md`).
+- **Anatomy:** scrollable wrapper (`overflow-x-auto`) + `<table>` with a visually-hidden `<caption>` (required prop — an unlabeled data table has no accessible name), sticky `<thead>`, row-mapped `<tbody>`.
+- **Variants:** none — one shape, columns are caller-defined (`DataTableColumn<Row>`: `key`, `header`, optional `align`, `render`).
+- **Sizes/Density:** `compact` / `default` / `comfortable`, consuming the platform's existing `--row-height-*` tokens via inline `style` (these tokens have no generated Tailwind utility class, so CSS-custom-property consumption is the correct mechanism, not a new hardcoded pixel value).
+- **States:** `Empty` is real and built-in — `rows.length === 0` renders the caller-supplied `emptyMessage` (required, not defaulted, since empty copy is domain-specific per `09_*.md` §5) instead of the table. `Loading` and `Error` remain page-owned, matching every existing screen's own convention (a route `loading.tsx` Suspense boundary; an inline `role="alert"` render before this component) — **not** consolidated into the primitive this checkpoint; named as future work, not overclaimed.
+- **Keyboard:** native `<table>`/`<a>`/interactive-cell semantics; no custom keyboard handling added or needed for a non-interactive-row table.
+- **Accessibility:** `caption` required; `scope="col"` on every header cell; sticky header only (page-scroll sticky, not a fixed-height virtualized viewport — the wrapper does not set `overflow-y`, so the header sticks against the page's own scroll, not a bounded internal scroll region).
+- **Responsive:** horizontal scroll (`overflow-x-auto`) below the table's natural width; no column-priority/collapse behavior yet.
+- **White-label behavior:** header/border/text colors are semantic tokens (`--color-surface`, `neutral-*`); no tenant-brand-specific path.
+- **Density behavior:** see Sizes above — the only primitive so far to actually consume the density token category (`docs/standards/DESIGN_SYSTEM.md` §2's density row, previously "no primitive consumes these yet").
+- **Anti-patterns:** do not hand-roll a `<table>` with Tailwind utility classes in a new screen — import this component. Do not add sort/filter/pagination UI directly inside a `DataTable` consumer's JSX; extend the shared primitive (or `Pagination`, below) instead once a second real need appears.
+- **Implementation notes:** generic over `Row`; `rowKey`/`render` are caller functions, not string accessors, so a column can render arbitrary JSX (e.g. a link) without a special-cased "link column" type. Sorting, filtering, grouping, saved views, column visibility/pinning, bulk actions, row selection, export, and virtualization remain `DOCUMENTED_ONLY` in §2 below — this checkpoint's own instruction explicitly named building 60+ primitives speculatively as a pattern to avoid.
+
+### Pagination — `components/tables/pagination.tsx` — `IMPLEMENTED`
+
+**Implemented by:** CargoGrid UI Modernization checkpoint (2026-07-26), alongside `DataTable` — the same two screens are its first real consumers. Both screens previously rendered a static "Page X — Y total" string with no actual prev/next control; this is the first real pagination *control* in the repository (the query-layer offset pagination itself already existed, `supreme/tenants`).
+
+- **Purpose:** the single shared page-number navigation control for server-paginated lists.
+- **When to use:** any list using offset pagination (`page`/`pageSize`/`totalCount`).
+- **When not to use:** cursor/keyset or infinite-loading pagination — a different, not-yet-built pattern (`04_DATA_EXPERIENCE_AND_WORKFLOW_PATTERNS.md` §1).
+- **Anatomy:** `<nav aria-label="Pagination">` containing Previous/Next controls and a numbered page list with collapsed ellipsis gaps.
+- **Variants/sizes:** none.
+- **States:** boundary pages render Previous/Next as non-interactive, `aria-disabled="true"` (never a dead link); the current page renders as a non-link `aria-current="page"` element; a single-page result renders nothing (no pagination decision to present).
+- **Keyboard:** every actionable page is a real `next/link` anchor — native Tab/Enter navigation, no custom key handling.
+- **Accessibility:** landmark `aria-label`, `aria-current="page"` on the active page, `aria-disabled` on boundary controls, ellipsis marked `aria-hidden="true"` (decorative, not a navigable item).
+- **Responsive:** wraps (`flex-wrap`) rather than overflowing on narrow viewports.
+- **White-label behavior:** current-page fill uses `bg-primary` — reflects tenant brand when active, consistent with `Button`'s primary variant.
+- **Density behavior:** fixed padding — not density-tiered (a pagination control is not a data row).
+- **Anti-patterns:** do not compute page-number math inline in a page component (`supreme/tenants/page.tsx`'s own prior pattern, now removed) — import this component instead.
+- **Implementation notes:** page-window math (which page numbers to show, where to collapse to an ellipsis) is a pure function, `lib/tables/pagination-range.ts`, unit-tested there (`.tsx` files have no test runner in this repository yet, the same reason `lib/theme/resolve-portal-theme.ts` was extracted as plain `.ts`). The component itself takes a caller-supplied `buildHref(page)` function rather than owning a query-string shape — keeps it agnostic to whatever other params (future filters/sort) a given screen's URL carries.
+
 ## 2. Full requested catalogue — status summary
 
 Every component this task's own instruction named, with purpose (one line) and status. Components not listed individually above are `DOCUMENTED_ONLY`: a real screen has not needed them yet in this repository (every existing screen is a plain server-rendered table/form using raw HTML elements with Tailwind utility classes reading the semantic tokens directly — functionally correct and token-disciplined, but not yet extracted into a shared primitive per `09_*.md` §4.2's "one owner" rule). Building each of these against a *hypothetical* future screen, with no real consumer to validate the API against, risks exactly the "unresolved placeholder"/"speculative abstraction" pattern `AGENTS.md` and this repository's own coding standards forbid — so the catalogue below is a specification a future capability-driven checkpoint builds against when a real screen needs it, not a batch of speculative components.
@@ -108,9 +147,9 @@ Every component this task's own instruction named, with purpose (one line) and s
 | Accordion | Collapsible content sections | `DOCUMENTED_ONLY` |
 | Card | Bounded content block | `DOCUMENTED_ONLY` — used sparingly by design (`ADR-0017` §1: "avoid turning every section into a card") |
 | Metric card / KPI widget | Single-number dashboard tile | `DOCUMENTED_ONLY` |
-| Table | Static/simple tabular display | `DOCUMENTED_ONLY` — current screens (`supreme/tenants`) use a raw `<table>` |
-| Data grid | Dense, server-paginated/sortable/filterable operational table with density-tier support (`--row-height-*`) | `DOCUMENTED_ONLY` — the highest-priority future primitive per `09_*.md` §4.1, since "dense ERP-style" is this product's defining trait; not attempted this checkpoint because no real screen with pagination/sort/filter exists yet to build it against |
-| Pagination | Page/cursor navigation control | `DOCUMENTED_ONLY` — `supreme/tenants/page.tsx` implements page-number math inline; extraction due once a second paginated table exists |
+| Table | Static/simple tabular display | `IMPLEMENTED` — `components/tables/data-table.tsx` (see §1 above); both `commercial/leads` and `supreme/tenants` migrated off their raw `<table>` |
+| Data grid | Dense, server-paginated/sortable/filterable operational table with density-tier support (`--row-height-*`) | `IMPLEMENTED` for display + density (`DataTable` above, consumes `--row-height-*`); sort/filter/grouping/saved-views/column-visibility-pinning/bulk-actions/selection/virtualization remain `DOCUMENTED_ONLY` — no current screen has server-side support for any of those yet, per `09_*.md` §4.1's "one owner" rule building ahead of a real consumer is deferred, not attempted |
+| Pagination | Page/cursor navigation control | `IMPLEMENTED` (offset case only) — `components/tables/pagination.tsx` + `lib/tables/pagination-range.ts`; both `commercial/leads` and `supreme/tenants` migrated off inline page-number math and a static "Page X" string. Cursor/keyset pagination remains `DOCUMENTED_ONLY`. |
 | Filter bar | Explicit-allowlist filter controls (`09_*.md` §4.1, mirrors the server-side allowlist) | `DOCUMENTED_ONLY` |
 | Saved views | Named, persisted filter/sort/column configurations | `DOCUMENTED_ONLY` |
 | Bulk action bar | Appears on multi-row selection, drives selection-token-based bulk mutation (never thousands of raw IDs from the browser, `09_*.md` §4.1) | `DOCUMENTED_ONLY` |

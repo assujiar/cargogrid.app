@@ -3803,6 +3803,40 @@ Additive for every object. Zero prior migration file edited; zero prior table's 
 
 Self-closing. `CG-S7-COM-019` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-020` (Prompt 161, No-Reentry Enforcement) -- dependency-`READY` (`143..160` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own "lanjut sd prompt 160" authorization range ends here. A fresh explicit user authorization is required before `161` proceeds.
 
+### CHG-2026-093 — Table and Pagination primitives (CargoGrid UI Modernization, out-of-band, not a numbered `CG-S*-*` prompt)
+
+| Field | Value |
+|---|---|
+| Task/prompt | None — out-of-band UI-modernization checkpoint. A separate, much broader "CargoGrid UI Modernization & Design System Enforcement" instruction was issued this session (audit/refactor every Commercial page, build the full ~70-component catalogue, standardize navigation/search/notifications/charts/forms in one pass); per `AGENTS.md` ("one authorized task at a time," 5–15-file default sizing, broad refactors require dedicated prompts) and `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §5's own precedent, that full scope was not attempted. The user was asked which concrete slice to build first and chose the Data Grid/Table primitive (roadmap item 3). |
+| Change type | UI |
+| Baseline evidence | `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §5 item 3 (`DOCUMENTED_ONLY`, "no real screen with pagination/sort/filter exists yet to build it against" — since resolved, two Commercial-adjacent screens already had server-side offset pagination in their query layer, just no rendered table/pagination primitive) |
+| Final status | `COMPLETED` for the bounded scope actually attempted (Table + Pagination display/density/empty-state, migrated onto two real screens); sort/filter/column-config/bulk-actions/selection/virtualization remain `DOCUMENTED_ONLY`, named not attempted — see `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §8 for the exact split |
+| Authorization | User-issued task instruction (this session) for the broad UI modernization mission; the specific slice (Table primitive) was confirmed via an explicit clarifying question, given the mission's own scope conflicts with this repository's atomic-task-sizing discipline |
+
+#### Outcome
+
+Flipped "Table"/"Data grid"/"Pagination" from `DOCUMENTED_ONLY` to `IMPLEMENTED` in `docs/design-system/02_COMPONENTS.md` — the first shared table implementation in this repository, replacing two screens' own hand-rolled raw `<table>` markup: `app/(tenant)/[tenantSlug]/commercial/leads/page.tsx` (Commercial reference consumer, per this mission's own emphasis) and `app/(supreme)/supreme/tenants/page.tsx` (a second, structurally different consumer outside Commercial, included deliberately so the primitive's API is validated against more than one caller before being called `IMPLEMENTED` rather than a single-consumer speculative shape).
+
+`components/tables/data-table.tsx`: generic `DataTable<Row>` — caller-supplied `columns`/`rowKey`/`emptyMessage`, sticky header (page-scroll), and the first primitive in the repository to actually consume the `--row-height-compact/default/comfortable` density tokens (previously decided in `docs/standards/DESIGN_SYSTEM.md` §2 but consumed by nothing). `components/tables/pagination.tsx`: a real Previous/Next/page-number control — both migrated screens previously rendered only a static "Page X — Y total" string with **no actual pagination control**, so this is a genuine, disclosed behavior improvement, not a purely cosmetic refactor. Page-window math (`lib/tables/pagination-range.ts`) is a pure, unit-tested function (9 cases: single page, zero rows, few pages, current-page-in-middle collapsing both gaps, near-start/near-end collapsing one gap, out-of-range clamping in both directions, non-finite `pageSize`) — extracted the same way `lib/theme/resolve-portal-theme.ts` was in checkpoint 1, since `.tsx` files have no test runner in this repository.
+
+**Deliberately not done, named rather than silently skipped** (`docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §8 has the full list): sorting, filtering, grouping, saved views, column visibility/pinning, bulk actions, row selection, export, virtualization — no current screen has server-side support for any of these; building the UI ahead of a real backing capability would be exactly the speculative-abstraction pattern `AGENTS.md` forbids. `DataTable`'s Loading/Error states remain page-owned (route `loading.tsx` Suspense boundary; inline `role="alert"`) rather than consolidated into the primitive. No other Commercial list screen (prospects, contacts, accounts, opportunities, quotations, contracts, rates, approvals, credit-approvals, costing-requests, margin-rules, pipeline) was migrated — each remains on its own raw `<table>`, the natural next candidate for a follow-up checkpoint of this same shape.
+
+#### Scope and files
+
+New: `components/tables/data-table.tsx`, `components/tables/pagination.tsx`, `lib/tables/pagination-range.ts`(`.test.ts`). Modified: `app/(tenant)/[tenantSlug]/commercial/leads/page.tsx`, `app/(supreme)/supreme/tenants/page.tsx` (table/pagination markup only — no query, access-control, or data-shape change), `docs/design-system/{00_INDEX,02_COMPONENTS,07_GAP_ANALYSIS_AND_ROADMAP}.md`, `docs/standards/DESIGN_SYSTEM.md` (reconciled in place, historical text preserved). 4 new files, 6 modified files, 0 migrations.
+
+#### Tests and quality evidence
+
+`pnpm install` PASS. `pnpm run typecheck` PASS (0 errors). `pnpm run lint` PASS (0 errors; 55 pre-existing `@next/next/no-html-link-for-pages` warnings, none introduced by this checkpoint — confirmed no warnings on any new/modified file). `pnpm run test` 1369 tests, 1368 PASS, 1 pre-existing failure (`checkWorktreeCollision — against this repository's real state`) confirmed identical on the unmodified baseline via `git stash`/re-run — unrelated to this diff, same disclosed condition as `COM-158`'s own manifest entry. 9 net-new tests (`lib/tables/pagination-range.test.ts`). `npx next build` PASS — 32 routes, same count as before this checkpoint (no route added/removed). `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. **Not run:** `pnpm run db:test` (no migration in this change), `pnpm run test:e2e` (requires a browser-driven server, same disclosed condition as checkpoint 1).
+
+#### Compatibility, rollout, recovery
+
+Additive — no existing component's public API changed, no route added/removed, no migration, no query/RLS/access-control behavior changed on either migrated screen (verified: `listLeads`/`listSupremeTenants` calls and their inputs are byte-identical to before this diff). The one user-visible behavior change: both migrated screens now render a real, working Previous/Next/page-number pagination control where none existed before (previously a static, non-interactive "Page X" string) — an intended improvement, not a regression. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing (out-of-band, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-020` (Prompt 161, No-Reentry Enforcement), not yet authorized. The broader "CargoGrid UI Modernization" mission that prompted this checkpoint remains open and largely un-executed (every other Commercial list screen, the ~68 remaining `DOCUMENTED_ONLY` primitives, navigation/search/notifications/charts) — this entry and `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §7/§8 are the durable record of exactly how much of it this checkpoint actually did, so a future checkpoint does not have to re-derive the boundary.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -43,3 +43,7 @@ No item in this subtree is marked `IMPLEMENTED` unless it was directly verified 
 - Left the Supreme Admin shell (`app/(supreme)/supreme/layout.tsx`) unchanged by design (`ADR-0017` §4) and added a comment there stating why, so a future checkpoint does not "fix" it into tenant-branded by mistake.
 
 Everything else this task's own instruction requested (the ~70-component catalogue, dense data-grid/table primitives, full navigation shell, AI-interaction components, additional white-label schema fields) is `DOCUMENTED_ONLY` or `DEFERRED` — see each document's own status column and `07_GAP_ANALYSIS_AND_ROADMAP.md` for why building all of it in one checkpoint was not attempted (it would violate `AGENTS.md`'s own atomic-task-sizing and single-writer-collision discipline, which this task's own instruction defers to as governing authority).
+
+## Update (Checkpoint 2, 2026-07-26, out-of-band)
+
+`components/tables/data-table.tsx` and `components/tables/pagination.tsx` are now `IMPLEMENTED` — the first Table/Data-grid/Pagination primitives, built against two real consumers (`commercial/leads`, `supreme/tenants`). Full detail: `02_COMPONENTS.md` §1, `07_GAP_ANALYSIS_AND_ROADMAP.md` §8. This was one deliberately narrow slice of a much larger "UI Modernization" instruction issued this session; the rest of that instruction's scope (every other Commercial list screen, sort/filter/column-config, the remaining ~68-component catalogue, navigation/search/notifications/charts) remains exactly as un-executed as before — see `07_GAP_ANALYSIS_AND_ROADMAP.md` §7.
