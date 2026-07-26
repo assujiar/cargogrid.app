@@ -24,6 +24,7 @@ import { decideQuotationApprovalStep, QuotationApprovalMutationError } from "../
 import { sendQuotationForAcceptance, revokeQuotationAcceptanceToken, QuotationAcceptanceMutationError } from "../../../../../../server/mutations/quotation-acceptance.ts";
 import { convertQuotationToAccount, AccountMutationError } from "../../../../../../server/mutations/account.ts";
 import { createCustomerContractDraft, ContractMutationError } from "../../../../../../server/mutations/contract.ts";
+import { prepareJobOrderHandoff, JobOrderLineageMutationError } from "../../../../../../server/mutations/job-order-lineage.ts";
 import type { QuotationLineType, QuotationTerms } from "../../../../../../server/contracts/quotation/quotation.ts";
 import type { QuotationAcceptanceChannel } from "../../../../../../server/contracts/quotation/quotation-acceptance.ts";
 
@@ -346,4 +347,29 @@ export async function createContractFromQuotationAction(tenantSlug: string, quot
   }
 
   redirect(`/${tenantSlug}/commercial/contracts/${contractId}`);
+}
+
+export interface PrepareJobOrderHandoffState {
+  readonly error: string | null;
+}
+
+/** COM-160: idempotent -- calling this again after a handoff already exists simply re-fetches the same row, it never re-derives or duplicates it. */
+export async function prepareJobOrderHandoffAction(tenantSlug: string, quotationId: string, _prevState: PrepareJobOrderHandoffState, _formData: FormData): Promise<PrepareJobOrderHandoffState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await prepareJobOrderHandoff(supabase, { quotationId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof JobOrderLineageMutationError) {
+      return { error: `Could not prepare Job Order handoff: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/commercial/quotations/${quotationId}`);
+  return { error: null };
 }

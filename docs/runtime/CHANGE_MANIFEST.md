@@ -3765,6 +3765,44 @@ Additive for every object. Zero prior migration file edited; zero prior table's 
 
 Self-closing. `CG-S7-COM-018` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-019` (Prompt 160, Full Lineage into Job Order) -- dependency-`READY` (`143..159` all `VERIFIED`) and **already authorized** by this checkpoint's own "lanjut sd prompt 160"; proceeding directly.
 
+### CHG-2026-092 — Full Lineage into Job Order (Phase 2, Prompt 160)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-019` / `160_COMMERCIAL_JOB_ORDER_LINEAGE_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `019` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The user message "lanjut sd prompt 160" -- the final task in that authorized range |
+
+#### Outcome
+
+The idempotent accepted-quote -> `JobOrderDraftInput` handoff contract Commercial owns; **no Job Order table, route, or domain logic implemented** (Prompt 160 §12/§24's own explicit forbidden scope, structural in this migration -- zero references to any "job_order" concept beyond this one handoff record).
+
+**Every payload field is a reference to, or verbatim snapshot of, an already-canonical Commercial source**: customer identity from `app.quotations.customer_snapshot` (the pinned snapshot the customer actually accepted); cargo/service from `app.opportunities.requirements`; pricing from `app.quotations`/`app.quotation_lines`'s own real server-computed totals; acceptance evidence from `app.quotation_customer_decisions` (`COM-154`); the converted account from `app.account_conversions` (`COM-155`, `unique(quotation_id)`); the contract, if any, from `app.customer_contracts.source_quotation_id` (`COM-156`); the credit signal, if any, from the account's most recent `app.credit_check_snapshots` row (`COM-157`) -- **only its `outcome`/`checked_at`, never a dollar limit figure**, sidestepping fine-grained masking inside the credit portion of the payload entirely.
+
+**Idempotency key is `(tenant_id, quotation_id, purpose)`** -- one accepted quote/version cannot create a duplicate downstream outcome; a retry after the row exists returns it unchanged. **`app.prepare_job_order_handoff` is synchronous and deterministic, not a queued job** -- every source is already-live Commercial data with no external dependency; a precondition failure raises a named exception and creates no row at all. `downstream_reference`/`delivered_at` are the real, structurally-ready columns a future Phase 3 Operations consumer would populate -- both stay null in this environment, disclosed, not fabricated.
+
+**`payload`/`payload_hash` are masked wholesale, not per-key**, behind `COM:View selling price` via `app.job_order_handoffs_directory` -- `authenticated` has no direct column grant on either column on the base table, forcing every read through the directory.
+
+**One real defect found and fixed during authoring, before any db-test was written to prove it**: `app.prepare_job_order_handoff`'s first draft returned the raw, unmasked row directly, but the function is gated only on `COM:Edit`, not `COM:View selling price` -- an actor who can prepare a handoff but cannot see prices would have seen real pricing through the RPC's own return value even though the directory would correctly mask the same row on a subsequent read. Caught by comparing against `app.check_customer_credit`'s (`COM-157`) own "mask the function's own output" precedent, fixed by nulling `payload`/`payload_hash` on both the idempotent-retry and fresh-insert return paths whenever the caller lacks `COM:View selling price`, proven directly by a dedicated `editor` role/user in the db-test fixture.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724340000_create_commercial_job_order_lineage.sql` (1 migration -- 1 new table, 3 new functions, 1 masked directory view, zero new permission-catalogue row); `scripts/db-tests/commercial-job-order-lineage.sql`; `server/contracts/job-order-lineage/job-order-lineage.ts`(`.test.ts`); `server/queries/job-order-lineage.ts`(`.test.ts`); `server/mutations/job-order-lineage.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{job-order-handoff-panel,prepare-job-order-handoff-form}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.ts(x)` (panel wiring, new server action). 8 new files, 1 migration, 2 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1360/1360 PASS (12 net new); `pnpm run db:test` PASS -- 50 migrations/50 db-test files, all green including the new `commercial-job-order-lineage.sql` and `COM-143..159`'s own test files running unmodified (re-run twice for determinism); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `npx next build` PASS (no new route -- the panel lives on the existing Quotation Detail route). `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..159` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered. `git revert` of this checkpoint's commit is safe and complete. No Phase 3 Operations consumer exists yet to depend on `downstream_reference`.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-019` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-020` (Prompt 161, No-Reentry Enforcement) -- dependency-`READY` (`143..160` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own "lanjut sd prompt 160" authorization range ends here. A fresh explicit user authorization is required before `161` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
