@@ -4,8 +4,10 @@ import { createSupabaseServerClient } from "../../../../../../lib/supabase/serve
 import { getOpportunityById, listOpportunityStageHistory, getOpportunityCostingReadiness, OpportunityQueryError } from "../../../../../../server/queries/opportunity.ts";
 import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
 import { listCostingRequestsForOpportunity } from "../../../../../../server/queries/costing.ts";
+import { listQuotationsForOpportunity } from "../../../../../../server/queries/quotation.ts";
 import { OpportunityActionsPanel } from "./opportunity-actions-panel.tsx";
 import { RequestCostingForm } from "./request-costing-form.tsx";
+import { CreateQuotationForm } from "./create-quotation-form.tsx";
 import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
 
 /**
@@ -44,11 +46,12 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
     notFound();
   }
 
-  const [stageHistory, readiness, activities, costingRequests] = await Promise.all([
+  const [stageHistory, readiness, activities, costingRequests, quotations] = await Promise.all([
     listOpportunityStageHistory(supabase, opportunity.id),
     getOpportunityCostingReadiness(supabase, opportunity.id, access.authUserId),
     listActivitiesForRecord(supabase, "opportunity", opportunity.id),
     listCostingRequestsForOpportunity(supabase, opportunity.id),
+    listQuotationsForOpportunity(supabase, opportunity.id),
   ]);
 
   return (
@@ -135,6 +138,26 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
       </div>
 
       <RequestCostingForm tenantSlug={tenantSlug} opportunityId={opportunity.id} disabled={!readiness.ready} />
+
+      <div className="rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Quotations</h2>
+        {quotations.length === 0 ? (
+          <p className="mt-2 text-sm text-neutral-600">No quotations yet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-1 text-sm">
+            {quotations.map((quotation) => (
+              <li key={quotation.id}>
+                <a href={`/${tenantSlug}/commercial/quotations/${quotation.id}`} className="font-medium text-primary underline">
+                  {quotation.quoteNumber}
+                </a>
+                <span className="text-neutral-500"> — {quotation.status}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <CreateQuotationForm tenantSlug={tenantSlug} opportunityId={opportunity.id} defaultCurrency={opportunity.valueMasked ? null : opportunity.valueCurrency} />
 
       <OpportunityActionsPanel
         tenantSlug={tenantSlug}

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { resolveTenantAdminAccessForRequest } from "../../../../lib/portal/resolve-tenant-admin-access.server.ts";
+import { resolveTenantPortalThemeForRequest } from "../../../../lib/portal/resolve-tenant-portal-theme.server.ts";
 
 /**
  * Tenant Admin portal shell (PLT-135, CG-S6-PLT-032). Every request through this route
@@ -30,6 +31,17 @@ export default async function TenantAdminLayout({
     redirect(`/login`);
   }
 
+  /**
+   * Tenant white-label theme resolution (CargoGrid Design System Expansion,
+   * docs/design-system/01_TOKENS_AND_THEME.md §4, ADR-0017 §4). Only fetched once
+   * access is actually `allowed` -- a denied/unauthenticated render never needs (or
+   * should reveal) tenant branding. Falls back to the CargoGrid default atomically on
+   * any failure (`resolveTenantPortalThemeForRequest`'s own header). Deliberately not
+   * wired into `app/(supreme)/supreme/layout.tsx` -- ADR-0017 §4 forbids the Supreme
+   * Admin shell from ever rendering tenant branding in its own chrome.
+   */
+  const theme = access.status === "allowed" ? await resolveTenantPortalThemeForRequest(access.tenant.id) : null;
+
   if (access.status !== "allowed") {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
@@ -47,9 +59,15 @@ export default async function TenantAdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col" style={theme?.cssVars as CSSProperties | undefined}>
       <header className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-3">
-        <span className="text-sm font-semibold text-neutral-900">CargoGrid — {access.tenant.slug}</span>
+        <span className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
+          {theme?.logoAssetUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- SUPPRESS(owner=design-system, reason=tenant-supplied remote logo asset cannot be optimized by next/image at build time, expires=NONE, adr=ADR-0017)
+            <img src={theme.logoAssetUrl} alt={`${access.tenant.slug} logo`} className="h-6 w-auto" />
+          ) : null}
+          CargoGrid — {access.tenant.slug}
+        </span>
         <nav aria-label="Admin navigation" className="flex gap-4 text-sm">
           <a href={`/${access.tenant.slug}/admin`} className="text-neutral-700 hover:text-neutral-900">
             Home

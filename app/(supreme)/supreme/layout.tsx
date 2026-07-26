@@ -14,6 +14,13 @@ import { Banner } from "../../../components/ui/banner.tsx";
  * pretend immutable/tamper-proof evidence" (the same exception `AGENTS.md`'s own
  * "Supreme Admin risk rule" names): rendered on every page in this portal, not a
  * one-time dismissible notice a returning Supreme Admin would stop seeing.
+ *
+ * Deliberately CargoGrid-branded only, never tenant-branded (CargoGrid Design System
+ * Expansion, `docs/adr/ADR-0017` §4) -- this shell must NOT import `lib/theme/
+ * resolve-portal-theme.ts` or any tenant-brand resolution. Tenant branding may only
+ * appear in a future tenant-scoped preview/detail context nested inside this portal
+ * (not built yet, see `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md`), never in
+ * this file's own chrome.
  */
 export default async function SupremeLayout({ children }: { children: ReactNode }) {
   const access = await resolveSupremeAdminAccessForRequest();

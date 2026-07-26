@@ -70,8 +70,26 @@ export default async function CommercialLayout({
           <a href={`/${access.tenant.slug}/commercial/rates`} className="text-neutral-700 hover:text-neutral-900">
             Rates
           </a>
+          <a href={`/${access.tenant.slug}/commercial/quotations`} className="text-neutral-700 hover:text-neutral-900">
+            Quotations
+          </a>
+          <a href={`/${access.tenant.slug}/commercial/accounts`} className="text-neutral-700 hover:text-neutral-900">
+            Accounts
+          </a>
+          <a href={`/${access.tenant.slug}/commercial/contracts`} className="text-neutral-700 hover:text-neutral-900">
+            Contracts
+          </a>
           <a href={`/${access.tenant.slug}/commercial/margin-rules`} className="text-neutral-700 hover:text-neutral-900">
             Margin Rules
+          </a>
+          <a href={`/${access.tenant.slug}/commercial/approval-rules`} className="text-neutral-700 hover:text-neutral-900">
+            Approval Rules
+          </a>
+          <a href={`/${access.tenant.slug}/commercial/approvals`} className="text-neutral-700 hover:text-neutral-900">
+            Approvals
+          </a>
+          <a href={`/${access.tenant.slug}/commercial/credit-approvals`} className="text-neutral-700 hover:text-neutral-900">
+            Credit Approvals
           </a>
         </nav>
       </header>

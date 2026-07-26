@@ -3379,6 +3379,314 @@ Additive for every new table/function. `git revert` of this checkpoint's commit 
 
 Self-closing. `CG-S7-COM-009` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-010` (Prompt 151, Quotation Builder) -- dependency-`READY`, covered by the same open-ended authorization.
 
+### CHG-2026-082 — CargoGrid Design System Expansion and Implementation (out-of-band, not a numbered `CG-S*-*` prompt)
+
+| Field | Value |
+|---|---|
+| Task/prompt | None — out-of-band design-system documentation/implementation task, explicitly scoped by its own instruction to NOT consume, rename, or renumber Prompt 151 (`CG-S7-COM-010`, Quotation Builder) or any later roadmap prompt |
+| Change type | DOCS + TOKENS + UI |
+| Baseline evidence | `docs/runtime/CARGOGRID_BUILD_STATUS.md` §1 at session start: Phase 2 `IN_PROGRESS`, next eligible task `CG-S7-COM-010` (Prompt 151) — **unchanged by this checkpoint**, verified not edited |
+| Final status | `COMPLETED` for the bounded scope actually attempted (token/brand resolution, 2 new primitives, tenant-shell white-label wiring for one route group, canonical documentation set); `PARTIALLY_COMPLETE`/`DEFERRED` for the full ~70-component catalogue and full portal/screen alignment this task's own instruction enumerated — see `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` for the exact split |
+| Authorization | User-issued task instruction (this session), explicitly out-of-band per its own §17 |
+
+#### Outcome
+
+Resolved `docs/standards/DESIGN_SYSTEM.md` §3's long-disclosed open item — CargoGrid's own default brand identity (color, typography) had never been decided; it now is (`docs/adr/ADR-0016`). Recorded the "CargoGrid Adaptive Industrial UI" design identity and a precision restatement of the white-label tenant-configurable/platform-controlled boundary (`docs/adr/ADR-0017`), given `components/ui/` and the white-label backend (`PLT-117`) both now exist where `RPD-019`/`09_UX_DESIGN_SYSTEM_WORKSTREAM.md` only fixed the boundary at planning precision.
+
+`app/globals.css`: real brand tokens (`--color-primary/-hover`, `--color-secondary/-hover`), a new surface/text/border semantic category, elevation tokens (`--shadow-sm/md/lg`, decided in principle since Prompt 90 but never authored in CSS until now), and density tokens (`--row-height-compact/default/comfortable`) — all additive, none of it removing or renaming an existing token. `components/ui/button.tsx`'s primary variant now uses the named `hover:bg-primary-hover` token instead of a generic opacity dim; `components/ui/banner.tsx` gained `success`/`danger` variants alongside its existing `info`/`warning`. Two new primitives: `components/ui/badge.tsx`, `components/ui/status-badge.tsx` (the latter structurally requires a text label — never a color-only status signal).
+
+First-ever wiring of the white-label backend to a real portal shell: `lib/theme/resolve-portal-theme.ts` (pure, unit-tested) and `lib/portal/resolve-tenant-portal-theme.server.ts` (server wrapper, request-memoized, fails soft to the CargoGrid default on any error) are consumed by `app/(tenant)/[tenantSlug]/admin/layout.tsx`, which now renders a tenant's resolved primary/secondary colors and logo when a published brand exists, and the CargoGrid default otherwise — atomically, never a partial merge. `app/(supreme)/supreme/layout.tsx` was deliberately left unwired, with a comment recording why (`ADR-0017` §4: the Supreme Admin shell's own chrome must never be tenant-branded).
+
+A standalone, unit-tested tenant-brand distinguishability policy (`lib/theme/tenant-brand-policy.ts`) was added to satisfy this task's "red tenant-primary"/"semantic-status distinction" validation requirement, but was **deliberately not wired** into `server/mutations/white-label.ts`'s enforced publish path — doing so would change tested `PLT-117` publish behavior, judged out of this checkpoint's bounded scope and named as a deferred follow-up rather than silently done.
+
+A full canonical documentation set was added under `docs/design-system/` (8 files: index, tokens/theme, components, layout/navigation, data-experience/workflow patterns, AI-assisted interaction, accessibility/performance, gap analysis), each citing rather than re-deriving `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md`'s already-`VERIFIED` planning-precision content, and each honestly marking every one of the ~70 requested components/patterns as `IMPLEMENTED`/`DOCUMENTED_ONLY`/`DEFERRED`/`BLOCKED` rather than claiming a completeness this checkpoint did not achieve. `docs/standards/DESIGN_SYSTEM.md` was reconciled in place (not replaced) — its historical §3 disclosure is preserved with the resolution appended, per the file's own reconciliation discipline.
+
+#### Scope and files
+
+New: `docs/adr/ADR-0016-cargogrid-default-brand-identity.md`, `docs/adr/ADR-0017-adaptive-industrial-ui-and-whitelabel-boundary.md`, `docs/design-system/{00_INDEX,01_TOKENS_AND_THEME,02_COMPONENTS,03_LAYOUT_NAVIGATION,04_DATA_EXPERIENCE_AND_WORKFLOW_PATTERNS,05_AI_ASSISTED_INTERACTION,06_ACCESSIBILITY_PERFORMANCE,07_GAP_ANALYSIS_AND_ROADMAP}.md`, `components/ui/{badge,status-badge}.tsx`, `lib/theme/resolve-portal-theme.ts`(`.test.ts`), `lib/theme/tenant-brand-policy.ts`(`.test.ts`), `lib/portal/resolve-tenant-portal-theme.server.ts`. Modified: `docs/standards/DESIGN_SYSTEM.md`, `docs/adr/README.md` (index), `app/globals.css`, `components/ui/button.tsx`, `components/ui/banner.tsx`, `app/(tenant)/[tenantSlug]/admin/layout.tsx`, `app/(supreme)/supreme/layout.tsx` (comment only). 24 files total (13 new, 11 modified), 0 migrations — larger than the standard 5-15 file atomic-sizing guideline because a design-system checkpoint's unit of coherent work spans docs+tokens+components+one wiring example together; no single file's change is itself large or high-risk (verified individually via `git diff` before staging).
+
+#### Tests and quality evidence
+
+`pnpm install --frozen-lockfile` PASS. `pnpm run typecheck` PASS (0 errors). `pnpm run lint` PASS (0 errors; 35 pre-existing warnings, all `@next/next/no-html-link-for-pages`, none introduced by this checkpoint — confirmed by file/line against `git diff`). `pnpm run test` PASS 1128/1128 (13 net new — 5 for `resolve-portal-theme.test.ts`, 8 for `tenant-brand-policy.test.ts`). `next build` (Turbopack) PASS — 21 routes (unchanged count; no route added or removed). `pnpm run docs:check`/`standards:check`/`security:check`/`data-classification:check`/`threat-model:check`/`git:check-paths` all PASS (`git:check-paths`: 24 files checked, 0 caution flags). **Not run this checkpoint:** `pnpm run db:test` (no migration in this change, nothing new to exercise against the database layer), `pnpm run test:e2e` (Playwright + axe-core — requires a browser-driven server; recommended before this branch merges, not executed in this pass, disclosed in `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §3).
+
+#### Compatibility, rollout, recovery
+
+Additive throughout — no existing token renamed/removed, no existing component's public API changed (only `button.tsx`'s internal hover class and `banner.tsx`'s variant set gained new members), no route added/removed, no migration. `git revert` of this checkpoint's commit is safe and complete. The one behavior-visible change end users would see: `app/globals.css`'s compiled default colors change from the neutral-scale placeholder to CargoGrid's real brand (teal/red) — an intended, requested outcome, not a regression; and the Tenant Admin portal now renders a tenant's logo/brand colors when a tenant has published one (previously rendered CargoGrid-default unconditionally, since no wiring existed) — also an intended, requested outcome.
+
+#### Approval and closure
+
+Self-closing (out-of-band task, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-010` (Prompt 151, Quotation Builder). This entry exists so the manifest's append-only history reflects this checkpoint's real changes without disturbing the numbered task-ledger machinery `AGENTS.md` governs.
+
+### CHG-2026-083 — Quotation Builder (Phase 2, Prompt 151)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-010` / `151_QUOTATION_BUILDER_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `010` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message scoped to exactly this task ("lanjut prompt 151") -- distinct from `CG-S7-COM-001`'s own open-ended "lanjut" precedent recorded on the separate `claude/lanjut-c6vqse` branch/session |
+
+#### Outcome
+
+Canonical quotation builder reusing customer/opportunity/cargo/service/rate data (`app.opportunities`, `app.prospects`, `app.contacts`, `app.margin_calculations` -- `COM-144..150`) to produce exact selling lines/terms and a submission-ready offer. `app.quotations` (root -- stable `quote_number` via a real atomic tenant-scoped counter, `source_opportunity_version` pin, `customer_snapshot` copied from the real prospect row, server-computed aggregate money columns, `draft`/`submitted`/`cancelled` status). `app.quotation_lines` (typed lines -- `service`/`surcharge`/`fee`/`discount` -- optionally sourced from a margin calculation, whose cost/margin snapshot is copied at add-time and masked at read-time).
+
+`app.next_quotation_number()` is a disclosed, bounded alternative to the still-unadopted Configurable Numbering Engine (`PLT-125`) -- no Commercial capability has wired that engine up yet. `app.create_quotation_draft`/`app.clone_quotation`/`app.add_quotation_line`/`app.remove_quotation_line`/`app.update_quotation_terms` are all `COM:Create`/`COM:Edit`-gated with record access and optimistic concurrency; every money-producing step is explicit `numeric` arithmetic with `round(..., 2)`. `app.get_quotation_submission_readiness` is a read-only structural gate (no dollar figures, only reason codes) that `app.submit_quotation` calls internally, failing closed with the exact blocking reasons (`submission_not_ready`) rather than a bare rejection.
+
+`app.quotations_directory`/`app.quotation_lines_directory` mask two independent dimensions -- every monetary total behind `COM:View selling price`, the line-level cost/margin snapshot behind `COM:View cost` -- reusing `COM-147`/`148`'s masking predicates directly, no new permission-catalogue row.
+
+**Six scope boundaries disclosed up front** (migration header and `docs/build-log/phase-02/COM-151.md` §3.1): no canonical customer/account/address master yet (reuses `app.prospects`/`app.contacts`); Numbering Engine not adopted; line editing is add/remove, not in-place numeric edit; autosave is an explicit optimistically-concurrent save, not real-time; document generation/private signed-URL preview is `BLOCKED` on the still-missing asset-upload/storage pipeline (confirmed absent during this same session's prior CargoGrid Design System Expansion task); revisioning/versioning (`152`) and approval routing (`153`) are explicitly out of scope here.
+
+**Two real defects found and fixed during authoring, both via genuine `db:test` failures:** (1) `v_reasons := v_reasons || 'code'` (implicit `text[] || text` concatenation) raised a Postgres "malformed array literal" error -- the operator resolved to `anyarray || anyarray` instead of `anyarray || anyelement` for an untyped string literal; fixed with explicit `array_append(v_reasons, 'code')` throughout `app.get_quotation_submission_readiness`. (2) This checkpoint's own db-test file picked "the first quotation for this customer" via `order by created_at asc limit 1`, non-deterministic when two quotations are created inside the same `do $$ ... $$` block (Postgres freezes `now()` for the whole transaction) -- fixed by ordering on the guaranteed-distinct, allocation-ordered `quote_number` instead.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724210000_create_commercial_quotation_builder.sql` (1 migration -- 3 tables, 2 views, 8 functions); `scripts/db-tests/commercial-quotation-builder.sql`; `server/contracts/quotation/quotation.ts`(`.test.ts`); `server/queries/quotation.ts`(`.test.ts`); `server/mutations/quotation.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/quotations/{page,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,loading,actions,add-line-form,terms-form,submit-and-clone-actions}.tsx`; `app/(tenant)/[tenantSlug]/commercial/opportunities/[opportunityId]/create-quotation-form.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/opportunities/[opportunityId]/page.tsx` (Quotations section), `app/(tenant)/[tenantSlug]/commercial/opportunities/actions.ts` (`createQuotationDraftAction`), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Quotations nav link). 21 new application/test files, 1 migration, 3 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1158/1158 PASS (30 net new); `pnpm run db:test` PASS -- 41 migrations/41 db-test files, all green including the new `commercial-quotation-builder.sql`; `next build` (Turbopack) PASS -- 23 routes (up from 21); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports one `FORBIDDEN` finding on this checkpoint's own new migration file -- a disclosed, pre-existing tool false positive (its regex matches any changed path under `supabase/migrations/`, not only genuine edits to an already-merged file; verified this checkpoint that the identical false positive fires against `COM-150`'s own historical commit run through the same checker) -- not a real protected-path violation, and the tool itself is outside this task's Quotation Lifecycle file scope to fix.
+
+#### Compatibility, rollout, recovery
+
+Additive for every new object (3 tables, 2 views, 8 functions). Zero prior migration file edited; zero prior table's data altered. `git revert` of this checkpoint's commit is safe and complete; no downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-010` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-011` (Prompt 152, Quotation Versioning) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was scoped to exactly Prompt 151. A fresh explicit user authorization is required before `152` proceeds.
+
+### CHG-2026-084 — Quotation Versioning (Phase 2, Prompt 152)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-011` / `152_QUOTATION_VERSIONING_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `011` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Real business versioning on top of `COM-151`'s quotation root. Widens `app.quotations` (never edits `COM-151`'s own migration file, per `AGENTS.md`) with `root_quotation_id` (the version-1 row's own id), `version_number` (monotonic per root), `is_current` (true for exactly one row per root -- a partial-unique-index guarantee, `quotations_root_current_unique`, mirroring `app.margin_calculations_current_unique`), `superseded_by_id`, `revision_reason`. Replaces `COM-151`'s `unique(tenant_id, quote_number)` with `unique(tenant_id, quote_number, version_number)` (multiple versions now legitimately share one quote_number) and adds `unique(root_quotation_id, version_number)`.
+
+`app.create_quotation_revision(p_source_quotation_id, p_reason, p_actor_auth_user_id, p_actor_label)` serves both Prompt 152's main flow (revise the latest version) and alternative flow (restore an older version as a new latest draft) identically -- the source may be current or historical, both cases copy header/lines into a new version and supersede whichever row was current beforehand. `COM:Edit` + record access gated, mandatory non-empty reason. Concurrency: real row-level locking (`SELECT ... FOR UPDATE` on the root's current-version row), not merely optimistic concurrency -- a genuinely concurrent second call blocks until the first commits, then proceeds correctly against the fresh current row.
+
+Six `COM-151` functions (`create_quotation_draft`, `clone_quotation`, `add_quotation_line`, `remove_quotation_line`, `update_quotation_terms`, `submit_quotation`, `get_quotation_submission_readiness`) plus `app.quotations_directory` widened via `CREATE OR REPLACE FUNCTION`/`VIEW` with identical signatures (the same technique `COM-149` used on `app.can_access_record` and `COM-132` used on three `PLT-131` functions). The four mutation functions now additionally require `is_current=true` -- closing a real gap: without this widening, a superseded historical version whose own `status` column still literally read `draft` (revised before ever being submitted) would have remained directly editable.
+
+**Five scope boundaries disclosed up front** (migration header, `docs/build-log/phase-02/COM-152.md` §3.1): no "issued"/"accepted" status values invented ahead of real evidence (`COM-153`/`154` have not run) -- the lock rule is bounded to `is_current` + `status <> 'cancelled'`, with the extension point named for those future capabilities; "supersede" is the internal side-effect of `create_quotation_revision`, never a separate action; "compare" is computed in TypeScript (`server/contracts/quotation/quotation-diff.ts`, pure and unit-tested) rather than a third SQL function with no real rule left to enforce; RPD-022 disclosed, not newly implemented; legacy data migration not applicable (greenfield).
+
+**No defect found in the migration itself.** Two real test-authoring mistakes were found and fixed before the db-test suite passed: (1) the initial setup used the tenant_admin identity (holding neither `COM:Create` nor `COM:Approve`) to create/publish the margin rule, fixed by using the rep instead; (2) an incorrect assertion expected the freshly-revised version 2 to be "not yet ready," when it had in fact correctly inherited a satisfied contact/line state from version 1, fixed to expect `ready=true`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724240000_create_commercial_quotation_versioning.sql` (1 migration -- 5 new columns, 2 new indexes, 2 new constraints, 1 new function, 6 widened functions, 1 widened view); `scripts/db-tests/commercial-quotation-versioning.sql`; `server/contracts/quotation/quotation-diff.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{version-history,revision-form,comparison-panel}.tsx`. Modified: `server/contracts/quotation/quotation.ts` (5 new fields), `server/queries/quotation.ts` (`listQuotationVersions`), `server/mutations/quotation.ts` (`createQuotationRevision`), `server/{contracts,queries,mutations}/quotation*.test.ts` (fixture/coverage updates), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions,terms-form}.tsx` (version-aware locking, history, revise/restore, compare). 5 new files, 1 migration, 8 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1172/1172 PASS (14 net new); `pnpm run db:test` PASS -- 42 migrations/42 db-test files, all green including the new `commercial-quotation-versioning.sql` and `COM-151`'s own test file running unmodified against the widened schema; `next build` (Turbopack) PASS -- 23 routes (unchanged count); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151` (confirmed to fire identically against `COM-151`'s own historical commit too) -- not a real protected-path violation.
+
+#### Compatibility, rollout, recovery
+
+Additive/widening for every object. Zero prior migration file edited; zero prior table's data altered (one backfill statement for `root_quotation_id`, not exercised against real data -- greenfield, no live environment). `git revert` of this checkpoint's commit is safe and complete; the widened functions/view revert to their exact `COM-151` behavior. No downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-011` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-012` (Prompt 153, Quotation Approval) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `152`. A fresh explicit user authorization is required before `153` proceeds.
+
+### CHG-2026-085 — Quotation Approval (Phase 2, Prompt 153)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-012` / `153_QUOTATION_APPROVAL_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `012` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Configurable quotation approval, instantiating two already-`VERIFIED` Platform primitives (`PLT-121` Configuration Engine, `PLT-123` Approval Engine) rather than forking them -- both `COM-151`'s and `COM-152`'s own migration headers had already disclosed this exact boundary in advance ("approval routing is Prompt 153's own scope").
+
+New `app.quotation_approval_rules` -- a versioned, tenant-wide threshold policy (`min_margin_pct`/`max_discount_pct`/`min_value_amount`, each optional but at least one required by CHECK) mirroring `app.margin_rule_versions` (`COM-150`) line for line: draft/published/archived, `supersedes_version_id`, exactly one published row per tenant via a partial unique index. Widens `app.quotations` (never edits `COM-151`/`152`'s own migration files, per `AGENTS.md`) with a second axis independent of submission `status`: `approval_status` (not_required/pending/approved/rejected), `approval_request_id`, `approval_rule_version_id`, `approval_required_reasons` (reason codes only, never a dollar figure).
+
+`app.evaluate_quotation_approval_requirement` is the one deterministic threshold decision (margin via `min(quotation_lines.margin_pct_snapshot)`, discount via the header's own `discount_amount/subtotal_amount`, value via `total_amount` directly). `CREATE OR REPLACE FUNCTION app.submit_quotation` (identical signature) now resolves routing inside the same transaction as the draft→submitted move: no threshold crossed → auto-approved, no request ever created; a threshold crossed → looks up the tenant's published `config_type_code='approval'` routing definition (published via the unmodified generic `PLT-121`/`123` RPCs -- no new SQL) and opens a real routed request via `app.request_approval`, failing closed (`approval_definition_not_configured`) if none is published.
+
+New `app.decide_quotation_approval_step` is the one domain-specific sync wrapper this checkpoint adds over the Approval Engine -- validates the bound request's `entity_type='quotation'`, delegates the real decision to the unmodified `app.decide_approval_step` (eligibility/self-approval-denial/duplicate-decision guards all reused), then syncs `app.quotations.approval_status` only once the request reaches a final state. Delegation/escalation need no such wrapper -- the API layer calls the engine's own functions directly.
+
+**Scope boundaries disclosed up front** (migration header, `docs/build-log/phase-02/COM-153.md` §3.1): thresholds are a bespoke tenant-wide table, not a second Configuration Engine instantiation (customer/service/organizational thresholds out of this bounded slice); the approval routing definition is instantiated via the existing generic Platform RPCs directly, no dedicated Commercial authoring UI built; "request revision" is not a fourth decision verb -- reject with a reason, then `app.create_quotation_revision` (`COM-152`, unmodified) starts a fresh governed approval path; legacy submitted quotations are never retroactively approved (no backfill).
+
+**No defect found in the migration itself.** Two test-authoring mistakes were found and fixed before the db-test suite passed: (1) the rep role initially lacked `COM:Approve` (needed to publish the margin rule reused from setup), fixed by adding it; (2) this checkpoint's own new test file's unscoped `full_name = 'Jane Doe'` contact collided with `commercial-quotation-builder.sql`'s own pre-existing unscoped lookup once alphabetical run order placed this file first, fixed by renaming this checkpoint's own contact to "Jane Doe Appr."
+
+#### Scope and files
+
+New: `supabase/migrations/20260724270000_create_commercial_quotation_approval.sql` (1 migration -- 1 new table, 2 new functions on it, 4 new columns + 1 CHECK on `app.quotations`, 1 new evaluator function, 1 new domain-sync function, 1 widened function, 1 widened view); `scripts/db-tests/commercial-quotation-approval.sql`; `server/contracts/quotation/quotation-approval.ts`(`.test.ts`); `server/queries/quotation-approval.ts`(`.test.ts`); `server/mutations/quotation-approval.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/approval-rules/{page,create-approval-rule-form,actions,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/approvals/{page,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{approval-panel,approval-decision-form}.tsx`. Modified: `server/contracts/quotation/quotation.ts` (4 new fields), `server/contracts/quotation/quotation-diff.test.ts` (fixture update), `server/contracts/quotation/quotation.test.ts` (2 new tests), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (approval panel wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (2 new nav links). 13 new files, 1 migration, 6 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1196/1196 PASS (24 net new); `pnpm run db:test` PASS -- 43 migrations/43 db-test files, all green including the new `commercial-quotation-approval.sql` and `COM-150`/`151`/`152`'s own test files running unmodified against the widened schema; `next build` (Turbopack) PASS -- 25 routes (up from 23); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` will report the same disclosed, pre-existing false positive as `COM-151`/`152` once this checkpoint's own new migration file is staged -- not a real protected-path violation.
+
+#### Compatibility, rollout, recovery
+
+Additive/widening for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- every pre-existing quotation defaults to `approval_status='not_required'` by column default, never retroactively approved). `git revert` of this checkpoint's commit is safe and complete; `app.submit_quotation`/`app.quotations_directory` revert to their exact `COM-152` behavior. No downstream Commercial capability (`COM-154` Customer Acceptance) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-012` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-013` (Prompt 154, Customer Acceptance) -- dependency-`READY`, but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `153`. A fresh explicit user authorization is required before `154` proceeds.
+
+### CHG-2026-086 — Customer Acceptance (Phase 2, Prompt 154)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-013` / `154_CUSTOMER_ACCEPTANCE_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `013` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Secure quotation delivery and explicit customer accept/reject evidence bound to one exact quotation version, for a customer who holds no CargoGrid account (no Customer Portal exists yet, `COM-155` has not run). Reuses, not reinvents: the hashed-bearer-secret shape is `PLT-129`'s own `app.api_keys`/`app.authenticate_api_key` (raw value returned exactly once, sha256 digest stored, lazy expiry-flip-on-read); the public consumption route reuses `PLT-135`'s own `createSupabaseServiceRoleClient()` (`lib/supabase/service-role.ts`) -- the first time that already-established factory is exercised from a public route.
+
+New `app.quotation_acceptance_tokens` (mirrors `app.api_keys`: `token_hash` one-way sha256, raw value returned exactly once by `app.send_quotation_for_acceptance`, never stored; at most one active row per quotation via a partial unique index -- "send"/"resend" are one function, calling it again revokes the prior active token and mints a fresh one) and `app.quotation_customer_decisions` (append-only, `unique(quotation_id)` -- one final decision per exact version, mandatory reason when rejected). Widens `app.quotations` (never edits `COM-151..153`'s own migration files, per `AGENTS.md`) with `customer_decision`/`customer_decision_at` -- a third axis alongside `status` (`COM-151`) and `approval_status` (`COM-153`).
+
+`app.send_quotation_for_acceptance` (`COM:Edit` + record access gated, requires status=submitted + approval_status approved/not_required + is_current + no existing decision + validity_to not yet passed) and `app.revoke_quotation_acceptance_token` (explicit seller-initiated revoke, mandatory reason) are the internal, authenticated operations. `app.get_quotation_for_customer_decision` (public, unauthenticated, service_role-only, mirrors `app.authenticate_api_key`'s own posture -- never raises for an expired/revoked/consumed token) and `app.record_quotation_customer_decision` (the one customer-facing decision write; atomic single-use token consumption is the real replay guard, the same "stale record fails safely" pattern `app.decide_approval_step`, PLT-123, already established; audits with a null `actor_auth_user_id` since no `auth.users` identity exists for a customer) are the public operations.
+
+**Scope boundaries disclosed up front** (migration header, `docs/build-log/phase-02/COM-154.md` §3.1): token expiry is bound to the quotation's own `validity_to`, never a separately invented policy; no scheduled expiry/reminder job (`PLT-132`'s Background Job Framework has no live worker anywhere in this repository) and no real email/SMTP delivery (no provider wired anywhere) -- both disclosed, the seller relays the real, secure, returned link through their own channel; no rate limiting on the public route (no live gateway infrastructure exists yet); customer identity is bearer-token possession, not a verified account (no customer login exists yet).
+
+**Three real defects found and fixed during authoring, all via genuine `db:test` failures**: (1) two `plpgsql` functions whose `RETURNS TABLE` declared an output column literally named `quotation_id` produced "column reference is ambiguous" against bare `quotation_id` references inside their own bodies -- fixed by table-aliasing every such reference; (2) `gen_random_bytes`/`digest` (pgcrypto, installed in `public`) were unreachable from two `SECURITY DEFINER` functions whose `search_path` excluded `public` -- fixed by widening those two functions' `search_path` to `app, public, pg_temp` (disclosed as a real, narrower-than-`PLT-129`'s-own-precedent restriction, not a regression); (3) the customer-decision function's expiry check did not handle a token already lazily flipped to `expired` by a prior read -- fixed by adding an explicit branch covering both paths uniformly.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724280000_create_commercial_quotation_customer_acceptance.sql` (1 migration -- 2 new tables, 4 new functions, 2 new columns + 1 CHECK on `app.quotations`, 1 widened view); `scripts/db-tests/commercial-quotation-customer-acceptance.sql`; `server/contracts/quotation/quotation-acceptance.ts`(`.test.ts`); `server/queries/quotation-acceptance.ts`(`.test.ts`); `server/mutations/quotation-acceptance.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{customer-acceptance-panel,send-acceptance-form}.tsx`; `app/(public)/quote-decision/[token]/{page,decision-form,actions}.tsx` (the first public route this repository adds beyond `/login`). Modified: `server/contracts/quotation/quotation.ts` (2 new fields), `server/contracts/quotation/quotation-diff.test.ts` (fixture update), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (acceptance panel wiring). 11 new files, 1 migration, 3 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1216/1216 PASS (20 net new); `pnpm run db:test` PASS -- 44 migrations/44 db-test files, all green including the new `commercial-quotation-customer-acceptance.sql` and `COM-150`/`151`/`152`/`153`'s own test files running unmodified against the widened schema; `next build` (Turbopack) PASS -- 26 routes (up from 25, the new `/quote-decision/[token]` route); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151`/`152`/`153` once this checkpoint's own new migration file is staged -- not a real protected-path violation.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- a pre-existing quotation simply has no acceptance token/decision history). `git revert` of this checkpoint's commit is safe and complete; `app.quotations_directory` reverts to its exact `COM-153` behavior. No downstream Commercial capability (`COM-155` Customer and Account Conversion) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-013` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-014` (Prompt 155, Customer and Account Conversion) -- dependency-`READY` (`144..146`,`154` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `154`. A fresh explicit user authorization is required before `155` proceeds.
+
+### CHG-2026-087 — Customer and Account Conversion (Phase 2, Prompt 155)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-014` / `155_CUSTOMER_AND_ACCOUNT_CONVERSION_PROMPT.md` |
+| Change type | ADR + SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `014` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+The canonical Customer/Account entity and quotation-to-account conversion, resolving `ADR-CAND-ARCH-012` via a newly ratified **`ADR-0018`**: a flat-column `app.accounts` table -- not built on `PLT-120`'s Master Data Engine (its Supreme-Admin/tenant-admin-grant authority model is the wrong shape for an ordinary `COM:Approve`-gated workflow action), not two separate `app.accounts`/`app.customers` tables (no real requirement drives the split yet). `customer_status` resolves the account/customer naming distinction as one entity, not two.
+
+New `app.accounts` (`legal_name`/`trade_name`/`tax_id`, normalization/fingerprint columns reused directly from `COM-144`'s own `app.normalize_prospect_identifier`/`app.compute_prospect_duplicate_fingerprint` rather than re-authored, `billing_address` jsonb mirroring `app.prospects`'s own shape, `customer_status` active/inactive, `parent_account_id` self-FK for subsidiaries, `status` active/merged) with database-enforced anti-duplication (`accounts_tenant_fingerprint_active_unique`, a partial unique index on `(tenant_id, duplicate_fingerprint) where status='active'`). New `app.account_conversions` (`unique(quotation_id)` -- one final conversion outcome per quotation, ever).
+
+`app.find_duplicate_accounts`/`app.get_account_conversion_readiness` are read-only pre-conversion previews (reason codes only, never a dollar figure). `app.convert_quotation_to_account` is the one atomic, `COM:Approve`-gated, idempotent create-or-link write: early-returns the existing account for an already-converted quotation before any authority re-check (a retry is always safe); creates a new account or links an explicitly chosen target; catches a concurrent `unique_violation` on the fingerprint index and gracefully re-resolves it as "link to the winning row" rather than erroring; re-links every one of the source prospect's existing `app.contact_links` rows onto the resulting account via `app.resolve_commercial_record_ref`'s widened `'account'` branch (contacts reused, never re-created); backfills `app.opportunities.account_ref`, closing `COM-147`'s own disclosed forward-reference.
+
+**Disclosed scope boundary**: Prompt 155 §16 asked to restrict legal/tax/billing fields by permission -- a `COM:View billing` permission action was attempted and rejected by `app.permissions_action_check`'s fixed, closed 19-action enum (widening it is an architecture-level change out of this bounded task's scope). Resolved instead by enforcing the restriction one layer up via the `COM:Approve` gate on conversion itself; `app.accounts` carries no `*_directory` masking view at all (mirrors `app.quotation_approval_rules`'s own "no view when nothing needs masking" precedent) -- `SELECT` is granted directly on the base table. RLS is deliberately tenant-wide, not record-scoped, the same precedent `app.margin_rule_versions`/`app.quotation_approval_rules` already established -- proven directly: a sibling-team outsider with no ownership stake sees every account in the tenant. No credit field/site master (both deferred), no merge-accounts function (structural columns only), no legacy backfill.
+
+**Two real defects found and fixed during authoring**: (1) the attempted `'View billing'` permission insert violated the fixed enum -- fixed by removing the permission insert, the `app.has_view_billing()` function, and all column-masking logic entirely; (2) the db-test's second/third quotations initially reused a single shadowed contact variable and passed `null` for `contact_id` into `create_quotation_draft`, tripping `submission_not_ready (contact_required)` -- fixed by declaring distinct contact variables and creating/linking a real contact per prospect before submission. Also self-caught (not a hard error): an initial `app.accounts_directory` masking view became a redundant pass-through once masking was removed -- deleted entirely in favor of the base-table grant, requiring a rewrite of the db-test's tenant-wide-visibility assertion to query `app.accounts` directly.
+
+#### Scope and files
+
+New: `docs/adr/ADR-0018-canonical-account-entity-shape-and-ownership.md`; `supabase/migrations/20260724290000_create_commercial_customer_account_conversion.sql` (1 migration -- 2 new tables, 3 new functions, 1 widened CHECK constraint on `app.contact_links`, 1 widened function `app.resolve_commercial_record_ref`); `scripts/db-tests/commercial-customer-account-conversion.sql`; `server/contracts/account/account.ts`(`.test.ts`); `server/queries/account.ts`(`.test.ts`); `server/mutations/account.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/accounts/{page,loading}.tsx` and `accounts/[accountId]/{page,loading}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{account-conversion-panel,convert-account-form}.tsx`. Modified: `docs/adr/README.md` (§5.2/§6/§1), `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (conversion panel wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Accounts nav link). 13 new files, 1 migration, 4 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1238/1238 PASS (22 net new); `pnpm run db:test` PASS -- 45 migrations/45 db-test files, all green including the new `commercial-customer-account-conversion.sql` and `COM-144..154`'s own test files running unmodified against the widened schema; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..154` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script -- `next build` is not part of this repository's own gate set.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- `app.opportunities.account_ref` stays null for every opportunity whose quotation has never been converted). `git revert` of this checkpoint's commit is safe and complete; the widened `app.contact_links` CHECK and `app.resolve_commercial_record_ref` revert to their exact `COM-154` behavior. No downstream Commercial capability (`COM-156` Contract and Customer Pricing) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-014` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-015` (Prompt 156, Contract and Customer Pricing) -- dependency-`READY` (`150`,`154..155` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `155`. A fresh explicit user authorization is required before `156` proceeds.
+
+### CHG-2026-088 — Contract and Customer Pricing (Phase 2, Prompt 156)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-015` / `156_CONTRACT_CUSTOMER_PRICING_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `015` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Versioned customer contracts and pricing derived from accepted, converted (`COM-155`) quotations, with effective dates, service/lane price components, and a deterministic, reproducible effective-price lookup.
+
+New `app.customer_contracts` -- one row per contract/pricelist version, reusing `app.quotations`' own `root_quotation_id`/`version_number` self-referencing-insert identity technique (`COM-152`). Unlike a quotation's single `is_current` row, multiple versions of one root may be simultaneously `status=published` as long as their `[effective_from, effective_to)` windows do not overlap -- enforced at publish time via `SELECT ... FOR UPDATE` row locking against every other published sibling under the same root, the same concurrency-safety technique `app.create_quotation_revision` (`COM-152`) already established for its own analogous invariant, not a partial-unique index. New `app.customer_contract_price_components` -- one priced service/lane condition per row; a unique index on `(contract_id, service_type, mode, origin_lane, destination_lane, equipment_type)` structurally guarantees `app.get_effective_customer_price` resolves to at most one row.
+
+`app.create_customer_contract_draft` serves both flows identically: the main flow (`p_source_quotation_id` set) requires `customer_decision='accepted'` and an existing account conversion -- one contract root per source quotation, ever; the alternative flow (`p_source_contract_id` set) is a renewal/amendment, copying the source version's own price components into a new future-dated draft, mandatory reason. `app.publish_customer_contract` (`COM:Approve`-gated, requires >=1 component, rejects a date-overlapping already-published sibling) and `app.retire_customer_contract` (`COM:Approve`-gated, mandatory reason) are direct governance gates on the contract itself, **not** a second Approval Engine (`PLT-121`/`123`) routing instantiation -- a deliberately smaller-scope choice than `COM-153`'s own quotation approval, disclosed in the migration header as staying within Prompt 156's own file-count boundary (5-15 files, 1-3 migrations). `app.get_effective_customer_price` is the deterministic, reproducible lookup Prompt 156's own objective names -- exact-match on every identity dimension (`IS NOT DISTINCT FROM`, never a wildcard), raises `no_effective_price` explicitly on zero rows rather than returning an empty set silently.
+
+**`COM:View margin` newly seeded for the `COM` module** -- reusing the already-real `'View margin'` enum value from `app.permissions_action_check` (currently seeded only for `FIN`/`PRC`), the same bounded `(module, action)`-pair mechanism `COM-148` already used to add `COM:View cost`, unlike `COM-155`'s own blocked `'View billing'` attempt (an enum value that does not exist at all). Selling price and discount figures on `app.customer_contract_price_components` are masked via the already-established `COM:View selling price` instead, since no separate margin figure is computed or stored by this capability -- `COM:View margin` is seeded now, unused by any masked column yet, so a future capability that does compute one has a real permission ready.
+
+**Three real defects found and fixed during authoring**: (1) `app.get_effective_customer_price`'s initial body checked `if v_row is null` on a `record`-typed variable after a `select into` to detect a zero-row match -- a `record` variable does not reliably evaluate as `IS NULL` that way; fixed by checking the implicit `FOUND` boolean immediately after the select, the correct plpgsql idiom; (2) `app.add_customer_contract_price_component` initially gated only `COM:Edit` while returning the raw, unmasked price-component row directly -- an actor holding `Edit` but not `View selling price` could round-trip a selling price back to themselves through the RPC's own return value; caught by comparing against `app.select_vendor_rate`'s own established dual-gate precedent (`COM-149`) before any test was written, fixed by adding an explicit `has_view_selling_price` check alongside `Edit`; (3) a real `react/no-unescaped-entities` lint error in `renewal-form.tsx`'s help text, fixed.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724300000_create_commercial_customer_contract_pricing.sql` (1 migration -- 2 new tables, 1 new `COM:View margin` permission row + 1 gate function, 5 new functions, 1 masked view); `scripts/db-tests/commercial-customer-contract-pricing.sql`; `server/contracts/contract/contract.ts`(`.test.ts`); `server/queries/contract.ts`(`.test.ts`); `server/mutations/contract.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/contracts/{page,loading}.tsx` and `contracts/[contractId]/{page,loading,actions,add-component-form,renewal-form,retire-form}.tsx`; `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{contract-creation-panel,create-contract-form}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/quotations/[quotationId]/{page,actions}.tsx` (contract-creation panel wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Contracts nav link). 15 new files, 1 migration, 3 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors -- one real `react/no-unescaped-entities` error caught and fixed during authoring); `pnpm run test` 1265/1265 PASS (29 net new); `pnpm run db:test` PASS -- 46 migrations/46 db-test files, all green including the new `commercial-customer-contract-pricing.sql` and `COM-144..155`'s own test files running unmodified against the widened schema; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..155` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- a pre-existing accepted quotation simply has no contract until one is explicitly created). `git revert` of this checkpoint's commit is safe and complete. No downstream Commercial capability (`COM-157` Credit and Commercial Control) has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-015` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-016` (Prompt 157, Credit and Commercial Control) -- dependency-`READY` (`155..156` both `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `156`. A fresh explicit user authorization is required before `157` proceeds.
+
+### CHG-2026-089 — Credit and Commercial Control (Phase 2, Prompt 157)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-016` / `157_CREDIT_COMMERCIAL_CONTROL_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `016` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Commercial credit profile and transaction eligibility controls, deferring AR/GL posting to Phase 4 -- no exposure/balance figure of any kind is modeled or invented anywhere in this migration (Prompt 157 §24's own business rule, structural here, not just documented).
+
+New `app.credit_profiles` (one row per requested/active credit relationship, `status` requested/active/held/expired/rejected, at most one non-terminal row per account via a partial unique index, `supersedes_profile_id` self-FK linking a fresh request to prior rejected/expired history). New `app.credit_profile_overrides` (a bounded, reasoned, always-expiring exception -- never a silent permanent limit change). New `app.credit_check_snapshots` (the deterministic, immutable, append-only pre-conversion evidence record -- the "stable Finance integration contract" Prompt 157 §14 asks this checkpoint to expose).
+
+**Governance routing reuses the Platform Approval Engine (`PLT-121`/`123`) unchanged**, per Prompt 157 §20 task 2's own literal instruction -- unlike `COM-156`'s own deliberately smaller direct-`COM:Approve`-gate choice for contract publish/retire. `app.request_customer_credit_profile` unconditionally opens a routed `entity_type='credit_profile'` request (never conditionally skipped on a threshold, unlike `COM-153`'s own quotation routing -- Prompt 157 §24: "customer creation does not imply credit approval") against the exact same generic, tenant-wide `config_type_code='approval'` config object `COM-153` already resolves for quotations (no new config type registered -- `PLT-123`'s own routing-definition model is entity-type-agnostic). `app.decide_credit_profile_approval_step` wraps `app.decide_approval_step` (unchanged) and syncs the profile only once the bound request reaches a final state, mirroring `app.decide_quotation_approval_step` (`COM-153`) exactly.
+
+**"MFA for privileged approvers" (Prompt 157 §16) reuses `PLT-115`'s own `reauth_confirmed_at`-freshness mechanism** (`app.support_access_sessions`'s "re-authentication must have completed within the last 5 minutes" check, reproduced verbatim) rather than inventing a second, unproven pattern -- no live MFA/IdP challenge provider exists anywhere in this repository, the same disclosed boundary `PLT-115` itself already carries. Applied to every privileged-approver action this capability adds: `app.decide_credit_profile_approval_step`, `app.hold_credit_profile`, `app.release_credit_profile`, `app.create_credit_override`.
+
+`app.check_customer_credit` is the deterministic, reproducible pre-conversion check -- lazily flips an expired profile to `expired` in the same transaction (mirrors `app.quotation_acceptance_tokens`, `COM-154`), evaluates hold/not-active/currency-mismatch/limit against the effective limit (a currently-valid override if any, else the approved limit), always persists an immutable snapshot regardless of outcome, and masks its own *returned row* per-caller (`COM:View selling price`, reused -- not a new permission) directly in the function body rather than gating the whole function -- the same "mask the function's own output, not just a view" technique `app.get_effective_customer_price` (`COM-156`) and `app.search_vendor_rates` (`COM-149`) already established, so an ordinary `COM:View` holder still gets the real allow/hold outcome (Prompt 157 §26) without the raw dollar figures.
+
+**Four real defects found and fixed during authoring**: (1) the `RETURNS TABLE` output-column shadowing bug this session has hit before (`COM-154`'s own two functions) reproduced twice inside `app.check_customer_credit` -- bare `credit_profile_id`/`id` references in `WHERE` clauses were ambiguous against the function's own auto-declared output-column variables of the same names -- fixed by table-aliasing every such reference; (2) `app.credit_profile_overrides.amount` initially had no masked read path at all, not even for an authorized `COM:View selling price` holder (the base-table column grant excluded it and no directory view existed) -- fixed by adding `app.credit_profile_overrides_directory`, matching the masking discipline already applied to the other two tables; (3) a genuine `db:test` failure: backdating a profile's `effective_to` alone (without `effective_from`) violated the validity CHECK constraint -- fixed by backdating both together; (4) a `db:test` actor-UUID-prefix collision with `COM-154`'s own fixtures (`...09701`-`09705` used by both files independently) -- fixed by moving to an unused `...010101`-`010105` range.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724310000_create_commercial_credit_commercial_control.sql` (1 migration -- 3 new tables, 6 new functions, 3 masked directory views, zero new permission-catalogue row); `scripts/db-tests/commercial-credit-commercial-control.sql`; `server/contracts/credit/credit.ts`(`.test.ts`); `server/queries/credit.ts`(`.test.ts`); `server/mutations/credit.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/accounts/[accountId]/{credit-panel,request-credit-form,credit-approval-decision-form,hold-release-form,override-form,credit-check-form,credit-actions}.tsx`; `app/(tenant)/[tenantSlug]/commercial/credit-approvals/{page,loading}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/accounts/[accountId]/page.tsx` (`CreditPanel` wiring), `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Credit Approvals nav link). 16 new files, 1 migration, 2 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1292/1292 PASS (27 net new); `pnpm run db:test` PASS -- 47 migrations/47 db-test files, all green including the new `commercial-credit-commercial-control.sql` and `COM-144..156`'s own test files running unmodified against the widened schema; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS. `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..156` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered (no backfill performed -- a pre-existing account simply has no credit profile until one is explicitly requested). `git revert` of this checkpoint's commit is safe and complete. No downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-016` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-017` (Prompt 158, Commercial Dashboard) -- dependency-`READY` (`143..157` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `157`. A fresh explicit user authorization is required before `158` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -1,19 +1,17 @@
 /**
  * Design-system token source (PLT-135, CG-S6-PLT-032, ADR-0005/ADR-0006,
- * docs/standards/DESIGN_SYSTEM.md). Tailwind v4's CSS-first `@theme` is the single
- * runtime token representation -- no separate JS token file exists to drift against.
+ * docs/standards/DESIGN_SYSTEM.md; brand/semantic/elevation/density tokens added by the
+ * CargoGrid Design System Expansion task, ADR-0016/ADR-0017). Tailwind v4's CSS-first
+ * `@theme` is the single runtime token representation -- no separate JS token file
+ * exists to drift against.
  *
- * `--color-primary`/`--color-secondary` are an EXPLICITLY DISCLOSED PLACEHOLDER, not a
- * real CargoGrid brand decision: docs/standards/DESIGN_SYSTEM.md §3 records that no hex
- * color, logo, or typography family for CargoGrid's own default brand identity has been
- * decided by Product/Design yet -- inventing one here would be exactly the kind of
- * unauthorized product decision this build's governance has consistently refused to
- * make. Both are mapped to the already-decided neutral scale (never a fabricated "brand
- * blue") so the portal shell is fully functional and accessible today; only these two
- * variable values need to change once Product/Design resolves §3 -- nothing structural.
- * Every other token below (`neutral`/`success`/`warning`/`danger`/`info`, spacing,
- * radius, motion) reproduces docs/standards/DESIGN_SYSTEM.md §2/§2.1's own decided
- * values verbatim, not re-derived here.
+ * `--color-primary`/`--color-secondary`/`--color-primary-hover`/`--color-secondary-hover`
+ * are CargoGrid's real, decided default brand (ADR-0016) -- previously a disclosed
+ * neutral-scale placeholder (docs/standards/DESIGN_SYSTEM.md §3, now resolved). A tenant
+ * white-label override replaces `--color-primary`/`--color-secondary` at the portal-shell
+ * root (lib/theme/resolve-portal-theme.ts) -- never these three other categories below,
+ * which stay platform-controlled by construction (ADR-0017 §2): semantic status,
+ * typography scale, spacing, radius, elevation, density.
  */
 
 @import "tailwindcss";
@@ -31,18 +29,30 @@
   --color-neutral-800: #262626;
   --color-neutral-900: #171717;
 
-  /* Semantic roles -- docs/standards/DESIGN_SYSTEM.md §2.1, each proposed value already meets 4.5:1 against white. */
+  /* Semantic roles -- docs/standards/DESIGN_SYSTEM.md §2.1, each proposed value already meets 4.5:1 against white. Platform-controlled: never tenant-overridable (ADR-0017 §2, enforced structurally by BrandTokensSchema's .strict() shape). */
   --color-success: #15803d;
   --color-warning: #b45309;
   --color-danger: #b91c1c;
   --color-info: #1d4ed8;
 
-  /* PLACEHOLDER -- see this file's own header. Not a brand decision. */
-  --color-primary: var(--color-neutral-900);
-  --color-secondary: var(--color-neutral-600);
+  /* CargoGrid default brand (ADR-0016) -- resolves docs/standards/DESIGN_SYSTEM.md §3's prior disclosed open item. Tenant-overridable within RPD-019/ADR-0017 §2's boundary. */
+  --color-primary: #0097b2;
+  --color-primary-hover: #007d94;
+  --color-secondary: #cb3421;
+  --color-secondary-hover: #a52313;
 
-  /* Typography -- docs/standards/DESIGN_SYSTEM.md §2's modular scale; family intentionally left at the system stack (also open, §3) rather than an invented brand face. */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Surface/text/border (ADR-0016) -- new semantic category; platform-controlled, never tenant-overridable. --color-border-default reuses the already-decided neutral scale rather than a new invented value. */
+  --color-app-background: #eaf0f6;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f0f4f8;
+  --color-text-primary: #2c3e50;
+  --color-text-secondary: #4a5c6e;
+  --color-border-default: var(--color-neutral-200);
+
+  /* Typography -- docs/standards/DESIGN_SYSTEM.md §2's modular scale (unchanged). Family (ADR-0016): real values, system-fallback stacks -- no @font-face/next/font loading wired yet (docs/design-system/01_TOKENS_AND_THEME.md §5, disclosed gap), so every browser renders the fallback face today. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -59,12 +69,22 @@
   --radius-lg: 10px;
   --radius-full: 9999px;
 
+  /* Elevation (docs/standards/DESIGN_SYSTEM.md §2, decided in principle since Prompt 90; authored in CSS for the first time here). Restrained on purpose -- no blur, no glassmorphism -- to hold the 85% flat / 10% elevated / 5% tactile balance (ADR-0017 §1). Used sparingly: drawers/dialogs/dropdowns only, never a decorative card-shadow system. */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.1);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.14);
+
+  /* Density (ADR-0017 §3) -- platform-controlled row heights for dense operational tables. No table primitive consumes these yet (docs/design-system/02_COMPONENTS.md). */
+  --row-height-compact: 34px;
+  --row-height-default: 38px;
+  --row-height-comfortable: 46px;
+
   /* Motion -- docs/standards/DESIGN_SYSTEM.md §2, decided. prefers-reduced-motion is respected at the component level, not overridden here. */
   --default-transition-duration: 200ms;
 }
 
 body {
-  background-color: var(--color-neutral-50);
-  color: var(--color-neutral-900);
+  background-color: var(--color-app-background);
+  color: var(--color-text-primary);
   font-family: var(--font-sans);
 }
