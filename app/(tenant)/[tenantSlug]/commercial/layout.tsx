@@ -52,6 +52,9 @@ export default async function CommercialLayout({
       <header className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-3">
         <span className="text-sm font-semibold text-neutral-900">CargoGrid — {access.tenant.slug} — Commercial</span>
         <nav aria-label="Commercial navigation" className="flex gap-4 text-sm">
+          <a href={`/${access.tenant.slug}/commercial/dashboard`} className="text-neutral-700 hover:text-neutral-900">
+            Dashboard
+          </a>
           <a href={`/${access.tenant.slug}/commercial/leads`} className="text-neutral-700 hover:text-neutral-900">
             Leads
           </a>

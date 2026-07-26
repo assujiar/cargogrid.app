@@ -3687,6 +3687,46 @@ Additive for every object. Zero prior migration file edited; zero prior table's 
 
 Self-closing. `CG-S7-COM-016` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-017` (Prompt 158, Commercial Dashboard) -- dependency-`READY` (`143..157` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `157`. A fresh explicit user authorization is required before `158` proceeds.
 
+### CHG-2026-090 — Commercial Dashboard (Phase 2, Prompt 158)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-017` / `158_COMMERCIAL_DASHBOARD_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `017` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A single, unscoped user "lanjut" -- read as authorizing exactly this one task, the same standing precedent `docs/runtime/HANDOFF.md` records repeatedly for a bare "lanjut" |
+
+#### Outcome
+
+Role-specific live Commercial dashboard -- lead aging, activity queue, pipeline, quote SLA, margin, win/loss and forecast, with permission-safe drill-down. Zero new tables (Prompt 158 §13's own "no duplicate analytics store") -- every metric is a live read against the already-`VERIFIED` transactional tables `app.leads`/`app.activities`/`app.opportunities`/`app.opportunity_stage_history`/`app.quotations`/`app.margin_calculations`.
+
+**Every one of the seven `app.get_dashboard_*` functions (plus the `app.dashboard_scope_org_unit_ids` filter wrapper) is `security definer` with its own explicit, re-stated `app.can_access_record(...)` row filter, not an invoker-mode read relying on RLS.** An invoker-mode first draft was tried and failed empirically: Postgres checks column privileges against the *invoker*, and `authenticated` has no direct column-level grant on `app.opportunities.value_amount`/`value_currency`/`probability` nor on `app.quotations.approval_status`/`customer_decision`/`is_current` (each added by a later migration's own narrower column grant) -- reproducing the exact `permission denied for table opportunities` error `COM-147`'s own build log already documented for `app.opportunities_directory`. Every function now mirrors the identical `can_access_record` check its corresponding `*_directory` view already uses.
+
+Field masking reuses the two already-`VERIFIED` gates directly: `app.has_view_selling_price` (`COM-147`) for opportunity/quotation/forecast amounts, `app.has_view_cost` (`COM-149`) for margin figures -- no new permission action. A masked aggregate returns `null` (never a zero) plus its own `*_masked=true` flag. Mixed-currency ambiguity (Prompt 158 §23) is resolved structurally -- every amount-bearing summary groups by `currency`, one row per currency actually present, no cross-currency sum is ever computed.
+
+`server/queries/dashboard.ts` adds a real query-budget timeout mechanism (`withQueryBudget`, `DEFAULT_DASHBOARD_QUERY_BUDGET_MS=5000`, `DashboardQueryTimeoutError`) satisfying RPD-014's "timeouts" live-OLTP control concretely -- the first such mechanism in this repository's service layer, proven by a real elapsed-timeout unit test (a `rpc()` that never resolves).
+
+New `commercial/dashboard/` route: KPI-card sections for lead aging/activity queue/quote SLA, tabular sections for pipeline/margin/win-loss/forecast, a masked-amount renderer that never coerces a masked `null` into a displayed zero, an "As of" timestamp, a distinct timeout-vs-generic-failure error banner (the exception-flow "safe explicit state" Prompt 158 §23 requires), and drill-down links to the existing Leads/Pipeline/Quotations/Opportunities routes. New "Dashboard" nav link (first item) on `commercial/layout.tsx`. No org-unit/owner filter UI in this bounded slice -- every card reflects the caller's own full accessible scope, the same disclosed choice `COM-146`'s Pipeline page already made.
+
+**Three real defects found and fixed during authoring**: (1) `app.dashboard_scope_org_unit_ids`'s first draft returned strict descendants only (`app.org_units.path` excludes self by design, `PLT-109`'s own documented shape) -- filtering by a leaf department wrongly excluded every record assigned directly to it -- fixed by unioning the org unit itself into the result set; (2) the invoker-vs-security-definer column-privilege bug described above, fixed by switching every function to `security definer` with an explicit `can_access_record` check; (3) a db-test fixture value collision with `scripts/db-tests/commercial-margin-calculation.sql`'s own unscoped `where margin_pct = 16.67` lookup query -- that pre-existing, unmodified file finds its own test row by value rather than by tenant/id, and this checkpoint's own second margin calculation happened to also compute exactly `16.67%` inside the one disposable database every db-tests file shares, so the other file silently picked up this checkpoint's row and failed acting as an actor with no role in that foreign tenant -- fixed by choosing a non-colliding sell amount (16,000,000 instead of 12,000,000, landing on `37.50%`), with the collision and the colliding value both disclosed directly in the fixture's own comment.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724320000_create_commercial_dashboard.sql` (1 migration -- 0 new tables, 8 new functions, zero new permission-catalogue row); `scripts/db-tests/commercial-dashboard.sql`; `server/contracts/dashboard/dashboard.ts`(`.test.ts`); `server/queries/dashboard.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/dashboard/{page,loading}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Dashboard nav link). 6 new files, 1 migration, 1 modified file.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1315/1316 PASS (24 net new; the one failure, `checkWorktreeCollision`, is a pre-existing environment-dependent assertion against this sandbox's real git state, unrelated to this diff); `pnpm run db:test` PASS -- 48 migrations/48 db-test files, all green including the new `commercial-dashboard.sql` and `COM-143..157`'s own test files running unmodified (re-run twice for determinism); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `npx next build` PASS (new `/[tenantSlug]/commercial/dashboard` route registered). `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..157` once this checkpoint's own new migration file is staged -- not a real protected-path violation. `npx playwright test e2e/smoke.spec.ts` `NOT_RUN` -- same disclosed sandbox Playwright browser-binary condition as `PLT-117` onward. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object (functions only, zero tables). Zero prior migration file edited; zero prior table's data altered. `git revert` of this checkpoint's commit is safe and complete. No downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-017` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-018` (Prompt 159, Commercial Reports) -- dependency-`READY` (`143..158` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `158`. A fresh explicit user authorization is required before `159` proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
