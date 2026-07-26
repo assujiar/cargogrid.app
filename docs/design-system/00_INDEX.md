@@ -30,6 +30,7 @@ No item in this subtree is marked `IMPLEMENTED` unless it was directly verified 
 | `05_AI_ASSISTED_INTERACTION.md` | AI suggestion/summary/draft/recommendation/score/explanation patterns; the binding human-approval/audit rule |
 | `06_ACCESSIBILITY_PERFORMANCE.md` | WCAG 2.2 AA acceptance criteria and performance budgets at component/pattern precision |
 | `07_GAP_ANALYSIS_AND_ROADMAP.md` | Repository audit findings; what changed this checkpoint; deferred/blocked items with reasoning; recommended (not unilaterally executed) sequencing |
+| `08_COMPONENT_INVENTORY.md` | Full shared-component inventory (all 14 requested categories), the `/internal/design-system` showcase route, and the duplicate-component migration map (checkpoint 3, 2026-07-26) |
 
 ## What this task implemented in code (summary — full detail `07_GAP_ANALYSIS_AND_ROADMAP.md`)
 
@@ -47,3 +48,7 @@ Everything else this task's own instruction requested (the ~70-component catalog
 ## Update (Checkpoint 2, 2026-07-26, out-of-band)
 
 `components/tables/data-table.tsx` and `components/tables/pagination.tsx` are now `IMPLEMENTED` — the first Table/Data-grid/Pagination primitives, built against two real consumers (`commercial/leads`, `supreme/tenants`). Full detail: `02_COMPONENTS.md` §1, `07_GAP_ANALYSIS_AND_ROADMAP.md` §8. This was one deliberately narrow slice of a much larger "UI Modernization" instruction issued this session; the rest of that instruction's scope (every other Commercial list screen, sort/filter/column-config, the remaining ~68-component catalogue, navigation/search/notifications/charts) remains exactly as un-executed as before — see `07_GAP_ANALYSIS_AND_ROADMAP.md` §7.
+
+## Update (Checkpoint 3, 2026-07-26, out-of-band)
+
+Full shared-component inventory (all 14 requested categories) and a protected internal showcase (`/internal/design-system`) — full detail: `08_COMPONENT_INVENTORY.md`. No new component was built; the showcase renders exactly the 6 real primitives (still just Button/Banner/Badge/StatusBadge/DataTable/Pagination) plus honest, cited disclosures for everything else. The most consequential finding: `Badge`/`StatusBadge` are production-ready but have zero real consumers — recorded in the new duplicate-component migration map (`08_COMPONENT_INVENTORY.md` §4) as the highest-priority, lowest-risk follow-up.
