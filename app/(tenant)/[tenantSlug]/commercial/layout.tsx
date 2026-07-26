@@ -55,6 +55,9 @@ export default async function CommercialLayout({
           <a href={`/${access.tenant.slug}/commercial/dashboard`} className="text-neutral-700 hover:text-neutral-900">
             Dashboard
           </a>
+          <a href={`/${access.tenant.slug}/commercial/reports`} className="text-neutral-700 hover:text-neutral-900">
+            Reports
+          </a>
           <a href={`/${access.tenant.slug}/commercial/leads`} className="text-neutral-700 hover:text-neutral-900">
             Leads
           </a>

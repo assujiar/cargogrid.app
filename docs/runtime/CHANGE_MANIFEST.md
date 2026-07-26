@@ -3727,6 +3727,44 @@ Additive for every object (functions only, zero tables). Zero prior migration fi
 
 Self-closing. `CG-S7-COM-017` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-018` (Prompt 159, Commercial Reports) -- dependency-`READY` (`143..158` all `VERIFIED`), but **not authorized to start automatically**: this checkpoint's own authorization was a single, unscoped "lanjut," read as scoped to exactly `158`. A fresh explicit user authorization is required before `159` proceeds.
 
+### CHG-2026-091 — Commercial Reports (Phase 2, Prompt 159)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-018` / `159_COMMERCIAL_REPORTS_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `018` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The user message "lanjut sd prompt 160" -- read as authorizing this task and Prompt 160 in sequence, not the usual single-task "lanjut" |
+
+#### Outcome
+
+Governed Commercial reports -- a permissioned, audited, exportable rendering of the exact metrics `COM-158`'s own dashboard already proved correct and access-controlled, adding zero new aggregation SQL. Of Prompt 159 §4's ten named report subjects, the seven `COM-158` already computes are implemented (lead aging, activity queue, pipeline, quote SLA, margin, win-loss, forecast); conversion/costing/pricing have no existing governed query to reuse and are a disclosed, out-of-scope gap.
+
+**`app.report_types` is a Supreme-registered, code-shipped catalogue** (mirrors `app.document_types`, `PLT-128`) -- reports are a product feature, not tenant-authored config, so this migration seeds the seven rows directly. **`app.report_runs` is the one audit/bookkeeping table** for both `preview` (synchronous) and `export` (asynchronous, via `app.enqueue_report_export` enqueuing a real `report_generation` job through `PLT-132`'s own `app.enqueue_job`, unchanged). **No live worker processes a `report_generation` job anywhere in this repository** -- the same disclosed `NOT_RUN` condition `PLT-132`'s own migration header already carries for every job type it added -- so an export reaches `status='queued'` and stops there in this environment; `report_runs.file_id` (wired to `PLT-128`'s own `app.files`/`app.authorize_file_access`, unchanged) is the real, provable target shape a future worker would populate, not a fabricated pipeline.
+
+**Export requires the real, seeded, previously-unused `COM:Export` permission** (already present in the original `PLT-111` catalogue, `category='standard'`), distinct from ordinary preview (no new gate beyond what the underlying `app.get_dashboard_*` function already enforces). **`app.retire_report_type`** is the "retire unsafe exports" mechanism at the definition level: Supreme-only, and both `enqueue_report_export`/`record_report_run` refuse a retired code.
+
+**Formula-injection protection is a pure, unit-tested cell-sanitization function** at the service layer (`server/policies/csv-export-sanitize.ts`, OWASP CSV-injection pattern -- a leading `=`/`+`/`-`/`@`/tab/CR triggers a neutralizing leading apostrophe) -- not provable end-to-end against a real generated file, since no live export pipeline exists to generate one.
+
+**Three real defects found and fixed during authoring**: (1) the migration's first draft tried to insert a fresh `('Export', 'COM', ...)` permission row, but it was already seeded at `PLT-111` (never consumed by any Commercial capability until now) -- a real unique-constraint violation on `db:test` caught it immediately, fixed by removing the insert and reusing the existing row; (2) a db-test assertion referenced `.id` on `app.report_types`, whose real primary key is `code` -- fixed; (3) a db-test query referenced a non-existent `app.audit_logs.entity_id` column (the real column is `resource_id`) -- fixed.
+
+#### Scope and files
+
+New: `supabase/migrations/20260724330000_create_commercial_reports.sql` (1 migration -- 2 new tables, 4 new functions, 7 seeded catalogue rows, zero new permission-catalogue row); `scripts/db-tests/commercial-reports.sql`; `server/contracts/report/report.ts`(`.test.ts`); `server/queries/report.ts`(`.test.ts`); `server/mutations/report.ts`(`.test.ts`); `server/policies/csv-export-sanitize.ts`(`.test.ts`); `app/(tenant)/[tenantSlug]/commercial/reports/{page,loading,actions,export-report-form,run-report}.ts(x)`; `app/(tenant)/[tenantSlug]/commercial/reports/[reportCode]/{page,loading}.tsx`. Modified: `app/(tenant)/[tenantSlug]/commercial/layout.tsx` (Reports nav link). 14 new files, 1 migration, 1 modified file.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1348/1348 PASS (32 net new; the previously-flaky `checkWorktreeCollision` test passed cleanly this run); `pnpm run db:test` PASS -- 49 migrations/49 db-test files, all green including the new `commercial-reports.sql` and `COM-143..158`'s own test files running unmodified (re-run twice for determinism); `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `npx next build` PASS (new `/[tenantSlug]/commercial/reports` and `/[tenantSlug]/commercial/reports/[reportCode]` routes registered). `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..158` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object. Zero prior migration file edited; zero prior table's data altered. `git revert` of this checkpoint's commit is safe and complete. No downstream Commercial capability has run yet to depend on any object this checkpoint adds.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-018` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-019` (Prompt 160, Full Lineage into Job Order) -- dependency-`READY` (`143..159` all `VERIFIED`) and **already authorized** by this checkpoint's own "lanjut sd prompt 160"; proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
