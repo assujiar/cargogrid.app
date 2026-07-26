@@ -9,6 +9,7 @@ import { getQuotationApprovalOverview } from "../../../../../../server/queries/q
 import { listQuotationAcceptanceTokens } from "../../../../../../server/queries/quotation-acceptance.ts";
 import { getAccountConversionForQuotation, getAccountConversionReadiness, findDuplicateAccounts } from "../../../../../../server/queries/account.ts";
 import { getCustomerContractForQuotation } from "../../../../../../server/queries/contract.ts";
+import { getJobOrderHandoffForQuotation } from "../../../../../../server/queries/job-order-lineage.ts";
 import { diffQuotationVersions } from "../../../../../../server/contracts/quotation/quotation-diff.ts";
 import { removeQuotationLineAction } from "./actions.ts";
 import { AddLineForm } from "./add-line-form.tsx";
@@ -21,6 +22,7 @@ import { ApprovalPanel } from "./approval-panel.tsx";
 import { CustomerAcceptancePanel } from "./customer-acceptance-panel.tsx";
 import { AccountConversionPanel } from "./account-conversion-panel.tsx";
 import { ContractCreationPanel } from "./contract-creation-panel.tsx";
+import { JobOrderHandoffPanel } from "./job-order-handoff-panel.tsx";
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
 import type { Account, AccountConversionReadiness } from "../../../../../../server/contracts/account/account.ts";
 
@@ -108,6 +110,7 @@ export default async function QuotationDetailPage({
   }
 
   const existingContract = existingConversion ? await getCustomerContractForQuotation(supabase, quotation.id) : null;
+  const existingHandoff = existingConversion ? await getJobOrderHandoffForQuotation(supabase, quotation.id) : null;
 
   let comparisonPanel = null;
   if (compareWith) {
@@ -250,6 +253,8 @@ export default async function QuotationDetailPage({
         existingConversion={existingConversion}
         existingContract={existingContract}
       />
+
+      <JobOrderHandoffPanel tenantSlug={tenantSlug} quotation={quotation} existingConversion={existingConversion} existingHandoff={existingHandoff} />
 
       <RevisionForm tenantSlug={tenantSlug} sourceQuotationId={quotation.id} isCurrent={quotation.isCurrent} />
 
