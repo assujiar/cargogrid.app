@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { createCreditOverrideAction } from "./credit-actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
 
 /** Bounded, reasoned, always-expiring override (COM-157, Prompt 157 §22's alternative flow) -- COM:Approve + reauth-freshness gated ("elevated approval"). */
 export function OverrideForm({ tenantSlug, accountId, profileId }: { tenantSlug: string; accountId: string; profileId: string }) {
@@ -18,9 +19,9 @@ export function OverrideForm({ tenantSlug, accountId, profileId }: { tenantSlug:
       <h3 className="text-sm font-semibold text-neutral-900">Create a bounded override</h3>
       <div className="flex gap-2">
         <input type="number" min={0} placeholder="Override amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
       </div>
-      <input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <Input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
       <label className="flex items-center gap-2 text-xs text-neutral-600">
         <input type="checkbox" checked={reauthConfirmed} onChange={(e) => setReauthConfirmed(e.target.checked)} />
         I have recently re-authenticated (required for this action)

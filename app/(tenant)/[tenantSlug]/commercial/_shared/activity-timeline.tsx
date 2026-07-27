@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { logActivityAction, completeActivityAction, cancelActivityAction } from "./activity-actions.ts";
 import type { Activity, ActivityType, RelatedType } from "../../../../../server/contracts/contact/contact.ts";
+import { Input } from "../../../../../components/forms/input.tsx";
 
 const ACTIVITY_TYPES: ActivityType[] = ["call", "email", "meeting", "visit", "follow_up", "task"];
 
@@ -58,13 +59,7 @@ export function ActivityTimeline({
             <input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
           ) : null}
         </div>
-        <input
-          type="text"
-          placeholder="Subject"
-          value={subject}
-          onChange={(event) => setSubject(event.target.value)}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+        <Input type="text" placeholder="Subject" value={subject} onChange={(event) => setSubject(event.target.value)} />
         <Button
           type="button"
           disabled={!subject.trim()}

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { qualifyLeadAction, disqualifyLeadAction, convertLeadToProspectAction } from "../actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
 
 /**
  * Qualify/disqualify/convert action panel (COM-143/`144`, CG-S7-COM-002/`003`) -- a
@@ -62,13 +63,7 @@ export function LeadActionsPanel({
         <label htmlFor="disqualify-reason" className="text-sm font-medium text-neutral-700">
           Disqualify reason
         </label>
-        <input
-          id="disqualify-reason"
-          type="text"
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+        <Input id="disqualify-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} />
       </div>
       <Button
         type="button"
@@ -92,13 +87,7 @@ export function LeadActionsPanel({
         <label htmlFor="convert-legal-name" className="text-sm font-medium text-neutral-700">
           Prospect legal name
         </label>
-        <input
-          id="convert-legal-name"
-          type="text"
-          value={legalName}
-          onChange={(event) => setLegalName(event.target.value)}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+        <Input id="convert-legal-name" type="text" value={legalName} onChange={(event) => setLegalName(event.target.value)} />
       </div>
       <Button
         type="button"

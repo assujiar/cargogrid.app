@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import type { RateFormState } from "./actions.ts";
+import { Input } from "../../../../../components/forms/input.tsx";
 
 const INITIAL_STATE: RateFormState = { error: null };
 
@@ -18,31 +19,31 @@ export function CreateRateVersionForm({ action }: { action: (prevState: RateForm
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="vendorCode" className="text-sm font-medium text-neutral-700">Vendor code</label>
-          <input id="vendorCode" name="vendorCode" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="vendorCode" name="vendorCode" type="text" required />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="vendorName" className="text-sm font-medium text-neutral-700">Vendor name</label>
-          <input id="vendorName" name="vendorName" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="vendorName" name="vendorName" type="text" required />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="serviceType" className="text-sm font-medium text-neutral-700">Service type</label>
-          <input id="serviceType" name="serviceType" type="text" placeholder="ocean_freight" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="serviceType" name="serviceType" type="text" placeholder="ocean_freight" required />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="originLane" className="text-sm font-medium text-neutral-700">Origin</label>
-          <input id="originLane" name="originLane" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="originLane" name="originLane" type="text" required />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="destinationLane" className="text-sm font-medium text-neutral-700">Destination</label>
-          <input id="destinationLane" name="destinationLane" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="destinationLane" name="destinationLane" type="text" required />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="currency" className="text-sm font-medium text-neutral-700">Currency</label>
-          <input id="currency" name="currency" type="text" placeholder="IDR" maxLength={3} required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="currency" name="currency" type="text" placeholder="IDR" maxLength={3} required />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="baseAmount" className="text-sm font-medium text-neutral-700">Base amount</label>
-          <input id="baseAmount" name="baseAmount" type="number" min={0} required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="baseAmount" name="baseAmount" type="number" min={0} required />
         </div>
       </div>
 

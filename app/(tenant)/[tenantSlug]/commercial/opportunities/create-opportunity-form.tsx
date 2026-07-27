@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import type { OpportunityFormState } from "./actions.ts";
+import { Input } from "../../../../../components/forms/input.tsx";
 
 const INITIAL_STATE: OpportunityFormState = { error: null };
 
@@ -18,14 +19,14 @@ export function CreateOpportunityForm({ action }: { action: (prevState: Opportun
         <label htmlFor="prospectId" className="text-sm font-medium text-neutral-700">
           Prospect ID
         </label>
-        <input id="prospectId" name="prospectId" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="prospectId" name="prospectId" type="text" required />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="name" className="text-sm font-medium text-neutral-700">
           Opportunity name
         </label>
-        <input id="name" name="name" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="name" name="name" type="text" required />
       </div>
 
       {state.error ? (

@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { publishSalesPlanAction, archiveSalesPlanAction, createSalesTargetAction } from "../actions.ts";
 import { SALES_TARGET_METRIC_TYPES, type SalesTargetMetricType } from "../../../../../../server/contracts/pipeline/pipeline.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
 
 /** Publish/archive/add-target action panel (COM-146) -- mirrors COM-143/144's own `*-actions-panel.tsx` pattern (bound Server Actions called directly via `useTransition`, not `useActionState`, since each takes explicit args rather than `FormData`). */
 export function PlanActionsPanel({
@@ -42,13 +44,7 @@ export function PlanActionsPanel({
         <label htmlFor="supersedes-plan-id" className="text-sm font-medium text-neutral-700">
           Supersedes plan ID <span className="font-normal text-neutral-500">(optional -- archives that published plan on publish)</span>
         </label>
-        <input
-          id="supersedes-plan-id"
-          type="text"
-          value={supersedesPlanId}
-          onChange={(event) => setSupersedesPlanId(event.target.value)}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+        <Input id="supersedes-plan-id" type="text" value={supersedesPlanId} onChange={(event) => setSupersedesPlanId(event.target.value)} />
       </div>
       <Button
         type="button"
@@ -90,48 +86,27 @@ export function PlanActionsPanel({
         <label htmlFor="metric-type" className="text-sm font-medium text-neutral-700">
           Metric
         </label>
-        <select
-          id="metric-type"
-          value={metricType}
-          onChange={(event) => setMetricType(event.target.value as SalesTargetMetricType)}
-          disabled={!canAddTarget}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        >
+        <Select id="metric-type" value={metricType} onChange={(event) => setMetricType(event.target.value as SalesTargetMetricType)} disabled={!canAddTarget}>
           {SALES_TARGET_METRIC_TYPES.map((metric) => (
             <option key={metric} value={metric}>
               {metric.replace(/_/g, " ")}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="target-org-unit-id" className="text-sm font-medium text-neutral-700">
           Organization unit ID <span className="font-normal text-neutral-500">(optional -- defaults to the plan&apos;s own scope)</span>
         </label>
-        <input
-          id="target-org-unit-id"
-          type="text"
-          value={orgUnitId}
-          onChange={(event) => setOrgUnitId(event.target.value)}
-          disabled={!canAddTarget}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+        <Input id="target-org-unit-id" type="text" value={orgUnitId} onChange={(event) => setOrgUnitId(event.target.value)} disabled={!canAddTarget} />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="target-value" className="text-sm font-medium text-neutral-700">
           Target value
         </label>
-        <input
-          id="target-value"
-          type="number"
-          min={0}
-          value={targetValue}
-          onChange={(event) => setTargetValue(event.target.value)}
-          disabled={!canAddTarget}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+        <Input id="target-value" type="number" min={0} value={targetValue} onChange={(event) => setTargetValue(event.target.value)} disabled={!canAddTarget} />
       </div>
 
       <Button

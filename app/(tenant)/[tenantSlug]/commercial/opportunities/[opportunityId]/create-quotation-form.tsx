@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { createQuotationDraftAction } from "../actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
 
 /** Quotation-draft trigger (COM-151) -- currency/validity only; the contact and every selling line are added on the quotation's own builder page after creation. */
 export function CreateQuotationForm({ tenantSlug, opportunityId, defaultCurrency }: { tenantSlug: string; opportunityId: string; defaultCurrency: string | null }) {
@@ -22,7 +23,7 @@ export function CreateQuotationForm({ tenantSlug, opportunityId, defaultCurrency
           onChange={(e) => setCurrency(e.target.value.toUpperCase())}
           className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm"
         />
-        <input type="datetime-local" value={validityTo} onChange={(e) => setValidityTo(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input type="datetime-local" value={validityTo} onChange={(e) => setValidityTo(e.target.value)} />
       </div>
 
       {error ? (

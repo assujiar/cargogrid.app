@@ -5,6 +5,8 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { addQuotationLineAction } from "./actions.ts";
 import type { QuotationLineType } from "../../../../../../server/contracts/quotation/quotation.ts";
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
 
 const LINE_TYPES: readonly QuotationLineType[] = ["service", "surcharge", "fee", "discount"];
 
@@ -43,14 +45,14 @@ export function AddLineForm({
       <h2 className="text-sm font-semibold text-neutral-900">Add line</h2>
 
       {availableCalculations.length > 0 ? (
-        <select value={marginCalculationId} onChange={(e) => applyCalculation(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+        <Select value={marginCalculationId} onChange={(e) => applyCalculation(e.target.value)}>
           <option value="">No sourcing margin calculation (manual line)</option>
           {availableCalculations.map((calc) => (
             <option key={calc.id} value={calc.id}>
               {calc.marginPct === null ? "Restricted" : `${calc.marginPct}% margin`} ({calc.id.slice(0, 8)})
             </option>
           ))}
-        </select>
+        </Select>
       ) : (
         <p className="text-sm text-neutral-600">No calculated rates are available to source from yet -- this will be a manual line.</p>
       )}
@@ -63,7 +65,7 @@ export function AddLineForm({
         ))}
       </select>
 
-      <input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <Input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
 
       <div className="flex gap-2">
         <input type="number" min={0} step="0.001" placeholder="Quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-28 rounded-md border border-neutral-300 px-3 py-2 text-sm" />

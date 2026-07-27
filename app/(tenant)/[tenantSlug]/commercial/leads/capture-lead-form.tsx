@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import type { LeadFormState } from "./actions.ts";
+import { Input } from "../../../../../components/forms/input.tsx";
 
 const INITIAL_STATE: LeadFormState = { error: null };
 
@@ -18,28 +19,28 @@ export function CaptureLeadForm({ action }: { action: (prevState: LeadFormState,
         <label htmlFor="contactName" className="text-sm font-medium text-neutral-700">
           Contact name
         </label>
-        <input id="contactName" name="contactName" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="contactName" name="contactName" type="text" required />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="companyName" className="text-sm font-medium text-neutral-700">
           Company <span className="font-normal text-neutral-500">(optional)</span>
         </label>
-        <input id="companyName" name="companyName" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="companyName" name="companyName" type="text" />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="email" className="text-sm font-medium text-neutral-700">
           Email <span className="font-normal text-neutral-500">(one of email/phone required)</span>
         </label>
-        <input id="email" name="email" type="email" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="email" name="email" type="email" />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="phone" className="text-sm font-medium text-neutral-700">
           Phone
         </label>
-        <input id="phone" name="phone" type="tel" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="phone" name="phone" type="tel" />
       </div>
 
       {state.error ? (
