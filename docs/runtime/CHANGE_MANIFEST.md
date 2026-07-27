@@ -4233,6 +4233,36 @@ Documentation-only; no schema/data/application code touched. `git revert` of thi
 
 Self-closing. `CG-S7-COM-024` is `VERIFIED`. **`PHASE_2_VERIFIED` is set.** Phase 2 (Commercial) is closed. Next eligible action: the Phase 3 Operations kickoff prompt -- **not authorized to start automatically**; this checkpoint's own "Commercial WBS through phase closure (161-165)" authorization range ends here. A fresh explicit user authorization is required before any Phase 3 work begins.
 
+### CHG-2026-105 — Operations WBS and Runtime Kickoff (Phase 3, Prompt 167)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-001` / `167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Change type | DOCS only (planning/index, zero Operations-domain schema/code) |
+| Baseline evidence | `PHASE_2_VERIFIED` (`docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- a scoped multi-task range naming its exact endpoint |
+
+#### Outcome
+
+The Phase 3 equivalent of `142`'s own Commercial kickoff. Mandatory entry gate re-confirmed (`RUNTIME_DISCOVERY_VERIFIED`/`RUNTIME_ARCHITECTURE_VERIFIED`/`PHASE_0_VERIFIED`/`PHASE_1_VERIFIED`/`PHASE_2_VERIFIED`). Produced the required `JobOrderDraftInput`→Job Order field-by-field lineage map: every customer/contact/address/cargo/service/rate/quote/price/credit field resolves to a verbatim jsonb snapshot column (`customer_snapshot`/`cargo_service_snapshot`/`revenue_snapshot`/`contract_snapshot`/`credit_snapshot`/`acceptance_snapshot`) or a live canonical FK (`account_id`), never a re-typed value. Phase 3/5 (single-mode/single-leg, no dispatch board/route optimization/GPS-telematics, no full WMS), Phase 3/8 (no Customer Portal), and Phase 3/4 (no Finance posting) boundaries explicitly encoded. Collision audit found zero genuine Operations-domain file anywhere (only Commercial's own already-disclosed `job-order-lineage` handoff files matched the search pattern).
+
+#### Scope and files
+
+New: `docs/build-log/phase-03/00_OPERATIONS_WBS.md`; `docs/build-log/phase-03/OPERATIONS_EXECUTION_INDEX.md`; `docs/build-log/phase-03/OPS-167.md`. Zero application code, zero migration. 3 new files.
+
+#### Tests and quality evidence
+
+No code/schema gate applies to a pure planning checkpoint. `git status` confirms only the three new documents plus ledger updates were touched.
+
+#### Compatibility, rollout, recovery
+
+Documentation-only; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-001` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-002` (Prompt 168, Job Order) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
