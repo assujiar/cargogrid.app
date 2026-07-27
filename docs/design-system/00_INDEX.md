@@ -30,6 +30,8 @@ No item in this subtree is marked `IMPLEMENTED` unless it was directly verified 
 | `05_AI_ASSISTED_INTERACTION.md` | AI suggestion/summary/draft/recommendation/score/explanation patterns; the binding human-approval/audit rule |
 | `06_ACCESSIBILITY_PERFORMANCE.md` | WCAG 2.2 AA acceptance criteria and performance budgets at component/pattern precision |
 | `07_GAP_ANALYSIS_AND_ROADMAP.md` | Repository audit findings; what changed this checkpoint; deferred/blocked items with reasoning; recommended (not unilaterally executed) sequencing |
+| `08_COMPONENT_INVENTORY.md` | Full shared-component inventory (all 14 requested categories), the `/internal/design-system` showcase route, and the duplicate-component migration map (checkpoint 3, 2026-07-26) |
+| `09_CHARTS.md` | The CargoGrid Chart System (Apache ECharts) — architecture, theme integration, chart selection rules, accessibility, export, governance (checkpoint 5, 2026-07-26) |
 
 ## What this task implemented in code (summary — full detail `07_GAP_ANALYSIS_AND_ROADMAP.md`)
 
@@ -43,3 +45,19 @@ No item in this subtree is marked `IMPLEMENTED` unless it was directly verified 
 - Left the Supreme Admin shell (`app/(supreme)/supreme/layout.tsx`) unchanged by design (`ADR-0017` §4) and added a comment there stating why, so a future checkpoint does not "fix" it into tenant-branded by mistake.
 
 Everything else this task's own instruction requested (the ~70-component catalogue, dense data-grid/table primitives, full navigation shell, AI-interaction components, additional white-label schema fields) is `DOCUMENTED_ONLY` or `DEFERRED` — see each document's own status column and `07_GAP_ANALYSIS_AND_ROADMAP.md` for why building all of it in one checkpoint was not attempted (it would violate `AGENTS.md`'s own atomic-task-sizing and single-writer-collision discipline, which this task's own instruction defers to as governing authority).
+
+## Update (Checkpoint 2, 2026-07-26, out-of-band)
+
+`components/tables/data-table.tsx` and `components/tables/pagination.tsx` are now `IMPLEMENTED` — the first Table/Data-grid/Pagination primitives, built against two real consumers (`commercial/leads`, `supreme/tenants`). Full detail: `02_COMPONENTS.md` §1, `07_GAP_ANALYSIS_AND_ROADMAP.md` §8. This was one deliberately narrow slice of a much larger "UI Modernization" instruction issued this session; the rest of that instruction's scope (every other Commercial list screen, sort/filter/column-config, the remaining ~68-component catalogue, navigation/search/notifications/charts) remains exactly as un-executed as before — see `07_GAP_ANALYSIS_AND_ROADMAP.md` §7.
+
+## Update (Checkpoint 3, 2026-07-26, out-of-band)
+
+Full shared-component inventory (all 14 requested categories) and a protected internal showcase (`/internal/design-system`) — full detail: `08_COMPONENT_INVENTORY.md`. No new component was built; the showcase renders exactly the 6 real primitives (still just Button/Banner/Badge/StatusBadge/DataTable/Pagination) plus honest, cited disclosures for everything else. The most consequential finding: `Badge`/`StatusBadge` are production-ready but have zero real consumers — recorded in the new duplicate-component migration map (`08_COMPONENT_INVENTORY.md` §4) as the highest-priority, lowest-risk follow-up.
+
+## Update (Checkpoint 4, 2026-07-26, out-of-band)
+
+~40 further components built, at the user's explicit request to build everything checkpoint 3's inventory found missing — full detail: `07_GAP_ANALYSIS_AND_ROADMAP.md` §10. `components/forms/` (new) and `components/domain/` (new) directories added; `components/ui/` substantially extended. Zero new npm dependencies — every overlay/navigation primitive uses the `radix-ui` package already installed (`ADR-0005`). `commercial/leads`/`supreme/tenants` migrated onto `StatusBadge`/`Badge`, closing checkpoint 3's top-priority migration-map item. Still not built, each for a named, specific reason (not oversight): Time picker, File upload (blocked), Document preview/Attachment list (blocked), Kanban board, Calendar, Chart wrapper (needs a new-dependency decision, flagged back to the user), Filter bar/Saved views/Bulk action bar, Stepper, Approval queue, and the application-shell-level Sidebar/Navigation group/Page header/Persistent top bar items.
+
+## Update (Checkpoint 5, 2026-07-26, out-of-band)
+
+The CargoGrid Chart System — Apache ECharts (v6, Apache License 2.0), the user's own explicit library decision, following checkpoint 4's "Chart wrapper needs a new-dependency decision" flag. Full detail: `09_CHARTS.md`. New `lib/charts/` (pure logic, this repo's own lib-vs-components convention) and `components/charts/` (the low-level `Chart`, `ChartCard`, and 3 real presets — Trend/Comparison Bar/Donut). A real bug (color resolution computed during render instead of via `useSyncExternalStore`, which would have left every chart permanently blank after the server-rendered pass) was found and fixed before this checkpoint closed, alongside a real visual bug (a bar chart's long category labels overlapping its legend), both caught by live Playwright verification, not just static checks. `eslint.config.js` now bans `echarts.init(...)` outside `components/charts/**` (verified firing). Deliberately not built: 8 further presets (stacked bar/funnel/waterfall/gauge/calendar-heatmap/Sankey/map/scatter — no real consumer for any), a print export flow, and wiring any preset into the real `commercial/dashboard` page (no existing chart consumer was found anywhere in the repository — the dashboard's masked/multi-currency values need careful handling, judged a distinct follow-up).

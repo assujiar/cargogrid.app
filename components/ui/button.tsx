@@ -14,7 +14,8 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { Slot } from "radix-ui";
 
-const VARIANT_CLASSES = {
+/** Exported so `IconButton` (`docs/design-system/02_COMPONENTS.md` "Icon button") can reuse the exact same variant treatment rather than duplicating it. */
+export const VARIANT_CLASSES = {
   primary: "bg-primary text-neutral-50 hover:bg-primary-hover focus-visible:outline-primary",
   secondary: "bg-neutral-100 text-neutral-900 hover:bg-neutral-200 focus-visible:outline-neutral-400",
   destructive: "bg-danger text-neutral-50 hover:opacity-90 focus-visible:outline-danger",

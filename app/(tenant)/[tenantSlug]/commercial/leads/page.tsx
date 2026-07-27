@@ -2,6 +2,12 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listLeads, LeadQueryError, type ListLeadsResult } from "../../../../../server/queries/lead.ts";
+import type { Lead } from "../../../../../server/contracts/lead/lead.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { Pagination } from "../../../../../components/tables/pagination.tsx";
+import { Badge } from "../../../../../components/ui/badge.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { LEAD_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { captureLeadAction } from "./actions.ts";
 import { CaptureLeadForm } from "./capture-lead-form.tsx";
 
@@ -17,6 +23,18 @@ import { CaptureLeadForm } from "./capture-lead-form.tsx";
  * renders below; a sibling `loading.tsx` covers Loading via the Suspense boundary. Data
  * is fetched into a plain result/error value first, JSX construction kept entirely
  * outside the `try`/`catch`, mirroring `admin/users/page.tsx`'s own discipline exactly.
+ *
+ * Migrated onto the shared `DataTable`/`Pagination` primitives (CargoGrid UI
+ * Modernization checkpoint, `docs/design-system/02_COMPONENTS.md`) -- the reference
+ * Commercial consumer for both; no query/behavior change, table markup and the
+ * previously-static "Page X" text (no actual prev/next control existed before this
+ * checkpoint) only.
+ *
+ * Status/Source columns now render through `StatusBadge`/`Badge` (checkpoint 4), the
+ * first real consumer of either -- closing `docs/design-system/08_COMPONENT_
+ * INVENTORY.md` §4's top-priority migration-map entry. Tone comes from
+ * `components/domain/status-tone-map.ts`'s `LEAD_STATUS_TONE_MAP`, not an inline
+ * mapping duplicated in this file.
  */
 export default async function CommercialLeadsPage({
   params,
@@ -49,6 +67,29 @@ export default async function CommercialLeadsPage({
 
   const boundCaptureLeadAction = captureLeadAction.bind(null, tenantSlug);
 
+  const columns: readonly DataTableColumn<Lead>[] = [
+    {
+      key: "contact",
+      header: "Contact",
+      render: (lead) => (
+        <a href={`/${tenantSlug}/commercial/leads/${lead.id}`} className="font-medium text-primary underline">
+          {lead.contactName}
+        </a>
+      ),
+    },
+    { key: "company", header: "Company", render: (lead) => lead.companyName ?? "—" },
+    { key: "source", header: "Source", render: (lead) => <Badge tone="neutral">{lead.source}</Badge> },
+    {
+      key: "status",
+      header: "Status",
+      render: (lead) => {
+        const { tone, label } = LEAD_STATUS_TONE_MAP[lead.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    { key: "score", header: "Score", align: "right", render: (lead) => lead.score },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Leads</h1>
@@ -59,49 +100,26 @@ export default async function CommercialLeadsPage({
         <div role="alert" className="flex flex-col gap-2">
           <p className="text-sm text-danger">Something went wrong loading leads. Please try again.</p>
         </div>
-      ) : result.leads.length === 0 ? (
-        <p className="text-sm text-neutral-600">No leads found for this organization yet.</p>
       ) : (
         <div className="flex flex-col gap-4">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Contact
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Company
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Source
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Status
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Score
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.leads.map((lead) => (
-                <tr key={lead.id} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 text-neutral-900">
-                    <a href={`/${tenantSlug}/commercial/leads/${lead.id}`} className="font-medium text-primary underline">
-                      {lead.contactName}
-                    </a>
-                  </td>
-                  <td className="py-2 pr-4 text-neutral-600">{lead.companyName ?? "—"}</td>
-                  <td className="py-2 pr-4 text-neutral-600">{lead.source}</td>
-                  <td className="py-2 pr-4 text-neutral-600">{lead.status}</td>
-                  <td className="py-2 text-neutral-600">{lead.score}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-xs text-neutral-500">
-            Page {result.page} — {result.totalCount} total lead{result.totalCount === 1 ? "" : "s"}
-          </p>
+          <DataTable
+            caption="Leads"
+            columns={columns}
+            rows={result.leads}
+            rowKey={(lead) => lead.id}
+            emptyMessage="No leads found for this organization yet."
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-neutral-500">
+              Page {result.page} — {result.totalCount} total lead{result.totalCount === 1 ? "" : "s"}
+            </p>
+            <Pagination
+              page={result.page}
+              pageSize={result.pageSize}
+              totalCount={result.totalCount}
+              buildHref={(targetPage) => `/${tenantSlug}/commercial/leads?page=${targetPage}`}
+            />
+          </div>
         </div>
       )}
     </div>

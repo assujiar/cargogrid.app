@@ -81,6 +81,36 @@
 
   /* Motion -- docs/standards/DESIGN_SYSTEM.md §2, decided. prefers-reduced-motion is respected at the component level, not overridden here. */
   --default-transition-duration: 200ms;
+
+  /* Chart tokens (CargoGrid Chart System, Apache ECharts, checkpoint 5) -- deliberately
+     NOT under the `--color-*` namespace: these are consumed by `components/charts/
+     chart-colors.ts` via `getComputedStyle` at chart-init/theme-change time (Canvas/SVG
+     rendering needs a resolved color string, not a live `var()` reference), never as a
+     Tailwind `bg-*`/`text-*` utility class -- declaring them under `--color-*` would
+     generate unused utilities for a value class no chart-adjacent markup should ever
+     consume directly. Positive/warning/negative/neutral intentionally reuse the
+     platform's existing semantic colors (never a second, competing "chart red") --
+     forecast/target/comparison/grid/axis/tooltip/selection are new because no existing
+     token covers a dashed-forecast-series, a target mark-line, or a chart-specific grid
+     line weight. */
+  --chart-primary: var(--color-primary);
+  --chart-secondary: var(--color-secondary);
+  --chart-tertiary: #7c3aed;
+  --chart-quaternary: #0d9488;
+  --chart-positive: var(--color-success);
+  --chart-warning: var(--color-warning);
+  --chart-negative: var(--color-danger);
+  --chart-neutral: var(--color-neutral-400);
+  --chart-forecast: var(--color-neutral-500);
+  --chart-target: var(--color-neutral-700);
+  --chart-comparison: var(--color-neutral-300);
+  --chart-grid: var(--color-neutral-200);
+  --chart-axis: var(--color-neutral-400);
+  --chart-axis-muted: var(--color-neutral-300);
+  --chart-tooltip-background: var(--color-neutral-900);
+  --chart-tooltip-foreground: var(--color-neutral-50);
+  --chart-tooltip-border: var(--color-neutral-700);
+  --chart-selection: var(--color-primary);
 }
 
 body {
