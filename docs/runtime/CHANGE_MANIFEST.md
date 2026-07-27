@@ -4061,6 +4061,456 @@ Purely additive/presentational for the 26 migrated files — no query, mutation,
 
 Self-closing (out-of-band, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-020` (Prompt 161, No-Reentry Enforcement), not yet authorized. `lib/design-system/migration-map.ts`'s form-field item now reads as substantially (not fully) resolved, with its own four remaining sub-categories named and reasoned rather than left as a vague "not migrated yet." Remaining open UI-primitive-adoption work: `EmptyState` (small in-section fragments, not real whole-page empty states — see `CHG-2026-098`'s own disclosure), the width-customized-input/checkbox/radio/`FormField` sub-categories named above, and the two-form `ApprovalDecisionPanel` migration (Medium risk, touches real submit paths).
 
+### CHG-2026-100 — No-Reentry Enforcement (Phase 2, Prompt 161)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-020` / `161_COMMERCIAL_NO_REENTRY_ENFORCEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `020` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A fresh, explicit `AskUserQuestion` resolving a bare, unscoped "lanjut" -- operator selected "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+Closed two concrete, disclosed no-reentry/canonical-reuse gaps rather than inventing a generic provenance framework -- every prior capability's own hand-rolled jsonb-snapshot/duplicate-fingerprint pattern (`COM-143..160`) is reused unchanged.
+
+**Referential integrity**: `app.opportunities.account_ref` (`COM-147`) was a disclosed `text` "forward-compatible placeholder" populated by `app.convert_quotation_to_account` (`COM-155`) via a same-value `::text` cast -- no foreign key, no index, no database-enforced sync guarantee. New `app.opportunities.account_id uuid references app.accounts(id)` (indexed, guarded backfill) closes this; `app.convert_quotation_to_account` re-pointed via `create or replace function` (the same extension pattern `COM-155` itself used on `app.resolve_commercial_record_ref`) to set both columns going forward. `account_ref` retained unmodified -- additive only, immutable-migrations convention respected.
+
+**Visibility timing**: account-duplicate checking already existed (`app.find_duplicate_accounts`, `COM-155`) but fired only at quotation-acceptance time (`app.get_account_conversion_readiness`) -- a full Lead->Prospect->Opportunity->RFQ->rate-lookup->margin->Quotation pipeline could be duplicated for a repeat customer before that check ever ran. New `app.find_existing_accounts_for_lead` (company-name-only match, the one identifying field a Lead carries) and `app.find_existing_accounts_for_prospect` (reuses `app.find_duplicate_accounts`' own legal_name+tax_id fingerprint match verbatim) surface the same signal at the two earliest answerable points -- both advisory-only, tenant-scoped, fail-closed on missing membership, mirroring `app.find_duplicate_leads`' own established "never blocks capture" discipline exactly. No new override/audit table: the real "treat as same entity" actions (`app.link_lead_to_existing_prospect`, `COM-144`; `app.convert_quotation_to_account(p_target_account_id=...)`, `COM-155`) already self-capture a canonical `app.audit_logs` entry.
+
+New `app.commercial_opportunity_account_ref_drift` view (`security_invoker=true`, no masking needed) is a reconciliation safety net flagging any future disagreement between the two columns -- should be structurally empty from this checkpoint onward.
+
+**No implementation defect found during authoring.** One environment-setup blocker resolved before any test could run: this sandbox had neither a running Postgres server nor the PostGIS extension the existing migration chain requires -- both provisioned this checkpoint. One test-authoring UUID-range collision with `commercial-customer-contract-pricing.sql`'s own fixtures, remapped to an unclaimed suffix range.
+
+#### Scope and files
+
+New: `supabase/migrations/20260725090000_create_commercial_no_reentry_enforcement.sql` (1 migration -- 1 new column/index on `app.opportunities`, 1 `create or replace` of an already-applied function, 2 new functions, 1 new view, zero new permission-catalogue row); `scripts/db-tests/commercial-no-reentry-enforcement.sql`; `app/(tenant)/[tenantSlug]/commercial/_shared/account-reentry-panel.tsx`. Modified: `server/contracts/lead/lead.ts`, `server/contracts/prospect/prospect.ts`, `server/contracts/opportunity/opportunity.ts` (`accountId` added), `server/queries/lead.ts`(`.test.ts`), `server/queries/prospect.ts`(`.test.ts`), `app/(tenant)/[tenantSlug]/commercial/leads/[leadId]/page.tsx`, `app/(tenant)/[tenantSlug]/commercial/prospects/[prospectId]/page.tsx`. 3 new files, 1 migration, 7 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (6 net new); `pnpm run db:test` PASS -- 51 migrations/51 db-test files, all green including the new `commercial-no-reentry-enforcement.sql` and `COM-143..160`'s own test files running unmodified; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `npx next build` PASS (no new route). `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..160` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object; zero prior migration file's own column/table definition edited (`account_ref` untouched). `git revert` of this checkpoint's commit is safe and complete -- `account_id` has no dependent outside this same migration's own `convert_quotation_to_account` extension and the new drift view.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-020` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-021` (Prompt 162, Integrated Commercial Verification) -- dependency-`READY` (`143..161` all `VERIFIED`), already authorized under this same checkpoint's "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
+
+### CHG-2026-101 — Integrated Commercial Verification (Phase 2, Prompt 162)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-021` / `162_COMMERCIAL_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | TEST + DOCS (verification-only, zero application-code change) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `021` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+The Phase 2 equivalent of Platform Core's own `PLT-137` (Integrated Verification), scaled to 19 shipped Commercial capability prompts. New `scripts/db-tests/commercial-integrated-verification.sql` composes 13 of the 19 prompts (`143..145`, `147..151`, `154`, `155`, `157`, `160`, `161`) through one continuous **two-tenant** golden path -- two tenants deliberately sharing an identical company/contact name ("Global Freight Co"/"Jane Doe IntVer"), stressing `COM-161`'s own no-reentry purpose directly rather than a contrived edge case. Six new scenario groups: a combined RLS sweep across 9 major Commercial tables in one query (zero cross-tenant leak); confirmation that `app.accounts`' deliberately tenant-wide visibility (`ADR-0018`) still isolates two identically-named accounts across the tenant boundary; a no-reentry composition check (`find_existing_accounts_for_lead`/`for_prospect` never cross the tenant boundary, `commercial_opportunity_account_ref_drift` empty for both tenants); a combined masking sweep across four independently-authored directory views (`opportunities`/`quotations`/`margin_calculations`/`job_order_handoffs_directory`) simultaneously; an audit-trail reconciliation (>=8 distinct resource types in one tenant-scoped trail); and a composed `ERR-2026-004` regression sweep (zero `anon` `EXECUTE` across 23 functions, checked together not sampled).
+
+Full requirement/WBS/ADR/docs traceability audit: all 19 `docs/build-log/phase-02/COM-*.md` files present, all 20 `TASK_LEDGER`/execution-index rows `VERIFIED` with zero gap, 18/18 ADRs indexed, 51 migrations confirmed applying cleanly from a fresh `rm -rf node_modules && pnpm install --frozen-lockfile`.
+
+**Two test-authoring issues found and fixed in this checkpoint's own new file, zero defect in any already-`VERIFIED` capability**: (1) the composed tenant slugs initially violated `app.tenants`' own lowercase-only `tenants_slug_format` CHECK -- fixed; (2) this checkpoint's own new file's alphabetically-earlier filename meant its own "Jane Doe" contacts were created before `commercial-quotation-builder.sql`'s (`COM-151`, unmodified) own unscoped `full_name = 'Jane Doe'` lookup ran, breaking its "exactly one row" assumption -- the identical collision class `COM-153`'s own build log already documented once before -- fixed by renaming this checkpoint's own contact to "Jane Doe IntVer" rather than touching the established file.
+
+**Zero Critical/High/Medium-severity finding anywhere in the composed golden path or the full 52-file `db:test` run.** Nothing blocks `COM-163` Hardening.
+
+#### Scope and files
+
+New: `scripts/db-tests/commercial-integrated-verification.sql`; `docs/build-log/phase-02/COM-162.md`. Zero application code, zero migration. 2 new files.
+
+#### Tests and quality evidence
+
+Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS; `pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 51 migrations/52 db-test files (1 net new), re-run twice for determinism; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run git:check-paths` PASS (0 forbidden paths -- no new migration this checkpoint, so the usual disclosed false positive does not fire); `npx next build` PASS (no new route). This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Test-only and documentation changes; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-021` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-022` (Prompt 163, Tenant/Security/Financial/Data Hardening) -- dependency-`READY` (`162` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
+
+### CHG-2026-102 — Tenant/Security/Financial/Data Hardening (Phase 2, Prompt 163)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-022` / `163_COMMERCIAL_SECURITY_FINANCIAL_HARDENING_PROMPT.md` |
+| Change type | SCHEMA (function-level) + TEST + DOCS |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `022` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+`COM-162`'s own failure matrix recorded zero Critical/High/Medium finding. This checkpoint performed a fresh, targeted security review of the 6 capability prompts (`146`, `152`, `153`, `156`, `158`, `159`) `COM-162` itself disclosed as not independently recomposed by its own integration suite -- reading every `grant execute ... to authenticated` line across those 6 migrations (30 functions) for the one access-control convention every other Commercial function follows.
+
+**Found one real, previously undetected High-severity finding**: `app.evaluate_quotation_approval_requirement(p_quotation_id uuid)` (`COM-153`) was the only function across all 51 prior migrations granted to `authenticated` that takes a bare entity id with no tenant/actor parameter and performs no access check at all -- unlike its own sibling `app.get_quotation_submission_readiness`, which does. Concretely exploitable as a cross-tenant business-intelligence disclosure: any authenticated identity in any tenant, given a quotation id belonging to a different tenant, could learn that tenant's own margin/discount/value approval-threshold-crossing signal.
+
+**Root-cause repair**, new migration `20260726090000_create_commercial_hardening.sql`: `DROP FUNCTION` + recreate `app.evaluate_quotation_approval_requirement` with `p_actor_auth_user_id uuid default auth.uid()` and the identical `can_access_record` check its sibling already uses (a `DROP`, not `CREATE OR REPLACE`, is required since adding a parameter changes the function's identity); `CREATE OR REPLACE app.submit_quotation` (same signature, unchanged) now passes the already-validated actor through to its one internal call. One pre-existing db-test call site (`commercial-quotation-approval.sql`) updated to pass its real actor id explicitly.
+
+#### Scope and files
+
+New: `supabase/migrations/20260726090000_create_commercial_hardening.sql` (1 migration -- drops+recreates 1 function, `create or replace`s 1 more, zero new permission-catalogue row); `scripts/db-tests/commercial-hardening.sql`; `docs/build-log/phase-02/COM-163.md`. Modified: `scripts/db-tests/commercial-quotation-approval.sql` (one call-site line). 3 new files, 1 migration, 1 modified test file.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 52 migrations/53 db-test files (1 net new), re-run twice for determinism, including `commercial-quotation-approval.sql`'s own updated call site passing unchanged; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `npx next build` PASS (no new route). `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..161` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+The dropped-and-recreated function is a stricter, superset-of-behavior replacement (same logic, added access check) -- no caller with legitimate access loses functionality; the one caller relying on the old bare signature (`submit_quotation`) is updated in the same migration. `git revert` of this checkpoint's commit restores the prior, vulnerable form -- safe for data (no data-bearing object touched) but reopens the finding, so a revert should be paired with re-applying the fix another way.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-022` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-023` (Prompt 164, Documentation and Handoff) -- dependency-`READY` (`163` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
+
+### CHG-2026-103 — Commercial Documentation and Handoff (Phase 2, Prompt 164)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-023` / `164_COMMERCIAL_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | DOCS only |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `023` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+The Phase 2 equivalent of Platform Core's own `PLT-139` (Documentation and Handoff). Documentation-only, zero application-code/migration change (Prompt 164 §13's own mandate). Two new deliverables: `docs/build-log/phase-02/COMMERCIAL_HANDOFF_PACKAGE.md` (the Phase 2→Phase 3 entry package, mirroring `PLATFORM_CORE_HANDOFF_PACKAGE.md`'s own structure -- verified dependencies, 20-migration/53-db-test-file/18-ADR preserved-assets inventory, known issues carried forward unchanged, verified environment commands, residual risks collected from every `COM-143..163` build log's own disclosed boundary, zero correction needed this checkpoint, forbidden-scope re-confirmation, fresh-context reconstruction check) and `docs/build-log/phase-02/JOB_ORDER_HANDOFF_CONTRACT.md` (Prompt 164 §20 task 3's own literal deliverable -- the exact `JobOrderDraftInput` schema field-by-field cited directly to `server/contracts/job-order-lineage/job-order-lineage.ts`, a full synthetic/redacted example payload, 5 compatibility notes, and a 5-item unresolved-dependency list for Phase 3).
+
+Forbidden-scope grep re-run directly this checkpoint (not assumed unchanged from `COM-160`'s own original confirmation): zero matches for any Operations/Finance/Procurement domain concept anywhere in application code -- even Commercial's own hyphenated `job-order-lineage` service files fall outside the underscore-based search pattern, confirming no literal "Job Order domain" naming exists in code at all.
+
+#### Scope and files
+
+New: `docs/build-log/phase-02/COMMERCIAL_HANDOFF_PACKAGE.md`; `docs/build-log/phase-02/JOB_ORDER_HANDOFF_CONTRACT.md`; `docs/build-log/phase-02/COM-164.md`. Zero application code, zero migration. 3 new files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 52 migrations/53 db-test files (unchanged); `pnpm run docs:check` PASS (the two new documents introduce zero broken link, confirmed mechanically). No other gate is applicable to a documentation-only checkpoint touching zero application/schema file.
+
+#### Compatibility, rollout, recovery
+
+Documentation-only; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-023` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-024` (Prompt 165, Phase 2 Closure Verification) -- dependency-`READY` (`164` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly. This is the final Commercial task before `PHASE_2_VERIFIED`.
+
+### CHG-2026-104 — Phase 2 Closure Verification (Phase 2, Prompt 165)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-024` / `165_COMMERCIAL_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | DOCS only (independent verification, zero repair needed) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `024` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED`, **`PHASE_2_VERIFIED` set** |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" -- the final task in that range |
+
+#### Outcome
+
+Independent re-verification only, mirroring `docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md`'s own precedent. Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` + full 13-gate re-run, all green, including a real `next build` producing all 45 expected routes (26 Commercial). All 10 required-verification items (Prompt 165) independently confirmed against live, freshly re-run evidence: traceability (24 execution-index rows, 23 `TASK_LEDGER` rows, 22 build logs, zero orphan); all 19 capabilities' implementation/evidence/docs/owner; the full lead->prospect->contact->opportunity->costing->rate->margin->quotation->approval->acceptance->account/contract/credit->Job Order handoff flow, proven end to end twice independently including a two-simultaneous-tenant composed run; no-reentry/canonical-reference discipline; exact money/masking/quote-lock/acceptance-evidence/duplicate-safe-conversion; the single-owned, Phase-6-extensible vendor/rate foundation with zero procurement-scope match; the `JobOrderDraftInput` handoff's idempotency/lineage/retry-safety with zero Job Order domain code found anywhere; dashboard/report reconciliation and cross-tenant/access matrices; RPD-022/001/034/036 disclosures.
+
+**Zero bounded repair was needed** -- Commercial's own closing sequence (`162` verification, `163` hardening -- which itself found and closed the phase's one real High-severity finding, `164` documentation) had already found and closed everything there was to find. Zero Critical/High-severity issue or error exists anywhere in the entire Commercial phase.
+
+#### Scope and files
+
+New: `docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md`. Zero application code, zero migration. 1 new file.
+
+#### Tests and quality evidence
+
+Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS (1.4s); `pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS; `pnpm run db:test` PASS -- 52 migrations/53 db-test files; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` all PASS; `npx next build` PASS -- 45 routes (26 Commercial). `pnpm run test:e2e` correctly disclosed `NOT_RUN` (the identical, unchanged sandbox `chrome-headless-shell` condition since `PLT-117`).
+
+#### Compatibility, rollout, recovery
+
+Documentation-only; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-024` is `VERIFIED`. **`PHASE_2_VERIFIED` is set.** Phase 2 (Commercial) is closed. Next eligible action: the Phase 3 Operations kickoff prompt -- **not authorized to start automatically**; this checkpoint's own "Commercial WBS through phase closure (161-165)" authorization range ends here. A fresh explicit user authorization is required before any Phase 3 work begins.
+
+### CHG-2026-105 — Operations WBS and Runtime Kickoff (Phase 3, Prompt 167)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-001` / `167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Change type | DOCS only (planning/index, zero Operations-domain schema/code) |
+| Baseline evidence | `PHASE_2_VERIFIED` (`docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- a scoped multi-task range naming its exact endpoint |
+
+#### Outcome
+
+The Phase 3 equivalent of `142`'s own Commercial kickoff. Mandatory entry gate re-confirmed (`RUNTIME_DISCOVERY_VERIFIED`/`RUNTIME_ARCHITECTURE_VERIFIED`/`PHASE_0_VERIFIED`/`PHASE_1_VERIFIED`/`PHASE_2_VERIFIED`). Produced the required `JobOrderDraftInput`→Job Order field-by-field lineage map: every customer/contact/address/cargo/service/rate/quote/price/credit field resolves to a verbatim jsonb snapshot column (`customer_snapshot`/`cargo_service_snapshot`/`revenue_snapshot`/`contract_snapshot`/`credit_snapshot`/`acceptance_snapshot`) or a live canonical FK (`account_id`), never a re-typed value. Phase 3/5 (single-mode/single-leg, no dispatch board/route optimization/GPS-telematics, no full WMS), Phase 3/8 (no Customer Portal), and Phase 3/4 (no Finance posting) boundaries explicitly encoded. Collision audit found zero genuine Operations-domain file anywhere (only Commercial's own already-disclosed `job-order-lineage` handoff files matched the search pattern).
+
+#### Scope and files
+
+New: `docs/build-log/phase-03/00_OPERATIONS_WBS.md`; `docs/build-log/phase-03/OPERATIONS_EXECUTION_INDEX.md`; `docs/build-log/phase-03/OPS-167.md`. Zero application code, zero migration. 3 new files.
+
+#### Tests and quality evidence
+
+No code/schema gate applies to a pure planning checkpoint. `git status` confirms only the three new documents plus ledger updates were touched.
+
+#### Compatibility, rollout, recovery
+
+Documentation-only; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-001` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-002` (Prompt 168, Job Order) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
+### CHG-2026-106 — Job Order (Phase 3, Prompt 168)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-002` / `168_JOB_ORDER_PROMPT.md` |
+| Change type | Schema (additive) + service layer + UI |
+| Baseline evidence | `OPS-167` `VERIFIED` (`docs/build-log/phase-03/OPS-167.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- this is the first capability task in that range |
+
+#### Outcome
+
+The first Operations-domain (and first Phase 3) table in this repository. `app.job_orders` converts one verified Commercial `JobOrderDraftInput` handoff (`app.job_order_handoffs`, `COM-160`) into one canonical, tenant-scoped Job Order -- idempotent on `(tenant_id, source_handoff_id)`, complete source/version lineage, zero re-entry (every snapshot column a verbatim jsonb copy; `account_id` a live canonical FK). Sensitive-field masking reuses Commercial's own `COM:View selling price`/`COM:View cost` directly rather than inventing a redundant OPS-level pair -- "conversion never broadens Commercial access" (Prompt 168 §16) proven by a real masking-sweep db-test, not just documented. The one bounded correction path (`app.override_job_order_field`) is restricted to `customer_snapshot`/`cargo_service_snapshot` only.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727090000_create_operations_job_order.sql` (2 tables -- `app.job_order_number_counters`, `app.job_orders`, `app.job_order_overrides`; 5 functions -- `next_job_order_number`, `get_job_order_conversion_readiness`, `prepare_job_order`, `confirm_job_order`, `override_job_order_field`; 1 view -- `app.job_orders_directory`). New service layer: `server/contracts/job-order/job-order.ts(.test.ts)`, `server/queries/job-order.ts(.test.ts)`, `server/mutations/job-order.ts(.test.ts)`. New portal guard: `lib/portal/operations-guard.ts(.test.ts)`, `operations-guard-deps.server.ts`, `resolve-operations-access.server.ts`. New UI: `app/(tenant)/[tenantSlug]/operations/job-orders/` (list + `loading.tsx`; `convert/` conversion review + `actions.ts` + form + `loading.tsx`; `[jobOrderId]/` detail + `actions.ts` + confirm/override forms + `loading.tsx`). New test fixture: `scripts/db-tests/operations-job-order.sql`. Modified: `components/domain/status-tone-map.ts` (added `JOB_ORDER_STATUS_TONE_MAP`). 1 migration, ~20 new files, 1 modified file.
+
+#### Tests and quality evidence
+
+`node:test` 1440/1440 (36 net new: 8 contract, 10 query, 10 mutation, 8 portal-guard). `db:test` PASS across 53 migrations/54 db-test files (1 net new, zero regression) -- 9 scenario groups covering conversion readiness, idempotent prepare, optimistic-concurrency confirm, mandatory-reason/restricted-column override validation, directory-view masking sweep, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, and audit-trail reconciliation (exactly 3 events). `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 48 routes (3 new). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Commercial migration checkpoint (flags this checkpoint's own new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (`OPS` action set already seeded at `PLT-111`). `git revert` of this checkpoint's commit is safe and complete (no downstream consumer exists yet).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-002` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-003` (Prompt 169, Shipment Order) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
+### CHG-2026-107 — Shipment Order (Phase 3, Prompt 169)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-003` / `169_SHIPMENT_ORDER_PROMPT.md` |
+| Change type | Schema (additive) + service layer + UI |
+| Baseline evidence | `OPS-168` `VERIFIED` (`docs/build-log/phase-03/OPS-168.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- second capability task in that range |
+
+#### Outcome
+
+The second Operations-domain table. `app.shipment_orders` converts one confirmed Job Order into one or more single-leg Shipment Orders, each inheriting shipper (a live FK)/cargo (a governed verbatim snapshot) from the Job Order rather than re-entering them. A governed, reconciled allocation spans every non-cancelled Shipment Order sharing the same Job Order -- the very first Shipment Order for a Job Order declares the allocation basis (per dimension: quantity/weight/volume, each independently, nullable = advisory-only), every later split is checked against the running sum via `app.get_job_shipment_allocation_balance` and requires a non-empty `split_reason`. No override path exists in this bounded slice; an over-allocation attempt is a hard, structural block.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727100000_create_operations_shipment_order.sql` (2 tables -- `app.shipment_order_number_counters`, `app.shipment_orders`; 3 functions -- `next_shipment_number`, `get_job_shipment_allocation_balance`, `create_shipment_order_from_job`, `confirm_shipment_order`, `cancel_shipment_order` -- 5 functions total). New service layer: `server/contracts/shipment-order/shipment-order.ts(.test.ts)`, `server/queries/shipment-order.ts(.test.ts)`, `server/mutations/shipment-order.ts(.test.ts)`. New UI: `app/(tenant)/[tenantSlug]/operations/shipment-orders/` (list + `loading.tsx`; `create/` create-from-job workflow + `actions.ts` + form + `loading.tsx`; `[shipmentOrderId]/` detail + `actions.ts` + confirm/cancel forms + `loading.tsx`). New test fixture: `scripts/db-tests/operations-shipment-order.sql`. Modified: `components/domain/status-tone-map.ts` (added `SHIPMENT_ORDER_STATUS_TONE_MAP`), Job Order detail page (one new link to Shipment Order creation, shown only when `status === 'confirmed'`). 1 migration, ~17 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1469/1469 (29 net new: 9 contract, 9 query, 11 mutation). `db:test` PASS across 54 migrations/55 db-test files (1 net new, zero regression) -- 9 scenario groups covering null-basis-before-any-shipment, authority/confirmed-job-required/inheritance/idempotent create, split-reason-required/over-allocation/valid-split allocation-balance checks, optimistic-concurrency confirm, mandatory-reason cancel with balance release, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, and audit-trail reconciliation (exactly 5 events). `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (3 new). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint (flags this checkpoint's own new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses the `OPS` action set `OPS-168` already made the first real consumer of). `git revert` of this checkpoint's commit is safe and complete (no downstream consumer exists yet).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-003` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-004` (Prompt 170, Shipment Lifecycle) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
+### CHG-2026-108 — Shipment Lifecycle (Phase 3, Prompt 170)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-004` / `170_SHIPMENT_LIFECYCLE_PROMPT.md` |
+| Change type | Schema (additive columns/constraint/table) + service layer + UI |
+| Baseline evidence | `OPS-169` `VERIFIED` (`docs/build-log/phase-03/OPS-169.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- third capability task in that range |
+
+#### Outcome
+
+A canonical Shipment Order state machine (draft->confirmed->planned->assigned->dispatched->in_transit->delivered->epod->closed, plus held/cancelled/reopen) whose current-state projection is driven exclusively by one validated, idempotent, optimistic-concurrency-checked function -- never a direct UPDATE. Engine-reuse research performed first (Platform Core's Workflow Engine explicitly forbids broad domain adoption per its own header; the Status Engine is a label registry only, no transition matrix) -- concluded this checkpoint should follow the same hand-rolled-per-capability precedent every other status transition in this repository already uses, rather than force-fitting an engine whose own boundary disclaims this exact use.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727110000_create_operations_shipment_lifecycle.sql` (broadened `app.shipment_orders_status_check` to the full 11-state set; new `held_from_status` column; `app.shipment_status_transitions` table; `app.transition_shipment_order`, `app.get_shipment_status_history` functions). New service layer: `server/contracts/shipment-lifecycle/shipment-lifecycle.ts(.test.ts)`, `server/queries/shipment-lifecycle.ts(.test.ts)`, `server/mutations/shipment-lifecycle.ts(.test.ts)`. New UI: `status-timeline.tsx`, `transition-shipment-order-form.tsx`, `lifecycle-transitions.ts` on the existing Shipment Order detail route. Modified: `server/contracts/shipment-order/shipment-order.ts` (broadened `SHIPMENT_ORDER_STATUSES`, added `heldFromStatus`), `components/domain/status-tone-map.ts` (expanded `SHIPMENT_ORDER_STATUS_TONE_MAP`), Shipment Order detail `actions.ts`/`page.tsx`. Removed: `cancel-shipment-order-form.tsx` and `cancelShipmentOrderAction` (dead code once fully superseded by the unified transition control -- the underlying `app.cancel_shipment_order` database function itself remains, immutable). 1 migration, ~9 new files, 5 modified files, 1 removed file.
+
+#### Tests and quality evidence
+
+`node:test` 1485/1485 (16 net new: 6 contract, 3 query, 7 mutation). `db:test` PASS across 55 migrations/56 db-test files (1 net new, zero regression) -- 10 scenario groups covering authority/illegal-skip-ahead/reason-required, hold-resume-into-exact-prior-state-only, the full forward path plus evidence-required, closed-terminal-and-Supreme-only-reopen, idempotent-retry/stale-version/cancelled-terminal, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, ordered history reconciliation, and a 12-event audit-trail count. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- the constraint broadening is safe (no row would ever have carried a status outside the original three), zero new permission-catalogue row (reuses `OPS:Edit`). `git revert` of this checkpoint's commit is safe and complete; `app.confirm_shipment_order`/`app.cancel_shipment_order` (`OPS-169`) continue to work identically either way.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-004` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-005` (Prompt 171, Land/Air/Sea Baseline) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
+### CHG-2026-109 — Land, Air and Sea Baseline (Phase 3, Prompt 171)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-006` / `171_LAND_AIR_SEA_BASELINE_PROMPT.md` |
+| Change type | Schema (additive table) + service layer + UI |
+| Baseline evidence | `OPS-170` `VERIFIED` (`docs/build-log/phase-03/OPS-170.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- fourth capability task in that range |
+
+#### Outcome
+
+One bounded, single-mode/single-leg mode profile per Shipment Order (land/air/sea), typed via mutually-exclusive column groups on one shared table, enforced by a real multi-column `CHECK` constraint (never merely a convention). Vehicle/vendor/carrier references are deliberately plain text -- no vehicle/vendor master type has ever been registered anywhere in this repository (`app.master_records` has only ever seeded `vendor_rate`); binding these to real canonical references is `OPS-172`'s (Resource Assignment) own explicit scope, not anticipated here. Mode change itself (`app.change_shipment_mode`) is draft-only and reconciles the prior incompatible profile by deleting it.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727120000_create_operations_mode_baseline.sql` (`app.shipment_mode_profiles` table; `app.set_shipment_mode_profile`, `app.change_shipment_mode` functions). New service layer: `server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts(.test.ts)` (a real TypeScript discriminated union over the shared row), `server/queries/shipment-mode-baseline.ts(.test.ts)`, `server/mutations/shipment-mode-baseline.ts(.test.ts)`. New UI: `mode-profile-form.tsx`, `change-mode-form.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`. 1 migration, ~9 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1502/1502 (17 net new: 7 contract, 3 query, 7 mutation). `db:test` PASS across 56 migrations/57 db-test files (1 net new, zero regression) -- 7 scenario groups covering authority/missing-required-reference/valid-profile-with-structural-nulls/idempotent-update across all three modes, blocked-once-cancelled, mode-change validation and reconciliation, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Edit`). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders.mode` itself is untouched (already existed since `OPS-169`).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-005` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-006` (Prompt 172, Resource Assignment) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
+### CHG-2026-110 — Resource/Vendor Assignment (Phase 3, Prompt 172)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-006` / `172_RESOURCE_ASSIGNMENT_PROMPT.md` |
+| Change type | Schema (4 master-type seed rows + additive table) + service layer + UI |
+| Baseline evidence | `OPS-171` `VERIFIED` (`docs/build-log/phase-03/OPS-171.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- fifth capability task in that range |
+
+#### Outcome
+
+Basic vendor/fleet/vehicle/driver assignment to a Shipment Order, with availability/conflict checks enforced at the database layer. Rather than a bespoke reference table, this checkpoint registers four new master types (`vendor`/`fleet`/`vehicle` -> `PRC`, `driver` -> `HRS`) into the already-built generic master-data registry (`app.master_types`/`app.master_records`, `PLT-120`), seeded via direct `INSERT` the same way `PLT-120`'s own `vendor_rate` was seeded -- fulfilling `OPS-171`'s own explicit deferral (its `vehicle_ref`/`vendor_ref` plain-text fields). `resource_snapshot` is structurally limited to `{code, name}` only, never `app.master_records.attributes`, which may hold driver PII.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727130000_create_operations_resource_assignment.sql` (4 `app.master_types` seed rows; `app.resource_assignments` table; `app.find_assignment_candidates`, `app.assign_resource`, `app.reassign_resource`, `app.hold_resource_assignment`, `app.resume_resource_assignment`, `app.unassign_resource`, `app.get_resource_assignment_history` functions). New service layer: `server/contracts/resource-assignment/resource-assignment.ts(.test.ts)`, `server/queries/resource-assignment.ts(.test.ts)`, `server/mutations/resource-assignment.ts(.test.ts)`. New UI: `resource-assignment-panel.tsx`, `resource-assignment-history.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`. 1 migration, ~9 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1529/1529 (25 net new: 6 contract, 6 query, 13 mutation). `db:test` PASS across 57 migrations/58 db-test files (1 net new, zero regression) -- 11 scenario groups covering candidate-lookup with decoy exclusion, authority/invalid-resource/already-assigned assign checks, assignment-conflict-across-shipments, hold/resume reason-required and slot-still-occupied-while-held, reassign reason-required/no-current-assignment/new-row-with-superseded-link, unassign reason-required and slot-release, blocked-once-cancelled, ordered history, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Assign`/`OPS:Edit`, both already seeded by `PLT-112`; `OPS:Assign` gets its first real consumer here). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders` itself is untouched.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-006` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-007` (Prompt 173, Milestone Management) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
+### CHG-2026-111 — Milestone Management (Phase 3, Prompt 173)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-007` / `173_MILESTONE_MANAGEMENT_PROMPT.md` |
+| Change type | Schema (4 new tables) + service layer + UI |
+| Baseline evidence | `OPS-172` `VERIFIED` (`docs/build-log/phase-03/OPS-172.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- sixth capability task in that range |
+
+#### Outcome
+
+Configurable, versioned per-mode milestone templates plus append-oriented, idempotent event capture with event/received time kept distinct, and a deterministic ETA/location/status projection recalculated in full from the event history on every ingest. Engine-reuse research (the same discipline `OPS-170` established) found the Configuration Engine's precedence model does not fit this capability's own `mode` versioning axis; mirrors `COM-150`'s own simpler tenant-scoped versioned-definition pattern instead. Milestone codes are a permanent, platform-wide registry (mirroring Status Engine's "canonical meaning is permanent" split).
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727140000_create_operations_milestone_management.sql` (`app.milestone_codes`, `app.milestone_template_versions`, `app.milestone_events`, `app.shipment_milestone_projections` tables; `app.register_milestone_code`, `app.create_milestone_template_draft`, `app.set_milestone_template_sequence`, `app.publish_milestone_template_version`, `app.recalculate_shipment_milestone_projection`, `app.ingest_milestone_event`, `app.get_shipment_milestone_timeline`, `app.get_shipment_milestone_projection` functions). New service layer: `server/contracts/milestone-management/milestone-management.ts(.test.ts)`, `server/queries/milestone-management.ts(.test.ts)`, `server/mutations/milestone-management.ts(.test.ts)`. New UI: `milestone-timeline.tsx`, `ingest-milestone-event-form.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`. 1 migration, ~9 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1555/1555 (26 net new: 9 contract, 9 query, 8 mutation). `db:test` PASS across 58 migrations/59 db-test files (1 net new, zero regression) -- 10 scenario groups covering template draft/sequence/publish authority-gating and idempotency and at-most-one-per-mode, empty-sequence/stale-version publish rejection, event-ingestion authority/unknown-code/unknown-source rejection and projection recalculation and idempotent retry, out-of-order-event determinism, reason-mandatory/real-prior-event correction as an additive row, blocked-once-cancelled, timeline ordering and customer-visible filtering, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Create`/`OPS:Edit`/`OPS:View`, all already seeded by `PLT-112`). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders` itself is untouched.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-007` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-008` (Prompt 174, Exception and Escalation) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
+### CHG-2026-112 — Exception and Escalation (Phase 3, Prompt 174)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-008` / `174_EXCEPTION_ESCALATION_PROMPT.md` |
+| Change type | Schema (1 permission row + 3 new tables + 1 view) + service layer + UI + one test-defect fix in a prior checkpoint's own file |
+| Baseline evidence | `OPS-173` `VERIFIED` (`docs/build-log/phase-03/OPS-173.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- seventh capability task in that range |
+
+#### Outcome
+
+Basic operational exception intake, ownership, versioned/pinned SLA, escalation and resolution linked to Shipment Order/milestone evidence. Type/severity are a small fixed taxonomy (mirroring `OPS-169`'s own bounded `mode` enum). SLA/escalation policy is real and versioned, pinned onto each exception as a governed snapshot at creation time -- a later republish never retroactively changes an already-open exception's own due date. Sensitive claim/damage fields are masked via a new `OPS:View cost` permission (reusing the already-approved fixed action vocabulary, paired with the `OPS` module -- never a collision with `COM:View cost`) and `app.exceptions_directory`, the same precedent `COM-148`/`COM-156` established.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727150000_create_operations_exception_escalation.sql` (one `OPS:View cost` permission row; `app.exception_sla_policy_versions`, `app.operational_exceptions`, `app.exception_escalations` tables; `app.exceptions_directory` view; `app.create_exception_sla_policy_draft`, `app.set_exception_sla_policy_terms`, `app.publish_exception_sla_policy_version`, `app.report_exception`, `app.assign_exception_owner`, `app.acknowledge_exception`, `app.escalate_exception`, `app.resolve_exception`, `app.close_exception`, `app.reopen_exception`, `app.set_exception_sensitive_fields`, `app.get_exception_escalation_history`, `app.has_view_exception_cost` functions). New service layer: `server/contracts/exception-escalation/exception-escalation.ts(.test.ts)`, `server/queries/exception-escalation.ts(.test.ts)`, `server/mutations/exception-escalation.ts(.test.ts)`. New UI: `report-exception-form.tsx`, `exception-list.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`; `scripts/db-tests/operations-job-order.sql` (one-line root-cause fix to a pre-existing unqualified `limit 1` query, see Errors below). 1 migration, ~9 new files, 3 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1587/1587 (32 net new: 13 contract, 6 query, 13 mutation). `db:test` PASS across 59 migrations/60 db-test files (1 net new, zero regression) -- 11 scenario groups covering SLA policy draft/terms/publish authority-gating and at-most-one-per-`(tenant,type,severity)`, report-exception authority/unknown-type-severity-source rejection/real-SLA-pinning/null-pin-when-unpublished/system-dedup-idempotency, owner-assignment reason-on-reassign-only, full acknowledge/escalate/resolve/close/reopen lifecycle with every guard, sensitive-field write gating and read masking via the real `set local role authenticated`/`request.jwt.claims` RLS-simulation technique, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited. One new permission-catalogue row (`OPS:View cost`, reusing the already-approved fixed action vocabulary; `OPS:Assign`/`OPS:Close` gain further/first real consumers). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders` itself is untouched. The `operations-job-order.sql` test-query fix is independently revertible (test-scope only, no production code touched).
+
+#### Errors found and fixed
+
+A genuine, pre-existing defect was found in `OPS-168`'s own `scripts/db-tests/operations-job-order.sql`, not in this checkpoint's own new code: its `job_orders_directory` masking assertion used an unqualified `select id into v_job_order_id from app.job_orders limit 1` with no tenant filter, silently relying on row-insertion-order luck across the one shared, continuously-migrated disposable test database every `db-test` file runs against together. This broke the moment this checkpoint's own new file (`operations-exception-escalation.sql`, sorting alphabetically before `operations-job-order.sql`) created its own job order first. Root-cause fixed by scoping that query to `where tenant_id = v_tenant1`, matching every other query in that same file -- not by renaming this checkpoint's own correctly-named file to dodge the pre-existing fragility.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-008` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-009` (Prompt 175, Basic Dispatch) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly. This is the final task in that authorized range.
+
+### CHG-2026-113 — Basic Dispatch (Phase 3, Prompt 175)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-009` / `175_BASIC_DISPATCH_PROMPT.md` |
+| Change type | Schema (2 new tables/view + 4 functions) + service layer + UI (1 new route) + 1 pre-existing UI file's forward-affordance edge removed |
+| Baseline evidence | `OPS-174` `VERIFIED` (`docs/build-log/phase-03/OPS-174.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- **eighth and final capability task in that range** |
+
+#### Outcome
+
+A permission-safe, deterministic readiness queue plus one validated, readiness-gated dispatch command for `assigned` Shipment Orders -- list/queue dispatch only, never a dispatch board or route/load/capacity optimization. Dispatch is a thin wrapper over `OPS-170`'s own already-shipped `assigned -> dispatched` transition, never a second parallel state machine: idempotency is checked first (a genuine retry short-circuits before any readiness recheck), then `OPS:Edit` + record-scope, then a real commit-time readiness recheck, then the existing `app.transition_shipment_order` call.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727160000_create_operations_basic_dispatch.sql` (`app.evaluate_dispatch_readiness`, `app.get_dispatch_readiness`, `app.dispatch_commands` table, `app.dispatch_shipment_order`, `app.bulk_dispatch_shipment_orders`, `app.dispatch_ready_queue` view). New service layer: `server/contracts/basic-dispatch/basic-dispatch.ts(.test.ts)`, `server/queries/basic-dispatch.ts(.test.ts)`, `server/mutations/basic-dispatch.ts(.test.ts)`. New UI: `app/(tenant)/[tenantSlug]/operations/dispatch/` (`page.tsx`, `actions.ts`, `dispatch-row-action.tsx`, `loading.tsx`), Shipment Order detail `dispatch-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (dispatch action + panel wiring), `lifecycle-transitions.ts` (removed the generic `assigned -> dispatched` forward-affordance edge, now superseded by the dedicated dispatch panel), `shipment-orders/page.tsx` (added a "Dispatch queue" link). 1 migration, ~10 new files, 4 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1611/1611 (24 net new: 15 contract, 8 query, 7 mutation -- some overlap across describe blocks, exact split per `OPS-175.md` §4.2). `db:test` PASS across 60 migrations/61 db-test files (1 net new, zero regression) -- scenario groups covering readiness evaluation per-fixture, ready-queue listing, dispatch authority/readiness/idempotency, bulk-dispatch bounded/mixed-result, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation (2 persisted success events, 0 persisted failure events -- see Errors below). `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (1 new: `/[tenantSlug]/operations/dispatch`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Edit`/`OPS:View`, already seeded). `git revert` of this checkpoint's commit is safe and complete; the `lifecycle-transitions.ts` change is independently revertible (UI-only -- the database's own `app.transition_shipment_order` never enforced that restriction).
+
+#### Errors found and fixed
+
+Several real issues, all confined to this checkpoint's own new files: (1) a db-test authoring bug assigning a single-column select into a full-row variable; (2)-(3) a migration bug where a stray text argument, then a jsonb array, were passed into `app.capture_audit_event`'s `jsonb` parameters incorrectly; (4) discovering, while fixing (2)-(3), that the entire failure-audit-capture design was architecturally unreachable -- a `raise exception` always rolls back any insert made before it to the nearest enclosing exception block's own implicit savepoint (true both in the caller's own handler and inside `bulk_dispatch_shipment_orders`' per-record catch) -- root-cause fixed by removing the failure-path audit capture and correcting the db-test's own assertion accordingly; (5) a db-test column-name bug (`outcome` vs. the real `result` column); (6) two fixture-authoring bugs (vendor-resource reuse, an incorrect "viewer" actor choice for a read-success assertion).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-009` is `VERIFIED` -- **this closes the full "lanjut sd prompt 175" authorized range.** Next eligible prompt: `CG-S8-OPS-010` (Prompt 176, Document Requirement) -- dependency-`READY`, but **NOT authorized under any standing instruction**. The next runtime agent must obtain fresh explicit user authorization before proceeding to `176` or beyond.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

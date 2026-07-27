@@ -70,6 +70,14 @@ export const CaptureLeadInputSchema = z.object({
 });
 export type CaptureLeadInput = z.input<typeof CaptureLeadInputSchema>;
 
+/** app.find_existing_accounts_for_lead (COM-161) input -- "is this Lead's company already a known Account." */
+export const FindExistingAccountsForLeadInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  leadId: z.string().uuid(),
+});
+export type FindExistingAccountsForLeadInput = z.infer<typeof FindExistingAccountsForLeadInputSchema>;
+
 export const FindDuplicateLeadsInputSchema = z.object({
   tenantId: z.string().uuid(),
   actorAuthUserId: z.string().uuid(),

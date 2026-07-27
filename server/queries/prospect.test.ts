@@ -1,6 +1,14 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { findDuplicateProspects, getProspectConversionReadiness, listProspects, getProspectById, ProspectQueryError, type ProspectQueryRpcClient } from "./prospect.ts";
+import {
+  findDuplicateProspects,
+  findExistingAccountsForProspect,
+  getProspectConversionReadiness,
+  listProspects,
+  getProspectById,
+  ProspectQueryError,
+  type ProspectQueryRpcClient,
+} from "./prospect.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -60,6 +68,73 @@ describe("findDuplicateProspects", () => {
     } as unknown as ProspectQueryRpcClient;
     await assert.rejects(
       () => findDuplicateProspects(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID }),
+      (err: unknown) => {
+        assert.ok(err instanceof ProspectQueryError);
+        return true;
+      },
+    );
+  });
+});
+
+describe("findExistingAccountsForProspect", () => {
+  const ACCOUNT_ROW = {
+    id: "623e4567-e89b-12d3-a456-426614174000",
+    tenant_id: TENANT_ID,
+    legal_name: "Contoso Ltd",
+    trade_name: "Contoso",
+    tax_id: "01.234.567.8-901.000",
+    billing_address: {},
+    customer_status: "active",
+    parent_account_id: null,
+    source_prospect_id: null,
+    status: "active",
+    merged_into_id: null,
+    merged_at: null,
+    owner_user_id: ACTOR_ID,
+    org_unit_id: null,
+    record_version: 1,
+    created_by: "tester",
+    created_at: "2026-07-25T00:00:00.000Z",
+    updated_at: "2026-07-25T00:00:00.000Z",
+  };
+
+  test("calls find_existing_accounts_for_prospect with the exact snake_case params and maps every returned row", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = {
+      async rpc(fn: string, args: Record<string, unknown>) {
+        calls.push({ fn, args });
+        return { data: [ACCOUNT_ROW], error: null };
+      },
+    } as unknown as ProspectQueryRpcClient;
+    const accounts = await findExistingAccountsForProspect(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, prospectId: PROSPECT_ID });
+
+    assert.deepEqual(calls[0]?.args, {
+      p_tenant_id: TENANT_ID,
+      p_actor_auth_user_id: ACTOR_ID,
+      p_prospect_id: PROSPECT_ID,
+    });
+    assert.equal(accounts.length, 1);
+    assert.equal(accounts[0]?.legalName, "Contoso Ltd");
+  });
+
+  test("returns an empty array when no candidate account matches (never blocks qualification)", async () => {
+    const client = {
+      async rpc() {
+        return { data: [], error: null };
+      },
+    } as unknown as ProspectQueryRpcClient;
+    const accounts = await findExistingAccountsForProspect(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, prospectId: PROSPECT_ID });
+    assert.deepEqual(accounts, []);
+  });
+
+  test("wraps a tenant-membership error (never a silent empty result)", async () => {
+    const client = {
+      async rpc() {
+        return { data: null, error: { message: "insufficient_authority: identity x holds no active membership" } };
+      },
+    } as unknown as ProspectQueryRpcClient;
+    await assert.rejects(
+      () => findExistingAccountsForProspect(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, prospectId: PROSPECT_ID }),
       (err: unknown) => {
         assert.ok(err instanceof ProspectQueryError);
         return true;

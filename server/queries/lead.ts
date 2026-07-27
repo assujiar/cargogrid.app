@@ -8,7 +8,15 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FindDuplicateLeadsInputSchema, parseLead, type FindDuplicateLeadsInput, type Lead } from "../contracts/lead/lead.ts";
+import {
+  FindDuplicateLeadsInputSchema,
+  FindExistingAccountsForLeadInputSchema,
+  parseLead,
+  type FindDuplicateLeadsInput,
+  type FindExistingAccountsForLeadInput,
+  type Lead,
+} from "../contracts/lead/lead.ts";
+import { parseAccount, type Account } from "../contracts/account/account.ts";
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
@@ -91,4 +99,21 @@ export async function getLeadById(client: Pick<SupabaseClient, "from">, leadId: 
     return null;
   }
   return parseLead(data as Record<string, unknown>);
+}
+
+/** COM-161: "is this Lead's company already a known Account" -- advisory only, never blocks capture. Fails closed (raises) for an actor with no active membership in tenantId. */
+export async function findExistingAccountsForLead(client: LeadQueryRpcClient, input: FindExistingAccountsForLeadInput): Promise<Account[]> {
+  const parsedInput = FindExistingAccountsForLeadInputSchema.parse(input);
+  const { data, error } = await client.rpc("find_existing_accounts_for_lead", {
+    p_tenant_id: parsedInput.tenantId,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_lead_id: parsedInput.leadId,
+  });
+  if (error) {
+    throw new LeadQueryError(error.message);
+  }
+  if (!Array.isArray(data)) {
+    throw new LeadQueryError("find_existing_accounts_for_lead returned a non-array result");
+  }
+  return data.map((row) => parseAccount(row as Record<string, unknown>));
 }

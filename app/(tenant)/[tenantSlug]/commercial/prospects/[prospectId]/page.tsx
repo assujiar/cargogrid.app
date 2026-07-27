@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
-import { getProspectById, getProspectConversionReadiness, ProspectQueryError } from "../../../../../../server/queries/prospect.ts";
+import { getProspectById, getProspectConversionReadiness, findExistingAccountsForProspect, ProspectQueryError } from "../../../../../../server/queries/prospect.ts";
 import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
 import { ProspectActionsPanel } from "./prospect-actions-panel.tsx";
 import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
+import { AccountReentryPanel } from "../../_shared/account-reentry-panel.tsx";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
@@ -44,10 +45,16 @@ export default async function ProspectDetailPage({ params }: { params: Promise<{
   }
 
   const activities = await listActivitiesForRecord(supabase, "prospect", prospect.id);
+  const reentryCandidates =
+    prospect.status === "active"
+      ? await findExistingAccountsForProspect(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, prospectId: prospect.id })
+      : [];
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">{prospect.legalName}</h1>
+
+      <AccountReentryPanel tenantSlug={tenantSlug} accounts={reentryCandidates} />
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
         <dt className="font-medium text-neutral-600">Trade name</dt>

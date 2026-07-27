@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
-import { getLeadById, LeadQueryError } from "../../../../../../server/queries/lead.ts";
+import { getLeadById, findExistingAccountsForLead, LeadQueryError } from "../../../../../../server/queries/lead.ts";
 import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
 import { LeadActionsPanel } from "./lead-actions-panel.tsx";
 import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
+import { AccountReentryPanel } from "../../_shared/account-reentry-panel.tsx";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
@@ -40,10 +41,16 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ ten
   }
 
   const activities = await listActivitiesForRecord(supabase, "lead", lead.id);
+  const reentryCandidates =
+    lead.status === "new" || lead.status === "contacted" || lead.status === "qualified"
+      ? await findExistingAccountsForLead(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, leadId: lead.id })
+      : [];
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">{lead.contactName}</h1>
+
+      <AccountReentryPanel tenantSlug={tenantSlug} accounts={reentryCandidates} />
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
         <dt className="font-medium text-neutral-600">Company</dt>

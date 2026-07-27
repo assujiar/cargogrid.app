@@ -184,7 +184,7 @@ begin
   perform app.add_quotation_line(v_quote.id, v_quote.record_version, 'service', 'Ocean freight Jakarta-Surabaya', v_calc_id, 1, 15000000, 0, 0, '00000000-0000-0000-0000-000000009602', 'tester');
   select * into v_quote from app.quotations where id = v_quote.id;
 
-  select required, reasons into v_required, v_reasons from app.evaluate_quotation_approval_requirement(v_quote.id);
+  select required, reasons into v_required, v_reasons from app.evaluate_quotation_approval_requirement(v_quote.id, '00000000-0000-0000-0000-000000009602');
   if not v_required or v_reasons <> array['below_minimum_margin'] then
     raise exception 'assertion failed: expected required=true reasons=[below_minimum_margin], got required=% reasons=%', v_required, v_reasons;
   end if;

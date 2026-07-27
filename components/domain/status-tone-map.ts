@@ -22,6 +22,8 @@ import type { QuotationApprovalRuleStatus } from "../../server/contracts/quotati
 import type { QuotationAcceptanceTokenStatus } from "../../server/contracts/quotation/quotation-acceptance.ts";
 import type { ReportRunStatus } from "../../server/contracts/report/report.ts";
 import type { UserStatus } from "../../server/contracts/user-lifecycle/user-lifecycle.ts";
+import type { JobOrderStatus } from "../../server/contracts/job-order/job-order.ts";
+import type { ShipmentOrderStatus } from "../../server/contracts/shipment-order/shipment-order.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -149,3 +151,24 @@ const TENANT_STATUS_TONE_MAP: Record<string, StatusToneEntry> = {
 export function resolveTenantStatusTone(canonicalStatus: string): StatusToneEntry {
   return TENANT_STATUS_TONE_MAP[canonicalStatus] ?? { tone: "neutral", label: canonicalStatus };
 }
+
+export const JOB_ORDER_STATUS_TONE_MAP: Record<JobOrderStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  confirmed: { tone: "success", label: "Confirmed" },
+  cancelled: { tone: "danger", label: "Cancelled" },
+};
+
+/** Broadened at OPS-170 (Shipment Lifecycle) to the full canonical lifecycle. */
+export const SHIPMENT_ORDER_STATUS_TONE_MAP: Record<ShipmentOrderStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  confirmed: { tone: "info", label: "Confirmed" },
+  planned: { tone: "info", label: "Planned" },
+  assigned: { tone: "info", label: "Assigned" },
+  dispatched: { tone: "info", label: "Dispatched" },
+  in_transit: { tone: "warning", label: "In transit" },
+  delivered: { tone: "success", label: "Delivered" },
+  epod: { tone: "success", label: "ePOD received" },
+  closed: { tone: "success", label: "Closed" },
+  held: { tone: "warning", label: "Held" },
+  cancelled: { tone: "danger", label: "Cancelled" },
+};
