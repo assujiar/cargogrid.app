@@ -126,4 +126,17 @@ export const MIGRATION_MAP: readonly MigrationMapEntry[] = [
     riskNote:
       "All primitives now exist (checkpoint 4), styled to match every existing field's own current appearance exactly (border-neutral-300, rounded-md, px-3 py-2) so a migration changes zero visual behavior. Large surface (39 files) but mechanical if scoped to display only; becomes Medium risk only if a future migration also changes validation-state wiring (autosave, error-message binding) rather than just markup.",
   },
+  {
+    legacyImplementation:
+      "None found — audited every file under app/ for chart/visualization code before building the CargoGrid Chart System (checkpoint 5); commercial/dashboard/page.tsx (COM-158) renders every metric as a bucket list/table, never a chart, and no other screen renders any data visualization at all",
+    sharedReplacement: "components/charts/ (Chart, ChartCard, TrendChart, ComparisonBarChart, DonutChart)",
+    replacementStatus: "IMPLEMENTED",
+    affectedPages: [
+      "commercial/dashboard/page.tsx could adopt TrendChart/DonutChart for its Pipeline/Win-Loss sections — deliberately not wired this checkpoint: the dashboard's multi-currency grouping and permission-masked values need careful handling to convert correctly, judged a distinct, correctness-sensitive follow-up rather than rushed into this checkpoint's diff",
+    ],
+    priority: "Low",
+    breakingChangeRisk: "Low",
+    riskNote:
+      "Not a migration in the usual sense (nothing to move away from) — the finding here is that this checkpoint's whole shared chart layer was built ahead of any real chart consumer, a deliberate, explicitly-authorized departure from this repository's usual 'wait for a real consumer' default (docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md §10/§11). Adopting a preset into the real dashboard is the natural next step, not performed here to avoid rushing a masked-value/multi-currency correctness question.",
+  },
 ] as const;

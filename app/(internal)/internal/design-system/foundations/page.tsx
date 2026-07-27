@@ -42,18 +42,22 @@ export default function FoundationsPage() {
           ) : category.key === "neutral" ||
             category.key === "semantic" ||
             category.key === "brand" ||
-            category.key === "surface" ? (
+            category.key === "surface" ||
+            category.key === "chart" ? (
             <div className="flex flex-wrap gap-3">
-              {category.items.map((item) => (
-                <div key={item.cssVar} className="flex w-32 flex-col gap-1">
-                  <div
-                    className={`h-12 w-full rounded-md border border-[var(--ds-border)] ${item.utilityClass?.startsWith("hover:") ? "" : item.utilityClass}`}
-                    style={item.utilityClass?.startsWith("hover:") ? { background: `var(${item.cssVar})` } : undefined}
-                  />
-                  <span className="text-xs font-medium">{item.label}</span>
-                  <code className="text-xs text-[var(--ds-text-secondary)]">{item.cssVar}</code>
-                </div>
-              ))}
+              {category.items.map((item) => {
+                const needsInlineStyle = !item.utilityClass || item.utilityClass.startsWith("hover:");
+                return (
+                  <div key={item.cssVar} className="flex w-32 flex-col gap-1">
+                    <div
+                      className={`h-12 w-full rounded-md border border-[var(--ds-border)] ${needsInlineStyle ? "" : item.utilityClass}`}
+                      style={needsInlineStyle ? { background: `var(${item.cssVar})` } : undefined}
+                    />
+                    <span className="text-xs font-medium">{item.label}</span>
+                    <code className="text-xs text-[var(--ds-text-secondary)]">{item.cssVar}</code>
+                  </div>
+                );
+              })}
             </div>
           ) : category.key === "typography-family" ? (
             <div className="flex flex-col gap-2">

@@ -16,12 +16,16 @@
  *
  * Checkpoint 4 (2026-07-26) flipped ~40 entries from `DOCUMENTED_ONLY`/`NOT_NAMED` to
  * `IMPLEMENTED` -- see `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §10 for the
- * full narrative. A handful of items remain deliberately not built: Time picker, File
- * upload (blocked), Document preview/Attachment list (blocked), Kanban board, Calendar,
- * Chart wrapper (needs a new dependency decision), Filter bar/Saved views/Bulk action
- * bar (no server-side support to build against), Stepper, Approval queue, and the
- * layout-level Sidebar/Navigation group/Page header/Persistent top bar items (need an
- * actual shell redesign, not a single component).
+ * full narrative. Checkpoint 5 (2026-07-26) built the CargoGrid Chart System (Apache
+ * ECharts) -- `Chart`/`ChartCard` plus 3 real presets (Trend/Comparison Bar/Donut),
+ * `docs/design-system/09_CHARTS.md`. A handful of items remain deliberately not built:
+ * Time picker, File upload (blocked), Document preview/Attachment list (blocked),
+ * Kanban board, Calendar, 8 further chart presets (stacked bar/funnel/waterfall/gauge/
+ * calendar-heatmap/Sankey/map/scatter -- no real consumer/data model for any of them
+ * yet), Filter bar/Saved views/Bulk action bar (no server-side support to build
+ * against), Stepper, Approval queue, and the layout-level Sidebar/Navigation group/
+ * Page header/Persistent top bar items (need an actual shell redesign, not a single
+ * component).
  */
 
 export type ComponentCategory =
@@ -474,15 +478,128 @@ export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
   { name: "Saved views", category: "Tables", status: "DOCUMENTED_ONLY", purpose: "Named, persisted filter/sort/column configurations.", productionReady: false, citation: "docs/design-system/02_COMPONENTS.md §2 — depends on Filter bar/sorting existing first." },
   { name: "Bulk action bar", category: "Tables", status: "DOCUMENTED_ONLY", purpose: "Appears on multi-row selection, drives a selection-token-based bulk mutation — no bulk mutation exists in this repository yet.", productionReady: false, citation: "docs/design-system/02_COMPONENTS.md §2" },
 
-  // ---- Charts and Analytics ----
+  // ---- Charts and Analytics (CargoGrid Chart System, checkpoint 5, Apache ECharts) ----
   {
     name: "Chart wrapper",
     category: "ChartsAndAnalytics",
+    status: "IMPLEMENTED",
+    purpose: "Low-level chart component -- ECharts init/dispose, theme, resize, loading/empty/error, accessibility, reduced-motion. Contains no business logic; presets build the series-specific option it renders.",
+    sourceFile: "components/charts/chart.tsx",
+    importSnippet: 'import { Chart } from "@/components/charts/chart.tsx";',
+    consumers: ["components/charts/presets/trend-chart.tsx", "components/charts/presets/comparison-bar-chart.tsx", "components/charts/presets/donut-chart.tsx"],
+    states: ["success", "loading (Skeleton)", "empty (EmptyState)", "error (ErrorState + retry)"],
+    tokensUsed: ["--chart-*  (all 18 tokens, via lib/charts/chart-colors.ts)"],
+    a11y: 'role="img" + required ariaLabel; ECharts aria.enabled; every preset offers a real "View as table" toggle to the same DataTable-based accessible alternative.',
+    productionReady: true,
+    citation: "docs/design-system/09_CHARTS.md §2 (checkpoint 5, 2026-07-26)",
+  },
+  {
+    name: "ChartCard",
+    category: "ChartsAndAnalytics",
+    status: "IMPLEMENTED",
+    purpose: "Shared dashboard-widget shell: header (title/KPI/trend), actions (period/refresh/export/fullscreen, each caller-gated), chart content, footer insight. Built entirely from existing Card/IconButton/DropdownMenu/Select.",
+    sourceFile: "components/charts/chart-card.tsx",
+    importSnippet: 'import { ChartCard } from "@/components/charts/chart-card.tsx";',
+    consumers: [],
+    productionReady: true,
+    citation: "docs/design-system/09_CHARTS.md §4 (checkpoint 5, 2026-07-26)",
+  },
+  {
+    name: "Trend Chart",
+    category: "ChartsAndAnalytics",
+    status: "IMPLEMENTED",
+    purpose: "Time-series line chart preset -- revenue/cost/margin movement, shipment volume, SLA trends, forecast vs. actual (a dashed forecast series, never the same style as actual).",
+    sourceFile: "components/charts/presets/trend-chart.tsx",
+    importSnippet: 'import { TrendChart } from "@/components/charts/presets/trend-chart.tsx";',
+    consumers: [],
+    productionReady: true,
+    citation: "docs/design-system/09_CHARTS.md §6 (checkpoint 5, 2026-07-26)",
+  },
+  {
+    name: "Comparison Bar Chart",
+    category: "ChartsAndAnalytics",
+    status: "IMPLEMENTED",
+    purpose: "Category comparison preset -- business-unit/salesperson/customer ranking, pipeline stage, win/loss reasons. Supports horizontal orientation for long labels or many categories.",
+    sourceFile: "components/charts/presets/comparison-bar-chart.tsx",
+    importSnippet: 'import { ComparisonBarChart } from "@/components/charts/presets/comparison-bar-chart.tsx";',
+    consumers: [],
+    productionReady: true,
+    citation: "docs/design-system/09_CHARTS.md §6 (checkpoint 5, 2026-07-26)",
+  },
+  {
+    name: "Donut Chart",
+    category: "ChartsAndAnalytics",
+    status: "IMPLEMENTED",
+    purpose: "Small part-to-whole comparison preset (≤~5 categories; prefer Comparison Bar Chart when exact ranking matters). Slice tone can be semantic (positive/negative/warning/neutral) or categorical.",
+    sourceFile: "components/charts/presets/donut-chart.tsx",
+    importSnippet: 'import { DonutChart } from "@/components/charts/presets/donut-chart.tsx";',
+    consumers: [],
+    productionReady: true,
+    citation: "docs/design-system/09_CHARTS.md §6 (checkpoint 5, 2026-07-26)",
+  },
+  {
+    name: "Stacked Bar Chart",
+    category: "ChartsAndAnalytics",
     status: "DOCUMENTED_ONLY",
-    purpose: "Dynamically-imported chart with a data-table/text-summary accessible alternative.",
+    purpose: "Status/revenue/service composition over time.",
     productionReady: false,
-    citation:
-      "docs/design-system/02_COMPONENTS.md §2 — not built this checkpoint: no chart library dependency exists anywhere in package.json, and adding one is a real architectural decision (bundle size, license, API shape) outside this checkpoint's authority to make unilaterally. Flagged for explicit user decision.",
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5, no real consumer/data model to build the right shape against yet.",
+  },
+  {
+    name: "Funnel Chart",
+    category: "ChartsAndAnalytics",
+    status: "DOCUMENTED_ONLY",
+    purpose: "Lead-to-win conversion, opportunity stages, quotation conversion, approval funnel.",
+    productionReady: false,
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5.",
+  },
+  {
+    name: "Waterfall Chart",
+    category: "ChartsAndAnalytics",
+    status: "DOCUMENTED_ONLY",
+    purpose: "Revenue-to-gross-margin bridge, cost variance decomposition.",
+    productionReady: false,
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5; would need a custom-series composition over ECharts' own stacking primitives.",
+  },
+  {
+    name: "Gauge Chart",
+    category: "ChartsAndAnalytics",
+    status: "DOCUMENTED_ONLY",
+    purpose: "SLA attainment, capacity utilization, target attainment -- used sparingly per this checkpoint's own Chart Selection Rules (prefer KPI + Progress when a gauge adds no analytical value).",
+    productionReady: false,
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5.",
+  },
+  {
+    name: "Calendar Heatmap",
+    category: "ChartsAndAnalytics",
+    status: "DOCUMENTED_ONLY",
+    purpose: "Shipment activity by day/hour, delivery density, SLA performance matrix.",
+    productionReady: false,
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5, no real consumer.",
+  },
+  {
+    name: "Sankey Flow Chart",
+    category: "ChartsAndAnalytics",
+    status: "DOCUMENTED_ONLY",
+    purpose: "Lead-to-conversion flow, shipment origin-to-destination flow, job handoff flow.",
+    productionReady: false,
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5, no real consumer.",
+  },
+  {
+    name: "Lane Map",
+    category: "ChartsAndAnalytics",
+    status: "DOCUMENTED_ONLY",
+    purpose: "Shipment lanes, origin/destination distribution, route flow on a geographic map.",
+    productionReady: false,
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5, needs geo/map data CargoGrid does not have a source for yet.",
+  },
+  {
+    name: "Distribution Chart",
+    category: "ChartsAndAnalytics",
+    status: "DOCUMENTED_ONLY",
+    purpose: "Scatter plot -- margin vs. revenue, cost vs. distance, transit time vs. distance.",
+    productionReady: false,
+    citation: "docs/design-system/09_CHARTS.md §9 -- not built checkpoint 5, no real consumer.",
   },
 
   // ---- Status and Workflow ----

@@ -12,6 +12,7 @@ const NAV_GROUPS: readonly { readonly href: string; readonly label: string }[] =
   { href: "/internal/design-system/foundations", label: "Foundations" },
   { href: "/internal/design-system/components", label: "Components" },
   { href: "/internal/design-system/tables", label: "Tables" },
+  { href: "/internal/design-system/charts", label: "Charts and Analytics" },
   { href: "/internal/design-system/domain-components", label: "Domain Components" },
   { href: "/internal/design-system/domain-examples", label: "Business Examples" },
   { href: "/internal/design-system/patterns", label: "Patterns" },
