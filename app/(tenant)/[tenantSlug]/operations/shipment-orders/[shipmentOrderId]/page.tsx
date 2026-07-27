@@ -4,6 +4,7 @@ import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getShipmentOrder, getJobShipmentAllocationBalance, ShipmentOrderQueryError } from "../../../../../../server/queries/shipment-order.ts";
 import { getShipmentStatusHistory, ShipmentLifecycleQueryError } from "../../../../../../server/queries/shipment-lifecycle.ts";
+import { getShipmentModeProfile, ShipmentModeBaselineQueryError } from "../../../../../../server/queries/shipment-mode-baseline.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -11,9 +12,18 @@ import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { ConfirmShipmentOrderForm } from "./confirm-shipment-order-form.tsx";
 import { TransitionShipmentOrderForm } from "./transition-shipment-order-form.tsx";
 import { StatusTimeline } from "./status-timeline.tsx";
-import { confirmShipmentOrderAction, transitionShipmentOrderAction, type ShipmentOrderFormState } from "./actions.ts";
+import { ModeProfileForm } from "./mode-profile-form.tsx";
+import { ChangeModeForm } from "./change-mode-form.tsx";
+import {
+  confirmShipmentOrderAction,
+  transitionShipmentOrderAction,
+  setShipmentModeProfileAction,
+  changeShipmentModeAction,
+  type ShipmentOrderFormState,
+} from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
+import type { ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
 
 /**
  * Shipment Order detail (OPS-169, CG-S8-OPS-003, Prompt 169 §15) -- inherited fields
@@ -65,6 +75,16 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading the status history. Please try again." />;
   }
 
+  let modeProfile;
+  try {
+    modeProfile = await getShipmentModeProfile(supabase, shipment.id);
+  } catch (error) {
+    if (!(error instanceof ShipmentModeBaselineQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading the mode profile. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -77,6 +97,10 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     formData: FormData,
   ) => transitionShipmentOrderAction(tenantSlug, shipment.id, shipment.recordVersion, transitionIdempotencyKey, toStatus, reason, evidenceRef, prevState, formData);
   const nextStatuses = permittedNextStatuses(shipment.status, shipment.heldFromStatus);
+  const boundModeProfileAction = (fields: Record<string, string>, prevState: ShipmentOrderFormState, formData: FormData) =>
+    setShipmentModeProfileAction(tenantSlug, shipment.id, shipment.mode as ShipmentModeProfileMode, fields, prevState, formData);
+  const boundChangeModeAction = (newMode: ShipmentModeProfileMode, prevState: ShipmentOrderFormState, formData: FormData) =>
+    changeShipmentModeAction(tenantSlug, shipment.id, shipment.recordVersion, newMode, prevState, formData);
 
   return (
     <div className="flex flex-col gap-6">
@@ -112,6 +136,16 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           <dt className="text-neutral-600">Planned delivery</dt>
           <dd className="text-neutral-900">{shipment.plannedDeliveryAt ? new Date(shipment.plannedDeliveryAt).toLocaleString() : "—"}</dd>
         </dl>
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Mode profile</h2>
+        <ModeProfileForm action={boundModeProfileAction} mode={shipment.mode as ShipmentModeProfileMode} existingProfile={modeProfile} />
+        {shipment.status === "draft" ? (
+          <div className="mt-2 border-t border-neutral-200 pt-2">
+            <ChangeModeForm action={boundChangeModeAction} currentMode={shipment.mode as ShipmentModeProfileMode} />
+          </div>
+        ) : null}
       </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">

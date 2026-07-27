@@ -4353,6 +4353,36 @@ Additive only -- the constraint broadening is safe (no row would ever have carri
 
 Self-closing. `CG-S8-OPS-004` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-005` (Prompt 171, Land/Air/Sea Baseline) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
 
+### CHG-2026-109 — Land, Air and Sea Baseline (Phase 3, Prompt 171)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-006` / `171_LAND_AIR_SEA_BASELINE_PROMPT.md` |
+| Change type | Schema (additive table) + service layer + UI |
+| Baseline evidence | `OPS-170` `VERIFIED` (`docs/build-log/phase-03/OPS-170.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- fourth capability task in that range |
+
+#### Outcome
+
+One bounded, single-mode/single-leg mode profile per Shipment Order (land/air/sea), typed via mutually-exclusive column groups on one shared table, enforced by a real multi-column `CHECK` constraint (never merely a convention). Vehicle/vendor/carrier references are deliberately plain text -- no vehicle/vendor master type has ever been registered anywhere in this repository (`app.master_records` has only ever seeded `vendor_rate`); binding these to real canonical references is `OPS-172`'s (Resource Assignment) own explicit scope, not anticipated here. Mode change itself (`app.change_shipment_mode`) is draft-only and reconciles the prior incompatible profile by deleting it.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727120000_create_operations_mode_baseline.sql` (`app.shipment_mode_profiles` table; `app.set_shipment_mode_profile`, `app.change_shipment_mode` functions). New service layer: `server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts(.test.ts)` (a real TypeScript discriminated union over the shared row), `server/queries/shipment-mode-baseline.ts(.test.ts)`, `server/mutations/shipment-mode-baseline.ts(.test.ts)`. New UI: `mode-profile-form.tsx`, `change-mode-form.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`. 1 migration, ~9 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1502/1502 (17 net new: 7 contract, 3 query, 7 mutation). `db:test` PASS across 56 migrations/57 db-test files (1 net new, zero regression) -- 7 scenario groups covering authority/missing-required-reference/valid-profile-with-structural-nulls/idempotent-update across all three modes, blocked-once-cancelled, mode-change validation and reconciliation, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Edit`). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders.mode` itself is untouched (already existed since `OPS-169`).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-005` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-006` (Prompt 172, Resource Assignment) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
