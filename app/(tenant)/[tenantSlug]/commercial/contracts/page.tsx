@@ -3,6 +3,9 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listCustomerContracts, ContractQueryError } from "../../../../../server/queries/contract.ts";
 import type { CustomerContract } from "../../../../../server/contracts/contract/contract.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { CUSTOMER_CONTRACT_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 
 /**
  * Customer contract list (COM-156, CG-S7-COM-015). Tenant-wide reference data, never
@@ -30,6 +33,28 @@ export default async function ContractsPage({ params }: { params: Promise<{ tena
     contracts = [];
   }
 
+  const columns: readonly DataTableColumn<CustomerContract>[] = [
+    {
+      key: "version",
+      header: "Version",
+      render: (contract) => (
+        <a href={`/${tenantSlug}/commercial/contracts/${contract.id}`} className="font-medium text-primary underline">
+          v{contract.versionNumber}
+        </a>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (contract) => {
+        const { tone, label } = CUSTOMER_CONTRACT_STATUS_TONE_MAP[contract.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    { key: "effectiveFrom", header: "Effective from", render: (contract) => new Date(contract.effectiveFrom).toLocaleDateString() },
+    { key: "effectiveTo", header: "Effective to", render: (contract) => (contract.effectiveTo ? new Date(contract.effectiveTo).toLocaleDateString() : "—") },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Contracts</h1>
@@ -38,41 +63,14 @@ export default async function ContractsPage({ params }: { params: Promise<{ tena
         <div role="alert" className="flex flex-col gap-2">
           <p className="text-sm text-danger">Something went wrong loading contracts. Please try again.</p>
         </div>
-      ) : contracts.length === 0 ? (
-        <p className="text-sm text-neutral-600">No contracts yet. Creating one from an accepted, converted quotation starts the first version.</p>
       ) : (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-neutral-600">
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Version
-              </th>
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Status
-              </th>
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Effective from
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                Effective to
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {contracts.map((contract) => (
-              <tr key={contract.id} className="border-b border-neutral-100">
-                <td className="py-2 pr-4 text-neutral-900">
-                  <a href={`/${tenantSlug}/commercial/contracts/${contract.id}`} className="font-medium text-primary underline">
-                    v{contract.versionNumber}
-                  </a>
-                </td>
-                <td className="py-2 pr-4 text-neutral-600">{contract.status}</td>
-                <td className="py-2 pr-4 text-neutral-600">{new Date(contract.effectiveFrom).toLocaleDateString()}</td>
-                <td className="py-2 text-neutral-600">{contract.effectiveTo ? new Date(contract.effectiveTo).toLocaleDateString() : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          caption="Contracts"
+          columns={columns}
+          rows={contracts}
+          rowKey={(contract) => contract.id}
+          emptyMessage="No contracts yet. Creating one from an accepted, converted quotation starts the first version."
+        />
       )}
     </div>
   );

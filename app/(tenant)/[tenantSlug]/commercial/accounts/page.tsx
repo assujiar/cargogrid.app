@@ -3,6 +3,9 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listAccounts, AccountQueryError } from "../../../../../server/queries/account.ts";
 import type { Account } from "../../../../../server/contracts/account/account.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { ACCOUNT_STATUS_TONE_MAP, CUSTOMER_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 
 /**
  * Account list (COM-155, CG-S7-COM-014). Tenant-wide reference data, never record-scoped
@@ -31,6 +34,35 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
     accounts = [];
   }
 
+  const columns: readonly DataTableColumn<Account>[] = [
+    {
+      key: "legalName",
+      header: "Legal name",
+      render: (account) => (
+        <a href={`/${tenantSlug}/commercial/accounts/${account.id}`} className="font-medium text-primary underline">
+          {account.legalName}
+        </a>
+      ),
+    },
+    { key: "tradeName", header: "Trade name", render: (account) => account.tradeName ?? "—" },
+    {
+      key: "customerStatus",
+      header: "Customer status",
+      render: (account) => {
+        const { tone, label } = CUSTOMER_STATUS_TONE_MAP[account.customerStatus];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (account) => {
+        const { tone, label } = ACCOUNT_STATUS_TONE_MAP[account.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Accounts</h1>
@@ -39,41 +71,14 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
         <div role="alert" className="flex flex-col gap-2">
           <p className="text-sm text-danger">Something went wrong loading accounts. Please try again.</p>
         </div>
-      ) : accounts.length === 0 ? (
-        <p className="text-sm text-neutral-600">No accounts yet. Converting an accepted quotation creates the first one.</p>
       ) : (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-neutral-600">
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Legal name
-              </th>
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Trade name
-              </th>
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Customer status
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map((account) => (
-              <tr key={account.id} className="border-b border-neutral-100">
-                <td className="py-2 pr-4 text-neutral-900">
-                  <a href={`/${tenantSlug}/commercial/accounts/${account.id}`} className="font-medium text-primary underline">
-                    {account.legalName}
-                  </a>
-                </td>
-                <td className="py-2 pr-4 text-neutral-600">{account.tradeName ?? "—"}</td>
-                <td className="py-2 pr-4 text-neutral-600">{account.customerStatus}</td>
-                <td className="py-2 text-neutral-600">{account.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          caption="Accounts"
+          columns={columns}
+          rows={accounts}
+          rowKey={(account) => account.id}
+          emptyMessage="No accounts yet. Converting an accepted quotation creates the first one."
+        />
       )}
     </div>
   );

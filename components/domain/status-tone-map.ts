@@ -12,7 +12,16 @@
 import type { StatusTone } from "../ui/status-badge.tsx";
 import type { LeadStatus } from "../../server/contracts/lead/lead.ts";
 import type { OpportunityStage } from "../../server/contracts/opportunity/opportunity.ts";
-import type { QuotationApprovalStatus } from "../../server/contracts/quotation/quotation.ts";
+import type { QuotationApprovalStatus, QuotationStatus } from "../../server/contracts/quotation/quotation.ts";
+import type { ProspectStatus } from "../../server/contracts/prospect/prospect.ts";
+import type { SalesPlanStatus } from "../../server/contracts/pipeline/pipeline.ts";
+import type { AccountStatus, CustomerStatus } from "../../server/contracts/account/account.ts";
+import type { CustomerContractStatus } from "../../server/contracts/contract/contract.ts";
+import type { MarginRuleStatus } from "../../server/contracts/margin/margin.ts";
+import type { QuotationApprovalRuleStatus } from "../../server/contracts/quotation/quotation-approval.ts";
+import type { QuotationAcceptanceTokenStatus } from "../../server/contracts/quotation/quotation-acceptance.ts";
+import type { ReportRunStatus } from "../../server/contracts/report/report.ts";
+import type { UserStatus } from "../../server/contracts/user-lifecycle/user-lifecycle.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -42,6 +51,84 @@ export const QUOTATION_APPROVAL_STATUS_TONE_MAP: Record<QuotationApprovalStatus,
   approved: { tone: "success", label: "Approved" },
   rejected: { tone: "danger", label: "Rejected" },
 };
+
+export const PROSPECT_STATUS_TONE_MAP: Record<ProspectStatus, StatusToneEntry> = {
+  active: { tone: "info", label: "Active" },
+  disqualified: { tone: "neutral", label: "Disqualified" },
+  archived: { tone: "neutral", label: "Archived" },
+  merged: { tone: "neutral", label: "Merged" },
+};
+
+/** Shared shape for the three independent draft/published/archived lifecycle enums below (`SalesPlanStatus`, `MarginRuleStatus`, `QuotationApprovalRuleStatus`) -- each still gets its own `Record<...>` so TypeScript keeps exhaustiveness-checking each domain's own enum independently if one of them ever diverges. */
+export const SALES_PLAN_STATUS_TONE_MAP: Record<SalesPlanStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  published: { tone: "success", label: "Published" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+export const MARGIN_RULE_STATUS_TONE_MAP: Record<MarginRuleStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  published: { tone: "success", label: "Published" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  published: { tone: "success", label: "Published" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+export const QUOTATION_STATUS_TONE_MAP: Record<QuotationStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  cancelled: { tone: "danger", label: "Cancelled" },
+};
+
+export const CUSTOMER_CONTRACT_STATUS_TONE_MAP: Record<CustomerContractStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  published: { tone: "success", label: "Published" },
+  retired: { tone: "neutral", label: "Retired" },
+};
+
+export const ACCOUNT_STATUS_TONE_MAP: Record<AccountStatus, StatusToneEntry> = {
+  active: { tone: "success", label: "Active" },
+  merged: { tone: "neutral", label: "Merged" },
+};
+
+export const CUSTOMER_STATUS_TONE_MAP: Record<CustomerStatus, StatusToneEntry> = {
+  active: { tone: "success", label: "Active" },
+  inactive: { tone: "neutral", label: "Inactive" },
+};
+
+export const QUOTATION_ACCEPTANCE_TOKEN_STATUS_TONE_MAP: Record<QuotationAcceptanceTokenStatus, StatusToneEntry> = {
+  active: { tone: "info", label: "Active" },
+  consumed: { tone: "success", label: "Consumed" },
+  revoked: { tone: "neutral", label: "Revoked" },
+  expired: { tone: "neutral", label: "Expired" },
+};
+
+export const REPORT_RUN_STATUS_TONE_MAP: Record<ReportRunStatus, StatusToneEntry> = {
+  queued: { tone: "neutral", label: "Queued" },
+  running: { tone: "info", label: "Running" },
+  completed: { tone: "success", label: "Completed" },
+  failed: { tone: "danger", label: "Failed" },
+};
+
+const USER_STATUS_TONE_MAP: Record<UserStatus, StatusToneEntry> = {
+  invited: { tone: "info", label: "Invited" },
+  active: { tone: "success", label: "Active" },
+  suspended: { tone: "warning", label: "Suspended" },
+  revoked: { tone: "danger", label: "Revoked" },
+};
+
+/**
+ * `PortalUser.status` (`server/queries/portal-users.ts`) is typed as a plain `string`,
+ * not `UserStatus` -- it comes back through `app.users_directory` untyped at the query
+ * boundary. Resolved defensively, mirroring `resolveTenantStatusTone`, rather than cast.
+ */
+export function resolvePortalUserStatusTone(status: string): StatusToneEntry {
+  return (USER_STATUS_TONE_MAP as Record<string, StatusToneEntry>)[status] ?? { tone: "neutral", label: status };
+}
 
 /**
  * `SupremeTenant.canonicalStatus` (`server/queries/supreme-tenants.ts`) is typed as a

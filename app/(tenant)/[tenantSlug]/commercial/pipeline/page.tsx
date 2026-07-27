@@ -3,6 +3,9 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { getPipelineSummary, listSalesPlans, PipelineQueryError } from "../../../../../server/queries/pipeline.ts";
 import type { PipelineStageSummaryEntry, SalesPlan } from "../../../../../server/contracts/pipeline/pipeline.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { SALES_PLAN_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createSalesPlanAction } from "./actions.ts";
 import { CreateSalesPlanForm } from "./create-sales-plan-form.tsx";
 
@@ -40,6 +43,27 @@ export default async function CommercialPipelinePage({ params }: { params: Promi
 
   const boundCreateAction = createSalesPlanAction.bind(null, tenantSlug);
 
+  const salesPlanColumns: readonly DataTableColumn<SalesPlan>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (plan) => (
+        <a href={`/${tenantSlug}/commercial/pipeline/${plan.id}`} className="font-medium text-primary underline">
+          {plan.name}
+        </a>
+      ),
+    },
+    { key: "period", header: "Period", render: (plan) => `${plan.periodStart} — ${plan.periodEnd}` },
+    {
+      key: "status",
+      header: "Status",
+      render: (plan) => {
+        const { tone, label } = SALES_PLAN_STATUS_TONE_MAP[plan.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Pipeline</h1>
@@ -68,40 +92,13 @@ export default async function CommercialPipelinePage({ params }: { params: Promi
 
           <section className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold text-neutral-900">Sales plans</h2>
-            {plans.length === 0 ? (
-              <p className="text-sm text-neutral-600">No sales plans yet. Create one below.</p>
-            ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Name
-                    </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Period
-                    </th>
-                    <th scope="col" className="py-2 font-medium">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plans.map((plan) => (
-                    <tr key={plan.id} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-neutral-900">
-                        <a href={`/${tenantSlug}/commercial/pipeline/${plan.id}`} className="font-medium text-primary underline">
-                          {plan.name}
-                        </a>
-                      </td>
-                      <td className="py-2 pr-4 text-neutral-600">
-                        {plan.periodStart} — {plan.periodEnd}
-                      </td>
-                      <td className="py-2 text-neutral-600">{plan.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <DataTable
+              caption="Sales plans"
+              columns={salesPlanColumns}
+              rows={plans}
+              rowKey={(plan) => plan.id}
+              emptyMessage="No sales plans yet. Create one below."
+            />
           </section>
 
           <CreateSalesPlanForm action={boundCreateAction} />

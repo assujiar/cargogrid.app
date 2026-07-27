@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listContacts, ContactQueryError, type ListContactsResult } from "../../../../../server/queries/contact.ts";
+import type { Contact } from "../../../../../server/contracts/contact/contact.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { Pagination } from "../../../../../components/tables/pagination.tsx";
 import { createContactAction } from "./actions.ts";
 import { CreateContactForm } from "./create-contact-form.tsx";
 
@@ -40,6 +43,20 @@ export default async function CommercialContactsPage({
 
   const boundCreateContactAction = createContactAction.bind(null, tenantSlug);
 
+  const columns: readonly DataTableColumn<Contact>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (contact) => (
+        <a href={`/${tenantSlug}/commercial/contacts/${contact.id}`} className="font-medium text-primary underline">
+          {contact.fullName}
+        </a>
+      ),
+    },
+    { key: "title", header: "Title", render: (contact) => contact.title ?? "—" },
+    { key: "email", header: "Email", render: (contact) => contact.email ?? "—" },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Contacts</h1>
@@ -50,41 +67,26 @@ export default async function CommercialContactsPage({
         <div role="alert" className="flex flex-col gap-2">
           <p className="text-sm text-danger">Something went wrong loading contacts. Please try again.</p>
         </div>
-      ) : result.contacts.length === 0 ? (
-        <p className="text-sm text-neutral-600">No contacts found for this organization yet.</p>
       ) : (
         <div className="flex flex-col gap-4">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Name
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Title
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Email
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.contacts.map((contact) => (
-                <tr key={contact.id} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 text-neutral-900">
-                    <a href={`/${tenantSlug}/commercial/contacts/${contact.id}`} className="font-medium text-primary underline">
-                      {contact.fullName}
-                    </a>
-                  </td>
-                  <td className="py-2 pr-4 text-neutral-600">{contact.title ?? "—"}</td>
-                  <td className="py-2 text-neutral-600">{contact.email ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-xs text-neutral-500">
-            Page {result.page} — {result.totalCount} total contact{result.totalCount === 1 ? "" : "s"}
-          </p>
+          <DataTable
+            caption="Contacts"
+            columns={columns}
+            rows={result.contacts}
+            rowKey={(contact) => contact.id}
+            emptyMessage="No contacts found for this organization yet."
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-neutral-500">
+              Page {result.page} — {result.totalCount} total contact{result.totalCount === 1 ? "" : "s"}
+            </p>
+            <Pagination
+              page={result.page}
+              pageSize={result.pageSize}
+              totalCount={result.totalCount}
+              buildHref={(targetPage) => `/${tenantSlug}/commercial/contacts?page=${targetPage}`}
+            />
+          </div>
         </div>
       )}
     </div>

@@ -6,6 +6,10 @@ import { recordReportRun, ReportMutationError } from "../../../../../../server/m
 import { runReportByCode, collectMaskedColumnFlags } from "../run-report.ts";
 import { requestReportExportAction } from "../actions.ts";
 import { ExportReportForm } from "../export-report-form.tsx";
+import { DataTable, type DataTableColumn } from "../../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
+import { REPORT_RUN_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
+import type { ReportRun } from "../../../../../../server/contracts/report/report.ts";
 
 /**
  * Report detail/run page (COM-159, CG-S7-COM-018): runs the report's one named
@@ -52,7 +56,27 @@ export default async function CommercialReportDetailPage({
   }
 
   const history = await listReportRunsForType(supabase, access.tenant.id, reportCode, 10);
-  const columns = rows.length > 0 ? Object.keys(rows[0] as Record<string, unknown>) : [];
+  const columnNames = rows.length > 0 ? Object.keys(rows[0] as Record<string, unknown>) : [];
+  const previewRows = rows.map((row, index) => ({ index, row }));
+  const previewColumns: readonly DataTableColumn<(typeof previewRows)[number]>[] = columnNames.map((column) => ({
+    key: column,
+    header: column,
+    render: (entry) => String(entry.row[column] ?? "—"),
+  }));
+
+  const historyColumns: readonly DataTableColumn<ReportRun>[] = [
+    { key: "type", header: "Type", render: (run) => run.runType },
+    {
+      key: "status",
+      header: "Status",
+      render: (run) => {
+        const { tone, label } = REPORT_RUN_STATUS_TONE_MAP[run.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    { key: "rows", header: "Rows", render: (run) => run.rowCount ?? "—" },
+    { key: "requested", header: "Requested", render: (run) => run.requestedAt },
+  ];
 
   const boundExportAction = requestReportExportAction.bind(null, tenantSlug, reportCode);
 
@@ -73,34 +97,13 @@ export default async function CommercialReportDetailPage({
       ) : (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold text-neutral-900">Preview</h2>
-          {rows.length === 0 ? (
-            <p className="text-sm text-neutral-600">No rows in your current accessible scope.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                    {columns.map((column) => (
-                      <th key={column} scope="col" className="whitespace-nowrap py-2 pr-4 font-medium">
-                        {column}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={index} className="border-b border-neutral-100">
-                      {columns.map((column) => (
-                        <td key={column} className="whitespace-nowrap py-2 pr-4 text-neutral-600">
-                          {String(row[column] ?? "—")}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable
+            caption="Report preview"
+            columns={previewColumns}
+            rows={previewRows}
+            rowKey={(entry) => String(entry.index)}
+            emptyMessage="No rows in your current accessible scope."
+          />
         </section>
       )}
 
@@ -112,38 +115,13 @@ export default async function CommercialReportDetailPage({
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold text-neutral-900">Run history</h2>
-        {history.length === 0 ? (
-          <p className="text-sm text-neutral-600">No prior runs.</p>
-        ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Type
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Status
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Rows
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Requested
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((run) => (
-                <tr key={run.id} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 text-neutral-900">{run.runType}</td>
-                  <td className="py-2 pr-4 text-neutral-600">{run.status}</td>
-                  <td className="py-2 pr-4 text-neutral-600">{run.rowCount ?? "—"}</td>
-                  <td className="py-2 text-neutral-600">{run.requestedAt}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          caption="Run history for this report"
+          columns={historyColumns}
+          rows={history}
+          rowKey={(run) => run.id}
+          emptyMessage="No prior runs."
+        />
       </section>
     </div>
   );

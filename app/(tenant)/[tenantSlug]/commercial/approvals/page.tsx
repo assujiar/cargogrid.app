@@ -3,6 +3,7 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listQuotationApprovalInboxForActor, QuotationApprovalQueryError } from "../../../../../server/queries/quotation-approval.ts";
 import { getQuotationById } from "../../../../../server/queries/quotation.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 
 /**
  * Quotation approval inbox (COM-153, CG-S7-COM-012, Prompt 153 §66/§15: "accessible
@@ -37,6 +38,21 @@ export default async function ApprovalsInboxPage({ params }: { params: Promise<{
   }
 
   const quotations = await Promise.all(items.map((item) => getQuotationById(supabase, item.quotationId)));
+  const rows = items.map((item, index) => ({ item, quotation: quotations[index] }));
+
+  const columns: readonly DataTableColumn<(typeof rows)[number]>[] = [
+    { key: "quotation", header: "Quotation", render: (row) => row.quotation?.quoteNumber ?? row.item.quotationId },
+    { key: "step", header: "Step", render: (row) => `Step ${row.item.stepOrder}` },
+    {
+      key: "action",
+      header: "Action",
+      render: (row) => (
+        <a href={`/${tenantSlug}/commercial/quotations/${row.item.quotationId}`} className="text-sm font-medium text-primary underline">
+          Review
+        </a>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,41 +65,15 @@ export default async function ApprovalsInboxPage({ params }: { params: Promise<{
       ) : (
         <div className="rounded-md border border-neutral-200 p-4">
           <h2 className="text-sm font-semibold text-neutral-900">Waiting on your decision</h2>
-          {items.length === 0 ? (
-            <p className="mt-2 text-sm text-neutral-600">Nothing is waiting on you right now.</p>
-          ) : (
-            <table className="mt-2 w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Quotation
-                  </th>
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Step
-                  </th>
-                  <th scope="col" className="py-2 font-medium">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, index) => {
-                  const quotation = quotations[index];
-                  return (
-                    <tr key={item.stepId} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-neutral-900">{quotation?.quoteNumber ?? item.quotationId}</td>
-                      <td className="py-2 pr-4 text-neutral-600">Step {item.stepOrder}</td>
-                      <td className="py-2 text-neutral-600">
-                        <a href={`/${tenantSlug}/commercial/quotations/${item.quotationId}`} className="text-sm font-medium text-primary underline">
-                          Review
-                        </a>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+          <div className="mt-2">
+            <DataTable
+              caption="Approvals waiting on your decision"
+              columns={columns}
+              rows={rows}
+              rowKey={(row) => row.item.stepId}
+              emptyMessage="Nothing is waiting on you right now."
+            />
+          </div>
         </div>
       )}
     </div>

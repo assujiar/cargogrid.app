@@ -3,6 +3,9 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listQuotationsForTenant, QuotationQueryError } from "../../../../../server/queries/quotation.ts";
 import type { Quotation } from "../../../../../server/contracts/quotation/quotation.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { QUOTATION_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 
 /**
  * Quotation list (COM-151, CG-S7-COM-010). Tenant-wide, field-masked via
@@ -32,6 +35,33 @@ export default async function QuotationsPage({ params }: { params: Promise<{ ten
     quotations = [];
   }
 
+  const columns: readonly DataTableColumn<Quotation>[] = [
+    {
+      key: "quoteNumber",
+      header: "Quote number",
+      render: (quotation) => (
+        <a href={`/${tenantSlug}/commercial/quotations/${quotation.id}`} className="font-medium text-primary underline">
+          {quotation.quoteNumber}
+        </a>
+      ),
+    },
+    { key: "customer", header: "Customer", render: (quotation) => quotation.customerSnapshot.legalName ?? "—" },
+    {
+      key: "status",
+      header: "Status",
+      render: (quotation) => {
+        const { tone, label } = QUOTATION_STATUS_TONE_MAP[quotation.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    {
+      key: "total",
+      header: "Total",
+      render: (quotation) => (quotation.sellMasked ? "Restricted" : quotation.totalAmount !== null ? `${quotation.totalAmount} ${quotation.currency}` : "—"),
+    },
+    { key: "validity", header: "Validity", render: (quotation) => new Date(quotation.validityTo).toLocaleDateString() },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-neutral-900">Quotations</h1>
@@ -40,47 +70,14 @@ export default async function QuotationsPage({ params }: { params: Promise<{ ten
         <div role="alert" className="flex flex-col gap-2">
           <p className="text-sm text-danger">Something went wrong loading quotations. Please try again.</p>
         </div>
-      ) : quotations.length === 0 ? (
-        <p className="text-sm text-neutral-600">No quotations yet. Create one from an opportunity&apos;s detail page.</p>
       ) : (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-neutral-600">
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Quote number
-              </th>
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Customer
-              </th>
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Status
-              </th>
-              <th scope="col" className="py-2 pr-4 font-medium">
-                Total
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                Validity
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {quotations.map((quotation) => (
-              <tr key={quotation.id} className="border-b border-neutral-100">
-                <td className="py-2 pr-4 text-neutral-900">
-                  <a href={`/${tenantSlug}/commercial/quotations/${quotation.id}`} className="font-medium text-primary underline">
-                    {quotation.quoteNumber}
-                  </a>
-                </td>
-                <td className="py-2 pr-4 text-neutral-600">{quotation.customerSnapshot.legalName ?? "—"}</td>
-                <td className="py-2 pr-4 text-neutral-600">{quotation.status}</td>
-                <td className="py-2 pr-4 text-neutral-600">
-                  {quotation.sellMasked ? "Restricted" : quotation.totalAmount !== null ? `${quotation.totalAmount} ${quotation.currency}` : "—"}
-                </td>
-                <td className="py-2 text-neutral-600">{new Date(quotation.validityTo).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          caption="Quotations"
+          columns={columns}
+          rows={quotations}
+          rowKey={(quotation) => quotation.id}
+          emptyMessage={<>No quotations yet. Create one from an opportunity&apos;s detail page.</>}
+        />
       )}
     </div>
   );

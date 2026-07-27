@@ -3,6 +3,9 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listQuotationApprovalRuleVersions, QuotationApprovalQueryError } from "../../../../../server/queries/quotation-approval.ts";
 import type { QuotationApprovalRuleVersion } from "../../../../../server/contracts/quotation/quotation-approval.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createQuotationApprovalRuleVersionAction, publishQuotationApprovalRuleVersionAction } from "./actions.ts";
 import { CreateApprovalRuleForm } from "./create-approval-rule-form.tsx";
 
@@ -40,6 +43,34 @@ export default async function ApprovalRulesPage({ params }: { params: Promise<{ 
   const publishedRule = rules.find((rule) => rule.status === "published") ?? null;
   const boundCreateAction = createQuotationApprovalRuleVersionAction.bind(null, tenantSlug);
 
+  const columns: readonly DataTableColumn<QuotationApprovalRuleVersion>[] = [
+    { key: "minMarginPct", header: "Min margin %", render: (rule) => (rule.minMarginPct !== null ? `${rule.minMarginPct}%` : "—") },
+    { key: "maxDiscountPct", header: "Max discount %", render: (rule) => (rule.maxDiscountPct !== null ? `${rule.maxDiscountPct}%` : "—") },
+    { key: "minValueAmount", header: "Min value", render: (rule) => (rule.minValueAmount !== null ? rule.minValueAmount : "—") },
+    {
+      key: "status",
+      header: "Status",
+      render: (rule) => {
+        const { tone, label } = QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP[rule.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    {
+      key: "action",
+      header: "Action",
+      render: (rule) =>
+        rule.status === "draft" ? (
+          <form action={publishQuotationApprovalRuleVersionAction.bind(null, tenantSlug, rule.id, rule.recordVersion, publishedRule?.id ?? null)}>
+            <button type="submit" className="text-sm font-medium text-primary underline">
+              Publish{publishedRule ? " (supersedes current)" : ""}
+            </button>
+          </form>
+        ) : (
+          "—"
+        ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Quotation approval rules</h1>
@@ -51,52 +82,15 @@ export default async function ApprovalRulesPage({ params }: { params: Promise<{ 
       ) : (
         <div className="rounded-md border border-neutral-200 p-4">
           <h2 className="text-sm font-semibold text-neutral-900">Rule versions</h2>
-          {rules.length === 0 ? (
-            <p className="mt-2 text-sm text-neutral-600">No approval rules yet. Every quotation submits without routing until one is published below.</p>
-          ) : (
-            <table className="mt-2 w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Min margin %
-                  </th>
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Max discount %
-                  </th>
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Min value
-                  </th>
-                  <th scope="col" className="py-2 pr-4 font-medium">
-                    Status
-                  </th>
-                  <th scope="col" className="py-2 font-medium">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rules.map((rule) => (
-                  <tr key={rule.id} className="border-b border-neutral-100">
-                    <td className="py-2 pr-4 text-neutral-900">{rule.minMarginPct !== null ? `${rule.minMarginPct}%` : "—"}</td>
-                    <td className="py-2 pr-4 text-neutral-600">{rule.maxDiscountPct !== null ? `${rule.maxDiscountPct}%` : "—"}</td>
-                    <td className="py-2 pr-4 text-neutral-600">{rule.minValueAmount !== null ? rule.minValueAmount : "—"}</td>
-                    <td className="py-2 pr-4 text-neutral-600">{rule.status}</td>
-                    <td className="py-2 text-neutral-600">
-                      {rule.status === "draft" ? (
-                        <form action={publishQuotationApprovalRuleVersionAction.bind(null, tenantSlug, rule.id, rule.recordVersion, publishedRule?.id ?? null)}>
-                          <button type="submit" className="text-sm font-medium text-primary underline">
-                            Publish{publishedRule ? " (supersedes current)" : ""}
-                          </button>
-                        </form>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <div className="mt-2">
+            <DataTable
+              caption="Quotation approval rule versions"
+              columns={columns}
+              rows={rules}
+              rowKey={(rule) => rule.id}
+              emptyMessage="No approval rules yet. Every quotation submits without routing until one is published below."
+            />
+          </div>
         </div>
       )}
 

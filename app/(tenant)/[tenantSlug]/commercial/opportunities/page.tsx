@@ -2,6 +2,11 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listOpportunities, OpportunityQueryError, type ListOpportunitiesResult } from "../../../../../server/queries/opportunity.ts";
+import type { Opportunity } from "../../../../../server/contracts/opportunity/opportunity.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { Pagination } from "../../../../../components/tables/pagination.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { OPPORTUNITY_STAGE_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createOpportunityAction } from "./actions.ts";
 import { CreateOpportunityForm } from "./create-opportunity-form.tsx";
 
@@ -44,6 +49,27 @@ export default async function CommercialOpportunitiesPage({
 
   const boundCreateAction = createOpportunityAction.bind(null, tenantSlug);
 
+  const columns: readonly DataTableColumn<Opportunity>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (opportunity) => (
+        <a href={`/${tenantSlug}/commercial/opportunities/${opportunity.id}`} className="font-medium text-primary underline">
+          {opportunity.name}
+        </a>
+      ),
+    },
+    {
+      key: "stage",
+      header: "Stage",
+      render: (opportunity) => {
+        const { tone, label } = OPPORTUNITY_STAGE_TONE_MAP[opportunity.stage];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    { key: "probability", header: "Probability", render: (opportunity) => opportunity.probability ?? "—" },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Opportunities</h1>
@@ -52,41 +78,26 @@ export default async function CommercialOpportunitiesPage({
         <div role="alert" className="flex flex-col gap-2">
           <p className="text-sm text-danger">Something went wrong loading opportunities. Please try again.</p>
         </div>
-      ) : result.opportunities.length === 0 ? (
-        <p className="text-sm text-neutral-600">No opportunities yet. Create one below from a prospect.</p>
       ) : (
         <div className="flex flex-col gap-4">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Name
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Stage
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Probability
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.opportunities.map((opportunity) => (
-                <tr key={opportunity.id} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 text-neutral-900">
-                    <a href={`/${tenantSlug}/commercial/opportunities/${opportunity.id}`} className="font-medium text-primary underline">
-                      {opportunity.name}
-                    </a>
-                  </td>
-                  <td className="py-2 pr-4 text-neutral-600">{opportunity.stage.replace(/_/g, " ")}</td>
-                  <td className="py-2 text-neutral-600">{opportunity.probability ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-xs text-neutral-500">
-            Page {result.page} — {result.totalCount} total opportunit{result.totalCount === 1 ? "y" : "ies"}
-          </p>
+          <DataTable
+            caption="Opportunities"
+            columns={columns}
+            rows={result.opportunities}
+            rowKey={(opportunity) => opportunity.id}
+            emptyMessage="No opportunities yet. Create one below from a prospect."
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-neutral-500">
+              Page {result.page} — {result.totalCount} total opportunit{result.totalCount === 1 ? "y" : "ies"}
+            </p>
+            <Pagination
+              page={result.page}
+              pageSize={result.pageSize}
+              totalCount={result.totalCount}
+              buildHref={(targetPage) => `/${tenantSlug}/commercial/opportunities?page=${targetPage}`}
+            />
+          </div>
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listActiveVendorRates, listPendingRateVersions, RateQueryError } from "../../../../../server/queries/rate.ts";
 import type { RateVersion } from "../../../../../server/contracts/rate/rate.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { createRateVersionAction } from "./actions.ts";
 import { CreateRateVersionForm } from "./create-rate-form.tsx";
 
@@ -47,6 +48,25 @@ export default async function CommercialRatesPage({ params }: { params: Promise<
 
   const boundCreateAction = createRateVersionAction.bind(null, tenantSlug);
 
+  const pendingColumns: readonly DataTableColumn<RateVersion>[] = [
+    {
+      key: "vendor",
+      header: "Vendor",
+      render: (rate) => (
+        <a href={`/${tenantSlug}/commercial/rates/${rate.rateVersionId}`} className="font-medium text-primary underline">
+          {rate.vendorName}
+        </a>
+      ),
+    },
+    { key: "lane", header: "Lane", render: (rate) => `${rate.originLane} → ${rate.destinationLane}` },
+    { key: "service", header: "Service", render: (rate) => `${rate.serviceType}${rate.mode ? ` (${rate.mode})` : ""}` },
+  ];
+
+  const activeColumns: readonly DataTableColumn<RateVersion>[] = [
+    ...pendingColumns,
+    { key: "cost", header: "Cost", render: (rate) => (rate.costMasked ? "Restricted" : `${rate.baseAmount} ${rate.currency ?? ""}`) },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Vendor rates</h1>
@@ -60,61 +80,29 @@ export default async function CommercialRatesPage({ params }: { params: Promise<
           {pendingRates.length > 0 ? (
             <div className="rounded-md border border-neutral-200 p-4">
               <h2 className="text-sm font-semibold text-neutral-900">Pending approval</h2>
-              <table className="mt-2 w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                    <th scope="col" className="py-2 pr-4 font-medium">Vendor</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Lane</th>
-                    <th scope="col" className="py-2 font-medium">Service</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pendingRates.map((rate) => (
-                    <tr key={rate.rateVersionId} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-neutral-900">
-                        <a href={`/${tenantSlug}/commercial/rates/${rate.rateVersionId}`} className="font-medium text-primary underline">
-                          {rate.vendorName}
-                        </a>
-                      </td>
-                      <td className="py-2 pr-4 text-neutral-600">{rate.originLane} → {rate.destinationLane}</td>
-                      <td className="py-2 text-neutral-600">{rate.serviceType}{rate.mode ? ` (${rate.mode})` : ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="mt-2">
+                <DataTable
+                  caption="Pending vendor rates"
+                  columns={pendingColumns}
+                  rows={pendingRates}
+                  rowKey={(rate) => rate.rateVersionId}
+                  emptyMessage="No pending rate versions."
+                />
+              </div>
             </div>
           ) : null}
 
           <div className="rounded-md border border-neutral-200 p-4">
             <h2 className="text-sm font-semibold text-neutral-900">Active rates</h2>
-            {activeRates.length === 0 ? (
-              <p className="mt-2 text-sm text-neutral-600">No approved, currently-effective rates yet. Create one below.</p>
-            ) : (
-              <table className="mt-2 w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                    <th scope="col" className="py-2 pr-4 font-medium">Vendor</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Lane</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Service</th>
-                    <th scope="col" className="py-2 font-medium">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeRates.map((rate) => (
-                    <tr key={rate.rateVersionId} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-neutral-900">
-                        <a href={`/${tenantSlug}/commercial/rates/${rate.rateVersionId}`} className="font-medium text-primary underline">
-                          {rate.vendorName}
-                        </a>
-                      </td>
-                      <td className="py-2 pr-4 text-neutral-600">{rate.originLane} → {rate.destinationLane}</td>
-                      <td className="py-2 pr-4 text-neutral-600">{rate.serviceType}{rate.mode ? ` (${rate.mode})` : ""}</td>
-                      <td className="py-2 text-neutral-600">{rate.costMasked ? "Restricted" : `${rate.baseAmount} ${rate.currency ?? ""}`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <div className="mt-2">
+              <DataTable
+                caption="Active vendor rates"
+                columns={activeColumns}
+                rows={activeRates}
+                rowKey={(rate) => rate.rateVersionId}
+                emptyMessage="No approved, currently-effective rates yet. Create one below."
+              />
+            </div>
           </div>
         </>
       )}
