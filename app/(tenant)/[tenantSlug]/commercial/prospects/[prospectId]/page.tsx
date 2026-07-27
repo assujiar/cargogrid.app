@@ -5,6 +5,7 @@ import { getProspectById, getProspectConversionReadiness, ProspectQueryError } f
 import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
 import { ProspectActionsPanel } from "./prospect-actions-panel.tsx";
 import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Prospect Detail (COM-144, CG-S7-COM-003). `getProspectById` returns `null` for both
@@ -34,9 +35,7 @@ export default async function ProspectDetailPage({ params }: { params: Promise<{
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this prospect. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this prospect. Please try again." />
     );
   }
 

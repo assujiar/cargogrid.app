@@ -6,6 +6,7 @@ import type { Account } from "../../../../../server/contracts/account/account.ts
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { ACCOUNT_STATUS_TONE_MAP, CUSTOMER_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Account list (COM-155, CG-S7-COM-014). Tenant-wide reference data, never record-scoped
@@ -68,9 +69,7 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
       <h1 className="text-xl font-semibold text-neutral-900">Accounts</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading accounts. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading accounts. Please try again." />
       ) : (
         <DataTable
           caption="Accounts"

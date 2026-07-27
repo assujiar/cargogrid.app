@@ -8,6 +8,7 @@ import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createQuotationApprovalRuleVersionAction, publishQuotationApprovalRuleVersionAction } from "./actions.ts";
 import { CreateApprovalRuleForm } from "./create-approval-rule-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Quotation Approval Rule list (COM-153, CG-S7-COM-012). Tenant-wide reference/policy
@@ -76,9 +77,7 @@ export default async function ApprovalRulesPage({ params }: { params: Promise<{ 
       <h1 className="text-xl font-semibold text-neutral-900">Quotation approval rules</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading approval rules. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading approval rules. Please try again." />
       ) : (
         <div className="rounded-md border border-neutral-200 p-4">
           <h2 className="text-sm font-semibold text-neutral-900">Rule versions</h2>

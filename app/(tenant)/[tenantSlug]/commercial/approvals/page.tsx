@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "../../../../../lib/supabase/server.t
 import { listQuotationApprovalInboxForActor, QuotationApprovalQueryError } from "../../../../../server/queries/quotation-approval.ts";
 import { getQuotationById } from "../../../../../server/queries/quotation.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Quotation approval inbox (COM-153, CG-S7-COM-012, Prompt 153 §66/§15: "accessible
@@ -59,9 +60,7 @@ export default async function ApprovalsInboxPage({ params }: { params: Promise<{
       <h1 className="text-xl font-semibold text-neutral-900">Approvals</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading your approval inbox. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading your approval inbox. Please try again." />
       ) : (
         <div className="rounded-md border border-neutral-200 p-4">
           <h2 className="text-sm font-semibold text-neutral-900">Waiting on your decision</h2>

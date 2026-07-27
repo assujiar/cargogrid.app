@@ -3989,6 +3989,40 @@ Purely additive/presentational — no schema, query, mutation, or access-control
 
 Self-closing (out-of-band, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-020` (Prompt 161, No-Reentry Enforcement), not yet authorized. `lib/design-system/migration-map.ts`'s "Canonical status values" and "Hand-rolled raw `<table>` markup" entries are both now fully resolved — no remaining Commercial or admin screen has an un-migrated status column or a raw `<table>`. Remaining named UI follow-ups (unchanged by this checkpoint): Skeleton/ErrorState/EmptyState/ApprovalDecisionPanel/form-field-primitive adoption, wiring a chart preset into `commercial/dashboard`, the 8 further chart presets, and application-shell/navigation standardization — each already named with its own reason in `migration-map.ts` and `07_GAP_ANALYSIS_AND_ROADMAP.md`.
 
+### CHG-2026-098 — Skeleton and ErrorState adoption across every Commercial/admin/supreme route (CargoGrid UI Modernization, out-of-band, not a numbered `CG-S*-*` prompt)
+
+| Field | Value |
+|---|---|
+| Task/prompt | None — out-of-band UI-modernization checkpoint, seventh in this session's series. Closes two more `migration-map.ts` items left open after `CHG-2026-097`: hand-rolled `loading.tsx` skeleton bars, and the inline `role="alert"` page-load-failure block. |
+| Change type | UI |
+| Baseline evidence | `lib/design-system/migration-map.ts` as of `CHG-2026-097` — both entries listed every page below as "Not migrated yet" |
+| Final status | `COMPLETED` — every route-level `loading.tsx` and every page's static load-failure branch now uses the shared primitive |
+| Authorization | User-issued task instruction (this session): "lanjut" (continue), following on from `CHG-2026-097`'s own next-priority framing in the migration map |
+
+#### Outcome
+
+**ErrorState (28 pages):** every Commercial/admin/supreme list and detail page's `<div role="alert" className="flex flex-col gap-2"><p className="text-sm text-danger">...</p></div>` load-failure block replaced with `<ErrorState description="..." />`. Two variants handled distinctly rather than force-fit into one shape: `admin/users/page.tsx` and `supreme/tenants/page.tsx` keep their own `<h1>` page title outside `ErrorState` (only the inner message moves); `commercial/dashboard/page.tsx`'s ternary (`loadError === "timeout" ? ... : ...`) is passed as `description`'s expression rather than a literal string, since `ErrorState.description` is typed `string`, not `ReactNode`. `commercial/reports/[reportCode]/page.tsx` had a second, separate `role="alert"` block for its own run-failure branch (distinct message, "Something went wrong running this report") — migrated too, discovered by re-grepping for `role="alert"` after the first pass to confirm nothing was missed. Explicitly out of scope, named rather than silently skipped: the many client-form inline validation/submission error messages (`create-*-form.tsx`, `*-decision-form.tsx`, `*-actions-panel.tsx`) — a stateful, form-submission-path pattern and a different risk class from a page's static load-failure branch, which is all this migration-map item ever scoped.
+
+**Skeleton (27 loading.tsx files):** every route-level `loading.tsx` replaced its hand-rolled `animate-pulse` bar stack with either `SkeletonTable` or `SkeletonText`, chosen per-route rather than uniformly: the 13 routes whose real page renders a single `DataTable` (`leads`, `prospects`, `contacts`, `accounts`, `opportunities`, `quotations`, `contracts`, `margin-rules`, `approval-rules`, `approvals`, `credit-approvals`, `admin/users`, `supreme/tenants`) got `SkeletonTable` with that page's own real column count (known precisely from `CHG-2026-097`'s own migration of those same pages onto `DataTable`); the other 14 (every entity detail page, plus `dashboard`/`pipeline`/`rates`/`reports` whose real content is mixed or non-tabular — card grids, multi-panel detail views, dual tables) got `SkeletonText`, sized to each file's own original bar count and re-using each file's own existing `sr-only` loading label verbatim (no announced-text regression for screen-reader users).
+
+No query, access-control, mutation-path, or route behavior changed on any of the 55 files touched — Suspense-boundary and error-branch markup only.
+
+#### Scope and files
+
+Modified: 28 `page.tsx` files (`app/(supreme)/supreme/tenants/page.tsx`, `app/(tenant)/[tenantSlug]/admin/users/page.tsx`, and 26 `app/(tenant)/[tenantSlug]/commercial/**/page.tsx` list/detail pages — the full set `grep -rl 'Something went wrong'` found); 27 `loading.tsx` files (the full route-level set under the same three route groups); `lib/design-system/{component-registry,migration-map}.ts`; `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md`. 58 files modified, 0 new files, 0 new dependencies, 0 migrations.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS (0 errors). `pnpm run lint` PASS (0 errors — same 55 pre-existing warnings as every prior checkpoint, none introduced). `pnpm run test` 1398/1398 PASS (unchanged — no test file needed new coverage; `Skeleton`/`ErrorState` have no dedicated test file today, same precedent as `status-tone-map.ts`). `npx next build` PASS — identical route list to `CHG-2026-097`. `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` all PASS. **Not run, disclosed:** live Playwright verification against the real business pages, same disclosed reason as `CHG-2026-097` (no local Supabase/Docker backend in this environment) — this checkpoint carries the same lower-risk profile, reusing already-live-verified primitives (`Skeleton`/`SkeletonText`/`SkeletonTable`/`ErrorState` were all built and typechecked in checkpoint 4) rather than changing them. `pnpm run test:e2e` not run, same disclosed condition as every earlier checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Purely additive/presentational — no schema, query, mutation, or access-control change on any of the 55 route files. `git revert` of this checkpoint's commit is safe and complete; no dependency or migration to unwind.
+
+#### Approval and closure
+
+Self-closing (out-of-band, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-020` (Prompt 161, No-Reentry Enforcement), not yet authorized. `lib/design-system/migration-map.ts` now has only two open UI-primitive-adoption items left: `EmptyState` (deliberately not attempted this checkpoint — the remaining candidates found by grep are small in-section informational fragments inside card-grid sections, not the whole-page "no data + gated action" case `EmptyState` is built for, and forcing them in would misuse the primitive rather than adopt it correctly) and the 39-file form-field-primitive migration (`Input`/`Select`/`Textarea`/etc.), plus the `ApprovalDecisionPanel` migration (Medium risk, touches real submit paths) — all three named with their own specific reason, not silently skipped.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

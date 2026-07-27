@@ -9,6 +9,7 @@ import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { OPPORTUNITY_STAGE_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createOpportunityAction } from "./actions.ts";
 import { CreateOpportunityForm } from "./create-opportunity-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Opportunity list (COM-147, CG-S7-COM-006). A server-paginated table, not a drag/drop
@@ -75,9 +76,7 @@ export default async function CommercialOpportunitiesPage({
       <h1 className="text-xl font-semibold text-neutral-900">Opportunities</h1>
 
       {loadFailed || !result ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading opportunities. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading opportunities. Please try again." />
       ) : (
         <div className="flex flex-col gap-4">
           <DataTable

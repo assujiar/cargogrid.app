@@ -8,6 +8,7 @@ import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { MARGIN_RULE_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createMarginRuleVersionAction, publishMarginRuleVersionAction } from "./actions.ts";
 import { CreateMarginRuleForm } from "./create-margin-rule-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Margin Rule list (COM-150, CG-S7-COM-009). Tenant-wide reference/policy data, never
@@ -74,9 +75,7 @@ export default async function MarginRulesPage({ params }: { params: Promise<{ te
       <h1 className="text-xl font-semibold text-neutral-900">Margin rules</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading margin rules. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading margin rules. Please try again." />
       ) : (
         <div className="rounded-md border border-neutral-200 p-4">
           <h2 className="text-sm font-semibold text-neutral-900">Rule versions</h2>

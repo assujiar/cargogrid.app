@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getContactById, ContactQueryError } from "../../../../../../server/queries/contact.ts";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Contact Detail (COM-145, CG-S7-COM-004). Read-only in this bounded first slice --
@@ -27,9 +28,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this contact. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this contact. Please try again." />
     );
   }
 

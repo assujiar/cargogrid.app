@@ -6,6 +6,7 @@ import type { Quotation } from "../../../../../server/contracts/quotation/quotat
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { QUOTATION_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Quotation list (COM-151, CG-S7-COM-010). Tenant-wide, field-masked via
@@ -67,9 +68,7 @@ export default async function QuotationsPage({ params }: { params: Promise<{ ten
       <h1 className="text-xl font-semibold text-neutral-900">Quotations</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading quotations. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading quotations. Please try again." />
       ) : (
         <DataTable
           caption="Quotations"

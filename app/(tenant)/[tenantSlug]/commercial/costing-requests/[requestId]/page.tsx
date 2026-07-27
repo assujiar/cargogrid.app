@@ -15,6 +15,7 @@ import type { MarginCalculation } from "../../../../../../server/contracts/margi
 import { CostingRequestActionsPanel } from "./costing-request-actions-panel.tsx";
 import { SelectRateForm } from "./select-rate-form.tsx";
 import { CalculateMarginForm } from "./calculate-margin-form.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Costing Request Detail (COM-148, CG-S7-COM-007). `getCostingRequestById` returns `null`
@@ -41,9 +42,7 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this costing request. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this costing request. Please try again." />
     );
   }
 

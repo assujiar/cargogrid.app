@@ -7,6 +7,7 @@ import { DataTable, type DataTableColumn } from "../../../../../components/table
 import { Pagination } from "../../../../../components/tables/pagination.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { PROSPECT_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Prospect queue (COM-144, CG-S7-COM-003). Read-only -- prospects are created only via
@@ -69,9 +70,7 @@ export default async function CommercialProspectsPage({
       <h1 className="text-xl font-semibold text-neutral-900">Prospects</h1>
 
       {loadFailed || !result ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading prospects. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading prospects. Please try again." />
       ) : (
         <div className="flex flex-col gap-4">
           <DataTable

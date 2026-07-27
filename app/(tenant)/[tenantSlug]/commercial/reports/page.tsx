@@ -6,6 +6,7 @@ import type { ReportType, ReportRun } from "../../../../../server/contracts/repo
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { REPORT_RUN_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Commercial Reports catalogue (COM-159, CG-S7-COM-018): the code-shipped report
@@ -53,9 +54,7 @@ export default async function CommercialReportsPage({ params }: { params: Promis
       <h1 className="text-xl font-semibold text-neutral-900">Reports</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading the report catalogue. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading the report catalogue. Please try again." />
       ) : (
         <>
           <section className="flex flex-col gap-2">

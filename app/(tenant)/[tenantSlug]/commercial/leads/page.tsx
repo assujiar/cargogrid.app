@@ -10,6 +10,7 @@ import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { LEAD_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { captureLeadAction } from "./actions.ts";
 import { CaptureLeadForm } from "./capture-lead-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Lead List (COM-143, CG-S7-COM-002) -- the first business-domain page in this
@@ -97,9 +98,7 @@ export default async function CommercialLeadsPage({
       <CaptureLeadForm action={boundCaptureLeadAction} />
 
       {loadFailed || !result ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading leads. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading leads. Please try again." />
       ) : (
         <div className="flex flex-col gap-4">
           <DataTable

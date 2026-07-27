@@ -6,6 +6,7 @@ import type { RateVersion } from "../../../../../server/contracts/rate/rate.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { createRateVersionAction } from "./actions.ts";
 import { CreateRateVersionForm } from "./create-rate-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Vendor Rate list (COM-149, CG-S7-COM-008). Two tables reading through the field-masked
@@ -72,9 +73,7 @@ export default async function CommercialRatesPage({ params }: { params: Promise<
       <h1 className="text-xl font-semibold text-neutral-900">Vendor rates</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading vendor rates. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading vendor rates. Please try again." />
       ) : (
         <>
           {pendingRates.length > 0 ? (

@@ -7,6 +7,7 @@ import { DataTable, type DataTableColumn } from "../../../../../components/table
 import { Pagination } from "../../../../../components/tables/pagination.tsx";
 import { createContactAction } from "./actions.ts";
 import { CreateContactForm } from "./create-contact-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Contact directory (COM-145, CG-S7-COM-004) -- mirrors the Lead List page's own
@@ -64,9 +65,7 @@ export default async function CommercialContactsPage({
       <CreateContactForm action={boundCreateContactAction} />
 
       {loadFailed || !result ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading contacts. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading contacts. Please try again." />
       ) : (
         <div className="flex flex-col gap-4">
           <DataTable

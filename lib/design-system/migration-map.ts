@@ -80,20 +80,22 @@ export const MIGRATION_MAP: readonly MigrationMapEntry[] = [
     sharedReplacement: "Skeleton / SkeletonText / SkeletonTable (components/ui/skeleton.tsx)",
     replacementStatus: "IMPLEMENTED",
     affectedPages: [
-      "27 loading.tsx files across commercial/* and admin/users, supreme/tenants — see docs/design-system/08_COMPONENT_INVENTORY.md §4 for the full list. Not migrated yet.",
+      "All 27 loading.tsx files across commercial/*, admin/users, supreme/tenants — MIGRATED, checkpoint 7. The 13 whose route renders a single real DataTable (leads, prospects, contacts, accounts, opportunities, quotations, contracts, margin-rules, approval-rules, approvals, credit-approvals, admin/users, supreme/tenants) use SkeletonTable with that page's own real column count; the remaining 14 (entity detail pages, and list pages whose content is mixed/non-tabular — dashboard, pipeline, rates, reports) use SkeletonText.",
     ],
     priority: "Medium",
     breakingChangeRisk: "Low",
-    riskNote: "Purely presentational. The primitive now exists (checkpoint 4) — the remaining work is 27 one-line-ish swaps, not a design decision.",
+    riskNote: "Purely presentational. This migration-map item is now fully resolved — no remaining loading.tsx hand-rolls its own animate-pulse bars.",
   },
   {
     legacyImplementation: "Inline role=\"alert\" error block, one copy per page",
     sharedReplacement: "ErrorState (components/ui/error-state.tsx)",
     replacementStatus: "IMPLEMENTED",
-    affectedPages: ["Every Commercial list/detail page's load-failure branch — 21+ pages. Not migrated yet."],
+    affectedPages: [
+      "Every Commercial/admin/supreme list and detail page's load-failure branch (28 pages, including commercial/dashboard's two-message ternary and commercial/reports/[reportCode]'s separate run-failure branch) — MIGRATED, checkpoint 7.",
+    ],
     priority: "Medium",
     breakingChangeRisk: "Low",
-    riskNote: "Purely presentational. The primitive now exists (checkpoint 4) — no retry/request-id behavior exists today to preserve or break.",
+    riskNote: "Purely presentational. This migration-map item is now fully resolved. Not touched, and out of scope by design: the many client-form inline validation/submission error messages (e.g. create-*-form.tsx, *-decision-form.tsx, *-actions-panel.tsx) — those are a stateful, form-submission-path pattern, a different risk class from a page's static load-failure branch, and were not part of this item's own scope.",
   },
   {
     legacyImplementation: "Inline empty-state <p> message, one copy per page",

@@ -6,6 +6,7 @@ import type { CustomerContract } from "../../../../../server/contracts/contract/
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { CUSTOMER_CONTRACT_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Customer contract list (COM-156, CG-S7-COM-015). Tenant-wide reference data, never
@@ -60,9 +61,7 @@ export default async function ContractsPage({ params }: { params: Promise<{ tena
       <h1 className="text-xl font-semibold text-neutral-900">Contracts</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading contracts. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading contracts. Please try again." />
       ) : (
         <DataTable
           caption="Contracts"

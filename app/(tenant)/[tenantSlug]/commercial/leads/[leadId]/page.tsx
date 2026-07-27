@@ -5,6 +5,7 @@ import { getLeadById, LeadQueryError } from "../../../../../../server/queries/le
 import { listActivitiesForRecord } from "../../../../../../server/queries/contact.ts";
 import { LeadActionsPanel } from "./lead-actions-panel.tsx";
 import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Lead Detail (COM-143, CG-S7-COM-002). `getLeadById` returns `null` for both "does not
@@ -30,9 +31,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ ten
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this lead. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this lead. Please try again." />
     );
   }
 

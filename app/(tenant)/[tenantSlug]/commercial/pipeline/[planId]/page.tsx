@@ -10,6 +10,7 @@ import {
 } from "../../../../../../server/queries/pipeline.ts";
 import { PlanActionsPanel } from "./plan-actions-panel.tsx";
 import { CaptureSnapshotForm } from "./capture-snapshot-form.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Sales Plan Detail (COM-146, CG-S7-COM-005). `getSalesPlanById` returns `null` for both
@@ -33,9 +34,7 @@ export default async function SalesPlanDetailPage({ params }: { params: Promise<
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this sales plan. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this sales plan. Please try again." />
     );
   }
 

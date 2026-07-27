@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from "../../../../../components/table
 import { Pagination } from "../../../../../components/tables/pagination.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { resolvePortalUserStatusTone } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 const PAGE_SIZE = 20;
 
@@ -55,9 +56,9 @@ export default async function TenantAdminUsersPage({
 
   if (loadFailed || !result) {
     return (
-      <div className="flex flex-col gap-2" role="alert">
+      <div className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold text-neutral-900">Users</h1>
-        <p className="text-sm text-danger">Something went wrong loading users. Please try again.</p>
+        <ErrorState description="Something went wrong loading users. Please try again." />
       </div>
     );
   }

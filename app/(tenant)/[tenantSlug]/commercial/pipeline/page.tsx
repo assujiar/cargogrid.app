@@ -8,6 +8,7 @@ import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { SALES_PLAN_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createSalesPlanAction } from "./actions.ts";
 import { CreateSalesPlanForm } from "./create-sales-plan-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Pipeline overview (COM-146, CG-S7-COM-005): a governed, RLS-backed stage summary
@@ -69,9 +70,7 @@ export default async function CommercialPipelinePage({ params }: { params: Promi
       <h1 className="text-xl font-semibold text-neutral-900">Pipeline</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading the pipeline. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading the pipeline. Please try again." />
       ) : (
         <>
           <section className="flex flex-col gap-2">

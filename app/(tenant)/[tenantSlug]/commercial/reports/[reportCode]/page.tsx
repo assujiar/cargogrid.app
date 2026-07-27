@@ -10,6 +10,7 @@ import { DataTable, type DataTableColumn } from "../../../../../../components/ta
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { REPORT_RUN_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
 import type { ReportRun } from "../../../../../../server/contracts/report/report.ts";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Report detail/run page (COM-159, CG-S7-COM-018): runs the report's one named
@@ -91,9 +92,7 @@ export default async function CommercialReportDetailPage({
       </div>
 
       {runFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong running this report. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong running this report. Please try again." />
       ) : (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold text-neutral-900">Preview</h2>
