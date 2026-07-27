@@ -1,0 +1,61 @@
+/**
+ * Operations portal entry guard (OPS-168, CG-S8-OPS-002). Same composition
+ * `lib/portal/commercial-guard.ts` (COM-143) already established -- PLT-108's
+ * four-layer identity/access context plus the tenant-membership RLS boundary
+ * (PLT-113) -- for the same audience (`org_user`/`tenant_admin`, never `supreme_admin`
+ * or `customer_user`), since Operations is a second internal workspace alongside
+ * Commercial, not a differently-scoped one.
+ *
+ * Portal-entry gating only (a coarse, layer-level check) -- every individual query/
+ * mutation this portal calls still relies on its own RLS (`job_orders_select_scoped`)
+ * and RBAC (`app.evaluate_permission` against the 'OPS' module) enforcement, unchanged.
+ */
+
+export interface TenantLookupResult {
+  readonly id: string;
+  readonly slug: string;
+  readonly canonicalStatus: string;
+}
+
+export interface ResolvedAccessContextResult {
+  readonly layer: string;
+  readonly tenantId: string | null;
+}
+
+export interface OperationsGuardDeps {
+  getCurrentUserId(): Promise<string | null>;
+  findTenantBySlug(slug: string): Promise<TenantLookupResult | null>;
+  resolveAccessContext(authUserId: string, tenantId: string): Promise<ResolvedAccessContextResult | null>;
+}
+
+export type OperationsGuardResult =
+  | { readonly status: "unauthenticated" }
+  | { readonly status: "tenant_not_found_or_not_member" }
+  | { readonly status: "tenant_suspended"; readonly tenant: TenantLookupResult }
+  | { readonly status: "forbidden"; readonly tenant: TenantLookupResult; readonly layer: string }
+  | { readonly status: "allowed"; readonly tenant: TenantLookupResult; readonly authUserId: string; readonly layer: "tenant_admin" | "org_user" };
+
+const ALLOWED_LAYERS = new Set(["tenant_admin", "org_user"]);
+
+export async function resolveOperationsAccess(deps: OperationsGuardDeps, tenantSlug: string): Promise<OperationsGuardResult> {
+  const authUserId = await deps.getCurrentUserId();
+  if (!authUserId) {
+    return { status: "unauthenticated" };
+  }
+
+  const tenant = await deps.findTenantBySlug(tenantSlug);
+  if (!tenant) {
+    return { status: "tenant_not_found_or_not_member" };
+  }
+
+  if (tenant.canonicalStatus !== "active") {
+    return { status: "tenant_suspended", tenant };
+  }
+
+  const context = await deps.resolveAccessContext(authUserId, tenant.id);
+  if (!context || !ALLOWED_LAYERS.has(context.layer)) {
+    return { status: "forbidden", tenant, layer: context?.layer ?? "none" };
+  }
+
+  return { status: "allowed", tenant, authUserId, layer: context.layer as "tenant_admin" | "org_user" };
+}

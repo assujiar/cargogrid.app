@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S8-OPS-001` (`CG-AABPP-OPS-167` v0.9.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/08-phase-03-operations/167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-167` (kickoff, `VERIFIED`); this document itself remains index/planning only and performs no Operations-domain runtime source/schema change
+**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-168` (Job Order, `VERIFIED`); this document's own row/tally table is updated at every checkpoint, most recently to reflect `168`'s completion and `169`'s dependency-`READY` state
 
 ## 0. Checkpoint
 
@@ -22,8 +22,8 @@
 | Row | Prompt | Capability | Status | Dependency | Branch | Runtime build log | Owner | Next |
 |---|---|---|---|---|---|---|---|---|
 | `001` | `167` WBS and Runtime Kickoff | Governance / Operations Kickoff | `VERIFIED` | `PHASE_2_VERIFIED` | `claude/lanjut-kv0mze`@(this checkpoint's commit) | This file + `00_OPERATIONS_WBS.md` | Runtime build agent | `CG-S8-OPS-002` |
-| `002` | `168` Job Order | Order Execution / Accepted Demand Conversion | `READY` | `OPS-167` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-168.md` | Runtime build agent | `CG-S8-OPS-003` |
-| `003` | `169` Shipment Order | Order Execution / Shipment Definition | `BLOCKED` | `OPS-168` | — | `docs/build-log/phase-03/OPS-169.md` | Runtime build agent | `CG-S8-OPS-004` |
+| `002` | `168` Job Order | Order Execution / Accepted Demand Conversion | `VERIFIED` | `OPS-167` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-168.md` | Runtime build agent | `CG-S8-OPS-003` |
+| `003` | `169` Shipment Order | Order Execution / Shipment Definition | `READY` | `OPS-168` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-169.md` | Runtime build agent | `CG-S8-OPS-004` |
 | `004` | `170` Shipment lifecycle | Shipment Execution / Canonical Shipment State | `BLOCKED` | `OPS-168..169` | — | `docs/build-log/phase-03/OPS-170.md` | Runtime build agent | `CG-S8-OPS-005` |
 | `005` | `171` Land, air and sea baseline | Shipment Execution / Mode Baseline | `BLOCKED` | `OPS-169..170` | — | `docs/build-log/phase-03/OPS-171.md` | Runtime build agent | `CG-S8-OPS-006` |
 | `006` | `172` Resource/vendor assignment | Shipment Execution / Execution Responsibility | `BLOCKED` | `OPS-168..171` | — | `docs/build-log/phase-03/OPS-172.md` | Runtime build agent | `CG-S8-OPS-007` |
@@ -32,7 +32,7 @@
 | `009` | `175` Basic dispatch | Dispatch / Shipment Release | `BLOCKED` | `OPS-169..174` | — | `docs/build-log/phase-03/OPS-175.md` | Runtime build agent | `CG-S8-OPS-010` |
 | `010`–`022` | `176`–`188` Document requirement, ePOD, actual cost, profitability, public tracking, billing readiness, dashboard, reports, transaction lineage, integrated verification, hardening, documentation, closure | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-175` onward | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | Out of this session's authorized range |
 
-**Tally:** of the 22 rows in this index (`167`–`188`), **1 is `VERIFIED`** (kickoff), **1 is `READY`** (`168`, Job Order), **7 are `BLOCKED`** on their own not-yet-started predecessor within this session's authorized range (`169`–`175`), and **13 are `NOT_STARTED`** (`176`–`188`, out of the "lanjut sd prompt 175" authorized range).
+**Tally:** of the 22 rows in this index (`167`–`188`), **2 are `VERIFIED`** (kickoff, Job Order), **1 is `READY`** (`169`, Shipment Order), **6 are `BLOCKED`** on their own not-yet-started predecessor within this session's authorized range (`170`–`175`), and **13 are `NOT_STARTED`** (`176`–`188`, out of the "lanjut sd prompt 175" authorized range).
 
 ## 2. Collision inspection
 

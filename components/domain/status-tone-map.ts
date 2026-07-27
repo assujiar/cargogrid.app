@@ -22,6 +22,7 @@ import type { QuotationApprovalRuleStatus } from "../../server/contracts/quotati
 import type { QuotationAcceptanceTokenStatus } from "../../server/contracts/quotation/quotation-acceptance.ts";
 import type { ReportRunStatus } from "../../server/contracts/report/report.ts";
 import type { UserStatus } from "../../server/contracts/user-lifecycle/user-lifecycle.ts";
+import type { JobOrderStatus } from "../../server/contracts/job-order/job-order.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -149,3 +150,9 @@ const TENANT_STATUS_TONE_MAP: Record<string, StatusToneEntry> = {
 export function resolveTenantStatusTone(canonicalStatus: string): StatusToneEntry {
   return TENANT_STATUS_TONE_MAP[canonicalStatus] ?? { tone: "neutral", label: canonicalStatus };
 }
+
+export const JOB_ORDER_STATUS_TONE_MAP: Record<JobOrderStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  confirmed: { tone: "success", label: "Confirmed" },
+  cancelled: { tone: "danger", label: "Cancelled" },
+};

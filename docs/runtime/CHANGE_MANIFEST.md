@@ -4263,6 +4263,36 @@ Documentation-only; no schema/data/application code touched. `git revert` of thi
 
 Self-closing. `CG-S8-OPS-001` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-002` (Prompt 168, Job Order) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
 
+### CHG-2026-106 — Job Order (Phase 3, Prompt 168)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-002` / `168_JOB_ORDER_PROMPT.md` |
+| Change type | Schema (additive) + service layer + UI |
+| Baseline evidence | `OPS-167` `VERIFIED` (`docs/build-log/phase-03/OPS-167.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- this is the first capability task in that range |
+
+#### Outcome
+
+The first Operations-domain (and first Phase 3) table in this repository. `app.job_orders` converts one verified Commercial `JobOrderDraftInput` handoff (`app.job_order_handoffs`, `COM-160`) into one canonical, tenant-scoped Job Order -- idempotent on `(tenant_id, source_handoff_id)`, complete source/version lineage, zero re-entry (every snapshot column a verbatim jsonb copy; `account_id` a live canonical FK). Sensitive-field masking reuses Commercial's own `COM:View selling price`/`COM:View cost` directly rather than inventing a redundant OPS-level pair -- "conversion never broadens Commercial access" (Prompt 168 §16) proven by a real masking-sweep db-test, not just documented. The one bounded correction path (`app.override_job_order_field`) is restricted to `customer_snapshot`/`cargo_service_snapshot` only.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727090000_create_operations_job_order.sql` (2 tables -- `app.job_order_number_counters`, `app.job_orders`, `app.job_order_overrides`; 5 functions -- `next_job_order_number`, `get_job_order_conversion_readiness`, `prepare_job_order`, `confirm_job_order`, `override_job_order_field`; 1 view -- `app.job_orders_directory`). New service layer: `server/contracts/job-order/job-order.ts(.test.ts)`, `server/queries/job-order.ts(.test.ts)`, `server/mutations/job-order.ts(.test.ts)`. New portal guard: `lib/portal/operations-guard.ts(.test.ts)`, `operations-guard-deps.server.ts`, `resolve-operations-access.server.ts`. New UI: `app/(tenant)/[tenantSlug]/operations/job-orders/` (list + `loading.tsx`; `convert/` conversion review + `actions.ts` + form + `loading.tsx`; `[jobOrderId]/` detail + `actions.ts` + confirm/override forms + `loading.tsx`). New test fixture: `scripts/db-tests/operations-job-order.sql`. Modified: `components/domain/status-tone-map.ts` (added `JOB_ORDER_STATUS_TONE_MAP`). 1 migration, ~20 new files, 1 modified file.
+
+#### Tests and quality evidence
+
+`node:test` 1440/1440 (36 net new: 8 contract, 10 query, 10 mutation, 8 portal-guard). `db:test` PASS across 53 migrations/54 db-test files (1 net new, zero regression) -- 9 scenario groups covering conversion readiness, idempotent prepare, optimistic-concurrency confirm, mandatory-reason/restricted-column override validation, directory-view masking sweep, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, and audit-trail reconciliation (exactly 3 events). `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 48 routes (3 new). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Commercial migration checkpoint (flags this checkpoint's own new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (`OPS` action set already seeded at `PLT-111`). `git revert` of this checkpoint's commit is safe and complete (no downstream consumer exists yet).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-002` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-003` (Prompt 169, Shipment Order) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
