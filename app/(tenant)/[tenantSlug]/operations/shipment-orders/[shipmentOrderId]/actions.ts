@@ -11,8 +11,17 @@ import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/
 import { confirmShipmentOrder, ShipmentOrderMutationError } from "../../../../../../server/mutations/shipment-order.ts";
 import { transitionShipmentOrder, ShipmentLifecycleMutationError } from "../../../../../../server/mutations/shipment-lifecycle.ts";
 import { setShipmentModeProfile, changeShipmentMode, ShipmentModeBaselineMutationError } from "../../../../../../server/mutations/shipment-mode-baseline.ts";
+import {
+  assignResource,
+  reassignResource,
+  holdResourceAssignment,
+  resumeResourceAssignment,
+  unassignResource,
+  ResourceAssignmentMutationError,
+} from "../../../../../../server/mutations/resource-assignment.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
+import type { ResourceAssignmentRole } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
 
 export interface ShipmentOrderFormState {
   readonly error: string | null;
@@ -136,6 +145,146 @@ export async function setShipmentModeProfileAction(
   } catch (error) {
     if (error instanceof ShipmentModeBaselineMutationError) {
       return { error: `Could not set the mode profile: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-172: creates the first assignment for a (shipmentOrderId, role) slot. */
+export async function assignResourceAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  role: ResourceAssignmentRole,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const resourceId = String(formData.get("resourceId") ?? "");
+  const supabase = await createSupabaseServerClient();
+  try {
+    await assignResource(supabase, { shipmentOrderId, role, resourceId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ResourceAssignmentMutationError) {
+      return { error: `Could not assign this ${role}: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-172: reason-mandatory replacement of the current (shipmentOrderId, role) assignment -- the prior row is preserved, never overwritten. */
+export async function reassignResourceAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  role: ResourceAssignmentRole,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const newResourceId = String(formData.get("resourceId") ?? "");
+  const reason = String(formData.get("reason") ?? "");
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reassignResource(supabase, { shipmentOrderId, role, newResourceId, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ResourceAssignmentMutationError) {
+      return { error: `Could not reassign this ${role}: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-172: in-place status flip active -> held on the current (shipmentOrderId, role) assignment -- reason mandatory. */
+export async function holdResourceAssignmentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  role: ResourceAssignmentRole,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reason = String(formData.get("reason") ?? "");
+  const supabase = await createSupabaseServerClient();
+  try {
+    await holdResourceAssignment(supabase, { shipmentOrderId, role, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ResourceAssignmentMutationError) {
+      return { error: `Could not hold this ${role} assignment: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-172: in-place status flip held -> active on the current (shipmentOrderId, role) assignment. */
+export async function resumeResourceAssignmentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  role: ResourceAssignmentRole,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await resumeResourceAssignment(supabase, { shipmentOrderId, role, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ResourceAssignmentMutationError) {
+      return { error: `Could not resume this ${role} assignment: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-172: releases the (shipmentOrderId, role) slot entirely -- reason mandatory. A subsequent assign may then create a fresh current row for the same role. */
+export async function unassignResourceAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  role: ResourceAssignmentRole,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reason = String(formData.get("reason") ?? "");
+  const supabase = await createSupabaseServerClient();
+  try {
+    await unassignResource(supabase, { shipmentOrderId, role, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ResourceAssignmentMutationError) {
+      return { error: `Could not unassign this ${role}: ${error.message}` };
     }
     throw error;
   }

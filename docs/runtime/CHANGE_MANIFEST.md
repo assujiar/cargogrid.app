@@ -4383,6 +4383,36 @@ Additive only -- zero prior migration file edited, zero new permission-catalogue
 
 Self-closing. `CG-S8-OPS-005` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-006` (Prompt 172, Resource Assignment) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
 
+### CHG-2026-110 — Resource/Vendor Assignment (Phase 3, Prompt 172)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-006` / `172_RESOURCE_ASSIGNMENT_PROMPT.md` |
+| Change type | Schema (4 master-type seed rows + additive table) + service layer + UI |
+| Baseline evidence | `OPS-171` `VERIFIED` (`docs/build-log/phase-03/OPS-171.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- fifth capability task in that range |
+
+#### Outcome
+
+Basic vendor/fleet/vehicle/driver assignment to a Shipment Order, with availability/conflict checks enforced at the database layer. Rather than a bespoke reference table, this checkpoint registers four new master types (`vendor`/`fleet`/`vehicle` -> `PRC`, `driver` -> `HRS`) into the already-built generic master-data registry (`app.master_types`/`app.master_records`, `PLT-120`), seeded via direct `INSERT` the same way `PLT-120`'s own `vendor_rate` was seeded -- fulfilling `OPS-171`'s own explicit deferral (its `vehicle_ref`/`vendor_ref` plain-text fields). `resource_snapshot` is structurally limited to `{code, name}` only, never `app.master_records.attributes`, which may hold driver PII.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727130000_create_operations_resource_assignment.sql` (4 `app.master_types` seed rows; `app.resource_assignments` table; `app.find_assignment_candidates`, `app.assign_resource`, `app.reassign_resource`, `app.hold_resource_assignment`, `app.resume_resource_assignment`, `app.unassign_resource`, `app.get_resource_assignment_history` functions). New service layer: `server/contracts/resource-assignment/resource-assignment.ts(.test.ts)`, `server/queries/resource-assignment.ts(.test.ts)`, `server/mutations/resource-assignment.ts(.test.ts)`. New UI: `resource-assignment-panel.tsx`, `resource-assignment-history.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`. 1 migration, ~9 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1529/1529 (25 net new: 6 contract, 6 query, 13 mutation). `db:test` PASS across 57 migrations/58 db-test files (1 net new, zero regression) -- 11 scenario groups covering candidate-lookup with decoy exclusion, authority/invalid-resource/already-assigned assign checks, assignment-conflict-across-shipments, hold/resume reason-required and slot-still-occupied-while-held, reassign reason-required/no-current-assignment/new-row-with-superseded-link, unassign reason-required and slot-release, blocked-once-cancelled, ordered history, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Assign`/`OPS:Edit`, both already seeded by `PLT-112`; `OPS:Assign` gets its first real consumer here). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders` itself is untouched.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-006` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-007` (Prompt 173, Milestone Management) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

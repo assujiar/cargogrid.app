@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "../../../../../../lib/supabase/serve
 import { getShipmentOrder, getJobShipmentAllocationBalance, ShipmentOrderQueryError } from "../../../../../../server/queries/shipment-order.ts";
 import { getShipmentStatusHistory, ShipmentLifecycleQueryError } from "../../../../../../server/queries/shipment-lifecycle.ts";
 import { getShipmentModeProfile, ShipmentModeBaselineQueryError } from "../../../../../../server/queries/shipment-mode-baseline.ts";
+import { findAssignmentCandidates, getResourceAssignmentHistory, ResourceAssignmentQueryError } from "../../../../../../server/queries/resource-assignment.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -14,16 +15,24 @@ import { TransitionShipmentOrderForm } from "./transition-shipment-order-form.ts
 import { StatusTimeline } from "./status-timeline.tsx";
 import { ModeProfileForm } from "./mode-profile-form.tsx";
 import { ChangeModeForm } from "./change-mode-form.tsx";
+import { ResourceAssignmentPanel } from "./resource-assignment-panel.tsx";
+import { ResourceAssignmentHistory } from "./resource-assignment-history.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
   setShipmentModeProfileAction,
   changeShipmentModeAction,
+  assignResourceAction,
+  reassignResourceAction,
+  holdResourceAssignmentAction,
+  resumeResourceAssignmentAction,
+  unassignResourceAction,
   type ShipmentOrderFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
+import { RESOURCE_ASSIGNMENT_ROLES } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
 
 /**
  * Shipment Order detail (OPS-169, CG-S8-OPS-003, Prompt 169 §15) -- inherited fields
@@ -85,6 +94,25 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading the mode profile. Please try again." />;
   }
 
+  let resourceHistory;
+  let candidatesByRole;
+  try {
+    resourceHistory = await getResourceAssignmentHistory(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+    candidatesByRole = Object.fromEntries(
+      await Promise.all(
+        RESOURCE_ASSIGNMENT_ROLES.map(async (role) => [role, await findAssignmentCandidates(supabase, { tenantId: access.tenant.id, role, actorAuthUserId: access.authUserId })] as const),
+      ),
+    ) as Record<(typeof RESOURCE_ASSIGNMENT_ROLES)[number], Awaited<ReturnType<typeof findAssignmentCandidates>>>;
+  } catch (error) {
+    if (!(error instanceof ResourceAssignmentQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading resource assignments. Please try again." />;
+  }
+  const currentAssignmentByRole = Object.fromEntries(
+    RESOURCE_ASSIGNMENT_ROLES.map((role) => [role, resourceHistory.find((a) => a.role === role && a.isCurrent) ?? null] as const),
+  ) as Record<(typeof RESOURCE_ASSIGNMENT_ROLES)[number], (typeof resourceHistory)[number] | null>;
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -101,6 +129,11 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     setShipmentModeProfileAction(tenantSlug, shipment.id, shipment.mode as ShipmentModeProfileMode, fields, prevState, formData);
   const boundChangeModeAction = (newMode: ShipmentModeProfileMode, prevState: ShipmentOrderFormState, formData: FormData) =>
     changeShipmentModeAction(tenantSlug, shipment.id, shipment.recordVersion, newMode, prevState, formData);
+  const boundAssignAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => assignResourceAction.bind(null, tenantSlug, shipment.id, role);
+  const boundReassignAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => reassignResourceAction.bind(null, tenantSlug, shipment.id, role);
+  const boundHoldAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => holdResourceAssignmentAction.bind(null, tenantSlug, shipment.id, role);
+  const boundResumeAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => resumeResourceAssignmentAction.bind(null, tenantSlug, shipment.id, role);
+  const boundUnassignAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => unassignResourceAction.bind(null, tenantSlug, shipment.id, role);
 
   return (
     <div className="flex flex-col gap-6">
@@ -146,6 +179,27 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
             <ChangeModeForm action={boundChangeModeAction} currentMode={shipment.mode as ShipmentModeProfileMode} />
           </div>
         ) : null}
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Resource assignments</h2>
+        {RESOURCE_ASSIGNMENT_ROLES.map((role) => (
+          <ResourceAssignmentPanel
+            key={role}
+            role={role}
+            current={currentAssignmentByRole[role]}
+            candidates={candidatesByRole[role]}
+            assignAction={boundAssignAction(role)}
+            reassignAction={boundReassignAction(role)}
+            holdAction={boundHoldAction(role)}
+            resumeAction={boundResumeAction(role)}
+            unassignAction={boundUnassignAction(role)}
+          />
+        ))}
+        <div className="mt-2 border-t border-neutral-200 pt-2">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">History</h3>
+          <ResourceAssignmentHistory history={resourceHistory} />
+        </div>
       </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
