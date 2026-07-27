@@ -63,6 +63,14 @@ export const LinkLeadToExistingProspectInputSchema = z.object({
 });
 export type LinkLeadToExistingProspectInput = z.infer<typeof LinkLeadToExistingProspectInputSchema>;
 
+/** app.find_existing_accounts_for_prospect (COM-161) input -- reuses app.find_duplicate_accounts' own legal_name+tax_id fingerprint match, surfaced at Prospect stage rather than only at quotation-acceptance time. */
+export const FindExistingAccountsForProspectInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  prospectId: z.string().uuid(),
+});
+export type FindExistingAccountsForProspectInput = z.infer<typeof FindExistingAccountsForProspectInputSchema>;
+
 export const FindDuplicateProspectsInputSchema = z.object({
   tenantId: z.string().uuid(),
   actorAuthUserId: z.string().uuid(),

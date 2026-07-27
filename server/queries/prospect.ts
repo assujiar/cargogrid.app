@@ -8,12 +8,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   FindDuplicateProspectsInputSchema,
+  FindExistingAccountsForProspectInputSchema,
   ConversionReadinessSchema,
   parseProspect,
   type FindDuplicateProspectsInput,
+  type FindExistingAccountsForProspectInput,
   type Prospect,
   type ConversionReadiness,
 } from "../contracts/prospect/prospect.ts";
+import { parseAccount, type Account } from "../contracts/account/account.ts";
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
@@ -108,4 +111,21 @@ export async function getProspectById(client: Pick<SupabaseClient, "from">, pros
     return null;
   }
   return parseProspect(data as Record<string, unknown>);
+}
+
+/** COM-161: reuses app.find_duplicate_accounts' own legal_name+tax_id fingerprint match, surfaced at Prospect stage. Advisory only, never blocks qualification. Fails closed (raises) for an actor with no active membership in tenantId. */
+export async function findExistingAccountsForProspect(client: ProspectQueryRpcClient, input: FindExistingAccountsForProspectInput): Promise<Account[]> {
+  const parsedInput = FindExistingAccountsForProspectInputSchema.parse(input);
+  const { data, error } = await client.rpc("find_existing_accounts_for_prospect", {
+    p_tenant_id: parsedInput.tenantId,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_prospect_id: parsedInput.prospectId,
+  });
+  if (error) {
+    throw new ProspectQueryError(error.message);
+  }
+  if (!Array.isArray(data)) {
+    throw new ProspectQueryError("find_existing_accounts_for_prospect returned a non-array result");
+  }
+  return data.map((row) => parseAccount(row as Record<string, unknown>));
 }

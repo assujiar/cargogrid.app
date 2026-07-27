@@ -4061,6 +4061,44 @@ Purely additive/presentational for the 26 migrated files — no query, mutation,
 
 Self-closing (out-of-band, no `CG-S*-*` verification chain applies). `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s "Active task"/"Next eligible task" rows are unchanged — still `CG-S7-COM-020` (Prompt 161, No-Reentry Enforcement), not yet authorized. `lib/design-system/migration-map.ts`'s form-field item now reads as substantially (not fully) resolved, with its own four remaining sub-categories named and reasoned rather than left as a vague "not migrated yet." Remaining open UI-primitive-adoption work: `EmptyState` (small in-section fragments, not real whole-page empty states — see `CHG-2026-098`'s own disclosure), the width-customized-input/checkbox/radio/`FormField` sub-categories named above, and the two-form `ApprovalDecisionPanel` migration (Medium risk, touches real submit paths).
 
+### CHG-2026-100 — No-Reentry Enforcement (Phase 2, Prompt 161)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-020` / `161_COMMERCIAL_NO_REENTRY_ENFORCEMENT_PROMPT.md` |
+| Change type | SCHEMA + SERVICE + UI |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `020` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | A fresh, explicit `AskUserQuestion` resolving a bare, unscoped "lanjut" -- operator selected "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+Closed two concrete, disclosed no-reentry/canonical-reuse gaps rather than inventing a generic provenance framework -- every prior capability's own hand-rolled jsonb-snapshot/duplicate-fingerprint pattern (`COM-143..160`) is reused unchanged.
+
+**Referential integrity**: `app.opportunities.account_ref` (`COM-147`) was a disclosed `text` "forward-compatible placeholder" populated by `app.convert_quotation_to_account` (`COM-155`) via a same-value `::text` cast -- no foreign key, no index, no database-enforced sync guarantee. New `app.opportunities.account_id uuid references app.accounts(id)` (indexed, guarded backfill) closes this; `app.convert_quotation_to_account` re-pointed via `create or replace function` (the same extension pattern `COM-155` itself used on `app.resolve_commercial_record_ref`) to set both columns going forward. `account_ref` retained unmodified -- additive only, immutable-migrations convention respected.
+
+**Visibility timing**: account-duplicate checking already existed (`app.find_duplicate_accounts`, `COM-155`) but fired only at quotation-acceptance time (`app.get_account_conversion_readiness`) -- a full Lead->Prospect->Opportunity->RFQ->rate-lookup->margin->Quotation pipeline could be duplicated for a repeat customer before that check ever ran. New `app.find_existing_accounts_for_lead` (company-name-only match, the one identifying field a Lead carries) and `app.find_existing_accounts_for_prospect` (reuses `app.find_duplicate_accounts`' own legal_name+tax_id fingerprint match verbatim) surface the same signal at the two earliest answerable points -- both advisory-only, tenant-scoped, fail-closed on missing membership, mirroring `app.find_duplicate_leads`' own established "never blocks capture" discipline exactly. No new override/audit table: the real "treat as same entity" actions (`app.link_lead_to_existing_prospect`, `COM-144`; `app.convert_quotation_to_account(p_target_account_id=...)`, `COM-155`) already self-capture a canonical `app.audit_logs` entry.
+
+New `app.commercial_opportunity_account_ref_drift` view (`security_invoker=true`, no masking needed) is a reconciliation safety net flagging any future disagreement between the two columns -- should be structurally empty from this checkpoint onward.
+
+**No implementation defect found during authoring.** One environment-setup blocker resolved before any test could run: this sandbox had neither a running Postgres server nor the PostGIS extension the existing migration chain requires -- both provisioned this checkpoint. One test-authoring UUID-range collision with `commercial-customer-contract-pricing.sql`'s own fixtures, remapped to an unclaimed suffix range.
+
+#### Scope and files
+
+New: `supabase/migrations/20260725090000_create_commercial_no_reentry_enforcement.sql` (1 migration -- 1 new column/index on `app.opportunities`, 1 `create or replace` of an already-applied function, 2 new functions, 1 new view, zero new permission-catalogue row); `scripts/db-tests/commercial-no-reentry-enforcement.sql`; `app/(tenant)/[tenantSlug]/commercial/_shared/account-reentry-panel.tsx`. Modified: `server/contracts/lead/lead.ts`, `server/contracts/prospect/prospect.ts`, `server/contracts/opportunity/opportunity.ts` (`accountId` added), `server/queries/lead.ts`(`.test.ts`), `server/queries/prospect.ts`(`.test.ts`), `app/(tenant)/[tenantSlug]/commercial/leads/[leadId]/page.tsx`, `app/(tenant)/[tenantSlug]/commercial/prospects/[prospectId]/page.tsx`. 3 new files, 1 migration, 7 modified files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (6 net new); `pnpm run db:test` PASS -- 51 migrations/51 db-test files, all green including the new `commercial-no-reentry-enforcement.sql` and `COM-143..160`'s own test files running unmodified; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `npx next build` PASS (no new route). `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..160` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Additive for every object; zero prior migration file's own column/table definition edited (`account_ref` untouched). `git revert` of this checkpoint's commit is safe and complete -- `account_id` has no dependent outside this same migration's own `convert_quotation_to_account` extension and the new drift view.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-020` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-021` (Prompt 162, Integrated Commercial Verification) -- dependency-`READY` (`143..161` all `VERIFIED`), already authorized under this same checkpoint's "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
