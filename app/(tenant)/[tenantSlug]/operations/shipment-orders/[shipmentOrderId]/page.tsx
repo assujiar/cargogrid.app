@@ -6,6 +6,7 @@ import { getShipmentOrder, getJobShipmentAllocationBalance, ShipmentOrderQueryEr
 import { getShipmentStatusHistory, ShipmentLifecycleQueryError } from "../../../../../../server/queries/shipment-lifecycle.ts";
 import { getShipmentModeProfile, ShipmentModeBaselineQueryError } from "../../../../../../server/queries/shipment-mode-baseline.ts";
 import { findAssignmentCandidates, getResourceAssignmentHistory, ResourceAssignmentQueryError } from "../../../../../../server/queries/resource-assignment.ts";
+import { getShipmentMilestoneTimeline, getShipmentMilestoneProjection, listMilestoneCodes, MilestoneManagementQueryError } from "../../../../../../server/queries/milestone-management.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -17,6 +18,8 @@ import { ModeProfileForm } from "./mode-profile-form.tsx";
 import { ChangeModeForm } from "./change-mode-form.tsx";
 import { ResourceAssignmentPanel } from "./resource-assignment-panel.tsx";
 import { ResourceAssignmentHistory } from "./resource-assignment-history.tsx";
+import { MilestoneTimeline } from "./milestone-timeline.tsx";
+import { IngestMilestoneEventForm } from "./ingest-milestone-event-form.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -27,6 +30,7 @@ import {
   holdResourceAssignmentAction,
   resumeResourceAssignmentAction,
   unassignResourceAction,
+  ingestMilestoneEventAction,
   type ShipmentOrderFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
@@ -113,6 +117,20 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     RESOURCE_ASSIGNMENT_ROLES.map((role) => [role, resourceHistory.find((a) => a.role === role && a.isCurrent) ?? null] as const),
   ) as Record<(typeof RESOURCE_ASSIGNMENT_ROLES)[number], (typeof resourceHistory)[number] | null>;
 
+  let milestoneEvents;
+  let milestoneProjection;
+  let milestoneCodes;
+  try {
+    milestoneEvents = await getShipmentMilestoneTimeline(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+    milestoneProjection = await getShipmentMilestoneProjection(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+    milestoneCodes = await listMilestoneCodes(supabase);
+  } catch (error) {
+    if (!(error instanceof MilestoneManagementQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading milestone events. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -134,6 +152,8 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundHoldAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => holdResourceAssignmentAction.bind(null, tenantSlug, shipment.id, role);
   const boundResumeAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => resumeResourceAssignmentAction.bind(null, tenantSlug, shipment.id, role);
   const boundUnassignAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => unassignResourceAction.bind(null, tenantSlug, shipment.id, role);
+  const milestoneIdempotencyKey = randomUUID();
+  const boundIngestMilestoneEventAction = ingestMilestoneEventAction.bind(null, tenantSlug, shipment.id, milestoneIdempotencyKey);
 
   return (
     <div className="flex flex-col gap-6">
@@ -245,6 +265,25 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Status timeline</h2>
         <StatusTimeline history={history} />
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Milestone events</h2>
+        {milestoneProjection ? (
+          <dl className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+            <dt className="text-neutral-600">Last milestone</dt>
+            <dd className="text-neutral-900">{milestoneProjection.lastMilestoneCode ?? "—"}</dd>
+            <dt className="text-neutral-600">Current ETA</dt>
+            <dd className="text-neutral-900">{milestoneProjection.currentEta ? new Date(milestoneProjection.currentEta).toLocaleString() : "—"}</dd>
+            <dt className="text-neutral-600">Delayed</dt>
+            <dd className="text-neutral-900">{milestoneProjection.isDelayed ? "Yes" : "No"}</dd>
+          </dl>
+        ) : null}
+        <IngestMilestoneEventForm action={boundIngestMilestoneEventAction} milestoneCodes={milestoneCodes} />
+        <div className="mt-2 border-t border-neutral-200 pt-2">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Timeline</h3>
+          <MilestoneTimeline events={milestoneEvents} />
+        </div>
       </section>
     </div>
   );

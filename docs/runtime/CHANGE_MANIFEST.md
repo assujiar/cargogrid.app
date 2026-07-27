@@ -4413,6 +4413,36 @@ Additive only -- zero prior migration file edited, zero new permission-catalogue
 
 Self-closing. `CG-S8-OPS-006` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-007` (Prompt 173, Milestone Management) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
 
+### CHG-2026-111 — Milestone Management (Phase 3, Prompt 173)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-007` / `173_MILESTONE_MANAGEMENT_PROMPT.md` |
+| Change type | Schema (4 new tables) + service layer + UI |
+| Baseline evidence | `OPS-172` `VERIFIED` (`docs/build-log/phase-03/OPS-172.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- sixth capability task in that range |
+
+#### Outcome
+
+Configurable, versioned per-mode milestone templates plus append-oriented, idempotent event capture with event/received time kept distinct, and a deterministic ETA/location/status projection recalculated in full from the event history on every ingest. Engine-reuse research (the same discipline `OPS-170` established) found the Configuration Engine's precedence model does not fit this capability's own `mode` versioning axis; mirrors `COM-150`'s own simpler tenant-scoped versioned-definition pattern instead. Milestone codes are a permanent, platform-wide registry (mirroring Status Engine's "canonical meaning is permanent" split).
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727140000_create_operations_milestone_management.sql` (`app.milestone_codes`, `app.milestone_template_versions`, `app.milestone_events`, `app.shipment_milestone_projections` tables; `app.register_milestone_code`, `app.create_milestone_template_draft`, `app.set_milestone_template_sequence`, `app.publish_milestone_template_version`, `app.recalculate_shipment_milestone_projection`, `app.ingest_milestone_event`, `app.get_shipment_milestone_timeline`, `app.get_shipment_milestone_projection` functions). New service layer: `server/contracts/milestone-management/milestone-management.ts(.test.ts)`, `server/queries/milestone-management.ts(.test.ts)`, `server/mutations/milestone-management.ts(.test.ts)`. New UI: `milestone-timeline.tsx`, `ingest-milestone-event-form.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`. 1 migration, ~9 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1555/1555 (26 net new: 9 contract, 9 query, 8 mutation). `db:test` PASS across 58 migrations/59 db-test files (1 net new, zero regression) -- 10 scenario groups covering template draft/sequence/publish authority-gating and idempotency and at-most-one-per-mode, empty-sequence/stale-version publish rejection, event-ingestion authority/unknown-code/unknown-source rejection and projection recalculation and idempotent retry, out-of-order-event determinism, reason-mandatory/real-prior-event correction as an additive row, blocked-once-cancelled, timeline ordering and customer-visible filtering, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Create`/`OPS:Edit`/`OPS:View`, all already seeded by `PLT-112`). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders` itself is untouched.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-007` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-008` (Prompt 174, Exception and Escalation) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

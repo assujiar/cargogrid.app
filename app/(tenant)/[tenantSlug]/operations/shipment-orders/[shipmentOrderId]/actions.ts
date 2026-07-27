@@ -19,6 +19,7 @@ import {
   unassignResource,
   ResourceAssignmentMutationError,
 } from "../../../../../../server/mutations/resource-assignment.ts";
+import { ingestMilestoneEvent, MilestoneManagementMutationError } from "../../../../../../server/mutations/milestone-management.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
 import type { ResourceAssignmentRole } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
@@ -313,6 +314,50 @@ export async function changeShipmentModeAction(
   } catch (error) {
     if (error instanceof ShipmentModeBaselineMutationError) {
       return { error: `Could not change this Shipment Order's mode: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-173: ingests one milestone event -- idempotent on the fresh-per-render idempotencyKey (see the detail page). A correction (correctsEventId set) requires a non-empty reason. */
+export async function ingestMilestoneEventAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const milestoneCode = String(formData.get("milestoneCode") ?? "");
+  const eventTime = String(formData.get("eventTime") ?? "");
+  const locationLabel = String(formData.get("locationLabel") ?? "").trim();
+  const correctsEventId = String(formData.get("correctsEventId") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await ingestMilestoneEvent(supabase, {
+      shipmentOrderId,
+      milestoneCode,
+      eventTime: new Date(eventTime).toISOString(),
+      source: "manual",
+      location: locationLabel.length === 0 ? null : { lat: 0, lng: 0, label: locationLabel },
+      reason: reason.length === 0 ? null : reason,
+      correctsEventId: correctsEventId.length === 0 ? null : correctsEventId,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MilestoneManagementMutationError) {
+      return { error: `Could not record this milestone event: ${error.message}` };
     }
     throw error;
   }
