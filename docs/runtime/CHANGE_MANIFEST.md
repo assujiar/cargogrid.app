@@ -4099,6 +4099,42 @@ Additive for every object; zero prior migration file's own column/table definiti
 
 Self-closing. `CG-S7-COM-020` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-021` (Prompt 162, Integrated Commercial Verification) -- dependency-`READY` (`143..161` all `VERIFIED`), already authorized under this same checkpoint's "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
 
+### CHG-2026-101 — Integrated Commercial Verification (Phase 2, Prompt 162)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-021` / `162_COMMERCIAL_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | TEST + DOCS (verification-only, zero application-code change) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `021` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+The Phase 2 equivalent of Platform Core's own `PLT-137` (Integrated Verification), scaled to 19 shipped Commercial capability prompts. New `scripts/db-tests/commercial-integrated-verification.sql` composes 13 of the 19 prompts (`143..145`, `147..151`, `154`, `155`, `157`, `160`, `161`) through one continuous **two-tenant** golden path -- two tenants deliberately sharing an identical company/contact name ("Global Freight Co"/"Jane Doe IntVer"), stressing `COM-161`'s own no-reentry purpose directly rather than a contrived edge case. Six new scenario groups: a combined RLS sweep across 9 major Commercial tables in one query (zero cross-tenant leak); confirmation that `app.accounts`' deliberately tenant-wide visibility (`ADR-0018`) still isolates two identically-named accounts across the tenant boundary; a no-reentry composition check (`find_existing_accounts_for_lead`/`for_prospect` never cross the tenant boundary, `commercial_opportunity_account_ref_drift` empty for both tenants); a combined masking sweep across four independently-authored directory views (`opportunities`/`quotations`/`margin_calculations`/`job_order_handoffs_directory`) simultaneously; an audit-trail reconciliation (>=8 distinct resource types in one tenant-scoped trail); and a composed `ERR-2026-004` regression sweep (zero `anon` `EXECUTE` across 23 functions, checked together not sampled).
+
+Full requirement/WBS/ADR/docs traceability audit: all 19 `docs/build-log/phase-02/COM-*.md` files present, all 20 `TASK_LEDGER`/execution-index rows `VERIFIED` with zero gap, 18/18 ADRs indexed, 51 migrations confirmed applying cleanly from a fresh `rm -rf node_modules && pnpm install --frozen-lockfile`.
+
+**Two test-authoring issues found and fixed in this checkpoint's own new file, zero defect in any already-`VERIFIED` capability**: (1) the composed tenant slugs initially violated `app.tenants`' own lowercase-only `tenants_slug_format` CHECK -- fixed; (2) this checkpoint's own new file's alphabetically-earlier filename meant its own "Jane Doe" contacts were created before `commercial-quotation-builder.sql`'s (`COM-151`, unmodified) own unscoped `full_name = 'Jane Doe'` lookup ran, breaking its "exactly one row" assumption -- the identical collision class `COM-153`'s own build log already documented once before -- fixed by renaming this checkpoint's own contact to "Jane Doe IntVer" rather than touching the established file.
+
+**Zero Critical/High/Medium-severity finding anywhere in the composed golden path or the full 52-file `db:test` run.** Nothing blocks `COM-163` Hardening.
+
+#### Scope and files
+
+New: `scripts/db-tests/commercial-integrated-verification.sql`; `docs/build-log/phase-02/COM-162.md`. Zero application code, zero migration. 2 new files.
+
+#### Tests and quality evidence
+
+Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS; `pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 52 migrations/52 db-test files (1 net new), re-run twice for determinism; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run git:check-paths` PASS (0 forbidden paths -- no new migration this checkpoint, so the usual disclosed false positive does not fire); `npx next build` PASS (no new route). This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+Test-only and documentation changes; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-021` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-022` (Prompt 163, Tenant/Security/Financial/Data Hardening) -- dependency-`READY` (`162` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
