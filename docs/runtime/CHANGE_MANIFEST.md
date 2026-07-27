@@ -4125,7 +4125,7 @@ New: `scripts/db-tests/commercial-integrated-verification.sql`; `docs/build-log/
 
 #### Tests and quality evidence
 
-Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS; `pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 52 migrations/52 db-test files (1 net new), re-run twice for determinism; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run git:check-paths` PASS (0 forbidden paths -- no new migration this checkpoint, so the usual disclosed false positive does not fire); `npx next build` PASS (no new route). This repository defines no `build` script.
+Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS; `pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 51 migrations/52 db-test files (1 net new), re-run twice for determinism; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `pnpm run git:check-paths` PASS (0 forbidden paths -- no new migration this checkpoint, so the usual disclosed false positive does not fire); `npx next build` PASS (no new route). This repository defines no `build` script.
 
 #### Compatibility, rollout, recovery
 
@@ -4134,6 +4134,40 @@ Test-only and documentation changes; no schema/data/application code touched. `g
 #### Approval and closure
 
 Self-closing. `CG-S7-COM-021` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-022` (Prompt 163, Tenant/Security/Financial/Data Hardening) -- dependency-`READY` (`162` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
+
+### CHG-2026-102 — Tenant/Security/Financial/Data Hardening (Phase 2, Prompt 163)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-022` / `163_COMMERCIAL_SECURITY_FINANCIAL_HARDENING_PROMPT.md` |
+| Change type | SCHEMA (function-level) + TEST + DOCS |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `022` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+`COM-162`'s own failure matrix recorded zero Critical/High/Medium finding. This checkpoint performed a fresh, targeted security review of the 6 capability prompts (`146`, `152`, `153`, `156`, `158`, `159`) `COM-162` itself disclosed as not independently recomposed by its own integration suite -- reading every `grant execute ... to authenticated` line across those 6 migrations (30 functions) for the one access-control convention every other Commercial function follows.
+
+**Found one real, previously undetected High-severity finding**: `app.evaluate_quotation_approval_requirement(p_quotation_id uuid)` (`COM-153`) was the only function across all 51 prior migrations granted to `authenticated` that takes a bare entity id with no tenant/actor parameter and performs no access check at all -- unlike its own sibling `app.get_quotation_submission_readiness`, which does. Concretely exploitable as a cross-tenant business-intelligence disclosure: any authenticated identity in any tenant, given a quotation id belonging to a different tenant, could learn that tenant's own margin/discount/value approval-threshold-crossing signal.
+
+**Root-cause repair**, new migration `20260726090000_create_commercial_hardening.sql`: `DROP FUNCTION` + recreate `app.evaluate_quotation_approval_requirement` with `p_actor_auth_user_id uuid default auth.uid()` and the identical `can_access_record` check its sibling already uses (a `DROP`, not `CREATE OR REPLACE`, is required since adding a parameter changes the function's identity); `CREATE OR REPLACE app.submit_quotation` (same signature, unchanged) now passes the already-validated actor through to its one internal call. One pre-existing db-test call site (`commercial-quotation-approval.sql`) updated to pass its real actor id explicitly.
+
+#### Scope and files
+
+New: `supabase/migrations/20260726090000_create_commercial_hardening.sql` (1 migration -- drops+recreates 1 function, `create or replace`s 1 more, zero new permission-catalogue row); `scripts/db-tests/commercial-hardening.sql`; `docs/build-log/phase-02/COM-163.md`. Modified: `scripts/db-tests/commercial-quotation-approval.sql` (one call-site line). 3 new files, 1 migration, 1 modified test file.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 52 migrations/53 db-test files (1 net new), re-run twice for determinism, including `commercial-quotation-approval.sql`'s own updated call site passing unchanged; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` PASS; `npx next build` PASS (no new route). `pnpm run git:check-paths` reports the same disclosed, pre-existing false positive as `COM-151..161` once this checkpoint's own new migration file is staged -- not a real protected-path violation. This repository defines no `build` script.
+
+#### Compatibility, rollout, recovery
+
+The dropped-and-recreated function is a stricter, superset-of-behavior replacement (same logic, added access check) -- no caller with legitimate access loses functionality; the one caller relying on the old bare signature (`submit_quotation`) is updated in the same migration. `git revert` of this checkpoint's commit restores the prior, vulnerable form -- safe for data (no data-bearing object touched) but reopens the finding, so a revert should be paired with re-applying the fix another way.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-022` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-023` (Prompt 164, Documentation and Handoff) -- dependency-`READY` (`163` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
 
 ## 3. Maintenance rules
 
