@@ -2,6 +2,8 @@
 
 **Added by:** CargoGrid UI Modernization checkpoint 3 (2026-07-26, out-of-band — not a numbered `CG-S*-*` Commercial-phase prompt; does not consume, rename, or renumber `CG-S7-COM-020`/Prompt 161). Continues the same out-of-band design-system track as checkpoint 1 (`CargoGrid Design System Expansion and Implementation`) and checkpoint 2 (`Table and Pagination primitives`, `docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md` §8).
 
+**Superseded by checkpoint 4 (2026-07-26, `07_GAP_ANALYSIS_AND_ROADMAP.md` §10):** the "exactly 6 components are real" finding below was checkpoint 3's own snapshot, at the user's explicit request to then build everything else this document found missing. ~40 further components are now `IMPLEMENTED` — `lib/design-system/component-registry.ts` is the current, living source of truth (this document's §1/§2 below are preserved as the original audit narrative, not rewritten to erase what checkpoint 3 actually found at the time).
+
 ## 0. Scope and method
 
 This checkpoint's own instruction asked for a full inventory of every shared component, classified into 14 categories, plus a protected internal showcase route rendering every one of them with every supported variant/state, plus a duplicate-detection migration map. Before writing any code, the repository was audited by direct inspection (`Grep`/`Read`, not assumed):

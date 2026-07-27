@@ -1,11 +1,13 @@
 /**
  * Duplicate-component / migration map for `/internal/design-system/duplicates`
- * (CargoGrid UI Modernization checkpoint 3). Every "affectedPages" count below was
- * verified this checkpoint by grep against `app/` (see
+ * (CargoGrid UI Modernization checkpoint 3, updated checkpoint 4). Every
+ * "affectedPages" count was verified by grep against `app/` (see
  * `docs/design-system/08_COMPONENT_INVENTORY.md` §4 for the exact commands) — not
  * estimated. Per this task's own instruction: "Do not delete legacy implementations
  * until all consumers have been safely migrated" — this module only records the map,
- * it does not perform any migration itself.
+ * it does not perform any migration itself, except where explicitly noted below
+ * (two entries were migrated as a direct, low-risk consequence of checkpoint 4
+ * building the missing replacement).
  */
 
 export type MigrationPriority = "High" | "Medium" | "Low";
@@ -22,6 +24,29 @@ export interface MigrationMapEntry {
 }
 
 export const MIGRATION_MAP: readonly MigrationMapEntry[] = [
+  {
+    legacyImplementation: "Canonical status values (Lead.status, SupremeTenant.canonicalStatus, and others) rendered as plain text",
+    sharedReplacement: "components/ui/status-badge.tsx + components/domain/status-tone-map.ts",
+    replacementStatus: "IMPLEMENTED",
+    affectedPages: [
+      "commercial/leads/page.tsx (status column) — MIGRATED, checkpoint 4",
+      "supreme/tenants/page.tsx (status column) — MIGRATED, checkpoint 4",
+      "every other Commercial list/detail page rendering a canonical status column (opportunities, quotations, contracts, credit-approvals, etc.) — still pending",
+    ],
+    priority: "High",
+    breakingChangeRisk: "Low",
+    riskNote:
+      "StatusBadge was production-ready with 0 consumers because nothing owned the domain-specific canonical_ref→tone mapping. Checkpoint 4 built that mapping (Domain Components, now IMPLEMENTED) and migrated the two screens checkpoint 2 already touched. Every remaining screen needs its own domain's tone map added to status-tone-map.ts first (mechanical, low-risk) before its status column can migrate.",
+  },
+  {
+    legacyImplementation: "Lead.source rendered as plain text",
+    sharedReplacement: "components/ui/badge.tsx",
+    replacementStatus: "IMPLEMENTED",
+    affectedPages: ["commercial/leads/page.tsx (source column) — MIGRATED, checkpoint 4"],
+    priority: "Low",
+    breakingChangeRisk: "Low",
+    riskNote: "Resolved. A free-form tag, not a canonical status, so Badge (not StatusBadge) was the correct target.",
+  },
   {
     legacyImplementation: "Hand-rolled raw <table> markup, one copy per page",
     sharedReplacement: "components/tables/data-table.tsx",
@@ -51,77 +76,54 @@ export const MIGRATION_MAP: readonly MigrationMapEntry[] = [
   },
   {
     legacyImplementation: "Hand-rolled animate-pulse skeleton bars, one copy per route's loading.tsx",
-    sharedReplacement: "Skeleton (docs/design-system/02_COMPONENTS.md §2)",
-    replacementStatus: "DOCUMENTED_ONLY",
+    sharedReplacement: "Skeleton / SkeletonText / SkeletonTable (components/ui/skeleton.tsx)",
+    replacementStatus: "IMPLEMENTED",
     affectedPages: [
-      "27 loading.tsx files across commercial/* and admin/users, supreme/tenants — see docs/design-system/08_COMPONENT_INVENTORY.md §4 for the full list",
+      "27 loading.tsx files across commercial/* and admin/users, supreme/tenants — see docs/design-system/08_COMPONENT_INVENTORY.md §4 for the full list. Not migrated yet.",
     ],
     priority: "Medium",
     breakingChangeRisk: "Low",
-    riskNote: "Purely presentational, but blocked until a Skeleton primitive is actually built — nothing to migrate onto yet.",
-  },
-  {
-    legacyImplementation: "Canonical status values (Lead.status, SupremeTenant.canonicalStatus, and others) rendered as plain text",
-    sharedReplacement: "components/ui/status-badge.tsx",
-    replacementStatus: "IMPLEMENTED",
-    affectedPages: [
-      "commercial/leads/page.tsx (status column)",
-      "supreme/tenants/page.tsx (status column)",
-      "every other Commercial list/detail page rendering a canonical status column",
-    ],
-    priority: "High",
-    breakingChangeRisk: "Low",
-    riskNote:
-      "StatusBadge is production-ready and unused (0 consumers) — the highest-value, lowest-risk adoption gap in this inventory. Blocked only on the not-yet-built per-domain canonical_ref→tone mapping (\"Canonical status-to-tone mapping\", Domain Components, DOCUMENTED_ONLY) — StatusBadge itself deliberately does not own that mapping.",
-  },
-  {
-    legacyImplementation: "Lead.source rendered as plain text",
-    sharedReplacement: "components/ui/badge.tsx",
-    replacementStatus: "IMPLEMENTED",
-    affectedPages: ["commercial/leads/page.tsx (source column)"],
-    priority: "Low",
-    breakingChangeRisk: "Low",
-    riskNote: "Single-file, purely cosmetic — a free-form tag, not a canonical status, so Badge (not StatusBadge) is the correct target.",
+    riskNote: "Purely presentational. The primitive now exists (checkpoint 4) — the remaining work is 27 one-line-ish swaps, not a design decision.",
   },
   {
     legacyImplementation: "Inline role=\"alert\" error block, one copy per page",
-    sharedReplacement: "Error State (docs/design-system/02_COMPONENTS.md §2)",
-    replacementStatus: "DOCUMENTED_ONLY",
-    affectedPages: ["Every Commercial list/detail page's load-failure branch — 21+ pages"],
+    sharedReplacement: "ErrorState (components/ui/error-state.tsx)",
+    replacementStatus: "IMPLEMENTED",
+    affectedPages: ["Every Commercial list/detail page's load-failure branch — 21+ pages. Not migrated yet."],
     priority: "Medium",
     breakingChangeRisk: "Low",
-    riskNote: "Purely presentational once built; no retry/request-id behavior exists today to preserve or break.",
+    riskNote: "Purely presentational. The primitive now exists (checkpoint 4) — no retry/request-id behavior exists today to preserve or break.",
   },
   {
     legacyImplementation: "Inline empty-state <p> message, one copy per page",
-    sharedReplacement: "Empty State (docs/design-system/02_COMPONENTS.md §2); DataTable's built-in emptyMessage is a first step but takes a plain node, not the full illustration/primary-action/secondary-action shape",
-    replacementStatus: "DOCUMENTED_ONLY",
-    affectedPages: ["Every Commercial list page's zero-row branch — 19+ pages"],
+    sharedReplacement: "EmptyState (components/ui/empty-state.tsx); DataTable's built-in emptyMessage remains the right choice for a table's own empty row, EmptyState is for a whole-page empty state with an action",
+    replacementStatus: "IMPLEMENTED",
+    affectedPages: ["Every Commercial list page's zero-row branch — 19+ pages. Not migrated yet."],
     priority: "Medium",
     breakingChangeRisk: "Low",
-    riskNote: "Purely presentational; no gated action exists today to preserve or break.",
+    riskNote: "Purely presentational. The primitive now exists (checkpoint 4) — no gated action exists today to preserve or break.",
   },
   {
     legacyImplementation: "approval-decision-form.tsx and credit-approval-decision-form.tsx independently implement the same approve/reject decision panel",
-    sharedReplacement: "Approval Decision Panel (components/domain/, docs/design-system/04_DATA_EXPERIENCE_AND_WORKFLOW_PATTERNS.md §2)",
-    replacementStatus: "DOCUMENTED_ONLY",
+    sharedReplacement: "ApprovalDecisionPanel (components/domain/approval-decision-panel.tsx)",
+    replacementStatus: "IMPLEMENTED",
     affectedPages: [
-      "commercial/quotations/[quotationId]/approval-decision-form.tsx",
-      "commercial/accounts/[accountId]/credit-approval-decision-form.tsx",
+      "commercial/quotations/[quotationId]/approval-decision-form.tsx — not migrated",
+      "commercial/accounts/[accountId]/credit-approval-decision-form.tsx — not migrated",
     ],
     priority: "Medium",
     breakingChangeRisk: "Medium",
     riskNote:
-      "Touches real submit/decision server actions, not pure display — extraction must preserve each capability's own reason-required/permission-gated behavior exactly (COM-153/COM-157). Wait for a third real consumer before extracting, per 09_UX_DESIGN_SYSTEM_WORKSTREAM.md §4.2's \"one owner\" rule.",
+      "The primitive now exists (checkpoint 4) but touches real submit/decision server actions, not pure display — migrating either form must preserve its own reason-required/permission-gated behavior exactly (COM-153/COM-157). Deliberately not done this checkpoint: a display-only component build and a behavior-preserving migration of two tested capabilities are different risk classes and shouldn't share one diff.",
   },
   {
     legacyImplementation: "Raw <input>/<select>/<textarea> form fields, one hand-styled copy per form",
-    sharedReplacement: "Input / Select / Form Field (docs/design-system/02_COMPONENTS.md §2)",
-    replacementStatus: "DOCUMENTED_ONLY",
-    affectedPages: ["39 form/action-panel files across every Commercial module — see docs/design-system/08_COMPONENT_INVENTORY.md §4"],
+    sharedReplacement: "Input / Select / Textarea / Checkbox / Radio / Switch / FormField (components/forms/)",
+    replacementStatus: "IMPLEMENTED",
+    affectedPages: ["39 form/action-panel files across every Commercial module — see docs/design-system/08_COMPONENT_INVENTORY.md §4. Not migrated yet."],
     priority: "Medium",
     breakingChangeRisk: "Low",
     riskNote:
-      "Large surface but mechanical if scoped to display/styling only; becomes Medium risk only if a future extraction also changes validation-state wiring (autosave, error-message binding) rather than just markup.",
+      "All primitives now exist (checkpoint 4), styled to match every existing field's own current appearance exactly (border-neutral-300, rounded-md, px-3 py-2) so a migration changes zero visual behavior. Large surface (39 files) but mechanical if scoped to display only; becomes Medium risk only if a future migration also changes validation-state wiring (autosave, error-message binding) rather than just markup.",
   },
 ] as const;

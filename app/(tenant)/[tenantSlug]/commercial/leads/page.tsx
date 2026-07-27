@@ -5,6 +5,9 @@ import { listLeads, LeadQueryError, type ListLeadsResult } from "../../../../../
 import type { Lead } from "../../../../../server/contracts/lead/lead.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { Pagination } from "../../../../../components/tables/pagination.tsx";
+import { Badge } from "../../../../../components/ui/badge.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { LEAD_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { captureLeadAction } from "./actions.ts";
 import { CaptureLeadForm } from "./capture-lead-form.tsx";
 
@@ -26,6 +29,12 @@ import { CaptureLeadForm } from "./capture-lead-form.tsx";
  * Commercial consumer for both; no query/behavior change, table markup and the
  * previously-static "Page X" text (no actual prev/next control existed before this
  * checkpoint) only.
+ *
+ * Status/Source columns now render through `StatusBadge`/`Badge` (checkpoint 4), the
+ * first real consumer of either -- closing `docs/design-system/08_COMPONENT_
+ * INVENTORY.md` §4's top-priority migration-map entry. Tone comes from
+ * `components/domain/status-tone-map.ts`'s `LEAD_STATUS_TONE_MAP`, not an inline
+ * mapping duplicated in this file.
  */
 export default async function CommercialLeadsPage({
   params,
@@ -69,8 +78,15 @@ export default async function CommercialLeadsPage({
       ),
     },
     { key: "company", header: "Company", render: (lead) => lead.companyName ?? "—" },
-    { key: "source", header: "Source", render: (lead) => lead.source },
-    { key: "status", header: "Status", render: (lead) => lead.status },
+    { key: "source", header: "Source", render: (lead) => <Badge tone="neutral">{lead.source}</Badge> },
+    {
+      key: "status",
+      header: "Status",
+      render: (lead) => {
+        const { tone, label } = LEAD_STATUS_TONE_MAP[lead.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
     { key: "score", header: "Score", align: "right", render: (lead) => lead.score },
   ];
 

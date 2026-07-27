@@ -12,12 +12,37 @@ import { ComponentStatusBadge } from "./component-status-badge.tsx";
 import { CopyImport } from "../copy-import.tsx";
 import { ViewportFrame } from "../viewport-frame.tsx";
 import { ButtonShowcase, BannerShowcase, BadgeShowcase, StatusBadgeShowcase } from "./implemented-showcases.tsx";
+import {
+  InputShowcase,
+  SelectShowcase,
+  CheckboxSwitchShowcase,
+  AlertShowcase,
+  EmptyErrorStateShowcase,
+  DialogShowcase,
+  TooltipDropdownShowcase,
+  TabsAccordionShowcase,
+  CardKpiShowcase,
+} from "./checkpoint4-showcases.tsx";
 
 const LIVE_SHOWCASES: Partial<Record<string, () => React.JSX.Element>> = {
   Button: ButtonShowcase,
   Banner: BannerShowcase,
   Badge: BadgeShowcase,
   StatusBadge: StatusBadgeShowcase,
+  Input: InputShowcase,
+  Select: SelectShowcase,
+  Checkbox: CheckboxSwitchShowcase,
+  Switch: CheckboxSwitchShowcase,
+  Alert: AlertShowcase,
+  "Empty State": EmptyErrorStateShowcase,
+  "Error State": EmptyErrorStateShowcase,
+  Dialog: DialogShowcase,
+  Tooltip: TooltipDropdownShowcase,
+  "Dropdown menu": TooltipDropdownShowcase,
+  Tabs: TabsAccordionShowcase,
+  Accordion: TabsAccordionShowcase,
+  Card: CardKpiShowcase,
+  "KPI Card": CardKpiShowcase,
 };
 
 const STATUSES: readonly ComponentStatus[] = ["IMPLEMENTED", "DOCUMENTED_ONLY", "BLOCKED", "NOT_NAMED"];

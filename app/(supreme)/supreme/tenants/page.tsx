@@ -4,6 +4,8 @@ import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
 import { listSupremeTenants, SupremeTenantsQueryError, type ListSupremeTenantsResult, type SupremeTenant } from "../../../../server/queries/supreme-tenants.ts";
 import { DataTable, type DataTableColumn } from "../../../../components/tables/data-table.tsx";
 import { Pagination } from "../../../../components/tables/pagination.tsx";
+import { StatusBadge } from "../../../../components/ui/status-badge.tsx";
+import { resolveTenantStatusTone } from "../../../../components/domain/status-tone-map.ts";
 
 const PAGE_SIZE = 20;
 
@@ -29,6 +31,13 @@ const PAGE_SIZE = 20;
  * consumer validating both against a screen outside Commercial; no query/behavior
  * change, table markup and the previously-static "Page X" text (no actual prev/next
  * control existed before this checkpoint) only.
+ *
+ * Status column now renders through `StatusBadge` (checkpoint 4), via
+ * `components/domain/status-tone-map.ts`'s `resolveTenantStatusTone` -- the real
+ * `canonical_status` check constraint (`supabase/migrations/
+ * 20260716075355_create_tenants.sql`) has 4 values; any unrecognized value falls back
+ * to a neutral tone rather than throwing, since this column's own TS type is an
+ * unconstrained `string`.
  */
 export default async function SupremeTenantsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const access = await resolveSupremeAdminAccessForRequest();
@@ -64,7 +73,14 @@ export default async function SupremeTenantsPage({ searchParams }: { searchParam
   const columns: readonly DataTableColumn<SupremeTenant>[] = [
     { key: "name", header: "Name", render: (tenant) => tenant.name },
     { key: "slug", header: "Slug", render: (tenant) => tenant.slug },
-    { key: "status", header: "Status", render: (tenant) => tenant.canonicalStatus },
+    {
+      key: "status",
+      header: "Status",
+      render: (tenant) => {
+        const { tone, label } = resolveTenantStatusTone(tenant.canonicalStatus);
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
   ];
 
   return (

@@ -1,6 +1,6 @@
 # Component Catalogue
 
-**Updated by:** CargoGrid UI Modernization checkpoint (2026-07-26, out-of-band, see `07_GAP_ANALYSIS_AND_ROADMAP.md` §8) — added `DataTable`/`Pagination` as `IMPLEMENTED` (roadmap item 3). Original authoring below (CargoGrid Design System Expansion, 2026-07-24) preserved as-is except the specific rows/sections this update touches.
+**Updated by:** CargoGrid UI Modernization checkpoint 2 (2026-07-26, out-of-band, see `07_GAP_ANALYSIS_AND_ROADMAP.md` §8) — added `DataTable`/`Pagination` as `IMPLEMENTED` (roadmap item 3). **Updated again by checkpoint 4** (`07_GAP_ANALYSIS_AND_ROADMAP.md` §10) — ~40 further entries in §2's table flipped to `IMPLEMENTED`; §1's full-spec treatment below still covers only the original 6 primitives plus the two checkpoint-2 additions in detail (Button/Banner/Badge/StatusBadge/DataTable/Pagination) — the ~40 checkpoint-4 additions get §2's one-line-plus-status treatment and a real, working implementation, not (yet) the full 10-field spec shape this file's own convention calls for; `docs/design-system/08_COMPONENT_INVENTORY.md` §1 carries the fuller per-field detail (variants/states/a11y/tokens/consumers) for every one of them. Original authoring below (CargoGrid Design System Expansion, 2026-07-24) preserved as-is except the specific rows/sections each update touches.
 
 Source of decisions: `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §4/§5 (inventory, 11-state contract — cited, not re-derived), `ADR-0005` (Radix copy-in mechanism), `ADR-0017` (design identity, white-label boundary). Every component below is documented against the same spec shape this task's own instruction requires: purpose, when to use, when not to use, anatomy, variants, sizes, states, keyboard behavior, accessibility, responsive behavior, white-label behavior, density behavior, anti-patterns, implementation notes. `IMPLEMENTED` components get the full shape; `DOCUMENTED_ONLY` components get a compact version of the same shape (enough for a future checkpoint to build against without re-deriving the pattern) — building all ~70 to full production detail in one checkpoint is out of this task's bounded scope (`AGENTS.md` atomic-sizing discipline), named honestly rather than rushed.
 
@@ -110,71 +110,80 @@ Source of decisions: `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §4/�
 
 ## 2. Full requested catalogue — status summary
 
-Every component this task's own instruction named, with purpose (one line) and status. Components not listed individually above are `DOCUMENTED_ONLY`: a real screen has not needed them yet in this repository (every existing screen is a plain server-rendered table/form using raw HTML elements with Tailwind utility classes reading the semantic tokens directly — functionally correct and token-disciplined, but not yet extracted into a shared primitive per `09_*.md` §4.2's "one owner" rule). Building each of these against a *hypothetical* future screen, with no real consumer to validate the API against, risks exactly the "unresolved placeholder"/"speculative abstraction" pattern `AGENTS.md` and this repository's own coding standards forbid — so the catalogue below is a specification a future capability-driven checkpoint builds against when a real screen needs it, not a batch of speculative components.
+**Updated checkpoint 4 (2026-07-26):** ~40 entries below flipped from `DOCUMENTED_ONLY`/un-named to `IMPLEMENTED` — full detail in `07_GAP_ANALYSIS_AND_ROADMAP.md` §10 and `08_COMPONENT_INVENTORY.md` §2 (updated). Every one was built against the Radix primitives already a `radix-ui` dependency (`ADR-0005`'s copy-in mechanism) or as plain native-HTML server-safe components — zero new npm dependencies added. What's still not built, and why, is named per-row below rather than left silently blank: a handful of items (Time picker, File upload, Document preview/Attachment list, Kanban board, Calendar, Chart wrapper, Filter bar/Saved views/Bulk action bar, Stepper, Approval queue, Sidebar/Navigation group/Page header/Persistent top bar) remain `DOCUMENTED_ONLY`/`BLOCKED` because each needs either a missing storage pipeline, a new dependency decision, a real consumer that doesn't exist yet, or an actual shell redesign — not because building more components ran out of time.
 
 | Component | One-line purpose | Status |
 |---|---|---|
-| Icon button | Icon-only action (row action, toolbar) | `DOCUMENTED_ONLY` — same states/variants as Button, `aria-label` mandatory (no visible text to derive an accessible name from) |
-| Button group | Segmented set of mutually exclusive or related actions | `DOCUMENTED_ONLY` |
-| Link | Inline/styled navigation, distinct from Button's `asChild` composition | `DOCUMENTED_ONLY` |
-| Input | Single-line text entry | `DOCUMENTED_ONLY` — every current form (`admin/users`, `commercial/leads`, etc.) uses a raw `<input>` with token-driven Tailwind classes; extraction is due once a second form needs identical validation-state styling |
-| Textarea | Multi-line text entry | `DOCUMENTED_ONLY` |
-| Number input | Numeric entry with locale-aware formatting | `DOCUMENTED_ONLY` |
-| Currency input | Money entry, always paired with a currency code, never floating point in the underlying value | `DOCUMENTED_ONLY` — the money-as-`numeric`-never-float rule (`AGENTS.md` "Data and finance rules") binds this component's future implementation |
-| Password input | Masked entry with reveal toggle | `DOCUMENTED_ONLY` |
-| Search input | Debounced, server-side-filtered search trigger (never client-side filter of a large dataset — `09_*.md` §11) | `DOCUMENTED_ONLY` |
-| Select | Single-choice dropdown | `DOCUMENTED_ONLY` |
-| Combobox | Searchable single-choice, RLS-aware reference picker (`09_*.md` §4.1) | `DOCUMENTED_ONLY` |
-| Multi-select | Multiple-choice with chip display | `DOCUMENTED_ONLY` |
-| Checkbox | Boolean/multi-select-in-a-set | `DOCUMENTED_ONLY` |
-| Radio | Single choice, always-visible set | `DOCUMENTED_ONLY` |
-| Switch | Immediate-effect boolean toggle (vs. Checkbox's form-submit-pending boolean) | `DOCUMENTED_ONLY` |
-| Date picker | Calendar-backed date entry | `DOCUMENTED_ONLY` |
-| Date-range picker | Paired start/end date entry | `DOCUMENTED_ONLY` |
-| Time picker | Time-of-day entry | `DOCUMENTED_ONLY` |
+| Icon button | Icon-only action (row action, toolbar) | `IMPLEMENTED` — `components/ui/icon-button.tsx`, same variants/states as Button, `aria-label` mandatory |
+| Button group | Segmented set of mutually exclusive or related actions | `IMPLEMENTED` — `components/ui/button-group.tsx` |
+| Link | Inline/styled navigation, distinct from Button's `asChild` composition | `IMPLEMENTED` — `components/ui/link.tsx` |
+| Split Button | Primary action + caret trigger opening secondary actions | `IMPLEMENTED` — `components/ui/split-button.tsx`. Not named in this catalogue before a later checkpoint's own instruction requested it; disclosed then built, not silently invented. |
+| Dropdown Action | A single button that itself triggers a dropdown action list | `IMPLEMENTED` — `components/ui/dropdown-action.tsx`. Same not-previously-named disclosure as Split Button. |
+| Input | Single-line text entry | `IMPLEMENTED` — `components/forms/input.tsx`, styled to match every existing raw `<input>` exactly; 39 forms remain unmigrated (migration map) |
+| Textarea | Multi-line text entry | `IMPLEMENTED` — `components/forms/textarea.tsx` |
+| Number input | Numeric entry with locale-aware formatting | `IMPLEMENTED` — `components/forms/number-input.tsx` (a `type="number"` specialization of Input; no locale-aware formatting layer added) |
+| Currency input | Money entry, always paired with a currency code, never floating point in the underlying value | `IMPLEMENTED` — `components/forms/currency-input.tsx`, bound to a `numeric`-shaped string (the money-as-`numeric`-never-float rule, `AGENTS.md`) |
+| Password input | Masked entry with reveal toggle | `IMPLEMENTED` — `components/forms/password-input.tsx` |
+| Search input | Debounced, server-side-filtered search trigger (never client-side filter of a large dataset — `09_*.md` §11) | `IMPLEMENTED` for the field's appearance (`components/forms/search-input.tsx`) — debouncing/server-side wiring remains the caller's own responsibility, this component does not fetch |
+| Select | Single-choice dropdown | `IMPLEMENTED` — `components/forms/select.tsx`, native `<select>` matching existing styling |
+| Combobox | Searchable single-choice, RLS-aware reference picker (`09_*.md` §4.1) | `IMPLEMENTED` — `components/forms/combobox.tsx`, hand-implemented WAI-ARIA combobox pattern (no Radix Combobox exists) |
+| Multi-select | Multiple-choice with chip display | `IMPLEMENTED` — `components/forms/multi-select.tsx` |
+| Checkbox | Boolean/multi-select-in-a-set | `IMPLEMENTED` — `components/forms/checkbox.tsx` |
+| Radio | Single choice, always-visible set | `IMPLEMENTED` — `components/forms/radio.tsx` (`Radio` + `RadioGroup`) |
+| Switch | Immediate-effect boolean toggle (vs. Checkbox's form-submit-pending boolean) | `IMPLEMENTED` — `components/forms/switch.tsx`, pure-CSS track/thumb, zero client JS |
+| Date picker | Calendar-backed date entry | `IMPLEMENTED` — `components/forms/date-input.tsx` (`DateInput`), native `<input type="date">`, not a custom calendar popover |
+| Date-range picker | Paired start/end date entry | `IMPLEMENTED` — `components/forms/date-input.tsx` (`DateRangeInput`) |
+| Time picker | Time-of-day entry | `DOCUMENTED_ONLY` — not built checkpoint 4; no real consumer named it |
 | File upload | Async progress, type/size validation, signed-URL preview (never renders a file whose scan status isn't clean, `09_*.md` §4.1) | `BLOCKED` on a storage/upload pipeline — none exists yet (`01_TOKENS_AND_THEME.md` §3.1) |
-| Form field | Label + control + help text + error message, one accessible unit | `DOCUMENTED_ONLY` |
-| Form section | Grouped fields with a heading, used for long forms' readable-max-width layout | `DOCUMENTED_ONLY` |
-| Validation summary | Form-level error list, focus target for "jump to first error" | `DOCUMENTED_ONLY` |
-| Alert / Callout | Inline, non-persistent emphasis block (distinct from Banner's page-level persistence) | `DOCUMENTED_ONLY` — `Banner`'s 4-tone set is the closest existing implementation; a true dismissible Alert/Callout is a separate future component |
+| Form field | Label + control + help text + error message, one accessible unit | `IMPLEMENTED` — `components/forms/form-field.tsx` |
+| Form section | Grouped fields with a heading, used for long forms' readable-max-width layout | `IMPLEMENTED` — `components/forms/form-section.tsx` |
+| Validation summary | Form-level error list, focus target for "jump to first error" | `IMPLEMENTED` — `components/forms/validation-message.tsx` (`ValidationMessage` field-level, `ValidationSummary` form-level) |
+| Alert / Callout | Inline, non-persistent emphasis block (distinct from Banner's page-level persistence) | `IMPLEMENTED` — `components/ui/alert.tsx`, dismissible (local state) |
 | Tag | Free-form label, same shape as `Badge` | `IMPLEMENTED` via `Badge` (no separate `Tag` component — same primitive, no duplication) |
-| Tooltip | Hover/focus-triggered supplementary text | `DOCUMENTED_ONLY` |
-| Popover | Click-triggered floating content | `DOCUMENTED_ONLY` |
-| Dropdown menu | Click-triggered action list | `DOCUMENTED_ONLY` |
-| Context menu | Right-click action list | `DOCUMENTED_ONLY` |
-| Command palette | Keyboard-first global action/search launcher | `DOCUMENTED_ONLY` |
-| Tabs | Same-page view switch | `DOCUMENTED_ONLY` |
-| Accordion | Collapsible content sections | `DOCUMENTED_ONLY` |
-| Card | Bounded content block | `DOCUMENTED_ONLY` — used sparingly by design (`ADR-0017` §1: "avoid turning every section into a card") |
-| Metric card / KPI widget | Single-number dashboard tile | `DOCUMENTED_ONLY` |
+| Tooltip | Hover/focus-triggered supplementary text | `IMPLEMENTED` — `components/ui/tooltip.tsx`, built on Radix Tooltip |
+| Popover | Click-triggered floating content | `IMPLEMENTED` — `components/ui/popover.tsx`, built on Radix Popover |
+| Dropdown menu | Click-triggered action list | `IMPLEMENTED` — `components/ui/dropdown-menu.tsx`, built on Radix DropdownMenu |
+| Context menu | Right-click action list | `IMPLEMENTED` — `components/ui/context-menu.tsx`, built on Radix ContextMenu |
+| Command palette | Keyboard-first global action/search launcher | `IMPLEMENTED` — `components/ui/command-menu.tsx` (Cmd/Ctrl+K), built on Radix Dialog + a plain filtered list, not the `cmdk` package (not a dependency) |
+| Tabs | Same-page view switch | `IMPLEMENTED` — `components/ui/tabs.tsx`, built on Radix Tabs |
+| Accordion | Collapsible content sections | `IMPLEMENTED` — `components/ui/accordion.tsx`, native `<details>`/`<summary>`, zero client JS |
+| Card | Bounded content block | `IMPLEMENTED` — `components/ui/card.tsx` — used sparingly by design (`ADR-0017` §1: "avoid turning every section into a card") |
+| Metric card / KPI widget | Single-number dashboard tile | `IMPLEMENTED` — `components/ui/kpi-card.tsx`; no real dashboard consumes it yet (`commercial/dashboard` renders buckets/lists) |
+| Description List | Label/value pairs | `IMPLEMENTED` — `components/ui/description-list.tsx`. Not named in this catalogue before a later checkpoint's own instruction requested it; disclosed then built. |
+| Stat | Bare label/value pair (inline counterpart to KPI Card) | `IMPLEMENTED` — `components/ui/stat.tsx`. Same not-previously-named disclosure. |
 | Table | Static/simple tabular display | `IMPLEMENTED` — `components/tables/data-table.tsx` (see §1 above); both `commercial/leads` and `supreme/tenants` migrated off their raw `<table>` |
-| Data grid | Dense, server-paginated/sortable/filterable operational table with density-tier support (`--row-height-*`) | `IMPLEMENTED` for display + density (`DataTable` above, consumes `--row-height-*`); sort/filter/grouping/saved-views/column-visibility-pinning/bulk-actions/selection/virtualization remain `DOCUMENTED_ONLY` — no current screen has server-side support for any of those yet, per `09_*.md` §4.1's "one owner" rule building ahead of a real consumer is deferred, not attempted |
-| Pagination | Page/cursor navigation control | `IMPLEMENTED` (offset case only) — `components/tables/pagination.tsx` + `lib/tables/pagination-range.ts`; both `commercial/leads` and `supreme/tenants` migrated off inline page-number math and a static "Page X" string. Cursor/keyset pagination remains `DOCUMENTED_ONLY`. |
-| Filter bar | Explicit-allowlist filter controls (`09_*.md` §4.1, mirrors the server-side allowlist) | `DOCUMENTED_ONLY` |
-| Saved views | Named, persisted filter/sort/column configurations | `DOCUMENTED_ONLY` |
-| Bulk action bar | Appears on multi-row selection, drives selection-token-based bulk mutation (never thousands of raw IDs from the browser, `09_*.md` §4.1) | `DOCUMENTED_ONLY` |
-| Dialog | Modal, focus-trapped | `DOCUMENTED_ONLY` |
-| Confirmation dialog | Dialog variant requiring a typed/selected reason for destructive/override actions (`09_*.md` §5's "Destructive confirmation" state) | `DOCUMENTED_ONLY` |
-| Drawer | Side-anchored panel, e.g. record detail | `DOCUMENTED_ONLY` |
-| Sheet | Same shape as Drawer, mobile-first sizing | `DOCUMENTED_ONLY` |
-| Toast | Transient, non-blocking confirmation | `DOCUMENTED_ONLY` |
-| Skeleton | Loading placeholder matching known layout | `DOCUMENTED_ONLY` — every route today has a `loading.tsx` file (Next.js Suspense boundary) but no shared skeleton primitive; each currently renders ad hoc |
-| Progress | Determinate long-running-operation indicator | `DOCUMENTED_ONLY` |
-| Spinner | Indeterminate loading indicator | `DOCUMENTED_ONLY` |
-| Empty state | No-data explanation + gated next action (`09_*.md` §5) | `DOCUMENTED_ONLY` — `supreme/tenants/page.tsx` implements this inline; extraction due once a second empty-state screen exists |
-| Error state | Human-readable message + request ID + gated retry (`09_*.md` §5) | `DOCUMENTED_ONLY` — same inline-today status as Empty state |
-| Permission state | "You do not have access to..." pattern, never leaking hidden data shape (`09_*.md` §5 "Forbidden") | `DOCUMENTED_ONLY` — `admin/layout.tsx`'s denied-state render is the closest existing implementation, inline |
-| Avatar | User/entity image or initials | `DOCUMENTED_ONLY` |
-| User menu | Account/session actions, top-bar | `DOCUMENTED_ONLY` — no top-bar user menu exists in any layout yet |
-| Breadcrumb | Hierarchical location trail | `DOCUMENTED_ONLY` |
-| Timeline | Chronological event list (activity, approval, milestone) | `DOCUMENTED_ONLY` |
-| Activity item / Audit item | Single timeline entry, before/after value disclosure for Supreme Admin mutations (`09_*.md` §7) | `DOCUMENTED_ONLY` |
-| Stepper | Multi-step workflow progress indicator | `DOCUMENTED_ONLY` |
-| Kanban board | Drag/status-column view | `DOCUMENTED_ONLY` |
-| Calendar | Date-grid scheduling view | `DOCUMENTED_ONLY` |
-| Chart wrapper | Dynamically-imported chart with data-table/text-summary accessible alternative (`09_*.md` §9) | `DOCUMENTED_ONLY` |
+| Data grid | Dense, server-paginated/sortable/filterable operational table with density-tier support (`--row-height-*`) | `IMPLEMENTED` for display + density (`DataTable` above, consumes `--row-height-*`); sort/filter/grouping/saved-views/column-visibility-pinning/bulk-actions/selection/virtualization remain `DOCUMENTED_ONLY` — no current screen has server-side support for any of those yet |
+| Pagination | Page/cursor navigation control | `IMPLEMENTED` (offset case only) — `components/tables/pagination.tsx` + `lib/tables/pagination-range.ts`; both `commercial/leads` and `supreme/tenants` migrated off inline page-number math. Cursor/keyset pagination remains `DOCUMENTED_ONLY`. |
+| Filter bar | Explicit-allowlist filter controls (`09_*.md` §4.1, mirrors the server-side allowlist) | `DOCUMENTED_ONLY` — no real screen has server-side filter support to build against yet |
+| Saved views | Named, persisted filter/sort/column configurations | `DOCUMENTED_ONLY` — depends on Filter bar/sorting existing first |
+| Bulk action bar | Appears on multi-row selection, drives selection-token-based bulk mutation (never thousands of raw IDs from the browser, `09_*.md` §4.1) | `DOCUMENTED_ONLY` — no bulk mutation exists in this repository yet |
+| Dialog | Modal, focus-trapped | `IMPLEMENTED` — `components/ui/dialog.tsx`, built on Radix Dialog |
+| Confirmation dialog | Dialog variant requiring a typed/selected reason for destructive/override actions (`09_*.md` §5's "Destructive confirmation" state) | `IMPLEMENTED` — `components/ui/dialog.tsx` (`ConfirmationDialog`), requires an explicit confirm click |
+| Drawer | Side-anchored panel, e.g. record detail | `IMPLEMENTED` — `components/ui/drawer.tsx`, built on Radix Dialog positioned as a side panel (no slide-in transition — `tailwindcss-animate` is not a dependency) |
+| Sheet | Same shape as Drawer, mobile-first sizing | `IMPLEMENTED` via `Drawer` (`side="bottom"`) — the spec's own "same shape as Drawer" is literal, not a separate component |
+| Toast | Transient, non-blocking confirmation | `IMPLEMENTED` — `components/ui/toast.tsx`, built on Radix Toast (`ToastProvider` + `useToast()`) |
+| Skeleton | Loading placeholder matching known layout | `IMPLEMENTED` — `components/ui/skeleton.tsx` (`Skeleton`/`SkeletonText`/`SkeletonTable`); the 27 existing `loading.tsx` files still hand-roll their own bars, unmigrated (migration map) |
+| Progress | Determinate long-running-operation indicator | `IMPLEMENTED` — `components/ui/progress.tsx`, native `<progress>` |
+| Spinner | Indeterminate loading indicator | `IMPLEMENTED` — `components/ui/spinner.tsx`; `docs/standards/DESIGN_SYSTEM.md`'s own identity statement still says prefer Skeleton |
+| Empty state | No-data explanation + gated next action (`09_*.md` §5) | `IMPLEMENTED` — `components/ui/empty-state.tsx`; existing list pages' inline empty text remains unmigrated (migration map) |
+| Error state | Human-readable message + request ID + gated retry (`09_*.md` §5) | `IMPLEMENTED` — `components/ui/error-state.tsx`; existing pages' inline `role="alert"` blocks remain unmigrated (migration map) |
+| Success state | Whole-page/whole-section confirmation | `IMPLEMENTED` — `components/ui/success-state.tsx`. Not named in this catalogue before a later checkpoint's own instruction requested it; disclosed then built. |
+| Permission state | "You do not have access to..." pattern, never leaking hidden data shape (`09_*.md` §5 "Forbidden") | `IMPLEMENTED` — `components/ui/permission-state.tsx` |
+| Avatar | User/entity image or initials | `IMPLEMENTED` — `components/ui/avatar.tsx`, built on Radix Avatar (automatic image-load-failure fallback) |
+| User menu | Account/session actions, top-bar | `IMPLEMENTED` — `components/ui/user-menu.tsx` (Avatar + DropdownMenu composition); no real layout has adopted it into its top bar yet |
+| Breadcrumb | Hierarchical location trail | `IMPLEMENTED` — `components/ui/breadcrumb.tsx` |
+| Timeline | Chronological event list (activity, approval, milestone) | `IMPLEMENTED` — `components/ui/timeline.tsx` |
+| Activity item / Audit item | Single timeline entry, before/after value disclosure for Supreme Admin mutations (`09_*.md` §7) | `IMPLEMENTED` — `components/ui/timeline.tsx` (`ActivityItem`) |
+| Stepper | Multi-step workflow progress indicator | `DOCUMENTED_ONLY` — no multi-step form exists anywhere in this repository yet to build the right shape against |
+| Kanban board | Drag/status-column view | `DOCUMENTED_ONLY` — needs a drag-and-drop dependency and a real consumer/data model; not attempted checkpoint 4 |
+| Calendar | Date-grid scheduling view | `DOCUMENTED_ONLY` — `DateInput`/`DateRangeInput` cover the entry use case; a full scheduling grid has no real consumer yet |
+| Chart wrapper | Dynamically-imported chart with data-table/text-summary accessible alternative (`09_*.md` §9) | `DOCUMENTED_ONLY` — deliberately not built: adding a chart library is a real dependency/bundle-size/license decision outside a component-build checkpoint's authority to make unilaterally |
 | Document preview | Signed-URL-gated file preview | `BLOCKED` — same storage-pipeline prerequisite as File upload |
 | Attachment list | List of uploaded files with status | `BLOCKED` — same prerequisite |
+| Sidebar item / Navigation group / Page header / Persistent top bar | Application-shell navigation elements | `DOCUMENTED_ONLY` — `03_LAYOUT_NAVIGATION.md` §1; both real portals still use a flat 2-link top bar, appropriate at their current page count — these need an actual shell redesign, not a single component in isolation |
+| Approval Decision Panel | Shared Approve/Reject panel (`04_DATA_EXPERIENCE_AND_WORKFLOW_PATTERNS.md` §2) | `IMPLEMENTED` — `components/domain/approval-decision-panel.tsx`; not yet wired into the two existing duplicate forms it would replace (migration map) |
+| Canonical status-to-tone mapping | Domain-specific `canonical_ref` → `StatusBadge` tone binding | `IMPLEMENTED` — `components/domain/status-tone-map.ts`; unblocked `StatusBadge`'s zero-consumer gap, migrated onto `commercial/leads`/`supreme/tenants` |
+| Approval queue / Exception queue | Renders the approval-decision/exception catalogue as a queue | `DOCUMENTED_ONLY` — `commercial/approvals/page.tsx` is a plain list today, not a queue pattern |
 
 ## 3. Component/state contract (restated, not re-derived)
 
