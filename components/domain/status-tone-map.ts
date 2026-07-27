@@ -158,8 +158,17 @@ export const JOB_ORDER_STATUS_TONE_MAP: Record<JobOrderStatus, StatusToneEntry> 
   cancelled: { tone: "danger", label: "Cancelled" },
 };
 
+/** Broadened at OPS-170 (Shipment Lifecycle) to the full canonical lifecycle. */
 export const SHIPMENT_ORDER_STATUS_TONE_MAP: Record<ShipmentOrderStatus, StatusToneEntry> = {
   draft: { tone: "neutral", label: "Draft" },
-  confirmed: { tone: "success", label: "Confirmed" },
+  confirmed: { tone: "info", label: "Confirmed" },
+  planned: { tone: "info", label: "Planned" },
+  assigned: { tone: "info", label: "Assigned" },
+  dispatched: { tone: "info", label: "Dispatched" },
+  in_transit: { tone: "warning", label: "In transit" },
+  delivered: { tone: "success", label: "Delivered" },
+  epod: { tone: "success", label: "ePOD received" },
+  closed: { tone: "success", label: "Closed" },
+  held: { tone: "warning", label: "Held" },
   cancelled: { tone: "danger", label: "Cancelled" },
 };

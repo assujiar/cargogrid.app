@@ -12,7 +12,20 @@
 
 import { z } from "zod";
 
-export const SHIPMENT_ORDER_STATUSES = ["draft", "confirmed", "cancelled"] as const;
+/** Broadened at OPS-170 (Shipment Lifecycle) from the original draft/confirmed/cancelled set -- app.shipment_orders_status_check now covers the full canonical lifecycle. */
+export const SHIPMENT_ORDER_STATUSES = [
+  "draft",
+  "confirmed",
+  "planned",
+  "assigned",
+  "dispatched",
+  "in_transit",
+  "delivered",
+  "epod",
+  "closed",
+  "held",
+  "cancelled",
+] as const;
 export const ShipmentOrderStatusSchema = z.enum(SHIPMENT_ORDER_STATUSES);
 export type ShipmentOrderStatus = z.infer<typeof ShipmentOrderStatusSchema>;
 
@@ -27,6 +40,8 @@ export const ShipmentOrderSchema = z.object({
   shipmentNumber: z.string(),
   idempotencyKey: z.string(),
   status: ShipmentOrderStatusSchema,
+  /** OPS-170: set only while status = 'held' -- the one legal resume target app.transition_shipment_order enforces. */
+  heldFromStatus: ShipmentOrderStatusSchema.nullable(),
   shipperAccountId: z.string().uuid(),
   consigneeSnapshot: z.record(z.string(), z.unknown()),
   notifyPartySnapshot: z.record(z.string(), z.unknown()).nullable(),
@@ -61,6 +76,7 @@ export function parseShipmentOrder(row: Record<string, unknown>): ShipmentOrder 
     shipmentNumber: row.shipment_number,
     idempotencyKey: row.idempotency_key,
     status: row.status,
+    heldFromStatus: row.held_from_status ?? null,
     shipperAccountId: row.shipper_account_id,
     consigneeSnapshot: row.consignee_snapshot,
     notifyPartySnapshot: row.notify_party_snapshot ?? null,

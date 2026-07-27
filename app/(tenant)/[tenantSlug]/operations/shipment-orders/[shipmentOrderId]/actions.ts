@@ -8,7 +8,9 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/resolve-operations-access.server.ts";
-import { confirmShipmentOrder, cancelShipmentOrder, ShipmentOrderMutationError } from "../../../../../../server/mutations/shipment-order.ts";
+import { confirmShipmentOrder, ShipmentOrderMutationError } from "../../../../../../server/mutations/shipment-order.ts";
+import { transitionShipmentOrder, ShipmentLifecycleMutationError } from "../../../../../../server/mutations/shipment-lifecycle.ts";
+import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 
 export interface ShipmentOrderFormState {
   readonly error: string | null;
@@ -41,12 +43,20 @@ export async function confirmShipmentOrderAction(
   return { error: null };
 }
 
-/** draft/confirmed -> cancelled, mandatory reason. */
-export async function cancelShipmentOrderAction(
+/**
+ * OPS-170: the one canonical, idempotent transition entry point for every status
+ * change beyond draft -> confirmed. idempotencyKey is generated fresh per form
+ * render (see the detail page), not regenerated per submit, so a genuine retry
+ * reuses the same key.
+ */
+export async function transitionShipmentOrderAction(
   tenantSlug: string,
   shipmentOrderId: string,
   expectedVersion: number,
+  idempotencyKey: string,
+  toStatus: TransitionableStatus,
   reason: string,
+  evidenceRef: string,
   _prevState: ShipmentOrderFormState,
   _formData: FormData,
 ): Promise<ShipmentOrderFormState> {
@@ -57,10 +67,19 @@ export async function cancelShipmentOrderAction(
 
   const supabase = await createSupabaseServerClient();
   try {
-    await cancelShipmentOrder(supabase, { shipmentOrderId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    await transitionShipmentOrder(supabase, {
+      shipmentOrderId,
+      toStatus,
+      expectedVersion,
+      reason: reason.trim().length === 0 ? null : reason,
+      evidenceRef: evidenceRef.trim().length === 0 ? null : evidenceRef,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
   } catch (error) {
-    if (error instanceof ShipmentOrderMutationError) {
-      return { error: `Could not cancel this Shipment Order: ${error.message}` };
+    if (error instanceof ShipmentLifecycleMutationError) {
+      return { error: `Could not transition this Shipment Order: ${error.message}` };
     }
     throw error;
   }

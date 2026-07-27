@@ -4323,6 +4323,36 @@ Additive only -- zero prior migration file edited, zero new permission-catalogue
 
 Self-closing. `CG-S8-OPS-003` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-004` (Prompt 170, Shipment Lifecycle) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
 
+### CHG-2026-108 — Shipment Lifecycle (Phase 3, Prompt 170)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-004` / `170_SHIPMENT_LIFECYCLE_PROMPT.md` |
+| Change type | Schema (additive columns/constraint/table) + service layer + UI |
+| Baseline evidence | `OPS-169` `VERIFIED` (`docs/build-log/phase-03/OPS-169.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- third capability task in that range |
+
+#### Outcome
+
+A canonical Shipment Order state machine (draft->confirmed->planned->assigned->dispatched->in_transit->delivered->epod->closed, plus held/cancelled/reopen) whose current-state projection is driven exclusively by one validated, idempotent, optimistic-concurrency-checked function -- never a direct UPDATE. Engine-reuse research performed first (Platform Core's Workflow Engine explicitly forbids broad domain adoption per its own header; the Status Engine is a label registry only, no transition matrix) -- concluded this checkpoint should follow the same hand-rolled-per-capability precedent every other status transition in this repository already uses, rather than force-fitting an engine whose own boundary disclaims this exact use.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727110000_create_operations_shipment_lifecycle.sql` (broadened `app.shipment_orders_status_check` to the full 11-state set; new `held_from_status` column; `app.shipment_status_transitions` table; `app.transition_shipment_order`, `app.get_shipment_status_history` functions). New service layer: `server/contracts/shipment-lifecycle/shipment-lifecycle.ts(.test.ts)`, `server/queries/shipment-lifecycle.ts(.test.ts)`, `server/mutations/shipment-lifecycle.ts(.test.ts)`. New UI: `status-timeline.tsx`, `transition-shipment-order-form.tsx`, `lifecycle-transitions.ts` on the existing Shipment Order detail route. Modified: `server/contracts/shipment-order/shipment-order.ts` (broadened `SHIPMENT_ORDER_STATUSES`, added `heldFromStatus`), `components/domain/status-tone-map.ts` (expanded `SHIPMENT_ORDER_STATUS_TONE_MAP`), Shipment Order detail `actions.ts`/`page.tsx`. Removed: `cancel-shipment-order-form.tsx` and `cancelShipmentOrderAction` (dead code once fully superseded by the unified transition control -- the underlying `app.cancel_shipment_order` database function itself remains, immutable). 1 migration, ~9 new files, 5 modified files, 1 removed file.
+
+#### Tests and quality evidence
+
+`node:test` 1485/1485 (16 net new: 6 contract, 3 query, 7 mutation). `db:test` PASS across 55 migrations/56 db-test files (1 net new, zero regression) -- 10 scenario groups covering authority/illegal-skip-ahead/reason-required, hold-resume-into-exact-prior-state-only, the full forward path plus evidence-required, closed-terminal-and-Supreme-only-reopen, idempotent-retry/stale-version/cancelled-terminal, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, ordered history reconciliation, and a 12-event audit-trail count. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- the constraint broadening is safe (no row would ever have carried a status outside the original three), zero new permission-catalogue row (reuses `OPS:Edit`). `git revert` of this checkpoint's commit is safe and complete; `app.confirm_shipment_order`/`app.cancel_shipment_order` (`OPS-169`) continue to work identically either way.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-004` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-005` (Prompt 171, Land/Air/Sea Baseline) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

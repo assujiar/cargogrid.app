@@ -1,14 +1,19 @@
 import { notFound } from "next/navigation";
+import { randomUUID } from "node:crypto";
 import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/resolve-operations-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getShipmentOrder, getJobShipmentAllocationBalance, ShipmentOrderQueryError } from "../../../../../../server/queries/shipment-order.ts";
+import { getShipmentStatusHistory, ShipmentLifecycleQueryError } from "../../../../../../server/queries/shipment-lifecycle.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { ConfirmShipmentOrderForm } from "./confirm-shipment-order-form.tsx";
-import { CancelShipmentOrderForm } from "./cancel-shipment-order-form.tsx";
-import { confirmShipmentOrderAction, cancelShipmentOrderAction } from "./actions.ts";
+import { TransitionShipmentOrderForm } from "./transition-shipment-order-form.tsx";
+import { StatusTimeline } from "./status-timeline.tsx";
+import { confirmShipmentOrderAction, transitionShipmentOrderAction, type ShipmentOrderFormState } from "./actions.ts";
+import { permittedNextStatuses } from "./lifecycle-transitions.ts";
+import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 
 /**
  * Shipment Order detail (OPS-169, CG-S8-OPS-003, Prompt 169 §15) -- inherited fields
@@ -50,11 +55,28 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading the allocation balance. Please try again." />;
   }
 
+  let history;
+  try {
+    history = await getShipmentStatusHistory(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+  } catch (error) {
+    if (!(error instanceof ShipmentLifecycleQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading the status history. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
-  const boundCancelAction = (reason: string, prevState: Parameters<typeof cancelShipmentOrderAction>[4], formData: FormData) =>
-    cancelShipmentOrderAction(tenantSlug, shipment.id, shipment.recordVersion, reason, prevState, formData);
+  const transitionIdempotencyKey = randomUUID();
+  const boundTransitionAction = (
+    toStatus: TransitionableStatus,
+    reason: string,
+    evidenceRef: string,
+    prevState: ShipmentOrderFormState,
+    formData: FormData,
+  ) => transitionShipmentOrderAction(tenantSlug, shipment.id, shipment.recordVersion, transitionIdempotencyKey, toStatus, reason, evidenceRef, prevState, formData);
+  const nextStatuses = permittedNextStatuses(shipment.status, shipment.heldFromStatus);
 
   return (
     <div className="flex flex-col gap-6">
@@ -122,12 +144,20 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
         </section>
       ) : null}
 
-      {shipment.status !== "cancelled" ? (
+      {nextStatuses.length > 0 ? (
         <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-          <h2 className="text-sm font-semibold text-neutral-900">Cancel</h2>
-          <CancelShipmentOrderForm action={boundCancelAction} />
+          <h2 className="text-sm font-semibold text-neutral-900">Transition</h2>
+          {shipment.status === "closed" ? (
+            <p className="text-xs text-neutral-500">Reopening a closed shipment is a Supreme Admin-only correction (RPD-022).</p>
+          ) : null}
+          <TransitionShipmentOrderForm action={boundTransitionAction} permittedNextStatuses={nextStatuses} />
         </section>
       ) : null}
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Status timeline</h2>
+        <StatusTimeline history={history} />
+      </section>
     </div>
   );
 }
