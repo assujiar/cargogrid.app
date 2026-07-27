@@ -4201,6 +4201,38 @@ Documentation-only; no schema/data/application code touched. `git revert` of thi
 
 Self-closing. `CG-S7-COM-023` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-024` (Prompt 165, Phase 2 Closure Verification) -- dependency-`READY` (`164` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly. This is the final Commercial task before `PHASE_2_VERIFIED`.
 
+### CHG-2026-104 — Phase 2 Closure Verification (Phase 2, Prompt 165)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-024` / `165_COMMERCIAL_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | DOCS only (independent verification, zero repair needed) |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `024` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED`, **`PHASE_2_VERIFIED` set** |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" -- the final task in that range |
+
+#### Outcome
+
+Independent re-verification only, mirroring `docs/build-log/phase-01/PLATFORM_CORE_CLOSURE_REPORT.md`'s own precedent. Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` + full 13-gate re-run, all green, including a real `next build` producing all 45 expected routes (26 Commercial). All 10 required-verification items (Prompt 165) independently confirmed against live, freshly re-run evidence: traceability (24 execution-index rows, 23 `TASK_LEDGER` rows, 22 build logs, zero orphan); all 19 capabilities' implementation/evidence/docs/owner; the full lead->prospect->contact->opportunity->costing->rate->margin->quotation->approval->acceptance->account/contract/credit->Job Order handoff flow, proven end to end twice independently including a two-simultaneous-tenant composed run; no-reentry/canonical-reference discipline; exact money/masking/quote-lock/acceptance-evidence/duplicate-safe-conversion; the single-owned, Phase-6-extensible vendor/rate foundation with zero procurement-scope match; the `JobOrderDraftInput` handoff's idempotency/lineage/retry-safety with zero Job Order domain code found anywhere; dashboard/report reconciliation and cross-tenant/access matrices; RPD-022/001/034/036 disclosures.
+
+**Zero bounded repair was needed** -- Commercial's own closing sequence (`162` verification, `163` hardening -- which itself found and closed the phase's one real High-severity finding, `164` documentation) had already found and closed everything there was to find. Zero Critical/High-severity issue or error exists anywhere in the entire Commercial phase.
+
+#### Scope and files
+
+New: `docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md`. Zero application code, zero migration. 1 new file.
+
+#### Tests and quality evidence
+
+Fresh `rm -rf node_modules && pnpm install --frozen-lockfile` PASS (1.4s); `pnpm run typecheck`/`lint` PASS (0 errors); `pnpm run test` 1404/1404 PASS; `pnpm run db:test` PASS -- 52 migrations/53 db-test files; `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` all PASS; `npx next build` PASS -- 45 routes (26 Commercial). `pnpm run test:e2e` correctly disclosed `NOT_RUN` (the identical, unchanged sandbox `chrome-headless-shell` condition since `PLT-117`).
+
+#### Compatibility, rollout, recovery
+
+Documentation-only; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-024` is `VERIFIED`. **`PHASE_2_VERIFIED` is set.** Phase 2 (Commercial) is closed. Next eligible action: the Phase 3 Operations kickoff prompt -- **not authorized to start automatically**; this checkpoint's own "Commercial WBS through phase closure (161-165)" authorization range ends here. A fresh explicit user authorization is required before any Phase 3 work begins.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S7-COM-001` (`CG-AABPP-COM-142` v0.8.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/07-phase-02-commercial/142_COMMERCIAL_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_2_IN_PROGRESS` — updated at `COM-150` (Margin Calculation, `VERIFIED`); this document itself remains index/planning only and performs no Commercial-domain runtime source/schema change (each capability's own migration/code lives in its own commit, cited per row)
+**Status:** `PHASE_2_VERIFIED` — set at `COM-165` (Phase 2 Closure Verification, `docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md`); this document itself remains index/planning only and performs no Commercial-domain runtime source/schema change (each capability's own migration/code lives in its own commit, cited per row)
 
 ## 0. Checkpoint
 
@@ -79,9 +79,9 @@ Hierarchy column format: `Workstream / Epic`, derived from `00_COMMERCIAL_WBS.md
 | `021` | `162` Integrated Commercial verification | Phase Closing / Integrated Verification | `VERIFIED` | `COM-143..161` (all `VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-02/COM-162.md` | Runtime build agent | `CG-S7-COM-022` |
 | `022` | `163` Tenant/security/financial/data hardening | Phase Closing / Risk Hardening | `VERIFIED` | `COM-162` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-02/COM-163.md` | Runtime build agent | `CG-S7-COM-023` |
 | `023` | `164` Documentation and handoff | Phase Closing / Knowledge and Handoff | `VERIFIED` | `COM-163` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-02/COM-164.md` | Runtime build agent | `CG-S7-COM-024` |
-| `024` | `165` Phase 2 closure verification | Phase Closing / Closure | `READY` | `COM-164` (`VERIFIED`) | — | `docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md` | Runtime build agent | `CG-S8-...-001` (Phase 3 Operations kickoff — contingent on fresh explicit user authorization, same standing discipline as the Phase 1→2 boundary) |
+| `024` | `165` Phase 2 closure verification | Phase Closing / Closure | `VERIFIED` (`PHASE_2_VERIFIED` set) | `COM-164` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-02/COMMERCIAL_CLOSURE_REPORT.md` | Runtime build agent | `CG-S8-...-001` (Phase 3 Operations kickoff — contingent on fresh explicit user authorization, same standing discipline as the Phase 1→2 boundary) |
 
-**Tally (updated at `COM-164`, row `023` — Documentation and Handoff `VERIFIED`):** of the 24 rows in this index (`142`–`165`), **23 are `VERIFIED`** (kickoff, Lead Management, Prospect Lifecycle, Contact and Activity Management, CRM Sales Plan and Pipeline, Opportunity Management, RFQ and Costing Request, Rate and Cost Lookup, Margin Calculation, Quotation Builder, Quotation Versioning, Quotation Approval, Customer Acceptance, Customer and Account Conversion, Contract and Customer Pricing, Credit and Commercial Control, Commercial Dashboard, Commercial Reports, Full Lineage into Job Order, No-Reentry Enforcement, Integrated Commercial Verification, Tenant/Security/Financial/Data Hardening, Documentation and Handoff) and **1 is `READY`** (`165`, Phase 2 Closure Verification — its dependency `164` now `VERIFIED`, the final row before `PHASE_2_VERIFIED`). Zero rows remain `BLOCKED`. [Historical: at `COM-163`'s own checkpoint, the tally was 22 `VERIFIED`, 1 `READY`, 1 `BLOCKED` — retained here only as a superseded data point, not current state.]
+**Tally (updated at `COM-165`, row `024` — Phase 2 Closure Verification `VERIFIED`, `PHASE_2_VERIFIED` set):** of the 24 rows in this index (`142`–`165`), **all 24 are `VERIFIED`** (kickoff, all 19 capability prompts `143`–`161`, Integrated Commercial Verification, Tenant/Security/Financial/Data Hardening, Documentation and Handoff, and Phase 2 Closure Verification). **Phase 2 (Commercial) is closed.** [Historical: at `COM-164`'s own checkpoint, the tally was 23 `VERIFIED`, 1 `READY`, 0 `BLOCKED` — retained here only as a superseded data point, not current state.]
 
 ## 4. Collision inspection (required task 7)
 
