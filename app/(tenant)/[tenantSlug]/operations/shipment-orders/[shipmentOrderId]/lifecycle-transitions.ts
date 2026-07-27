@@ -7,6 +7,16 @@ import type { TransitionableStatus } from "../../../../../../server/contracts/sh
  * -- never authoritative. The database re-validates every edge itself regardless of
  * what this module offers; a stale or bypassed client can never reach an illegal
  * transition, it would simply be rejected server-side.
+ *
+ * assigned -> dispatched is deliberately omitted from the forward edge here (OPS-175):
+ * that edge now has its own dedicated, readiness-gated command
+ * (app.dispatch_shipment_order, surfaced by this page's own DispatchPanel), the same
+ * "a dedicated command supersedes the generic transition matrix in this UI" precedent
+ * draft -> confirmed already set with ConfirmShipmentOrderForm. The database itself
+ * still accepts assigned -> dispatched via the generic app.transition_shipment_order
+ * RPC (the readiness gate is an application-level guard in front of an already-legal
+ * edge, not a second parallel state machine) -- this module only controls which forms
+ * this page renders.
  */
 export function permittedNextStatuses(status: ShipmentOrderStatus, heldFromStatus: ShipmentOrderStatus | null): readonly TransitionableStatus[] {
   switch (status) {
@@ -35,7 +45,6 @@ function nextForwardStatus(status: ShipmentOrderStatus): readonly Transitionable
   const forward: Partial<Record<ShipmentOrderStatus, TransitionableStatus>> = {
     confirmed: "planned",
     planned: "assigned",
-    assigned: "dispatched",
     dispatched: "in_transit",
     in_transit: "delivered",
   };

@@ -73,9 +73,14 @@ export default async function ShipmentOrdersPage({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-neutral-900">Shipment Orders</h1>
-        <a href={`/${tenantSlug}/operations/job-orders`} className="text-sm font-medium text-primary underline">
-          Create from a confirmed Job Order
-        </a>
+        <div className="flex items-center gap-4">
+          <a href={`/${tenantSlug}/operations/dispatch`} className="text-sm font-medium text-primary underline">
+            Dispatch queue
+          </a>
+          <a href={`/${tenantSlug}/operations/job-orders`} className="text-sm font-medium text-primary underline">
+            Create from a confirmed Job Order
+          </a>
+        </div>
       </div>
 
       {loadFailed || !result ? (

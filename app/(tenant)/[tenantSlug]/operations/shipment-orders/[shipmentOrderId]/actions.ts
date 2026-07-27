@@ -30,6 +30,7 @@ import {
   reopenException,
   ExceptionEscalationMutationError,
 } from "../../../../../../server/mutations/exception-escalation.ts";
+import { dispatchShipmentOrder, BasicDispatchMutationError } from "../../../../../../server/mutations/basic-dispatch.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
 import type { ResourceAssignmentRole } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
@@ -414,6 +415,35 @@ export async function reportExceptionAction(
   }
 
   revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-175: the one validated dispatch command -- assigned -> dispatched, gated on a real commit-time readiness recheck. Idempotent on (shipmentOrderId, idempotencyKey). */
+export async function dispatchShipmentOrderAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  expectedVersion: number,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await dispatchShipmentOrder(supabase, { shipmentOrderId, expectedVersion, idempotencyKey, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof BasicDispatchMutationError) {
+      return { error: `Could not dispatch this Shipment Order: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  revalidatePath(`/${tenantSlug}/operations/dispatch`);
   return { error: null };
 }
 

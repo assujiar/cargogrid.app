@@ -8,6 +8,7 @@ import { getShipmentModeProfile, ShipmentModeBaselineQueryError } from "../../..
 import { findAssignmentCandidates, getResourceAssignmentHistory, ResourceAssignmentQueryError } from "../../../../../../server/queries/resource-assignment.ts";
 import { getShipmentMilestoneTimeline, getShipmentMilestoneProjection, listMilestoneCodes, MilestoneManagementQueryError } from "../../../../../../server/queries/milestone-management.ts";
 import { listShipmentExceptions, ExceptionEscalationQueryError } from "../../../../../../server/queries/exception-escalation.ts";
+import { getDispatchReadiness, BasicDispatchQueryError } from "../../../../../../server/queries/basic-dispatch.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -23,6 +24,7 @@ import { MilestoneTimeline } from "./milestone-timeline.tsx";
 import { IngestMilestoneEventForm } from "./ingest-milestone-event-form.tsx";
 import { ReportExceptionForm } from "./report-exception-form.tsx";
 import { ExceptionList } from "./exception-list.tsx";
+import { DispatchPanel } from "./dispatch-panel.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -36,6 +38,7 @@ import {
   ingestMilestoneEventAction,
   reportExceptionAction,
   manageExceptionAction,
+  dispatchShipmentOrderAction,
   type ShipmentOrderFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
@@ -146,6 +149,18 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading exceptions. Please try again." />;
   }
 
+  let dispatchReadiness = null;
+  if (shipment.status === "assigned") {
+    try {
+      dispatchReadiness = await getDispatchReadiness(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+    } catch (error) {
+      if (!(error instanceof BasicDispatchQueryError)) {
+        throw error;
+      }
+      return <ErrorState description="Something went wrong loading dispatch readiness. Please try again." />;
+    }
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -172,6 +187,8 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const exceptionIdempotencyKey = randomUUID();
   const boundReportExceptionAction = reportExceptionAction.bind(null, tenantSlug, shipment.id, exceptionIdempotencyKey);
   const boundManageExceptionAction = (exceptionId: string, expectedVersion: number) => manageExceptionAction.bind(null, tenantSlug, shipment.id, exceptionId, expectedVersion);
+  const dispatchIdempotencyKey = randomUUID();
+  const boundDispatchAction = dispatchShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion, dispatchIdempotencyKey);
 
   return (
     <div className="flex flex-col gap-6">
@@ -277,6 +294,13 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
             <p className="text-xs text-neutral-500">Reopening a closed shipment is a Supreme Admin-only correction (RPD-022).</p>
           ) : null}
           <TransitionShipmentOrderForm action={boundTransitionAction} permittedNextStatuses={nextStatuses} />
+        </section>
+      ) : null}
+
+      {dispatchReadiness ? (
+        <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+          <h2 className="text-sm font-semibold text-neutral-900">Dispatch</h2>
+          <DispatchPanel readiness={dispatchReadiness} action={boundDispatchAction} />
         </section>
       ) : null}
 

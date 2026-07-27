@@ -4477,6 +4477,40 @@ A genuine, pre-existing defect was found in `OPS-168`'s own `scripts/db-tests/op
 
 Self-closing. `CG-S8-OPS-008` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-009` (Prompt 175, Basic Dispatch) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly. This is the final task in that authorized range.
 
+### CHG-2026-113 — Basic Dispatch (Phase 3, Prompt 175)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-009` / `175_BASIC_DISPATCH_PROMPT.md` |
+| Change type | Schema (2 new tables/view + 4 functions) + service layer + UI (1 new route) + 1 pre-existing UI file's forward-affordance edge removed |
+| Baseline evidence | `OPS-174` `VERIFIED` (`docs/build-log/phase-03/OPS-174.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- **eighth and final capability task in that range** |
+
+#### Outcome
+
+A permission-safe, deterministic readiness queue plus one validated, readiness-gated dispatch command for `assigned` Shipment Orders -- list/queue dispatch only, never a dispatch board or route/load/capacity optimization. Dispatch is a thin wrapper over `OPS-170`'s own already-shipped `assigned -> dispatched` transition, never a second parallel state machine: idempotency is checked first (a genuine retry short-circuits before any readiness recheck), then `OPS:Edit` + record-scope, then a real commit-time readiness recheck, then the existing `app.transition_shipment_order` call.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727160000_create_operations_basic_dispatch.sql` (`app.evaluate_dispatch_readiness`, `app.get_dispatch_readiness`, `app.dispatch_commands` table, `app.dispatch_shipment_order`, `app.bulk_dispatch_shipment_orders`, `app.dispatch_ready_queue` view). New service layer: `server/contracts/basic-dispatch/basic-dispatch.ts(.test.ts)`, `server/queries/basic-dispatch.ts(.test.ts)`, `server/mutations/basic-dispatch.ts(.test.ts)`. New UI: `app/(tenant)/[tenantSlug]/operations/dispatch/` (`page.tsx`, `actions.ts`, `dispatch-row-action.tsx`, `loading.tsx`), Shipment Order detail `dispatch-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (dispatch action + panel wiring), `lifecycle-transitions.ts` (removed the generic `assigned -> dispatched` forward-affordance edge, now superseded by the dedicated dispatch panel), `shipment-orders/page.tsx` (added a "Dispatch queue" link). 1 migration, ~10 new files, 4 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1611/1611 (24 net new: 15 contract, 8 query, 7 mutation -- some overlap across describe blocks, exact split per `OPS-175.md` §4.2). `db:test` PASS across 60 migrations/61 db-test files (1 net new, zero regression) -- scenario groups covering readiness evaluation per-fixture, ready-queue listing, dispatch authority/readiness/idempotency, bulk-dispatch bounded/mixed-result, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation (2 persisted success events, 0 persisted failure events -- see Errors below). `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (1 new: `/[tenantSlug]/operations/dispatch`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Edit`/`OPS:View`, already seeded). `git revert` of this checkpoint's commit is safe and complete; the `lifecycle-transitions.ts` change is independently revertible (UI-only -- the database's own `app.transition_shipment_order` never enforced that restriction).
+
+#### Errors found and fixed
+
+Several real issues, all confined to this checkpoint's own new files: (1) a db-test authoring bug assigning a single-column select into a full-row variable; (2)-(3) a migration bug where a stray text argument, then a jsonb array, were passed into `app.capture_audit_event`'s `jsonb` parameters incorrectly; (4) discovering, while fixing (2)-(3), that the entire failure-audit-capture design was architecturally unreachable -- a `raise exception` always rolls back any insert made before it to the nearest enclosing exception block's own implicit savepoint (true both in the caller's own handler and inside `bulk_dispatch_shipment_orders`' per-record catch) -- root-cause fixed by removing the failure-path audit capture and correcting the db-test's own assertion accordingly; (5) a db-test column-name bug (`outcome` vs. the real `result` column); (6) two fixture-authoring bugs (vendor-resource reuse, an incorrect "viewer" actor choice for a read-success assertion).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-009` is `VERIFIED` -- **this closes the full "lanjut sd prompt 175" authorized range.** Next eligible prompt: `CG-S8-OPS-010` (Prompt 176, Document Requirement) -- dependency-`READY`, but **NOT authorized under any standing instruction**. The next runtime agent must obtain fresh explicit user authorization before proceeding to `176` or beyond.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
