@@ -25,6 +25,7 @@ import { ContractCreationPanel } from "./contract-creation-panel.tsx";
 import { JobOrderHandoffPanel } from "./job-order-handoff-panel.tsx";
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
 import type { Account, AccountConversionReadiness } from "../../../../../../server/contracts/account/account.ts";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Quotation Builder detail page (COM-151/152/153, CG-S7-COM-010/011/012).
@@ -70,9 +71,7 @@ export default async function QuotationDetailPage({
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this quotation. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this quotation. Please try again." />
     );
   }
 

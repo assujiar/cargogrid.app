@@ -3,6 +3,7 @@ import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getRateVersionById, RateQueryError } from "../../../../../../server/queries/rate.ts";
 import { RateActionsPanel } from "./rate-actions-panel.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Rate Version Detail (COM-149, CG-S7-COM-008). `getRateVersionById` returns `null` for
@@ -27,9 +28,7 @@ export default async function RateVersionDetailPage({ params }: { params: Promis
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this rate version. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this rate version. Please try again." />
     );
   }
 

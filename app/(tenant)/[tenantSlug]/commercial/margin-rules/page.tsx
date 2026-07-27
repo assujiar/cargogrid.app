@@ -3,8 +3,12 @@ import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/res
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listMarginRuleVersions, MarginQueryError } from "../../../../../server/queries/margin.ts";
 import type { MarginRuleVersion } from "../../../../../server/contracts/margin/margin.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { MARGIN_RULE_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { createMarginRuleVersionAction, publishMarginRuleVersionAction } from "./actions.ts";
 import { CreateMarginRuleForm } from "./create-margin-rule-form.tsx";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Margin Rule list (COM-150, CG-S7-COM-009). Tenant-wide reference/policy data, never
@@ -39,51 +43,51 @@ export default async function MarginRulesPage({ params }: { params: Promise<{ te
   const publishedRule = rules.find((rule) => rule.status === "published") ?? null;
   const boundCreateAction = createMarginRuleVersionAction.bind(null, tenantSlug);
 
+  const columns: readonly DataTableColumn<MarginRuleVersion>[] = [
+    { key: "minimumMarginPct", header: "Minimum margin %", render: (rule) => `${rule.minimumMarginPct}%` },
+    { key: "roundingMode", header: "Rounding", render: (rule) => rule.roundingMode },
+    {
+      key: "status",
+      header: "Status",
+      render: (rule) => {
+        const { tone, label } = MARGIN_RULE_STATUS_TONE_MAP[rule.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    {
+      key: "action",
+      header: "Action",
+      render: (rule) =>
+        rule.status === "draft" ? (
+          <form action={publishMarginRuleVersionAction.bind(null, tenantSlug, rule.id, rule.recordVersion, publishedRule?.id ?? null)}>
+            <button type="submit" className="text-sm font-medium text-primary underline">
+              Publish{publishedRule ? " (supersedes current)" : ""}
+            </button>
+          </form>
+        ) : (
+          "—"
+        ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Margin rules</h1>
 
       {loadFailed ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading margin rules. Please try again.</p>
-        </div>
+        <ErrorState description="Something went wrong loading margin rules. Please try again." />
       ) : (
         <div className="rounded-md border border-neutral-200 p-4">
           <h2 className="text-sm font-semibold text-neutral-900">Rule versions</h2>
-          {rules.length === 0 ? (
-            <p className="mt-2 text-sm text-neutral-600">No margin rules yet. Create one below.</p>
-          ) : (
-            <table className="mt-2 w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                  <th scope="col" className="py-2 pr-4 font-medium">Minimum margin %</th>
-                  <th scope="col" className="py-2 pr-4 font-medium">Rounding</th>
-                  <th scope="col" className="py-2 pr-4 font-medium">Status</th>
-                  <th scope="col" className="py-2 font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rules.map((rule) => (
-                  <tr key={rule.id} className="border-b border-neutral-100">
-                    <td className="py-2 pr-4 text-neutral-900">{rule.minimumMarginPct}%</td>
-                    <td className="py-2 pr-4 text-neutral-600">{rule.roundingMode}</td>
-                    <td className="py-2 pr-4 text-neutral-600">{rule.status}</td>
-                    <td className="py-2 text-neutral-600">
-                      {rule.status === "draft" ? (
-                        <form action={publishMarginRuleVersionAction.bind(null, tenantSlug, rule.id, rule.recordVersion, publishedRule?.id ?? null)}>
-                          <button type="submit" className="text-sm font-medium text-primary underline">
-                            Publish{publishedRule ? " (supersedes current)" : ""}
-                          </button>
-                        </form>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <div className="mt-2">
+            <DataTable
+              caption="Margin rule versions"
+              columns={columns}
+              rows={rules}
+              rowKey={(rule) => rule.id}
+              emptyMessage="No margin rules yet. Create one below."
+            />
+          </div>
         </div>
       )}
 

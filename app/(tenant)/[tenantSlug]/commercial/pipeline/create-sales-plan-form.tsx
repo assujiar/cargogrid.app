@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import type { PipelineFormState } from "./actions.ts";
+import { Input } from "../../../../../components/forms/input.tsx";
 
 const INITIAL_STATE: PipelineFormState = { error: null };
 
@@ -18,7 +19,7 @@ export function CreateSalesPlanForm({ action }: { action: (prevState: PipelineFo
         <label htmlFor="name" className="text-sm font-medium text-neutral-700">
           Plan name
         </label>
-        <input id="name" name="name" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="name" name="name" type="text" required />
       </div>
 
       <div className="flex gap-3">
@@ -26,13 +27,13 @@ export function CreateSalesPlanForm({ action }: { action: (prevState: PipelineFo
           <label htmlFor="periodStart" className="text-sm font-medium text-neutral-700">
             Period start
           </label>
-          <input id="periodStart" name="periodStart" type="date" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="periodStart" name="periodStart" type="date" required />
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <label htmlFor="periodEnd" className="text-sm font-medium text-neutral-700">
             Period end
           </label>
-          <input id="periodEnd" name="periodEnd" type="date" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input id="periodEnd" name="periodEnd" type="date" required />
         </div>
       </div>
 
@@ -40,7 +41,7 @@ export function CreateSalesPlanForm({ action }: { action: (prevState: PipelineFo
         <label htmlFor="orgUnitId" className="text-sm font-medium text-neutral-700">
           Organization unit ID <span className="font-normal text-neutral-500">(optional -- leave blank for a tenant-wide plan)</span>
         </label>
-        <input id="orgUnitId" name="orgUnitId" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="orgUnitId" name="orgUnitId" type="text" />
       </div>
 
       {state.error ? (

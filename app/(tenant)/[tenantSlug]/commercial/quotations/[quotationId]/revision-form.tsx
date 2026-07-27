@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { createQuotationRevisionAction } from "./actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
 
 /** Create-revision / restore-as-new-draft trigger (COM-152) -- both flows call the same app.create_quotation_revision RPC with sourceQuotationId set to whichever version is currently being viewed; the label communicates which case this is without the underlying mechanism differing. Mandatory reason (server-enforced, reason_required). */
 export function RevisionForm({ tenantSlug, sourceQuotationId, isCurrent }: { tenantSlug: string; sourceQuotationId: string; isCurrent: boolean }) {
@@ -19,7 +20,7 @@ export function RevisionForm({ tenantSlug, sourceQuotationId, isCurrent }: { ten
           : "Restores this historical version's data as a brand-new current draft; the version that was current becomes history instead."}
       </p>
 
-      <input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <Input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
 
       {error ? (
         <p role="alert" className="text-sm text-danger">

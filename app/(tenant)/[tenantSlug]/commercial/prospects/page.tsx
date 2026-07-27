@@ -2,6 +2,12 @@ import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listProspects, ProspectQueryError, type ListProspectsResult } from "../../../../../server/queries/prospect.ts";
+import type { Prospect } from "../../../../../server/contracts/prospect/prospect.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { Pagination } from "../../../../../components/tables/pagination.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { PROSPECT_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 /**
  * Prospect queue (COM-144, CG-S7-COM-003). Read-only -- prospects are created only via
@@ -38,51 +44,57 @@ export default async function CommercialProspectsPage({
     loadFailed = true;
   }
 
+  const columns: readonly DataTableColumn<Prospect>[] = [
+    {
+      key: "legalName",
+      header: "Legal name",
+      render: (prospect) => (
+        <a href={`/${tenantSlug}/commercial/prospects/${prospect.id}`} className="font-medium text-primary underline">
+          {prospect.legalName}
+        </a>
+      ),
+    },
+    { key: "contact", header: "Contact", render: (prospect) => prospect.contactName },
+    {
+      key: "status",
+      header: "Status",
+      render: (prospect) => {
+        const { tone, label } = PROSPECT_STATUS_TONE_MAP[prospect.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-neutral-900">Prospects</h1>
 
       {loadFailed || !result ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">Something went wrong loading prospects. Please try again.</p>
-        </div>
-      ) : result.prospects.length === 0 ? (
-        <p className="text-sm text-neutral-600">
-          No prospects yet. Convert a qualified <a href={`/${tenantSlug}/commercial/leads`} className="font-medium text-primary underline">lead</a> to get started.
-        </p>
+        <ErrorState description="Something went wrong loading prospects. Please try again." />
       ) : (
         <div className="flex flex-col gap-4">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Legal name
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Contact
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.prospects.map((prospect) => (
-                <tr key={prospect.id} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 text-neutral-900">
-                    <a href={`/${tenantSlug}/commercial/prospects/${prospect.id}`} className="font-medium text-primary underline">
-                      {prospect.legalName}
-                    </a>
-                  </td>
-                  <td className="py-2 pr-4 text-neutral-600">{prospect.contactName}</td>
-                  <td className="py-2 text-neutral-600">{prospect.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-xs text-neutral-500">
-            Page {result.page} — {result.totalCount} total prospect{result.totalCount === 1 ? "" : "s"}
-          </p>
+          <DataTable
+            caption="Prospects"
+            columns={columns}
+            rows={result.prospects}
+            rowKey={(prospect) => prospect.id}
+            emptyMessage={
+              <>
+                No prospects yet. Convert a qualified <a href={`/${tenantSlug}/commercial/leads`} className="font-medium text-primary underline">lead</a> to get started.
+              </>
+            }
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-neutral-500">
+              Page {result.page} — {result.totalCount} total prospect{result.totalCount === 1 ? "" : "s"}
+            </p>
+            <Pagination
+              page={result.page}
+              pageSize={result.pageSize}
+              totalCount={result.totalCount}
+              buildHref={(targetPage) => `/${tenantSlug}/commercial/prospects?page=${targetPage}`}
+            />
+          </div>
         </div>
       )}
     </div>

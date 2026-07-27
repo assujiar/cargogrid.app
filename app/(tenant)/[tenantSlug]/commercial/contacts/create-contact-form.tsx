@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import type { ContactFormState } from "./actions.ts";
+import { Input } from "../../../../../components/forms/input.tsx";
 
 const INITIAL_STATE: ContactFormState = { error: null };
 
@@ -18,28 +19,28 @@ export function CreateContactForm({ action }: { action: (prevState: ContactFormS
         <label htmlFor="fullName" className="text-sm font-medium text-neutral-700">
           Full name
         </label>
-        <input id="fullName" name="fullName" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="fullName" name="fullName" type="text" required />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="title" className="text-sm font-medium text-neutral-700">
           Title <span className="font-normal text-neutral-500">(optional)</span>
         </label>
-        <input id="title" name="title" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="title" name="title" type="text" />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="email" className="text-sm font-medium text-neutral-700">
           Email
         </label>
-        <input id="email" name="email" type="email" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="email" name="email" type="email" />
       </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="phone" className="text-sm font-medium text-neutral-700">
           Phone
         </label>
-        <input id="phone" name="phone" type="tel" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input id="phone" name="phone" type="tel" />
       </div>
 
       {state.error ? (

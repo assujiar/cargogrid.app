@@ -7,6 +7,7 @@ import { removePriceComponentAction, publishContractAction } from "./actions.ts"
 import { AddComponentForm } from "./add-component-form.tsx";
 import { RenewalForm } from "./renewal-form.tsx";
 import { RetireForm } from "./retire-form.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Customer contract detail (COM-156, CG-S7-COM-015). Editing (add/remove price
@@ -31,9 +32,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this contract. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this contract. Please try again." />
     );
   }
 

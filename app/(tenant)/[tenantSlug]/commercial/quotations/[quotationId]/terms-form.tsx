@@ -5,6 +5,9 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { updateQuotationTermsAction } from "./actions.ts";
 import type { Quotation } from "../../../../../../server/contracts/quotation/quotation.ts";
 import type { Contact } from "../../../../../../server/contracts/contact/contact.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../../components/forms/textarea.tsx";
 
 /** Terms/currency/validity/contact form (COM-151) -- terms keys are whitelisted server-side (payment_terms/incoterm/notes only); a currency change that would conflict with an existing sourced line's currency is rejected server-side too. */
 export function TermsForm({ tenantSlug, quotation, contacts }: { tenantSlug: string; quotation: Quotation; contacts: readonly Contact[] }) {
@@ -26,25 +29,25 @@ export function TermsForm({ tenantSlug, quotation, contacts }: { tenantSlug: str
         <label htmlFor="contact" className="text-sm font-medium text-neutral-700">
           Contact
         </label>
-        <select id="contact" value={contactId} onChange={(e) => setContactId(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+        <Select id="contact" value={contactId} onChange={(e) => setContactId(e.target.value)}>
           <option value="">None selected</option>
           {contacts.map((contact) => (
             <option key={contact.id} value={contact.id}>
               {contact.fullName}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="flex gap-2">
         <input placeholder="Currency" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} className="w-28 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <input type="datetime-local" value={validityFrom} onChange={(e) => setValidityFrom(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <input type="datetime-local" value={validityTo} onChange={(e) => setValidityTo(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input type="datetime-local" value={validityFrom} onChange={(e) => setValidityFrom(e.target.value)} />
+        <Input type="datetime-local" value={validityTo} onChange={(e) => setValidityTo(e.target.value)} />
       </div>
 
-      <input placeholder="Payment terms (e.g. Net 30)" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <input placeholder="Incoterm (e.g. FOB)" value={incoterm} onChange={(e) => setIncoterm(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <textarea placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" rows={2} />
+      <Input placeholder="Payment terms (e.g. Net 30)" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
+      <Input placeholder="Incoterm (e.g. FOB)" value={incoterm} onChange={(e) => setIncoterm(e.target.value)} />
+      <Textarea placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
 
       {error ? (
         <p role="alert" className="text-sm text-danger">

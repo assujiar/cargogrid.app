@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { decideCreditProfileApprovalStepAction } from "./credit-actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
 
 /**
  * One eligible step's decide form (COM-157) -- mirrors ApprovalDecisionForm (COM-153)
@@ -28,7 +29,7 @@ export function CreditApprovalDecisionForm({ tenantSlug, accountId, requestStepI
   return (
     <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
       <p className="text-sm font-medium text-neutral-900">Step {stepOrder} is waiting on your decision</p>
-      <input placeholder="Reason (required to reject)" value={reason} onChange={(e) => setReason(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <Input placeholder="Reason (required to reject)" value={reason} onChange={(e) => setReason(e.target.value)} />
       <label className="flex items-center gap-2 text-xs text-neutral-600">
         <input type="checkbox" checked={reauthConfirmed} onChange={(e) => setReauthConfirmed(e.target.checked)} />
         I have recently re-authenticated (required for this decision)

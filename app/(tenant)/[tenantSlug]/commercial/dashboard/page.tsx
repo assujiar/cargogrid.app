@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import {
   getDashboardLeadAging,
   getDashboardActivityQueue,
@@ -118,13 +119,13 @@ export default async function CommercialDashboardPage({ params }: { params: Prom
       </div>
 
       {loadError ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <p className="text-sm text-danger">
-            {loadError === "timeout"
+        <ErrorState
+          description={
+            loadError === "timeout"
               ? "The dashboard is taking longer than expected to load. Please try again."
-              : "Something went wrong loading the dashboard. Please try again."}
-          </p>
-        </div>
+              : "Something went wrong loading the dashboard. Please try again."
+          }
+        />
       ) : null}
 
       {data ? (

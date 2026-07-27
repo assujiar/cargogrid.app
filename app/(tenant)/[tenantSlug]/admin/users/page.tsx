@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
-import { listPortalUsers, PortalUsersQueryError, type ListPortalUsersResult } from "../../../../../server/queries/portal-users.ts";
+import { listPortalUsers, PortalUsersQueryError, type ListPortalUsersResult, type PortalUser } from "../../../../../server/queries/portal-users.ts";
+import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { Pagination } from "../../../../../components/tables/pagination.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { resolvePortalUserStatusTone } from "../../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
 const PAGE_SIZE = 20;
 
@@ -51,55 +56,56 @@ export default async function TenantAdminUsersPage({
 
   if (loadFailed || !result) {
     return (
-      <div className="flex flex-col gap-2" role="alert">
+      <div className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold text-neutral-900">Users</h1>
-        <p className="text-sm text-danger">Something went wrong loading users. Please try again.</p>
+        <ErrorState description="Something went wrong loading users. Please try again." />
       </div>
     );
   }
 
-  if (result.users.length === 0) {
-    return (
-      <div className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold text-neutral-900">Users</h1>
-        <p className="text-sm text-neutral-600">No users found for this organization yet.</p>
-      </div>
-    );
-  }
+  const columns: readonly DataTableColumn<PortalUser>[] = [
+    { key: "name", header: "Name", render: (user) => user.displayName },
+    {
+      key: "email",
+      header: "Email",
+      render: (user) => (
+        <>
+          {user.email ?? "—"}
+          {user.emailMasked ? <span className="ml-1 text-xs text-neutral-400">(masked)</span> : null}
+        </>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (user) => {
+        const { tone, label } = resolvePortalUserStatusTone(user.status);
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-neutral-900">Users</h1>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-neutral-200 text-left text-neutral-600">
-            <th scope="col" className="py-2 pr-4 font-medium">
-              Name
-            </th>
-            <th scope="col" className="py-2 pr-4 font-medium">
-              Email
-            </th>
-            <th scope="col" className="py-2 font-medium">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.users.map((user) => (
-            <tr key={user.id} className="border-b border-neutral-100">
-              <td className="py-2 pr-4 text-neutral-900">{user.displayName}</td>
-              <td className="py-2 pr-4 text-neutral-600">
-                {user.email ?? "—"}
-                {user.emailMasked ? <span className="ml-1 text-xs text-neutral-400">(masked)</span> : null}
-              </td>
-              <td className="py-2 text-neutral-600">{user.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="text-xs text-neutral-500">
-        Page {result.page} — {result.totalCount} total user{result.totalCount === 1 ? "" : "s"}
-      </p>
+      <DataTable
+        caption="Users"
+        columns={columns}
+        rows={result.users}
+        rowKey={(user) => user.id}
+        emptyMessage="No users found for this organization yet."
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-neutral-500">
+          Page {result.page} — {result.totalCount} total user{result.totalCount === 1 ? "" : "s"}
+        </p>
+        <Pagination
+          page={result.page}
+          pageSize={result.pageSize}
+          totalCount={result.totalCount}
+          buildHref={(targetPage) => `/${tenantSlug}/admin/users?page=${targetPage}`}
+        />
+      </div>
     </div>
   );
 }

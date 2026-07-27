@@ -9,6 +9,7 @@ import { OpportunityActionsPanel } from "./opportunity-actions-panel.tsx";
 import { RequestCostingForm } from "./request-costing-form.tsx";
 import { CreateQuotationForm } from "./create-quotation-form.tsx";
 import { ActivityTimeline } from "../../_shared/activity-timeline.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Opportunity Detail (COM-147, CG-S7-COM-006). `getOpportunityById` returns `null` for
@@ -36,9 +37,7 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this opportunity. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this opportunity. Please try again." />
     );
   }
 

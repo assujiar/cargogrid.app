@@ -2,6 +2,9 @@ import type { Quotation } from "../../../../../../server/contracts/quotation/quo
 import type { QuotationAcceptanceToken } from "../../../../../../server/contracts/quotation/quotation-acceptance.ts";
 import { SendAcceptanceForm } from "./send-acceptance-form.tsx";
 import { revokeQuotationAcceptanceTokenAction } from "./actions.ts";
+import { DataTable, type DataTableColumn } from "../../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
+import { QUOTATION_ACCEPTANCE_TOKEN_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
 
 /**
  * Customer Acceptance panel (COM-154, CG-S7-COM-013, Prompt 154 §15: "send confirmation/
@@ -30,6 +33,34 @@ export function CustomerAcceptancePanel({
 
   const activeToken = tokens.find((token) => token.status === "active") ?? null;
 
+  const tokenColumns: readonly DataTableColumn<QuotationAcceptanceToken>[] = [
+    { key: "sent", header: "Sent", render: (token) => new Date(token.sentAt).toLocaleString() },
+    { key: "channel", header: "Channel", render: (token) => token.channel },
+    {
+      key: "status",
+      header: "Status",
+      render: (token) => {
+        const { tone, label } = QUOTATION_ACCEPTANCE_TOKEN_STATUS_TONE_MAP[token.status];
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    { key: "expires", header: "Expires", render: (token) => new Date(token.expiresAt).toLocaleString() },
+    {
+      key: "action",
+      header: "Action",
+      render: (token) =>
+        token.status === "active" ? (
+          <form action={revokeQuotationAcceptanceTokenAction.bind(null, tenantSlug, quotation.id, token.id, "Revoked by sender")}>
+            <button type="submit" className="text-sm font-medium text-danger underline">
+              Revoke
+            </button>
+          </form>
+        ) : (
+          "—"
+        ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Customer acceptance</h2>
@@ -44,48 +75,13 @@ export function CustomerAcceptancePanel({
       {tokens.length > 0 ? (
         <div className="flex flex-col gap-1">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Send history</h3>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Sent
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Channel
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Status
-                </th>
-                <th scope="col" className="py-2 pr-4 font-medium">
-                  Expires
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {tokens.map((token) => (
-                <tr key={token.id} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 text-neutral-900">{new Date(token.sentAt).toLocaleString()}</td>
-                  <td className="py-2 pr-4 text-neutral-600">{token.channel}</td>
-                  <td className="py-2 pr-4 text-neutral-600">{token.status}</td>
-                  <td className="py-2 pr-4 text-neutral-600">{new Date(token.expiresAt).toLocaleString()}</td>
-                  <td className="py-2 text-neutral-600">
-                    {token.status === "active" ? (
-                      <form action={revokeQuotationAcceptanceTokenAction.bind(null, tenantSlug, quotation.id, token.id, "Revoked by sender")}>
-                        <button type="submit" className="text-sm font-medium text-danger underline">
-                          Revoke
-                        </button>
-                      </form>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            caption="Customer acceptance send history"
+            columns={tokenColumns}
+            rows={tokens}
+            rowKey={(token) => token.id}
+            emptyMessage="No send history yet."
+          />
         </div>
       ) : null}
 

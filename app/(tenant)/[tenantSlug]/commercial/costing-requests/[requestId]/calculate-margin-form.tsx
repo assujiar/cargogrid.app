@@ -5,6 +5,8 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { calculateMarginAction, overrideMarginThresholdAction } from "./actions.ts";
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
 import type { RateSelection } from "../../../../../../server/contracts/rate/rate.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
 
 /**
  * Margin calculation trigger + override panel (COM-150). Requires both COM:Edit and
@@ -42,13 +44,13 @@ export function CalculateMarginForm({
         <p className="text-sm text-neutral-600">Select a rate above before calculating a margin.</p>
       ) : (
         <>
-          <select value={rateSelectionId} onChange={(e) => setRateSelectionId(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+          <Select value={rateSelectionId} onChange={(e) => setRateSelectionId(e.target.value)}>
             {rateSelections.map((selection) => (
               <option key={selection.id} value={selection.id}>
                 {selection.isAdhoc ? "Ad-hoc selection" : "Catalog selection"} ({selection.id.slice(0, 8)})
               </option>
             ))}
-          </select>
+          </Select>
           <div className="flex gap-2">
             <input type="number" min={0} placeholder="Sell amount" value={sellAmount} onChange={(e) => setSellAmount(e.target.value)} className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
             <input placeholder="Currency (e.g. IDR)" value={sellCurrency} onChange={(e) => setSellCurrency(e.target.value.toUpperCase())} className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
@@ -86,7 +88,7 @@ export function CalculateMarginForm({
           </p>
           {needsOverride ? (
             <div className="mt-2 flex flex-col gap-2">
-              <input placeholder="Override reason" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+              <Input placeholder="Override reason" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
               <Button
                 type="button"
                 variant="secondary"

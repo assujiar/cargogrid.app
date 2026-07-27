@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "../../../../../../lib/supabase/serve
 import { getAccountById, listAccounts, AccountQueryError } from "../../../../../../server/queries/account.ts";
 import { getCreditProfileForAccount, getCreditProfileApprovalOverview } from "../../../../../../server/queries/credit.ts";
 import { CreditPanel } from "./credit-panel.tsx";
+import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
  * Account detail (COM-155, CG-S7-COM-014). Read-only in this bounded slice -- no
@@ -29,9 +30,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
       throw error;
     }
     return (
-      <div role="alert" className="flex flex-col gap-2">
-        <p className="text-sm text-danger">Something went wrong loading this account. Please try again.</p>
-      </div>
+      <ErrorState description="Something went wrong loading this account. Please try again." />
     );
   }
 

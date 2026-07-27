@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from "../../../../components/tables/d
 import { Pagination } from "../../../../components/tables/pagination.tsx";
 import { StatusBadge } from "../../../../components/ui/status-badge.tsx";
 import { resolveTenantStatusTone } from "../../../../components/domain/status-tone-map.ts";
+import { ErrorState } from "../../../../components/ui/error-state.tsx";
 
 const PAGE_SIZE = 20;
 
@@ -63,9 +64,9 @@ export default async function SupremeTenantsPage({ searchParams }: { searchParam
 
   if (loadFailed || !result) {
     return (
-      <div className="flex flex-col gap-2" role="alert">
+      <div className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold text-neutral-900">Tenants</h1>
-        <p className="text-sm text-danger">Something went wrong loading tenants. Please try again.</p>
+        <ErrorState description="Something went wrong loading tenants. Please try again." />
       </div>
     );
   }

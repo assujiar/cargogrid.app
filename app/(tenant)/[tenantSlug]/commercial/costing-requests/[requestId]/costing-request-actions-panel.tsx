@@ -5,6 +5,8 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { assignCostingRequestAction, submitCostingResponseAction, reviseCostingRequestAction, cancelCostingRequestAction } from "./actions.ts";
 import type { CostingResponseSourceType } from "../../../../../../server/contracts/costing/costing.ts";
 import type { CostingRequestComponent } from "../../../../../../server/contracts/costing/costing.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
 
 /** Assign/respond/revise/cancel action panel (COM-148) -- mirrors every prior Commercial capability's own `*-actions-panel.tsx` pattern (bound Server Actions called directly via `useTransition`). */
 export function CostingRequestActionsPanel({
@@ -44,7 +46,7 @@ export function CostingRequestActionsPanel({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Assign</h3>
-        <input placeholder="Assignee user ID" value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)} disabled={isClosed} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input placeholder="Assignee user ID" value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)} disabled={isClosed} />
         <Button
           type="button"
           variant="secondary"
@@ -64,15 +66,15 @@ export function CostingRequestActionsPanel({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Submit response</h3>
-        <select value={sourceType} onChange={(e) => setSourceType(e.target.value as CostingResponseSourceType)} disabled={isClosed} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+        <Select value={sourceType} onChange={(e) => setSourceType(e.target.value as CostingResponseSourceType)} disabled={isClosed}>
           <option value="internal">Internal</option>
           <option value="vendor">Vendor</option>
-        </select>
+        </Select>
         {sourceType === "vendor" ? (
-          <input placeholder="Vendor reference" value={vendorRef} onChange={(e) => setVendorRef(e.target.value)} disabled={isClosed} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <Input placeholder="Vendor reference" value={vendorRef} onChange={(e) => setVendorRef(e.target.value)} disabled={isClosed} />
         ) : null}
         <input placeholder="Currency (e.g. IDR)" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} disabled={isClosed} className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <input type="datetime-local" placeholder="Expiry (optional)" value={expiryAt} onChange={(e) => setExpiryAt(e.target.value)} disabled={isClosed} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input type="datetime-local" placeholder="Expiry (optional)" value={expiryAt} onChange={(e) => setExpiryAt(e.target.value)} disabled={isClosed} />
         {requestComponents.length === 0 ? (
           <p className="text-xs text-neutral-500">This request has no line items to price.</p>
         ) : (
@@ -140,7 +142,7 @@ export function CostingRequestActionsPanel({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Cancel</h3>
-        <input placeholder="Cancel reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} disabled={isClosed} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input placeholder="Cancel reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} disabled={isClosed} />
         <Button
           type="button"
           variant="destructive"

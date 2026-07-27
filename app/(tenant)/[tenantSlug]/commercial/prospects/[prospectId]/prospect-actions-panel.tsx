@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { disqualifyProspectAction, archiveProspectAction } from "./actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
 
 /** Disqualify/archive action panel (COM-144, CG-S7-COM-003) -- mirrors COM-143's own `lead-actions-panel.tsx` pattern exactly. */
 export function ProspectActionsPanel({
@@ -36,13 +37,7 @@ export function ProspectActionsPanel({
         <label htmlFor="disqualify-reason" className="text-sm font-medium text-neutral-700">
           Disqualify reason
         </label>
-        <input
-          id="disqualify-reason"
-          type="text"
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+        <Input id="disqualify-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} />
       </div>
       <Button
         type="button"

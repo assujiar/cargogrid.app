@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { approveRateVersionAction, rejectRateVersionAction, withdrawRateVersionAction } from "./actions.ts";
 import type { RateVersionApprovalStatus } from "../../../../../../server/contracts/rate/rate.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
 
 /** Approve/reject/withdraw action panel (COM-149) -- mirrors every prior Commercial capability's own `*-actions-panel.tsx` pattern (bound Server Actions called directly via `useTransition`). All three RPCs are gated by app.is_support_grant_authority, not ordinary COM RBAC -- a Commercial rep will see a real server-side denial here, which is expected. */
 export function RateActionsPanel({
@@ -55,7 +56,7 @@ export function RateActionsPanel({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Reject</h3>
-        <input placeholder="Rejection reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} disabled={!isPending} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input placeholder="Rejection reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} disabled={!isPending} />
         <Button
           type="button"
           variant="destructive"
@@ -76,7 +77,7 @@ export function RateActionsPanel({
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Withdraw</h3>
         <p className="text-xs text-neutral-500">Only an approved rate can be withdrawn.</p>
-        <input placeholder="Withdrawal reason" value={withdrawReason} onChange={(e) => setWithdrawReason(e.target.value)} disabled={!isApproved} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <Input placeholder="Withdrawal reason" value={withdrawReason} onChange={(e) => setWithdrawReason(e.target.value)} disabled={!isApproved} />
         <Button
           type="button"
           variant="destructive"
