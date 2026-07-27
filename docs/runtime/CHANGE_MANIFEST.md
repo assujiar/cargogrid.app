@@ -4169,6 +4169,38 @@ The dropped-and-recreated function is a stricter, superset-of-behavior replaceme
 
 Self-closing. `CG-S7-COM-022` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-023` (Prompt 164, Documentation and Handoff) -- dependency-`READY` (`163` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly.
 
+### CHG-2026-103 — Commercial Documentation and Handoff (Phase 2, Prompt 164)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S7-COM-023` / `164_COMMERCIAL_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | DOCS only |
+| Baseline evidence | `docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md` row `023` (`READY`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Already recorded at `COM-161`'s own checkpoint: "Commercial WBS through phase closure (161-165)" |
+
+#### Outcome
+
+The Phase 2 equivalent of Platform Core's own `PLT-139` (Documentation and Handoff). Documentation-only, zero application-code/migration change (Prompt 164 §13's own mandate). Two new deliverables: `docs/build-log/phase-02/COMMERCIAL_HANDOFF_PACKAGE.md` (the Phase 2→Phase 3 entry package, mirroring `PLATFORM_CORE_HANDOFF_PACKAGE.md`'s own structure -- verified dependencies, 20-migration/53-db-test-file/18-ADR preserved-assets inventory, known issues carried forward unchanged, verified environment commands, residual risks collected from every `COM-143..163` build log's own disclosed boundary, zero correction needed this checkpoint, forbidden-scope re-confirmation, fresh-context reconstruction check) and `docs/build-log/phase-02/JOB_ORDER_HANDOFF_CONTRACT.md` (Prompt 164 §20 task 3's own literal deliverable -- the exact `JobOrderDraftInput` schema field-by-field cited directly to `server/contracts/job-order-lineage/job-order-lineage.ts`, a full synthetic/redacted example payload, 5 compatibility notes, and a 5-item unresolved-dependency list for Phase 3).
+
+Forbidden-scope grep re-run directly this checkpoint (not assumed unchanged from `COM-160`'s own original confirmation): zero matches for any Operations/Finance/Procurement domain concept anywhere in application code -- even Commercial's own hyphenated `job-order-lineage` service files fall outside the underscore-based search pattern, confirming no literal "Job Order domain" naming exists in code at all.
+
+#### Scope and files
+
+New: `docs/build-log/phase-02/COMMERCIAL_HANDOFF_PACKAGE.md`; `docs/build-log/phase-02/JOB_ORDER_HANDOFF_CONTRACT.md`; `docs/build-log/phase-02/COM-164.md`. Zero application code, zero migration. 3 new files.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS; `pnpm run test` 1404/1404 PASS (unchanged); `pnpm run db:test` PASS -- 52 migrations/53 db-test files (unchanged); `pnpm run docs:check` PASS (the two new documents introduce zero broken link, confirmed mechanically). No other gate is applicable to a documentation-only checkpoint touching zero application/schema file.
+
+#### Compatibility, rollout, recovery
+
+Documentation-only; no schema/data/application code touched. `git revert` of this checkpoint's commit is safe and complete.
+
+#### Approval and closure
+
+Self-closing. `CG-S7-COM-023` is `VERIFIED`. Next eligible prompt: `CG-S7-COM-024` (Prompt 165, Phase 2 Closure Verification) -- dependency-`READY` (`164` `VERIFIED`), already authorized under the same "Commercial WBS through phase closure (161-165)" range -- proceeding directly. This is the final Commercial task before `PHASE_2_VERIFIED`.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
