@@ -273,12 +273,14 @@ $$;
 \echo '>> app.job_orders_directory: revenue_snapshot/credit_snapshot masked (null, *_masked=true) for the restricted ops-only actor lacking COM:View selling price/View cost; visible for the full-access rep on the identical row'
 do $$
 declare
+  v_tenant1 uuid;
   v_job_order_id uuid;
   v_revenue_masked boolean;
   v_credit_masked boolean;
   v_revenue jsonb;
 begin
-  select id into v_job_order_id from app.job_orders limit 1;
+  v_tenant1 := (select id from app.tenants where slug = 'acmeops');
+  select id into v_job_order_id from app.job_orders where tenant_id = v_tenant1;
 
   set local role authenticated;
   set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000009961", "role": "authenticated"}';

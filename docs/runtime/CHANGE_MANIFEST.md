@@ -4443,6 +4443,40 @@ Additive only -- zero prior migration file edited, zero new permission-catalogue
 
 Self-closing. `CG-S8-OPS-007` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-008` (Prompt 174, Exception and Escalation) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
 
+### CHG-2026-112 — Exception and Escalation (Phase 3, Prompt 174)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-008` / `174_EXCEPTION_ESCALATION_PROMPT.md` |
+| Change type | Schema (1 permission row + 3 new tables + 1 view) + service layer + UI + one test-defect fix in a prior checkpoint's own file |
+| Baseline evidence | `OPS-173` `VERIFIED` (`docs/build-log/phase-03/OPS-173.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- seventh capability task in that range |
+
+#### Outcome
+
+Basic operational exception intake, ownership, versioned/pinned SLA, escalation and resolution linked to Shipment Order/milestone evidence. Type/severity are a small fixed taxonomy (mirroring `OPS-169`'s own bounded `mode` enum). SLA/escalation policy is real and versioned, pinned onto each exception as a governed snapshot at creation time -- a later republish never retroactively changes an already-open exception's own due date. Sensitive claim/damage fields are masked via a new `OPS:View cost` permission (reusing the already-approved fixed action vocabulary, paired with the `OPS` module -- never a collision with `COM:View cost`) and `app.exceptions_directory`, the same precedent `COM-148`/`COM-156` established.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727150000_create_operations_exception_escalation.sql` (one `OPS:View cost` permission row; `app.exception_sla_policy_versions`, `app.operational_exceptions`, `app.exception_escalations` tables; `app.exceptions_directory` view; `app.create_exception_sla_policy_draft`, `app.set_exception_sla_policy_terms`, `app.publish_exception_sla_policy_version`, `app.report_exception`, `app.assign_exception_owner`, `app.acknowledge_exception`, `app.escalate_exception`, `app.resolve_exception`, `app.close_exception`, `app.reopen_exception`, `app.set_exception_sensitive_fields`, `app.get_exception_escalation_history`, `app.has_view_exception_cost` functions). New service layer: `server/contracts/exception-escalation/exception-escalation.ts(.test.ts)`, `server/queries/exception-escalation.ts(.test.ts)`, `server/mutations/exception-escalation.ts(.test.ts)`. New UI: `report-exception-form.tsx`, `exception-list.tsx` on the existing Shipment Order detail route. Modified: Shipment Order detail `actions.ts`/`page.tsx`; `scripts/db-tests/operations-job-order.sql` (one-line root-cause fix to a pre-existing unqualified `limit 1` query, see Errors below). 1 migration, ~9 new files, 3 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1587/1587 (32 net new: 13 contract, 6 query, 13 mutation). `db:test` PASS across 59 migrations/60 db-test files (1 net new, zero regression) -- 11 scenario groups covering SLA policy draft/terms/publish authority-gating and at-most-one-per-`(tenant,type,severity)`, report-exception authority/unknown-type-severity-source rejection/real-SLA-pinning/null-pin-when-unpublished/system-dedup-idempotency, owner-assignment reason-on-reassign-only, full acknowledge/escalate/resolve/close/reopen lifecycle with every guard, sensitive-field write gating and read masking via the real `set local role authenticated`/`request.jwt.claims` RLS-simulation technique, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (unchanged). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint.
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited. One new permission-catalogue row (`OPS:View cost`, reusing the already-approved fixed action vocabulary; `OPS:Assign`/`OPS:Close` gain further/first real consumers). `git revert` of this checkpoint's commit is safe and complete; `app.shipment_orders` itself is untouched. The `operations-job-order.sql` test-query fix is independently revertible (test-scope only, no production code touched).
+
+#### Errors found and fixed
+
+A genuine, pre-existing defect was found in `OPS-168`'s own `scripts/db-tests/operations-job-order.sql`, not in this checkpoint's own new code: its `job_orders_directory` masking assertion used an unqualified `select id into v_job_order_id from app.job_orders limit 1` with no tenant filter, silently relying on row-insertion-order luck across the one shared, continuously-migrated disposable test database every `db-test` file runs against together. This broke the moment this checkpoint's own new file (`operations-exception-escalation.sql`, sorting alphabetically before `operations-job-order.sql`) created its own job order first. Root-cause fixed by scoping that query to `where tenant_id = v_tenant1`, matching every other query in that same file -- not by renaming this checkpoint's own correctly-named file to dodge the pre-existing fragility.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-008` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-009` (Prompt 175, Basic Dispatch) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly. This is the final task in that authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

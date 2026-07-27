@@ -20,9 +20,20 @@ import {
   ResourceAssignmentMutationError,
 } from "../../../../../../server/mutations/resource-assignment.ts";
 import { ingestMilestoneEvent, MilestoneManagementMutationError } from "../../../../../../server/mutations/milestone-management.ts";
+import {
+  reportException,
+  assignExceptionOwner,
+  acknowledgeException,
+  escalateException,
+  resolveException,
+  closeException,
+  reopenException,
+  ExceptionEscalationMutationError,
+} from "../../../../../../server/mutations/exception-escalation.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
 import type { ResourceAssignmentRole } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
+import type { ExceptionType, ExceptionSeverity } from "../../../../../../server/contracts/exception-escalation/exception-escalation.ts";
 
 export interface ShipmentOrderFormState {
   readonly error: string | null;
@@ -358,6 +369,97 @@ export async function ingestMilestoneEventAction(
   } catch (error) {
     if (error instanceof MilestoneManagementMutationError) {
       return { error: `Could not record this milestone event: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-174: reports a new operational exception -- always source="manual" for this internal UI. */
+export async function reportExceptionAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const type = String(formData.get("type") ?? "") as ExceptionType;
+  const severity = String(formData.get("severity") ?? "") as ExceptionSeverity;
+  const description = String(formData.get("description") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reportException(supabase, {
+      shipmentOrderId,
+      type,
+      severity,
+      description,
+      source: "manual",
+      correlationKey: idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof ExceptionEscalationMutationError) {
+      return { error: `Could not report this exception: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/**
+ * OPS-174: one unified dispatcher for every per-exception lifecycle action
+ * (acknowledge/escalate/resolve/close/reopen/assign owner) -- the form's own hidden
+ * "action" field selects which real mutation runs, keeping the UI to one compact
+ * per-exception control instead of six separate forms.
+ */
+export async function manageExceptionAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  exceptionId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const action = String(formData.get("action") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const supabase = await createSupabaseServerClient();
+
+  try {
+    if (action === "acknowledge") {
+      await acknowledgeException(supabase, { exceptionId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    } else if (action === "escalate") {
+      await escalateException(supabase, { exceptionId, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    } else if (action === "resolve") {
+      await resolveException(supabase, { exceptionId, expectedVersion, resolutionEvidence: reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    } else if (action === "close") {
+      await closeException(supabase, { exceptionId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    } else if (action === "reopen") {
+      await reopenException(supabase, { exceptionId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    } else if (action === "assign_owner") {
+      const ownerUserId = String(formData.get("ownerUserId") ?? "");
+      await assignExceptionOwner(supabase, { exceptionId, ownerUserId, reason: reason.length === 0 ? null : reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    } else {
+      return { error: `Unknown exception action: ${action}` };
+    }
+  } catch (error) {
+    if (error instanceof ExceptionEscalationMutationError) {
+      return { error: `Could not perform this action: ${error.message}` };
     }
     throw error;
   }

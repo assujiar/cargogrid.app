@@ -7,6 +7,7 @@ import { getShipmentStatusHistory, ShipmentLifecycleQueryError } from "../../../
 import { getShipmentModeProfile, ShipmentModeBaselineQueryError } from "../../../../../../server/queries/shipment-mode-baseline.ts";
 import { findAssignmentCandidates, getResourceAssignmentHistory, ResourceAssignmentQueryError } from "../../../../../../server/queries/resource-assignment.ts";
 import { getShipmentMilestoneTimeline, getShipmentMilestoneProjection, listMilestoneCodes, MilestoneManagementQueryError } from "../../../../../../server/queries/milestone-management.ts";
+import { listShipmentExceptions, ExceptionEscalationQueryError } from "../../../../../../server/queries/exception-escalation.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -20,6 +21,8 @@ import { ResourceAssignmentPanel } from "./resource-assignment-panel.tsx";
 import { ResourceAssignmentHistory } from "./resource-assignment-history.tsx";
 import { MilestoneTimeline } from "./milestone-timeline.tsx";
 import { IngestMilestoneEventForm } from "./ingest-milestone-event-form.tsx";
+import { ReportExceptionForm } from "./report-exception-form.tsx";
+import { ExceptionList } from "./exception-list.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -31,6 +34,8 @@ import {
   resumeResourceAssignmentAction,
   unassignResourceAction,
   ingestMilestoneEventAction,
+  reportExceptionAction,
+  manageExceptionAction,
   type ShipmentOrderFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
@@ -131,6 +136,16 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading milestone events. Please try again." />;
   }
 
+  let exceptions;
+  try {
+    exceptions = await listShipmentExceptions(supabase, shipment.id);
+  } catch (error) {
+    if (!(error instanceof ExceptionEscalationQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading exceptions. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -154,6 +169,9 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundUnassignAction = (role: (typeof RESOURCE_ASSIGNMENT_ROLES)[number]) => unassignResourceAction.bind(null, tenantSlug, shipment.id, role);
   const milestoneIdempotencyKey = randomUUID();
   const boundIngestMilestoneEventAction = ingestMilestoneEventAction.bind(null, tenantSlug, shipment.id, milestoneIdempotencyKey);
+  const exceptionIdempotencyKey = randomUUID();
+  const boundReportExceptionAction = reportExceptionAction.bind(null, tenantSlug, shipment.id, exceptionIdempotencyKey);
+  const boundManageExceptionAction = (exceptionId: string, expectedVersion: number) => manageExceptionAction.bind(null, tenantSlug, shipment.id, exceptionId, expectedVersion);
 
   return (
     <div className="flex flex-col gap-6">
@@ -283,6 +301,14 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
         <div className="mt-2 border-t border-neutral-200 pt-2">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Timeline</h3>
           <MilestoneTimeline events={milestoneEvents} />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Exceptions</h2>
+        <ReportExceptionForm action={boundReportExceptionAction} />
+        <div className="mt-2 border-t border-neutral-200 pt-2">
+          <ExceptionList exceptions={exceptions} actionFor={boundManageExceptionAction} />
         </div>
       </section>
     </div>

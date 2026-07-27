@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S8-OPS-001` (`CG-AABPP-OPS-167` v0.9.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/08-phase-03-operations/167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-173` (Milestone Management, `VERIFIED`); this document's own row/tally table is updated at every checkpoint, most recently to reflect `173`'s completion and `174`'s dependency-`READY` state
+**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-174` (Exception and Escalation, `VERIFIED`); this document's own row/tally table is updated at every checkpoint, most recently to reflect `174`'s completion and `175`'s dependency-`READY` state
 
 ## 0. Checkpoint
 
@@ -28,11 +28,11 @@
 | `005` | `171` Land, air and sea baseline | Shipment Execution / Mode Baseline | `VERIFIED` | `OPS-169..170` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-171.md` | Runtime build agent | `CG-S8-OPS-006` |
 | `006` | `172` Resource/vendor assignment | Shipment Execution / Execution Responsibility | `VERIFIED` | `OPS-168..171` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-172.md` | Runtime build agent | `CG-S8-OPS-007` |
 | `007` | `173` Milestone management | Control Tower / Shipment Visibility | `VERIFIED` | `OPS-169..172` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-173.md` | Runtime build agent | `CG-S8-OPS-008` |
-| `008` | `174` Exception and escalation | Control Tower / Operational Exception | `READY` | `OPS-173` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-174.md` | Runtime build agent | `CG-S8-OPS-009` |
-| `009` | `175` Basic dispatch | Dispatch / Shipment Release | `BLOCKED` | `OPS-169..174` | — | `docs/build-log/phase-03/OPS-175.md` | Runtime build agent | `CG-S8-OPS-010` |
+| `008` | `174` Exception and escalation | Control Tower / Operational Exception | `VERIFIED` | `OPS-173` (`VERIFIED`) | `claude/lanjut-kv0mze`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-174.md` | Runtime build agent | `CG-S8-OPS-009` |
+| `009` | `175` Basic dispatch | Dispatch / Shipment Release | `READY` | `OPS-169..174` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-175.md` | Runtime build agent | `CG-S8-OPS-010` |
 | `010`–`022` | `176`–`188` Document requirement, ePOD, actual cost, profitability, public tracking, billing readiness, dashboard, reports, transaction lineage, integrated verification, hardening, documentation, closure | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-175` onward | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | Out of this session's authorized range |
 
-**Tally:** of the 22 rows in this index (`167`–`188`), **7 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management), **1 is `READY`** (`174`, Exception and Escalation), **1 is `BLOCKED`** on its own not-yet-started predecessor within this session's authorized range (`175`), and **13 are `NOT_STARTED`** (`176`–`188`, out of the "lanjut sd prompt 175" authorized range).
+**Tally:** of the 22 rows in this index (`167`–`188`), **8 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation), **1 is `READY`** (`175`, Basic Dispatch — the final task in this session's authorized range), and **13 are `NOT_STARTED`** (`176`–`188`, out of the "lanjut sd prompt 175" authorized range).
 
 ## 2. Collision inspection
 
