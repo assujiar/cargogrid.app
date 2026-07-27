@@ -115,6 +115,15 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
           <OverrideJobOrderForm action={boundOverrideAction} />
         </section>
       ) : null}
+
+      {jobOrder.status === "confirmed" ? (
+        <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+          <h2 className="text-sm font-semibold text-neutral-900">Shipment Orders</h2>
+          <a href={`/${tenantSlug}/operations/shipment-orders/create?jobOrderId=${jobOrder.id}`} className="w-fit text-sm font-medium text-primary underline">
+            Create a Shipment Order from this Job Order
+          </a>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -4293,6 +4293,36 @@ Additive only -- zero prior migration file edited, zero new permission-catalogue
 
 Self-closing. `CG-S8-OPS-002` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-003` (Prompt 169, Shipment Order) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
 
+### CHG-2026-107 — Shipment Order (Phase 3, Prompt 169)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-003` / `169_SHIPMENT_ORDER_PROMPT.md` |
+| Change type | Schema (additive) + service layer + UI |
+| Baseline evidence | `OPS-168` `VERIFIED` (`docs/build-log/phase-03/OPS-168.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "lanjut sd prompt 175" -- second capability task in that range |
+
+#### Outcome
+
+The second Operations-domain table. `app.shipment_orders` converts one confirmed Job Order into one or more single-leg Shipment Orders, each inheriting shipper (a live FK)/cargo (a governed verbatim snapshot) from the Job Order rather than re-entering them. A governed, reconciled allocation spans every non-cancelled Shipment Order sharing the same Job Order -- the very first Shipment Order for a Job Order declares the allocation basis (per dimension: quantity/weight/volume, each independently, nullable = advisory-only), every later split is checked against the running sum via `app.get_job_shipment_allocation_balance` and requires a non-empty `split_reason`. No override path exists in this bounded slice; an over-allocation attempt is a hard, structural block.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260727100000_create_operations_shipment_order.sql` (2 tables -- `app.shipment_order_number_counters`, `app.shipment_orders`; 3 functions -- `next_shipment_number`, `get_job_shipment_allocation_balance`, `create_shipment_order_from_job`, `confirm_shipment_order`, `cancel_shipment_order` -- 5 functions total). New service layer: `server/contracts/shipment-order/shipment-order.ts(.test.ts)`, `server/queries/shipment-order.ts(.test.ts)`, `server/mutations/shipment-order.ts(.test.ts)`. New UI: `app/(tenant)/[tenantSlug]/operations/shipment-orders/` (list + `loading.tsx`; `create/` create-from-job workflow + `actions.ts` + form + `loading.tsx`; `[shipmentOrderId]/` detail + `actions.ts` + confirm/cancel forms + `loading.tsx`). New test fixture: `scripts/db-tests/operations-shipment-order.sql`. Modified: `components/domain/status-tone-map.ts` (added `SHIPMENT_ORDER_STATUS_TONE_MAP`), Job Order detail page (one new link to Shipment Order creation, shown only when `status === 'confirmed'`). 1 migration, ~17 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1469/1469 (29 net new: 9 contract, 9 query, 11 mutation). `db:test` PASS across 54 migrations/55 db-test files (1 net new, zero regression) -- 9 scenario groups covering null-basis-before-any-shipment, authority/confirmed-job-required/inheritance/idempotent create, split-reason-required/over-allocation/valid-split allocation-balance checks, optimistic-concurrency confirm, mandatory-reason cancel with balance release, record-scope isolation, cross-tenant isolation, schema-privilege defense in depth, and audit-trail reconciliation (exactly 5 events). `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 51 routes (3 new). `git:check-paths` shows the same disclosed, pre-existing false positive as every prior Operations/Commercial migration checkpoint (flags this checkpoint's own new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses the `OPS` action set `OPS-168` already made the first real consumer of). `git revert` of this checkpoint's commit is safe and complete (no downstream consumer exists yet).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-003` is `VERIFIED`. Next eligible prompt: `CG-S8-OPS-004` (Prompt 170, Shipment Lifecycle) -- dependency-`READY`, already authorized under this session's "lanjut sd prompt 175" range -- proceeding directly.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
