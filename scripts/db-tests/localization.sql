@@ -56,7 +56,15 @@ begin
   if not app.validate_currency_code('IDR') or not app.validate_currency_code('USD') then
     raise exception 'assertion failed: expected IDR/USD to validate';
   end if;
-  if app.validate_currency_code('EUR') then
+  -- FIN-194 (Prompt 194, CG-S9-FIN-005) widened app.validate_currency_code from
+  -- PLT-119's own disclosed two-code placeholder (IDR/USD only) to resolve
+  -- against the real, governed app.finance_currencies registry -- IDR/USD/SGD/
+  -- EUR/JPY are all now genuinely supported. EUR (this test's own original
+  -- negative example) is deliberately no longer an unsupported-currency
+  -- example post-FIN-194; GBP, which no migration has ever registered, is the
+  -- corrected example -- the same "bounded set, real rejection proof" this
+  -- assertion always existed to prove, unweakened.
+  if app.validate_currency_code('GBP') then
     raise exception 'assertion failed: expected an unsupported currency to be rejected';
   end if;
 end;
@@ -115,7 +123,10 @@ begin
   end;
 
   begin
-    insert into app.tenant_locale_versions (tenant_id, version_number, default_currency) values (v_tenant_id, 902, 'EUR');
+    -- FIN-194 widened app.validate_currency_code (see this file's own §2
+    -- comment) -- EUR is no longer an unsupported-currency example; GBP,
+    -- which no migration has ever registered, is the corrected example.
+    insert into app.tenant_locale_versions (tenant_id, version_number, default_currency) values (v_tenant_id, 902, 'GBP');
     raise exception 'assertion failed: expected an unsupported currency to be rejected';
   exception
     when check_violation then
@@ -346,7 +357,10 @@ begin
   end;
 
   begin
-    update app.users set preferred_currency = 'EUR' where id = v_user_id;
+    -- FIN-194 widened app.validate_currency_code (see this file's own §2
+    -- comment) -- EUR is no longer an unsupported-currency example; GBP,
+    -- which no migration has ever registered, is the corrected example.
+    update app.users set preferred_currency = 'GBP' where id = v_user_id;
     raise exception 'assertion failed: expected an unsupported preferred_currency to be rejected';
   exception
     when check_violation then

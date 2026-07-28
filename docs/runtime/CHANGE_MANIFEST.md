@@ -5089,6 +5089,40 @@ None -- zero implementation defect found during authoring. Zero regression to an
 
 Self-closing. `CG-S9-FIN-004` is `VERIFIED`. `CG-S9-FIN-005` (Prompt 194, Currency and Exchange Rate) proceeds next -- the final task within this session's explicit authorized range.
 
+### CHG-2026-131 — Currency and Exchange Rate (Phase 4, Prompt 194)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-005` / `194_CURRENCY_EXCHANGE_RATE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (plus `CREATE OR REPLACE FUNCTION` on `PLT-119`'s own `app.validate_currency_code`), service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-004` `VERIFIED` (`docs/build-log/phase-04/FIN-193.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- fifth and final task in that range |
+
+#### Outcome
+
+A real, governed currency registry and versioned exchange-rate quotes (`draft -> approved -> archived`) with deterministic tenant-then-global resolution and a convert-preview service that never silently substitutes a stale/default/missing rate. Closes `PLT-119`'s own disclosed forward reference (widens `app.validate_currency_code` from its two-code placeholder to the real registry). Ties FX-conversion rounding into `FIN-191`'s own `finance_rounding` config rather than a second mechanism. This session's entire explicit authorized range (Prompts 190-194) is now fully complete.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728230000_create_finance_currency_exchange_rate.sql`; `server/contracts/currency-exchange-rate/currency-exchange-rate.ts(.test.ts)`; `server/queries/currency-exchange-rate.ts(.test.ts)`; `server/mutations/currency-exchange-rate.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/exchange-rates/page.tsx`/`actions.ts`/`exchange-rate-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-currency-exchange-rate.sql`; `docs/build-log/phase-04/FIN-194.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_EXCHANGE_RATE_STATUS_TONE_MAP`); `scripts/db-tests/localization.sql` (corrected three stale `'EUR'`-as-unsupported-currency assertions to `'GBP'`, per this checkpoint's own real registry widening -- see Errors below); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `194`, plus header status note recording this session's entire authorized range as fully complete). 1 new migration, 0 prior migration file edited in place, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1868/1868 (33 net new), `pnpm run db:test` PASS -- 75 migrations/76 db-test files (1 net new, zero regression, one pre-existing Platform Core test corrected), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 61 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 10 new functions), plus a strictly-additive `CREATE OR REPLACE FUNCTION` widening of `PLT-119`'s own `app.validate_currency_code` (every code it already accepted, IDR/USD, remains accepted; its `service_role`-only grant preserved untouched). `git revert` of this checkpoint's commit is safe and independent -- reverting `app.validate_currency_code` restores `PLT-119`'s own placeholder exactly.
+
+#### Errors found and fixed
+
+Two real defects found and fixed before commit (both via this checkpoint's own db-test, before any commit; full detail in `FIN-194.md` §3.2/§3.1): (1) `app.resolve_finance_exchange_rate` was declared as a bare composite return rather than `setof`, which silently broke `FOUND`-based missing-rate detection in `app.convert_finance_amount` -- fixed by declaring it `setof`. (2) the platform-wide-default (`tenant_id null`) authority path had no route to succeed -- fixed by falling back to Supreme Admin authority for a `null` tenant, mirroring `PLT-121`'s own global-scope precedent. One real regression found and fixed in a pre-existing Platform Core test (`scripts/db-tests/localization.sql`, three stale `'EUR'`-as-unsupported assertions corrected to `'GBP'`) -- a stale-assumption fix, not a weakening; zero coverage removed.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-005` is `VERIFIED`. This session's entire explicit authorized range (Finance Phase 4 Prompts 190-194) is now fully complete. `CG-S9-FIN-006` (Prompt 195, Configurable Tax Baseline) is dependency-eligible but **not authorized this session** -- fresh explicit user authorization is required before any further Phase 4 work begins.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -27,6 +27,7 @@ import type { ShipmentOrderStatus } from "../../server/contracts/shipment-order/
 import type { ConfigVersionStatus } from "../../server/contracts/config/config.ts";
 import type { FinanceAccountStatus } from "../../server/contracts/chart-of-accounts/chart-of-accounts.ts";
 import type { FinancePeriodStatus } from "../../server/contracts/fiscal-period/fiscal-period.ts";
+import type { FinanceExchangeRateStatus } from "../../server/contracts/currency-exchange-rate/currency-exchange-rate.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -96,6 +97,13 @@ export const FINANCE_PERIOD_STATUS_TONE_MAP: Record<FinancePeriodStatus, StatusT
   open: { tone: "success", label: "Open" },
   soft_closed: { tone: "warning", label: "Soft-closed" },
   closed: { tone: "neutral", label: "Closed" },
+};
+
+/** FIN-194: Currency Exchange Rate's own draft/approved/archived lifecycle -- versioned-quote status, distinct from FIN-191's config-version and FIN-192's account-lifecycle Record<...>s. */
+export const FINANCE_EXCHANGE_RATE_STATUS_TONE_MAP: Record<FinanceExchangeRateStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  approved: { tone: "success", label: "Approved" },
+  archived: { tone: "neutral", label: "Archived" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {

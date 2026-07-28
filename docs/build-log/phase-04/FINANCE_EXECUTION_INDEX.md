@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — this session's explicit user authorization names Prompts 190, 191, 192, 193, 194 in order; only those five rows are instantiated with exact repository paths and marked `READY`/`VERIFIED` below. Prompts 195–218 are mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3 but remain `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths yet (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
+**Status:** `PHASE_4_IN_PROGRESS` — this session's explicit user authorization named Prompts 190, 191, 192, 193, 194 in order; all five rows are now instantiated with exact repository paths and marked `VERIFIED` below. This session's entire authorized range (Prompts 190-194) is now fully complete -- Prompt 195 onward requires fresh explicit user authorization before any further row is instantiated. Prompts 195–218 are mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3 but remain `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths yet (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
 
 ## 0. Checkpoint
 
@@ -156,8 +156,8 @@
 | `evidence` | FIN-194.md build log; db-test output |
 | `rollback` | deactivate unconsumed erroneous rate version only; additive migration |
 | `owner` | Runtime build agent |
-| `status` | READY (BLOCKED behind FIN-193 VERIFIED) |
-| `resume_point` | CG-S9-FIN-006 (Prompt 195) dependency-eligible; NOT authorized this session |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-006 (Prompt 195) is dependency-eligible; NOT authorized this session -- this session's explicit authorized range (Prompts 190-194) is now fully complete |
 
 ### Row `195` — Prompt 195, `CG-S9-FIN-006`
 
