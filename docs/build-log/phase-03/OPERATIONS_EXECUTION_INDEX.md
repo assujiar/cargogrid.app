@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S8-OPS-001` (`CG-AABPP-OPS-167` v0.9.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/08-phase-03-operations/167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-187` (Operations Documentation and Handoff, `VERIFIED`); this document's own row/tally table is updated at every checkpoint. This session's authorized range was `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"); mid-checkpoint the user extended it to `OPS-188` ("lanjut sd prompt 188") — the current authorized range is now `OPS-176`–`188`.
+**Status:** `PHASE_3_VERIFIED` — set at `OPS-188` (Operations Closure Verification, `VERIFIED`); see `docs/build-log/phase-03/OPERATIONS_CLOSURE_REPORT.md`. This session's authorized range was `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"), extended mid-checkpoint to `OPS-188` ("lanjut sd prompt 188") — that extended range is now fully complete. No further Operations task may run this session without fresh explicit user authorization.
 
 ## 0. Checkpoint
 
@@ -42,9 +42,9 @@
 | `019` | `185` Integrated verification | Operations Completion / Integrated Verification | `VERIFIED` | `OPS-168..184` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-185.md` | Runtime build agent | `CG-S8-OPS-020` |
 | `020` | `186` Security and financial hardening | Operations Completion / Risk Hardening | `VERIFIED` | `OPS-185` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-186.md` | Runtime build agent | `CG-S8-OPS-021` |
 | `021` | `187` Documentation and handoff | Operations Completion / Knowledge and Handoff | `VERIFIED` | `OPS-186` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-187.md` | Runtime build agent | `CG-S8-OPS-022` |
-| `022` | `188` Closure verification | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-187` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | Final task in this session's extended authorized range ("lanjut sd prompt 188") |
+| `022` | `188` Closure verification | Operations Completion / Closure Verification | `VERIFIED` | `OPS-187` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPERATIONS_CLOSURE_REPORT.md` | Runtime build agent | — (Phase 3 closed; `PHASE_3_VERIFIED`) |
 
-**Tally:** of the 22 rows in this index (`167`–`188`), **21 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost, Basic Job Profitability, Basic Public Customer Tracking, Billing Readiness, Operations Dashboard, Operations Reports, Operations Transaction Lineage, Operations Integrated Verification, Operations Security and Financial Hardening, Operations Documentation and Handoff), and **1 is `NOT_STARTED`** (`188`; dependency-`READY` and authorized this session per "lanjut sd prompt 188" — the final task in the extended range).
+**Tally:** of the 22 rows in this index (`167`–`188`), **all 22 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost, Basic Job Profitability, Basic Public Customer Tracking, Billing Readiness, Operations Dashboard, Operations Reports, Operations Transaction Lineage, Operations Integrated Verification, Operations Security and Financial Hardening, Operations Documentation and Handoff, Operations Closure Verification). **Phase 3 (Operations) is `PHASE_3_VERIFIED`, closed.** This session's entire authorized range ("LANJUT PROMP 176 SD PROM 183" extended via "lanjut sd prompt 188" to `OPS-188`) is now fully complete — no further task runs without fresh explicit user authorization.
 
 ## 2. Collision inspection
 

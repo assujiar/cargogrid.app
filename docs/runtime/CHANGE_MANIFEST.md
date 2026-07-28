@@ -4919,6 +4919,40 @@ None. Read-back of `docs/adr/README.md` §6, `docs/runtime/KNOWN_ISSUES.md`, and
 
 Self-closing. `CG-S8-OPS-021` is `VERIFIED` -- **fourth task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-022` (Prompt 188, Operations Closure Verification) -- dependency-`READY`, the final task in the extended authorized range.
 
+### CHG-2026-126 — Operations Closure Verification (Phase 3, Prompt 188) — `PHASE_3_VERIFIED`
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-022` / `188_OPERATIONS_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | Independent verification only (0 migration, 0 schema, 0 code) |
+| Baseline evidence | `OPS-187` `VERIFIED` (`docs/build-log/phase-03/OPS-187.md`) |
+| Final status | `COMPLETED` -- `VERIFIED`. **`PHASE_3_VERIFIED` is set by this entry.** |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **the final capability task run under that extended range**, following `CG-S8-OPS-021` (Prompt 187) |
+
+#### Outcome
+
+Independent re-verification of the entire Operations phase (`167`–`187`) against fresh, live evidence -- not carried forward from any prior checkpoint's self-report. All 12 of Prompt 188's own required-verification items pass. **Phase 3 (Operations) is closed: `PHASE_3_VERIFIED`.**
+
+#### Scope and files
+
+New: `docs/build-log/phase-03/OPERATIONS_CLOSURE_REPORT.md` (the primary deliverable, mirroring `COMMERCIAL_CLOSURE_REPORT.md`'s exact structure). No migration, no application code. 1 new file.
+
+#### Tests and quality evidence
+
+Fresh install (`rm -rf node_modules && pnpm install --frozen-lockfile`, 1.6s, deterministic) followed by a full gate suite re-run from scratch: `pnpm run typecheck` PASS (2.8s), `pnpm run lint` PASS (0 errors, 16.6s), `pnpm run test` PASS -- `node:test` 1747/1747 (17.5s), `pnpm run db:test` PASS -- 71 migrations/72 db-test files, zero drift (24.0s), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` PASS -- 0 forbidden paths (clean worktree at verification start, no new migration file this checkpoint), `npx next build` PASS -- 56 routes (27.4s), `pnpm run test:e2e` correctly `NOT_RUN` (the same disclosed sandbox condition since `PLT-117`). No gate fabricated or skipped.
+
+#### Compatibility, rollout, recovery
+
+Verification-only -- zero schema/code dependency. `git revert` of this checkpoint's commit is trivially safe (removes only the closure report and ledger updates).
+
+#### Errors found and fixed
+
+None. Independent re-verification found no defect requiring repair -- every gate passed on the first fresh run, and every required-verification item passed against live evidence without needing a bounded fix. Every finding the Operations phase ever produced (`OPS-182`'s disclosed `org_unit_id` design boundary, `OPS-185`'s one Critical record-scope gap, `OPS-186`'s four findings) was already closed within the same checkpoint that found it.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-022` is `VERIFIED`. **`PHASE_3_VERIFIED` is set this checkpoint -- Phase 3 (Operations) is CLOSED.** This also completes this session's entire authorized range in full (the original "LANJUT PROMP 176 SD PROM 183" range, extended via "lanjut sd prompt 188" through `OPS-188`). **No further task -- Operations, Finance, Advanced TMS/WMS, or Customer Portal -- may run this session without fresh explicit user authorization**, per `OPERATIONS_CLOSURE_REPORT.md` §9.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
