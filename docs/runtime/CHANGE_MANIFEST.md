@@ -4987,6 +4987,40 @@ None requiring repair. One disclosed, transient, pre-commit-state test artifact 
 
 Self-closing. `CG-S9-FIN-001` is `VERIFIED`. **`PHASE_4_IN_PROGRESS` is set this checkpoint.** `CG-S9-FIN-002` (Prompt 191, Finance Configuration) is `READY` and proceeds next, within this session's explicit authorized range.
 
+### CHG-2026-128 — Finance Configuration (Phase 4, Prompt 191)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-002` / `191_FINANCE_CONFIGURATION_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, portal guard, UI route |
+| Baseline evidence | `CG-S9-FIN-001` `VERIFIED` (`docs/build-log/phase-04/00_FINANCE_WBS.md`); `PLT-121` Configuration Engine `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- second task in that range |
+
+#### Outcome
+
+Tenant/company-scoped versioned Finance policy (accounting dimensions, document numbering, posting-map references, rounding rules, budget/accrual/recognition, close-policy baseline) reusing `PLT-121`'s Configuration Engine directly. Two-factor authority (`FIN:Edit`/`FIN:Approve` AND `tenant_admin`/Supreme, the latter inherited from the reused engine) discovered and disclosed, proven both directions in the db-test.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728200000_create_finance_configuration.sql`; `server/contracts/finance-config/finance-config.ts(.test.ts)`; `server/queries/finance-config.ts(.test.ts)`; `server/mutations/finance-config.ts(.test.ts)`; `lib/portal/finance-guard.ts`/`finance-guard-deps.server.ts`/`resolve-finance-access.server.ts`/`finance-guard.test.ts`; `app/(tenant)/[tenantSlug]/finance/config/page.tsx`/`actions.ts`/`finance-config-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-configuration.sql`; `docs/build-log/phase-04/FIN-191.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_CONFIG_VERSION_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `191`). 1 new migration, 0 prior migration edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1792/1792 (45 net new), `pnpm run db:test` PASS -- 72 migrations/73 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 57 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (6 new `config_types` rows, 1 new reference table, 11 new functions) -- dropping them is safe, no other capability depends on them yet. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Three fixture-authoring issues (UUID-range collision, invite-before-assign-role ordering, ambiguous-column join) -- see `docs/build-log/phase-04/FIN-191.md` §8. Zero defect in the migration's own logic once corrected. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-002` is `VERIFIED`. `CG-S9-FIN-003` (Prompt 192, Chart of Accounts) proceeds next, within this session's explicit authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

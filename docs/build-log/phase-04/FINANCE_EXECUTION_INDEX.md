@@ -72,8 +72,8 @@
 | `evidence` | FIN-191.md build log; db-test output; node:test count delta |
 | `rollback` | additive migration only (drop new functions/seed rows if unused); no prior migration edited |
 | `owner` | Runtime build agent |
-| `status` | READY |
-| `resume_point` | CG-S9-FIN-003 (Prompt 192) becomes READY once VERIFIED |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-003 (Prompt 192) is READY -- next |
 
 ### Row `192` — Prompt 192, `CG-S9-FIN-003`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190` is `VERIFIED`** (this checkpoint). **`191`–`194` are `READY`/sequentially `BLOCKED` behind each other**, all four within this session's explicit authorized range. **`195`–`218` (24 rows) remain `NOT_STARTED`**, dependency-mapped but not instantiated with exact paths, and not authorized this session.
+Of the 29 rows in this index (`190`–`218`): **`190`–`191` are `VERIFIED`** (`191` this checkpoint). **`192`–`194` are `READY`/sequentially `BLOCKED` behind each other**, all three within this session's explicit authorized range. **`195`–`218` (24 rows) remain `NOT_STARTED`**, dependency-mapped but not instantiated with exact paths, and not authorized this session.
 
 ## 3. Collision inspection
 
@@ -850,4 +850,4 @@ Of the 29 rows in this index (`190`–`218`): **`190` is `VERIFIED`** (this chec
 - **No cycle**: dependency edges strictly increase in prompt number (each row's `upstream` only names lower-numbered rows), confirmed by direct inspection of every row above.
 - **No orphan**: every `FIN-*` anchor (`FIN-GL/AR/AP/TAX/CLS/PRF-001..004`) appears in at least one row's `source_ids`; every `FINTEST-001..024` scenario is mapped as an implementation/verification input to `FIN-215` per `189_*.md` §6/§7 (full per-scenario mapping is `FIN-215`'s own instantiation, not required with exact test-file paths before its upstream is `VERIFIED`).
 - **No collision**: §3 above confirms zero pre-existing Finance-domain file anywhere in the repository.
-- **Deterministic next eligible atomic task**: `CG-S9-FIN-002` (Prompt 191, Finance Configuration).
+- **Deterministic next eligible atomic task**: `CG-S9-FIN-003` (Prompt 192, Chart of Accounts).

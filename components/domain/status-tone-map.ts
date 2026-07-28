@@ -24,6 +24,7 @@ import type { ReportRunStatus } from "../../server/contracts/report/report.ts";
 import type { UserStatus } from "../../server/contracts/user-lifecycle/user-lifecycle.ts";
 import type { JobOrderStatus } from "../../server/contracts/job-order/job-order.ts";
 import type { ShipmentOrderStatus } from "../../server/contracts/shipment-order/shipment-order.ts";
+import type { ConfigVersionStatus } from "../../server/contracts/config/config.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -69,6 +70,13 @@ export const SALES_PLAN_STATUS_TONE_MAP: Record<SalesPlanStatus, StatusToneEntry
 };
 
 export const MARGIN_RULE_STATUS_TONE_MAP: Record<MarginRuleStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  published: { tone: "success", label: "Published" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-191: Finance Configuration reuses PLT-121's own ConfigVersionStatus enum directly (draft/published/archived) -- one more independently-exhaustiveness-checked Record<...>, matching this file's own established "each domain gets its own Record" convention. */
+export const FINANCE_CONFIG_VERSION_STATUS_TONE_MAP: Record<ConfigVersionStatus, StatusToneEntry> = {
   draft: { tone: "neutral", label: "Draft" },
   published: { tone: "success", label: "Published" },
   archived: { tone: "neutral", label: "Archived" },
