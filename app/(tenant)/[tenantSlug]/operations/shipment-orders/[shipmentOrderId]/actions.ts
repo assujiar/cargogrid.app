@@ -48,6 +48,16 @@ import {
   EpodCaptureReviewMutationError,
 } from "../../../../../../server/mutations/epod-capture-review.ts";
 import type { GeoJsonPoint } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
+import {
+  createActualCostDraft,
+  addActualCostComponent,
+  removeActualCostComponent,
+  submitActualCost,
+  decideActualCost,
+  createActualCostAdjustment,
+  ActualCostMutationError,
+} from "../../../../../../server/mutations/actual-cost.ts";
+import type { ActualCostCategory, ActualCostSourceType } from "../../../../../../server/contracts/actual-cost/actual-cost.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
@@ -852,6 +862,202 @@ export async function completeEpodCaptureAction(
   } catch (error) {
     if (error instanceof EpodCaptureReviewMutationError) {
       return { error: `Could not complete this ePOD capture: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: starts the shipment's first actual-cost version -- fails if a current version already exists (use the adjustment action instead). */
+export async function createActualCostDraftAction(tenantSlug: string, shipmentOrderId: string, _prevState: ShipmentOrderFormState, formData: FormData): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const currency = String(formData.get("currency") ?? "");
+  const estimatedAmountRaw = String(formData.get("estimatedAmount") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createActualCostDraft(supabase, {
+      tenantId: access.tenant.id,
+      shipmentOrderId,
+      currency,
+      estimatedAmount: estimatedAmountRaw.length === 0 ? null : Number(estimatedAmountRaw),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not start actual cost: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: amount is always server-computed -- the form only supplies quantity/rate/minimum/surcharge. */
+export async function addActualCostComponentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  actualCostId: string,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const category = String(formData.get("category") ?? "") as ActualCostCategory;
+  const sourceType = String(formData.get("sourceType") ?? "") as ActualCostSourceType;
+  const vendorId = String(formData.get("vendorId") ?? "").trim();
+  const quantity = Number(formData.get("quantity") ?? 0);
+  const uom = String(formData.get("uom") ?? "").trim();
+  const rate = Number(formData.get("rate") ?? 0);
+  const minimumChargeRaw = String(formData.get("minimumCharge") ?? "").trim();
+  const surcharge = Number(formData.get("surcharge") ?? 0);
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await addActualCostComponent(supabase, {
+      actualCostId,
+      category,
+      sourceType,
+      vendorId: vendorId.length === 0 ? null : vendorId,
+      quantity,
+      uom: uom.length === 0 ? null : uom,
+      rate,
+      minimumCharge: minimumChargeRaw.length === 0 ? null : Number(minimumChargeRaw),
+      surcharge,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not add this cost component: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: draft-only; recomputes the header total. */
+export async function removeActualCostComponentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  componentId: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await removeActualCostComponent(supabase, { componentId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not remove this cost component: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: draft -> submitted; requires at least one component. */
+export async function submitActualCostAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  actualCostId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await submitActualCost(supabase, { actualCostId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not submit this actual cost: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: submitted -> approved | rejected; a reason is required to reject. */
+export async function decideActualCostAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  actualCostId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const decision = String(formData.get("decision") ?? "") as "approved" | "rejected";
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await decideActualCost(supabase, { actualCostId, decision, reason: reason.length === 0 ? null : reason, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not record this actual-cost decision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: approved-only; starts a brand-new draft version, copying the prior version's own component lines. */
+export async function createActualCostAdjustmentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  previousActualCostId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const adjustmentReason = String(formData.get("adjustmentReason") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createActualCostAdjustment(supabase, { previousActualCostId, adjustmentReason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not start this actual-cost adjustment: ${error.message}` };
     }
     throw error;
   }

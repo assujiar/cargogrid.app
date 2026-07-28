@@ -11,6 +11,7 @@ import { listShipmentExceptions, ExceptionEscalationQueryError } from "../../../
 import { getDispatchReadiness, BasicDispatchQueryError } from "../../../../../../server/queries/basic-dispatch.ts";
 import { getShipmentDocumentChecklist, evaluateShipmentDocumentChecklistCompleteness, DocumentRequirementQueryError } from "../../../../../../server/queries/document-requirement.ts";
 import { getEpodCaptureHistory, EpodCaptureReviewQueryError } from "../../../../../../server/queries/epod-capture-review.ts";
+import { getShipmentActualCost, listActualCostComponents, evaluateActualCostVariance, ActualCostQueryError } from "../../../../../../server/queries/actual-cost.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -29,6 +30,7 @@ import { ExceptionList } from "./exception-list.tsx";
 import { DispatchPanel } from "./dispatch-panel.tsx";
 import { DocumentChecklistPanel } from "./document-checklist-panel.tsx";
 import { EpodPanel } from "./epod-panel.tsx";
+import { ActualCostPanel } from "./actual-cost-panel.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -52,6 +54,12 @@ import {
   reviewEpodCaptureAction,
   reviseEpodCaptureAction,
   completeEpodCaptureAction,
+  createActualCostDraftAction,
+  addActualCostComponentAction,
+  removeActualCostComponentAction,
+  submitActualCostAction,
+  decideActualCostAction,
+  createActualCostAdjustmentAction,
   type ShipmentOrderFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
@@ -196,6 +204,22 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading ePOD capture history. Please try again." />;
   }
 
+  let actualCost;
+  let actualCostComponents: Awaited<ReturnType<typeof listActualCostComponents>> = [];
+  let actualCostVariance = null;
+  try {
+    actualCost = await getShipmentActualCost(supabase, shipment.id);
+    if (actualCost && !actualCost.costMasked) {
+      actualCostComponents = await listActualCostComponents(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });
+      actualCostVariance = await evaluateActualCostVariance(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });
+    }
+  } catch (error) {
+    if (!(error instanceof ActualCostQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading actual cost. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -235,6 +259,12 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundReviseEpodCaptureAction = (captureId: string) => reviseEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId);
   const boundCompleteEpodCaptureAction = (captureId: string, expectedVersion: number) =>
     completeEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion, shipment.recordVersion, randomUUID());
+  const boundCreateActualCostDraftAction = createActualCostDraftAction.bind(null, tenantSlug, shipment.id);
+  const boundAddActualCostComponentAction = addActualCostComponentAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", randomUUID());
+  const boundRemoveActualCostComponentAction = (componentId: string) => removeActualCostComponentAction.bind(null, tenantSlug, shipment.id, componentId);
+  const boundSubmitActualCostAction = submitActualCostAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", actualCost?.recordVersion ?? 0);
+  const boundDecideActualCostAction = decideActualCostAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", actualCost?.recordVersion ?? 0);
+  const boundCreateActualCostAdjustmentAction = createActualCostAdjustmentAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "");
 
   return (
     <div className="flex flex-col gap-6">
@@ -376,6 +406,23 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           />
         </section>
       ) : null}
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Actual cost</h2>
+        <ActualCostPanel
+          cost={actualCost}
+          costMasked={actualCost?.costMasked ?? false}
+          components={actualCostComponents}
+          variance={actualCostVariance}
+          vendors={candidatesByRole.vendor}
+          createAction={boundCreateActualCostDraftAction}
+          addComponentAction={boundAddActualCostComponentAction}
+          removeComponentAction={boundRemoveActualCostComponentAction}
+          submitAction={boundSubmitActualCostAction}
+          decideAction={boundDecideActualCostAction}
+          adjustAction={boundCreateActualCostAdjustmentAction}
+        />
+      </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Status timeline</h2>

@@ -4579,6 +4579,40 @@ Two real issues, both confined to this checkpoint's own new files: (1) a local `
 
 Self-closing. `CG-S8-OPS-011` is `VERIFIED` -- **second task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-012` (Prompt 178, Actual Cost) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-116 — Actual Cost (Phase 3, Prompt 178)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-012` / `178_ACTUAL_COST_PROMPT.md` |
+| Change type | Schema (2 new tables + 10 functions + 1 masked view) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-177` `VERIFIED` (`docs/build-log/phase-03/OPS-177.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **third capability task in that range** |
+
+#### Outcome
+
+Componentized, exact (numeric, never float) actual-cost capture with vendor/internal source and assignment/document lineage, approval, and estimated-versus-actual variance -- operational cost recording only, no Finance/AP posting scope introduced.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728110000_create_operations_actual_cost.sql` (`app.shipment_actual_costs`, `app.shipment_actual_cost_components` tables, `app.shipment_actual_costs_directory` masked view; `app.has_view_actual_cost`, `app.compute_actual_cost_component_amount`, `app.recalculate_actual_cost_total`, `app.create_actual_cost_draft`, `app.add_actual_cost_component`, `app.remove_actual_cost_component`, `app.submit_actual_cost`, `app.decide_actual_cost`, `app.create_actual_cost_adjustment`, `app.evaluate_actual_cost_variance`, `app.list_actual_cost_components` functions). New service layer: `server/contracts/actual-cost/actual-cost.ts(.test.ts)`, `server/queries/actual-cost.ts(.test.ts)`, `server/mutations/actual-cost.ts(.test.ts)`. New UI: Shipment Order detail `actual-cost-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (six new server actions + panel wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1673/1673 (22 net new: 7 contract, 6 query, 9 mutation). `db:test` PASS across 63 migrations/64 db-test files (1 net new, zero regression) -- scenario groups covering draft authority-gating/idempotency/at-most-one-current, exact amount reconciliation, vendor/assignment/document validation, draft-only removal recomputing the total, submit/decide lifecycle with reason enforcement, real variance evaluation, adjustment lineage preservation, component-read denial without `OPS:View cost`, directory-view masking, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS-174`'s own already-registered `OPS:View cost`). `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+One real fixture bug, confined to this checkpoint's own db-test file: reusing the same vendor master record across two Shipment Orders' own resource assignments tripped `OPS-172`'s own `assignment_conflict` rule, fixed with a second distinct vendor.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-012` is `VERIFIED` -- **third task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-013` (Prompt 179, Basic Job Profitability) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
