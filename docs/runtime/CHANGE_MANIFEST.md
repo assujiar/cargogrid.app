@@ -4817,6 +4817,40 @@ Two real fixes during authoring, neither a defect in the final migration: the fi
 
 Self-closing. `CG-S8-OPS-018` is `VERIFIED` -- **first task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-019` (Prompt 185, Operations Integrated Verification) -- dependency-`READY` and within the extended authorized range.
 
+### CHG-2026-123 — Operations Integrated Verification (Phase 3, Prompt 185)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-019` / `185_OPERATIONS_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | Verification/hardening (0 new tables, 1 hardened function via `CREATE OR REPLACE`, 0 new permission-catalogue row) + test |
+| Baseline evidence | `OPS-184` `VERIFIED` (`docs/build-log/phase-03/OPS-184.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **second capability task run under that extended range**, following `CG-S8-OPS-018` (Prompt 184) |
+
+#### Outcome
+
+Independent cross-capability verification over all 17 `VERIFIED` Operations capabilities (`OPS-168..184`): one fixture driven through the complete critical flow (accepted quote → Job → Shipment → mode baseline → resource assignment → milestone ingestion → dispatch → document/ePOD → actual cost → profitability → public tracking → billing readiness), cross-checked against three independently-authored read paths (Operations Dashboard, Operations Reports, Transaction Lineage) built on the same data. Found and fixed one real, Critical-class record-scope gap in `OPS-184`'s own corrective-override function.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728180000_harden_operations_transaction_lineage_override.sql` (`CREATE OR REPLACE FUNCTION app.record_transaction_lineage_override` -- identical name/signature, adds an `app.can_access_record` check on whichever side(s) of the edge resolve to a real `job_order`/`shipment_order`/`job_order_handoff` row; zero new table, zero new permission-catalogue row, zero new grant needed since the function's identity is unchanged). New test: `scripts/db-tests/operations-integrated-verification.sql`. No service-layer or UI file changed. 2 new files.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (no net new -- this checkpoint adds no new service-layer file). `db:test` PASS across 70 migrations/71 db-test files (1 net new, zero regression) -- the new integrated-verification file exercises: full critical-flow cross-capability walk with milestone/dispatch/document/ePOD/cost/profitability/tracking/billing-readiness all in one fixture; cross-reconciliation of dashboard/reports/lineage read paths against the identical underlying state; end-to-end record-scope isolation across eleven cross-capability entry points in one pass (the block that caught the finding below); cross-tenant isolation; phase-wide schema-privilege defense in depth (60 functions checked for zero `anon` `EXECUTE` in a single query); audit-trail reconciliation across 11 distinct action types. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged). `git:check-paths` PASS (disclosed known false positive on the new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive-hardening only -- zero new table, zero new permission-catalogue row. `CREATE OR REPLACE FUNCTION` preserves `app.record_transaction_lineage_override`'s exact identity, so `OPS-184`'s own grants remain unchanged, no new grant/revoke needed. `git revert` of this checkpoint's commit would restore the discovered record-scope gap -- forward-fix, not rollback, is the correct recovery path for this specific commit; the new db-test file alone is safely revertible (adds no schema).
+
+#### Errors found and fixed
+
+One real, Critical-class finding: `app.record_transaction_lineage_override` (`OPS-184`) checked only tenant-wide `OPS:Override` permission, never whether the actor could access the specific Job Order/Shipment Order/handoff record named as the correction's source or target -- any actor holding `OPS:Override` anywhere in the tenant could have injected a false lineage claim about a record they otherwise have zero access to. Missed at `OPS-184`'s own authoring because that checkpoint's own db-test only ever exercised the override function with an actor who legitimately owned every record involved; caught here because this checkpoint's own end-to-end isolation block re-uses the exact same sibling-team-outsider actor across all eleven cross-capability entry points in one pass rather than testing each capability's own isolated fixture. Fixed via `CREATE OR REPLACE FUNCTION` in a new migration, never editing `OPS-184`'s own applied one.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-019` is `VERIFIED` -- **second task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-020` (Prompt 186, Operations Security and Financial Hardening) -- dependency-`READY` and within the extended authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
