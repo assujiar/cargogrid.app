@@ -4511,6 +4511,40 @@ Several real issues, all confined to this checkpoint's own new files: (1) a db-t
 
 Self-closing. `CG-S8-OPS-009` is `VERIFIED` -- **this closes the full "lanjut sd prompt 175" authorized range.** Next eligible prompt: `CG-S8-OPS-010` (Prompt 176, Document Requirement) -- dependency-`READY`, but **NOT authorized under any standing instruction**. The next runtime agent must obtain fresh explicit user authorization before proceeding to `176` or beyond.
 
+### CHG-2026-114 — Document Requirement (Phase 3, Prompt 176)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-010` / `176_DOCUMENT_REQUIREMENT_PROMPT.md` |
+| Change type | Schema (3 new tables + 7 functions) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-175` `VERIFIED` (`docs/build-log/phase-03/OPS-175.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **first capability task in that range** |
+
+#### Outcome
+
+Versioned shipment document requirements (by mode/service/status/party) plus a pinned per-shipment checklist and a private link/review lifecycle layered on the Platform Document/File Engine (`PLT-128`) -- never re-implementing file storage, malware scanning, or the signed-URL access gate. A checklist item references `app.files.id` and re-reads its own live `malware_scan_status`, never a second copy that could drift. Approval requires a clean scan; rejection does not.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728090000_create_operations_document_requirement.sql` (`app.document_requirement_definitions`, `app.shipment_document_checklist_items`, `app.document_checklist_events` tables; `app.create_document_requirement_draft`, `app.publish_document_requirement_version`, `app.pin_shipment_document_checklist`, `app.link_document_to_checklist_item`, `app.review_document_checklist_item`, `app.get_shipment_document_checklist`, `app.evaluate_shipment_document_checklist_completeness` functions). New service layer: `server/contracts/document-requirement/document-requirement.ts(.test.ts)`, `server/queries/document-requirement.ts(.test.ts)`, `server/mutations/document-requirement.ts(.test.ts)` (including `uploadShipmentDocumentFile`, a thin wrapper around the Platform Document Engine's own `service_role`-only `app.initiate_file_upload`). New UI: Shipment Order detail `document-checklist-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (three new server actions + panel wiring). 1 migration, 6 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1634/1634 (23 net new: 6 contract, 6 query, 11 mutation). `db:test` PASS across 61 migrations/62 db-test files (1 net new, zero regression) -- scenario groups covering draft/publish authority-gating and versioning, additive-only pin sync, upload/link tenant/type-mismatch rejection, scan-gated approval, rejection/expiry `effective_status`, append-only event history, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Create`/`OPS:Edit`/`OPS:View`, already seeded). `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+Two real issues, both confined to this checkpoint's own new files: (1) `app.get_shipment_document_checklist`'s `returns table (id uuid, ...)` shape created a plpgsql variable named `id` colliding with `app.shipment_orders.id` inside its own lookup query (`column reference "id" is ambiguous`), fixed by aliasing the table; (2) the db-test's initial fixture UUID block collided with `commercial-integrated-verification.sql`'s own UUIDs, reassigned to a fresh, grepped-clear block.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-010` is `VERIFIED` -- **first task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-011` (Prompt 177, ePOD Capture and Review) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

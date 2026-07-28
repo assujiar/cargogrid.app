@@ -31,6 +31,14 @@ import {
   ExceptionEscalationMutationError,
 } from "../../../../../../server/mutations/exception-escalation.ts";
 import { dispatchShipmentOrder, BasicDispatchMutationError } from "../../../../../../server/mutations/basic-dispatch.ts";
+import {
+  pinShipmentDocumentChecklist,
+  linkDocumentToChecklistItem,
+  reviewDocumentChecklistItem,
+  uploadShipmentDocumentFile,
+  DocumentRequirementMutationError,
+} from "../../../../../../server/mutations/document-requirement.ts";
+import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
 import type { ResourceAssignmentRole } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
@@ -490,6 +498,119 @@ export async function manageExceptionAction(
   } catch (error) {
     if (error instanceof ExceptionEscalationMutationError) {
       return { error: `Could not perform this action: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-176: additive-only checklist sync -- pins any currently-published requirement matching the shipment's mode/service_type not yet pinned. */
+export async function pinDocumentChecklistAction(tenantSlug: string, shipmentOrderId: string, _prevState: ShipmentOrderFormState, _formData: FormData): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await pinShipmentDocumentChecklist(supabase, { shipmentOrderId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not sync the document checklist: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/**
+ * OPS-176: uploads file metadata through the Platform Document/File Engine
+ * (app.initiate_file_upload, PLT-128, service_role-only -- lib/supabase/service-role.ts's
+ * createSupabaseServiceRoleClient is the same "explicit actor, service-role execution"
+ * pattern lib/portal/tenant-admin-guard-deps.server.ts already established), then links
+ * the resulting file to this checklist item through the RLS-scoped authenticated client.
+ * No live storage backend exists in this sandbox -- only filename/MIME/size metadata is
+ * ever captured, the same disclosed constraint PLT-128's own migration recorded.
+ */
+export async function uploadAndLinkDocumentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  checklistItemId: string,
+  documentTypeCode: string,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const originalFilename = String(formData.get("originalFilename") ?? "");
+  const mimeType = String(formData.get("mimeType") ?? "");
+  const sizeBytes = Number(formData.get("sizeBytes") ?? 0);
+
+  try {
+    const serviceRole = createSupabaseServiceRoleClient();
+    const file = await uploadShipmentDocumentFile(serviceRole, {
+      tenantId: access.tenant.id,
+      shipmentOrderId,
+      documentTypeCode,
+      originalFilename,
+      mimeType,
+      sizeBytes,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+
+    const supabase = await createSupabaseServerClient();
+    await linkDocumentToChecklistItem(supabase, { checklistItemId, fileId: file.id, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not upload/link this document: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-176: approve/reject the linked evidence for one checklist item. Approving an unscanned or unsafe file is rejected server-side (document_checklist_unsafe_file) regardless of what the UI disables. */
+export async function reviewDocumentChecklistItemAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  checklistItemId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const decision = String(formData.get("decision") ?? "") as "approved" | "rejected";
+  const notes = String(formData.get("notes") ?? "").trim();
+  const expiresAtLocal = String(formData.get("expiresAt") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reviewDocumentChecklistItem(supabase, {
+      checklistItemId,
+      decision,
+      notes: notes.length === 0 ? null : notes,
+      expiresAt: expiresAtLocal.length === 0 ? null : new Date(expiresAtLocal).toISOString(),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not record this review decision: ${error.message}` };
     }
     throw error;
   }

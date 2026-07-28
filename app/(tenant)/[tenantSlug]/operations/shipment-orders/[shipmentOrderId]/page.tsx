@@ -9,6 +9,7 @@ import { findAssignmentCandidates, getResourceAssignmentHistory, ResourceAssignm
 import { getShipmentMilestoneTimeline, getShipmentMilestoneProjection, listMilestoneCodes, MilestoneManagementQueryError } from "../../../../../../server/queries/milestone-management.ts";
 import { listShipmentExceptions, ExceptionEscalationQueryError } from "../../../../../../server/queries/exception-escalation.ts";
 import { getDispatchReadiness, BasicDispatchQueryError } from "../../../../../../server/queries/basic-dispatch.ts";
+import { getShipmentDocumentChecklist, evaluateShipmentDocumentChecklistCompleteness, DocumentRequirementQueryError } from "../../../../../../server/queries/document-requirement.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -25,6 +26,7 @@ import { IngestMilestoneEventForm } from "./ingest-milestone-event-form.tsx";
 import { ReportExceptionForm } from "./report-exception-form.tsx";
 import { ExceptionList } from "./exception-list.tsx";
 import { DispatchPanel } from "./dispatch-panel.tsx";
+import { DocumentChecklistPanel } from "./document-checklist-panel.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -39,6 +41,9 @@ import {
   reportExceptionAction,
   manageExceptionAction,
   dispatchShipmentOrderAction,
+  pinDocumentChecklistAction,
+  uploadAndLinkDocumentAction,
+  reviewDocumentChecklistItemAction,
   type ShipmentOrderFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
@@ -161,6 +166,18 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     }
   }
 
+  let documentChecklist;
+  let documentChecklistCompleteness;
+  try {
+    documentChecklist = await getShipmentDocumentChecklist(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+    documentChecklistCompleteness = await evaluateShipmentDocumentChecklistCompleteness(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+  } catch (error) {
+    if (!(error instanceof DocumentRequirementQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading the document checklist. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -189,6 +206,10 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundManageExceptionAction = (exceptionId: string, expectedVersion: number) => manageExceptionAction.bind(null, tenantSlug, shipment.id, exceptionId, expectedVersion);
   const dispatchIdempotencyKey = randomUUID();
   const boundDispatchAction = dispatchShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion, dispatchIdempotencyKey);
+  const boundPinDocumentChecklistAction = pinDocumentChecklistAction.bind(null, tenantSlug, shipment.id);
+  const boundUploadAndLinkDocumentAction = (checklistItemId: string, documentTypeCode: string) =>
+    uploadAndLinkDocumentAction.bind(null, tenantSlug, shipment.id, checklistItemId, documentTypeCode, randomUUID());
+  const boundReviewDocumentChecklistItemAction = (checklistItemId: string) => reviewDocumentChecklistItemAction.bind(null, tenantSlug, shipment.id, checklistItemId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -303,6 +324,17 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           <DispatchPanel readiness={dispatchReadiness} action={boundDispatchAction} />
         </section>
       ) : null}
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Document checklist</h2>
+        <DocumentChecklistPanel
+          items={documentChecklist}
+          completeness={documentChecklistCompleteness}
+          pinAction={boundPinDocumentChecklistAction}
+          uploadAction={boundUploadAndLinkDocumentAction}
+          reviewAction={boundReviewDocumentChecklistItemAction}
+        />
+      </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Status timeline</h2>
