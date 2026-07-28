@@ -4511,6 +4511,244 @@ Several real issues, all confined to this checkpoint's own new files: (1) a db-t
 
 Self-closing. `CG-S8-OPS-009` is `VERIFIED` -- **this closes the full "lanjut sd prompt 175" authorized range.** Next eligible prompt: `CG-S8-OPS-010` (Prompt 176, Document Requirement) -- dependency-`READY`, but **NOT authorized under any standing instruction**. The next runtime agent must obtain fresh explicit user authorization before proceeding to `176` or beyond.
 
+### CHG-2026-114 — Document Requirement (Phase 3, Prompt 176)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-010` / `176_DOCUMENT_REQUIREMENT_PROMPT.md` |
+| Change type | Schema (3 new tables + 7 functions) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-175` `VERIFIED` (`docs/build-log/phase-03/OPS-175.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **first capability task in that range** |
+
+#### Outcome
+
+Versioned shipment document requirements (by mode/service/status/party) plus a pinned per-shipment checklist and a private link/review lifecycle layered on the Platform Document/File Engine (`PLT-128`) -- never re-implementing file storage, malware scanning, or the signed-URL access gate. A checklist item references `app.files.id` and re-reads its own live `malware_scan_status`, never a second copy that could drift. Approval requires a clean scan; rejection does not.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728090000_create_operations_document_requirement.sql` (`app.document_requirement_definitions`, `app.shipment_document_checklist_items`, `app.document_checklist_events` tables; `app.create_document_requirement_draft`, `app.publish_document_requirement_version`, `app.pin_shipment_document_checklist`, `app.link_document_to_checklist_item`, `app.review_document_checklist_item`, `app.get_shipment_document_checklist`, `app.evaluate_shipment_document_checklist_completeness` functions). New service layer: `server/contracts/document-requirement/document-requirement.ts(.test.ts)`, `server/queries/document-requirement.ts(.test.ts)`, `server/mutations/document-requirement.ts(.test.ts)` (including `uploadShipmentDocumentFile`, a thin wrapper around the Platform Document Engine's own `service_role`-only `app.initiate_file_upload`). New UI: Shipment Order detail `document-checklist-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (three new server actions + panel wiring). 1 migration, 6 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1634/1634 (23 net new: 6 contract, 6 query, 11 mutation). `db:test` PASS across 61 migrations/62 db-test files (1 net new, zero regression) -- scenario groups covering draft/publish authority-gating and versioning, additive-only pin sync, upload/link tenant/type-mismatch rejection, scan-gated approval, rejection/expiry `effective_status`, append-only event history, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Create`/`OPS:Edit`/`OPS:View`, already seeded). `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+Two real issues, both confined to this checkpoint's own new files: (1) `app.get_shipment_document_checklist`'s `returns table (id uuid, ...)` shape created a plpgsql variable named `id` colliding with `app.shipment_orders.id` inside its own lookup query (`column reference "id" is ambiguous`), fixed by aliasing the table; (2) the db-test's initial fixture UUID block collided with `commercial-integrated-verification.sql`'s own UUIDs, reassigned to a fresh, grepped-clear block.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-010` is `VERIFIED` -- **first task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-011` (Prompt 177, ePOD Capture and Review) -- dependency-`READY` and within this session's authorized range.
+
+### CHG-2026-115 — ePOD Capture and Review (Phase 3, Prompt 177)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-011` / `177_EPOD_CAPTURE_REVIEW_PROMPT.md` |
+| Change type | Schema (1 new table with a real `geography(Point,4326)` column + 7 functions) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-176` `VERIFIED` (`docs/build-log/phase-03/OPS-176.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **second capability task in that range** |
+
+#### Outcome
+
+Online-first, versioned electronic proof-of-delivery capture (receiver, signature, photo, geolocation, timestamp), review/revision, and completion -- a thin wrapper over `OPS-170`'s own already-shipped `delivered -> epod` transition, never a second parallel status machine. A dedicated structured object distinct from `OPS-176`'s own generic document checklist, composing the same Platform Document/File Engine (`PLT-128`) underneath.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728100000_create_operations_epod_capture_review.sql` (`app.epod_captures` table; `app.start_epod_capture`, `app.set_epod_evidence`, `app.submit_epod_capture`, `app.review_epod_capture`, `app.revise_epod_capture`, `app.complete_epod_capture`, `app.get_epod_capture_history` functions). New service layer: `server/contracts/epod-capture-review/epod-capture-review.ts(.test.ts)`, `server/queries/epod-capture-review.ts(.test.ts)`, `server/mutations/epod-capture-review.ts(.test.ts)`. New UI: Shipment Order detail `epod-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (six new server actions + panel wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1651/1651 (17 net new: 3 contract, 3 query, 11 mutation). `db:test` PASS across 62 migrations/63 db-test files (1 net new, zero regression) -- scenario groups covering start/evidence/submit/review/revise/complete lifecycle, file tenant/record-mismatch and out-of-range-GeoJSON rejection, scan-gated submission, full-history preservation across a revision, immutable-once-completed, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Create`/`OPS:Edit`/`OPS:View`, already seeded). `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+Two real issues, both confined to this checkpoint's own new files: (1) a local `geography`-typed variable declared inside a `SECURITY DEFINER` function whose own `search_path` excluded `public` raised `type "geography" does not exist` at CHECK-constraint compile time for every function that inserts/updates `app.epod_captures` (Postgres re-validates every row-level CHECK constraint on every INSERT/UPDATE, before any short-circuit evaluation), fixed by adding `public` to every such function's own `search_path`; (2) a vendor-resource-conflict fixture bug (reusing one vendor across two delivered-shipment fixtures tripped `OPS-172`'s own `assignment_conflict` rule), fixed with a second distinct vendor.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-011` is `VERIFIED` -- **second task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-012` (Prompt 178, Actual Cost) -- dependency-`READY` and within this session's authorized range.
+
+### CHG-2026-116 — Actual Cost (Phase 3, Prompt 178)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-012` / `178_ACTUAL_COST_PROMPT.md` |
+| Change type | Schema (2 new tables + 10 functions + 1 masked view) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-177` `VERIFIED` (`docs/build-log/phase-03/OPS-177.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **third capability task in that range** |
+
+#### Outcome
+
+Componentized, exact (numeric, never float) actual-cost capture with vendor/internal source and assignment/document lineage, approval, and estimated-versus-actual variance -- operational cost recording only, no Finance/AP posting scope introduced.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728110000_create_operations_actual_cost.sql` (`app.shipment_actual_costs`, `app.shipment_actual_cost_components` tables, `app.shipment_actual_costs_directory` masked view; `app.has_view_actual_cost`, `app.compute_actual_cost_component_amount`, `app.recalculate_actual_cost_total`, `app.create_actual_cost_draft`, `app.add_actual_cost_component`, `app.remove_actual_cost_component`, `app.submit_actual_cost`, `app.decide_actual_cost`, `app.create_actual_cost_adjustment`, `app.evaluate_actual_cost_variance`, `app.list_actual_cost_components` functions). New service layer: `server/contracts/actual-cost/actual-cost.ts(.test.ts)`, `server/queries/actual-cost.ts(.test.ts)`, `server/mutations/actual-cost.ts(.test.ts)`. New UI: Shipment Order detail `actual-cost-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (six new server actions + panel wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1673/1673 (22 net new: 7 contract, 6 query, 9 mutation). `db:test` PASS across 63 migrations/64 db-test files (1 net new, zero regression) -- scenario groups covering draft authority-gating/idempotency/at-most-one-current, exact amount reconciliation, vendor/assignment/document validation, draft-only removal recomputing the total, submit/decide lifecycle with reason enforcement, real variance evaluation, adjustment lineage preservation, component-read denial without `OPS:View cost`, directory-view masking, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS-174`'s own already-registered `OPS:View cost`). `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+One real fixture bug, confined to this checkpoint's own db-test file: reusing the same vendor master record across two Shipment Orders' own resource assignments tripped `OPS-172`'s own `assignment_conflict` rule, fixed with a second distinct vendor.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-012` is `VERIFIED` -- **third task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-013` (Prompt 179, Basic Job Profitability) -- dependency-`READY` and within this session's authorized range.
+
+### CHG-2026-117 — Basic Job Profitability (Phase 3, Prompt 179)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-013` / `179_BASIC_JOB_PROFITABILITY_PROMPT.md` |
+| Change type | Schema (1 new table + 2 functions + 1 masked view + 1 new permission-catalogue row) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-178` `VERIFIED` (`docs/build-log/phase-03/OPS-178.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **fourth capability task in that range** |
+
+#### Outcome
+
+A deterministic, versioned operational-margin snapshot from the Job Order's own pinned Commercial revenue and every approved `OPS-178` actual-cost version -- operational profitability only, never accounting P&L, no GL/subledger table touched.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728120000_create_operations_job_profitability.sql` (`app.job_profitability_snapshots` table, `app.job_profitability_directory` masked view; `app.has_view_job_margin`, `app.calculate_job_profitability` functions; one new permission-catalogue row `OPS:View margin`). New service layer: `server/contracts/job-profitability/job-profitability.ts(.test.ts)`, `server/queries/job-profitability.ts(.test.ts)`, `server/mutations/job-profitability.ts(.test.ts)`. New UI: Job Order detail `job-profitability-panel.tsx`. Modified: Job Order detail `actions.ts`/`page.tsx` (one new server action + panel wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1682/1682 (9 net new: 4 contract, 2 query, 3 mutation). `db:test` PASS across 64 migrations/65 db-test files (1 net new, zero regression) -- scenario groups covering authority-gating, exact revenue/cost/margin figures, recalculation-reason enforcement and version-lineage preservation, mixed-currency unavailable path, directory-view masking, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited. `git revert` of this checkpoint's commit is safe and complete; the Job Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+One real test-authoring issue, confined to this checkpoint's own db-test file: an RLS assertion initially expected a non-null `margin_amount` from the full-access actor at a point in the test sequence where the current snapshot was legitimately `unavailable` from a prior test block's own recalculation, corrected to assert only `margin_masked=false`.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-013` is `VERIFIED` -- **fourth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-014` (Prompt 180, Basic Public Customer Tracking) -- dependency-`READY` and within this session's authorized range.
+
+### CHG-2026-118 — Basic Public Customer Tracking (Phase 3, Prompt 180)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-014` / `180_BASIC_PUBLIC_CUSTOMER_TRACKING_PROMPT.md` |
+| Change type | Schema (2 new tables + 3 functions) + service layer + UI (1 existing route extended + 1 new public route) |
+| Baseline evidence | `OPS-179` `VERIFIED` (`docs/build-log/phase-03/OPS-179.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **fifth capability task in that range** |
+
+#### Outcome
+
+An unguessable, revocable, expiring per-shipment tracking token resolving to a minimal, sanitized status/timeline/ePOD-availability view -- never a live Customer Portal. Rate-limited and durably anti-enumeration-logged on every outcome, including a failed lookup.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728130000_create_operations_public_tracking.sql` (`app.shipment_tracking_tokens`, `app.tracking_lookup_attempts` tables; `app.issue_shipment_tracking_token`, `app.revoke_shipment_tracking_token`, `app.lookup_public_shipment_tracking` functions -- the last one the schema's one deliberate `EXECUTE` grant to `anon`). New service layer: `server/contracts/public-tracking/public-tracking.ts(.test.ts)`, `server/queries/public-tracking.ts(.test.ts)`, `server/mutations/public-tracking.ts(.test.ts)`. New UI: Shipment Order detail `tracking-panel.tsx`; new public route `app/(public)/tracking/[token]/page.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (two new server actions + panel/query wiring). 1 migration, 8 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1697/1697 (15 net new: 6 contract, 5 query, 4 mutation). `db:test` PASS across 65 migrations/66 db-test files (1 net new, zero regression) -- scenario groups covering issue/revoke authority-gating and at-most-one-active-token, sanitized/filtered projection correctness, ePOD-availability correctness, `not_found`/`invalid`/`rate_limited` outcomes with the attempt log surviving every one of them, revoke-reason enforcement, record-scope/cross-tenant isolation, schema-privilege defense in depth (including the one deliberate `anon` grant), audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 53 routes (new: `/tracking/[token]`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited. `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change and the new public route are additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+One architecturally significant correction: `app.lookup_public_shipment_tracking` originally used `raise exception` for `not_found`/`invalid`/`rate_limited` outcomes, each preceded by an attempt-log insert -- the raised exception rolled back that same insert (the identical defect class `OPS-175` documented for its own dispatch failure-audit design), so the rate limiter never actually triggered. Redesigned to a `lookup_status` column always returned, never raised, cascading into a db-test and TypeScript-layer rewrite. Two smaller `plpgsql` defects also caught and fixed: an ambiguous-column reference in `issue_shipment_tracking_token`'s own `update` (aliased the update target) and untyped `null` literals in early-return branches failing to structurally match the declared return type (fixed with explicit casts).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-014` is `VERIFIED` -- **fifth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-015` (Prompt 181, Billing Readiness) -- dependency-`READY` and within this session's authorized range.
+
+### CHG-2026-119 — Billing Readiness (Phase 3, Prompt 181)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-015` / `181_BILLING_READINESS_PROMPT.md` |
+| Change type | Schema (2 new tables incl. one generated column + 4 functions) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-180` `VERIFIED` (`docs/build-log/phase-03/OPS-180.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **sixth capability task in that range** |
+
+#### Outcome
+
+A versioned, deterministic, explainable billing-readiness evaluation per Job Order -- exact blockers when not ready, a bounded authorized-override path, and one idempotent Finance-handoff record. Evidence status only, never an invoice, accounts receivable (AR), general ledger (GL) entry, or journal.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728140000_create_operations_billing_readiness.sql` (`app.billing_readiness_evaluations` table with a generated `effective_status` column, `app.billing_readiness_handoffs` table; `app.evaluate_billing_readiness`, `app.override_billing_readiness`, `app.revoke_billing_readiness_override`, `app.handoff_billing_readiness` functions; zero new permission-catalogue row -- reuses `OPS:Edit`/`OPS:Override`). New service layer: `server/contracts/billing-readiness/billing-readiness.ts(.test.ts)`, `server/queries/billing-readiness.ts(.test.ts)`, `server/mutations/billing-readiness.ts(.test.ts)`. New UI: Job Order detail `billing-readiness-panel.tsx`. Modified: Job Order detail `actions.ts`/`page.tsx` (four new server actions + panel/query wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1712/1712 (15 net new: 3 contract, 5 query, 7 mutation). `db:test` PASS across 66 migrations/67 db-test files (1 net new, zero regression) -- scenario groups covering authority-gating, per-shipment blocker isolation, override/revoke boundedness and lineage, idempotent Finance handoff, evidence-object correctness, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 53 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row. `git revert` of this checkpoint's commit is safe and complete; the Job Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+Several fixture-authoring issues, none in the migration's own logic once corrected: a `RAISE EXCEPTION` format-string placeholder with no argument (`billing_readiness_override_not_needed`); a missing `tenant_admin` membership grant needed before `app.create_config_draft`; the fixture rep role initially lacking `COM:View cost`/`OPS:View cost`; the same vendor master record initially assigned to two Shipment Orders concurrently (`OPS-172`'s own `assignment_conflict` rule, the same fix class as `OPS-177`/`178`/`179`); `app.submit_epod_capture`'s own "at least one evidence file" requirement needing a real scanned-clean signature file per shipment; and the `pod`/`epod` document types/configs needing registration in the fresh fixture tenant before checklist pinning.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-015` is `VERIFIED` -- **sixth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-016` (Prompt 182, Operations Dashboard) -- dependency-`READY` and within this session's authorized range.
+
+### CHG-2026-120 — Operations Dashboard (Phase 3, Prompt 182)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-016` / `182_OPERATIONS_DASHBOARD_PROMPT.md` |
+| Change type | Schema (0 new tables + 6 read-only functions) + service layer + UI (1 new route) |
+| Baseline evidence | `OPS-181` `VERIFIED` (`docs/build-log/phase-03/OPS-181.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **seventh (final, this session) capability task in that range** |
+
+#### Outcome
+
+A role-specific live Operations dashboard -- shipment status, milestone SLA, exceptions, ePOD completion, cost variance and billing readiness -- each sourced from its own read-only, record-scope-checked RPC, mirroring the Commercial Dashboard's (`COM-158`) own precedent exactly.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728150000_create_operations_dashboard.sql` (`app.get_ops_dashboard_shipment_status`, `app.get_ops_dashboard_milestone_sla`, `app.get_ops_dashboard_exception_queue`, `app.get_ops_dashboard_epod_completion`, `app.get_ops_dashboard_cost_variance`, `app.get_ops_dashboard_billing_readiness` -- zero new tables, zero new permission-catalogue row). New service layer: `server/contracts/ops-dashboard/ops-dashboard.ts(.test.ts)`, `server/queries/ops-dashboard.ts(.test.ts)`. New UI: `/[tenantSlug]/operations/dashboard` (`page.tsx` + `loading.tsx`). 1 migration, 6 new files. No prior file modified.
+
+#### Tests and quality evidence
+
+`node:test` 1728/1728 (16 net new: 6 contract, 10 query incl. a query-budget-timeout test). `db:test` PASS across 67 migrations/68 db-test files (1 net new, zero regression) -- scenario groups covering per-bucket count correctness across all 6 functions, record-scope/cross-tenant isolation (a sibling-team outsider sees zero rows on every function despite full grants), cost-variance masking via a realistic role-downgrade scenario, schema-privilege defense in depth. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 54 routes (new: `/[tenantSlug]/operations/dashboard`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero prior file modified. `git revert` of this checkpoint's commit is safe and complete -- every new file is newly added.
+
+#### Errors found and fixed
+
+One real record-scope discovery during fixture authoring, not a migration bug: `app.create_shipment_order_from_job` (`OPS-169`) never stamps `org_unit_id` on the Shipment Order it creates, so a same-team, non-owner actor can never see it via the shared-org-unit branch of `app.can_access_record` -- only direct ownership or the Supreme Admin bypass grants access. The db-test's cost-variance masking scenario was corrected to downgrade rep's own role (a new role version omitting `OPS:View cost`, published after every fixture row already existed) rather than rely on a separate never-owning "restricted" actor. Also fixed an accidental tenant-slug/email collision with `COM-158`'s own `commercial-dashboard.sql` fixture (`acmedash` renamed to `acmeopsdash`).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-016` is `VERIFIED` -- **seventh (final, this session) task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-017` (Prompt 183, Operations Reports) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

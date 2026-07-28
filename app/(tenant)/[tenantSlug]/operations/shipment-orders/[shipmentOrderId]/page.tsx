@@ -9,6 +9,10 @@ import { findAssignmentCandidates, getResourceAssignmentHistory, ResourceAssignm
 import { getShipmentMilestoneTimeline, getShipmentMilestoneProjection, listMilestoneCodes, MilestoneManagementQueryError } from "../../../../../../server/queries/milestone-management.ts";
 import { listShipmentExceptions, ExceptionEscalationQueryError } from "../../../../../../server/queries/exception-escalation.ts";
 import { getDispatchReadiness, BasicDispatchQueryError } from "../../../../../../server/queries/basic-dispatch.ts";
+import { getShipmentDocumentChecklist, evaluateShipmentDocumentChecklistCompleteness, DocumentRequirementQueryError } from "../../../../../../server/queries/document-requirement.ts";
+import { getEpodCaptureHistory, EpodCaptureReviewQueryError } from "../../../../../../server/queries/epod-capture-review.ts";
+import { getShipmentActualCost, listActualCostComponents, evaluateActualCostVariance, ActualCostQueryError } from "../../../../../../server/queries/actual-cost.ts";
+import { getActiveShipmentTrackingToken, PublicTrackingQueryError } from "../../../../../../server/queries/public-tracking.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -25,6 +29,10 @@ import { IngestMilestoneEventForm } from "./ingest-milestone-event-form.tsx";
 import { ReportExceptionForm } from "./report-exception-form.tsx";
 import { ExceptionList } from "./exception-list.tsx";
 import { DispatchPanel } from "./dispatch-panel.tsx";
+import { DocumentChecklistPanel } from "./document-checklist-panel.tsx";
+import { EpodPanel } from "./epod-panel.tsx";
+import { ActualCostPanel } from "./actual-cost-panel.tsx";
+import { TrackingPanel } from "./tracking-panel.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -39,7 +47,25 @@ import {
   reportExceptionAction,
   manageExceptionAction,
   dispatchShipmentOrderAction,
+  pinDocumentChecklistAction,
+  uploadAndLinkDocumentAction,
+  reviewDocumentChecklistItemAction,
+  startEpodCaptureAction,
+  setEpodEvidenceAction,
+  submitEpodCaptureAction,
+  reviewEpodCaptureAction,
+  reviseEpodCaptureAction,
+  completeEpodCaptureAction,
+  createActualCostDraftAction,
+  addActualCostComponentAction,
+  removeActualCostComponentAction,
+  submitActualCostAction,
+  decideActualCostAction,
+  createActualCostAdjustmentAction,
+  issueShipmentTrackingTokenAction,
+  revokeShipmentTrackingTokenAction,
   type ShipmentOrderFormState,
+  type IssueTrackingTokenFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
@@ -161,6 +187,54 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     }
   }
 
+  let documentChecklist;
+  let documentChecklistCompleteness;
+  try {
+    documentChecklist = await getShipmentDocumentChecklist(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+    documentChecklistCompleteness = await evaluateShipmentDocumentChecklistCompleteness(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+  } catch (error) {
+    if (!(error instanceof DocumentRequirementQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading the document checklist. Please try again." />;
+  }
+
+  let epodHistory;
+  try {
+    epodHistory = await getEpodCaptureHistory(supabase, { shipmentOrderId: shipment.id, actorAuthUserId: access.authUserId });
+  } catch (error) {
+    if (!(error instanceof EpodCaptureReviewQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading ePOD capture history. Please try again." />;
+  }
+
+  let actualCost;
+  let actualCostComponents: Awaited<ReturnType<typeof listActualCostComponents>> = [];
+  let actualCostVariance = null;
+  try {
+    actualCost = await getShipmentActualCost(supabase, shipment.id);
+    if (actualCost && !actualCost.costMasked) {
+      actualCostComponents = await listActualCostComponents(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });
+      actualCostVariance = await evaluateActualCostVariance(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });
+    }
+  } catch (error) {
+    if (!(error instanceof ActualCostQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading actual cost. Please try again." />;
+  }
+
+  let trackingToken;
+  try {
+    trackingToken = await getActiveShipmentTrackingToken(supabase, shipment.id);
+  } catch (error) {
+    if (!(error instanceof PublicTrackingQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading the tracking link. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -189,6 +263,28 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundManageExceptionAction = (exceptionId: string, expectedVersion: number) => manageExceptionAction.bind(null, tenantSlug, shipment.id, exceptionId, expectedVersion);
   const dispatchIdempotencyKey = randomUUID();
   const boundDispatchAction = dispatchShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion, dispatchIdempotencyKey);
+  const boundPinDocumentChecklistAction = pinDocumentChecklistAction.bind(null, tenantSlug, shipment.id);
+  const boundUploadAndLinkDocumentAction = (checklistItemId: string, documentTypeCode: string) =>
+    uploadAndLinkDocumentAction.bind(null, tenantSlug, shipment.id, checklistItemId, documentTypeCode, randomUUID());
+  const boundReviewDocumentChecklistItemAction = (checklistItemId: string) => reviewDocumentChecklistItemAction.bind(null, tenantSlug, shipment.id, checklistItemId);
+  const boundStartEpodCaptureAction = startEpodCaptureAction.bind(null, tenantSlug, shipment.id, randomUUID());
+  const boundSetEpodEvidenceAction = (captureId: string) => setEpodEvidenceAction.bind(null, tenantSlug, shipment.id, captureId, randomUUID());
+  const boundSubmitEpodCaptureAction = (captureId: string, expectedVersion: number) => submitEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion);
+  const boundReviewEpodCaptureAction = (captureId: string, expectedVersion: number) => reviewEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion);
+  const boundReviseEpodCaptureAction = (captureId: string) => reviseEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId);
+  const boundCompleteEpodCaptureAction = (captureId: string, expectedVersion: number) =>
+    completeEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion, shipment.recordVersion, randomUUID());
+  const boundCreateActualCostDraftAction = createActualCostDraftAction.bind(null, tenantSlug, shipment.id);
+  const boundAddActualCostComponentAction = addActualCostComponentAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", randomUUID());
+  const boundRemoveActualCostComponentAction = (componentId: string) => removeActualCostComponentAction.bind(null, tenantSlug, shipment.id, componentId);
+  const boundSubmitActualCostAction = submitActualCostAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", actualCost?.recordVersion ?? 0);
+  const boundDecideActualCostAction = decideActualCostAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", actualCost?.recordVersion ?? 0);
+  const boundCreateActualCostAdjustmentAction = createActualCostAdjustmentAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "");
+  const boundIssueTrackingTokenAction = (prevState: IssueTrackingTokenFormState, formData: FormData) => {
+    const validityDays = Number(formData.get("validityDays") ?? 30);
+    return issueShipmentTrackingTokenAction(tenantSlug, shipment.id, validityDays, prevState, formData);
+  };
+  const boundRevokeTrackingTokenAction = revokeShipmentTrackingTokenAction.bind(null, tenantSlug, shipment.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -303,6 +399,55 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           <DispatchPanel readiness={dispatchReadiness} action={boundDispatchAction} />
         </section>
       ) : null}
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Document checklist</h2>
+        <DocumentChecklistPanel
+          items={documentChecklist}
+          completeness={documentChecklistCompleteness}
+          pinAction={boundPinDocumentChecklistAction}
+          uploadAction={boundUploadAndLinkDocumentAction}
+          reviewAction={boundReviewDocumentChecklistItemAction}
+        />
+      </section>
+
+      {shipment.status === "delivered" || epodHistory.length > 0 ? (
+        <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+          <h2 className="text-sm font-semibold text-neutral-900">ePOD</h2>
+          <EpodPanel
+            shipmentDelivered={shipment.status === "delivered"}
+            history={epodHistory}
+            startAction={boundStartEpodCaptureAction}
+            evidenceAction={boundSetEpodEvidenceAction}
+            submitAction={boundSubmitEpodCaptureAction}
+            reviewAction={boundReviewEpodCaptureAction}
+            reviseAction={boundReviseEpodCaptureAction}
+            completeAction={boundCompleteEpodCaptureAction}
+          />
+        </section>
+      ) : null}
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Actual cost</h2>
+        <ActualCostPanel
+          cost={actualCost}
+          costMasked={actualCost?.costMasked ?? false}
+          components={actualCostComponents}
+          variance={actualCostVariance}
+          vendors={candidatesByRole.vendor}
+          createAction={boundCreateActualCostDraftAction}
+          addComponentAction={boundAddActualCostComponentAction}
+          removeComponentAction={boundRemoveActualCostComponentAction}
+          submitAction={boundSubmitActualCostAction}
+          decideAction={boundDecideActualCostAction}
+          adjustAction={boundCreateActualCostAdjustmentAction}
+        />
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Public tracking link</h2>
+        <TrackingPanel token={trackingToken} issueAction={boundIssueTrackingTokenAction} revokeAction={boundRevokeTrackingTokenAction} />
+      </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Status timeline</h2>

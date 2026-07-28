@@ -11,6 +11,14 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/resolve-operations-access.server.ts";
 import { confirmJobOrder, overrideJobOrderField, JobOrderMutationError } from "../../../../../../server/mutations/job-order.ts";
+import { calculateJobProfitability, JobProfitabilityMutationError } from "../../../../../../server/mutations/job-profitability.ts";
+import {
+  evaluateBillingReadiness,
+  overrideBillingReadiness,
+  revokeBillingReadinessOverride,
+  handoffBillingReadiness,
+  BillingReadinessMutationError,
+} from "../../../../../../server/mutations/billing-readiness.ts";
 import type { OverridableSnapshotColumn } from "../../../../../../server/contracts/job-order/job-order.ts";
 
 export interface JobOrderFormState {
@@ -36,6 +44,129 @@ export async function confirmJobOrderAction(
   } catch (error) {
     if (error instanceof JobOrderMutationError) {
       return { error: `Could not confirm this Job Order: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/job-orders/${jobOrderId}`);
+  return { error: null };
+}
+
+/** OPS-179: the first calculation for a job needs no reason; every subsequent recalculation requires a non-empty reason. */
+export async function calculateJobProfitabilityAction(tenantSlug: string, jobOrderId: string, _prevState: JobOrderFormState, formData: FormData): Promise<JobOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const recalculationReason = String(formData.get("recalculationReason") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await calculateJobProfitability(supabase, {
+      jobOrderId,
+      recalculationReason: recalculationReason.length === 0 ? null : recalculationReason,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof JobProfitabilityMutationError) {
+      return { error: `Could not calculate profitability: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/job-orders/${jobOrderId}`);
+  return { error: null };
+}
+
+/** OPS-181: the first evaluation for a Job Order needs no reason; every subsequent evaluation while a current row already exists requires a non-empty reason. */
+export async function evaluateBillingReadinessAction(tenantSlug: string, jobOrderId: string, _prevState: JobOrderFormState, formData: FormData): Promise<JobOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reevaluationReason = String(formData.get("reevaluationReason") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await evaluateBillingReadiness(supabase, {
+      jobOrderId,
+      reevaluationReason: reevaluationReason.length === 0 ? null : reevaluationReason,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof BillingReadinessMutationError) {
+      return { error: `Could not evaluate billing readiness: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/job-orders/${jobOrderId}`);
+  return { error: null };
+}
+
+/** OPS-181: bounded to forcing an evaluated not_ready row to an effective ready outcome. Reason mandatory. */
+export async function overrideBillingReadinessAction(tenantSlug: string, jobOrderId: string, expectedVersion: number, _prevState: JobOrderFormState, formData: FormData): Promise<JobOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reason = String(formData.get("reason") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await overrideBillingReadiness(supabase, { jobOrderId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof BillingReadinessMutationError) {
+      return { error: `Could not override billing readiness: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/job-orders/${jobOrderId}`);
+  return { error: null };
+}
+
+/** OPS-181: restores the evidence-based evaluated status as the effective outcome. Reason mandatory. */
+export async function revokeBillingReadinessOverrideAction(tenantSlug: string, jobOrderId: string, expectedVersion: number, _prevState: JobOrderFormState, formData: FormData): Promise<JobOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reason = String(formData.get("reason") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await revokeBillingReadinessOverride(supabase, { jobOrderId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof BillingReadinessMutationError) {
+      return { error: `Could not revoke the billing-readiness override: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/job-orders/${jobOrderId}`);
+  return { error: null };
+}
+
+/** OPS-181: idempotent on a fresh-per-render idempotencyKey; requires the current evaluation's effective status to be ready. */
+export async function handoffBillingReadinessAction(tenantSlug: string, jobOrderId: string, idempotencyKey: string, _prevState: JobOrderFormState, _formData: FormData): Promise<JobOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await handoffBillingReadiness(supabase, { jobOrderId, idempotencyKey, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof BillingReadinessMutationError) {
+      return { error: `Could not hand off billing readiness: ${error.message}` };
     }
     throw error;
   }

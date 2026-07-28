@@ -1,0 +1,71 @@
+"use client";
+
+import { useActionState } from "react";
+import { Button } from "../../../../../../components/ui/button.tsx";
+import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
+import type { JobProfitabilityDirectoryRow } from "../../../../../../server/contracts/job-profitability/job-profitability.ts";
+import type { JobOrderFormState } from "./actions.ts";
+
+const INITIAL_STATE: JobOrderFormState = { error: null };
+
+/** OPS-179: an operational (never accounting P&L) margin snapshot -- masked entirely without OPS:View margin, otherwise shows revenue/cost/margin plus a recalculate action (reason required once a snapshot already exists). */
+export function JobProfitabilityPanel({
+  snapshot,
+  action,
+}: {
+  readonly snapshot: JobProfitabilityDirectoryRow | null;
+  readonly action: (prevState: JobOrderFormState, formData: FormData) => Promise<JobOrderFormState>;
+}) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-neutral-500">Operational margin only -- not accounting P&amp;L or recognized revenue.</p>
+
+      {!snapshot ? (
+        <p className="text-sm text-neutral-500">No profitability snapshot has been calculated yet.</p>
+      ) : snapshot.marginMasked ? (
+        <p className="text-sm text-neutral-500">Restricted -- OPS:View margin is required to see this Job Order&apos;s profitability.</p>
+      ) : snapshot.status === "unavailable" ? (
+        <div className="flex items-center gap-2">
+          <StatusBadge tone="warning" label="Unavailable" />
+          <span className="text-sm text-neutral-600">{snapshot.blockedReason}</span>
+        </div>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <dt className="text-neutral-600">Revenue</dt>
+          <dd className="text-neutral-900">
+            {snapshot.revenueAmount?.toLocaleString()} {snapshot.revenueCurrency}
+          </dd>
+          <dt className="text-neutral-600">Actual cost</dt>
+          <dd className="text-neutral-900">
+            {snapshot.costAmount?.toLocaleString()} {snapshot.costCurrency}
+          </dd>
+          <dt className="text-neutral-600">Margin</dt>
+          <dd className="text-neutral-900">
+            {snapshot.marginAmount?.toLocaleString()} {snapshot.revenueCurrency} ({snapshot.marginPercent}%)
+          </dd>
+          <dt className="text-neutral-600">Version</dt>
+          <dd className="text-neutral-900">v{snapshot.versionNumber}</dd>
+        </dl>
+      )}
+
+      <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
+        {snapshot ? (
+          <label className="flex flex-col text-sm text-neutral-700">
+            Recalculation reason (required to recalculate)
+            <input type="text" name="recalculationReason" className="rounded border border-neutral-300 px-2 py-1" />
+          </label>
+        ) : null}
+        <Button type="submit" loading={pending} loadingLabel="Calculating…" variant="secondary">
+          {snapshot ? "Recalculate" : "Calculate profitability"}
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="text-sm text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}

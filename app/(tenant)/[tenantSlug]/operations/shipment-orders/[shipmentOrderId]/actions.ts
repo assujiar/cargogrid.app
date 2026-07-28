@@ -31,6 +31,35 @@ import {
   ExceptionEscalationMutationError,
 } from "../../../../../../server/mutations/exception-escalation.ts";
 import { dispatchShipmentOrder, BasicDispatchMutationError } from "../../../../../../server/mutations/basic-dispatch.ts";
+import {
+  pinShipmentDocumentChecklist,
+  linkDocumentToChecklistItem,
+  reviewDocumentChecklistItem,
+  uploadShipmentDocumentFile,
+  DocumentRequirementMutationError,
+} from "../../../../../../server/mutations/document-requirement.ts";
+import {
+  startEpodCapture,
+  setEpodEvidence,
+  submitEpodCapture,
+  reviewEpodCapture,
+  reviseEpodCapture,
+  completeEpodCapture,
+  EpodCaptureReviewMutationError,
+} from "../../../../../../server/mutations/epod-capture-review.ts";
+import type { GeoJsonPoint } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
+import {
+  createActualCostDraft,
+  addActualCostComponent,
+  removeActualCostComponent,
+  submitActualCost,
+  decideActualCost,
+  createActualCostAdjustment,
+  ActualCostMutationError,
+} from "../../../../../../server/mutations/actual-cost.ts";
+import type { ActualCostCategory, ActualCostSourceType } from "../../../../../../server/contracts/actual-cost/actual-cost.ts";
+import { issueShipmentTrackingToken, revokeShipmentTrackingToken, PublicTrackingMutationError } from "../../../../../../server/mutations/public-tracking.ts";
+import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
 import type { ResourceAssignmentRole } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
@@ -490,6 +519,604 @@ export async function manageExceptionAction(
   } catch (error) {
     if (error instanceof ExceptionEscalationMutationError) {
       return { error: `Could not perform this action: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-176: additive-only checklist sync -- pins any currently-published requirement matching the shipment's mode/service_type not yet pinned. */
+export async function pinDocumentChecklistAction(tenantSlug: string, shipmentOrderId: string, _prevState: ShipmentOrderFormState, _formData: FormData): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await pinShipmentDocumentChecklist(supabase, { shipmentOrderId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not sync the document checklist: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/**
+ * OPS-176: uploads file metadata through the Platform Document/File Engine
+ * (app.initiate_file_upload, PLT-128, service_role-only -- lib/supabase/service-role.ts's
+ * createSupabaseServiceRoleClient is the same "explicit actor, service-role execution"
+ * pattern lib/portal/tenant-admin-guard-deps.server.ts already established), then links
+ * the resulting file to this checklist item through the RLS-scoped authenticated client.
+ * No live storage backend exists in this sandbox -- only filename/MIME/size metadata is
+ * ever captured, the same disclosed constraint PLT-128's own migration recorded.
+ */
+export async function uploadAndLinkDocumentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  checklistItemId: string,
+  documentTypeCode: string,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const originalFilename = String(formData.get("originalFilename") ?? "");
+  const mimeType = String(formData.get("mimeType") ?? "");
+  const sizeBytes = Number(formData.get("sizeBytes") ?? 0);
+
+  try {
+    const serviceRole = createSupabaseServiceRoleClient();
+    const file = await uploadShipmentDocumentFile(serviceRole, {
+      tenantId: access.tenant.id,
+      shipmentOrderId,
+      documentTypeCode,
+      originalFilename,
+      mimeType,
+      sizeBytes,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+
+    const supabase = await createSupabaseServerClient();
+    await linkDocumentToChecklistItem(supabase, { checklistItemId, fileId: file.id, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not upload/link this document: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-176: approve/reject the linked evidence for one checklist item. Approving an unscanned or unsafe file is rejected server-side (document_checklist_unsafe_file) regardless of what the UI disables. */
+export async function reviewDocumentChecklistItemAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  checklistItemId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const decision = String(formData.get("decision") ?? "") as "approved" | "rejected";
+  const notes = String(formData.get("notes") ?? "").trim();
+  const expiresAtLocal = String(formData.get("expiresAt") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reviewDocumentChecklistItem(supabase, {
+      checklistItemId,
+      decision,
+      notes: notes.length === 0 ? null : notes,
+      expiresAt: expiresAtLocal.length === 0 ? null : new Date(expiresAtLocal).toISOString(),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not record this review decision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: begins ePOD capture -- requires the shipment to already be delivered. */
+export async function startEpodCaptureAction(tenantSlug: string, shipmentOrderId: string, idempotencyKey: string, _prevState: ShipmentOrderFormState, _formData: FormData): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await startEpodCapture(supabase, { tenantId: access.tenant.id, shipmentOrderId, idempotencyKey, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not start ePOD capture: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/**
+ * OPS-177: uploads any provided signature/photo file metadata (through the same
+ * service-role `app.initiate_file_upload` path OPS-176 already established) and saves
+ * receiver/geolocation/captured-at evidence on the current draft/revision_requested
+ * ePOD capture version. No live storage backend exists in this sandbox -- MIME type
+ * and size are fixed placeholders, matching PLT-128's own disclosed constraint.
+ */
+export async function setEpodEvidenceAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  idempotencyKeyPrefix: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const receiverName = String(formData.get("receiverName") ?? "");
+  const receiverPosition = String(formData.get("receiverPosition") ?? "").trim();
+  const signatureFilename = String(formData.get("signatureFilename") ?? "").trim();
+  const photoFilename = String(formData.get("photoFilename") ?? "").trim();
+  const latitude = String(formData.get("latitude") ?? "").trim();
+  const longitude = String(formData.get("longitude") ?? "").trim();
+  const capturedAtLocal = String(formData.get("capturedAt") ?? "").trim();
+
+  try {
+    const serviceRole = createSupabaseServiceRoleClient();
+    let signatureFileId: string | null = null;
+    if (signatureFilename.length > 0) {
+      const file = await uploadShipmentDocumentFile(serviceRole, {
+        tenantId: access.tenant.id,
+        shipmentOrderId,
+        documentTypeCode: "epod",
+        originalFilename: signatureFilename,
+        mimeType: "image/png",
+        sizeBytes: 20480,
+        idempotencyKey: `${idempotencyKeyPrefix}-sig`,
+        actorAuthUserId: access.authUserId,
+        actorLabel: access.authUserId,
+      });
+      signatureFileId = file.id;
+    }
+    let photoFileIds: string[] = [];
+    if (photoFilename.length > 0) {
+      const file = await uploadShipmentDocumentFile(serviceRole, {
+        tenantId: access.tenant.id,
+        shipmentOrderId,
+        documentTypeCode: "epod",
+        originalFilename: photoFilename,
+        mimeType: "image/jpeg",
+        sizeBytes: 102400,
+        idempotencyKey: `${idempotencyKeyPrefix}-photo`,
+        actorAuthUserId: access.authUserId,
+        actorLabel: access.authUserId,
+      });
+      photoFileIds = [file.id];
+    }
+
+    const deliveryGeojson: GeoJsonPoint | null =
+      latitude.length > 0 && longitude.length > 0 ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] } : null;
+
+    const supabase = await createSupabaseServerClient();
+    await setEpodEvidence(supabase, {
+      captureId,
+      receiverName: receiverName.trim().length === 0 ? null : receiverName,
+      receiverPosition: receiverPosition.length === 0 ? null : receiverPosition,
+      signatureFileId,
+      photoFileIds,
+      deliveryGeojson,
+      capturedAt: capturedAtLocal.length === 0 ? null : new Date(capturedAtLocal).toISOString(),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not save this ePOD evidence: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: draft/revision_requested -> submitted. Requires a receiver name, at least one evidence file, and every referenced file to have already scanned clean. */
+export async function submitEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await submitEpodCapture(supabase, { captureId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not submit this ePOD capture: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: submitted -> approved | revision_requested. */
+export async function reviewEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const decision = String(formData.get("decision") ?? "") as "approved" | "revision_requested";
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reviewEpodCapture(supabase, { captureId, decision, notes: notes.length === 0 ? null : notes, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not record this ePOD review decision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: revision_requested -> a brand-new draft version; the prior rejected version is preserved unmutated. */
+export async function reviseEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  previousCaptureId: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reviseEpodCapture(supabase, { previousCaptureId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not start a revision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: approved -> completed; also transitions the shipment delivered -> epod through OPS-170's own existing transition command. */
+export async function completeEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  expectedCaptureVersion: number,
+  shipmentExpectedVersion: number,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await completeEpodCapture(supabase, {
+      captureId,
+      expectedCaptureVersion,
+      shipmentExpectedVersion,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not complete this ePOD capture: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: starts the shipment's first actual-cost version -- fails if a current version already exists (use the adjustment action instead). */
+export async function createActualCostDraftAction(tenantSlug: string, shipmentOrderId: string, _prevState: ShipmentOrderFormState, formData: FormData): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const currency = String(formData.get("currency") ?? "");
+  const estimatedAmountRaw = String(formData.get("estimatedAmount") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createActualCostDraft(supabase, {
+      tenantId: access.tenant.id,
+      shipmentOrderId,
+      currency,
+      estimatedAmount: estimatedAmountRaw.length === 0 ? null : Number(estimatedAmountRaw),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not start actual cost: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: amount is always server-computed -- the form only supplies quantity/rate/minimum/surcharge. */
+export async function addActualCostComponentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  actualCostId: string,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const category = String(formData.get("category") ?? "") as ActualCostCategory;
+  const sourceType = String(formData.get("sourceType") ?? "") as ActualCostSourceType;
+  const vendorId = String(formData.get("vendorId") ?? "").trim();
+  const quantity = Number(formData.get("quantity") ?? 0);
+  const uom = String(formData.get("uom") ?? "").trim();
+  const rate = Number(formData.get("rate") ?? 0);
+  const minimumChargeRaw = String(formData.get("minimumCharge") ?? "").trim();
+  const surcharge = Number(formData.get("surcharge") ?? 0);
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await addActualCostComponent(supabase, {
+      actualCostId,
+      category,
+      sourceType,
+      vendorId: vendorId.length === 0 ? null : vendorId,
+      quantity,
+      uom: uom.length === 0 ? null : uom,
+      rate,
+      minimumCharge: minimumChargeRaw.length === 0 ? null : Number(minimumChargeRaw),
+      surcharge,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not add this cost component: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: draft-only; recomputes the header total. */
+export async function removeActualCostComponentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  componentId: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await removeActualCostComponent(supabase, { componentId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not remove this cost component: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: draft -> submitted; requires at least one component. */
+export async function submitActualCostAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  actualCostId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await submitActualCost(supabase, { actualCostId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not submit this actual cost: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: submitted -> approved | rejected; a reason is required to reject. */
+export async function decideActualCostAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  actualCostId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const decision = String(formData.get("decision") ?? "") as "approved" | "rejected";
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await decideActualCost(supabase, { actualCostId, decision, reason: reason.length === 0 ? null : reason, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not record this actual-cost decision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-178: approved-only; starts a brand-new draft version, copying the prior version's own component lines. */
+export async function createActualCostAdjustmentAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  previousActualCostId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const adjustmentReason = String(formData.get("adjustmentReason") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createActualCostAdjustment(supabase, { previousActualCostId, adjustmentReason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ActualCostMutationError) {
+      return { error: `Could not start this actual-cost adjustment: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+export interface IssueTrackingTokenFormState {
+  readonly error: string | null;
+  readonly rawToken: string | null;
+}
+
+/** OPS-180: mints (or re-mints, revoking any prior active token) a hashed public tracking token. rawToken is returned exactly once -- never persisted, never retrievable again after this response. */
+export async function issueShipmentTrackingTokenAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  validityDays: number,
+  _prevState: IssueTrackingTokenFormState,
+  _formData: FormData,
+): Promise<IssueTrackingTokenFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace.", rawToken: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const issued = await issueShipmentTrackingToken(supabase, { shipmentOrderId, validityDays, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+    return { error: null, rawToken: issued.rawToken };
+  } catch (error) {
+    if (error instanceof PublicTrackingMutationError) {
+      return { error: `Could not issue a tracking link: ${error.message}`, rawToken: null };
+    }
+    throw error;
+  }
+}
+
+/** OPS-180: revokes the shipment's current active tracking token -- reason mandatory. */
+export async function revokeShipmentTrackingTokenAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reason = String(formData.get("reason") ?? "");
+  const supabase = await createSupabaseServerClient();
+  try {
+    await revokeShipmentTrackingToken(supabase, { shipmentOrderId, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof PublicTrackingMutationError) {
+      return { error: `Could not revoke the tracking link: ${error.message}` };
     }
     throw error;
   }
