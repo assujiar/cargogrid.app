@@ -25,6 +25,7 @@ import type { UserStatus } from "../../server/contracts/user-lifecycle/user-life
 import type { JobOrderStatus } from "../../server/contracts/job-order/job-order.ts";
 import type { ShipmentOrderStatus } from "../../server/contracts/shipment-order/shipment-order.ts";
 import type { ConfigVersionStatus } from "../../server/contracts/config/config.ts";
+import type { FinanceAccountStatus } from "../../server/contracts/chart-of-accounts/chart-of-accounts.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -80,6 +81,13 @@ export const FINANCE_CONFIG_VERSION_STATUS_TONE_MAP: Record<ConfigVersionStatus,
   draft: { tone: "neutral", label: "Draft" },
   published: { tone: "success", label: "Published" },
   archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-192: Chart of Accounts' own draft/active/inactive lifecycle -- a real domain table, not the reused Configuration Engine, so its own three-state Record<...> (distinct from FINANCE_CONFIG_VERSION_STATUS_TONE_MAP's draft/published/archived above). */
+export const FINANCE_ACCOUNT_STATUS_TONE_MAP: Record<FinanceAccountStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  active: { tone: "success", label: "Active" },
+  inactive: { tone: "neutral", label: "Inactive" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {

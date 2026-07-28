@@ -100,8 +100,8 @@
 | `evidence` | FIN-192.md build log; db-test output |
 | `rollback` | additive migration only; never remove a referenced account |
 | `owner` | Runtime build agent |
-| `status` | READY (BLOCKED behind FIN-191 VERIFIED) |
-| `resume_point` | CG-S9-FIN-004 (Prompt 193) becomes READY once VERIFIED |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-004 (Prompt 193) is READY -- next |
 
 ### Row `193` — Prompt 193, `CG-S9-FIN-004`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`191` are `VERIFIED`** (`191` this checkpoint). **`192`–`194` are `READY`/sequentially `BLOCKED` behind each other**, all three within this session's explicit authorized range. **`195`–`218` (24 rows) remain `NOT_STARTED`**, dependency-mapped but not instantiated with exact paths, and not authorized this session.
+Of the 29 rows in this index (`190`–`218`): **`190`–`192` are `VERIFIED`** (`192` this checkpoint). **`193`–`194` are `READY`/sequentially `BLOCKED` behind each other**, both within this session's explicit authorized range. **`195`–`218` (24 rows) remain `NOT_STARTED`**, dependency-mapped but not instantiated with exact paths, and not authorized this session.
 
 ## 3. Collision inspection
 
@@ -850,4 +850,4 @@ Of the 29 rows in this index (`190`–`218`): **`190`–`191` are `VERIFIED`** (
 - **No cycle**: dependency edges strictly increase in prompt number (each row's `upstream` only names lower-numbered rows), confirmed by direct inspection of every row above.
 - **No orphan**: every `FIN-*` anchor (`FIN-GL/AR/AP/TAX/CLS/PRF-001..004`) appears in at least one row's `source_ids`; every `FINTEST-001..024` scenario is mapped as an implementation/verification input to `FIN-215` per `189_*.md` §6/§7 (full per-scenario mapping is `FIN-215`'s own instantiation, not required with exact test-file paths before its upstream is `VERIFIED`).
 - **No collision**: §3 above confirms zero pre-existing Finance-domain file anywhere in the repository.
-- **Deterministic next eligible atomic task**: `CG-S9-FIN-003` (Prompt 192, Chart of Accounts).
+- **Deterministic next eligible atomic task**: `CG-S9-FIN-004` (Prompt 193, Fiscal Period).

@@ -5021,6 +5021,40 @@ Three fixture-authoring issues (UUID-range collision, invite-before-assign-role 
 
 Self-closing. `CG-S9-FIN-002` is `VERIFIED`. `CG-S9-FIN-003` (Prompt 192, Chart of Accounts) proceeds next, within this session's explicit authorized range.
 
+### CHG-2026-129 — Chart of Accounts (Phase 4, Prompt 192)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-003` / `192_CHART_OF_ACCOUNTS_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (incl. 1 `CREATE OR REPLACE FUNCTION` extension), service layer, UI route |
+| Baseline evidence | `CG-S9-FIN-002` `VERIFIED` (`docs/build-log/phase-04/FIN-191.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- third task in that range |
+
+#### Outcome
+
+Tenant/company-aware chart of accounts (canonical type/normal-balance matching, hierarchy, control/posting eligibility, draft/active/inactive lifecycle). Closes `FIN-191`'s own disclosed forward reference: `finance_posting_map` publish now validates every account-code reference against a real, active, postable `app.finance_accounts` row.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728210000_create_finance_chart_of_accounts.sql`; `server/contracts/chart-of-accounts/chart-of-accounts.ts(.test.ts)`; `server/queries/chart-of-accounts.ts(.test.ts)`; `server/mutations/chart-of-accounts.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/chart-of-accounts/page.tsx`/`actions.ts`/`chart-of-accounts-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-chart-of-accounts.sql`; `docs/build-log/phase-04/FIN-192.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_ACCOUNT_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `192`). 1 new migration (which itself `CREATE OR REPLACE FUNCTION`s `FIN-191`'s own `app.publish_finance_config_version`, the established later-migration-extends-an-earlier-one's-function pattern), 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1812/1812 (20 net new), `pnpm run db:test` PASS -- 73 migrations/74 db-test files (1 net new, zero regression, including `FIN-191`'s own file re-run unmodified), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 58 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (1 new table, 9 new functions) plus one `CREATE OR REPLACE FUNCTION` extension (reverting it restores `FIN-191`'s own prior publish behavior). `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+None -- zero implementation defect found during authoring. Zero regression to any prior capability, including `FIN-191`'s own db-test.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-003` is `VERIFIED`. `CG-S9-FIN-004` (Prompt 193, Fiscal Period) proceeds next, within this session's explicit authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
