@@ -5055,6 +5055,40 @@ None -- zero implementation defect found during authoring. Zero regression to an
 
 Self-closing. `CG-S9-FIN-003` is `VERIFIED`. `CG-S9-FIN-004` (Prompt 193, Fiscal Period) proceeds next, within this session's explicit authorized range.
 
+### CHG-2026-130 — Fiscal Period (Phase 4, Prompt 193)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-004` / `193_FISCAL_PERIOD_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 2 UI routes |
+| Baseline evidence | `CG-S9-FIN-003` `VERIFIED` (`docs/build-log/phase-04/FIN-192.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- fourth task in that range |
+
+#### Outcome
+
+Tenant/company fiscal calendars and a governed period lifecycle (open -> soft_closed -> closed, plus governed reopen) with a deterministic date-to-period resolver. Closes `FIN-191`'s `finance_close_policy` config class into a real consumer -- each generated period pins a governed checklist snapshot.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728220000_create_finance_fiscal_period.sql`; `server/contracts/fiscal-period/fiscal-period.ts(.test.ts)`; `server/queries/fiscal-period.ts(.test.ts)`; `server/mutations/fiscal-period.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/fiscal-periods/page.tsx`/`actions.ts`/`fiscal-period-forms.tsx`/`loading.tsx` and `.../[periodId]/page.tsx`/`loading.tsx`; `scripts/db-tests/finance-fiscal-period.sql`; `docs/build-log/phase-04/FIN-193.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_PERIOD_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `193`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1835/1835 (23 net new), `pnpm run db:test` PASS -- 74 migrations/75 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 60 routes (2 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (4 new tables, 11 new functions). `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+None -- zero implementation defect found during authoring. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-004` is `VERIFIED`. `CG-S9-FIN-005` (Prompt 194, Currency and Exchange Rate) proceeds next -- the final task within this session's explicit authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -26,6 +26,7 @@ import type { JobOrderStatus } from "../../server/contracts/job-order/job-order.
 import type { ShipmentOrderStatus } from "../../server/contracts/shipment-order/shipment-order.ts";
 import type { ConfigVersionStatus } from "../../server/contracts/config/config.ts";
 import type { FinanceAccountStatus } from "../../server/contracts/chart-of-accounts/chart-of-accounts.ts";
+import type { FinancePeriodStatus } from "../../server/contracts/fiscal-period/fiscal-period.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -88,6 +89,13 @@ export const FINANCE_ACCOUNT_STATUS_TONE_MAP: Record<FinanceAccountStatus, Statu
   draft: { tone: "neutral", label: "Draft" },
   active: { tone: "success", label: "Active" },
   inactive: { tone: "neutral", label: "Inactive" },
+};
+
+/** FIN-193: Fiscal Period's own open/soft_closed/closed lifecycle -- a real domain table, own three-state Record<...>, distinct from FIN-192's draft/active/inactive one. */
+export const FINANCE_PERIOD_STATUS_TONE_MAP: Record<FinancePeriodStatus, StatusToneEntry> = {
+  open: { tone: "success", label: "Open" },
+  soft_closed: { tone: "warning", label: "Soft-closed" },
+  closed: { tone: "neutral", label: "Closed" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {
