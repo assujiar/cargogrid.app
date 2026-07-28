@@ -2,12 +2,14 @@ import { notFound } from "next/navigation";
 import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/resolve-operations-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getJobOrder, JobOrderQueryError } from "../../../../../../server/queries/job-order.ts";
+import { getJobProfitability, JobProfitabilityQueryError } from "../../../../../../server/queries/job-profitability.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { JOB_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { ConfirmJobOrderForm } from "./confirm-job-order-form.tsx";
 import { OverrideJobOrderForm } from "./override-job-order-form.tsx";
-import { confirmJobOrderAction, overrideJobOrderFieldAction, type JobOrderFormState } from "./actions.ts";
+import { JobProfitabilityPanel } from "./job-profitability-panel.tsx";
+import { confirmJobOrderAction, overrideJobOrderFieldAction, calculateJobProfitabilityAction, type JobOrderFormState } from "./actions.ts";
 import type { OverridableSnapshotColumn } from "../../../../../../server/contracts/job-order/job-order.ts";
 
 /**
@@ -41,6 +43,17 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
     notFound();
   }
 
+  let profitabilitySnapshot;
+  try {
+    profitabilitySnapshot = await getJobProfitability(supabase, jobOrder.id);
+  } catch (error) {
+    if (!(error instanceof JobProfitabilityQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading job profitability. Please try again." />;
+  }
+
+  const boundCalculateProfitabilityAction = calculateJobProfitabilityAction.bind(null, tenantSlug, jobOrder.id);
   const { tone, label } = JOB_ORDER_STATUS_TONE_MAP[jobOrder.status];
   const customerSnapshot = jobOrder.customerSnapshot as { customerSnapshot?: { legal_name?: string }; contactName?: string; contactEmail?: string; contactPhone?: string };
   const boundConfirmAction = confirmJobOrderAction.bind(null, tenantSlug, jobOrder.id, jobOrder.recordVersion);
@@ -124,6 +137,11 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
           </a>
         </section>
       ) : null}
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Profitability</h2>
+        <JobProfitabilityPanel snapshot={profitabilitySnapshot} action={boundCalculateProfitabilityAction} />
+      </section>
     </div>
   );
 }

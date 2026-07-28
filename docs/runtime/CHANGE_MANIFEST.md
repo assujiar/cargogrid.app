@@ -4613,6 +4613,40 @@ One real fixture bug, confined to this checkpoint's own db-test file: reusing th
 
 Self-closing. `CG-S8-OPS-012` is `VERIFIED` -- **third task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-013` (Prompt 179, Basic Job Profitability) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-117 — Basic Job Profitability (Phase 3, Prompt 179)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-013` / `179_BASIC_JOB_PROFITABILITY_PROMPT.md` |
+| Change type | Schema (1 new table + 2 functions + 1 masked view + 1 new permission-catalogue row) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-178` `VERIFIED` (`docs/build-log/phase-03/OPS-178.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **fourth capability task in that range** |
+
+#### Outcome
+
+A deterministic, versioned operational-margin snapshot from the Job Order's own pinned Commercial revenue and every approved `OPS-178` actual-cost version -- operational profitability only, never accounting P&L, no GL/subledger table touched.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728120000_create_operations_job_profitability.sql` (`app.job_profitability_snapshots` table, `app.job_profitability_directory` masked view; `app.has_view_job_margin`, `app.calculate_job_profitability` functions; one new permission-catalogue row `OPS:View margin`). New service layer: `server/contracts/job-profitability/job-profitability.ts(.test.ts)`, `server/queries/job-profitability.ts(.test.ts)`, `server/mutations/job-profitability.ts(.test.ts)`. New UI: Job Order detail `job-profitability-panel.tsx`. Modified: Job Order detail `actions.ts`/`page.tsx` (one new server action + panel wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1682/1682 (9 net new: 4 contract, 2 query, 3 mutation). `db:test` PASS across 64 migrations/65 db-test files (1 net new, zero regression) -- scenario groups covering authority-gating, exact revenue/cost/margin figures, recalculation-reason enforcement and version-lineage preservation, mixed-currency unavailable path, directory-view masking, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited. `git revert` of this checkpoint's commit is safe and complete; the Job Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+One real test-authoring issue, confined to this checkpoint's own db-test file: an RLS assertion initially expected a non-null `margin_amount` from the full-access actor at a point in the test sequence where the current snapshot was legitimately `unavailable` from a prior test block's own recalculation, corrected to assert only `margin_masked=false`.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-013` is `VERIFIED` -- **fourth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-014` (Prompt 180, Basic Public Customer Tracking) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/resolve-operations-access.server.ts";
 import { confirmJobOrder, overrideJobOrderField, JobOrderMutationError } from "../../../../../../server/mutations/job-order.ts";
+import { calculateJobProfitability, JobProfitabilityMutationError } from "../../../../../../server/mutations/job-profitability.ts";
 import type { OverridableSnapshotColumn } from "../../../../../../server/contracts/job-order/job-order.ts";
 
 export interface JobOrderFormState {
@@ -36,6 +37,34 @@ export async function confirmJobOrderAction(
   } catch (error) {
     if (error instanceof JobOrderMutationError) {
       return { error: `Could not confirm this Job Order: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/job-orders/${jobOrderId}`);
+  return { error: null };
+}
+
+/** OPS-179: the first calculation for a job needs no reason; every subsequent recalculation requires a non-empty reason. */
+export async function calculateJobProfitabilityAction(tenantSlug: string, jobOrderId: string, _prevState: JobOrderFormState, formData: FormData): Promise<JobOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const recalculationReason = String(formData.get("recalculationReason") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await calculateJobProfitability(supabase, {
+      jobOrderId,
+      recalculationReason: recalculationReason.length === 0 ? null : recalculationReason,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof JobProfitabilityMutationError) {
+      return { error: `Could not calculate profitability: ${error.message}` };
     }
     throw error;
   }

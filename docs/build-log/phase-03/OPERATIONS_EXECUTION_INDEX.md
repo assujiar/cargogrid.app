@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S8-OPS-001` (`CG-AABPP-OPS-167` v0.9.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/08-phase-03-operations/167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-178` (Actual Cost, `VERIFIED`); this document's own row/tally table is updated at every checkpoint. This session's authorized range is `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"); `184` onward requires fresh explicit user authorization.
+**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-179` (Basic Job Profitability, `VERIFIED`); this document's own row/tally table is updated at every checkpoint. This session's authorized range is `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"); `184` onward requires fresh explicit user authorization.
 
 ## 0. Checkpoint
 
@@ -33,9 +33,10 @@
 | `010` | `176` Document requirement | Delivery Evidence / Shipment Documentation | `VERIFIED` | `OPS-169..175` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-176.md` | Runtime build agent | `CG-S8-OPS-011` |
 | `011` | `177` ePOD capture and review | Delivery Evidence / Proof of Delivery | `VERIFIED` | `OPS-170`, `OPS-173..176` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-177.md` | Runtime build agent | `CG-S8-OPS-012` |
 | `012` | `178` Actual cost | Operational Cost / Shipment Cost Capture | `VERIFIED` | `OPS-168..177` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-178.md` | Runtime build agent | `CG-S8-OPS-013` |
-| `013`–`022` | `179`–`188` Profitability, public tracking, billing readiness, dashboard, reports, transaction lineage, integrated verification, hardening, documentation, closure | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-178` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | `179`–`183` in this session's authorized range; `184`+ requires fresh explicit user authorization |
+| `013` | `179` Basic job profitability | Operational Cost / Operational Margin View | `VERIFIED` | `OPS-178` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-179.md` | Runtime build agent | `CG-S8-OPS-014` |
+| `014`–`022` | `180`–`188` Public tracking, billing readiness, dashboard, reports, transaction lineage, integrated verification, hardening, documentation, closure | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-179` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | `180`–`183` in this session's authorized range; `184`+ requires fresh explicit user authorization |
 
-**Tally:** of the 22 rows in this index (`167`–`188`), **12 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost), and **10 are `NOT_STARTED`** (`179`–`188`; `179`–`183` dependency-`READY` and authorized this session, `184`+ requires fresh authorization).
+**Tally:** of the 22 rows in this index (`167`–`188`), **13 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost, Basic Job Profitability), and **9 are `NOT_STARTED`** (`180`–`188`; `180`–`183` dependency-`READY` and authorized this session, `184`+ requires fresh authorization).
 
 ## 2. Collision inspection
 
