@@ -12,6 +12,7 @@ import { getDispatchReadiness, BasicDispatchQueryError } from "../../../../../..
 import { getShipmentDocumentChecklist, evaluateShipmentDocumentChecklistCompleteness, DocumentRequirementQueryError } from "../../../../../../server/queries/document-requirement.ts";
 import { getEpodCaptureHistory, EpodCaptureReviewQueryError } from "../../../../../../server/queries/epod-capture-review.ts";
 import { getShipmentActualCost, listActualCostComponents, evaluateActualCostVariance, ActualCostQueryError } from "../../../../../../server/queries/actual-cost.ts";
+import { getActiveShipmentTrackingToken, PublicTrackingQueryError } from "../../../../../../server/queries/public-tracking.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -31,6 +32,7 @@ import { DispatchPanel } from "./dispatch-panel.tsx";
 import { DocumentChecklistPanel } from "./document-checklist-panel.tsx";
 import { EpodPanel } from "./epod-panel.tsx";
 import { ActualCostPanel } from "./actual-cost-panel.tsx";
+import { TrackingPanel } from "./tracking-panel.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -60,7 +62,10 @@ import {
   submitActualCostAction,
   decideActualCostAction,
   createActualCostAdjustmentAction,
+  issueShipmentTrackingTokenAction,
+  revokeShipmentTrackingTokenAction,
   type ShipmentOrderFormState,
+  type IssueTrackingTokenFormState,
 } from "./actions.ts";
 import { permittedNextStatuses } from "./lifecycle-transitions.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
@@ -220,6 +225,16 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading actual cost. Please try again." />;
   }
 
+  let trackingToken;
+  try {
+    trackingToken = await getActiveShipmentTrackingToken(supabase, shipment.id);
+  } catch (error) {
+    if (!(error instanceof PublicTrackingQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading the tracking link. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -265,6 +280,11 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundSubmitActualCostAction = submitActualCostAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", actualCost?.recordVersion ?? 0);
   const boundDecideActualCostAction = decideActualCostAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", actualCost?.recordVersion ?? 0);
   const boundCreateActualCostAdjustmentAction = createActualCostAdjustmentAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "");
+  const boundIssueTrackingTokenAction = (prevState: IssueTrackingTokenFormState, formData: FormData) => {
+    const validityDays = Number(formData.get("validityDays") ?? 30);
+    return issueShipmentTrackingTokenAction(tenantSlug, shipment.id, validityDays, prevState, formData);
+  };
+  const boundRevokeTrackingTokenAction = revokeShipmentTrackingTokenAction.bind(null, tenantSlug, shipment.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -422,6 +442,11 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           decideAction={boundDecideActualCostAction}
           adjustAction={boundCreateActualCostAdjustmentAction}
         />
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Public tracking link</h2>
+        <TrackingPanel token={trackingToken} issueAction={boundIssueTrackingTokenAction} revokeAction={boundRevokeTrackingTokenAction} />
       </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">

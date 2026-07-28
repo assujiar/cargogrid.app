@@ -58,6 +58,7 @@ import {
   ActualCostMutationError,
 } from "../../../../../../server/mutations/actual-cost.ts";
 import type { ActualCostCategory, ActualCostSourceType } from "../../../../../../server/contracts/actual-cost/actual-cost.ts";
+import { issueShipmentTrackingToken, revokeShipmentTrackingToken, PublicTrackingMutationError } from "../../../../../../server/mutations/public-tracking.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
@@ -1058,6 +1059,64 @@ export async function createActualCostAdjustmentAction(
   } catch (error) {
     if (error instanceof ActualCostMutationError) {
       return { error: `Could not start this actual-cost adjustment: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+export interface IssueTrackingTokenFormState {
+  readonly error: string | null;
+  readonly rawToken: string | null;
+}
+
+/** OPS-180: mints (or re-mints, revoking any prior active token) a hashed public tracking token. rawToken is returned exactly once -- never persisted, never retrievable again after this response. */
+export async function issueShipmentTrackingTokenAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  validityDays: number,
+  _prevState: IssueTrackingTokenFormState,
+  _formData: FormData,
+): Promise<IssueTrackingTokenFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace.", rawToken: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const issued = await issueShipmentTrackingToken(supabase, { shipmentOrderId, validityDays, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+    return { error: null, rawToken: issued.rawToken };
+  } catch (error) {
+    if (error instanceof PublicTrackingMutationError) {
+      return { error: `Could not issue a tracking link: ${error.message}`, rawToken: null };
+    }
+    throw error;
+  }
+}
+
+/** OPS-180: revokes the shipment's current active tracking token -- reason mandatory. */
+export async function revokeShipmentTrackingTokenAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reason = String(formData.get("reason") ?? "");
+  const supabase = await createSupabaseServerClient();
+  try {
+    await revokeShipmentTrackingToken(supabase, { shipmentOrderId, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof PublicTrackingMutationError) {
+      return { error: `Could not revoke the tracking link: ${error.message}` };
     }
     throw error;
   }

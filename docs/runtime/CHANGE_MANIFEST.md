@@ -4647,6 +4647,40 @@ One real test-authoring issue, confined to this checkpoint's own db-test file: a
 
 Self-closing. `CG-S8-OPS-013` is `VERIFIED` -- **fourth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-014` (Prompt 180, Basic Public Customer Tracking) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-118 — Basic Public Customer Tracking (Phase 3, Prompt 180)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-014` / `180_BASIC_PUBLIC_CUSTOMER_TRACKING_PROMPT.md` |
+| Change type | Schema (2 new tables + 3 functions) + service layer + UI (1 existing route extended + 1 new public route) |
+| Baseline evidence | `OPS-179` `VERIFIED` (`docs/build-log/phase-03/OPS-179.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **fifth capability task in that range** |
+
+#### Outcome
+
+An unguessable, revocable, expiring per-shipment tracking token resolving to a minimal, sanitized status/timeline/ePOD-availability view -- never a live Customer Portal. Rate-limited and durably anti-enumeration-logged on every outcome, including a failed lookup.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728130000_create_operations_public_tracking.sql` (`app.shipment_tracking_tokens`, `app.tracking_lookup_attempts` tables; `app.issue_shipment_tracking_token`, `app.revoke_shipment_tracking_token`, `app.lookup_public_shipment_tracking` functions -- the last one the schema's one deliberate `EXECUTE` grant to `anon`). New service layer: `server/contracts/public-tracking/public-tracking.ts(.test.ts)`, `server/queries/public-tracking.ts(.test.ts)`, `server/mutations/public-tracking.ts(.test.ts)`. New UI: Shipment Order detail `tracking-panel.tsx`; new public route `app/(public)/tracking/[token]/page.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (two new server actions + panel/query wiring). 1 migration, 8 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1697/1697 (15 net new: 6 contract, 5 query, 4 mutation). `db:test` PASS across 65 migrations/66 db-test files (1 net new, zero regression) -- scenario groups covering issue/revoke authority-gating and at-most-one-active-token, sanitized/filtered projection correctness, ePOD-availability correctness, `not_found`/`invalid`/`rate_limited` outcomes with the attempt log surviving every one of them, revoke-reason enforcement, record-scope/cross-tenant isolation, schema-privilege defense in depth (including the one deliberate `anon` grant), audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 53 routes (new: `/tracking/[token]`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited. `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change and the new public route are additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+One architecturally significant correction: `app.lookup_public_shipment_tracking` originally used `raise exception` for `not_found`/`invalid`/`rate_limited` outcomes, each preceded by an attempt-log insert -- the raised exception rolled back that same insert (the identical defect class `OPS-175` documented for its own dispatch failure-audit design), so the rate limiter never actually triggered. Redesigned to a `lookup_status` column always returned, never raised, cascading into a db-test and TypeScript-layer rewrite. Two smaller `plpgsql` defects also caught and fixed: an ambiguous-column reference in `issue_shipment_tracking_token`'s own `update` (aliased the update target) and untyped `null` literals in early-return branches failing to structurally match the declared return type (fixed with explicit casts).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-014` is `VERIFIED` -- **fifth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-015` (Prompt 181, Billing Readiness) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
