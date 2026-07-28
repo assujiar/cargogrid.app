@@ -1,62 +1,387 @@
 # CargoGrid
 
-Multi-tenant SaaS ERP for 3PL/logistics operators (forwarding, cargo, trucking, warehouse, distribution, project logistics). See `docs/blueprint/` for the product/business/technical source of truth and `docs/runtime/CARGOGRID_CONTEXT.md` for the current build checkpoint.
+CargoGrid is a multi-tenant, modular enterprise SaaS ERP built for logistics and supply chain operators.
 
-**Status:** Phase 0 — Discovery and Foundation. No application code exists yet beyond this toolchain scaffold; feature/business-domain code is not authorized until `PHASE_0_VERIFIED` (see `docs/runtime/HANDOFF.md`).
+It connects commercial, operational, financial, customer, and enterprise workflows in one governed platform designed for freight forwarding, cargo, trucking, warehousing, distribution, and project logistics businesses.
 
-## Stack
+> One Platform. Every Shipment. Complete Visibility.
 
-Next.js App Router, React, TypeScript (strict) · Supabase (Auth, PostgreSQL, RLS, Storage) · pnpm · Vercel. See `AGENTS.md` "Stack baseline" for the ratified target and `docs/adr/` for the recorded tooling decisions.
+---
 
-## Local development
+## Current Build Status
+
+CargoGrid is currently under active development.
+
+| Phase | Scope | Status |
+|---|---|---|
+| Phase 0 | Discovery and Foundation | Verified |
+| Phase 1 | Platform Core | Verified |
+| Phase 2 | Commercial | Verified |
+| Phase 3 | Operations | In Progress |
+| Phase 4 | Finance | Not Started |
+| Phase 5 | Advanced TMS and WMS | Not Started |
+| Phase 6 | Procurement and Vendor Management | Not Started |
+| Phase 7 | HRIS and Ticketing | Not Started |
+| Phase 8 | Customer Portal and Loyalty | Not Started |
+| Phase 9 | Intelligence and Enterprise | Not Started |
+| Phase 15 | Full-System Hardening | Not Started |
+| Phase 16 | Release Candidate and Go-Live | Not Started |
+
+### Current checkpoint
+
+- Platform Core: complete
+- Commercial: complete
+- Operations: 16 of 22 tasks verified
+- Current main branch checkpoint: Operations Dashboard
+- Next task: Operations Reports
+- Production deployment: not yet completed
+- Live Supabase environment: not yet provisioned
+
+---
+
+## Implemented Capabilities
+
+### Platform Core
+
+The Platform Core provides the shared technical and governance foundation for every CargoGrid module.
+
+Implemented capabilities include:
+
+- Multi-tenant architecture
+- Tenant provisioning and lifecycle
+- Entitlement management
+- Supabase authentication
+- Organization and branch hierarchy
+- User, role, and permission management
+- Row-Level Security and record-level access
+- Field-level data masking
+- Audit logging and access disclosure
+- White-label configuration
+- Custom-domain foundation
+- Master-data management
+- Configuration engine
+- Workflow engine
+- Approval engine
+- Status engine
+- Numbering engine
+- Form engine
+- Notification engine
+- Document and file engine
+- API key and webhook foundation
+- Import and export jobs
+- Durable background jobs
+- Feature flags
+- PostGIS spatial foundation
+- Tenant Admin portal
+- Supreme Admin portal
+
+---
+
+### Commercial
+
+The Commercial module supports the complete journey from lead generation to an accepted, operation-ready commercial handoff.
+
+Implemented capabilities include:
+
+- Lead management
+- Prospect management
+- Contact and activity management
+- CRM sales planning
+- Opportunity management
+- Costing requests and responses
+- Vendor rate lookup and selection
+- Margin calculation and approval
+- Quotation creation
+- Quotation versioning
+- Quotation approval
+- Customer quotation acceptance
+- Customer and account conversion
+- Contract management
+- Credit checking and override
+- Sales targets and achievement
+- Commercial dashboard
+- Commercial reports
+- Job Order handoff
+- Duplicate detection and customer intelligence
+- Commercial integrated verification and hardening
+
+The Commercial workflow preserves source and version lineage from the initial lead through quotation acceptance and downstream Job Order preparation.
+
+---
+
+### Operations
+
+The Operations module currently covers the main shipment execution and control-tower workflow.
+
+Implemented capabilities include:
+
+- Job Order
+- Shipment Order
+- Canonical shipment lifecycle
+- Land, air, and sea baseline profiles
+- Vendor, fleet, vehicle, and driver assignment
+- Milestone management
+- ETA and shipment-status projection
+- Exception and escalation management
+- Dispatch
+- Shipment document requirements
+- Electronic Proof of Delivery
+- Actual operational cost capture
+- Estimated-versus-actual cost variance
+- Job profitability
+- Public shipment tracking
+- Billing-readiness evaluation
+- Operations dashboard
+
+Remaining Operations work includes:
+
+- Operations reports
+- Transaction lineage
+- Integrated verification
+- Operations hardening
+- Documentation and handoff
+- Phase closure verification
+
+---
+
+## Architecture
+
+CargoGrid uses a shared application and database architecture with strict tenant isolation.
+
+Core architecture principles:
+
+- One shared product codebase
+- Shared PostgreSQL schema with tenant-scoped records
+- Row-Level Security as a primary authorization boundary
+- No authorization based only on hidden UI elements
+- Versioned and auditable business configuration
+- Governed snapshots for transactional evidence
+- Exact decimal arithmetic for financial values
+- Idempotent mutation commands
+- Deterministic business evaluations
+- Explicit record and field-level permissions
+- Reusable platform engines instead of module-specific duplicates
+- Additive database migrations
+- No silent financial, status, or workflow mutations
+
+---
+
+## Technology Stack
+
+### Application
+
+- Next.js 16
+- React 19
+- TypeScript 5
+- Tailwind CSS 4
+- Radix UI
+- ECharts
+- Zod
+
+### Platform and Data
+
+- Supabase
+- PostgreSQL
+- Row-Level Security
+- PostGIS
+- Supabase Auth
+- Supabase Storage
+
+### Engineering
+
+- Node.js 22+
+- pnpm
+- ESLint
+- Node Test Runner
+- Playwright
+- GitHub Actions
+- Vercel target architecture
+
+---
+
+## Local Development
 
 ### Prerequisites
 
-- Node.js `>=22.11.0` (LTS "Jod" line; this repo pins `22.22.x` in the sandbox that authored it — any 22.11+ patch works).
-- [pnpm](https://pnpm.io) `10.33.0` — enable via Corepack: `corepack enable && corepack prepare pnpm@10.33.0 --activate`, or install directly.
-- [Docker](https://www.docker.com) — required by the Supabase CLI to run the local stack (Postgres, Auth, Storage, Studio).
-- [Supabase CLI](https://supabase.com/docs/guides/cli) — invoked via `npx supabase` below; no global install required.
+Install:
 
-### One-command-ish setup
+- Node.js `>=22.11.0`
+- pnpm `10.33.0`
+- Docker
+- Supabase CLI
 
-```bash
-pnpm install                 # installs pinned dependencies from the committed pnpm-lock.yaml
-cp .env.example .env.local   # then fill in the values `supabase start` prints below
-npx supabase start           # starts local Postgres/Auth/Storage/Studio in Docker
-pnpm run preflight           # verifies required env vars are set and correctly scoped to CARGOGRID_ENV
-pnpm run typecheck           # tsc --noEmit
-pnpm run lint                # eslint .
-pnpm test                    # node --test — env schema/cross-field/redaction tests
-```
-
-`supabase start` prints an API URL, anon key, and service-role key — copy those into `.env.local` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`). Never commit `.env.local` (already covered by `.gitignore`) and never paste a production project's keys into it — `pnpm run preflight` (backed by the typed schema in `scripts/env/`) refuses to proceed if `NEXT_PUBLIC_SUPABASE_URL`'s loopback-ness doesn't match `CARGOGRID_ENV`: `local` must point at `127.0.0.1`/`localhost`, every other tier (development/testing/staging/uat/production/sandbox — the seven environments in `docs/architecture/11_DEVOPS_WORKSTREAM.md` §2) must point at its own isolated Supabase project instead. There is no override flag — a local environment must never be pointed at a shared or production project, by design.
-
-**Note on `dev`/`build` scripts:** they are intentionally not defined yet. No `app/` directory exists in this repository — per `docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md`'s migration-wave plan, the Next.js application shell lands in Phase 1 (Platform Core), not Phase 0. `typecheck`, `lint`, `test`, and `preflight` are the only scripts meaningful at the current checkpoint; running `next dev`/`next build` today would fail with "no pages or app directory found," which is the expected state, not a defect.
-
-### Environment variables
-
-Every variable this repository consumes is declared, typed, and classified (`public`/`server`/`secret`) in `scripts/env/schema.ts` — that file is the source of truth, `.env.example` is only a convenience copy of its shape. `scripts/env/validate.ts` performs fail-fast, redacted validation (`pnpm run preflight`); error messages always name the failing variable and never its value. See `docs/adr/ADR-0003-environment-schema-validation-library.md` for why Zod was chosen.
-
-### Local database
-
-The Supabase CLI manages a disposable local Postgres instance in Docker — it is never connected to a real tenant's data. `supabase/config.toml` is the tracked project scaffold (Postgres 17, matching the ratified Supabase-managed target). As migrations and seed data are added in later phases:
+### Setup
 
 ```bash
-npx supabase db reset   # rebuild the local DB from supabase/migrations/ + supabase/seed.sql
-npx supabase stop       # stop the local stack when done
+pnpm install
+cp .env.example .env.local
+npx supabase start
+pnpm run preflight
 ```
 
-### Troubleshooting
+Copy the local Supabase URL and keys produced by `supabase start` into `.env.local`.
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `pnpm install` fails on an engine check | Node version `<22.11.0` | Install/switch to Node 22 LTS |
-| `supabase start` fails to bind a port | Another local Postgres/Supabase instance already running | `npx supabase stop` first, or check for port `54321-54329` conflicts |
-| `pnpm run preflight` fails "is required ... but is not set" | `.env.local` not created or incomplete | `cp .env.example .env.local`, fill in values from `supabase start` output |
-| `pnpm run preflight` fails "must be a loopback address when CARGOGRID_ENV=local" | `.env.local` was copied from a teammate/staging/production config | Point back at your own local `supabase start` output; `CARGOGRID_ENV=local` always requires a loopback Supabase URL, with no override |
-| `pnpm run preflight` fails "requires its own isolated Supabase project" | `CARGOGRID_ENV` is set to a non-`local` tier but `NEXT_PUBLIC_SUPABASE_URL` is still loopback | Set the tier's own provisioned Supabase project URL, or set `CARGOGRID_ENV=local` if you're actually developing locally |
-| `pnpm run typecheck` fails on a fresh clone with no code changes | Dependency drift — the lockfile is the source of truth | `pnpm install` (do not `pnpm update`); if it still fails, this is a real regression, file it, don't work around it |
+Never use production or shared-environment credentials for local development.
 
-### Recovery
+---
 
-The toolchain files here (`package.json`, `pnpm-lock.yaml`, `tsconfig.json`, `supabase/config.toml`, `.env.example`, `scripts/`) are pure configuration and code — there is no data to lose. To reset: `git checkout -- package.json pnpm-lock.yaml tsconfig.json` and re-run `pnpm install`. See `docs/build-log/phase-00/PH0-85.md` and `PH0-86.md` for the full checkpoint records and rollback notes.
+## Development Commands
+
+```bash
+pnpm run typecheck
+pnpm run lint
+pnpm test
+pnpm run db:test
+pnpm run docs:check
+pnpm run security:check
+pnpm run data-classification:check
+pnpm run threat-model:check
+pnpm run standards:check
+pnpm run git:check
+pnpm run git:check-paths
+pnpm run test:e2e
+```
+
+### Production build
+
+```bash
+pnpm exec next build
+```
+
+---
+
+## Repository Structure
+
+```text
+app/
+  (public)/
+  (tenant)/
+  (supreme)/
+
+components/
+docs/
+  adr/
+  architecture/
+  blueprint/
+  build-log/
+  runtime/
+
+e2e/
+lib/
+scripts/
+  db-tests/
+  security/
+  standards/
+
+server/
+  contracts/
+  mutations/
+  queries/
+
+supabase/
+  migrations/
+```
+
+---
+
+## Quality and Verification
+
+Every implemented capability is expected to include the relevant combination of:
+
+- Database migration
+- Row-Level Security policy
+- Permission and record-scope enforcement
+- Typed input and output contract
+- Mutation or query service
+- Positive tests
+- Negative authorization tests
+- Cross-tenant isolation tests
+- Regression tests
+- User-facing interface
+- Build log
+- Runtime status update
+
+The latest Operations checkpoint verified:
+
+- Type checking
+- Linting
+- Unit and service tests
+- Database rebuild and database tests
+- Documentation checks
+- Security checks
+- Data-classification checks
+- Threat-model checks
+- Standards checks
+- Git collision and protected-path checks
+- Next.js production build
+
+---
+
+## Environment Status
+
+CargoGrid does not yet have a verified production environment.
+
+Current limitations:
+
+- No live production Supabase project
+- No production tenant data
+- No production deployment verification
+- No full real-user authentication validation
+- No production performance benchmark
+- No external pilot or partial go-live claim
+- Some browser-based E2E validation still depends on a provisioned execution environment
+
+A completed internal phase means that its implementation and evidence are internally verified. It does not mean the overall product is production-ready.
+
+---
+
+## Documentation
+
+Primary documentation locations:
+
+- `docs/blueprint/`  
+  Product, business-process, UX, data, architecture, and delivery source documents.
+
+- `docs/architecture/`  
+  Architecture decisions, dependency mapping, workstreams, and execution design.
+
+- `docs/adr/`  
+  Architecture Decision Records.
+
+- `docs/build-log/`  
+  Per-capability implementation and verification evidence.
+
+- `docs/runtime/CARGOGRID_BUILD_STATUS.md`  
+  Current build checkpoint.
+
+- `docs/runtime/HANDOFF.md`  
+  Runtime handoff and next execution task.
+
+- `docs/runtime/TASK_LEDGER.md`  
+  Complete task and verification ledger.
+
+---
+
+## Product Roadmap
+
+The planned execution order is:
+
+1. Complete Operations
+2. Finance
+3. Advanced TMS and WMS
+4. Procurement and Vendor Management
+5. HRIS and Ticketing
+6. Customer Portal and Loyalty
+7. Intelligence and Enterprise
+8. Full-System Hardening
+9. Release Candidate
+10. Go-Live
+
+---
+
+## Product Ownership
+
+CargoGrid is developed as a modular logistics SaaS platform under SAIKI Group.
+
+Website: `cargogrid.net`  
+Email: `service@cargogrid.net`
