@@ -79,14 +79,16 @@ begin
 end;
 $$;
 
-\echo '>> app.report_types: seven report types seeded at status=active, code-shipped catalogue (not tenant-scoped)'
+\echo '>> app.report_types: seven Commercial report types seeded at status=active, code-shipped catalogue (not tenant-scoped) -- count checked by the known Commercial code set, not a bare total, since app.report_types is shared, growing infrastructure other capabilities (e.g. OPS-183) also register into'
 do $$
 declare
   v_active_count integer;
 begin
-  select count(*) into v_active_count from app.report_types where status = 'active';
+  select count(*) into v_active_count from app.report_types
+  where status = 'active'
+    and code in ('lead_aging', 'activity_queue', 'pipeline_summary', 'quote_sla', 'margin_summary', 'win_loss_summary', 'forecast_summary');
   if v_active_count <> 7 then
-    raise exception 'assertion failed: expected 7 active report types, got %', v_active_count;
+    raise exception 'assertion failed: expected 7 active Commercial report types, got %', v_active_count;
   end if;
 
   if not exists (select 1 from app.report_types where code = 'lead_aging' and source_function = 'get_dashboard_lead_aging') then

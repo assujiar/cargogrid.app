@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
+import { resolveOperationsAccessForRequest } from "../../../../../lib/portal/resolve-operations-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listActiveReportTypes, listReportRuns, ReportQueryError } from "../../../../../server/queries/report.ts";
 import type { ReportType, ReportRun } from "../../../../../server/contracts/report/report.ts";
@@ -8,17 +8,17 @@ import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { REPORT_RUN_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 
-/** The exact seven codes COM-159 itself registered -- app.report_types is a single, shared, schema-wide catalogue (OPS-183 registers its own six codes into the identical table), so this catalogue view must filter to its own module rather than listing every active row regardless of source. */
-const COMMERCIAL_REPORT_CODES = new Set(["lead_aging", "activity_queue", "pipeline_summary", "quote_sla", "margin_summary", "win_loss_summary", "forecast_summary"]);
+/** The exact six codes OPS-183 itself registered -- app.report_types is a single, shared, schema-wide catalogue (COM-159 registers its own seven codes into the identical table), so this catalogue view must filter to its own module rather than listing every active row regardless of source. */
+const OPERATIONS_REPORT_CODES = new Set(["shipment_status_summary", "milestone_sla_summary", "exception_queue_summary", "epod_completion_summary", "cost_variance_summary", "billing_readiness_summary"]);
 
 /**
- * Commercial Reports catalogue (COM-159, CG-S7-COM-018): the code-shipped report
- * catalogue plus this tenant's own run history. Every report reuses COM-158's own
+ * Operations Reports catalogue (OPS-183, CG-S8-OPS-017): the code-shipped report
+ * catalogue plus this tenant's own run history. Every report reuses OPS-182's own
  * governed dashboard query -- see app/.../reports/run-report.ts.
  */
-export default async function CommercialReportsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
+export default async function OperationsReportsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;
-  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
   if (access.status !== "allowed") {
     notFound();
   }
@@ -30,8 +30,8 @@ export default async function CommercialReportsPage({ params }: { params: Promis
   let loadFailed = false;
   try {
     const [allReportTypes, allRuns] = await Promise.all([listActiveReportTypes(supabase), listReportRuns(supabase, access.tenant.id, 20)]);
-    reportTypes = allReportTypes.filter((type) => COMMERCIAL_REPORT_CODES.has(type.code));
-    runs = allRuns.filter((run) => COMMERCIAL_REPORT_CODES.has(run.reportTypeCode));
+    reportTypes = allReportTypes.filter((type) => OPERATIONS_REPORT_CODES.has(type.code));
+    runs = allRuns.filter((run) => OPERATIONS_REPORT_CODES.has(run.reportTypeCode));
   } catch (error) {
     if (!(error instanceof ReportQueryError)) {
       throw error;
@@ -67,7 +67,7 @@ export default async function CommercialReportsPage({ params }: { params: Promis
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {reportTypes.map((type) => (
                 <li key={type.code} className="rounded-md border border-neutral-200 p-3">
-                  <a href={`/${tenantSlug}/commercial/reports/${type.code}`} className="font-medium text-primary underline">
+                  <a href={`/${tenantSlug}/operations/reports/${type.code}`} className="font-medium text-primary underline">
                     {type.name}
                   </a>
                   <p className="mt-1 text-xs text-neutral-500">{type.description}</p>

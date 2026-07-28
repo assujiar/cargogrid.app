@@ -4749,6 +4749,40 @@ One real record-scope discovery during fixture authoring, not a migration bug: `
 
 Self-closing. `CG-S8-OPS-016` is `VERIFIED` -- **seventh (final, this session) task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-017` (Prompt 183, Operations Reports) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-121 — Operations Reports (Phase 3, Prompt 183)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-017` / `183_OPERATIONS_REPORTS_PROMPT.md` |
+| Change type | Schema (0 new tables, 6 new `app.report_types` rows, 1 new function) + service layer + UI (2 new routes) |
+| Baseline evidence | `OPS-182` `VERIFIED` (`docs/build-log/phase-03/OPS-182.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **eighth (final) capability task in that range.** Mid-checkpoint the user sent "lanjut sd prompt 188", extending standing authorization through `OPS-188`. |
+
+#### Outcome
+
+Governed Operations reporting -- six report types (shipment status, milestone SLA, exceptions, ePOD completion, cost variance, billing readiness), each reusing its identical `OPS-182` dashboard RPC as its one query engine, plus a new `OPS:Export`-gated async export entry point, mirroring the Commercial Reports (`COM-159`) precedent exactly.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728160000_create_operations_reports.sql` (6 new `app.report_types` rows naming their exact `OPS-182` `source_function`; `app.enqueue_ops_report_export`, `OPS:Export`-gated -- zero new table, zero new permission-catalogue row). Reused directly, unchanged: `app.report_types`/`app.report_runs`/`app.record_report_run` and `server/contracts/report/report.ts`, `server/queries/report.ts` (all from `COM-159`). New service layer: `server/mutations/ops-report.ts(.test.ts)`. New UI: `/[tenantSlug]/operations/reports` (catalogue), `/[tenantSlug]/operations/reports/[reportCode]` (detail/run), `run-report.ts`, `actions.ts`, `export-report-form.tsx`. Modified: `commercial/reports/page.tsx` and `commercial/reports/[reportCode]/page.tsx` (added an explicit known-code-set filter, additive-only). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1732/1732 (4 net new mutation tests; no new contract/query test files -- reused unchanged, already covered by `COM-159`'s own tests). `db:test` PASS across 68 migrations/69 db-test files (1 net new, zero regression) -- scenario groups covering the six new report-type registrations, `record_report_run` reuse and audit, `enqueue_ops_report_export` authority-gating (rep denied, exporter allowed) and unknown/retired-type rejection, real job enqueue and `report_runs` linkage, tenant-wide RLS visibility, schema-privilege defense in depth (`anon` zero `EXECUTE`), audit-trail reconciliation. One pre-existing test fixed as a direct, expected consequence of this checkpoint's own additive registration: `commercial-reports.sql`'s "seven active report types" assertion corrected to count only the seven known Commercial codes by name rather than every active row in the now-shared table. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (new: `/[tenantSlug]/operations/reports`, `/[tenantSlug]/operations/reports/[reportCode]`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses already-seeded `OPS:Export`). `git revert` of this checkpoint's commit is safe and complete: the 6 additive `app.report_types` rows and the 1 additive function have no other capability depending on them; the two Commercial Reports page filters revert safely back to their pre-this-checkpoint unfiltered behavior.
+
+#### Errors found and fixed
+
+One real cross-module regression risk found and fixed during authoring, not a defect in this checkpoint's own migration: because `app.report_types` is one shared, global table (reused directly from `COM-159`), the pre-existing, unfiltered Commercial Reports catalogue page would have started listing this checkpoint's six new codes too (and a direct-URL visit to an Operations code from the Commercial detail route would silently render an empty table, per `COM-159`'s own `runReportByCode` switch default). Fixed by adding an explicit known-code-set filter to both Commercial Reports pages and building the new Operations Reports pages with the mirror-image filter from the outset. One pre-existing db-test assertion (`commercial-reports.sql`'s "expected 7 active report types") broke as a direct, expected consequence of this checkpoint's own additive registration -- corrected to count only the seven known Commercial codes by name, a fix class this checkpoint's own migration header explicitly anticipates for future capabilities that will register further codes.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-017` is `VERIFIED` -- **eighth (final) task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Mid-checkpoint the user sent "lanjut sd prompt 188", extending standing authorization through `OPS-188` without a further confirmation round. Next eligible prompt: `CG-S8-OPS-018` (Prompt 184, Operations Transaction Lineage) -- dependency-`READY` and within the extended authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
