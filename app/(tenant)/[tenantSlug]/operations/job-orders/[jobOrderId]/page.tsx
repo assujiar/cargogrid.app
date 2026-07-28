@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "../../../../../../lib/supabase/serve
 import { getJobOrder, JobOrderQueryError } from "../../../../../../server/queries/job-order.ts";
 import { getJobProfitability, JobProfitabilityQueryError } from "../../../../../../server/queries/job-profitability.ts";
 import { getCurrentBillingReadinessEvaluation, listBillingReadinessHandoffs, BillingReadinessQueryError } from "../../../../../../server/queries/billing-readiness.ts";
+import { getTransactionLineage, TransactionLineageQueryError } from "../../../../../../server/queries/transaction-lineage.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { JOB_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
@@ -11,6 +12,7 @@ import { ConfirmJobOrderForm } from "./confirm-job-order-form.tsx";
 import { OverrideJobOrderForm } from "./override-job-order-form.tsx";
 import { JobProfitabilityPanel } from "./job-profitability-panel.tsx";
 import { BillingReadinessPanel } from "./billing-readiness-panel.tsx";
+import { TransactionLineagePanel } from "./transaction-lineage-panel.tsx";
 import {
   confirmJobOrderAction,
   overrideJobOrderFieldAction,
@@ -19,6 +21,7 @@ import {
   overrideBillingReadinessAction,
   revokeBillingReadinessOverrideAction,
   handoffBillingReadinessAction,
+  recordTransactionLineageOverrideAction,
   type JobOrderFormState,
 } from "./actions.ts";
 import type { OverridableSnapshotColumn } from "../../../../../../server/contracts/job-order/job-order.ts";
@@ -77,11 +80,25 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
     return <ErrorState description="Something went wrong loading billing readiness. Please try again." />;
   }
 
+  let transactionLineageManifest = null;
+  try {
+    transactionLineageManifest = await getTransactionLineage(supabase, { jobOrderId: jobOrder.id, actorAuthUserId: access.authUserId });
+  } catch (error) {
+    if (!(error instanceof TransactionLineageQueryError)) {
+      throw error;
+    }
+    // A record-scope denial or a not-found id is not fatal here -- the rest of the page
+    // (already fetched above under the same actor/tenant) has already proven access, so
+    // this is treated as "lineage unavailable" rather than an error page.
+    transactionLineageManifest = null;
+  }
+
   const boundCalculateProfitabilityAction = calculateJobProfitabilityAction.bind(null, tenantSlug, jobOrder.id);
   const boundEvaluateBillingReadinessAction = evaluateBillingReadinessAction.bind(null, tenantSlug, jobOrder.id);
   const boundOverrideBillingReadinessAction = overrideBillingReadinessAction.bind(null, tenantSlug, jobOrder.id, billingReadinessEvaluation?.recordVersion ?? 0);
   const boundRevokeBillingReadinessOverrideAction = revokeBillingReadinessOverrideAction.bind(null, tenantSlug, jobOrder.id, billingReadinessEvaluation?.recordVersion ?? 0);
   const boundHandoffBillingReadinessAction = handoffBillingReadinessAction.bind(null, tenantSlug, jobOrder.id, randomUUID());
+  const boundRecordTransactionLineageOverrideAction = recordTransactionLineageOverrideAction.bind(null, tenantSlug, access.tenant.id, jobOrder.id);
   const { tone, label } = JOB_ORDER_STATUS_TONE_MAP[jobOrder.status];
   const customerSnapshot = jobOrder.customerSnapshot as { customerSnapshot?: { legal_name?: string }; contactName?: string; contactEmail?: string; contactPhone?: string };
   const boundConfirmAction = confirmJobOrderAction.bind(null, tenantSlug, jobOrder.id, jobOrder.recordVersion);
@@ -181,6 +198,11 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
           revokeOverrideAction={boundRevokeBillingReadinessOverrideAction}
           handoffAction={boundHandoffBillingReadinessAction}
         />
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Transaction lineage</h2>
+        <TransactionLineagePanel manifest={transactionLineageManifest} overrideAction={boundRecordTransactionLineageOverrideAction} />
       </section>
     </div>
   );

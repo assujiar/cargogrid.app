@@ -19,7 +19,19 @@ import {
   handoffBillingReadiness,
   BillingReadinessMutationError,
 } from "../../../../../../server/mutations/billing-readiness.ts";
+import { recordTransactionLineageOverride, TransactionLineageMutationError } from "../../../../../../server/mutations/transaction-lineage.ts";
 import type { OverridableSnapshotColumn } from "../../../../../../server/contracts/job-order/job-order.ts";
+import type { TransactionLineageRelationType, TransactionLineageNodeType } from "../../../../../../server/contracts/transaction-lineage/transaction-lineage.ts";
+
+/** OPS-184: the (sourceType, targetType) pair is fixed per relation -- the form only asks for the relation, never the node types themselves. */
+const TRANSACTION_LINEAGE_RELATION_NODE_TYPES: Record<TransactionLineageRelationType, { sourceType: TransactionLineageNodeType; targetType: TransactionLineageNodeType }> = {
+  quote_to_job: { sourceType: "job_order_handoff", targetType: "job_order" },
+  job_to_shipment: { sourceType: "job_order", targetType: "shipment_order" },
+  shipment_to_epod: { sourceType: "shipment_order", targetType: "epod_capture" },
+  shipment_to_cost: { sourceType: "shipment_order", targetType: "shipment_actual_cost" },
+  job_to_profitability: { sourceType: "job_order", targetType: "job_profitability_snapshot" },
+  job_to_billing_readiness: { sourceType: "job_order", targetType: "billing_readiness_evaluation" },
+};
 
 export interface JobOrderFormState {
   readonly error: string | null;
@@ -167,6 +179,46 @@ export async function handoffBillingReadinessAction(tenantSlug: string, jobOrder
   } catch (error) {
     if (error instanceof BillingReadinessMutationError) {
       return { error: `Could not hand off billing readiness: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/job-orders/${jobOrderId}`);
+  return { error: null };
+}
+
+/** OPS-184: adds a reasoned, additional lineage mapping without deleting any prior evidence. The (sourceType, targetType) pair is derived from the chosen relation, never typed by the caller. */
+export async function recordTransactionLineageOverrideAction(tenantSlug: string, tenantId: string, jobOrderId: string, _prevState: JobOrderFormState, formData: FormData): Promise<JobOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const relationType = String(formData.get("relationType") ?? "") as TransactionLineageRelationType;
+  const nodeTypes = TRANSACTION_LINEAGE_RELATION_NODE_TYPES[relationType];
+  if (!nodeTypes) {
+    return { error: "Choose a valid relation." };
+  }
+  const sourceId = String(formData.get("sourceId") ?? "");
+  const targetId = String(formData.get("targetId") ?? "");
+  const reason = String(formData.get("reason") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await recordTransactionLineageOverride(supabase, {
+      tenantId,
+      relationType,
+      sourceType: nodeTypes.sourceType,
+      sourceId,
+      targetType: nodeTypes.targetType,
+      targetId,
+      reason,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof TransactionLineageMutationError) {
+      return { error: `Could not record this lineage correction: ${error.message}` };
     }
     throw error;
   }

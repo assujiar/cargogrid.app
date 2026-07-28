@@ -4749,6 +4749,210 @@ One real record-scope discovery during fixture authoring, not a migration bug: `
 
 Self-closing. `CG-S8-OPS-016` is `VERIFIED` -- **seventh (final, this session) task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-017` (Prompt 183, Operations Reports) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-121 — Operations Reports (Phase 3, Prompt 183)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-017` / `183_OPERATIONS_REPORTS_PROMPT.md` |
+| Change type | Schema (0 new tables, 6 new `app.report_types` rows, 1 new function) + service layer + UI (2 new routes) |
+| Baseline evidence | `OPS-182` `VERIFIED` (`docs/build-log/phase-03/OPS-182.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **eighth (final) capability task in that range.** Mid-checkpoint the user sent "lanjut sd prompt 188", extending standing authorization through `OPS-188`. |
+
+#### Outcome
+
+Governed Operations reporting -- six report types (shipment status, milestone SLA, exceptions, ePOD completion, cost variance, billing readiness), each reusing its identical `OPS-182` dashboard RPC as its one query engine, plus a new `OPS:Export`-gated async export entry point, mirroring the Commercial Reports (`COM-159`) precedent exactly.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728160000_create_operations_reports.sql` (6 new `app.report_types` rows naming their exact `OPS-182` `source_function`; `app.enqueue_ops_report_export`, `OPS:Export`-gated -- zero new table, zero new permission-catalogue row). Reused directly, unchanged: `app.report_types`/`app.report_runs`/`app.record_report_run` and `server/contracts/report/report.ts`, `server/queries/report.ts` (all from `COM-159`). New service layer: `server/mutations/ops-report.ts(.test.ts)`. New UI: `/[tenantSlug]/operations/reports` (catalogue), `/[tenantSlug]/operations/reports/[reportCode]` (detail/run), `run-report.ts`, `actions.ts`, `export-report-form.tsx`. Modified: `commercial/reports/page.tsx` and `commercial/reports/[reportCode]/page.tsx` (added an explicit known-code-set filter, additive-only). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1732/1732 (4 net new mutation tests; no new contract/query test files -- reused unchanged, already covered by `COM-159`'s own tests). `db:test` PASS across 68 migrations/69 db-test files (1 net new, zero regression) -- scenario groups covering the six new report-type registrations, `record_report_run` reuse and audit, `enqueue_ops_report_export` authority-gating (rep denied, exporter allowed) and unknown/retired-type rejection, real job enqueue and `report_runs` linkage, tenant-wide RLS visibility, schema-privilege defense in depth (`anon` zero `EXECUTE`), audit-trail reconciliation. One pre-existing test fixed as a direct, expected consequence of this checkpoint's own additive registration: `commercial-reports.sql`'s "seven active report types" assertion corrected to count only the seven known Commercial codes by name rather than every active row in the now-shared table. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (new: `/[tenantSlug]/operations/reports`, `/[tenantSlug]/operations/reports/[reportCode]`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses already-seeded `OPS:Export`). `git revert` of this checkpoint's commit is safe and complete: the 6 additive `app.report_types` rows and the 1 additive function have no other capability depending on them; the two Commercial Reports page filters revert safely back to their pre-this-checkpoint unfiltered behavior.
+
+#### Errors found and fixed
+
+One real cross-module regression risk found and fixed during authoring, not a defect in this checkpoint's own migration: because `app.report_types` is one shared, global table (reused directly from `COM-159`), the pre-existing, unfiltered Commercial Reports catalogue page would have started listing this checkpoint's six new codes too (and a direct-URL visit to an Operations code from the Commercial detail route would silently render an empty table, per `COM-159`'s own `runReportByCode` switch default). Fixed by adding an explicit known-code-set filter to both Commercial Reports pages and building the new Operations Reports pages with the mirror-image filter from the outset. One pre-existing db-test assertion (`commercial-reports.sql`'s "expected 7 active report types") broke as a direct, expected consequence of this checkpoint's own additive registration -- corrected to count only the seven known Commercial codes by name, a fix class this checkpoint's own migration header explicitly anticipates for future capabilities that will register further codes.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-017` is `VERIFIED` -- **eighth (final) task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Mid-checkpoint the user sent "lanjut sd prompt 188", extending standing authorization through `OPS-188` without a further confirmation round. Next eligible prompt: `CG-S8-OPS-018` (Prompt 184, Operations Transaction Lineage) -- dependency-`READY` and within the extended authorized range.
+
+### CHG-2026-122 — Operations Transaction Lineage (Phase 3, Prompt 184)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-018` / `184_OPERATIONS_TRANSACTION_LINEAGE_PROMPT.md` |
+| Change type | Schema (1 new table, 7 new functions, 6 new triggers on already-existing tables) + service layer + UI (0 new routes -- additive section on an existing page) |
+| Baseline evidence | `OPS-183` `VERIFIED` (`docs/build-log/phase-03/OPS-183.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **first capability task run under that extended range**, following the eighth (final) task in the original "LANJUT PROMP 176 SD PROM 183" range |
+
+#### Outcome
+
+One traceable operational transaction chain -- Commercial's accepted-quote handoff through Job Order, Shipment Order, ePOD/Actual Cost, Job Profitability, to Billing Readiness -- captured automatically at every domain transition, with a bounded permission-aware traversal, a reasoned corrective-override path, an anomaly-reconciliation diagnostic, and an idempotent brownfield backfill.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728170000_create_operations_transaction_lineage.sql` (`app.transaction_lineage_edges` table, unique on `(tenant_id, source_type, source_id, target_type, target_id, relation_type)`; `app.capture_transaction_lineage_edge` shared primitive; six `AFTER INSERT` trigger functions/triggers on `app.job_orders`/`shipment_orders`/`epod_captures`/`shipment_actual_costs`/`job_profitability_snapshots`/`billing_readiness_evaluations`; `app.get_transaction_lineage`, `app.record_transaction_lineage_override`, `app.detect_transaction_lineage_anomalies`, `app.backfill_transaction_lineage` -- zero new permission-catalogue row, reuses the already-seeded `OPS:Override`). New service layer: `server/contracts/transaction-lineage/transaction-lineage.ts(.test.ts)`, `server/queries/transaction-lineage.ts(.test.ts)`, `server/mutations/transaction-lineage.ts(.test.ts)`. New UI: `transaction-lineage-panel.tsx` on the Job Order detail page. Modified: Job Order detail `actions.ts`/`page.tsx` (one new server action + panel/query wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (15 net new: 4 contract, 6 query incl. a query-budget-timeout test, 5 mutation). `db:test` PASS across 69 migrations/70 db-test files (1 net new, zero regression) -- scenario groups covering automatic edge capture at all six domain transitions with zero manual RPC call, record-scope/authority gating on all four new functions, a real corrective consolidation mapping, anomaly detection for duplicate/orphan/cross-tenant cases (including a simulated data-loss delete), idempotent backfill re-deriving the deleted edge, RLS/schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged; no new route). `git:check-paths` PASS (disclosed known false positive -- flags this checkpoint's own brand-new migration file as `FORBIDDEN`, the same standing false positive on any new-not-edited migration file first disclosed at `COM-151`).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited (the six triggers are new schema objects added to already-existing tables, not modifications of their own creating migrations), zero new permission-catalogue row. `git revert` of this checkpoint's commit is safe and complete: the new table/functions/triggers have no other capability depending on them, and removing the Job Order detail page's new section only removes a display section.
+
+#### Errors found and fixed
+
+Two real fixes during authoring, neither a defect in the final migration: the fixture rep role was initially missing `OPS:View margin` (required by `app.calculate_job_profitability` alongside `OPS:Edit`) -- corrected before use; the first draft of the `cross_tenant_mismatch` anomaly query filtered by the edge's own (potentially wrong) stamped tenant rather than the referenced Job Order's actual tenant, which could structurally never detect the anomaly it was meant to find -- corrected to join on the Job Order's real `tenant_id`.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-018` is `VERIFIED` -- **first task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-019` (Prompt 185, Operations Integrated Verification) -- dependency-`READY` and within the extended authorized range.
+
+### CHG-2026-123 — Operations Integrated Verification (Phase 3, Prompt 185)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-019` / `185_OPERATIONS_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | Verification/hardening (0 new tables, 1 hardened function via `CREATE OR REPLACE`, 0 new permission-catalogue row) + test |
+| Baseline evidence | `OPS-184` `VERIFIED` (`docs/build-log/phase-03/OPS-184.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **second capability task run under that extended range**, following `CG-S8-OPS-018` (Prompt 184) |
+
+#### Outcome
+
+Independent cross-capability verification over all 17 `VERIFIED` Operations capabilities (`OPS-168..184`): one fixture driven through the complete critical flow (accepted quote → Job → Shipment → mode baseline → resource assignment → milestone ingestion → dispatch → document/ePOD → actual cost → profitability → public tracking → billing readiness), cross-checked against three independently-authored read paths (Operations Dashboard, Operations Reports, Transaction Lineage) built on the same data. Found and fixed one real, Critical-class record-scope gap in `OPS-184`'s own corrective-override function.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728180000_harden_operations_transaction_lineage_override.sql` (`CREATE OR REPLACE FUNCTION app.record_transaction_lineage_override` -- identical name/signature, adds an `app.can_access_record` check on whichever side(s) of the edge resolve to a real `job_order`/`shipment_order`/`job_order_handoff` row; zero new table, zero new permission-catalogue row, zero new grant needed since the function's identity is unchanged). New test: `scripts/db-tests/operations-integrated-verification.sql`. No service-layer or UI file changed. 2 new files.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (no net new -- this checkpoint adds no new service-layer file). `db:test` PASS across 70 migrations/71 db-test files (1 net new, zero regression) -- the new integrated-verification file exercises: full critical-flow cross-capability walk with milestone/dispatch/document/ePOD/cost/profitability/tracking/billing-readiness all in one fixture; cross-reconciliation of dashboard/reports/lineage read paths against the identical underlying state; end-to-end record-scope isolation across eleven cross-capability entry points in one pass (the block that caught the finding below); cross-tenant isolation; phase-wide schema-privilege defense in depth (60 functions checked for zero `anon` `EXECUTE` in a single query); audit-trail reconciliation across 11 distinct action types. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged). `git:check-paths` PASS (disclosed known false positive on the new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive-hardening only -- zero new table, zero new permission-catalogue row. `CREATE OR REPLACE FUNCTION` preserves `app.record_transaction_lineage_override`'s exact identity, so `OPS-184`'s own grants remain unchanged, no new grant/revoke needed. `git revert` of this checkpoint's commit would restore the discovered record-scope gap -- forward-fix, not rollback, is the correct recovery path for this specific commit; the new db-test file alone is safely revertible (adds no schema).
+
+#### Errors found and fixed
+
+One real, Critical-class finding: `app.record_transaction_lineage_override` (`OPS-184`) checked only tenant-wide `OPS:Override` permission, never whether the actor could access the specific Job Order/Shipment Order/handoff record named as the correction's source or target -- any actor holding `OPS:Override` anywhere in the tenant could have injected a false lineage claim about a record they otherwise have zero access to. Missed at `OPS-184`'s own authoring because that checkpoint's own db-test only ever exercised the override function with an actor who legitimately owned every record involved; caught here because this checkpoint's own end-to-end isolation block re-uses the exact same sibling-team-outsider actor across all eleven cross-capability entry points in one pass rather than testing each capability's own isolated fixture. Fixed via `CREATE OR REPLACE FUNCTION` in a new migration, never editing `OPS-184`'s own applied one.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-019` is `VERIFIED` -- **second task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-020` (Prompt 186, Operations Security and Financial Hardening) -- dependency-`READY` and within the extended authorized range.
+
+### CHG-2026-124 — Operations Security and Financial Hardening (Phase 3, Prompt 186)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-020` / `186_OPERATIONS_SECURITY_FINANCIAL_HARDENING_PROMPT.md` |
+| Change type | Security/financial hardening (0 new tables, 3 hardened functions via `CREATE OR REPLACE`, 2 new check constraints, 0 new permission-catalogue row) + test |
+| Baseline evidence | `OPS-185` `VERIFIED` (`docs/build-log/phase-03/OPS-185.md`, zero open findings) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **third capability task run under that extended range**, following `CG-S8-OPS-019` (Prompt 185) |
+
+#### Outcome
+
+A targeted security/financial audit sweep of all 18 Operations migrations found and fixed two Critical-class record-scope gaps, one High-class bounded record-scope gap, and one Medium-class financial-precision gap. Zero findings in audit-capture, money-precision-elsewhere, anon-surface, and IDOR-enumeration categories, explicitly disclosed rather than padded.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728190000_harden_operations_security_financial.sql` -- `CREATE OR REPLACE FUNCTION` on `app.prepare_job_order` (`OPS-168`, adds `can_access_record` against the source handoff), `app.create_shipment_order_from_job` (`OPS-169`, adds `can_access_record` against the source Job Order), `app.detect_transaction_lineage_anomalies` (`OPS-184`, adds `can_access_record` filtering to its two single-record orphan diagnostics only); `ALTER TABLE app.job_profitability_snapshots ADD CONSTRAINT` (two new `>= 0` checks on `revenue_amount`/`cost_amount`). New test: `scripts/db-tests/operations-security-financial-hardening.sql`. No service-layer or UI file changed. 2 new files.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (no net new). `db:test` PASS across 71 migrations/72 db-test files (1 net new, zero regression) -- one targeted root-cause test per finding: outsider denied on `app.prepare_job_order`/`app.create_shipment_order_from_job` while the owning rep succeeds; a simulated data-loss orphan visible to the owning rep and Supreme Admin but not the sibling-team outsider (identical grants incl `OPS:Override`); a direct negative-`revenue_amount`/`cost_amount` insert rejected while a genuine loss still inserts cleanly; schema-privilege defense in depth confirms grants survive `CREATE OR REPLACE FUNCTION`. `OPS-184`'s and `OPS-185`'s own db-test files re-verified against the hardened functions with zero assertion changes needed. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged). `git:check-paths` PASS (disclosed known false positive on the new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive-hardening only -- zero new table, zero new permission-catalogue row. `CREATE OR REPLACE FUNCTION` preserves each function's exact identity, so existing grants remain unchanged, no new grant/revoke needed. The two new check constraints validate existing rows by default (non-`NOT VALID`); this sandbox schema carries no pre-existing negative-amount row. `git revert` of this checkpoint's commit would restore all four discovered gaps -- forward-fix, not rollback, is the correct recovery path for this specific commit.
+
+#### Errors found and fixed
+
+Four real findings (see Outcome). One authoring correction: an initial draft applied record-scope filtering to all four `detect_transaction_lineage_anomalies` diagnostics uniformly, which broke a real, correct pre-existing assertion in `OPS-184`'s own db-test (`duplicate_target` no longer detected a genuine cross-source claim once one contributing edge's owner was null) -- corrected by bounding the fix to only the two single-record orphan diagnostics, with the design rationale disclosed directly in the migration's own header comment.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-020` is `VERIFIED` -- **third task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-021` (Prompt 187, Operations Documentation and Handoff) -- dependency-`READY` and within the extended authorized range.
+
+### CHG-2026-125 — Operations Documentation and Handoff (Phase 3, Prompt 187)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-021` / `187_OPERATIONS_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | Documentation only (0 migration, 0 schema, 0 code) |
+| Baseline evidence | `OPS-186` `VERIFIED` (`docs/build-log/phase-03/OPS-186.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **fourth capability task run under that extended range**, following `CG-S8-OPS-020` (Prompt 186) |
+
+#### Outcome
+
+Two new durable documents reconciling the entire Operations phase (`167`–`186`) into a context-independent Phase 3 → Phase 4/5/8 handoff, mirroring `COM-164`'s own Commercial Documentation and Handoff precedent one phase up.
+
+#### Scope and files
+
+New: `docs/build-log/phase-03/OPERATIONS_HANDOFF_PACKAGE.md` (verified-dependency table for all 20 Operations checkpoints, 19-migration preserved-assets table, application-code/verification-evidence/ADR reconciliation, known-issues carry-forward, environment commands, 7 residual risks, corrections section, forbidden-scope confirmation, fresh-context reconstruction rehearsal) and `docs/build-log/phase-03/OPERATIONS_DOWNSTREAM_CONTRACTS.md` (three downstream contracts in one file: Phase 4 Billing Readiness, Phase 5 Advanced TMS/WMS extension boundaries, Phase 8 Public Tracking). 2 new files, 0 modified beyond the standard runtime ledgers.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (unchanged). `db:test` PASS across 71 migrations/72 db-test files (unchanged, zero regression). `typecheck`/`lint` (0 errors, unchanged)/`docs:check` (both new documents' cross-references resolve cleanly)/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged). `git:check-paths` PASS -- genuinely 0 forbidden paths this checkpoint (no new migration file, so the standing false positive does not apply).
+
+#### Compatibility, rollout, recovery
+
+Documentation-only -- zero schema/code dependency. `git revert` of this checkpoint's commit is trivially safe and complete.
+
+#### Errors found and fixed
+
+None. Read-back of `docs/adr/README.md` §6, `docs/runtime/KNOWN_ISSUES.md`, and every Operations build log (`OPS-167`–`186`) found no stale citation, no missing evidence link, no orphaned reference.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-021` is `VERIFIED` -- **fourth task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-022` (Prompt 188, Operations Closure Verification) -- dependency-`READY`, the final task in the extended authorized range.
+
+### CHG-2026-126 — Operations Closure Verification (Phase 3, Prompt 188) — `PHASE_3_VERIFIED`
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-022` / `188_OPERATIONS_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | Independent verification only (0 migration, 0 schema, 0 code) |
+| Baseline evidence | `OPS-187` `VERIFIED` (`docs/build-log/phase-03/OPS-187.md`) |
+| Final status | `COMPLETED` -- `VERIFIED`. **`PHASE_3_VERIFIED` is set by this entry.** |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **the final capability task run under that extended range**, following `CG-S8-OPS-021` (Prompt 187) |
+
+#### Outcome
+
+Independent re-verification of the entire Operations phase (`167`–`187`) against fresh, live evidence -- not carried forward from any prior checkpoint's self-report. All 12 of Prompt 188's own required-verification items pass. **Phase 3 (Operations) is closed: `PHASE_3_VERIFIED`.**
+
+#### Scope and files
+
+New: `docs/build-log/phase-03/OPERATIONS_CLOSURE_REPORT.md` (the primary deliverable, mirroring `COMMERCIAL_CLOSURE_REPORT.md`'s exact structure). No migration, no application code. 1 new file.
+
+#### Tests and quality evidence
+
+Fresh install (`rm -rf node_modules && pnpm install --frozen-lockfile`, 1.6s, deterministic) followed by a full gate suite re-run from scratch: `pnpm run typecheck` PASS (2.8s), `pnpm run lint` PASS (0 errors, 16.6s), `pnpm run test` PASS -- `node:test` 1747/1747 (17.5s), `pnpm run db:test` PASS -- 71 migrations/72 db-test files, zero drift (24.0s), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` PASS -- 0 forbidden paths (clean worktree at verification start, no new migration file this checkpoint), `npx next build` PASS -- 56 routes (27.4s), `pnpm run test:e2e` correctly `NOT_RUN` (the same disclosed sandbox condition since `PLT-117`). No gate fabricated or skipped.
+
+#### Compatibility, rollout, recovery
+
+Verification-only -- zero schema/code dependency. `git revert` of this checkpoint's commit is trivially safe (removes only the closure report and ledger updates).
+
+#### Errors found and fixed
+
+None. Independent re-verification found no defect requiring repair -- every gate passed on the first fresh run, and every required-verification item passed against live evidence without needing a bounded fix. Every finding the Operations phase ever produced (`OPS-182`'s disclosed `org_unit_id` design boundary, `OPS-185`'s one Critical record-scope gap, `OPS-186`'s four findings) was already closed within the same checkpoint that found it.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-022` is `VERIFIED`. **`PHASE_3_VERIFIED` is set this checkpoint -- Phase 3 (Operations) is CLOSED.** This also completes this session's entire authorized range in full (the original "LANJUT PROMP 176 SD PROM 183" range, extended via "lanjut sd prompt 188" through `OPS-188`). **No further task -- Operations, Finance, Advanced TMS/WMS, or Customer Portal -- may run this session without fresh explicit user authorization**, per `OPERATIONS_CLOSURE_REPORT.md` §9.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
