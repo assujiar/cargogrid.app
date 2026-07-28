@@ -4545,6 +4545,40 @@ Two real issues, both confined to this checkpoint's own new files: (1) `app.get_
 
 Self-closing. `CG-S8-OPS-010` is `VERIFIED` -- **first task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-011` (Prompt 177, ePOD Capture and Review) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-115 — ePOD Capture and Review (Phase 3, Prompt 177)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-011` / `177_EPOD_CAPTURE_REVIEW_PROMPT.md` |
+| Change type | Schema (1 new table with a real `geography(Point,4326)` column + 7 functions) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-176` `VERIFIED` (`docs/build-log/phase-03/OPS-176.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **second capability task in that range** |
+
+#### Outcome
+
+Online-first, versioned electronic proof-of-delivery capture (receiver, signature, photo, geolocation, timestamp), review/revision, and completion -- a thin wrapper over `OPS-170`'s own already-shipped `delivered -> epod` transition, never a second parallel status machine. A dedicated structured object distinct from `OPS-176`'s own generic document checklist, composing the same Platform Document/File Engine (`PLT-128`) underneath.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728100000_create_operations_epod_capture_review.sql` (`app.epod_captures` table; `app.start_epod_capture`, `app.set_epod_evidence`, `app.submit_epod_capture`, `app.review_epod_capture`, `app.revise_epod_capture`, `app.complete_epod_capture`, `app.get_epod_capture_history` functions). New service layer: `server/contracts/epod-capture-review/epod-capture-review.ts(.test.ts)`, `server/queries/epod-capture-review.ts(.test.ts)`, `server/mutations/epod-capture-review.ts(.test.ts)`. New UI: Shipment Order detail `epod-panel.tsx`. Modified: Shipment Order detail `actions.ts`/`page.tsx` (six new server actions + panel wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1651/1651 (17 net new: 3 contract, 3 query, 11 mutation). `db:test` PASS across 62 migrations/63 db-test files (1 net new, zero regression) -- scenario groups covering start/evidence/submit/review/revise/complete lifecycle, file tenant/record-mismatch and out-of-range-GeoJSON rejection, scan-gated submission, full-history preservation across a revision, immutable-once-completed, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 52 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row (reuses `OPS:Create`/`OPS:Edit`/`OPS:View`, already seeded). `git revert` of this checkpoint's commit is safe and complete; the Shipment Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+Two real issues, both confined to this checkpoint's own new files: (1) a local `geography`-typed variable declared inside a `SECURITY DEFINER` function whose own `search_path` excluded `public` raised `type "geography" does not exist` at CHECK-constraint compile time for every function that inserts/updates `app.epod_captures` (Postgres re-validates every row-level CHECK constraint on every INSERT/UPDATE, before any short-circuit evaluation), fixed by adding `public` to every such function's own `search_path`; (2) a vendor-resource-conflict fixture bug (reusing one vendor across two delivered-shipment fixtures tripped `OPS-172`'s own `assignment_conflict` rule), fixed with a second distinct vendor.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-011` is `VERIFIED` -- **second task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-012` (Prompt 178, Actual Cost) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

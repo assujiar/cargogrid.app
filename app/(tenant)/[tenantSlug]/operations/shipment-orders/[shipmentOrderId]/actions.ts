@@ -38,6 +38,16 @@ import {
   uploadShipmentDocumentFile,
   DocumentRequirementMutationError,
 } from "../../../../../../server/mutations/document-requirement.ts";
+import {
+  startEpodCapture,
+  setEpodEvidence,
+  submitEpodCapture,
+  reviewEpodCapture,
+  reviseEpodCapture,
+  completeEpodCapture,
+  EpodCaptureReviewMutationError,
+} from "../../../../../../server/mutations/epod-capture-review.ts";
+import type { GeoJsonPoint } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
@@ -611,6 +621,237 @@ export async function reviewDocumentChecklistItemAction(
   } catch (error) {
     if (error instanceof DocumentRequirementMutationError) {
       return { error: `Could not record this review decision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: begins ePOD capture -- requires the shipment to already be delivered. */
+export async function startEpodCaptureAction(tenantSlug: string, shipmentOrderId: string, idempotencyKey: string, _prevState: ShipmentOrderFormState, _formData: FormData): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await startEpodCapture(supabase, { tenantId: access.tenant.id, shipmentOrderId, idempotencyKey, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not start ePOD capture: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/**
+ * OPS-177: uploads any provided signature/photo file metadata (through the same
+ * service-role `app.initiate_file_upload` path OPS-176 already established) and saves
+ * receiver/geolocation/captured-at evidence on the current draft/revision_requested
+ * ePOD capture version. No live storage backend exists in this sandbox -- MIME type
+ * and size are fixed placeholders, matching PLT-128's own disclosed constraint.
+ */
+export async function setEpodEvidenceAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  idempotencyKeyPrefix: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const receiverName = String(formData.get("receiverName") ?? "");
+  const receiverPosition = String(formData.get("receiverPosition") ?? "").trim();
+  const signatureFilename = String(formData.get("signatureFilename") ?? "").trim();
+  const photoFilename = String(formData.get("photoFilename") ?? "").trim();
+  const latitude = String(formData.get("latitude") ?? "").trim();
+  const longitude = String(formData.get("longitude") ?? "").trim();
+  const capturedAtLocal = String(formData.get("capturedAt") ?? "").trim();
+
+  try {
+    const serviceRole = createSupabaseServiceRoleClient();
+    let signatureFileId: string | null = null;
+    if (signatureFilename.length > 0) {
+      const file = await uploadShipmentDocumentFile(serviceRole, {
+        tenantId: access.tenant.id,
+        shipmentOrderId,
+        documentTypeCode: "epod",
+        originalFilename: signatureFilename,
+        mimeType: "image/png",
+        sizeBytes: 20480,
+        idempotencyKey: `${idempotencyKeyPrefix}-sig`,
+        actorAuthUserId: access.authUserId,
+        actorLabel: access.authUserId,
+      });
+      signatureFileId = file.id;
+    }
+    let photoFileIds: string[] = [];
+    if (photoFilename.length > 0) {
+      const file = await uploadShipmentDocumentFile(serviceRole, {
+        tenantId: access.tenant.id,
+        shipmentOrderId,
+        documentTypeCode: "epod",
+        originalFilename: photoFilename,
+        mimeType: "image/jpeg",
+        sizeBytes: 102400,
+        idempotencyKey: `${idempotencyKeyPrefix}-photo`,
+        actorAuthUserId: access.authUserId,
+        actorLabel: access.authUserId,
+      });
+      photoFileIds = [file.id];
+    }
+
+    const deliveryGeojson: GeoJsonPoint | null =
+      latitude.length > 0 && longitude.length > 0 ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] } : null;
+
+    const supabase = await createSupabaseServerClient();
+    await setEpodEvidence(supabase, {
+      captureId,
+      receiverName: receiverName.trim().length === 0 ? null : receiverName,
+      receiverPosition: receiverPosition.length === 0 ? null : receiverPosition,
+      signatureFileId,
+      photoFileIds,
+      deliveryGeojson,
+      capturedAt: capturedAtLocal.length === 0 ? null : new Date(capturedAtLocal).toISOString(),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not save this ePOD evidence: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: draft/revision_requested -> submitted. Requires a receiver name, at least one evidence file, and every referenced file to have already scanned clean. */
+export async function submitEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await submitEpodCapture(supabase, { captureId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not submit this ePOD capture: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: submitted -> approved | revision_requested. */
+export async function reviewEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const decision = String(formData.get("decision") ?? "") as "approved" | "revision_requested";
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reviewEpodCapture(supabase, { captureId, decision, notes: notes.length === 0 ? null : notes, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not record this ePOD review decision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: revision_requested -> a brand-new draft version; the prior rejected version is preserved unmutated. */
+export async function reviseEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  previousCaptureId: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reviseEpodCapture(supabase, { previousCaptureId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not start a revision: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** OPS-177: approved -> completed; also transitions the shipment delivered -> epod through OPS-170's own existing transition command. */
+export async function completeEpodCaptureAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  captureId: string,
+  expectedCaptureVersion: number,
+  shipmentExpectedVersion: number,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await completeEpodCapture(supabase, {
+      captureId,
+      expectedCaptureVersion,
+      shipmentExpectedVersion,
+      idempotencyKey,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not complete this ePOD capture: ${error.message}` };
     }
     throw error;
   }
