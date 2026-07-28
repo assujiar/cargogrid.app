@@ -4953,6 +4953,40 @@ None. Independent re-verification found no defect requiring repair -- every gate
 
 Self-closing. `CG-S8-OPS-022` is `VERIFIED`. **`PHASE_3_VERIFIED` is set this checkpoint -- Phase 3 (Operations) is CLOSED.** This also completes this session's entire authorized range in full (the original "LANJUT PROMP 176 SD PROM 183" range, extended via "lanjut sd prompt 188" through `OPS-188`). **No further task -- Operations, Finance, Advanced TMS/WMS, or Customer Portal -- may run this session without fresh explicit user authorization**, per `OPERATIONS_CLOSURE_REPORT.md` §9.
 
+### CHG-2026-127 — Finance WBS and Runtime Kickoff (Phase 4, Prompt 190)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-001` / `190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Change type | Planning/index only (0 migration, 0 schema, 0 Finance-domain code) |
+| Baseline evidence | `PHASE_3_VERIFIED` (`docs/build-log/phase-03/OPERATIONS_CLOSURE_REPORT.md`) |
+| Final status | `COMPLETED` -- `VERIFIED`. **`PHASE_4_IN_PROGRESS` is set by this entry.** |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190, 191, 192, 193, and 194 in that exact order, one commit each, pushed after each commit |
+
+#### Outcome
+
+Instantiated the repository-specific Phase 4 hierarchy (`Phase 4 -> Workstream -> Epic -> Capability -> Feature slice -> Atomic task`), dependency graph, atomic task ledger, and execution index for all 28 rows (`190`-`218`). Only `191`-`194` are instantiated with exact repository paths and marked `READY`; `195`-`218` are dependency-mapped by reference but remain `NOT_STARTED`, not authorized this session. Entry gate independently re-verified (`RUNTIME_DISCOVERY_VERIFIED`/`RUNTIME_ARCHITECTURE_VERIFIED`/`PHASE_0_VERIFIED`/`PHASE_1_VERIFIED`/`PHASE_2_VERIFIED`/`PHASE_3_VERIFIED` all current).
+
+#### Scope and files
+
+New: `docs/build-log/phase-04/00_FINANCE_WBS.md`, `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md`. Modified: `scripts/docs/check-doc-links.ts` (added the two new kickoff documents to `PLANNING_DOCUMENT_EXCLUSIONS`, the same forward-referencing-kickoff-document exclusion every prior phase's own kickoff pair required). Runtime ledgers updated: `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `CARGOGRID_CONTEXT.md`, this file. No migration, no application/domain code. 3 new/changed files outside `docs/build-log/phase-04/` plus 3 runtime-ledger updates.
+
+#### Tests and quality evidence
+
+Baseline gates re-run fresh before any Finance file was written, then re-confirmed after this checkpoint's own commit: `pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1747/1747 (one transient pre-commit-state failure disclosed and cleared, see `TASK_LEDGER.md` `CG-S9-FIN-001`), `pnpm run db:test` PASS -- 71 migrations/72 db-test files (unchanged), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 56 routes (unchanged). No gate fabricated or skipped.
+
+#### Compatibility, rollout, recovery
+
+Planning-only -- zero schema/code dependency. `git revert` of this checkpoint's commit is trivially safe (removes only the WBS/execution-index documents, the doc-checker exclusion, and ledger updates).
+
+#### Errors found and fixed
+
+None requiring repair. One disclosed, transient, pre-commit-state test artifact (`checkWorktreeCollision`'s "branch has commits ahead of origin/main" assertion, expected to fail on a freshly checked-out branch with zero own commits and confirmed to clear once this checkpoint's own commit landed) -- not a defect in any capability, a property of this session's own starting git state.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-001` is `VERIFIED`. **`PHASE_4_IN_PROGRESS` is set this checkpoint.** `CG-S9-FIN-002` (Prompt 191, Finance Configuration) is `READY` and proceeds next, within this session's explicit authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
