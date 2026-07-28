@@ -4715,6 +4715,40 @@ Several fixture-authoring issues, none in the migration's own logic once correct
 
 Self-closing. `CG-S8-OPS-015` is `VERIFIED` -- **sixth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-016` (Prompt 182, Operations Dashboard) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-120 — Operations Dashboard (Phase 3, Prompt 182)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-016` / `182_OPERATIONS_DASHBOARD_PROMPT.md` |
+| Change type | Schema (0 new tables + 6 read-only functions) + service layer + UI (1 new route) |
+| Baseline evidence | `OPS-181` `VERIFIED` (`docs/build-log/phase-03/OPS-181.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **seventh (final, this session) capability task in that range** |
+
+#### Outcome
+
+A role-specific live Operations dashboard -- shipment status, milestone SLA, exceptions, ePOD completion, cost variance and billing readiness -- each sourced from its own read-only, record-scope-checked RPC, mirroring the Commercial Dashboard's (`COM-158`) own precedent exactly.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728150000_create_operations_dashboard.sql` (`app.get_ops_dashboard_shipment_status`, `app.get_ops_dashboard_milestone_sla`, `app.get_ops_dashboard_exception_queue`, `app.get_ops_dashboard_epod_completion`, `app.get_ops_dashboard_cost_variance`, `app.get_ops_dashboard_billing_readiness` -- zero new tables, zero new permission-catalogue row). New service layer: `server/contracts/ops-dashboard/ops-dashboard.ts(.test.ts)`, `server/queries/ops-dashboard.ts(.test.ts)`. New UI: `/[tenantSlug]/operations/dashboard` (`page.tsx` + `loading.tsx`). 1 migration, 6 new files. No prior file modified.
+
+#### Tests and quality evidence
+
+`node:test` 1728/1728 (16 net new: 6 contract, 10 query incl. a query-budget-timeout test). `db:test` PASS across 67 migrations/68 db-test files (1 net new, zero regression) -- scenario groups covering per-bucket count correctness across all 6 functions, record-scope/cross-tenant isolation (a sibling-team outsider sees zero rows on every function despite full grants), cost-variance masking via a realistic role-downgrade scenario, schema-privilege defense in depth. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 54 routes (new: `/[tenantSlug]/operations/dashboard`). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero prior file modified. `git revert` of this checkpoint's commit is safe and complete -- every new file is newly added.
+
+#### Errors found and fixed
+
+One real record-scope discovery during fixture authoring, not a migration bug: `app.create_shipment_order_from_job` (`OPS-169`) never stamps `org_unit_id` on the Shipment Order it creates, so a same-team, non-owner actor can never see it via the shared-org-unit branch of `app.can_access_record` -- only direct ownership or the Supreme Admin bypass grants access. The db-test's cost-variance masking scenario was corrected to downgrade rep's own role (a new role version omitting `OPS:View cost`, published after every fixture row already existed) rather than rely on a separate never-owning "restricted" actor. Also fixed an accidental tenant-slug/email collision with `COM-158`'s own `commercial-dashboard.sql` fixture (`acmedash` renamed to `acmeopsdash`).
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-016` is `VERIFIED` -- **seventh (final, this session) task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-017` (Prompt 183, Operations Reports) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
