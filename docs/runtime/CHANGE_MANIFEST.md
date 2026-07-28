@@ -4783,6 +4783,40 @@ One real cross-module regression risk found and fixed during authoring, not a de
 
 Self-closing. `CG-S8-OPS-017` is `VERIFIED` -- **eighth (final) task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Mid-checkpoint the user sent "lanjut sd prompt 188", extending standing authorization through `OPS-188` without a further confirmation round. Next eligible prompt: `CG-S8-OPS-018` (Prompt 184, Operations Transaction Lineage) -- dependency-`READY` and within the extended authorized range.
 
+### CHG-2026-122 — Operations Transaction Lineage (Phase 3, Prompt 184)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-018` / `184_OPERATIONS_TRANSACTION_LINEAGE_PROMPT.md` |
+| Change type | Schema (1 new table, 7 new functions, 6 new triggers on already-existing tables) + service layer + UI (0 new routes -- additive section on an existing page) |
+| Baseline evidence | `OPS-183` `VERIFIED` (`docs/build-log/phase-03/OPS-183.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **first capability task run under that extended range**, following the eighth (final) task in the original "LANJUT PROMP 176 SD PROM 183" range |
+
+#### Outcome
+
+One traceable operational transaction chain -- Commercial's accepted-quote handoff through Job Order, Shipment Order, ePOD/Actual Cost, Job Profitability, to Billing Readiness -- captured automatically at every domain transition, with a bounded permission-aware traversal, a reasoned corrective-override path, an anomaly-reconciliation diagnostic, and an idempotent brownfield backfill.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728170000_create_operations_transaction_lineage.sql` (`app.transaction_lineage_edges` table, unique on `(tenant_id, source_type, source_id, target_type, target_id, relation_type)`; `app.capture_transaction_lineage_edge` shared primitive; six `AFTER INSERT` trigger functions/triggers on `app.job_orders`/`shipment_orders`/`epod_captures`/`shipment_actual_costs`/`job_profitability_snapshots`/`billing_readiness_evaluations`; `app.get_transaction_lineage`, `app.record_transaction_lineage_override`, `app.detect_transaction_lineage_anomalies`, `app.backfill_transaction_lineage` -- zero new permission-catalogue row, reuses the already-seeded `OPS:Override`). New service layer: `server/contracts/transaction-lineage/transaction-lineage.ts(.test.ts)`, `server/queries/transaction-lineage.ts(.test.ts)`, `server/mutations/transaction-lineage.ts(.test.ts)`. New UI: `transaction-lineage-panel.tsx` on the Job Order detail page. Modified: Job Order detail `actions.ts`/`page.tsx` (one new server action + panel/query wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (15 net new: 4 contract, 6 query incl. a query-budget-timeout test, 5 mutation). `db:test` PASS across 69 migrations/70 db-test files (1 net new, zero regression) -- scenario groups covering automatic edge capture at all six domain transitions with zero manual RPC call, record-scope/authority gating on all four new functions, a real corrective consolidation mapping, anomaly detection for duplicate/orphan/cross-tenant cases (including a simulated data-loss delete), idempotent backfill re-deriving the deleted edge, RLS/schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged; no new route). `git:check-paths` PASS (disclosed known false positive -- flags this checkpoint's own brand-new migration file as `FORBIDDEN`, the same standing false positive on any new-not-edited migration file first disclosed at `COM-151`).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited (the six triggers are new schema objects added to already-existing tables, not modifications of their own creating migrations), zero new permission-catalogue row. `git revert` of this checkpoint's commit is safe and complete: the new table/functions/triggers have no other capability depending on them, and removing the Job Order detail page's new section only removes a display section.
+
+#### Errors found and fixed
+
+Two real fixes during authoring, neither a defect in the final migration: the fixture rep role was initially missing `OPS:View margin` (required by `app.calculate_job_profitability` alongside `OPS:Edit`) -- corrected before use; the first draft of the `cross_tenant_mismatch` anomaly query filtered by the edge's own (potentially wrong) stamped tenant rather than the referenced Job Order's actual tenant, which could structurally never detect the anomaly it was meant to find -- corrected to join on the Job Order's real `tenant_id`.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-018` is `VERIFIED` -- **first task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-019` (Prompt 185, Operations Integrated Verification) -- dependency-`READY` and within the extended authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

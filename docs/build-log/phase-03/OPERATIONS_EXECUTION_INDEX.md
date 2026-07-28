@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S8-OPS-001` (`CG-AABPP-OPS-167` v0.9.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/08-phase-03-operations/167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-183` (Operations Reports, `VERIFIED`); this document's own row/tally table is updated at every checkpoint. This session's authorized range was `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"); mid-checkpoint the user extended it to `OPS-188` ("lanjut sd prompt 188") — the current authorized range is now `OPS-176`–`188`.
+**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-184` (Operations Transaction Lineage, `VERIFIED`); this document's own row/tally table is updated at every checkpoint. This session's authorized range was `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"); mid-checkpoint the user extended it to `OPS-188` ("lanjut sd prompt 188") — the current authorized range is now `OPS-176`–`188`.
 
 ## 0. Checkpoint
 
@@ -38,9 +38,10 @@
 | `015` | `181` Billing readiness | Job Completion / Finance Handoff | `VERIFIED` | `OPS-168..180` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-181.md` | Runtime build agent | `CG-S8-OPS-016` |
 | `016` | `182` Operations dashboard | Operations Analytics / Control Tower Insight | `VERIFIED` | `OPS-168..181` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-182.md` | Runtime build agent | `CG-S8-OPS-017` |
 | `017` | `183` Operations reports | Operations Analytics / Governed Operational Reporting | `VERIFIED` | `OPS-168..182` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-183.md` | Runtime build agent | `CG-S8-OPS-018` |
-| `018`–`022` | `184`–`188` Transaction lineage, integrated verification, hardening, documentation, closure | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-183` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | `184`–`188` in this session's extended authorized range ("lanjut sd prompt 188") |
+| `018` | `184` Transaction lineage | Lineage and Completion / Quote-to-Billing Evidence | `VERIFIED` | `OPS-168..183` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-184.md` | Runtime build agent | `CG-S8-OPS-019` |
+| `019`–`022` | `185`–`188` Integrated verification, hardening, documentation, closure | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-184` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | `185`–`188` in this session's extended authorized range ("lanjut sd prompt 188") |
 
-**Tally:** of the 22 rows in this index (`167`–`188`), **17 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost, Basic Job Profitability, Basic Public Customer Tracking, Billing Readiness, Operations Dashboard, Operations Reports), and **5 are `NOT_STARTED`** (`184`–`188`; all dependency-`READY` in sequence and authorized this session per "lanjut sd prompt 188").
+**Tally:** of the 22 rows in this index (`167`–`188`), **18 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost, Basic Job Profitability, Basic Public Customer Tracking, Billing Readiness, Operations Dashboard, Operations Reports, Operations Transaction Lineage), and **4 are `NOT_STARTED`** (`185`–`188`; all dependency-`READY` in sequence and authorized this session per "lanjut sd prompt 188").
 
 ## 2. Collision inspection
 
