@@ -4681,6 +4681,40 @@ One architecturally significant correction: `app.lookup_public_shipment_tracking
 
 Self-closing. `CG-S8-OPS-014` is `VERIFIED` -- **fifth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-015` (Prompt 181, Billing Readiness) -- dependency-`READY` and within this session's authorized range.
 
+### CHG-2026-119 — Billing Readiness (Phase 3, Prompt 181)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-015` / `181_BILLING_READINESS_PROMPT.md` |
+| Change type | Schema (2 new tables incl. one generated column + 4 functions) + service layer + UI (1 existing route extended, no new route) |
+| Baseline evidence | `OPS-180` `VERIFIED` (`docs/build-log/phase-03/OPS-180.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user message "LANJUT PROMP 176 SD PROM 183" -- **sixth capability task in that range** |
+
+#### Outcome
+
+A versioned, deterministic, explainable billing-readiness evaluation per Job Order -- exact blockers when not ready, a bounded authorized-override path, and one idempotent Finance-handoff record. Evidence status only, never an invoice, accounts receivable (AR), general ledger (GL) entry, or journal.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728140000_create_operations_billing_readiness.sql` (`app.billing_readiness_evaluations` table with a generated `effective_status` column, `app.billing_readiness_handoffs` table; `app.evaluate_billing_readiness`, `app.override_billing_readiness`, `app.revoke_billing_readiness_override`, `app.handoff_billing_readiness` functions; zero new permission-catalogue row -- reuses `OPS:Edit`/`OPS:Override`). New service layer: `server/contracts/billing-readiness/billing-readiness.ts(.test.ts)`, `server/queries/billing-readiness.ts(.test.ts)`, `server/mutations/billing-readiness.ts(.test.ts)`. New UI: Job Order detail `billing-readiness-panel.tsx`. Modified: Job Order detail `actions.ts`/`page.tsx` (four new server actions + panel/query wiring). 1 migration, 7 new files, 2 modified files.
+
+#### Tests and quality evidence
+
+`node:test` 1712/1712 (15 net new: 3 contract, 5 query, 7 mutation). `db:test` PASS across 66 migrations/67 db-test files (1 net new, zero regression) -- scenario groups covering authority-gating, per-shipment blocker isolation, override/revoke boundedness and lineage, idempotent Finance handoff, evidence-object correctness, record-scope/cross-tenant isolation, schema-privilege defense in depth, audit-trail reconciliation. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 53 routes (no new route). `git:check-paths` PASS (0 forbidden paths touched).
+
+#### Compatibility, rollout, recovery
+
+Additive only -- zero prior migration file edited, zero new permission-catalogue row. `git revert` of this checkpoint's commit is safe and complete; the Job Order detail `actions.ts`/`page.tsx` change is additive only (no prior behavior removed).
+
+#### Errors found and fixed
+
+Several fixture-authoring issues, none in the migration's own logic once corrected: a `RAISE EXCEPTION` format-string placeholder with no argument (`billing_readiness_override_not_needed`); a missing `tenant_admin` membership grant needed before `app.create_config_draft`; the fixture rep role initially lacking `COM:View cost`/`OPS:View cost`; the same vendor master record initially assigned to two Shipment Orders concurrently (`OPS-172`'s own `assignment_conflict` rule, the same fix class as `OPS-177`/`178`/`179`); `app.submit_epod_capture`'s own "at least one evidence file" requirement needing a real scanned-clean signature file per shipment; and the `pod`/`epod` document types/configs needing registration in the fresh fixture tenant before checklist pinning.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-015` is `VERIFIED` -- **sixth task in the "LANJUT PROMP 176 SD PROM 183" authorized range.** Next eligible prompt: `CG-S8-OPS-016` (Prompt 182, Operations Dashboard) -- dependency-`READY` and within this session's authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

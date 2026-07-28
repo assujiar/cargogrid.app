@@ -3,14 +3,26 @@ import { resolveOperationsAccessForRequest } from "../../../../../../lib/portal/
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getJobOrder, JobOrderQueryError } from "../../../../../../server/queries/job-order.ts";
 import { getJobProfitability, JobProfitabilityQueryError } from "../../../../../../server/queries/job-profitability.ts";
+import { getCurrentBillingReadinessEvaluation, listBillingReadinessHandoffs, BillingReadinessQueryError } from "../../../../../../server/queries/billing-readiness.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { JOB_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { ConfirmJobOrderForm } from "./confirm-job-order-form.tsx";
 import { OverrideJobOrderForm } from "./override-job-order-form.tsx";
 import { JobProfitabilityPanel } from "./job-profitability-panel.tsx";
-import { confirmJobOrderAction, overrideJobOrderFieldAction, calculateJobProfitabilityAction, type JobOrderFormState } from "./actions.ts";
+import { BillingReadinessPanel } from "./billing-readiness-panel.tsx";
+import {
+  confirmJobOrderAction,
+  overrideJobOrderFieldAction,
+  calculateJobProfitabilityAction,
+  evaluateBillingReadinessAction,
+  overrideBillingReadinessAction,
+  revokeBillingReadinessOverrideAction,
+  handoffBillingReadinessAction,
+  type JobOrderFormState,
+} from "./actions.ts";
 import type { OverridableSnapshotColumn } from "../../../../../../server/contracts/job-order/job-order.ts";
+import { randomUUID } from "node:crypto";
 
 /**
  * Job Order detail (OPS-168, CG-S8-OPS-002, Prompt 168 §15) -- every inherited field
@@ -53,7 +65,23 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
     return <ErrorState description="Something went wrong loading job profitability. Please try again." />;
   }
 
+  let billingReadinessEvaluation;
+  let billingReadinessHandoffs;
+  try {
+    billingReadinessEvaluation = await getCurrentBillingReadinessEvaluation(supabase, jobOrder.id);
+    billingReadinessHandoffs = await listBillingReadinessHandoffs(supabase, jobOrder.id);
+  } catch (error) {
+    if (!(error instanceof BillingReadinessQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading billing readiness. Please try again." />;
+  }
+
   const boundCalculateProfitabilityAction = calculateJobProfitabilityAction.bind(null, tenantSlug, jobOrder.id);
+  const boundEvaluateBillingReadinessAction = evaluateBillingReadinessAction.bind(null, tenantSlug, jobOrder.id);
+  const boundOverrideBillingReadinessAction = overrideBillingReadinessAction.bind(null, tenantSlug, jobOrder.id, billingReadinessEvaluation?.recordVersion ?? 0);
+  const boundRevokeBillingReadinessOverrideAction = revokeBillingReadinessOverrideAction.bind(null, tenantSlug, jobOrder.id, billingReadinessEvaluation?.recordVersion ?? 0);
+  const boundHandoffBillingReadinessAction = handoffBillingReadinessAction.bind(null, tenantSlug, jobOrder.id, randomUUID());
   const { tone, label } = JOB_ORDER_STATUS_TONE_MAP[jobOrder.status];
   const customerSnapshot = jobOrder.customerSnapshot as { customerSnapshot?: { legal_name?: string }; contactName?: string; contactEmail?: string; contactPhone?: string };
   const boundConfirmAction = confirmJobOrderAction.bind(null, tenantSlug, jobOrder.id, jobOrder.recordVersion);
@@ -141,6 +169,18 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Profitability</h2>
         <JobProfitabilityPanel snapshot={profitabilitySnapshot} action={boundCalculateProfitabilityAction} />
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Billing readiness</h2>
+        <BillingReadinessPanel
+          evaluation={billingReadinessEvaluation}
+          handoffs={billingReadinessHandoffs}
+          evaluateAction={boundEvaluateBillingReadinessAction}
+          overrideAction={boundOverrideBillingReadinessAction}
+          revokeOverrideAction={boundRevokeBillingReadinessOverrideAction}
+          handoffAction={boundHandoffBillingReadinessAction}
+        />
       </section>
     </div>
   );
