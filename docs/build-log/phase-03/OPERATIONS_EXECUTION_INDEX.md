@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S8-OPS-001` (`CG-AABPP-OPS-167` v0.9.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/08-phase-03-operations/167_OPERATIONS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-186` (Operations Security and Financial Hardening, `VERIFIED`); this document's own row/tally table is updated at every checkpoint. This session's authorized range was `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"); mid-checkpoint the user extended it to `OPS-188` ("lanjut sd prompt 188") — the current authorized range is now `OPS-176`–`188`.
+**Status:** `PHASE_3_IN_PROGRESS` — updated at `OPS-187` (Operations Documentation and Handoff, `VERIFIED`); this document's own row/tally table is updated at every checkpoint. This session's authorized range was `OPS-176`–`183` ("LANJUT PROMP 176 SD PROM 183"); mid-checkpoint the user extended it to `OPS-188` ("lanjut sd prompt 188") — the current authorized range is now `OPS-176`–`188`.
 
 ## 0. Checkpoint
 
@@ -41,9 +41,10 @@
 | `018` | `184` Transaction lineage | Lineage and Completion / Quote-to-Billing Evidence | `VERIFIED` | `OPS-168..183` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-184.md` | Runtime build agent | `CG-S8-OPS-019` |
 | `019` | `185` Integrated verification | Operations Completion / Integrated Verification | `VERIFIED` | `OPS-168..184` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-185.md` | Runtime build agent | `CG-S8-OPS-020` |
 | `020` | `186` Security and financial hardening | Operations Completion / Risk Hardening | `VERIFIED` | `OPS-185` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-186.md` | Runtime build agent | `CG-S8-OPS-021` |
-| `021`–`022` | `187`–`188` Documentation, closure | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-186` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | `187`–`188` in this session's extended authorized range ("lanjut sd prompt 188") |
+| `021` | `187` Documentation and handoff | Operations Completion / Knowledge and Handoff | `VERIFIED` | `OPS-186` (`VERIFIED`) | `claude/lanjut-promp-176-sd-prom-183-oknugn`@(this checkpoint's commit) | `docs/build-log/phase-03/OPS-187.md` | Runtime build agent | `CG-S8-OPS-022` |
+| `022` | `188` Closure verification | (per `166_*.md` §4) | `NOT_STARTED` | `OPS-187` (`VERIFIED`) | — | `docs/build-log/phase-03/OPS-NNN.md` | Runtime build agent | Final task in this session's extended authorized range ("lanjut sd prompt 188") |
 
-**Tally:** of the 22 rows in this index (`167`–`188`), **20 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost, Basic Job Profitability, Basic Public Customer Tracking, Billing Readiness, Operations Dashboard, Operations Reports, Operations Transaction Lineage, Operations Integrated Verification, Operations Security and Financial Hardening), and **2 are `NOT_STARTED`** (`187`–`188`; all dependency-`READY` in sequence and authorized this session per "lanjut sd prompt 188").
+**Tally:** of the 22 rows in this index (`167`–`188`), **21 are `VERIFIED`** (kickoff, Job Order, Shipment Order, Shipment Lifecycle, Land/Air/Sea Baseline, Resource Assignment, Milestone Management, Exception and Escalation, Basic Dispatch, Document Requirement, ePOD Capture and Review, Actual Cost, Basic Job Profitability, Basic Public Customer Tracking, Billing Readiness, Operations Dashboard, Operations Reports, Operations Transaction Lineage, Operations Integrated Verification, Operations Security and Financial Hardening, Operations Documentation and Handoff), and **1 is `NOT_STARTED`** (`188`; dependency-`READY` and authorized this session per "lanjut sd prompt 188" — the final task in the extended range).
 
 ## 2. Collision inspection
 

@@ -4885,6 +4885,40 @@ Four real findings (see Outcome). One authoring correction: an initial draft app
 
 Self-closing. `CG-S8-OPS-020` is `VERIFIED` -- **third task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-021` (Prompt 187, Operations Documentation and Handoff) -- dependency-`READY` and within the extended authorized range.
 
+### CHG-2026-125 — Operations Documentation and Handoff (Phase 3, Prompt 187)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-021` / `187_OPERATIONS_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | Documentation only (0 migration, 0 schema, 0 code) |
+| Baseline evidence | `OPS-186` `VERIFIED` (`docs/build-log/phase-03/OPS-186.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **fourth capability task run under that extended range**, following `CG-S8-OPS-020` (Prompt 186) |
+
+#### Outcome
+
+Two new durable documents reconciling the entire Operations phase (`167`–`186`) into a context-independent Phase 3 → Phase 4/5/8 handoff, mirroring `COM-164`'s own Commercial Documentation and Handoff precedent one phase up.
+
+#### Scope and files
+
+New: `docs/build-log/phase-03/OPERATIONS_HANDOFF_PACKAGE.md` (verified-dependency table for all 20 Operations checkpoints, 19-migration preserved-assets table, application-code/verification-evidence/ADR reconciliation, known-issues carry-forward, environment commands, 7 residual risks, corrections section, forbidden-scope confirmation, fresh-context reconstruction rehearsal) and `docs/build-log/phase-03/OPERATIONS_DOWNSTREAM_CONTRACTS.md` (three downstream contracts in one file: Phase 4 Billing Readiness, Phase 5 Advanced TMS/WMS extension boundaries, Phase 8 Public Tracking). 2 new files, 0 modified beyond the standard runtime ledgers.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (unchanged). `db:test` PASS across 71 migrations/72 db-test files (unchanged, zero regression). `typecheck`/`lint` (0 errors, unchanged)/`docs:check` (both new documents' cross-references resolve cleanly)/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged). `git:check-paths` PASS -- genuinely 0 forbidden paths this checkpoint (no new migration file, so the standing false positive does not apply).
+
+#### Compatibility, rollout, recovery
+
+Documentation-only -- zero schema/code dependency. `git revert` of this checkpoint's commit is trivially safe and complete.
+
+#### Errors found and fixed
+
+None. Read-back of `docs/adr/README.md` §6, `docs/runtime/KNOWN_ISSUES.md`, and every Operations build log (`OPS-167`–`186`) found no stale citation, no missing evidence link, no orphaned reference.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-021` is `VERIFIED` -- **fourth task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-022` (Prompt 188, Operations Closure Verification) -- dependency-`READY`, the final task in the extended authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
