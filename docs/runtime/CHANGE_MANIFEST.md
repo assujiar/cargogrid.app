@@ -4851,6 +4851,40 @@ One real, Critical-class finding: `app.record_transaction_lineage_override` (`OP
 
 Self-closing. `CG-S8-OPS-019` is `VERIFIED` -- **second task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-020` (Prompt 186, Operations Security and Financial Hardening) -- dependency-`READY` and within the extended authorized range.
 
+### CHG-2026-124 — Operations Security and Financial Hardening (Phase 3, Prompt 186)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S8-OPS-020` / `186_OPERATIONS_SECURITY_FINANCIAL_HARDENING_PROMPT.md` |
+| Change type | Security/financial hardening (0 new tables, 3 hardened functions via `CREATE OR REPLACE`, 2 new check constraints, 0 new permission-catalogue row) + test |
+| Baseline evidence | `OPS-185` `VERIFIED` (`docs/build-log/phase-03/OPS-185.md`, zero open findings) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | The "lanjut sd prompt 188" extension the user granted mid-checkpoint during `OPS-183` -- **third capability task run under that extended range**, following `CG-S8-OPS-019` (Prompt 185) |
+
+#### Outcome
+
+A targeted security/financial audit sweep of all 18 Operations migrations found and fixed two Critical-class record-scope gaps, one High-class bounded record-scope gap, and one Medium-class financial-precision gap. Zero findings in audit-capture, money-precision-elsewhere, anon-surface, and IDOR-enumeration categories, explicitly disclosed rather than padded.
+
+#### Scope and files
+
+New migration: `supabase/migrations/20260728190000_harden_operations_security_financial.sql` -- `CREATE OR REPLACE FUNCTION` on `app.prepare_job_order` (`OPS-168`, adds `can_access_record` against the source handoff), `app.create_shipment_order_from_job` (`OPS-169`, adds `can_access_record` against the source Job Order), `app.detect_transaction_lineage_anomalies` (`OPS-184`, adds `can_access_record` filtering to its two single-record orphan diagnostics only); `ALTER TABLE app.job_profitability_snapshots ADD CONSTRAINT` (two new `>= 0` checks on `revenue_amount`/`cost_amount`). New test: `scripts/db-tests/operations-security-financial-hardening.sql`. No service-layer or UI file changed. 2 new files.
+
+#### Tests and quality evidence
+
+`node:test` 1747/1747 (no net new). `db:test` PASS across 71 migrations/72 db-test files (1 net new, zero regression) -- one targeted root-cause test per finding: outsider denied on `app.prepare_job_order`/`app.create_shipment_order_from_job` while the owning rep succeeds; a simulated data-loss orphan visible to the owning rep and Supreme Admin but not the sibling-team outsider (identical grants incl `OPS:Override`); a direct negative-`revenue_amount`/`cost_amount` insert rejected while a genuine loss still inserts cleanly; schema-privilege defense in depth confirms grants survive `CREATE OR REPLACE FUNCTION`. `OPS-184`'s and `OPS-185`'s own db-test files re-verified against the hardened functions with zero assertion changes needed. `typecheck`/`lint` (0 errors)/`docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS. `npx next build` PASS -- 56 routes (unchanged). `git:check-paths` PASS (disclosed known false positive on the new migration file).
+
+#### Compatibility, rollout, recovery
+
+Additive-hardening only -- zero new table, zero new permission-catalogue row. `CREATE OR REPLACE FUNCTION` preserves each function's exact identity, so existing grants remain unchanged, no new grant/revoke needed. The two new check constraints validate existing rows by default (non-`NOT VALID`); this sandbox schema carries no pre-existing negative-amount row. `git revert` of this checkpoint's commit would restore all four discovered gaps -- forward-fix, not rollback, is the correct recovery path for this specific commit.
+
+#### Errors found and fixed
+
+Four real findings (see Outcome). One authoring correction: an initial draft applied record-scope filtering to all four `detect_transaction_lineage_anomalies` diagnostics uniformly, which broke a real, correct pre-existing assertion in `OPS-184`'s own db-test (`duplicate_target` no longer detected a genuine cross-source claim once one contributing edge's owner was null) -- corrected by bounding the fix to only the two single-record orphan diagnostics, with the design rationale disclosed directly in the migration's own header comment.
+
+#### Approval and closure
+
+Self-closing. `CG-S8-OPS-020` is `VERIFIED` -- **third task run under the "lanjut sd prompt 188" extended authorization.** Next eligible prompt: `CG-S8-OPS-021` (Prompt 187, Operations Documentation and Handoff) -- dependency-`READY` and within the extended authorized range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
