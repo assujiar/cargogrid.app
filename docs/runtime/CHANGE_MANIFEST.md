@@ -5633,6 +5633,40 @@ One real implementation snag found and fixed before commit: `app.finance_subledg
 
 Self-closing. `CG-S9-FIN-020` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the fourth of five. `CG-S9-FIN-021` (Prompt 210, AR and AP Aging) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
 
+### CHG-2026-147 — AR and AP Aging (Phase 4, Prompt 210)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-021` / `210_AGING_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 9 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-020` `VERIFIED` (`docs/build-log/phase-04/FIN-209.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- fifth and final task in that range |
+
+#### Outcome
+
+A derived, as-of AR/AP aging report and summary, with versioned, non-overlapping, contiguous bucket definitions (`app.finance_aging_bucket_configs`) -- never a stored summary balance. `app.validate_finance_aging_buckets` rejects every malformed bucket shape (empty set, missing field, first bucket not covering current, non-open-ended final bucket, gap/overlap) with a distinct named exception; a tenant with no configured override resolves to a disclosed system default (version 0), never a silent empty result. `app.get_finance_aging_summary` always reconciles exactly to `app.get_finance_aging_report`'s own detail rows, since it aggregates them directly.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729240000_create_finance_aging.sql`; `scripts/db-tests/finance-aging.sql`; `server/contracts/aging/aging.ts(.test.ts)`; `server/queries/aging.ts(.test.ts)`; `server/mutations/aging.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/aging/{page.tsx,actions.ts,aging-forms.tsx}`; `docs/build-log/phase-04/FIN-210.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `210` `VERIFIED`; row `211`'s own resume_point updated to dependency-eligible-but-not-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2115/2115 (13 net new), `pnpm run db:test` PASS -- 92 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 74 routes (1 new: `/[tenantSlug]/finance/aging`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, nine new functions, none of them ever mutating a source table. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One documentation-accuracy issue found and disclosed, not an implementation defect: a precise recount of the real `next build` route listing at this checkpoint found the actual pre-`FIN-210` count was 73 routes, not the 74/75 narrated across `FIN-206`-`FIN-209`'s own build-log prose -- an uncorrected arithmetic slip in text only, the underlying build artifact itself was always correct. Disclosed in `docs/build-log/phase-04/FIN-210.md` §3.1 rather than silently carried forward; not corrected retroactively in the already-pushed prior commits. Zero implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-021` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the fifth and final task in that range -- **this session's entire authorized range is now fully complete**. `CG-S9-FIN-022` (Prompt 211, Cash and Bank Baseline) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
