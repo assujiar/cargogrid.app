@@ -5667,6 +5667,40 @@ One documentation-accuracy issue found and disclosed, not an implementation defe
 
 Self-closing. `CG-S9-FIN-021` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the fifth and final task in that range -- **this session's entire authorized range is now fully complete**. `CG-S9-FIN-022` (Prompt 211, Cash and Bank Baseline) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
 
+### CHG-2026-148 — Cash and Bank Baseline (Phase 4, Prompt 211)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-022` / `211_CASH_BANK_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (3 new tables, 10 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-021` `VERIFIED` (`docs/build-log/phase-04/FIN-210.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd promp 213" naming Finance Phase 4 prompts 211-213 in order -- first task in that range |
+
+#### Outcome
+
+Bank/cash account control with masked account numbers only (`account_number_last4`, never a full account number), a staged idempotent statement import with real per-line deduplication (`app.finance_bank_transactions`'s own unique `(bank_account_id, line_hash)` index, not merely an application check), governed transaction matching (`FIN:Edit` matches, `FIN:Approve` governs an unmatch with a mandatory reason), and a reconciled cash position comparing the statement-derived balance against the shared `cash_default`-mapped GL account -- the identical account FIN-198's own receipt allocation and FIN-201's own settlement already post to. No live bank-provider adapter is built; statement ingestion is a caller-supplied, already-parsed batch.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729250000_create_finance_cash_bank.sql`; `scripts/db-tests/finance-cash-bank.sql`; `server/contracts/cash-bank/cash-bank.ts(.test.ts)`; `server/queries/cash-bank.ts(.test.ts)`; `server/mutations/cash-bank.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/cash-bank/{page.tsx,actions.ts,cash-bank-forms.tsx}`; `docs/build-log/phase-04/FIN-211.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_BANK_TRANSACTION_MATCH_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `211` `VERIFIED`; row `212`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2132/2132 (17 net new), `pnpm run db:test` PASS -- 93 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 75 routes (1 new: `/[tenantSlug]/finance/cash-bank`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: three new tables, ten new functions, none of them ever mutating a source table outside their own domain. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real implementation snag found and fixed before commit: `app.get_finance_cash_position`'s own `RETURNS TABLE` column name `bank_account_id` collided with the identical column name on `app.finance_bank_transactions` inside the function body, producing a genuine ambiguous-column-reference error caught by the first `db:test` run -- fixed by qualifying the query with an explicit table alias. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-022` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 211-213; this is the first of three. `CG-S9-FIN-023` (Prompt 212, Financial Profitability) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
