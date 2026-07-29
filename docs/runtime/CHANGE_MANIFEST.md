@@ -5531,6 +5531,40 @@ Two real implementation snags found and fixed during authoring, before commit, b
 
 Self-closing. `CG-S9-FIN-017` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the first of five. `CG-S9-FIN-018` (Prompt 207, Period Lock and Governed Reopen) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-144 — Period Lock and Governed Reopen (Phase 4, Prompt 207)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-018` / `207_PERIOD_LOCK_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (2 new tables, 9 new functions, 3 signature-unchanged `CREATE OR REPLACE FUNCTION` extensions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-017` `VERIFIED` (`docs/build-log/phase-04/FIN-206.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- second task in that range |
+
+#### Outcome
+
+Company/ledger/module-aware period locks (`app.finance_period_locks`) layered on top of FIN-193's own fiscal-period lifecycle, enforced by one authoritative guard (`app.assert_finance_period_open_for_posting`) that every GL-affecting posting path calls -- FIN-203's own `app.post_finance_journal` (manual) and `app.create_and_post_finance_system_journal` (system: subledger and FIN-206 correction), the only two chokepoints any posting path in this repository funnels through. `app.post_finance_subledger_batch` derives the real `ar`/`ap` scope from its own already-known `source_type` and threads it through. A reopen (`app.request_finance_period_reopen` -> `app.approve_finance_period_reopen`) is minimum-scope, reasoned, approved, and time-boxed; the guard treats an expired `reopen_window_expires_at` as still-locked even before an explicit `app.relock_finance_period` call, proven directly in the db-test by simulating expiry.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729210000_create_finance_period_lock.sql`; `scripts/db-tests/finance-period-lock.sql`; `server/contracts/period-lock/period-lock.ts(.test.ts)`; `server/queries/period-lock.ts(.test.ts)`; `server/mutations/period-lock.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/period-locks/{page.tsx,actions.ts,lock-forms.tsx}`; `docs/build-log/phase-04/FIN-207.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_PERIOD_LOCK_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `207` `VERIFIED`; row `208`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2081/2081 (15 net new), `pnpm run db:test` PASS -- 89 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 74 routes (1 new: `/[tenantSlug]/finance/period-locks`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: two new tables, nine new functions, and three `CREATE OR REPLACE FUNCTION` extensions each keeping its own prior signature byte-for-byte unchanged (function body only gained one new guard call each) -- deliberately avoiding the overload-ambiguity class of defect FIN-206 hit. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+Zero implementation defect found during authoring -- every fixture scenario, including the simulated reopen-window-expiry and cross-tenant/authority-denial paths, passed on the first `db:test` run. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-018` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the second of five. `CG-S9-FIN-019` (Prompt 208, Idempotent Posting) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
