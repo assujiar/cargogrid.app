@@ -5327,6 +5327,40 @@ Zero implementation defect in the migration itself. One genuine test-design gap 
 
 Self-closing. `CG-S9-FIN-011` is `VERIFIED`. This session's entire explicit authorized range (Finance Phase 4 Prompts 195-200) is now fully complete. `CG-S9-FIN-012` (Prompt 201) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any Prompt 201 work begins.
 
+### CHG-2026-138 — Settlement (Phase 4, Prompt 201)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-012` / `201_SETTLEMENT_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-011` `VERIFIED` (`docs/build-log/phase-04/FIN-200.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 201-205 in order -- first task in that range |
+
+#### Outcome
+
+Governed vendor settlement allocated across one or more `FIN-199` AP open items -- the AP-side mirror of `FIN-198`'s own Receipt and Payment Allocation, composed directly with `FIN-199`'s own `app.apply_finance_ap_settlement`/`app.reverse_finance_ap_settlement` primitives rather than a second competing balance mechanism. Exact allocations are decided once at preparation; execution (payment sent) and posting (AP reduced) are distinct canonical states, so a settlement cannot post before it is executed; posting and reversal are both idempotent.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729150000_create_finance_settlement.sql`; `server/contracts/settlement/settlement.ts(.test.ts)`; `server/queries/settlement.ts(.test.ts)`; `server/mutations/settlement.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/settlements/page.tsx`/`actions.ts`/`settlement-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-settlement.sql`; `docs/build-log/phase-04/FIN-201.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_SETTLEMENT_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `201` `VERIFIED`, row `202`'s own resume_point updated to dependency-eligible and authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 2002/2002 (23 net new), `pnpm run db:test` PASS -- 82 migrations/83 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file once staged (standing since `COM-151`), `npx next build` PASS -- 68 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 12 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect. Zero Critical/High-severity issue. One environment-only note: this session's sandbox required starting a local PostgreSQL 16 server and installing `postgresql-16-postgis-3` before `pnpm run db:test` could run at all -- a one-time environment setup step, not a code or migration defect.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-012` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the first of five. `CG-S9-FIN-013` (Prompt 202, Subledger) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

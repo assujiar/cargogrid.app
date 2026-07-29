@@ -2,20 +2,20 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 195, 196, 197, 198, 199, and 200 in order, each as its own commit. Rows `195`-`200` are now instantiated with exact repository paths and marked `VERIFIED` below. This session's entire authorized range (Prompts 195-200) is now fully complete -- Prompt 201 onward requires fresh explicit user authorization before any further row is instantiated. Prompts 201–218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3 but `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 201, 202, 203, 204, and 205 in order, each as its own commit. Row `201` is now instantiated with exact repository paths and marked `VERIFIED` below. Prompts 202-218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `202`-`205` are authorized this session and will be instantiated as each is completed; rows `206`-`218` remain `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
 
 ## 0. Checkpoint
 
 | Field | Value |
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
-| Working branch | `claude/prompt-189-195-mb32zh`, tracked to `origin/claude/prompt-189-195-mb32zh` this checkpoint |
-| HEAD at authoring time (pre-commit) | `6d0a5f3` (merge of PR #26, Finance Phase 4 Prompts 190-194 `VERIFIED`) |
-| Worktree state | Clean except this checkpoint's own new Vendor Bill files and runtime-ledger updates |
-| Repository state | `FIN-191..199` (through Accounts Payable) all `VERIFIED`. `app/(tenant)/[tenantSlug]/finance/vendor-bills/` is new this checkpoint. |
-| Mutation performed by this document | Row `200` instantiated `VERIFIED`; row `201`'s own resume_point updated to reflect dependency-eligible-but-not-authorized; tally section updated |
+| Working branch | `claude/prompt-201-205-u8sa38`, tracked to `origin/claude/prompt-201-205-u8sa38` this checkpoint |
+| HEAD at authoring time (pre-commit) | merge of PR #28 (Finance Phase 4 Prompts 190-200 `VERIFIED`) |
+| Worktree state | Clean except this checkpoint's own new Settlement files and runtime-ledger updates |
+| Repository state | `FIN-191..200` (through Vendor Bill) all `VERIFIED`. `app/(tenant)/[tenantSlug]/finance/settlements/` is new this checkpoint. |
+| Mutation performed by this document | Row `201` instantiated `VERIFIED`; row `202`'s own resume_point updated to reflect dependency-eligible and authorized; tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
-| User authorization | Explicit user instruction: "implement Finance Phase 4 Prompts 195, 196, 197, 198, 199, and 200 in that exact order, each as its own commit" — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted |
+| User authorization | Explicit user instruction: "lanjut prompt 201-205" ("continue prompts 201-205") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted |
 
 ## 1. Full execution index
 
@@ -341,19 +341,19 @@
 | `source_ids` | FIN-AP-001..004; FIN-TAX-001..004; vendor-to-payment critical flow |
 | `upstream` | FIN-199..200 |
 | `downstream` | FIN-202 |
-| `allowed_paths` | not instantiated (dependency-eligible, but out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (dependency-eligible, but out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-199..200 both reached VERIFIED this session, so `CG-S9-FIN-012` (Prompt 201) is now dependency-eligible, but is **NOT authorized this session** -- fresh explicit user authorization is required before any Prompt 201 work begins |
+| `allowed_paths` | `supabase/migrations/20260729150000_create_finance_settlement.sql`; `server/contracts/settlement/`; `server/queries/settlement.ts`; `server/mutations/settlement.ts`; `app/(tenant)/[tenantSlug]/finance/settlements/**`; `docs/build-log/phase-04/FIN-201.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..200 migrations (extend via new migration only); Step 11 vendor/PO/contract/bank-adapter scope |
+| `migration_ids` | 1 additive migration (`app.finance_settlements`, `app.finance_settlement_allocations`, `app.finance_settlement_number_counters`, preparation/lifecycle/execution/posting/reversal functions) |
+| `api_contracts` | shared prepare/submit/discard/approve/execute/post/reversal/list/allocations/candidate-search service layer (creation only through controlled preparation against eligible AP open items) |
+| `access_controls` | FIN:Edit (prepare/submit/discard), FIN:Approve (approve/execute/post/reversal; post additionally composes with FIN-199's own layered authority for a settlement-sourced AP settlement application), FIN:View (read/candidate-search) |
+| `financial_invariants` | total_amount = allocated_amount + fee_amount (generated column); execution and posting are distinct canonical states; idempotent prepare (idempotency_key) and idempotent post (delegates to FIN-199's own row-locked app.apply_finance_ap_settlement); period-aware posting; governed reversal restores the AP balance exactly (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (23 net new); scripts/db-tests/finance-settlement.sql (preparation validation, lifecycle authority split, full posting path, idempotent post replay, governed reversal, discard boundary, cross-tenant, schema-privilege defense in depth, audit trail) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-201.md build log; db-test output (83 files, zero regression); node:test count delta (1979 -> 2002); next build (68 routes) |
+| `rollback` | additive migration only; governed reversal at the FIN-199 AP-item layer for any posted settlement |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-013 (Prompt 202, Subledger) is dependency-eligible and authorized this session -- next |
 
 ### Row `202` — Prompt 202, `CG-S9-FIN-013`
 
@@ -369,8 +369,8 @@
 | `source_ids` | FIN-GL-001..004, FIN-AR-001..004, FIN-AP-001..004; data lineage guardrails |
 | `upstream` | FIN-192..201 |
 | `downstream` | FIN-203 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
+| `allowed_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
+| `forbidden_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
 | `migration_ids` | not instantiated |
 | `api_contracts` | not instantiated |
 | `access_controls` | not instantiated |
@@ -381,7 +381,7 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-192..201 reaching VERIFIED |
+| `resume_point` | FIN-192..201 all reached VERIFIED, so CG-S9-FIN-013 (Prompt 202) is now dependency-eligible; authorized this session -- proceeding next |
 
 ### Row `203` — Prompt 203, `CG-S9-FIN-014`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`200` are `VERIFIED`** (`200` this checkpoint). This session's entire explicit authorized range (Prompts 195-200) is now fully complete. **`201`–`218` (18 rows) remain `NOT_STARTED`**, dependency-mapped but not instantiated with exact paths -- `201` is now dependency-eligible (`FIN-199..200` both `VERIFIED`) but **not authorized this session**; fresh explicit user authorization is required before any Prompt 201 work begins.
+Of the 29 rows in this index (`190`–`218`): **`190`–`201` are `VERIFIED`** (`201` this checkpoint). This session's explicit authorized range is Prompts 201-205; `202` is now dependency-eligible (`FIN-192..201` all `VERIFIED`) and authorized this session -- proceeding next. **`202`–`218` (17 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `206`–`218` additionally remain out of this session's authorized range.
 
 ## 3. Collision inspection
 

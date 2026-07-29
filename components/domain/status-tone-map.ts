@@ -34,6 +34,7 @@ import type { FinanceInvoiceStatus } from "../../server/contracts/invoice/invoic
 import type { FinanceReceiptStatus } from "../../server/contracts/receipt-allocation/receipt-allocation.ts";
 import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-payable/accounts-payable.ts";
 import type { FinanceVendorBillStatus } from "../../server/contracts/vendor-bill/vendor-bill.ts";
+import type { FinanceSettlementStatus } from "../../server/contracts/settlement/settlement.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -155,6 +156,17 @@ export const FINANCE_VENDOR_BILL_STATUS_TONE_MAP: Record<FinanceVendorBillStatus
   approved: { tone: "warning", label: "Approved" },
   posted: { tone: "success", label: "Posted" },
   void: { tone: "danger", label: "Void" },
+};
+
+/** FIN-201: Settlement's own draft -> submitted -> approved -> executed -> posted -> void/reversed lifecycle -- seven states, distinct from FIN-200's own Vendor Bill map (execution is its own canonical state, and a posted settlement's own governed correction is a distinct "reversed" terminal, not the shared "void" pre-execution cancellation). */
+export const FINANCE_SETTLEMENT_STATUS_TONE_MAP: Record<FinanceSettlementStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  executed: { tone: "warning", label: "Executed" },
+  posted: { tone: "success", label: "Posted" },
+  void: { tone: "danger", label: "Void" },
+  reversed: { tone: "danger", label: "Reversed" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {
