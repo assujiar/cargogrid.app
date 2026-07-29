@@ -33,6 +33,7 @@ import type { FinanceArOpenItemStatus } from "../../server/contracts/accounts-re
 import type { FinanceInvoiceStatus } from "../../server/contracts/invoice/invoice.ts";
 import type { FinanceReceiptStatus } from "../../server/contracts/receipt-allocation/receipt-allocation.ts";
 import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-payable/accounts-payable.ts";
+import type { FinanceVendorBillStatus } from "../../server/contracts/vendor-bill/vendor-bill.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -145,6 +146,15 @@ export const FINANCE_AP_OPEN_ITEM_STATUS_TONE_MAP: Record<FinanceApOpenItemStatu
   open: { tone: "warning", label: "Open" },
   partial: { tone: "info", label: "Partial" },
   settled: { tone: "success", label: "Settled" },
+};
+
+/** FIN-200: Vendor Bill's own draft -> submitted -> approved -> posted -> void lifecycle -- distinct from FIN-197's own Invoice map even though the label set is identical, since each capability owns its own Record<...>. */
+export const FINANCE_VENDOR_BILL_STATUS_TONE_MAP: Record<FinanceVendorBillStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  posted: { tone: "success", label: "Posted" },
+  void: { tone: "danger", label: "Void" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {
