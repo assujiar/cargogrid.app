@@ -84,6 +84,9 @@ export default async function JournalsPage({
       key: "actions",
       header: "Actions",
       render: (journal) => {
+        if (journal.status === "posted") {
+          return <span className="text-xs text-text-secondary">Posted -- immutable for normal roles (governed reversal only, FIN-206)</span>;
+        }
         if (journal.sourceType !== "manual") {
           return "—";
         }
@@ -125,7 +128,9 @@ export default async function JournalsPage({
         <h1 className="text-xl font-semibold text-text-primary">Journals</h1>
         <p className="text-sm text-text-secondary">
           Canonical double-entry journal -- manual and system (subledger-sourced) journals share identical debit=credit balance and posting
-          controls. A normal role cannot edit a posted journal -- correction is a governed reversal (FIN-206), not a direct edit.
+          controls. A normal role cannot edit or delete a posted journal at the database layer -- correction is a governed reversal (FIN-206), not a
+          direct edit. Supreme Admin retains an explicit, audited, disclosed absolute-CRUD exception (RPD-022); CargoGrid makes no tamper-proof or
+          universal-immutability claim.
         </p>
       </div>
 

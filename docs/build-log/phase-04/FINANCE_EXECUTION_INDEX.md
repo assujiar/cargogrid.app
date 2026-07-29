@@ -12,8 +12,8 @@
 | Working branch | `claude/prompt-201-205-u8sa38`, tracked to `origin/claude/prompt-201-205-u8sa38` this checkpoint |
 | HEAD at authoring time (pre-commit) | merge of PR #28 (Finance Phase 4 Prompts 190-200 `VERIFIED`) |
 | Worktree state | Clean except this checkpoint's own new Journal files and runtime-ledger updates |
-| Repository state | `FIN-191..202` (through Subledger) all `VERIFIED`. `app/(tenant)/[tenantSlug]/finance/journals/` is new this checkpoint. |
-| Mutation performed by this document | Row `203` instantiated `VERIFIED`; row `204`'s own resume_point updated to reflect dependency-eligible and authorized; tally section updated |
+| Repository state | `FIN-191..203` (through Double-Entry Journal) all `VERIFIED`. `supabase/migrations/20260729180000_create_finance_posted_journal_integrity.sql` is new this checkpoint. |
+| Mutation performed by this document | Row `204` instantiated `VERIFIED`; row `205`'s own resume_point updated to reflect dependency-eligible and authorized; tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
 | User authorization | Explicit user instruction: "lanjut prompt 201-205" ("continue prompts 201-205") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted |
 
@@ -425,19 +425,19 @@
 | `source_ids` | FIN-GL-001..004; INV-005; RPD-022/025/036 |
 | `upstream` | FIN-203 |
 | `downstream` | FIN-205 |
-| `allowed_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
-| `forbidden_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-203 reached VERIFIED, so CG-S9-FIN-015 (Prompt 204) is now dependency-eligible; authorized this session -- proceeding next |
+| `allowed_paths` | `supabase/migrations/20260729180000_create_finance_posted_journal_integrity.sql`; `docs/standards/SECURITY_STANDARDS.md`; `app/(tenant)/[tenantSlug]/finance/journals/page.tsx`; `docs/build-log/phase-04/FIN-204.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..203 migrations (extend via new migration/additive grant only; zero existing function body edited) |
+| `migration_ids` | 1 additive migration (`app.protect_posted_finance_journal`/`app.protect_posted_finance_journal_line` trigger functions + `before update or delete` triggers on `app.finance_journals`/`app.finance_journal_lines`; two additive grants -- `app.is_supreme_admin(uuid)` to `service_role`, `usage on schema auth` to `service_role`) |
+| `api_contracts` | none net new (database-trigger-and-documentation checkpoint only; one existing UI page's text/label updated, zero new contract/query/mutation surface) |
+| `access_controls` | normal roles: zero (already zero grant, per `PLT-118`/`FIN-197`); this checkpoint additionally blocks a hypothetical `service_role` direct mutation of an already-posted row; `app.is_supreme_admin` (RPD-022) retains its disclosed, audited absolute-CRUD exception |
+| `financial_invariants` | a posted `app.finance_journals`/`app.finance_journal_lines` row cannot be UPDATE'd or DELETE'd by any role except through the RPD-022 Supreme Admin exception, which is itself best-effort audit-evidenced every time it fires; never a tamper-proof or universal-immutability claim (per 189_FINANCE_README.md §5/§6) |
+| `tests` | no new TypeScript unit tests (no new service-layer surface); scripts/db-tests/finance-posted-journal-integrity.sql (baseline grant-only protection, new trigger-level protection scoped to posted rows only, RPD-022 Supreme Admin bypass with audit event verification, schema-privilege defense in depth, zero anon execute) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-204.md build log; db-test output (86 files, zero regression); node:test count unchanged (2032); next build (72 routes, unchanged) |
+| `rollback` | `git revert` removes both new triggers and the two additive grants, returning to the prior grant-only-protected state; no other capability depends on this checkpoint's own new functions |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-016 (Prompt 205, Draft-versus-Posted State) is dependency-eligible and authorized this session -- next |
 
 ### Row `205` — Prompt 205, `CG-S9-FIN-016`
 
@@ -453,8 +453,8 @@
 | `source_ids` | FIN-GL/AR/AP-001..004; master Phase 4 draft-versus-posted requirement |
 | `upstream` | FIN-196..204 |
 | `downstream` | FIN-206 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
+| `allowed_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
+| `forbidden_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
 | `migration_ids` | not instantiated |
 | `api_contracts` | not instantiated |
 | `access_controls` | not instantiated |
@@ -465,7 +465,7 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-196..204 reaching VERIFIED |
+| `resume_point` | FIN-204 reached VERIFIED, so CG-S9-FIN-016 (Prompt 205) is now dependency-eligible; authorized this session -- proceeding next, the final task in this session's explicit authorized range |
 
 ### Row `206` — Prompt 206, `CG-S9-FIN-017`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`203` are `VERIFIED`** (`203` this checkpoint). This session's explicit authorized range is Prompts 201-205; `204` is now dependency-eligible (`FIN-203` `VERIFIED`) and authorized this session -- proceeding next. **`204`–`218` (15 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `206`–`218` additionally remain out of this session's authorized range.
+Of the 29 rows in this index (`190`–`218`): **`190`–`204` are `VERIFIED`** (`204` this checkpoint). This session's explicit authorized range is Prompts 201-205; `205` is now dependency-eligible (`FIN-204` `VERIFIED`) and authorized this session -- proceeding next, the final task in this session's explicit authorized range. **`205`–`218` (14 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `206`–`218` additionally remain out of this session's authorized range.
 
 ## 3. Collision inspection
 

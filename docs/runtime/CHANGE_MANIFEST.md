@@ -5429,6 +5429,40 @@ Zero implementation defect. Zero Critical/High-severity issue. Zero regression t
 
 Self-closing. `CG-S9-FIN-014` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the third of five. `CG-S9-FIN-015` (Prompt 204, Posted-Journal Integrity) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-141 — Posted-Journal Integrity (Phase 4, Prompt 204)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-015` / `204_POSTED_JOURNAL_INTEGRITY_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (0 new tables, 2 new trigger functions, 2 new triggers, 2 additive grants), 1 UI text/label change, 1 new documentation section |
+| Baseline evidence | `CG-S9-FIN-014` `VERIFIED` (`docs/build-log/phase-04/FIN-203.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 201-205 in order -- fourth task in that range |
+
+#### Outcome
+
+Baseline grant-only protection was already real since `FIN-197` (disclosed, not rebuilt): every posted-state Finance table has carried zero `UPDATE`/`DELETE` grant for `authenticated` since its own migration. This checkpoint adds a strictly stronger, table-level trigger (`app.protect_posted_finance_journal`/`app.protect_posted_finance_journal_line`) scoped to Prompt 204's own named epic -- `app.finance_journals`/`app.finance_journal_lines` -- that blocks *any* `UPDATE`/`DELETE` against an already-posted row for every role, including a hypothetical `service_role` direct mutation outside the vetted RPC surface, unless the acting identity holds a live `supreme_admin` principal membership (`app.is_supreme_admin`, RPD-022's own disclosed absolute-CRUD exception). When the bypass is exercised against a posted row, the trigger still permits the mutation but captures a best-effort `app.capture_audit_event` row disclosing it -- a detective control, never a tamper-proof or universal-immutability claim.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729180000_create_finance_posted_journal_integrity.sql`; `scripts/db-tests/finance-posted-journal-integrity.sql`; `docs/build-log/phase-04/FIN-204.md`. Modified: `docs/standards/SECURITY_STANDARDS.md` (new section 7, posted financial record protection matrix); `app/(tenant)/[tenantSlug]/finance/journals/page.tsx` (posted-state disclosure label, RPD-022-naming intro text); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `204` `VERIFIED`, row `205`'s own resume_point updated); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 0 existing function body changed, 0 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2032/2032 (unchanged, no new service-layer surface), `pnpm run db:test` PASS -- 86 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file once staged (standing since `COM-151`), `npx next build` PASS -- 72 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only. `git revert` of this checkpoint's commit removes both new triggers and the two additive grants, returning `app.finance_journals`/`app.finance_journal_lines` to their prior grant-only-protected state; no other capability depends on this checkpoint's own new functions.
+
+#### Errors found and fixed
+
+One implementation snag found and fixed during authoring, before commit: `app.is_supreme_admin` was granted `EXECUTE` to `authenticated` only, not `service_role` (the role this checkpoint's own trigger actually runs under) -- fixed with an additive `grant execute on function app.is_supreme_admin(uuid) to service_role;`. A second, related snag surfaced immediately after: a direct `auth.uid()` call from plain `plpgsql` code (unlike every existing caller, which only ever invokes `app.is_supreme_admin()`/`app.has_active_tenant_membership()` with no explicit argument) requires real `USAGE` on schema `auth` for the invoking role -- fixed with an additive `grant usage on schema auth to service_role;`. Both fixes verified via a disposable scratch database before being folded into the migration and re-verified against the full `db:test` suite. Zero other implementation defect. Zero Critical/High-severity issue remains open. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-015` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the fourth of five. `CG-S9-FIN-016` (Prompt 205, Draft-versus-Posted State) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
