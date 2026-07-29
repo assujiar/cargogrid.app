@@ -100,7 +100,14 @@ export default async function JournalsPage({
       header: "Actions",
       render: (journal) => {
         if (journal.status === "posted") {
-          return <span className="text-xs text-text-secondary">Posted -- immutable for normal roles (governed reversal only, FIN-206)</span>;
+          return (
+            <span className="text-xs text-text-secondary">
+              Posted -- immutable for normal roles.{" "}
+              <Link href="../corrections" className="underline">
+                Correct via FIN-206
+              </Link>
+            </span>
+          );
         }
         if (journal.sourceType !== "manual") {
           return "—";

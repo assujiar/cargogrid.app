@@ -36,6 +36,7 @@ import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-pa
 import type { FinanceVendorBillStatus } from "../../server/contracts/vendor-bill/vendor-bill.ts";
 import type { FinanceSettlementStatus } from "../../server/contracts/settlement/settlement.ts";
 import type { FinanceJournalStatus } from "../../server/contracts/journal/journal.ts";
+import type { FinanceCorrectionStatus } from "../../server/contracts/journal-correction/journal-correction.ts";
 import type { FinanceLifecycleCanonicalState } from "../../server/contracts/lifecycle/lifecycle.ts";
 
 export interface StatusToneEntry {
@@ -178,6 +179,14 @@ export const FINANCE_JOURNAL_STATUS_TONE_MAP: Record<FinanceJournalStatus, Statu
   approved: { tone: "warning", label: "Approved" },
   posted: { tone: "success", label: "Posted" },
   void: { tone: "danger", label: "Void" },
+};
+
+export const FINANCE_CORRECTION_STATUS_TONE_MAP: Record<FinanceCorrectionStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  posted: { tone: "success", label: "Posted" },
+  discarded: { tone: "neutral", label: "Discarded" },
 };
 
 /** FIN-205: the one shared canonical-state vocabulary across invoice/vendor_bill/receipt/settlement/subledger_batch/journal (`app.finance_lifecycle_editability_matrix`) -- rendered alongside each domain's own concrete-status badge above, never replacing it, since the canonical bucket deliberately coarsens some domain-specific detail (e.g. a settlement's own 'approved' and 'executed' concrete statuses both render this same 'Approved' canonical tone). */

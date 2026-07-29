@@ -5497,6 +5497,40 @@ One db-test authoring collision, not an implementation defect: this checkpoint's
 
 Self-closing. `CG-S9-FIN-016` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the fifth and final task in that range -- **this session's entire authorized range is now fully complete**. `CG-S9-FIN-017` (Prompt 206, Reversal and Adjustment) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
 
+### CHG-2026-143 — Reversal and Adjustment (Phase 4, Prompt 206)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-017` / `206_REVERSAL_ADJUSTMENT_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 6 new functions, 2 widened `CHECK` constraints, 1 function-signature extension), a new full service layer, a new UI route, 1 existing UI page gaining one link |
+| Baseline evidence | `CG-S9-FIN-016` `VERIFIED` (`docs/build-log/phase-04/FIN-205.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- first task in that range |
+
+#### Outcome
+
+Governed correction of a posted journal (FIN-203) through a new linked record, never a rewrite of normal-role history -- closing two disclosed forward references named by earlier checkpoints: FIN-203's own "reverse posted journal via FIN-206" and FIN-202's own reserved `finance_subledger_batches.status = 'reversed'`. One correction table (`app.finance_journal_corrections`) carries `draft -> submitted -> approved -> posted`/`discarded` for both a `reversal` (system-derived exact opposite lines of the original, capped at one active per original) and an `adjustment` (preparer-supplied lines, validated up front by FIN-203's own shared balance rule, uncapped). The original posted journal is never rewritten -- FIN-204's own triggers already make that impossible; posting a correction calls FIN-203's own shared system-journal posting path with `source_type = 'correction'`. A subledger-sourced reversal additionally marks its source batch `reversed`; the AR/AP open item balance itself is untouched, a disclosed bound (that remains FIN-196/199's own separately-governed reversal path).
+
+#### Scope and files
+
+New: `supabase/migrations/20260729200000_create_finance_reversal_adjustment.sql`; `scripts/db-tests/finance-reversal-adjustment.sql`; `server/contracts/journal-correction/journal-correction.ts(.test.ts)`; `server/queries/journal-correction.ts(.test.ts)`; `server/mutations/journal-correction.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/corrections/{page.tsx,actions.ts,correction-forms.tsx}`; `docs/build-log/phase-04/FIN-206.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_CORRECTION_STATUS_TONE_MAP`); `app/(tenant)/[tenantSlug]/finance/journals/page.tsx` (one added "Correct via FIN-206" link on posted rows); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `206` `VERIFIED`; row `207`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2066/2066 (20 net new), `pnpm run db:test` PASS -- 88 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 73 routes (1 new: `/[tenantSlug]/finance/corrections`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, six new functions, two `CHECK`-constraint replacements (both strictly widening, no existing row affected), and one function-signature extension whose prior overload was explicitly dropped rather than left dangling. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+Two real implementation snags found and fixed during authoring, before commit, both caught by a real `db:test` run rather than by design review alone: (1) appending a trailing parameter to `app.create_and_post_finance_system_journal` left the prior 9-argument overload in place alongside the new 10-argument one (`CREATE OR REPLACE FUNCTION` does not replace a function whose own signature changed), making FIN-202's own existing 9-argument call site ambiguous (`function ... is not unique`) -- fixed with an explicit `drop function if exists` immediately before the new `create function`. (2) two of FIN-203's own `CHECK` constraints (`finance_journals_source_type_check`, `finance_journals_source_check`) only recognized `manual`/`subledger`, rejecting the new `'correction'` source type -- fixed by dropping and re-adding each with an identical, strictly wider condition. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-017` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the first of five. `CG-S9-FIN-018` (Prompt 207, Period Lock and Governed Reopen) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
