@@ -78,6 +78,8 @@ export interface ClassificationEntry {
   readonly level: SensitivityLevel;
   readonly owner: string;
   readonly description: string;
+  /** `"<MODULE>:<action>"` (e.g. `"FIN:View margin"`) when this entry classifies data exposed specifically through one seeded, `protected: true` RBAC permission action — FIN-214 (CG-S9-FIN-025) §7's adoption gate, extended to protected-permission traceability. Omitted for an entry with no single owning protected action. */
+  readonly protectedAction?: string;
 }
 
 export type RegistryViolationKind = "MISSING_OWNER" | "LEVEL_BELOW_CATEGORY_DEFAULT" | "DUPLICATE_ID";
@@ -122,5 +124,55 @@ export const PHASE_0_REGISTRY: readonly ClassificationEntry[] = [
     level: "credential",
     owner: "Platform/Security",
     description: "Supabase service-role key (scripts/env/schema.ts) — server-only, never sent to the browser bundle.",
+  },
+];
+
+/**
+ * Finance domain (FIN-191..213) sensitive `server/contracts/<domain>/` field groups,
+ * classified — FIN-214 (Financial Field-Level Security, CG-S9-FIN-025), §7's adoption
+ * gate applied retroactively to every Finance capability that shipped a sensitive
+ * field before this checkpoint (each was already access-controlled at the point it was
+ * built — FIN:View margin deny-outright, masked bank storage — this registry makes
+ * that classification explicit and mechanically checkable, not a new control).
+ * Field-*group* granularity (docs/standards/DATA_CLASSIFICATION_STANDARDS.md §1's own
+ * 6-group model), not one entry per literal database column.
+ */
+export const FINANCE_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "fin:job_profitability.financial_figures",
+    category: "cost_margin",
+    level: "restricted",
+    owner: "Finance",
+    protectedAction: "FIN:View margin",
+    description:
+      "revenue_amount/cost_amount/profit_amount/margin_percent on app.finance_job_profitability_facts and its two read RPCs (app.get_finance_job_profitability, app.get_finance_profitability_summary) — deny outright without FIN:View margin (FIN-212); the base table grants authenticated zero direct privilege.",
+  },
+  {
+    id: "fin:cash_bank.account_identifier",
+    category: "finance",
+    level: "restricted",
+    owner: "Finance",
+    description: "account_number_last4 on app.finance_bank_accounts — masked at rest to at most 4 characters; the full account number is never stored anywhere in this repository (FIN-211).",
+  },
+  {
+    id: "fin:tax_baseline.tax_identity",
+    category: "finance",
+    level: "restricted",
+    owner: "Finance",
+    description: "Tax identity/rule fields (NPWP-shaped tax codes, rule versions) on app.finance_tax_codes/app.finance_tax_rule_versions — FIN:View-gated, tenant-scoped (FIN-195).",
+  },
+  {
+    id: "fin:accounts_receivable.credit_exposure",
+    category: "finance",
+    level: "restricted",
+    owner: "Finance",
+    description: "Customer credit exposure/aging totals from app.get_finance_ar_exposure_summary and app.get_finance_aging_summary — FIN:View-gated; internal Finance aggregate only, customer-facing visibility deferred to Step 13 (FIN-196/FIN-210).",
+  },
+  {
+    id: "fin:ledger.posted_amounts",
+    category: "finance",
+    level: "restricted",
+    owner: "Finance",
+    description: "Posted subledger/journal line amounts on app.finance_subledger_lines/app.finance_journal_lines and every posting/reversal/adjustment RPC — FIN:View-gated reads, FIN:Edit/Approve-gated posting, period-lock and idempotent-posting invariants apply (FIN-201/203/206/208).",
   },
 ];

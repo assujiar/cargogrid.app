@@ -5769,6 +5769,40 @@ One real db-test fixture-collision defect found and fixed before commit: this ch
 
 Self-closing. `CG-S9-FIN-024` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the first of the range's substantive Finance tasks (213-218). `CG-S9-FIN-025` (Prompt 214, Financial Field-Level Security) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-151 — Financial Field-Level Security (Phase 4, Prompt 214)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-025` / `214_FINANCIAL_FIELD_LEVEL_SECURITY_PROMPT.md` |
+| Change type | Governance/audit pass -- 1 additive migration (0 new tables, 1 function retrofitted via `create or replace`), classification registry + check extension, 1 new standards document |
+| Baseline evidence | `CG-S9-FIN-024` `VERIFIED` (`docs/build-log/phase-04/FIN-213.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 213 sd 219" naming Finance Phase 4 Prompts 213-219 in order -- second task in that range |
+
+#### Outcome
+
+A governance/audit pass over FIN-191..213's own already-built field/record policy across database, service, API, UI, reports/exports, jobs, logs and support access -- not a new domain slice, since every prior Finance capability already embeds its own field/record control at the point it was built. One real, closeable gap found: `app.audit_logs` grants `authenticated` no direct table privilege, and its only read paths (`app.query_audit_logs`/`app.export_audit_logs`) gate on Supreme Admin OR tenant_admin alone, never a domain-specific permission -- but FIN-212's own `app.calculate_finance_job_profitability` logged the entire calculated fact (revenue/cost/profit/margin figures) into that table, so a tenant_admin with no `FIN:View margin` grant could read full profitability figures through the generic audit-log export. Fixed by redacting the audit payload to an explicit non-sensitive allowlist via `create or replace function` (identical signature). Classification registry extended with `FINANCE_REGISTRY` (5 field-group entries) and a new mechanical cross-check confirming every seeded protected FIN action a real Finance migration actually enforces has a matching registry entry. Every other named surface (REST/GraphQL, reports/export, jobs/cache, support access) audited and found either already policy-compliant or genuinely not-yet-applicable, disclosed rather than falsely claimed complete.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729280000_create_finance_field_level_security.sql`; `docs/standards/FINANCE_FIELD_POLICY_MATRIX.md`; `docs/build-log/phase-04/FIN-214.md`. Modified: `scripts/data-classification/registry.ts` (`FINANCE_REGISTRY`, `ClassificationEntry.protectedAction`); `scripts/data-classification/check-registry.ts`(`.test.ts`) (protected-action cross-check); `scripts/db-tests/finance-job-profitability.sql` (extended, not replaced); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `214` `VERIFIED`; row `215`'s own resume_point updated); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (retrofit only), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2165/2165 (9 net new), `pnpm run db:test` PASS -- 95 db-test files (0 new, 1 extended, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` flags the same known pre-existing new-migration false positive disclosed since `COM-151`/`FIN-213`, `npx next build` PASS -- 77 routes (unchanged, no new UI this checkpoint).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: zero new tables, one function retrofitted via `create or replace` (identical signature). `git revert` this checkpoint's own commit restores FIN-212's own original (less-redacted) audit payload -- a real behavior change on revert, documented in `FIN-214.md` §5.
+
+#### Errors found and fixed
+
+One real db-test authoring defect found and fixed before commit: the new FIN-214 regression-guard section's first draft transposed `app.query_audit_logs`'s own `(requester, tenant)` argument order (passed the tenant id twice instead of the actor id first), caught immediately by the first `db:test` run's own error message, fixed. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-025` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the second of the range's substantive Finance tasks (213-218). `CG-S9-FIN-026` (Prompt 215, Finance Integrated Verification) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
