@@ -97,11 +97,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S10-ATW-003` -- Advanced Dispatch Board with Tracking Health, `VERIFIED` this checkpoint. Second task in this session's own "lanjut prompt 221-223" authorized range. |
-| Prompt | `10-phase-05-advanced-tms-wms/222_DISPATCH_BOARD_PROMPT.md` -- `VERIFIED` this checkpoint. |
-| Status | **`VERIFIED`.** See `docs/build-log/phase-05/ATW-222.md`. New additive migration `20260729300000_create_advanced_tms_dispatch_board.sql` (97 total): a widened assigned/dispatched/in_transit dispatch board view plus an honestly feature-gated tracking-health read model (`app.shipment_tracking_health`, empty until `ATW-226F`; `app.is_shipment_tracking_entitled`, a disclosed stub). New route `app/(tenant)/[tenantSlug]/operations/dispatch-board/`. `node:test` 2191/2191, `db:test` PASS across 97 migrations/100 files, `next build` PASS (78 routes, 1 new). Two real pre-existing test-fragility defects (unscoped margin-calculation lookups) found and fixed. |
-| Reason | Fresh explicit user authorization ("lanjut prompt 221-223") names Prompts 221 through 223 in order. `CG-S10-ATW-004` (Prompt 223, Fleet/Vehicle/Driver/Device/SIM Operational Baseline) is next and final, within the same authorized range. |
-| Upstream | `CG-S10-ATW-002` (`VERIFIED`, Prompt 221); verified Phase 3 dispatch (OPS-175) |
+| Task ID/name | `CG-S10-ATW-004` -- Fleet, Vehicle, Driver, Device and SIM Operational Baseline, `VERIFIED` this checkpoint. Third and final task in this session's own "lanjut prompt 221-223" authorized range. |
+| Prompt | `10-phase-05-advanced-tms-wms/223_FLEET_VEHICLE_DRIVER_DEVICE_SIM_PROMPT.md` -- `VERIFIED` this checkpoint. |
+| Status | **`VERIFIED`.** See `docs/build-log/phase-05/ATW-223.md`. New additive migration `20260729310000_create_advanced_tms_fleet_driver_device.sql` (98 total): seven new tables (vehicle/driver operational profiles, GPS devices, SIM cards, device-vehicle assignment history, provider mappings, tracking-source priorities) and thirteen new RPCs, RLS tenant-wide mirroring `app.master_records`' own scope. New route `app/(tenant)/[tenantSlug]/operations/fleet/`. `node:test` 2205/2205 (14 net new), `db:test` PASS across 98 migrations/100 files, `next build` PASS (80 routes, 1 new). Two real production-code defects (`FOUND`-after-wrong-statement; insert-before-supersede ordering in `assign_device_to_vehicle`) found and fixed before commit, matching `app.reassign_resource`'s (OPS-172) own precedent. |
+| Reason | Fresh explicit user authorization ("lanjut prompt 221-223") named Prompts 221 through 223 in order; all three are now `VERIFIED`. This session's authorized range is complete -- per this repository's own standing discipline, the session stops here and awaits fresh explicit user authorization before starting `CG-S10-ATW-005` (Prompt 224, dependency-clean `READY`) or any further Phase 5 task. |
+| Upstream | `CG-S10-ATW-003` (`VERIFIED`, Prompt 222); Platform master/config/entitlement, verified Phase 3 resource assignment |
 
 ## 5. Work completed (all runs to date, summarized)
 
