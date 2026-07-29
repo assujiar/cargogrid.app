@@ -5735,6 +5735,40 @@ One real db-test authorization defect found and fixed before commit: a tenant B 
 
 Self-closing. `CG-S9-FIN-023` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 211-213; this is the second of three. `CG-S9-FIN-024` (Prompt 213, Finance Dashboard and Reports) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
 
+### CHG-2026-150 — Finance Dashboard and Reports (Phase 4, Prompt 213)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-024` / `213_FINANCE_DASHBOARD_REPORTS_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (0 new tables, 4 new functions, 6 new `report_types` rows), a new service layer, two new UI routes |
+| Baseline evidence | `CG-S9-FIN-023` `VERIFIED` (`docs/build-log/phase-04/FIN-212.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 213 sd 219" naming Finance Phase 4 Prompts 213-219 in order -- first task in that range |
+
+#### Outcome
+
+Permission-safe live Finance dashboards and governed reports covering billing/invoice, AR/AP aging, cash, close/reconciliation and profitability. Reuses OPS-182/OPS-183's own "reuse an already-checked read as the query engine, add only the aggregation that is genuinely missing" precedent: AR/AP aging (FIN-210) and profitability (FIN-212) widgets are reused verbatim with zero new SQL; billing summary, cash summary and close/reconciliation status are the three genuinely new functions, none `security definer`, each performing its own explicit `FIN:View` check. Profitability is fetched independently of the other five widgets so its stricter `FIN:View margin` "deny outright" gate never blocks the rest of the dashboard -- only the profitability card renders as permission-denied. Reports reuse COM-159's shared `report_types`/`report_runs`/`record_report_run` infrastructure directly (the same catalogue OPS-183 already extended); `app.enqueue_finance_report_export` is the one genuinely new mutation, `FIN:Export`-gated, a parallel entry point to COM-159's/OPS-183's own export functions since both are immutable prior migrations. No live worker processes a `report_generation` job anywhere in this repository -- disclosed, unchanged from COM-159/OPS-183.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729270000_create_finance_dashboard.sql`; `scripts/db-tests/finance-dashboard.sql`; `server/contracts/finance-dashboard/finance-dashboard.ts`; `server/queries/finance-dashboard.ts(.test.ts)`; `server/mutations/finance-report.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/dashboard/{page.tsx,loading.tsx}`; `app/(tenant)/[tenantSlug]/finance/reports/{page.tsx,actions.ts,run-report.ts,export-report-form.tsx,[reportCode]/page.tsx}`; `docs/build-log/phase-04/FIN-213.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `213` `VERIFIED`; row `214`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 2 new routes (`dashboard`, `reports[/[reportCode]]`).
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2156/2156 (12 net new), `pnpm run db:test` PASS -- 95 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 77 routes (2 new: `/[tenantSlug]/finance/dashboard`, `/[tenantSlug]/finance/reports[/[reportCode]]`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: zero new tables, four new functions, six new `report_types` catalogue rows. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real db-test fixture-collision defect found and fixed before commit: this checkpoint's own initial fixture reused an email/company name/vendor-rate code already used by `scripts/db-tests/operations-dashboard.sql`/`commercial-dashboard.sql`; because every `*.sql` db-test file runs against one cumulative disposable database and at least one downstream lookup carried no tenant scope, the earlier-alphabetical `finance-dashboard.sql` fixture row was silently picked up by `operations-dashboard.sql`, breaking its own assertion -- fixed by renaming every fixture identifier this checkpoint introduces to a distinctive, collision-free value; confirmed the full `db:test` suite passes end-to-end afterward. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-024` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the first of the range's substantive Finance tasks (213-218). `CG-S9-FIN-025` (Prompt 214, Financial Field-Level Security) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
