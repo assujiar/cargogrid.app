@@ -42,6 +42,7 @@ export const JOURNAL_CORRECTION_KNOWN_MUTATION_ERROR_CODES = [
   "finance_correction_not_submitted",
   "finance_correction_not_approved",
   "finance_correction_not_cancellable",
+  "finance_period_locked",
   "stale_version",
 ] as const;
 type KnownJournalCorrectionMutationErrorCode = (typeof JOURNAL_CORRECTION_KNOWN_MUTATION_ERROR_CODES)[number];

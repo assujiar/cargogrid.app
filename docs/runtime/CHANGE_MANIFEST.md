@@ -5565,6 +5565,40 @@ Zero implementation defect found during authoring -- every fixture scenario, inc
 
 Self-closing. `CG-S9-FIN-018` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the second of five. `CG-S9-FIN-019` (Prompt 208, Idempotent Posting) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-145 — Idempotent Posting (Phase 4, Prompt 208)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-019` / `208_IDEMPOTENT_POSTING_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 5 new functions, 1 signature-unchanged `CREATE OR REPLACE FUNCTION` extension), a new read-only service layer, one pre-existing db-test assertion deliberately tightened |
+| Baseline evidence | `CG-S9-FIN-018` `VERIFIED` (`docs/build-log/phase-04/FIN-207.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- third task in that range |
+
+#### Outcome
+
+One shared idempotency claim ledger (`app.finance_idempotency_claims`) closes the one real gap left by five already-idempotent Finance domains (invoice, receipt allocation, vendor bill, settlement, journal): each already returned an unchanged original on a byte-identical retry, but none detected a *different* payload reusing the same key, silently returning the stale original instead of rejecting the mismatch. `app.claim_finance_idempotency_key` now closes that gap -- a fingerprint match returns the identical claim, a mismatch raises `finance_idempotency_fingerprint_conflict` before any domain row is written. Wired into FIN-203's own `app.create_finance_journal_draft` as the one real adopter this checkpoint; the other five domains keep their own existing behavior, a disclosed forward-integration bound matching the capability's own named end-state.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729220000_create_finance_idempotent_posting.sql`; `scripts/db-tests/finance-idempotent-posting.sql`; `server/contracts/idempotency/idempotency.ts(.test.ts)`; `server/queries/idempotency.ts(.test.ts)`; `docs/build-log/phase-04/FIN-208.md`. Modified: `server/mutations/journal.ts` and `server/mutations/journal-correction.ts` (each gained the newly-possible `finance_idempotency_fingerprint_conflict`/`finance_period_locked` error-code classifications); `scripts/db-tests/finance-journal.sql` (its own retry assertion split into an identical-retry-unchanged case and a mismatched-retry-rejected case); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `208` `VERIFIED`; row `209`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 0 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2087/2087 (6 net new), `pnpm run db:test` PASS -- 90 db-test files (1 net new, zero regression including the deliberately-tightened `finance-journal.sql` assertion), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 74 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, five new functions, one `CREATE OR REPLACE FUNCTION` extension keeping its own prior signature byte-for-byte unchanged. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited. The one pre-existing db-test file this checkpoint modified reverts alongside it without orphaning any other assertion.
+
+#### Errors found and fixed
+
+One real implementation snag found and fixed before commit: a pre-existing FIN-203 db-test deliberately retried the same idempotency_key with a genuinely different payload to prove the old, now-superseded "any retry returns the original" contract -- exactly the gap this checkpoint exists to close, so that assertion now correctly failed under the new, stricter contract. Fixed by splitting it into a byte-identical-retry assertion (still returns the original unchanged) and a mismatched-payload-retry assertion (now a named conflict) -- a disclosed, deliberate tightening, not a regression. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-019` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the third of five. `CG-S9-FIN-020` (Prompt 209, Reconciliation) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

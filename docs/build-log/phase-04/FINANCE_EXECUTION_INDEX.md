@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 206, 207, 208, 209, and 210 in order, each as its own commit. Rows `201`-`206` are `VERIFIED`. Row `207` is now instantiated with exact repository paths and marked `VERIFIED` below. Prompts 208-218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `208`-`218` remain `NOT_STARTED`/`BLOCKED` until each is reached in turn within this session's own authorized range.
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 206, 207, 208, 209, and 210 in order, each as its own commit. Rows `201`-`207` are `VERIFIED`. Row `208` is now instantiated with exact repository paths and marked `VERIFIED` below. Prompts 209-218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `209`-`218` remain `NOT_STARTED`/`BLOCKED` until each is reached in turn within this session's own authorized range.
 
 ## 0. Checkpoint
 
@@ -10,10 +10,10 @@
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
 | Working branch | `claude/prompt-206-210-dpxtmu`, tracked to `origin/claude/prompt-206-210-dpxtmu` this checkpoint |
-| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-017` (Prompt 206, Reversal and Adjustment) commit |
-| Worktree state | Clean except this checkpoint's own new Period Lock files and runtime-ledger updates |
-| Repository state | `FIN-191..206` (through Reversal and Adjustment) all `VERIFIED`. `supabase/migrations/20260729210000_create_finance_period_lock.sql` is new this checkpoint. |
-| Mutation performed by this document | Row `207` instantiated `VERIFIED`; row `208`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
+| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-018` (Prompt 207, Period Lock and Governed Reopen) commit |
+| Worktree state | Clean except this checkpoint's own new Idempotent Posting files, one tightened pre-existing db-test assertion, and runtime-ledger updates |
+| Repository state | `FIN-191..207` (through Period Lock and Governed Reopen) all `VERIFIED`. `supabase/migrations/20260729220000_create_finance_idempotent_posting.sql` is new this checkpoint. |
+| Mutation performed by this document | Row `208` instantiated `VERIFIED`; row `209`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
 | User authorization | Explicit user instruction: "lanjut prompt 206-210" ("continue prompts 206-210") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. |
 
@@ -537,19 +537,19 @@
 | `source_ids` | FIN-GL/AR/AP-001..004; INV-011; master Phase 4 idempotent-posting requirement |
 | `upstream` | FIN-197..207 |
 | `downstream` | FIN-209 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-197..207 all VERIFIED (FIN-208 also depends on FIN-197..201, all already VERIFIED prior to this session), so CG-S9-FIN-019 (Prompt 208) is now dependency-eligible and authorized this session -- next |
+| `allowed_paths` | `supabase/migrations/20260729220000_create_finance_idempotent_posting.sql`; `server/contracts/idempotency/`; `server/queries/idempotency.ts`; `server/mutations/journal.ts` (error-code classification only); `server/mutations/journal-correction.ts` (error-code classification only); `scripts/db-tests/finance-journal.sql` (retry assertion tightened); `docs/build-log/phase-04/FIN-208.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..207 migrations (extend via new migration/`CREATE OR REPLACE FUNCTION` only; the one extension in this checkpoint keeps its own prior function signature unchanged) |
+| `migration_ids` | 1 additive migration (`app.finance_idempotency_claims`; 5 new functions including the one shared claim primitive; 1 `CREATE OR REPLACE FUNCTION` extension of FIN-203's own `app.create_finance_journal_draft`, signature-unchanged) |
+| `api_contracts` | one shared read (`get_finance_idempotency_claim`); `claim`/`complete`/`fail` are internal building blocks, not a standalone client-facing mutation surface this checkpoint |
+| `access_controls` | `FIN:View` (read claim status); `claim`/`complete`/`fail` require only an active tenant membership, relying on the calling domain function's own already-checked `FIN:Edit`/`FIN:Approve` |
+| `financial_invariants` | one stable scoped idempotency key maps to exactly one canonical request fingerprint; a fingerprint-matching retry returns the identical prior result; a mismatch is a named conflict, never a silent overwrite or a second effect (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries unit tests (6 net new); scripts/db-tests/finance-idempotent-posting.sql (claim/retry/conflict, idempotent complete, fail-rejects-completed, authority-gated read raising for an unknown key, the real adopter's own end-to-end proof, cross-tenant isolation, schema-privilege defense in depth); scripts/db-tests/finance-journal.sql's own retry assertion split into an identical-retry-unchanged case and a mismatched-retry-rejected case |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-208.md build log; db-test output (90 files, zero regression); node:test count delta (2081 -> 2087) |
+| `rollback` | additive migration only; the one `CREATE OR REPLACE FUNCTION` extension keeps its own prior signature unchanged; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-020 (Prompt 209, Reconciliation) is dependency-eligible and authorized this session -- next |
 
 ### Row `209` — Prompt 209, `CG-S9-FIN-020`
 
@@ -577,7 +577,7 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-196..208 (FIN-211 later adds bank/cash inputs) reaching VERIFIED |
+| `resume_point` | FIN-196..208 all VERIFIED (FIN-211 later adds bank/cash inputs), so CG-S9-FIN-020 (Prompt 209) is now dependency-eligible and authorized this session -- next |
 
 ### Row `210` — Prompt 210, `CG-S9-FIN-021`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`207` are `VERIFIED`** (`207` this checkpoint). This session's explicit authorized range is Prompts 206-210; `208`-`210` remain to be instantiated within this same session. **`208`–`218` (11 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `208`-`210` are authorized this session and dependency-eligible in turn, while `211`-`218` remain out of this session's authorized range.
+Of the 29 rows in this index (`190`–`218`): **`190`–`208` are `VERIFIED`** (`208` this checkpoint). This session's explicit authorized range is Prompts 206-210; `209`-`210` remain to be instantiated within this same session. **`209`–`218` (10 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `209`-`210` are authorized this session and dependency-eligible in turn, while `211`-`218` remain out of this session's authorized range.
 
 ## 3. Collision inspection
 

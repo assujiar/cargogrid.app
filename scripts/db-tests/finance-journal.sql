@@ -254,12 +254,28 @@ begin
     raise exception 'assertion failed: expected a draft manual journal of total_amount 500, got status=% total=% source=%', v_journal.status, v_journal.total_amount, v_journal.source_type;
   end if;
 
-  select * into v_retry from app.create_finance_journal_draft(v_tenant_a, null, '2026-03-06'::date, 'USD',
-    jsonb_build_array(jsonb_build_object('accountId', v_cash_id, 'direction', 'debit', 'amount', 9999)),
-    'jrnl-real-1', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+  -- FIN-208: a byte-identical retry (same date/currency/lines) under the same idempotency_key returns the original journal unchanged.
+  select * into v_retry from app.create_finance_journal_draft(v_tenant_a, null, '2026-03-05'::date, 'USD',
+    jsonb_build_array(
+      jsonb_build_object('accountId', v_cash_id, 'direction', 'debit', 'amount', 500, 'description', 'opening cash'),
+      jsonb_build_object('accountId', v_rev_id, 'direction', 'credit', 'amount', 500, 'description', 'opening revenue')
+    ), 'jrnl-real-1', '00000000-0000-0000-0000-000000029802', 'financemanagera');
   if v_retry.id <> v_journal.id or v_retry.total_amount <> 500 then
     raise exception 'assertion failed: expected a retried draft with the same idempotency_key to return the original journal unchanged, got id=% total=%', v_retry.id, v_retry.total_amount;
   end if;
+
+  -- FIN-208: the identical idempotency_key reused with a genuinely different request (a different single-line payload) is now a named conflict, never a silent return of the original.
+  begin
+    perform app.create_finance_journal_draft(v_tenant_a, null, '2026-03-06'::date, 'USD',
+      jsonb_build_array(jsonb_build_object('accountId', v_cash_id, 'direction', 'debit', 'amount', 9999)),
+      'jrnl-real-1', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+    raise exception 'assertion failed: expected finance_idempotency_fingerprint_conflict for a reused key with a different payload';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_idempotency_fingerprint_conflict' then
+        raise exception 'assertion failed: expected finance_idempotency_fingerprint_conflict, got %', sqlerrm;
+      end if;
+  end;
 end;
 $$;
 
