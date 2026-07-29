@@ -5259,6 +5259,40 @@ Zero implementation defect. Every fixture scenario, including idempotent-replay,
 
 Self-closing. `CG-S9-FIN-009` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-010` (Prompt 199, Accounts Payable) -- within this session's explicit authorized range (Prompts 195-200).
 
+### CHG-2026-136 — Accounts Payable (Phase 4, Prompt 199)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-010` / `199_ACCOUNTS_PAYABLE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-009` `VERIFIED` (`docs/build-log/phase-04/FIN-198.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- fifth task in that range |
+
+#### Outcome
+
+Source-linked AP open items and their balance lifecycle -- the vendor-side mirror of FIN-196's own Accounts Receivable design: idempotent posting from a source document, exact-balance settlement with status derived purely from balance, and a governed hold/release split. Vendor reference reuses OPS-172's own existing `master_records` vendor type -- no new vendor-identity table, no Step 11 scope smuggled in.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729130000_create_finance_accounts_payable.sql`; `server/contracts/accounts-payable/accounts-payable.ts(.test.ts)`; `server/queries/accounts-payable.ts(.test.ts)`; `server/mutations/accounts-payable.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/accounts-payable/page.tsx`/`actions.ts`/`accounts-payable-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-accounts-payable.sql`; `docs/build-log/phase-04/FIN-199.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_AP_OPEN_ITEM_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `199` `VERIFIED`, row `200` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1961/1961 (19 net new), `pnpm run db:test` PASS -- 80 migrations/81 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 66 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (2 new tables, 9 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect. Every fixture scenario passed on the first `db:test` run.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-010` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-011` (Prompt 200, Vendor Bill) -- the final task in this session's explicit authorized range (Prompts 195-200).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

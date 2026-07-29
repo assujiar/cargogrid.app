@@ -32,6 +32,7 @@ import type { FinanceTaxRuleStatus } from "../../server/contracts/tax-baseline/t
 import type { FinanceArOpenItemStatus } from "../../server/contracts/accounts-receivable/accounts-receivable.ts";
 import type { FinanceInvoiceStatus } from "../../server/contracts/invoice/invoice.ts";
 import type { FinanceReceiptStatus } from "../../server/contracts/receipt-allocation/receipt-allocation.ts";
+import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-payable/accounts-payable.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -137,6 +138,13 @@ export const FINANCE_INVOICE_STATUS_TONE_MAP: Record<FinanceInvoiceStatus, Statu
 export const FINANCE_RECEIPT_STATUS_TONE_MAP: Record<FinanceReceiptStatus, StatusToneEntry> = {
   captured: { tone: "success", label: "Captured" },
   void: { tone: "danger", label: "Void" },
+};
+
+/** FIN-199: Accounts Payable's own balance-derived lifecycle (open/partial/settled) -- the vendor-side mirror of FIN-196's own AR status map, distinct wording ("settled" vs. "paid"). */
+export const FINANCE_AP_OPEN_ITEM_STATUS_TONE_MAP: Record<FinanceApOpenItemStatus, StatusToneEntry> = {
+  open: { tone: "warning", label: "Open" },
+  partial: { tone: "info", label: "Partial" },
+  settled: { tone: "success", label: "Settled" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {
