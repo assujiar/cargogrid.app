@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 211, 212, and 213 in order ("lanjut sd promp 213" -- continue through prompt 213), each as its own commit, following the fully-complete Prompts 206-210 range. Rows `211`-`212` are now instantiated with exact repository paths and marked `VERIFIED` below. Prompt 213 remains to be instantiated within this same authorized range; rows `214`-`218` remain `NOT_STARTED`/`BLOCKED`, out of this session's authorized range.
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 211, 212, and 213 in order ("lanjut sd promp 213" -- continue through prompt 213), each as its own commit, following the fully-complete Prompts 206-210 range. Rows `211`-`213` are now instantiated with exact repository paths and marked `VERIFIED` below. **This session's entire explicit authorized range (Prompts 211-213) is now fully complete.** Rows `214`-`218` remain `NOT_STARTED`/`BLOCKED`, out of this session's authorized range.
 
 ## 0. Checkpoint
 
@@ -10,12 +10,12 @@
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
 | Working branch | `claude/prompt-206-210-dpxtmu` (continued -- the prior range's own branch was not yet merged when this fresh authorization arrived), tracked to `origin/claude/prompt-206-210-dpxtmu` this checkpoint |
-| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-022` (Prompt 211, Cash and Bank Baseline) commit |
-| Worktree state | Clean except this checkpoint's own new Job, Customer and Service Profitability files and runtime-ledger updates |
-| Repository state | `FIN-191..211` (through Cash and Bank Baseline) all `VERIFIED`. `supabase/migrations/20260729260000_create_finance_job_profitability.sql` is new this checkpoint. |
-| Mutation performed by this document | Row `212` instantiated `VERIFIED`; row `213`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
+| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-023` (Prompt 212, Job, Customer and Service Profitability) commit |
+| Worktree state | Clean except this checkpoint's own new Finance Dashboard and Reports files and runtime-ledger updates |
+| Repository state | `FIN-191..212` (through Job, Customer and Service Profitability) all `VERIFIED`. `supabase/migrations/20260729270000_create_finance_dashboard.sql` is new this checkpoint. |
+| Mutation performed by this document | Row `213` instantiated `VERIFIED`; row `214`'s own resume_point confirmed still correctly blocked (out of this session's authorized range); checkpoint header and tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
-| User authorization | Explicit user instruction: "lanjut sd promp 213" ("continue through prompt 213") — a scoped, multi-task, named-endpoint authorization covering Prompts 211-213, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. |
+| User authorization | Explicit user instruction: "lanjut sd promp 213" ("continue through prompt 213") — a scoped, multi-task, named-endpoint authorization covering Prompts 211-213, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. This is the final task in that range. |
 
 ## 1. Full execution index
 
@@ -677,19 +677,19 @@
 | `source_ids` | FIN-GL/AR/AP/TAX/CLS/PRF-004; RPD-014; 12 named report categories |
 | `upstream` | FIN-191..212 |
 | `downstream` | FIN-214 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-191..212 all VERIFIED, so CG-S9-FIN-024 (Prompt 213) is now dependency-eligible and authorized this session -- next, the final task in this session's explicit authorized range |
+| `allowed_paths` | `supabase/migrations/20260729270000_create_finance_dashboard.sql`; `server/contracts/finance-dashboard/`; `server/queries/finance-dashboard.ts`; `app/(tenant)/[tenantSlug]/finance/dashboard/**`; `docs/build-log/phase-04/FIN-213.md` |
+| `forbidden_paths` | any prior migration file; `server/contracts/dashboard/` (pre-existing Commercial `COM-158` directory, never touched) |
+| `migration_ids` | `20260729270000_create_finance_dashboard` |
+| `api_contracts` | `app.get_finance_dashboard_billing_summary`; `app.get_finance_dashboard_reconciliation_summary`; `app.get_finance_dashboard_cash_summary`; reuses `app.get_finance_aging_summary` (`FIN-210`) and `app.get_finance_profitability_summary` (`FIN-212`) verbatim |
+| `access_controls` | `FIN:View` gates billing/reconciliation/cash/aging; `FIN:View margin` additionally gates the profitability section, independently error-handled so its absence never fails the whole page |
+| `financial_invariants` | per 189_FINANCE_README.md §5/§6 -- every section is a live read of its own owning capability's already-governed source, zero new stored/cached figure, disclosed as-of date on every read |
+| `tests` | `server/contracts/finance-dashboard/finance-dashboard.test.ts`; `server/queries/finance-dashboard.test.ts`; `scripts/db-tests/finance-dashboard.sql` |
+| `commands` | `typecheck`, `lint`, `test`, `db:test`, `next build`, `docs:check`, `security:check`, `data-classification:check`, `threat-model:check`, `standards:check`, `git:check-paths` |
+| `evidence` | FIN-213.md build log; db-test output (95 files, zero regression); node:test count delta (2144 -> 2152); next build (77 routes) |
+| `rollback` | additive migration only (zero new table, four functions); `git revert` this checkpoint's own commit |
+| `owner` | this session |
+| `status` | VERIFIED |
+| `resume_point` | This session's entire explicit authorized range (Prompts 211-213) is now fully complete. `CG-S9-FIN-025` (Prompt 214) is dependency-eligible per this index but NOT authorized this session -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds |
 
 ### Row `214` — Prompt 214, `CG-S9-FIN-025`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`212` are `VERIFIED`** (`212` this checkpoint). This session's fresh explicit authorized range is Prompts 211-213; `213` remains to be instantiated within this same session. **`213`–`218` (6 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `213` is authorized this session and dependency-eligible, while `214`-`218` remain out of this session's authorized range.
+Of the 29 rows in this index (`190`–`218`): **`190`–`213` are `VERIFIED`** (`213` this checkpoint). This session's fresh explicit authorized range was Prompts 211-213 -- **that range is now fully complete.** **`214`–`218` (5 rows) remain `NOT_STARTED`/`BLOCKED`**, dependency-mapped but not yet instantiated with exact paths, all out of this session's authorized range; `214` is dependency-eligible per this index but requires fresh explicit user authorization before any further Finance Phase 4 work proceeds.
 
 ## 3. Collision inspection
 

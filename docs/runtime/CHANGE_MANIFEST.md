@@ -5735,6 +5735,40 @@ One real db-test authorization defect found and fixed before commit: a tenant B 
 
 Self-closing. `CG-S9-FIN-023` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 211-213; this is the second of three. `CG-S9-FIN-024` (Prompt 213, Finance Dashboard and Reports) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
 
+### CHG-2026-150 — Finance Dashboard and Reports (Phase 4, Prompt 213)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-024` / `213_FINANCE_DASHBOARD_REPORTS_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (0 new tables, 4 new functions), a new full service layer (read-only, no mutations), a new UI route |
+| Baseline evidence | `CG-S9-FIN-023` `VERIFIED` (`docs/build-log/phase-04/FIN-212.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd promp 213" naming Finance Phase 4 prompts 211-213 in order -- third and final task in that range |
+
+#### Outcome
+
+A permission-safe, source-reconciled Finance dashboard composed entirely from already-governed sources -- zero new stored figure anywhere. Billing (invoice status/currency counts) and reconciliation (most recent run per scope) are two new narrow, read-only aggregation functions reading directly from FIN-197/FIN-209's own tables; cash is composed across every one of the tenant's own bank accounts via FIN-211's own per-account `app.get_finance_cash_position`; AR/AP aging and profitability reuse FIN-210/FIN-212's own summary functions verbatim. Profitability remains gated on `FIN:View margin` exactly as FIN-212 established -- the UI fetches it independently of the other `FIN:View`-only sections, so a caller lacking that permission sees every other section but a disclosed permission-denied card in profitability's own place, never a failed page. Disclosed, bounded checkpoint scope: trial balance, P&L/balance-sheet statements, budget-versus-actual and tax liability summaries are not built (no such engine exists anywhere in this repository yet); a full report catalogue with saved views/scheduling/async export is equally out of this checkpoint's bounded scope.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729270000_create_finance_dashboard.sql`; `scripts/db-tests/finance-dashboard.sql`; `server/contracts/finance-dashboard/finance-dashboard.ts(.test.ts)`; `server/queries/finance-dashboard.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/dashboard/page.tsx`; `docs/build-log/phase-04/FIN-213.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `213` `VERIFIED`; row `214`'s own resume_point confirmed still correctly blocked); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route. `server/contracts/finance-dashboard/` is a deliberately distinct directory name from the pre-existing Commercial `server/contracts/dashboard/` (`COM-158`), avoiding a real naming collision found during authoring.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2152/2152 (8 net new), `pnpm run db:test` PASS -- 95 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 77 routes (1 new: `/[tenantSlug]/finance/dashboard`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: zero new table, four new functions, none of them ever mutating any source table -- pure read composition. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real fixture-design correction found and fixed before commit: the db-test's own reconciliation-run scenario initially used an as-of date before the fiscal period's own `end_date`, which FIN-209's own disclosed as-of-bounded-by-resolved-period-end technique correctly excludes from the GL side while the open-item side (bounded by the invoice's own business date) still included it -- a genuine, expected variance, not a defect in this checkpoint's own new code; fixed by moving the as-of date to on-or-after the period's own end date, matching FIN-209's own documented convention exactly. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-024` is `VERIFIED`. **This session's entire explicit authorized range (Finance Phase 4 Prompts 211-213, "lanjut sd promp 213") is now fully complete.** `CG-S9-FIN-025` (Prompt 214) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
