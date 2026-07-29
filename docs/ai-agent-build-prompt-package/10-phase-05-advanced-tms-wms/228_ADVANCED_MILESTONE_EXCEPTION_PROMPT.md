@@ -1,174 +1,168 @@
-# Prompt 228 — Advanced Milestone and Exception
+# Prompt 228 — Advanced Milestone and Exception with Multi-Source Telemetry
 
-**Prompt ID:** `CG-S10-ATW-009`  
-**Package document:** `CG-AABPP-ATW-228`  
-**Version:** `0.11.0`  
-**Runtime build log:** `docs/build-log/phase-05/ATW-228.md`
+    **Prompt ID:** `CG-S10-ATW-009`  
+    **Package document:** `CG-AABPP-ATW-228`  
+    **Version:** `0.12.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-05/ATW-228.md`
 
-Do not begin until Prompt 220 marks this task `READY`, all variables are resolved, and `PHASE_4_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S10-ATW-009` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S10-ATW-009` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 5 — Advanced TMS and WMS`; package `0.11.0`.
+    `Phase 5 — Advanced TMS and WMS`; package version `0.12.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Operations Control Tower; Epic: Predictable Network Execution; Capability: Advanced Milestone and Exception Management; Feature slice: leg/stage templates, ETA/ETD, dependencies, telemetry signals, SLA, root cause, recovery and customer-safe projection; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Operations Control Tower; Epic: Predictable Network Execution; Capability: Advanced Milestone and Exception; Feature slice: telemetry candidate signals, source confidence/freshness, SLA, recovery and customer-safe projection; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Extend Phase 3 milestones/exceptions across legs and mile stages with dependency-aware ETA/ETD, telemetry signals, SLA escalation and recovery plans.
+    Extend milestones and exceptions across legs/stages using canonical multi-source telemetry signals without allowing telemetry to become authoritative shipment truth by itself.
 
-## 5. Business value
+    ## 5. Business value
 
-Give the control tower early, explainable visibility into network delays and actionable recovery.
+    Give the control tower early, explainable delay and tracking-health signals while preserving human-governed operational truth.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-OPS-TRK-001..004 advanced slice; OPS-DOC incident linkage. Cite exact source sections, runtime evidence, ADR/configuration versions and prerequisite task IDs.
+    OPS-TRK-001..004; revised ATW-219/226; Phase 3 milestone/exception contracts. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, active closure IDs, schema/migrations/contracts/routes/modules, package manager/scripts, environment, baseline and last trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs and source requirements. Inspect repository/schema/API/UI/jobs/integrations/tests, detect package manager, run feasible baseline gates, state plan/expected files, and stop on tenant/customer/data/inventory/security/financial/phase-boundary conflict.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-ATW-221, ATW-225..227 and verified Phase 3 milestone/exception contracts. Every execution-index prerequisite must be `VERIFIED`.
+    ATW-221, ATW-225..227, Prompt 226 canonical telemetry, verified Phase 3 milestone/exception contracts. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-ATW-243..248. Identify affected schemas, services, REST/GraphQL, jobs/integrations/files, Finance/portal contracts, tests, docs and compatibility consumers.
+    ATW-243..248, Customer Portal tracking and monitoring. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Use only exact Advanced TMS/WMS schema, migration, service, UI, integration/job, test and documentation paths authorized by the WBS. Resolve paths from the repository; normally 5–15 files and at most 1–3 additive migrations.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Unrelated domains, duplicate Phase 3 roots, full Step 11–14 implementations, tenant forks, applied-migration edits, destructive cleanup, hidden test/permission weakening and user-owned unrelated changes. Preserve Phase 1–4 contracts and protected decisions.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-Extend milestone template/instance with leg/stage/dependency, planned/estimated/actual time, source confidence/version; exception root cause/impact/recovery/SLA/owner/escalation and customer-safe projection.
+    Extend milestone/exception records with leg/stage, planned/estimated/actual time, source class, source event ID, confidence, freshness, candidate/confirmed state, conflict and recovery metadata.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-Shared REST/GraphQL template/instance/read, event ingest, acknowledge/assign/escalate/recover/close and timeline projection operations. REST and GraphQL share one service, auth, field policy, idempotency, audit and version semantics.
+    Provide event ingest/reconcile/confirm/suppress/rebaseline/acknowledge/escalate/recover/close operations. Only canonical telemetry candidate signals are accepted, never raw provider/device/mobile payloads.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-Control-tower timeline/map/exception queue with dependency impact, ETA confidence/source, owner/SLA, recovery plan and customer-visibility preview. Include loading, empty, error, success, permission-denied and degraded states; responsive online-first PWA, keyboard/focus/labels, scan alternatives, unsaved-change protection and no dead action.
+    Control-tower timeline/map/exception queue showing source, freshness, confidence, candidate/confirmed status, conflict, owner, SLA, and recovery.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Internal cause/cost/vendor/driver data is field-restricted; customer projection is allowlisted; telemetry cannot authorize state change alone. Preserve tenant/customer isolation, RLS, RBAC, company/branch/warehouse/owner scope, field/record policy, server-only secrets, file controls and RPD-022 risk disclosure.
+    Internal cause, driver, device, provider, cost and raw telemetry are restricted. Customer projection is allowlisted.
 
-## 17. Performance impact
+    ## 17. Performance and reliability impact
 
-Index active leg/stage/status/SLA/time; selectively update active scope, batch dependency impact and bound ETA computations. Use selective columns, server filter/sort/search/cursor pagination, query budgets, async heavy work, limited realtime and before/after evidence; no `SELECT *` or browser-loaded full dataset.
+    Index active leg/stage/SLA/source/time; batch dependency impact; bound ETA calculations; selective realtime.
 
-## 18. Audit impact
+    ## 18. Audit and observability impact
 
-Record template/rule/source versions, event/received time, ETA changes, exception detection/manual action, escalation, recovery, customer visibility and override. Include correlation/idempotency key, actor/context, source/config versions, before/after or movement/event chain, outcome and privileged evidence.
+    Audit source event/version, recorded/received time, candidate generation, human confirmation, conflict resolution, source switch, ETA, exception, escalation and recovery.
 
-## 19. Data migration impact
+    ## 19. Data migration and compatibility impact
 
-Map Phase 3 milestones/exceptions additively to root or leg/stage with explicit unresolved classification. Use additive or expand-and-contract migrations; never edit an applied migration. Inventory/operational history changes require backup, rehearsal and reconciliation.
+    Map existing milestones additively. Historical source classification may remain unknown rather than fabricated.
 
-## 20. Detailed implementation tasks
+    ## 20. Detailed implementation tasks
 
-- Inventory Phase 3 timeline/exception and advanced source signals.
-- Define leg/stage dependency, ETA/source confidence and recovery semantics.
-- Implement extensions, shared services/APIs and control-tower UX.
-- Integrate telemetry/dispatch/capacity/claim/customer projections.
-- Run order/dependency/SLA/access/migration/load E2E tests.
+    - Define telemetry candidate-to-domain-event rules.
+- Add tracking-health exception taxonomy.
+- Implement confidence/freshness/conflict handling.
+- Integrate dependency-aware ETA and recovery.
+- Add customer-safe projection and tests.
 
-## 21. Main flow
+    ## 21. Main flow
 
-Canonical/manual/telemetry event updates an authorized leg milestone, dependency engine recalculates impacted ETA, opens/escalates exception if rule triggers, owner executes recovery and customer sees only approved projection.
+    Canonical telemetry produces a validated candidate; domain rules reconcile it with geofence, lifecycle, and confirmed evidence; milestone/exception is created or requires review.
 
-## 22. Alternative flow
+    ## 22. Alternative flow
 
-Manually confirm an uncertain signal, suppress duplicate alert with reason, revise recovery plan or rebaseline unstarted milestones under approval.
+    Manually confirm uncertain signals, suppress duplicate alerts with reason, switch to fallback source, or rebaseline unstarted milestones.
 
-## 23. Exception flow
+    ## 23. Exception flow
 
-Block contradictory terminal event, invalid dependency cycle, stale/low-confidence autonomous state mutation, duplicate escalation, SLA calendar error, unauthorized customer exposure or silent closure. Record blocker/error/issue, preserve evidence and exact safe resume point; never hide or bypass failure.
+    Block contradictory terminal event, low-confidence autonomous mutation, stale source, source conflict, duplicate escalation, no-signal storm, or unauthorized customer exposure.
 
-## 24. Business rules
+    ## 24. Business rules
 
-- Event time and received time are separate; source/confidence remains visible.
-- Derived ETA/exception is explainable and cannot silently replace confirmed actual events.
-- Exception closes only with required recovery/evidence and downstream impact resolution.
-- Extend canonical Phase 3/4 records and source/version lineage; no silent re-entry or duplicate source of truth.
-- When stock/quantity changes, use exact UOM and idempotent ledger/task events; normal roles never directly patch balances.
-- RPD-022 prevents any tamper-proof/immutable-for-all claim; no tenant fork, autonomous AI commitment, offline sync or partial-GA claim.
+    - Event and received time stay separate.
+- Raw telemetry cannot complete lifecycle.
+- Candidate signals remain distinguishable from confirmed events.
+- Source conflict/fallback is visible.
+- Customer sees only approved projection.
 
-## 25. Validation rules
+    ## 25. Validation rules
 
-- Milestone dependency graph is acyclic and templates are compatible with leg/stage/service.
-- State/event/order/idempotency and ETA inputs are valid.
-- Customer visibility classification is explicit per field/event.
-- Reject tenant/company/branch/warehouse/customer-owner/source/config/version mismatch and stale concurrent mutation.
-- Every state, assignment, movement or external event must be authorized, idempotency-safe and source-reconcilable.
+    - Validate canonical source link, confidence, freshness, geofence, event order, lifecycle compatibility and scope.
+- Reject stale/duplicate/conflicting terminal mutation.
 
-## 26. Access rules
+    ## 26. Access rules
 
-Control tower manages internal exceptions; assigned operators update scoped actions; managers approve rebaseline/override; customers receive only allowlisted status. Enforce authorization in database/service as applicable, not UI only; list/search/export/report/realtime use the same field and record policy.
+    Control tower manages internal exceptions; operators confirm scoped candidates; managers approve override; customers see allowlisted status only.
 
-## 27. Test data requirement
+    ## 27. Test data requirement
 
-Multi-leg delays, missed handoff, telemetry late/duplicate, ETA changes, dependency cascade, SLA breach, recovery/rebaseline, customer restrictions and Tenant A/B. Include deterministic IDs, exact quantities/UOM where relevant, source/config versions, allowed/denied roles, Tenant A/B, customer owners and retry/concurrency fixtures.
+    Late/duplicate/out-of-order mobile/device/provider events, hybrid conflict, source switch, no signal, ETA cascade, SLA breach, recovery, Tenant A/B.
 
-## 28. Tests to create/update
+    ## 28. Tests to create/update
 
-- Dependency/event-order/ETA/source-confidence/SLA/escalation/recovery tests.
-- Leg/dispatch/telemetry/capacity/claim/customer projection API E2E tests.
-- RLS/RBAC/field/customer isolation, idempotency/concurrency, load/realtime and accessibility tests.
-- Unit/component/integration/API contract/database/migration/audit/smoke coverage proportional to risk.
-- Inventory equation/ledger/reconciliation or transport state/capacity/event-order tests wherever applicable.
+    - Candidate reconciliation and event-order tests.
+- Source freshness/confidence/conflict tests.
+- ETA/SLA/escalation/recovery tests.
+- RLS/field/customer isolation.
+- Prompt 226 and customer projection E2E.
 
-## 29. Regression tests
+    ## 29. Regression tests
 
-Phase 3 milestone/exception/tracking/ePOD/readiness, notifications, Finance impacts and future portal. Re-run relevant tenant/customer isolation, inventory/operational integrity, Finance/API compatibility, browser/accessibility and critical E2E suites; compare baseline before/after.
+    Phase 3 milestone/exception/tracking/ePOD, ATW-225 orchestration, ATW-226 telemetry, capacity, notifications, Finance impacts.
 
-## 30. Commands to run
+    ## 30. Commands to run
 
-Detect and run repository equivalents of lint, typecheck, unit/integration tests and build; add relevant E2E, database reset/migration/type generation, security/dependency, job/integration and target-volume TMS/WMS commands. Do not disable a gate; separate proven pre-existing failures in `ERROR_LEDGER.md`.
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-## 31. Documentation to update
+    ## 31. Documentation to update
 
-Advanced milestone/dependency/ETA/exception/recovery contract and conflicting-signal/SLA/outage runbook. Update persistent context/status/task/change/regression/traceability/schema/API/data-flow/dependency/build-log artifacts and user/admin/API/support docs plus release note when behavior changes.
+    Candidate-event contract, source-confidence taxonomy, tracking exception codes, conflict/no-signal/provider-outage runbook.
 
-## 32. Rollback/recovery note
+    ## 32. Rollback/recovery note
 
-Disable faulty derived rule, restore last trusted confirmed events, recompute affected projections and reopen unresolved exceptions before resume. State last trusted checkpoint, reversible steps, data/ledger/event reconciliation and exact resume command; do not use destructive Git/database shortcuts.
+    Disable faulty derived rules, preserve confirmed events, recompute projections, reopen unresolved exceptions, and restore prior source policy.
 
-## 33. Acceptance criteria
+    ## 33. Acceptance criteria
 
-- Advanced timeline reconciles to canonical leg/stage events.
-- Exceptions are actionable and SLA-controlled.
-- Customer projection never leaks restricted causes or resources.
-- All mandatory automated/manual gates pass at one recorded checkpoint.
-- Completion evidence maps source requirement → task → code/migration/contract/UI → test → documentation.
+    - Advanced timeline reconciles to canonical events.
+- Telemetry never silently overrides confirmed truth.
+- Tracking-health exceptions are actionable and storm-controlled.
+- Customer projection is safe.
 
-## 34. Definition of Done
+    ## 34. Definition of Done
 
-Scope is implemented without placeholder/fake persistence/dead action; migrations, generated types, RLS/RBAC/field policy, shared APIs, complete UX states, jobs/integrations, tests, docs, audit, performance evidence and rollback are complete; no critical tenant/security/inventory/financial blocker remains.
+    Milestone/exception extensions, services, UI, tests, docs, and recovery are complete without critical event-order or privacy blocker.
 
-## 35. Completion report format
+    ## 35. Completion report format
 
-Report task/prompt IDs; repository checkpoint; changed files/migrations/contracts; source/config decisions; implementation summary; commands and baseline/after results; tenant/customer/access/inventory/transport/Finance evidence; idempotency/concurrency/reconciliation/performance results; residual errors/issues/risks; docs; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
 
-## 36. Next eligible prompt
+    ## 36. Next eligible prompt
 
-Only the execution index may release ATW-229 or another dependency-clean atomic task after this task is `VERIFIED`. Do not set `PHASE_5_VERIFIED`; only Prompt 248 may do so.
-
+    Only the execution index may release the next dependency-clean task. Prompt 248 alone may close Phase 5.

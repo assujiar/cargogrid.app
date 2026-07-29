@@ -1,170 +1,210 @@
 # Prompt 246 — Advanced TMS/WMS Integrity and Security Hardening
 
-**Prompt ID:** `CG-S10-ATW-027`  
-**Package document:** `CG-AABPP-ATW-246`  
-**Version:** `0.11.0`  
-**Runtime build log:** `docs/build-log/phase-05/ATW-246.md`
+    **Prompt ID:** `CG-S10-ATW-027`  
+    **Package document:** `CG-AABPP-ATW-246`  
+    **Version:** `0.12.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-05/ATW-246.md`
 
-Do not begin until ATW-245 is `VERIFIED`, its findings are triaged, and `PHASE_4_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S10-ATW-027` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S10-ATW-027` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 5 — Advanced TMS and WMS`; package `0.11.0`.
+    `Phase 5 — Advanced TMS and WMS`; package version `0.12.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Phase 5 Assurance; Epic: Integrity and Security Hardening; Capability: Findings Remediation and Adversarial Reverification; Feature slice: data invariants, authorization, files/integrations, concurrency, recovery and residual risk; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Phase 5 Assurance; Epic: Integrity and Security Hardening; Capability: Findings Remediation and Adversarial Reverification; Feature slice: repository-controlled defects across TMS/WMS and all GPS source classes; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Repair every Phase 5 blocking finding, harden high-risk boundaries and prove the fixes without expanding functional scope.
+    Repair every blocking finding and adversarially harden multi-source tracking without expanding functional scope.
 
-## 5. Business value
+    ## 5. Business value
 
-Reduce the chance that transport or warehouse defects cause cross-customer exposure, stock corruption, duplicate activity or financial inconsistency.
+    Reduce cross-customer exposure, spoofing, duplicate activity, tracking manipulation, inventory corruption and financial inconsistency.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-ATW-245 findings plus all Phase 5 OPS/RPD controls, especially RPD-001/002/014/022/025/031/032/033/035/036/038. Cite exact finding/source and before/after evidence.
+    ATW-245 findings; all Phase 5 OPS/RPD controls; revised ATW-226 threat model. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, tested checkpoint, open findings/closures, schemas/contracts/modules/jobs/integrations, package scripts, environment, baseline and trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read all persistent ledgers, ATW-245 evidence/findings and relevant build logs. Map each blocker to root cause, owner, files, tests and rollback; reproduce before editing, state bounded plan, and stop if repair requires a new product decision or Step 11–14 scope.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-ATW-245 `VERIFIED` with all findings classified and blocking items assigned.
+    ATW-245 verified with findings classified. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-ATW-247..248 and every repaired capability consumer. Invalidate and rerun all affected focused, integrated and Phase 1–4 regression gates.
+    ATW-247..248 and every repaired consumer. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Only files directly required to remediate registered ATW-245 findings plus tests, migrations, runbooks and build logs. Keep diffs minimal and evidence-backed.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Unregistered feature work, Step 11–14 implementations, tenant forks, duplicate roots, security/test weakening, destructive cleanup, applied-migration edits, broad refactors without evidence and unrelated user changes.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-Harden constraints, RLS/policies, idempotency/version/state transitions, exact ledger equations, job leases and indexes only where a finding proves need. Use additive/expand-contract migration and reconcile before/after.
+    Harden constraints, RLS, idempotency, event ordering, source mapping, retention, job leases, socket/buffer metadata and indexes only where evidence proves need.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-Repair shared service/auth/field-policy parity, validation, enumeration/errors, idempotency/concurrency, cursors/rate limits, callback signatures and failure semantics; update versioned contracts compatibly.
+    Repair auth/field policy, validation, enumeration, callback signature, mobile session, TCP protocol, provider contract, rate limits and failure semantics.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-Repair misleading or missing states, unsafe actions, stale/conflict handling, scan/manual alternatives, responsive/accessibility defects and recovery messaging. Keep online-first PWA and no fake success/dead action.
+    Repair misleading live/stale states, unsafe source overrides, missing consent/permission state, inaccessible recovery, and dead actions.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Adversarially test tenant/customer/warehouse/owner scope, scan/reference forgery, field/aggregate/export leakage, files/URLs, jobs/realtime/cache, webhook/telematics validation, secrets and privileged separation.
+    Adversarial tests must include:
 
-## 17. Performance impact
+**Direct device**
+- forged IMEI and cross-tenant mapping;
+- malformed/oversized frames, invalid CRC, packet flood, socket exhaustion;
+- replay, reconnect storms, ACK ambiguity, buffer tampering, exposed port/admin endpoint;
+- gateway/database credential leakage and unsafe logs.
 
-Confirm fixes do not regress declared target-volume budgets; rerun affected query plans, load/soak/failure tests and correctness reconciliation. Security controls must remain performant without unsafe bypass.
+**Driver mobile**
+- stolen/expired session, wrong trip/vehicle, revoked assignment/consent;
+- spoofed/impossible coordinates, permission loss, stale heartbeat;
+- falsely displayed background/live state and driver PII leakage.
 
-## 18. Audit impact
+**Third-party**
+- invalid signature/token, replay, schema drift, wrong external vehicle mapping;
+- rate-limit bypass, credential exposure, poisoned webhook/poll response.
 
-Ensure repaired actions preserve actor/context, source/config/version, idempotency/correlation, before/after/event chain, denial/failure and override evidence with appropriate redaction.
+**Hybrid**
+- malicious lower-priority source, rapid source oscillation, conflicting fresh coordinates;
+- unauthorized priority override and silent history overwrite.
 
-## 19. Data migration impact
+    ## 17. Performance and reliability impact
 
-Rehearse every repair migration on clean install and Phase 4/5 upgrade with lock/time/disk, backup, rollback/forward recovery and ledger/event reconciliation. Never rewrite applied migrations or fabricate history.
+    Rerun target profiles and confirm security controls do not create unsafe bypass or unacceptable ACK/queue/projection regression.
 
-## 20. Detailed implementation tasks
+    ## 18. Audit and observability impact
 
-- Reproduce and rank each ATW-245 blocker/root cause.
-- Repair minimal code/schema/policy/config/docs and add a failing-then-passing regression.
-- Run adversarial isolation, integrity, concurrency, file/integration and recovery tests.
-- Rerun affected focused plus complete integrated critical gates.
-- Close only findings with durable before/after evidence; document residual risks.
+    Ensure denials, failures, source changes, privileged replay and recovery are auditable without leaking credentials/raw sensitive data.
 
-## 21. Main flow
+    ## 19. Data migration and compatibility impact
 
-For each registered finding, reproduce at the frozen checkpoint, implement a bounded repair, prove focused regression, rerun impacted integration/non-regression gates and close with evidence/reviewer.
+    Rehearse every repair migration and deployment rollback on clean install and upgrade.
 
-## 22. Alternative flow
+    ## 20. Detailed implementation tasks
 
-If a safe fix cannot land in scope, disable the affected capability only through an approved reversible control, document user impact and keep Phase 5 closure blocked unless the source gate explicitly allows it.
+    - Reproduce/rank every finding.
+- Implement minimal repair and failing-then-passing regression.
+- Run the source-specific adversarial suites.
+- Rerun integrated and performance gates.
+- Close findings only with durable evidence.
 
-## 23. Exception flow
+    ## 21. Main flow
 
-Stop on data-loss risk, ambiguous ownership, new decision, incompatible contract, unbackfillable constraint, unreconciled ledger/event, critical regression or evidence mismatch. Register issue and safe recovery; never waive silently.
+    For each finding, reproduce, repair, prove focused regression, rerun impacted integration gates, and close with reviewer evidence.
 
-## 24. Business rules
+    ## 22. Alternative flow
 
-- Every change maps to an ATW-245 finding and has a regression test.
-- Authorization and inventory/transport/Finance invariants are enforced server/database-side where applicable.
-- Fixes preserve canonical roots, exact UOM/ledger, event order and idempotent handoffs.
-- RPD-022 remains an explicit residual risk; do not claim universal immutability/tamper proof.
-- No tenant fork, autonomous legal/routing/pricing commitment, offline sync or partial-GA claim.
-- Phase boundaries remain Step 11 procurement, Step 12 HR, Step 13 full Portal and Step 14 AI/enterprise depth.
+    If a safe fix is unavailable, disable only the affected source mode through an approved reversible control and keep repository-controlled blockers open.
 
-## 25. Validation rules
+    ## 23. Exception flow
 
-- Before evidence reproduces and after evidence disproves the same defect.
-- All affected focused/integrated tests and critical Phase 1–4 regressions pass.
-- Migration/API compatibility, exact reconciliation and scope-negative tests pass.
-- Any unresolved critical/high integrity/security/financial blocker keeps task unverified.
+    Stop on data-loss risk, ambiguous source ownership, unbackfillable constraint, unreconciled events/jobs, or critical regression.
 
-## 26. Access rules
+    ## 24. Business rules
 
-Use least-privilege test roles and scoped fixtures; no superuser-only acceptance. Only authorized maintainers change security/config/migrations, with reviewer evidence and separation for sensitive approvals.
+    - Every change maps to a finding.
+- Server/database authorization remains authoritative.
+- Fixes preserve canonical source history and arbitration.
+- No external evidence is fabricated.
+- Phase boundaries remain.
 
-## 27. Test data requirement
+    ## 25. Validation rules
 
-Reuse deterministic ATW-245 data plus minimal exploit/concurrency/failure fixtures for each finding, including Tenant A/B, customer-owner overlap, forged references, unsafe files, stale versions, duplicate jobs and external failures.
+    - Before/after evidence addresses the same defect.
+- Migration/API/deployment compatibility passes.
+- Cross-tenant and source-spoofing negative tests pass.
+- Unresolved critical/high blocker prevents verification.
 
-## 28. Tests to create/update
+    ## 26. Access rules
 
-- One targeted regression per finding.
-- Adversarial RLS/RBAC/field/file/job/realtime/integration tests.
-- Ledger/event/idempotency/concurrency/migration/recovery tests.
-- Rerun full transport and critical WMS E2E plus target-volume profiles.
+    Use least privilege, scoped fixtures and separated admin/device/driver/provider identities.
 
-## 29. Regression tests
+    ## 27. Test data requirement
 
-All ATW-221..245 suites and impacted Phase 1–4 gates. Compare same checkpoint/profile before/after; no unrelated test deletion, snapshot relaxation or permission broadening.
+    Reuse ATW-245 fixtures plus exploit, flood, malformed protocol, stolen session, spoofed provider, source conflict and outage data.
 
-## 30. Commands to run
+    ## 28. Tests to create/update
 
-Run repository lint/typecheck/test/build, security/dependency/static checks, migrations, policy matrix, file/integration failure, concurrency/reconciliation, target-volume and browser/accessibility E2Es. Record exact commands and never suppress a failure.
+    - One regression per finding.
+- Adversarial source-specific tests.
+- RLS/RBAC/secret/log/job/realtime tests.
+- Event/idempotency/concurrency/recovery tests.
+- Full transport/WMS and target-profile reruns.
 
-## 31. Documentation to update
 
-Finding root cause/change/evidence/closure, security/integrity architecture, threat model, runbooks, known issues/risks, schema/API/data-flow and ATW-246 log. Keep RPD-022 and phase boundaries explicit.
+### External-evidence policy
 
-## 32. Rollback/recovery note
+The implementation must not be blocked merely because physical hardware or a live third-party provider is unavailable at the active checkpoint.
 
-Each repair has a reversible code/config/data plan; preserve accepted events and audit, reconcile ledger/jobs/Finance, restore last trusted behavior and rerun invalidated gates. No destructive Git/database shortcuts.
+1. **Physical GPS device testing**
+   - Hardware-in-the-loop testing with an actual Teltonika or equivalent installed device is deferred until a device is available.
+   - Before verification, protocol simulators and recorded vendor frames must prove IMEI handshake, Codec 8 Extended parsing, CRC validation, ACK behavior, duplicate/replay handling, reconnect, malformed payload rejection, buffering, database outage recovery, and canonical projection.
+   - Record the deferred item as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE`, including owner, target device/model, installation prerequisites, exact future test procedure, expected evidence, and safe activation gate.
+   - Do not claim “tested on physical device” until that future evidence exists.
 
-## 33. Acceptance criteria
+2. **Third-party GPS platform testing**
+   - A live provider test is conditional on approved credentials, API access, legal/commercial permission, documented rate limits, and a stable provider contract.
+   - When those prerequisites are unavailable, mark the live-provider test `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE`.
+   - The provider adapter contract, authentication/signature checks, mapping, retry, rate-limit, schema-drift, idempotency, and failure behavior must still be tested with deterministic mocks, contract fixtures, or a sandbox when available.
+   - Do not claim a named provider is live or certified without live evidence.
 
-- Every blocking ATW-245 finding is repaired and independently reproducible as fixed.
-- Isolation, integrity, financial compatibility and recovery gates pass.
-- Full critical E2Es and performance budgets do not regress.
-- Residual risks are explicit, owned and non-blocking.
+3. **Closure treatment**
+   - These two deferred/conditional external tests are non-blocking when all repository-controlled implementation, simulator/contract, security, migration, load, recovery, and canonical-data gates pass.
+   - Any unresolved repository-controlled defect remains blocking.
 
-## 34. Definition of Done
+    ## 29. Regression tests
 
-All scoped findings have minimal reviewed fixes, failing-then-passing regressions, migration/contract/docs/rollback evidence and rerun integration gates; no critical tenant/security/inventory/financial blocker remains.
+    All ATW-221..245 suites and impacted Phase 1–4 gates.
 
-## 35. Completion report format
+    ## 30. Commands to run
 
-Report IDs/checkpoints; finding→root cause→change→test→result table; files/migrations/contracts; commands; adversarial/integrity/performance evidence; residual risks; docs; rollback/resume; ATW-247 recommendation. Update ledgers before `VERIFIED`.
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-## 36. Next eligible prompt
+    ## 31. Documentation to update
 
-Only the execution index may release ATW-247 after ATW-246 is `VERIFIED`. Do not set `PHASE_5_VERIFIED`; only Prompt 248 may do so.
+    Finding root cause/change/evidence, threat model, gateway/mobile/provider/hybrid security runbooks, residual risks.
+
+    ## 32. Rollback/recovery note
+
+    Each repair has reversible code/config/data/deployment plan; preserve events and restore trusted behavior before replay.
+
+    ## 33. Acceptance criteria
+
+    - Every blocking repository-controlled finding is repaired.
+- Adversarial, isolation, integrity and recovery gates pass.
+- Performance budgets do not critically regress.
+- External deferrals remain honest.
+
+    ## 34. Definition of Done
+
+    All scoped findings have minimal reviewed fixes, regressions, migration/deployment/docs/rollback evidence and no critical blocker.
+
+    ## 35. Completion report format
+
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+
+    ## 36. Next eligible prompt
+
+    Only the execution index may release ATW-247 after ATW-246 is verified. Prompt 248 alone may close Phase 5.

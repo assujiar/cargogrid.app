@@ -1,105 +1,162 @@
 # Phase 5 — Advanced TMS and WMS Prompt Package
 
 **Document ID:** `CG-AABPP-ATW-219`  
-**Version:** `0.11.0`  
-**Status:** `FINAL_FOR_STEP`
+**Version:** `0.12.0-multisource-gps`  
+**Status:** `FINAL_FOR_RUNTIME_PLANNING`
 
 ## 1. Purpose
 
-This directory extends the verified Phase 3 shipment backbone and Phase 4 Finance contracts into high-volume multi-leg/multimodal transportation and complete warehouse execution. It covers all 23 minimum master-prompt capabilities plus the source-required Advanced Claim/Incident capability deferred from Phase 3.
+This directory extends the verified Phase 3 shipment backbone and Phase 4 Finance contracts into multi-leg and multimodal transportation, multi-source fleet visibility, and complete warehouse execution.
 
-Together with Step 8, it completes the advanced slices of all 24 anchors in `OPS-SHP-001..004`, `OPS-TMS-001..004`, `OPS-WMS-001..004`, `OPS-TRK-001..004`, `OPS-DOC-001..004` and `OPS-CST-001..004`. Package completion is not runtime implementation.
+The Phase 5 transportation architecture must support three mandatory tracking source classes:
+
+1. `DRIVER_MOBILE` — location sent through the CargoGrid Driver PWA over authenticated HTTPS during an authorized active tracking session.
+2. `DIRECT_DEVICE` — location and telematics sent by a physical GPS tracker installed in a vehicle through the separately deployable, always-on CargoGrid GPS Gateway.
+3. `THIRD_PARTY_PLATFORM` — location and telematics obtained from an existing GPS/fleet platform through an approved webhook, push API, polling API, or sandbox contract.
+
+`HYBRID` is a governed combination of two or more source classes. All sources converge into one canonical telemetry model while preserving source identity, accuracy, freshness, confidence, event time, received time, raw-evidence policy, entitlement, and deterministic source arbitration.
 
 ## 2. Runtime entry gate
 
-Prompt 220 must stop with `PHASE_5_BLOCKED` unless the same active checkpoint proves:
+Prompt 220 must stop with `PHASE_5_BLOCKED` unless the same checkpoint proves all required Phase 0–4 closure states. The kickoff must reconcile:
 
-- `RUNTIME_DISCOVERY_VERIFIED`;
-- `RUNTIME_ARCHITECTURE_VERIFIED`;
-- `PHASE_0_VERIFIED`;
-- `PHASE_1_VERIFIED`;
-- `PHASE_2_VERIFIED`;
-- `PHASE_3_VERIFIED`;
-- `PHASE_4_VERIFIED`.
+- canonical Job Order, Shipment Order, leg, stop, resource assignment, milestone, exception, ePOD, actual-cost, and billing-readiness contracts;
+- Supabase/PostgreSQL, PostGIS, Auth, RLS/RBAC, Realtime, jobs, files, API keys, webhooks, feature flags, and entitlement foundations;
+- deployment topology for the Next.js application and the new always-on GPS Gateway;
+- vehicle, driver, device, SIM, provider, trip, and customer tracking boundaries;
+- retention, privacy, consent, security, load, outage, replay, and recovery requirements.
 
-The kickoff must reconcile repository/branch/HEAD/worktree ownership, schema/migration state, canonical Job Order/Shipment Order/milestone/ePOD/cost/billing-readiness contracts, Finance invoice/AP/posting interfaces, master/location/PostGIS foundations, environment, baselines and unresolved ledgers before any Phase 5 task becomes `READY`.
+## 3. Capability catalogue
 
-## 3. Required hierarchy and atomicity
+The original capability order remains, including:
 
-Prompt 220 creates repository-specific workstreams, epics, capabilities, feature slices and atomic tasks. Prompts 221–247 are capability envelopes that must be instantiated as one approved atomic task with exact files, migrations, contracts, tests, evidence and rollback boundaries.
+- Prompt 223 Fleet and Driver;
+- Prompt 225 First-, Middle-, and Last-Mile Orchestration;
+- Prompt 226 Multi-Source GPS and Telematics Integration;
+- Prompt 228 Advanced Milestone and Exception;
+- Prompt 243 High-Volume Controls;
+- Prompts 245–248 verification, hardening, documentation, and closure.
 
-No task may combine unrelated transportation planning, asset/resource, integration, warehouse master, inventory ledger, task workflow, billing, portal, performance and refactor work merely for convenience.
+## 4. Binding multi-source tracking architecture
 
-## 4. Capability catalogue and dependency order
+### 4.1 Canonical source classes
 
-| Order | Prompt | Capability | Primary anchor |
-|---:|---|---|---|
-| 1 | 221 | Multi-leg and multimodal shipment | OPS-SHP/TMS-001..004 |
-| 2 | 222 | Dispatch board | OPS-TMS-001..004 |
-| 3 | 223 | Fleet and driver | OPS-TMS-001..004; Phase 6/7 boundary |
-| 4 | 224 | Route and load planning | OPS-TMS-001..004 |
-| 5 | 225 | First-, middle- and last-mile orchestration | OPS-SHP/TMS/TRK |
-| 6 | 226 | GPS and telematics integration | OPS-TMS/TRK; RPD-038 |
-| 7 | 227 | Capacity and utilization | OPS-TMS-001..004 |
-| 8 | 228 | Advanced milestone and exception | OPS-TRK-001..004 |
-| 9 | 229 | Warehouse and zone | OPS-WMS-001..004 |
-| 10 | 230 | Bin and racking | OPS-WMS-001..004 |
-| 11 | 231 | Inbound | OPS-WMS-001..004 |
-| 12 | 232 | Receiving | OPS-WMS-001..004 |
-| 13 | 233 | Putaway | OPS-WMS-001..004 |
-| 14 | 234 | Inventory ledger | OPS-WMS/CST-001..004 |
-| 15 | 235 | Lot, batch, serial and expiry | OPS-WMS-001..004 |
-| 16 | 236 | Picking | OPS-WMS-001..004 |
-| 17 | 237 | Packing | OPS-WMS-001..004 |
-| 18 | 238 | Outbound | OPS-WMS/SHP-001..004 |
-| 19 | 239 | Cycle count and adjustment | OPS-WMS/CST-001..004 |
-| 20 | 240 | Label and barcode | OPS-WMS-001..004 |
-| 21 | 241 | Warehouse billing | OPS-WMS/CST; Finance contract |
-| 22 | 242 | Customer inventory access baseline | OPS-WMS; CPT-WHS Step 13 contract |
-| 23 | 243 | High-volume operation controls | all advanced OPS families |
-| 24 | 244 | Advanced claim and incident | OPS-DOC-001..004 |
-| 25 | 245 | Integrated verification | all Phase 5 capabilities |
-| 26 | 246 | TMS/WMS integrity and security hardening | evidence-ranked blocker repair |
-| 27 | 247 | Documentation and handoff | Phase 6/8/9 contracts |
-| 28 | 248 | Independent closure | `PHASE_5_VERIFIED` gate |
+Every normalized telemetry record must include at least:
 
-## 5. Binding Advanced TMS rules
+- tenant, source class, source/provider/device/session identity;
+- vehicle, driver, trip, shipment, leg, and stop linkage where resolved;
+- `recorded_at` and `received_at`;
+- location, accuracy, speed, heading, movement, and optional telematics;
+- validation/auth result, dedup/order classification, source priority, freshness, confidence, and retention class.
 
-- Extend the verified Phase 3 `JobOrder`, `ShipmentOrder`, lifecycle, assignment, milestone, exception, document/ePOD, actual-cost and billing-readiness roots. Do not create duplicate advanced roots or re-enter customer/cargo/service/source data.
-- A shipment may contain ordered pickup, transfer, linehaul and delivery legs across land, air and sea. Each leg preserves mode, handoff, schedule, parties, location, cargo allocation, status, source and chain lineage while the Shipment Order remains canonical.
-- Planning and optimization are decision support. Algorithms and heuristics must be versioned, constraint-aware, explainable and human-reviewable; no false optimality claim or autonomous AI operational commitment.
-- Dispatch, capacity, route/load and milestone transitions use concurrency control, stable idempotency keys and canonical events. Duplicate, late and out-of-order telemetry never silently rewrites operational truth.
-- PostGIS may provide location/distance/geofence primitives under RPD-015. Maps/GPS/telematics adapters are case-specific shared-product integrations under RPD-038; no tenant fork and no universal provider abstraction.
-- Fleet/driver operational resources must reference available canonical identities. Full vendor onboarding/compliance/contract/rate lifecycle remains Step 11; employee HR records, attendance and payroll remain Step 12.
-- Mobile execution remains responsive online-first PWA under RPD-004. Native apps and offline synchronization are not required; a warehouse/driver action is not committed without authoritative server acknowledgement.
+Raw telemetry never directly mutates authoritative shipment status. It may generate a candidate signal that is validated, reconciled, and converted into a canonical milestone or exception by domain rules.
 
-## 6. Binding WMS and inventory rules
+### 4.2 Driver mobile mode
 
-- Inventory identity includes tenant, company, warehouse, customer/owner, SKU/item, location and—when configured—lot/batch/serial/expiry/status/UOM dimensions.
-- Every stock-changing event uses an idempotent inventory ledger movement. Normal roles cannot directly edit on-hand/available/reserved balances or delete ledger rows; correction uses governed adjustment/reversal movements.
-- RPD-022 gives Supreme Admin absolute CRUD, including inventory and audit records. CargoGrid must not claim immutable/tamper-proof inventory; apply best available warnings, reasons, evidence and alerts while disclosing the residual risk.
-- Quantity uses exact decimal UOM rules. Conversion, rounding, catch-weight if supported, reservation, allocation, availability, negative-stock and tolerance policies are versioned and auditable.
-- Receiving → QC/hold → putaway → available → allocated → picked → packed → staged → loaded/shipped is canonical and source-linked. Cross-dock, partial, short, over, damage and exception flows remain explicit.
-- FIFO/FEFO/lot/serial rules are configuration-driven and never inferred when data is absent. Expired/held/damaged stock cannot become available through UI-only bypass.
-- Label/barcode identifiers are tenant/owner/SKU/location-aware, collision-safe and traceable; scans validate current task, location, item, lot/serial and quantity before committing.
-- Customer inventory access is backend/database scoped to assigned company/account/site/warehouse/owner. Step 10 supplies the secure read contract and bounded inventory view; full Customer Portal experience remains Step 13.
-- Warehouse billing emits a versioned, idempotent, source-reconciled Finance billing event/readiness handoff. It does not create or mutate invoice/AR/AP/journal directly.
+The supported baseline is an online-first Driver PWA active-trip tracking session. The system must not claim reliable continuous background tracking after the browser is closed, the OS suspends the page, permission is revoked, or the device is offline. Those conditions must be visible as stale/degraded states.
 
-## 7. Cross-cutting controls and boundaries
+### 4.3 Direct physical-device mode
 
-- Files/photos/claim evidence are private, malware-scanned before availability and served by short-lived signed URL under record/customer scope.
-- REST and GraphQL ship together from shared services with equivalent authentication, authorization, field policy, rate limit, idempotency, audit and version governance.
-- Realtime is limited to justified active dispatch/task/inventory signals. No global shipment or warehouse subscription.
-- Large import/export, wave/task generation, planning, telemetry ingestion, label generation, inventory reconciliation and billing batches use the PostgreSQL durable job framework with chunking, retry, DLQ, cancellation and evidence.
-- High-volume lists and ledgers use selective queries, server filtering/sort/search, cursor pagination and tenant-aware indexes. RPD-014 reporting controls and target-volume query/load tests are mandatory.
-- Full Procurement/vendor lifecycle remains Step 11; HRIS/employee depth Step 12; full Customer Portal Step 13; predictive/AI automation and enterprise integration depth Step 14.
-- No external pilot, partial-GA, production-ready or market-ready claim is allowed. Phase 5 is an internal gate; RPD-001/034/036 still require all modules and full validation before direct GA.
+The direct-device path must include:
 
-## 8. Mandatory Phase 5 evidence
+- an always-on, separately deployable GPS Gateway;
+- static public network endpoint and configurable raw TCP ports;
+- provider-protocol adapter architecture;
+- initial Teltonika Codec 8 Extended adapter;
+- IMEI handshake, packet length and CRC validation, AVL parsing, ACK, reconnect, timeout, malformed-packet protection, buffering, batch ingestion, health checks, metrics, and structured logs;
+- secure batch/RPC ingestion into Supabase;
+- no service-role key stored in the GPS device or client application.
 
-The runtime phase must preserve at least: canonical root/leg/handoff lineage; planning constraints/version/override; capacity and dispatch concurrency; telemetry source/order/replay evidence; warehouse/location hierarchy; inbound/receiving/putaway/pick/pack/outbound task chain; exact inventory movement/balance/reservation equations; lot/serial/expiry and FIFO/FEFO evidence; scan/label integrity; cycle-count/adjustment approval; warehouse billing-to-Finance lineage; customer inventory isolation; claim/file controls; clean rebuild/migration/CI; target-volume performance; and residual-risk ownership.
+The main CargoGrid application may remain serverless. The GPS Gateway is an explicit non-serverless infrastructure component.
 
-The critical UAT flow `WMS Inbound → Putaway → Inventory Ledger → Pick → Pack → Outbound`, the Delivery-plan `OPS-WMS-US-001` scenario and Phase 5 WMS/TMS scan/task/ledger/load/integration gates are mandatory inputs to Prompt 245 and closure.
+### 4.4 Third-party platform mode
+
+Third-party adapters must be case-specific and governed. A universal lowest-common-denominator provider abstraction is forbidden. Each approved adapter declares authentication, schema/version, mapping, rate limits, retention, retry, replay, outage, and cost/usage behavior.
+
+### 4.5 Hybrid source arbitration
+
+Canonical current position and derived tracking state must be selected deterministically using configured policy, including:
+
+- entitlement and active assignment;
+- source allowlist and priority;
+- event freshness;
+- location accuracy and confidence;
+- authentication and health;
+- impossible movement and conflict detection;
+- controlled fallback and source-switch evidence.
+
+No source silently overwrites another source’s history.
+
+### 4.6 Subscription and entitlement
+
+Tracking modes are package-controlled. At minimum support:
+
+- `tracking.mobile_enabled`;
+- `tracking.direct_device_enabled`;
+- `tracking.third_party_enabled`;
+- `tracking.hybrid_enabled`;
+- `tracking.customer_live_map_enabled`;
+- `tracking.max_active_vehicles`;
+- `tracking.location_interval_seconds`;
+- `tracking.history_retention_days`.
+
+Unauthorized source modes must be rejected server-side.
+
+## 5. Binding deployment rule
+
+The deployment topology must explicitly separate:
+
+```text
+CargoGrid Web/API        → serverless deployment
+CargoGrid GPS Gateway    → always-on container/VPS with static endpoint
+Supabase                 → PostgreSQL, PostGIS, Auth, Realtime, Storage, RPC/jobs
+```
+
+Do not pretend a Vercel Function or ordinary Supabase Edge Function is a permanent raw TCP listener.
+
+## 6. Cross-cutting controls
+
+- Realtime is limited to authorized active trips/vehicles.
+- High-volume ingestion uses bounded queues/batches, retry, DLQ, reconciliation, and backpressure.
+- Customer views use sanitized canonical projections, never raw device, raw mobile, or provider payloads.
+- Device/SIM/installation records are operational assets, not duplicate vendor or HR masters.
+- Location and driver data are purpose-bound and retention-controlled.
+- No tenant fork, unsupported native/offline claim, false optimality, or autonomous commitment.
+
+## 7. Verification treatment for unavailable external systems
+
+### External-evidence policy
+
+The implementation must not be blocked merely because physical hardware or a live third-party provider is unavailable at the active checkpoint.
+
+1. **Physical GPS device testing**
+   - Hardware-in-the-loop testing with an actual Teltonika or equivalent installed device is deferred until a device is available.
+   - Before verification, protocol simulators and recorded vendor frames must prove IMEI handshake, Codec 8 Extended parsing, CRC validation, ACK behavior, duplicate/replay handling, reconnect, malformed payload rejection, buffering, database outage recovery, and canonical projection.
+   - Record the deferred item as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE`, including owner, target device/model, installation prerequisites, exact future test procedure, expected evidence, and safe activation gate.
+   - Do not claim “tested on physical device” until that future evidence exists.
+
+2. **Third-party GPS platform testing**
+   - A live provider test is conditional on approved credentials, API access, legal/commercial permission, documented rate limits, and a stable provider contract.
+   - When those prerequisites are unavailable, mark the live-provider test `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE`.
+   - The provider adapter contract, authentication/signature checks, mapping, retry, rate-limit, schema-drift, idempotency, and failure behavior must still be tested with deterministic mocks, contract fixtures, or a sandbox when available.
+   - Do not claim a named provider is live or certified without live evidence.
+
+3. **Closure treatment**
+   - These two deferred/conditional external tests are non-blocking when all repository-controlled implementation, simulator/contract, security, migration, load, recovery, and canonical-data gates pass.
+   - Any unresolved repository-controlled defect remains blocking.
+
+## 8. Mandatory evidence
+
+Phase 5 evidence must include:
+
+- entitlement and source-policy enforcement;
+- mobile tracking session flow;
+- GPS Gateway container build and protocol-simulator evidence;
+- canonical telemetry normalization and arbitration;
+- geofence, milestone, exception, dispatch-board, route-planning, and customer-projection integration;
+- source conflict, stale data, provider outage, database outage, replay, buffering, and recovery;
+- target-volume and tenant/customer isolation;
+- deferred physical-hardware procedure and conditional provider evidence status.
 
 ## 9. Runtime states
 
@@ -107,6 +164,6 @@ The critical UAT flow `WMS Inbound → Putaway → Inventory Ledger → Pick →
 
 Only Prompt 248 may set `PHASE_5_VERIFIED`.
 
-## 10. Package completion
+## 10. Completion
 
-This package is complete when files 219–248 exist, Prompts 221–247 contain all 36 mandatory fields, controls/coverage/status/manifest are updated, structural/dependency/scope validation pass, and the exact next package-generation command is `LANJUT STEP 11`.
+This package is complete when all revised prompts are reflected in the runtime WBS, Prompt 226 is decomposed into reviewable child tasks, repository-controlled gates pass, external-evidence deferrals are honestly recorded, and no critical unresolved defect remains.
