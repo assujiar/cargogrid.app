@@ -5123,6 +5123,176 @@ Two real defects found and fixed before commit (both via this checkpoint's own d
 
 Self-closing. `CG-S9-FIN-005` is `VERIFIED`. This session's entire explicit authorized range (Finance Phase 4 Prompts 190-194) is now fully complete. `CG-S9-FIN-006` (Prompt 195, Configurable Tax Baseline) is dependency-eligible but **not authorized this session** -- fresh explicit user authorization is required before any further Phase 4 work begins.
 
+### CHG-2026-132 — Tax Baseline (Phase 4, Prompt 195)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-006` / `195_TAX_BASELINE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-005` `VERIFIED` (`docs/build-log/phase-04/FIN-194.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Fresh explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- first task in that range |
+
+#### Outcome
+
+An Indonesia-first, configurable tax-code catalogue plus a versioned, SME-approval-gated tax rule lifecycle (`draft -> approved -> archived`, mirroring `FIN-194`'s own exchange-rate shape), deterministic tenant-then-global resolution, and an exact-decimal calculation service. No legal tax rate, filing rule, or legal conclusion is invented or seeded as approved -- structurally enforced, not merely disclosed (see `FIN-195.md` §3.1). Ties calculation rounding into `FIN-191`'s own `finance_rounding` config rather than a second mechanism.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729090000_create_finance_tax_baseline.sql`; `server/contracts/tax-baseline/tax-baseline.ts(.test.ts)`; `server/queries/tax-baseline.ts(.test.ts)`; `server/mutations/tax-baseline.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/tax-baseline/page.tsx`/`actions.ts`/`tax-baseline-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-tax-baseline.sql`; `docs/build-log/phase-04/FIN-195.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_TAX_RULE_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `195` `VERIFIED`, row `196` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1891/1891 (23 net new), `pnpm run db:test` PASS -- 76 migrations/77 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 62 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (2 new tables, 9 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect. One fixture-completeness correction before commit (not a functional defect): the db-test's own `finance_rounding` publish fixture initially omitted the required `order` key on its `tax_calculation` item (inherited structural requirement from `FIN-191`'s own validator) -- fixed by adding it; `app.calculate_finance_tax` itself never reads `order`.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-006` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-007` (Prompt 196, Accounts Receivable) -- within this session's explicit authorized range (Prompts 195-200).
+
+### CHG-2026-133 — Accounts Receivable (Phase 4, Prompt 196)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-007` / `196_ACCOUNTS_RECEIVABLE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-006` `VERIFIED` (`docs/build-log/phase-04/FIN-195.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- second task in that range |
+
+#### Outcome
+
+Source-linked AR open items and their balance lifecycle: idempotent posting from a source document, exact-balance allocation/deallocation with status derived purely from balance, and a governed hold/release split. Builds the generic subledger primitive `FIN-197` (Invoice) and `FIN-198` (Receipt and Payment Allocation) are expected to call directly, since Invoice does not exist yet in this dependency order.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729100000_create_finance_accounts_receivable.sql`; `server/contracts/accounts-receivable/accounts-receivable.ts(.test.ts)`; `server/queries/accounts-receivable.ts(.test.ts)`; `server/mutations/accounts-receivable.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/accounts-receivable/page.tsx`/`actions.ts`/`accounts-receivable-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-accounts-receivable.sql`; `docs/build-log/phase-04/FIN-196.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_AR_OPEN_ITEM_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `196` `VERIFIED`, row `197` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1910/1910 (19 net new), `pnpm run db:test` PASS -- 77 migrations/78 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 63 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (2 new tables, 9 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent -- no other capability calls this migration's functions yet.
+
+#### Errors found and fixed
+
+Zero implementation defect. Every fixture scenario, including idempotent-replay and over-allocation/over-reversal boundary cases, passed on the first `db:test` run.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-007` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-008` (Prompt 197, Invoice) -- within this session's explicit authorized range (Prompts 195-200).
+
+### CHG-2026-134 — Invoice (Phase 4, Prompt 197)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-008` / `197_INVOICE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-007` `VERIFIED` (`docs/build-log/phase-04/FIN-196.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- third task in that range |
+
+#### Outcome
+
+Versioned customer invoices prepared idempotently from verified Operations BillingReadinessHandoff evidence (one handoff, one invoice), inheriting the exact governed revenue snapshot and integrating FIN-195's own tax calculation service. The draft -> submitted -> approved -> issued lifecycle posts exactly one FIN-196 AR open item on idempotent, period-aware issue.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729110000_create_finance_invoice.sql`; `server/contracts/invoice/invoice.ts(.test.ts)`; `server/queries/invoice.ts(.test.ts)`; `server/mutations/invoice.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/invoices/page.tsx`/`actions.ts`/`invoice-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-invoice.sql`; `docs/build-log/phase-04/FIN-197.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_INVOICE_STATUS_TONE_MAP`); `scripts/db-tests/finance-tax-baseline.sql` (corrected a whole-database "zero approved" assertion to the tenant/scope-appropriate check FIN-195's own header actually guarantees -- see Errors below); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `197` `VERIFIED`, row `198` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1926/1926 (16 net new), `pnpm run db:test` PASS -- 78 migrations/79 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 64 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 8 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+One real cross-file test-design defect, not a weakening: `FIN-195`'s own db-test asserted "zero seeded approved tax rules" as a whole-database count -- broke once this checkpoint's own fixture legitimately approved a real, evidence-backed tax rule for its own tenant. Fixed by narrowing to the specific invariant FIN-195's own header guarantees (the seeded example fixture never approved; no platform-wide-default rule ever approved) -- a stale-assumption fix, zero coverage removed. Two schema fixes during authoring (not business-logic defects): `finance_invoice_number_counters`' initial nullable-`company_id` primary key (invalid in Postgres) -- fixed via a surrogate `id` PK plus a `coalesce`-based unique index.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-008` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-009` (Prompt 198, Receipt and Payment Allocation) -- within this session's explicit authorized range (Prompts 195-200).
+
+### CHG-2026-135 — Receipt and Payment Allocation (Phase 4, Prompt 198)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-009` / `198_RECEIPT_PAYMENT_ALLOCATION_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-008` `VERIFIED` (`docs/build-log/phase-04/FIN-197.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- fourth task in that range |
+
+#### Outcome
+
+Idempotent customer receipt capture and exact, idempotent allocation to FIN-196's own AR open items -- delegating every balance mutation to FIN-196's own row-locked allocator rather than a second, competing mechanism. Governed deallocation (FIN:Approve, mandatory reason) reverses both the receipt's own unapplied amount and the AR open item's own open balance.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729120000_create_finance_receipt_allocation.sql`; `server/contracts/receipt-allocation/receipt-allocation.ts(.test.ts)`; `server/queries/receipt-allocation.ts(.test.ts)`; `server/mutations/receipt-allocation.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/receipts/page.tsx`/`actions.ts`/`receipt-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-receipt-allocation.sql`; `docs/build-log/phase-04/FIN-198.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_RECEIPT_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `198` `VERIFIED`, row `199` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1942/1942 (16 net new), `pnpm run db:test` PASS -- 79 migrations/80 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 65 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 8 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect. Every fixture scenario, including idempotent-replay, over-allocation rejection, and the full governed-reversal round trip, passed on the first `db:test` run.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-009` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-010` (Prompt 199, Accounts Payable) -- within this session's explicit authorized range (Prompts 195-200).
+
+### CHG-2026-136 — Accounts Payable (Phase 4, Prompt 199)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-010` / `199_ACCOUNTS_PAYABLE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-009` `VERIFIED` (`docs/build-log/phase-04/FIN-198.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- fifth task in that range |
+
+#### Outcome
+
+Source-linked AP open items and their balance lifecycle -- the vendor-side mirror of FIN-196's own Accounts Receivable design: idempotent posting from a source document, exact-balance settlement with status derived purely from balance, and a governed hold/release split. Vendor reference reuses OPS-172's own existing `master_records` vendor type -- no new vendor-identity table, no Step 11 scope smuggled in.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729130000_create_finance_accounts_payable.sql`; `server/contracts/accounts-payable/accounts-payable.ts(.test.ts)`; `server/queries/accounts-payable.ts(.test.ts)`; `server/mutations/accounts-payable.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/accounts-payable/page.tsx`/`actions.ts`/`accounts-payable-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-accounts-payable.sql`; `docs/build-log/phase-04/FIN-199.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_AP_OPEN_ITEM_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `199` `VERIFIED`, row `200` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1961/1961 (19 net new), `pnpm run db:test` PASS -- 80 migrations/81 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 66 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (2 new tables, 9 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect. Every fixture scenario passed on the first `db:test` run.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-010` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-011` (Prompt 200, Vendor Bill) -- the final task in this session's explicit authorized range (Prompts 195-200).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

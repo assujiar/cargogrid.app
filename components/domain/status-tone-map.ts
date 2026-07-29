@@ -28,6 +28,11 @@ import type { ConfigVersionStatus } from "../../server/contracts/config/config.t
 import type { FinanceAccountStatus } from "../../server/contracts/chart-of-accounts/chart-of-accounts.ts";
 import type { FinancePeriodStatus } from "../../server/contracts/fiscal-period/fiscal-period.ts";
 import type { FinanceExchangeRateStatus } from "../../server/contracts/currency-exchange-rate/currency-exchange-rate.ts";
+import type { FinanceTaxRuleStatus } from "../../server/contracts/tax-baseline/tax-baseline.ts";
+import type { FinanceArOpenItemStatus } from "../../server/contracts/accounts-receivable/accounts-receivable.ts";
+import type { FinanceInvoiceStatus } from "../../server/contracts/invoice/invoice.ts";
+import type { FinanceReceiptStatus } from "../../server/contracts/receipt-allocation/receipt-allocation.ts";
+import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-payable/accounts-payable.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -104,6 +109,42 @@ export const FINANCE_EXCHANGE_RATE_STATUS_TONE_MAP: Record<FinanceExchangeRateSt
   draft: { tone: "neutral", label: "Draft" },
   approved: { tone: "success", label: "Approved" },
   archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-195: Tax Baseline's own draft/approved/archived lifecycle -- mirrors FIN-194's finance_exchange_rates lifecycle shape exactly (own independently-exhaustiveness-checked Record<...>). */
+export const FINANCE_TAX_RULE_STATUS_TONE_MAP: Record<FinanceTaxRuleStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  approved: { tone: "success", label: "Approved" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-196: Accounts Receivable's own balance-derived lifecycle (open/partial/paid) -- distinct from every prior FIN capability's own three-state Record<...> (this one is not draft/approve-shaped at all). */
+export const FINANCE_AR_OPEN_ITEM_STATUS_TONE_MAP: Record<FinanceArOpenItemStatus, StatusToneEntry> = {
+  open: { tone: "warning", label: "Open" },
+  partial: { tone: "info", label: "Partial" },
+  paid: { tone: "success", label: "Paid" },
+};
+
+/** FIN-197: Customer Invoice's own draft/submitted/approved/issued/void lifecycle -- five states, distinct from every prior FIN capability's own Record<...>. */
+export const FINANCE_INVOICE_STATUS_TONE_MAP: Record<FinanceInvoiceStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  issued: { tone: "success", label: "Issued" },
+  void: { tone: "danger", label: "Void" },
+};
+
+/** FIN-198: Receipt and Payment Allocation's own captured/void lifecycle -- distinct from every prior FIN capability's own Record<...>. */
+export const FINANCE_RECEIPT_STATUS_TONE_MAP: Record<FinanceReceiptStatus, StatusToneEntry> = {
+  captured: { tone: "success", label: "Captured" },
+  void: { tone: "danger", label: "Void" },
+};
+
+/** FIN-199: Accounts Payable's own balance-derived lifecycle (open/partial/settled) -- the vendor-side mirror of FIN-196's own AR status map, distinct wording ("settled" vs. "paid"). */
+export const FINANCE_AP_OPEN_ITEM_STATUS_TONE_MAP: Record<FinanceApOpenItemStatus, StatusToneEntry> = {
+  open: { tone: "warning", label: "Open" },
+  partial: { tone: "info", label: "Partial" },
+  settled: { tone: "success", label: "Settled" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {

@@ -2,20 +2,20 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — this session's explicit user authorization named Prompts 190, 191, 192, 193, 194 in order; all five rows are now instantiated with exact repository paths and marked `VERIFIED` below. This session's entire authorized range (Prompts 190-194) is now fully complete -- Prompt 195 onward requires fresh explicit user authorization before any further row is instantiated. Prompts 195–218 are mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3 but remain `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths yet (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 195, 196, 197, 198, 199, and 200 in order, each as its own commit. Rows `195`-`199` are now instantiated with exact repository paths and marked `VERIFIED` below; row `200` is `READY` (the final row in this session's authorized range). Prompts 201–218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3 but `NOT_STARTED`/`BLOCKED` — not yet reached this session, and not instantiated with exact file paths (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
 
 ## 0. Checkpoint
 
 | Field | Value |
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
-| Working branch | `claude/prompt-189-sd-184-gtivdr`, tracked to `origin/claude/prompt-189-sd-184-gtivdr` this checkpoint |
-| HEAD at authoring time (pre-commit) | `0304e66` (merge of PR #25, `OPS-188` — `PHASE_3_VERIFIED` set) |
-| Worktree state | Clean except this document, its sibling `00_FINANCE_WBS.md`, and this checkpoint's own runtime-ledger updates |
-| Repository state | Unchanged application/schema surface: zero Finance-domain migration, table, route, or UI file exists or was touched by this task. `app/(tenant)/[tenantSlug]/finance/` does not exist yet — this kickoff does not create it (that is `191`'s own first task). |
-| Mutation performed by this document | **NONE** — index/planning only |
+| Working branch | `claude/prompt-189-195-mb32zh`, tracked to `origin/claude/prompt-189-195-mb32zh` this checkpoint |
+| HEAD at authoring time (pre-commit) | `6d0a5f3` (merge of PR #26, Finance Phase 4 Prompts 190-194 `VERIFIED`) |
+| Worktree state | Clean except this checkpoint's own new Tax Baseline files and runtime-ledger updates |
+| Repository state | `FIN-191..198` (through Receipt and Payment Allocation) all `VERIFIED`. `app/(tenant)/[tenantSlug]/finance/accounts-payable/` is new this checkpoint. |
+| Mutation performed by this document | Row `199` instantiated `VERIFIED`; row `200` set `READY`; tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
-| User authorization | Explicit user instruction: "execute Finance Phase 4 prompts 190, 191, 192, 193, and 194 in that exact order, each as its own commit" — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted |
+| User authorization | Explicit user instruction: "implement Finance Phase 4 Prompts 195, 196, 197, 198, 199, and 200 in that exact order, each as its own commit" — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted |
 
 ## 1. Full execution index
 
@@ -171,21 +171,21 @@
 | `feature_slice` | tax code, PPN/VAT, withholding, effective rule, calculation, evidence, SME activation |
 | `atomic_objective` | See prompt file `§4 Objective` (191–194 verbatim in `docs/build-log/phase-04/FIN-195.md` §1 once instantiated) |
 | `source_ids` | FIN-TAX-001..004; RPD-016/021/025/040; ASM-CH-004 |
-| `upstream` | FIN-191..194 + current legal/finance/tax SME evidence |
+| `upstream` | FIN-191..194 (VERIFIED) + current legal/finance/tax SME evidence for activation (mechanism only -- no rate seeded as approved, see FIN-195.md §3.1) |
 | `downstream` | FIN-196 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..194 + current legal/finance/tax SME evidence reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729090000_create_finance_tax_baseline.sql`; `server/contracts/tax-baseline/`; `server/queries/tax-baseline.ts`; `server/mutations/tax-baseline.ts`; `app/(tenant)/[tenantSlug]/finance/tax-baseline/**`; `docs/build-log/phase-04/FIN-195.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..194 migrations (extend via new migration only) |
+| `migration_ids` | 1 additive migration (`app.finance_tax_codes`, `app.finance_tax_rule_versions`, calculation/resolution functions) |
+| `api_contracts` | shared draft/attach-evidence/discard/approve/resolve/calculate service layer |
+| `access_controls` | FIN:Edit (draft/evidence-attach/discard), FIN:Approve (the explicit SME activation step), FIN:View (resolve/calculate/read) |
+| `financial_invariants` | exact-decimal numeric(12,6) rate, versioned rounding tie-in to FIN-191, missing-rule rejection never a silent zero (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests; scripts/db-tests/finance-tax-baseline.sql (evidence-gated approval, example-fixture block, overlap, resolution, calculation, cross-tenant, structural validation) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-195.md build log; db-test output; node:test count delta |
+| `rollback` | additive migration only; deactivate unconsumed erroneous rule |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-007 (Prompt 196) is READY -- next |
 
 ### Row `196` — Prompt 196, `CG-S9-FIN-007`
 
@@ -199,21 +199,21 @@
 | `feature_slice` | customer open item, due balance, status, credit exposure, source lineage |
 | `atomic_objective` | See prompt file `§4 Objective` (191–194 verbatim in `docs/build-log/phase-04/FIN-196.md` §1 once instantiated) |
 | `source_ids` | FIN-AR-001..004; OPS-CST finance depth; CPD-017..019 |
-| `upstream` | FIN-191..195 + verified BillingReadinessHandoff |
+| `upstream` | FIN-191..195 (VERIFIED) + verified BillingReadinessHandoff (OPS-181) |
 | `downstream` | FIN-197 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..195 + verified BillingReadinessHandoff reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729100000_create_finance_accounts_receivable.sql`; `server/contracts/accounts-receivable/`; `server/queries/accounts-receivable.ts`; `server/mutations/accounts-receivable.ts`; `app/(tenant)/[tenantSlug]/finance/accounts-receivable/**`; `docs/build-log/phase-04/FIN-196.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..195 migrations (extend via new migration only) |
+| `migration_ids` | 1 additive migration (`app.finance_ar_open_items`, `app.finance_ar_open_item_events`, posting/hold/allocation functions) |
+| `api_contracts` | shared post/hold/release/allocate/reverse/list/activity/exposure service layer (creation only through controlled source posting) |
+| `access_controls` | FIN:Edit (invoice-sourced posting, hold placement, allocation), FIN:Approve (opening-balance posting, hold release, governed deallocation), FIN:View (read) |
+| `financial_invariants` | open_amount = original_amount - allocated_amount (generated column); status derived purely from balance; idempotent posting/allocation; period-aware (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests; scripts/db-tests/finance-accounts-receivable.sql (idempotency, authority split, over-allocation/over-reversal, hold/release split, cross-tenant, exposure) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-196.md build log; db-test output; node:test count delta |
+| `rollback` | additive migration only; governed reversal for any consumed allocation |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-008 (Prompt 197, Invoice) is READY -- next |
 
 ### Row `197` — Prompt 197, `CG-S9-FIN-008`
 
@@ -227,21 +227,21 @@
 | `feature_slice` | readiness consumption, charge/tax lines, approval, issue/post, document package |
 | `atomic_objective` | See prompt file `§4 Objective` (191–194 verbatim in `docs/build-log/phase-04/FIN-197.md` §1 once instantiated) |
 | `source_ids` | FIN-AR-001..004; FIN-TAX; OPS FIN-181/184 handoff; UX FIN-INV-001 |
-| `upstream` | FIN-191..196 + one verified versioned BillingReadinessHandoff |
+| `upstream` | FIN-191..196 (VERIFIED) + one verified versioned BillingReadinessHandoff (OPS-181) |
 | `downstream` | FIN-198 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..196 + one verified versioned BillingReadinessHandoff reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729110000_create_finance_invoice.sql`; `server/contracts/invoice/`; `server/queries/invoice.ts`; `server/mutations/invoice.ts`; `app/(tenant)/[tenantSlug]/finance/invoices/**`; `docs/build-log/phase-04/FIN-197.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..196 migrations (extend via new migration only) |
+| `migration_ids` | 1 additive migration (`app.finance_invoices`, `app.finance_invoice_lines`, `app.finance_invoice_number_counters`, prepare/lifecycle/issue functions) |
+| `api_contracts` | shared prepare-from-readiness/submit/discard/approve/issue/read service layer |
+| `access_controls` | FIN:Edit (prepare/submit/discard), FIN:Approve (approve/issue) |
+| `financial_invariants` | total_amount = subtotal_amount + tax_amount (generated column); idempotent on billing_readiness_handoff_id; period-aware issue; posts exactly one AR open item (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests; scripts/db-tests/finance-invoice.sql (idempotency, lifecycle authority split, tax-line integration, AR posting, cross-tenant) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-197.md build log; db-test output; node:test count delta |
+| `rollback` | additive migration only; governed reversal for any issued invoice |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-009 (Prompt 198, Receipt and Payment Allocation) is READY -- next |
 
 ### Row `198` — Prompt 198, `CG-S9-FIN-009`
 
@@ -255,21 +255,21 @@
 | `feature_slice` | receipt capture, unapplied cash, exact split allocation, deallocation, source posting |
 | `atomic_objective` | See prompt file `§4 Objective` (191–194 verbatim in `docs/build-log/phase-04/FIN-198.md` §1 once instantiated) |
 | `source_ids` | FIN-AR-001..004; FIN-TAX; UAT Billing Readiness -> Invoice/AR -> Receipt -> Allocation -> Journal |
-| `upstream` | FIN-194 + FIN-196..197 |
+| `upstream` | FIN-194 (VERIFIED) + FIN-196..197 (VERIFIED) |
 | `downstream` | FIN-199 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-194 + FIN-196..197 reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729120000_create_finance_receipt_allocation.sql`; `server/contracts/receipt-allocation/`; `server/queries/receipt-allocation.ts`; `server/mutations/receipt-allocation.ts`; `app/(tenant)/[tenantSlug]/finance/receipts/**`; `docs/build-log/phase-04/FIN-198.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..197 migrations (extend via new migration only) |
+| `migration_ids` | 1 additive migration (`app.finance_receipts`, `app.finance_receipt_allocation_batches`, `app.finance_receipt_allocations`, capture/allocate/deallocate functions) |
+| `api_contracts` | shared capture/candidate-search/allocate/deallocate/read service layer |
+| `access_controls` | FIN:Edit (capture/allocate), FIN:Approve (governed deallocation), FIN:View (read/candidate-search) |
+| `financial_invariants` | unapplied_amount = amount - allocated_amount (generated column); idempotent capture/allocate; delegates AR balance mutation to FIN-196 (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests; scripts/db-tests/finance-receipt-allocation.sql (idempotency, over-allocation, governed reversal, cross-tenant) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-198.md build log; db-test output; node:test count delta |
+| `rollback` | additive migration only; governed reversal for any consumed allocation |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-010 (Prompt 199, Accounts Payable) is READY -- next |
 
 ### Row `199` — Prompt 199, `CG-S9-FIN-010`
 
@@ -283,21 +283,21 @@
 | `feature_slice` | vendor open item, due balance, status, hold, source lineage |
 | `atomic_objective` | See prompt file `§4 Objective` (191–194 verbatim in `docs/build-log/phase-04/FIN-199.md` §1 once instantiated) |
 | `source_ids` | FIN-AP-001..004; OPS-CST-001..004 finance depth; Step 11 linkage |
-| `upstream` | FIN-191..195 + verified Operations actual cost/vendor reference |
+| `upstream` | FIN-191..195 (VERIFIED) + verified Operations actual cost/vendor reference (OPS-178, VERIFIED) |
 | `downstream` | FIN-200 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..195 + verified Operations actual cost/vendor reference reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729130000_create_finance_accounts_payable.sql`; `server/contracts/accounts-payable/`; `server/queries/accounts-payable.ts`; `server/mutations/accounts-payable.ts`; `app/(tenant)/[tenantSlug]/finance/accounts-payable/**`; `docs/build-log/phase-04/FIN-199.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..198 migrations (extend via new migration only); Step 11 vendor/PO/contract scope |
+| `migration_ids` | 1 additive migration (`app.finance_ap_open_items`, `app.finance_ap_open_item_events`, posting/hold/settlement functions) |
+| `api_contracts` | shared post/hold/release/settle/reverse/list/activity/exposure service layer (creation only through controlled bill posting) |
+| `access_controls` | FIN:Edit (vendor-bill-sourced posting, hold placement, settlement), FIN:Approve (opening-balance posting, hold release, governed reversal), FIN:View (read) |
+| `financial_invariants` | open_amount = original_amount - settled_amount (generated column); status derived purely from balance; idempotent posting/settlement; period-aware (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests; scripts/db-tests/finance-accounts-payable.sql (idempotency, authority split, over-settlement/over-reversal, hold/release split, cross-tenant, exposure) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-199.md build log; db-test output; node:test count delta |
+| `rollback` | additive migration only; governed reversal for any consumed settlement |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-011 (Prompt 200, Vendor Bill) is READY -- next, the final task in this session's explicit authorized range |
 
 ### Row `200` — Prompt 200, `CG-S9-FIN-011`
 
@@ -311,10 +311,10 @@
 | `feature_slice` | actual-cost/source capture, basic match, tax, approval, AP posting |
 | `atomic_objective` | See prompt file `§4 Objective` (191–194 verbatim in `docs/build-log/phase-04/FIN-200.md` §1 once instantiated) |
 | `source_ids` | FIN-AP-001..004; FIN-TAX; OPS-CST-001..004; Phase 6 PRC-POI boundary |
-| `upstream` | FIN-191..195 + FIN-199 + verified Operations actual-cost/source manifest |
+| `upstream` | FIN-191..195 (VERIFIED) + FIN-199 (VERIFIED) + verified Operations actual-cost/source manifest (OPS-178, VERIFIED) |
 | `downstream` | FIN-201 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
+| `allowed_paths` | not yet instantiated (READY, the final task in this session's authorized range -- exact paths land with this row's own checkpoint) |
+| `forbidden_paths` | not yet instantiated (READY, this session's authorized range) |
 | `migration_ids` | not instantiated |
 | `api_contracts` | not instantiated |
 | `access_controls` | not instantiated |
@@ -323,9 +323,9 @@
 | `commands` | not instantiated |
 | `evidence` | not instantiated |
 | `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..195 + FIN-199 + verified Operations actual-cost/source manifest reaching VERIFIED |
+| `owner` | Runtime build agent |
+| `status` | READY |
+| `resume_point` | CG-S9-FIN-011 (Prompt 200, Vendor Bill) is READY -- the final task in this session's explicit authorized range (Prompts 195-200) |
 
 ### Row `201` — Prompt 201, `CG-S9-FIN-012`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`193` are `VERIFIED`** (`193` this checkpoint). **`194` is `READY`**, within this session's explicit authorized range. **`195`–`218` (24 rows) remain `NOT_STARTED`**, dependency-mapped but not instantiated with exact paths, and not authorized this session.
+Of the 29 rows in this index (`190`–`218`): **`190`–`199` are `VERIFIED`** (`199` this checkpoint). **`200` is `READY`** -- the final row in this session's explicit authorized range (Prompts 195-200). **`201`–`218` (18 rows) remain `NOT_STARTED`**, dependency-mapped but not instantiated with exact paths, and not yet reached this session.
 
 ## 3. Collision inspection
 
