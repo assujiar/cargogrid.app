@@ -5599,6 +5599,40 @@ One real implementation snag found and fixed before commit: a pre-existing FIN-2
 
 Self-closing. `CG-S9-FIN-019` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the third of five. `CG-S9-FIN-020` (Prompt 209, Reconciliation) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-146 — Reconciliation (Phase 4, Prompt 209)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-020` / `209_RECONCILIATION_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (2 new tables, 7 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-019` `VERIFIED` (`docs/build-log/phase-04/FIN-208.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- fourth task in that range |
+
+#### Outcome
+
+A deterministic, as-of, certifiable reconciliation run formalizes FIN-202's own already-real live control-account comparison (`app.get_finance_subledger_reconciliation_summary`) into a persisted, governed workflow -- one aggregate control-account total compared against one aggregate open-item total per (scope, as-of date), with an exception opened when the variance exceeds a stated tolerance. Certification (`FIN:Approve`) requires zero open exceptions, each resolved independently (`FIN:Edit`) with a mandatory reason. Every function is strictly read-only against every source table -- reconciliation never silently writes a balance to force equality.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729230000_create_finance_reconciliation.sql`; `scripts/db-tests/finance-reconciliation.sql`; `server/contracts/reconciliation/reconciliation.ts(.test.ts)`; `server/queries/reconciliation.ts(.test.ts)`; `server/mutations/reconciliation.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/reconciliation/{page.tsx,actions.ts,reconciliation-forms.tsx}`; `docs/build-log/phase-04/FIN-209.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_RECONCILIATION_RUN_STATUS_TONE_MAP`/`FINANCE_RECONCILIATION_EXCEPTION_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `209` `VERIFIED`; row `210`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2102/2102 (15 net new), `pnpm run db:test` PASS -- 91 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 75 routes (1 new: `/[tenantSlug]/finance/reconciliation`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: two new tables, seven new functions, none of them ever mutating a source table (`app.finance_ar_open_items`/`app.finance_ap_open_items`/`app.finance_subledger_lines`). `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real implementation snag found and fixed before commit: `app.finance_subledger_batches` carries no direct business posting-date column (only `posted_at`, a wall-clock insert timestamp, and `posting_period_id`); an initial draft bounded the control-account side by `posted_at::date <= as_of_date`, which would have silently used insert time rather than business date. Fixed by joining `app.finance_fiscal_periods` and bounding by the resolved period's own `end_date <= as_of_date` instead, verified against a real db-test scenario spanning two distinct as-of dates before commit. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-020` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the fourth of five. `CG-S9-FIN-021` (Prompt 210, AR and AP Aging) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

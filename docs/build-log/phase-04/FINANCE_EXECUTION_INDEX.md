@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 206, 207, 208, 209, and 210 in order, each as its own commit. Rows `201`-`207` are `VERIFIED`. Row `208` is now instantiated with exact repository paths and marked `VERIFIED` below. Prompts 209-218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `209`-`218` remain `NOT_STARTED`/`BLOCKED` until each is reached in turn within this session's own authorized range.
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 206, 207, 208, 209, and 210 in order, each as its own commit. Rows `201`-`208` are `VERIFIED`. Row `209` is now instantiated with exact repository paths and marked `VERIFIED` below. Prompt 210 remains mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `210`-`218` remain `NOT_STARTED`/`BLOCKED` until each is reached in turn -- `210` is the final task within this session's own authorized range.
 
 ## 0. Checkpoint
 
@@ -10,10 +10,10 @@
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
 | Working branch | `claude/prompt-206-210-dpxtmu`, tracked to `origin/claude/prompt-206-210-dpxtmu` this checkpoint |
-| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-018` (Prompt 207, Period Lock and Governed Reopen) commit |
-| Worktree state | Clean except this checkpoint's own new Idempotent Posting files, one tightened pre-existing db-test assertion, and runtime-ledger updates |
-| Repository state | `FIN-191..207` (through Period Lock and Governed Reopen) all `VERIFIED`. `supabase/migrations/20260729220000_create_finance_idempotent_posting.sql` is new this checkpoint. |
-| Mutation performed by this document | Row `208` instantiated `VERIFIED`; row `209`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
+| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-019` (Prompt 208, Idempotent Posting) commit |
+| Worktree state | Clean except this checkpoint's own new Reconciliation files and runtime-ledger updates |
+| Repository state | `FIN-191..208` (through Idempotent Posting) all `VERIFIED`. `supabase/migrations/20260729230000_create_finance_reconciliation.sql` is new this checkpoint. |
+| Mutation performed by this document | Row `209` instantiated `VERIFIED`; row `210`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
 | User authorization | Explicit user instruction: "lanjut prompt 206-210" ("continue prompts 206-210") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. |
 
@@ -565,19 +565,19 @@
 | `source_ids` | FIN-GL/AR/AP/TAX-001..004; Phase 4 reconciliation requirement; FINTEST financial scenarios |
 | `upstream` | FIN-196..208 (FIN-211 later adds bank/cash inputs) |
 | `downstream` | FIN-210 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-196..208 all VERIFIED (FIN-211 later adds bank/cash inputs), so CG-S9-FIN-020 (Prompt 209) is now dependency-eligible and authorized this session -- next |
+| `allowed_paths` | `supabase/migrations/20260729230000_create_finance_reconciliation.sql`; `server/contracts/reconciliation/`; `server/queries/reconciliation.ts`; `server/mutations/reconciliation.ts`; `app/(tenant)/[tenantSlug]/finance/reconciliation/**`; `components/domain/status-tone-map.ts` (two added tone maps); `docs/build-log/phase-04/FIN-209.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..208 migrations (extend via new migration only; zero prior migration file edited, zero existing function body changed) |
+| `migration_ids` | 1 additive migration (`app.finance_reconciliation_runs`, `app.finance_reconciliation_exceptions`; 7 new functions including the deterministic engine) |
+| `api_contracts` | shared execute/resolve-exception/certify/list-runs/list-exceptions service layer |
+| `access_controls` | `FIN:Edit` (execute a run, resolve an exception), `FIN:Approve` (certify), `FIN:View` (list) |
+| `financial_invariants` | reconciliation never silently writes a balance to force equality (strictly read-only against every source table); certification requires zero open exceptions and an independent authority; every certified result is reproducible from its own exact scope/as-of/tolerance (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (15 net new); scripts/db-tests/finance-reconciliation.sql (authority/validation rejection, a real posted batch driving a real control-account balance, a real open item reconciling exactly as of period-end, a later open item opening exactly one exception once as-of extends past it, certification blocked-then-succeeding with the full authority split, as-of-date bounding, cross-tenant isolation, schema-privilege defense in depth, audit trail) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-209.md build log; db-test output (91 files, zero regression); node:test count delta (2087 -> 2102); next build (75 routes) |
+| `rollback` | additive migration only; every function is strictly read-only against every source table; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-021 (Prompt 210, AR and AP Aging) is dependency-eligible and authorized this session -- next, the final task in this session's explicit authorized range |
 
 ### Row `210` — Prompt 210, `CG-S9-FIN-021`
 
@@ -605,7 +605,7 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-196, FIN-198..201, FIN-206, FIN-209 reaching VERIFIED |
+| `resume_point` | FIN-196, FIN-198..201, FIN-206, FIN-209 all VERIFIED, so CG-S9-FIN-021 (Prompt 210) is now dependency-eligible and authorized this session -- next, the final task in this session's explicit authorized range |
 
 ### Row `211` — Prompt 211, `CG-S9-FIN-022`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`208` are `VERIFIED`** (`208` this checkpoint). This session's explicit authorized range is Prompts 206-210; `209`-`210` remain to be instantiated within this same session. **`209`–`218` (10 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `209`-`210` are authorized this session and dependency-eligible in turn, while `211`-`218` remain out of this session's authorized range.
+Of the 29 rows in this index (`190`–`218`): **`190`–`209` are `VERIFIED`** (`209` this checkpoint). This session's explicit authorized range is Prompts 206-210; `210` remains to be instantiated within this same session, the final task in that range. **`210`–`218` (9 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `210` is authorized this session and dependency-eligible, while `211`-`218` remain out of this session's authorized range.
 
 ## 3. Collision inspection
 

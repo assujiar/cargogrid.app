@@ -38,6 +38,7 @@ import type { FinanceSettlementStatus } from "../../server/contracts/settlement/
 import type { FinanceJournalStatus } from "../../server/contracts/journal/journal.ts";
 import type { FinanceCorrectionStatus } from "../../server/contracts/journal-correction/journal-correction.ts";
 import type { FinancePeriodLockStatus } from "../../server/contracts/period-lock/period-lock.ts";
+import type { FinanceReconciliationRunStatus, FinanceReconciliationExceptionStatus } from "../../server/contracts/reconciliation/reconciliation.ts";
 import type { FinanceLifecycleCanonicalState } from "../../server/contracts/lifecycle/lifecycle.ts";
 
 export interface StatusToneEntry {
@@ -180,6 +181,16 @@ export const FINANCE_JOURNAL_STATUS_TONE_MAP: Record<FinanceJournalStatus, Statu
   approved: { tone: "warning", label: "Approved" },
   posted: { tone: "success", label: "Posted" },
   void: { tone: "danger", label: "Void" },
+};
+
+export const FINANCE_RECONCILIATION_RUN_STATUS_TONE_MAP: Record<FinanceReconciliationRunStatus, StatusToneEntry> = {
+  completed: { tone: "info", label: "Completed" },
+  certified: { tone: "success", label: "Certified" },
+};
+
+export const FINANCE_RECONCILIATION_EXCEPTION_STATUS_TONE_MAP: Record<FinanceReconciliationExceptionStatus, StatusToneEntry> = {
+  open: { tone: "danger", label: "Open" },
+  resolved: { tone: "success", label: "Resolved" },
 };
 
 export const FINANCE_PERIOD_LOCK_STATUS_TONE_MAP: Record<FinancePeriodLockStatus, StatusToneEntry> = {
