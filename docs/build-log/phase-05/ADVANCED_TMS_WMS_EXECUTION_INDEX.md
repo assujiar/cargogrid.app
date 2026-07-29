@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S10-ATW-001` (`CG-AABPP-ATW-220` v0.12.0-multisource-gps)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/220_ADVANCED_TMS_WMS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_5_IN_PROGRESS`. Rows `220` (`CG-S10-ATW-001`) and `221` (`CG-S10-ATW-002`) are `VERIFIED` this range. `CG-S10-ATW-003` (Prompt 222) is `READY`; `CG-S10-ATW-010` (Prompt 229) remains `READY` (independent Warehouse lane, not yet started); every other row is `NOT_STARTED` (dependency-correct, not yet authorized/unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
+**Status:** `PHASE_5_IN_PROGRESS`. Rows `220`–`222` (`CG-S10-ATW-001..003`) are `VERIFIED` this range. `CG-S10-ATW-004` (Prompt 223) is `READY` and authorized; `CG-S10-ATW-010` (Prompt 229) remains `READY` (independent Warehouse lane, not yet started); every other row is `NOT_STARTED` (dependency-correct, not yet authorized/unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
 
 ## 0. Checkpoint
 
@@ -55,8 +55,8 @@
 | `task_id` | Prompt | Workstream / Capability | `upstream` | `downstream` | `status` | `resume_point` |
 |---|---|---|---|---|---|---|
 | `CG-S10-ATW-002` | 221 — Multi-Leg and Multimodal Shipment | Advanced Transportation / Multi-Leg and Multimodal Shipment | `ATW-220`; verified Phase 3 Job Order/Shipment Order/lifecycle/milestone/ePOD/cost/readiness and Phase 4 Finance contracts | `ATW-222..228`, `ATW-238`, `ATW-243`, `ATW-244` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-221.md`. `CG-S10-ATW-003` (222) is dependency-clean `READY` |
-| `CG-S10-ATW-003` | 222 — Advanced Dispatch Board with Tracking Health | Advanced Transportation / Dispatcher Control Tower | `ATW-221`, verified Phase 3 dispatch; tracking columns additionally need `ATW-226F`/`226H` (may implement dispatch itself before 226, tracking columns feature-gated until then) | `ATW-223..228`, `ATW-243`, `ATW-245..248`, Customer Portal tracking | **`READY`** | Dependency-clean (`ATW-221` `VERIFIED`); this session's own "lanjut prompt 221-223" range authorizes it |
-| `CG-S10-ATW-004` | 223 — Fleet, Vehicle, Driver, Device and SIM Operational Baseline | Transport Resources / Operational Resource Control | `ATW-221..222`, Platform master/config/entitlement, verified Phase 3 resource assignment | `ATW-224..228`, `ATW-226B/C` | `NOT_STARTED` | Blocked on `ATW-222` `VERIFIED` |
+| `CG-S10-ATW-003` | 222 — Advanced Dispatch Board with Tracking Health | Advanced Transportation / Dispatcher Control Tower | `ATW-221`, verified Phase 3 dispatch; tracking columns additionally need `ATW-226F`/`226H` (may implement dispatch itself before 226, tracking columns feature-gated until then) | `ATW-223..228`, `ATW-243`, `ATW-245..248`, Customer Portal tracking | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-222.md`. `CG-S10-ATW-004` (223) is dependency-clean `READY` |
+| `CG-S10-ATW-004` | 223 — Fleet, Vehicle, Driver, Device and SIM Operational Baseline | Transport Resources / Operational Resource Control | `ATW-221..222`, Platform master/config/entitlement, verified Phase 3 resource assignment | `ATW-224..228`, `ATW-226B/C` | **`READY`** | Dependency-clean (`ATW-222` `VERIFIED`); this session's own "lanjut prompt 221-223" range authorizes it |
 | `CG-S10-ATW-005` | 224 — Route and Load Planning Using Canonical Position | Advanced Transportation / Constraint-Aware Planning | `ATW-221`, `ATW-223`, verified PostGIS/location/config foundations; live-position replanning additionally needs `ATW-226F` | `ATW-225`, `ATW-227`, `ATW-243` | `NOT_STARTED` | Blocked on `ATW-223` `VERIFIED` |
 | `CG-S10-ATW-006` | 225 — First-, Middle-, and Last-Mile Orchestration with Tracking Policy | Advanced Transportation / End-to-End Mile Execution | `ATW-221`, `ATW-224`, verified Phase 3 milestones/exceptions, resource eligibility `ATW-223` | `ATW-226`(`ATW-226C`), `ATW-228`, `ATW-243`, `ATW-244` | `NOT_STARTED` | Blocked on `ATW-224` `VERIFIED` |
 | §1.4 | 226 — Multi-Source GPS and Telematics Integration | Transportation Integration / Trusted Movement Events | see §1.4 (decomposed into `ATW-226A`..`226I`) | `ATW-227`, `ATW-228`, `ATW-243` | `NOT_STARTED` | See §1.4 |
@@ -155,11 +155,11 @@ Overall row `226` (`ATW-226`, parent) requires: `ATW-221`, `ATW-223`, `ATW-225`,
 
 | State | Count |
 |---|---|
-| `VERIFIED` | 2 (`220`, `221`) |
-| `READY` | 2 (`222`, `229`) |
-| `NOT_STARTED` | 33 (`223`–`225`, `227`, `228`, `230`–`248`, and all 9 `226` children) |
+| `VERIFIED` | 3 (`220`, `221`, `222`) |
+| `READY` | 2 (`223`, `229`) |
+| `NOT_STARTED` | 32 (`224`–`225`, `227`, `228`, `230`–`248`, and all 9 `226` children) |
 | **Total task rows** | **37** |
 
 ## 3. Completion statement
 
-This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. Row `221` (`CG-S10-ATW-002`) is `VERIFIED` this checkpoint (`docs/build-log/phase-05/ATW-221.md`) — the first task in this session's own "lanjut prompt 221-223" authorized range. `CG-S10-ATW-003` (Prompt 222) is next, within the same authorized range. `CG-S10-ATW-010` (Prompt 229) remains dependency-clean `READY` (independent Warehouse lane) but is not named in this range.
+This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. Rows `221`/`222` (`CG-S10-ATW-002`/`003`) are `VERIFIED` this range (`docs/build-log/phase-05/ATW-221.md`, `ATW-222.md`) — the first two tasks in this session's own "lanjut prompt 221-223" authorized range. `CG-S10-ATW-004` (Prompt 223) is next and final, within the same authorized range. `CG-S10-ATW-010` (Prompt 229) remains dependency-clean `READY` (independent Warehouse lane) but is not named in this range.

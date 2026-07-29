@@ -122,11 +122,11 @@ begin
 
   select * into v_rule from app.create_margin_rule_version(v_tenant1, 20.00, 'half_up', '00000000-0000-0000-0000-000000039102', 'tester');
   perform app.publish_margin_rule_version(v_rule.id, v_rule.record_version, null, '00000000-0000-0000-0000-000000039102', 'tester');
-  perform app.calculate_margin(v_selection.id, 18000000, 'IDR', 0, '00000000-0000-0000-0000-000000039102', 'tester');
+  perform app.calculate_margin(v_selection.id, 18700000, 'IDR', 0, '00000000-0000-0000-0000-000000039102', 'tester');
   select id into v_calc_id from app.margin_calculations where rate_selection_id = v_selection.id and is_current;
 
   select * into v_quote from app.create_quotation_draft(v_tenant1, v_opportunity.id, 'IDR', now() + interval '14 days', v_contact.id, null, null, '00000000-0000-0000-0000-000000039102', 'tester');
-  perform app.add_quotation_line(v_quote.id, v_quote.record_version, 'service', 'Ocean freight multileg lane', v_calc_id, 1, 18000000, 0, 0, '00000000-0000-0000-0000-000000039102', 'tester');
+  perform app.add_quotation_line(v_quote.id, v_quote.record_version, 'service', 'Ocean freight multileg lane', v_calc_id, 1, 18700000, 0, 0, '00000000-0000-0000-0000-000000039102', 'tester');
   select * into v_quote from app.quotations where id = v_quote.id;
   perform app.submit_quotation(v_quote.id, v_quote.record_version, '00000000-0000-0000-0000-000000039102', 'tester');
   select * into v_send from app.send_quotation_for_acceptance(v_quote.id, null, 'email', '00000000-0000-0000-0000-000000039102', 'tester');
