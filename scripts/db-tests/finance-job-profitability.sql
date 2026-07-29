@@ -576,3 +576,47 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> FIN-214 (Financial Field-Level Security) regression guard: Admin A (tenant_admin, holds no FIN:View margin grant -- confirmed by the fixture setup above) can read this tenant''s own calculate_finance_job_profitability audit events via app.query_audit_logs (gated on is_support_grant_authority alone, never FIN:View margin), but every one of at least 5 such events carries only the safe allowlisted keys -- never revenue_amount/cost_amount/profit_amount/margin_percent/source_invoice_ids/source_cost_version_ids, closing the log-channel inference leak app.audit_logs.after_value previously carried (fixed in 20260729280000_create_finance_field_level_security.sql, a create-or-replace of the identical FIN-212 function)'
+do $$
+declare
+  v_tenant1 uuid;
+  v_row app.audit_logs;
+  v_checked_count integer := 0;
+  v_has_calculated_fact boolean;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'acmeprofita');
+
+  select exists(
+    select 1 from app.finance_job_profitability_facts where tenant_id = v_tenant1 and status = 'calculated' and revenue_amount > 0
+  ) into v_has_calculated_fact;
+  if not v_has_calculated_fact then
+    raise exception 'assertion failed: expected at least one real calculated fact with a positive revenue_amount for this negative check to be meaningful (not vacuously true against all-null figures)';
+  end if;
+
+  for v_row in
+    select * from app.query_audit_logs('00000000-0000-0000-0000-000000037001', v_tenant1, 50, null, null) where action = 'calculate_finance_job_profitability'
+  loop
+    v_checked_count := v_checked_count + 1;
+    if v_row.after_value ? 'revenue_amount' or v_row.after_value ? 'cost_amount' or v_row.after_value ? 'profit_amount'
+      or v_row.after_value ? 'margin_percent' or v_row.after_value ? 'source_invoice_ids' or v_row.after_value ? 'source_cost_version_ids' then
+      raise exception 'assertion failed: audit event % (as read by a tenant_admin with no FIN:View margin grant) leaks a margin-sensitive key: %', v_row.id, v_row.after_value;
+    end if;
+    if not (v_row.after_value ? 'id' and v_row.after_value ? 'job_order_id' and v_row.after_value ? 'status' and v_row.after_value ? 'blocked_reason') then
+      raise exception 'assertion failed: audit event % is missing an expected safe key: %', v_row.id, v_row.after_value;
+    end if;
+  end loop;
+  if v_checked_count < 5 then
+    raise exception 'assertion failed: expected to read at least 5 calculate_finance_job_profitability events via app.query_audit_logs, read %', v_checked_count;
+  end if;
+
+  -- Confirm the perimeter itself is unchanged by this fix: Admin A (tenant_admin, no FIN:View margin) is still denied outright on the real read/calculate RPCs -- app.query_audit_logs is the one channel this checkpoint closed, not a general FIN:View margin bypass.
+  begin
+    perform app.get_finance_profitability_summary(v_tenant1, 'customer', '00000000-0000-0000-0000-000000037001');
+    raise exception 'assertion failed: expected insufficient_authority for Admin A on app.get_finance_profitability_summary (no FIN:View margin grant)';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+end;
+$$;

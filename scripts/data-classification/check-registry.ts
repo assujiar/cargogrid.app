@@ -1,20 +1,28 @@
 /**
  * Data-classification adoption gate — docs/standards/
- * DATA_CLASSIFICATION_STANDARDS.md §6/§7, CG-S5-PH0-016 (Prompt 95).
+ * DATA_CLASSIFICATION_STANDARDS.md §6/§7, CG-S5-PH0-016 (Prompt 95); extended by
+ * FIN-214 (Financial Field-Level Security, CG-S9-FIN-025).
  *
- * Two checks: (1) PHASE_0_REGISTRY is internally valid (owner/level-floor/
- * duplicate rules, registry.ts's own validateRegistry()); (2) every
- * `secret`-classified variable in scripts/env/schema.ts's real, current
- * ENV_REGISTRY has a matching PHASE_0_REGISTRY entry — the first real
- * instance of the "no unclassified sensitive field ships" gate (Prompt 95
- * §23's exception flow), extended to `server/contracts/<domain>/` fields by
- * whichever Phase 1 prompt introduces the first one, not duplicated here.
+ * Three checks: (1) the combined registry (PHASE_0_REGISTRY + FINANCE_REGISTRY) is
+ * internally valid (owner/level-floor/duplicate rules, registry.ts's own
+ * validateRegistry()); (2) every `secret`-classified variable in
+ * scripts/env/schema.ts's real, current ENV_REGISTRY has a matching registry entry;
+ * (3) every seeded `protected: true` Finance (`FIN`) permission action that at least
+ * one real Finance migration actually enforces by name has a matching
+ * `protectedAction` registry entry — closing Prompt 95 §23's "no unclassified
+ * sensitive field ships" gate for `server/contracts/<domain>/` fields, the exact
+ * extension §8 of the standards doc named as deferred to "each domain's own owning
+ * Phase 1+ prompt."
  *
  * CLI: node --experimental-strip-types scripts/data-classification/check-registry.ts
  */
 
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { ENV_REGISTRY } from "../env/schema.ts";
-import { validateRegistry, PHASE_0_REGISTRY, type ClassificationEntry, type RegistryViolation } from "./registry.ts";
+import { validateRegistry, PHASE_0_REGISTRY, FINANCE_REGISTRY, type ClassificationEntry, type RegistryViolation } from "./registry.ts";
+
+export const REGISTRY: readonly ClassificationEntry[] = [...PHASE_0_REGISTRY, ...FINANCE_REGISTRY];
 
 export type AdoptionGapKind = "UNCLASSIFIED_SECRET_ENV_VAR";
 
@@ -37,12 +45,58 @@ export function findUnclassifiedSecretEnvVars(envRegistry: typeof ENV_REGISTRY, 
   return gaps;
 }
 
-function main(): void {
-  const registryViolations: RegistryViolation[] = validateRegistry(PHASE_0_REGISTRY);
-  const adoptionGaps = findUnclassifiedSecretEnvVars(ENV_REGISTRY, PHASE_0_REGISTRY);
+/** Every `('<action>', 'FIN', ..., true)` row in the seeded permission catalog — statically parsed, not a live DB read (this script runs with no database connection). */
+export function parseSeededProtectedFinActions(permissionCatalogSource: string): string[] {
+  const actions: string[] = [];
+  // Matches e.g. ('View cost', 'FIN', 'sensitive', true) across the seed migration's own multi-row `values (...)` literal.
+  const rowPattern = /\(\s*'([^']+)'\s*,\s*'FIN'\s*,\s*'[^']*'\s*,\s*true\s*\)/g;
+  for (const match of permissionCatalogSource.matchAll(rowPattern)) {
+    const action = match[1];
+    if (action) actions.push(action);
+  }
+  return actions;
+}
 
-  if (registryViolations.length === 0 && adoptionGaps.length === 0) {
-    console.log("✔ data-classification registry is internally valid and every secret-classified env var is classified.");
+/** A protected FIN action this repository's own migrations actually reference by name (`'<action>'` inside an `evaluate_permission`/`check_finance_*_authority` call) — only an *enforced* action needs registry coverage; a seeded-but-unused one (disclosed) does not yet. */
+export function findEnforcedProtectedFinActions(protectedActions: readonly string[], financeMigrationsSource: string): string[] {
+  return protectedActions.filter((action) => financeMigrationsSource.includes(`'${action}'`));
+}
+
+export type FinancePolicyGapKind = "UNCLASSIFIED_PROTECTED_FIN_ACTION";
+
+export interface FinancePolicyGap {
+  readonly action: string;
+  readonly kind: FinancePolicyGapKind;
+}
+
+/** FIN-214 §7/§23: every protected FIN action a real Finance migration enforces must have a registry entry naming it as that entry's own `protectedAction`. */
+export function findUnclassifiedProtectedFinActions(enforcedActions: readonly string[], classificationRegistry: readonly ClassificationEntry[]): FinancePolicyGap[] {
+  const classifiedActions = new Set(classificationRegistry.map((e) => e.protectedAction).filter((a): a is string => Boolean(a)));
+  return enforcedActions.filter((action) => !classifiedActions.has(`FIN:${action}`)).map((action) => ({ action, kind: "UNCLASSIFIED_PROTECTED_FIN_ACTION" as const }));
+}
+
+function loadPermissionCatalogSource(): string {
+  return readFileSync(join(import.meta.dirname, "../../supabase/migrations/20260716103445_create_roles_permissions.sql"), "utf8");
+}
+
+function loadFinanceMigrationsSource(): string {
+  const dir = join(import.meta.dirname, "../../supabase/migrations");
+  return readdirSync(dir)
+    .filter((f) => f.includes("finance"))
+    .map((f) => readFileSync(join(dir, f), "utf8"))
+    .join("\n");
+}
+
+function main(): void {
+  const registryViolations: RegistryViolation[] = validateRegistry(REGISTRY);
+  const adoptionGaps = findUnclassifiedSecretEnvVars(ENV_REGISTRY, REGISTRY);
+
+  const protectedFinActions = parseSeededProtectedFinActions(loadPermissionCatalogSource());
+  const enforcedFinActions = findEnforcedProtectedFinActions(protectedFinActions, loadFinanceMigrationsSource());
+  const financePolicyGaps = findUnclassifiedProtectedFinActions(enforcedFinActions, REGISTRY);
+
+  if (registryViolations.length === 0 && adoptionGaps.length === 0 && financePolicyGaps.length === 0) {
+    console.log("✔ data-classification registry is internally valid, every secret-classified env var is classified, and every enforced protected Finance action is classified.");
     return;
   }
 
@@ -50,9 +104,13 @@ function main(): void {
     console.error(`✖ registry entry "${v.id}" [${v.kind}]`);
   }
   for (const g of adoptionGaps) {
-    console.error(`✖ env var "${g.envVarName}" [${g.kind}] — add a PHASE_0_REGISTRY entry with id "env:${g.envVarName}" before this ships`);
+    console.error(`✖ env var "${g.envVarName}" [${g.kind}] — add a registry entry with id "env:${g.envVarName}" before this ships`);
   }
-  console.error(`\n${registryViolations.length + adoptionGaps.length} data-classification issue(s) — see docs/standards/DATA_CLASSIFICATION_STANDARDS.md §6/§7.`);
+  for (const g of financePolicyGaps) {
+    console.error(`✖ protected Finance action "FIN:${g.action}" [${g.kind}] — add a FINANCE_REGISTRY entry naming it as protectedAction before it ships`);
+  }
+  const total = registryViolations.length + adoptionGaps.length + financePolicyGaps.length;
+  console.error(`\n${total} data-classification issue(s) — see docs/standards/DATA_CLASSIFICATION_STANDARDS.md §6/§7 and docs/standards/FINANCE_FIELD_POLICY_MATRIX.md.`);
   process.exit(1);
 }
 
