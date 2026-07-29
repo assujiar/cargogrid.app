@@ -93,15 +93,15 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 | Canonical context location | `docs/runtime/` (do not recreate root duplicates) |
 | Trust boundary | Repository + package + sources trusted; `docs/architecture/14..16_*.md` **reconciled and trusted** (Lineage A, 607-item baseline, `ERR-2026-003` `RECOVERED`) |
 
-## 4. Active task (next) -- **Phases 1-3 are CLOSED; Phase 4 Finance is `PHASE_4_IN_PROGRESS`**
+## 4. Active task (next) -- **Phases 1-4 are CLOSED; Phase 5 Advanced TMS/WMS is `PHASE_5_IN_PROGRESS`**
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S9-FIN-029` -- Finance Closure Verification, `VERIFIED` this checkpoint. **`PHASE_4_VERIFIED` set.** Sixth and final substantive task in a fresh explicit authorized range (Prompts 213-219). |
-| Prompt | `09-phase-04-finance/218_*.md` -- `VERIFIED` this checkpoint. Explicit user authorization "lanjut prompt 213 sd 219" naming Finance Phase 4 prompts 213 through 219 in order, one commit each, pushed after each -- 218 is the sixth and final substantive task in that range. |
-| Status | **`VERIFIED`.** See `docs/build-log/phase-04/FINANCE_CLOSURE_REPORT.md`. Independent re-verification, fresh install, all 15 required-verification items pass, zero bounded repair needed. **`PHASE_4_VERIFIED` set this checkpoint.** |
-| Reason | This checkpoint is the sixth and final substantive task in a fresh explicit authorized range (Prompts 213-218). Prompt 219 (Phase 5 Advanced TMS/WMS kickoff) is next, within this same session's own authorized range. |
-| Upstream | `CG-S9-FIN-028` (`VERIFIED` -- `docs/build-log/phase-04/FIN-217.md`) and all prior tasks (Phase 0/1/2/3 all closed and `VERIFIED`; Phase 4 Prompts 190-218 all `VERIFIED`) |
+| Task ID/name | `CG-S10-ATW-001` -- Advanced TMS/WMS WBS and Runtime Kickoff, `VERIFIED` this checkpoint. **`PHASE_5_IN_PROGRESS` set.** Sole task in this checkpoint's explicit "lanjut prompt 220" authorization (single named task, not a range). |
+| Prompt | `10-phase-05-advanced-tms-wms/220_ADVANCED_TMS_WMS_WBS_RUNTIME_KICKOFF_PROMPT.md` -- `VERIFIED` this checkpoint. Explicit user authorization "lanjut prompt 220" names Prompt 220 only. |
+| Status | **`VERIFIED`.** See `docs/build-log/phase-05/00_ADVANCED_TMS_WMS_WBS.md` and `ADVANCED_TMS_WMS_EXECUTION_INDEX.md`. Docs/index-only, zero schema/code change. Fresh baseline gate suite (install, typecheck, lint, `node:test` 2165/2165, `db:test` 95 migrations/97 files, `docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`, `next build` 77 routes) all re-run and green before any Phase 5 file was written. |
+| Reason | Fresh explicit user authorization ("lanjut prompt 220") named Prompt 220 specifically, following the standing gate recorded at the Phase 4/5 boundary (§ note above) that required exactly this before any Phase 5 runtime task could begin. `CG-S10-ATW-002` (Prompt 221) and `CG-S10-ATW-010` (Prompt 229) are both dependency-clean `READY` but **not** authorized by this same instruction -- per this build's own standing discipline, the next runtime agent/session must obtain fresh explicit user authorization before starting either. |
+| Upstream | `PHASE_4_VERIFIED` (`CG-S9-FIN-029`, `docs/build-log/phase-04/FINANCE_CLOSURE_REPORT.md`) and all prior tasks (Phase 0/1/2/3/4 all closed and `VERIFIED`) |
 
 ## 5. Work completed (all runs to date, summarized)
 
