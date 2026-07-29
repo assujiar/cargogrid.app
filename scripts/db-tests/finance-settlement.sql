@@ -88,6 +88,44 @@ begin
 end;
 $$;
 
+\echo '>> FIN-202 fixture prerequisite: a published finance_posting_map so app.post_finance_settlement''s own new subledger effect can resolve real accounts'
+do $$
+declare
+  v_tenant_a uuid;
+  v_account app.finance_accounts;
+  v_pm_draft app.config_versions;
+  v_coa_role uuid;
+  v_coa_draft app.role_versions;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
+
+  -- FIN-192's own app.create_finance_account_draft requires FIN:Create, which
+  -- this file's own "Finance Manager" role (Edit/Approve/View only) does not
+  -- grant -- an additional, additive role assignment, not a change to the
+  -- existing role's own permission set.
+  v_coa_role := (app.create_role(v_tenant_a, 'Chart of Accounts Setup', 'FIN-202 fixture-only account creation', 'tester')).id;
+  v_coa_draft := app.create_role_version(v_coa_role, 'tester');
+  perform app.set_role_version_permissions(v_coa_draft.id, array(select id from app.permissions where resource_module_code = 'FIN' and action = 'Create'), 'tester');
+  perform app.publish_role_version(v_coa_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_coa_role and status = 'published'), '00000000-0000-0000-0000-000000029602', '00000000-0000-0000-0000-000000029601', 'tester');
+
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'AP-CTRL', 'Accounts Payable Control', 'liability', 'credit', null, false, null, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'CASH-DEFAULT', 'Default Cash', 'asset', 'debit', null, false, null, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'FEE-EXP-DEFAULT', 'Default Fee Expense', 'expense', 'debit', null, false, null, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+
+  select * into v_pm_draft from app.create_finance_config_draft('finance_posting_map', v_tenant_a, 'tenant', null, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  perform app.set_finance_config_items(v_pm_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'ap_control', 'value', jsonb_build_object('accountCodeRef', 'AP-CTRL')),
+    jsonb_build_object('key', 'cash_default', 'value', jsonb_build_object('accountCodeRef', 'CASH-DEFAULT')),
+    jsonb_build_object('key', 'fee_expense_default', 'value', jsonb_build_object('accountCodeRef', 'FEE-EXP-DEFAULT'))
+  ), '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  perform app.publish_finance_config_version(v_pm_draft.id, '00000000-0000-0000-0000-000000029602', null, 'financemanagera');
+end;
+$$;
+
 \echo '>> preparation validation: Plain User A is denied; unknown vendor, unsupported currency, empty allocation, non-positive allocation amount, unknown open item, vendor mismatch, currency mismatch, held item, and over-allocation are each rejected; Finance Manager A prepares once and a retried call with the same idempotency_key returns the same row unchanged'
 do $$
 declare

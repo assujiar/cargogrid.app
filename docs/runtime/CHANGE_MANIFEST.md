@@ -5361,6 +5361,40 @@ Zero implementation defect. Zero Critical/High-severity issue. One environment-o
 
 Self-closing. `CG-S9-FIN-012` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the first of five. `CG-S9-FIN-013` (Prompt 202, Subledger) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-139 — Subledger (Phase 4, Prompt 202)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-013` / `202_SUBLEDGER_PROMPT.md` |
+| Change type | New capability -- 1 additive migration plus 4 CREATE OR REPLACE FUNCTION extensions of already-shipped functions, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-012` `VERIFIED` (`docs/build-log/phase-04/FIN-201.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 201-205 in order -- second task in that range |
+
+#### Outcome
+
+Canonical source subledgers translating invoice, receipt-allocation, vendor-bill and settlement events into balanced, reconcilable accounting events -- real-integrated, not a placeholder engine: `app.issue_finance_invoice`, `app.allocate_finance_receipt`, `app.post_finance_vendor_bill` and `app.post_finance_settlement` (FIN-197/198/200/201) are each extended via `CREATE OR REPLACE FUNCTION` to emit exactly one balanced `app.finance_subledger_batches` row at their own existing posting moment, resolving real accounts through FIN-191's own `finance_posting_map` configuration and FIN-192's own chart of accounts. A live `app.get_finance_subledger_reconciliation_summary` compares the subledger's own AR/AP control balances against FIN-196/199's own open-item totals.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729160000_create_finance_subledger.sql`; `server/contracts/subledger/subledger.ts(.test.ts)`; `server/queries/subledger.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/subledger/page.tsx`/`loading.tsx`; `scripts/db-tests/finance-subledger.sql`; `docs/build-log/phase-04/FIN-202.md`. Modified: `scripts/db-tests/finance-invoice.sql`/`finance-receipt-allocation.sql`/`finance-vendor-bill.sql`/`finance-settlement.sql` (each extended with a published `finance_posting_map` fixture, since the four retrofitted functions now require one; zero existing assertion altered); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `202` `VERIFIED`, row `203`'s own resume_point updated); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration *file* edited (four functions extended via `CREATE OR REPLACE FUNCTION`, the established precedent), 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 2015/2015 (13 net new), `pnpm run db:test` PASS -- 83 migrations/84 db-test files (1 net new, zero regression across all four extended files), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file once staged (standing since `COM-151`), `npx next build` PASS -- 71 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration (2 new tables, 7 new functions) plus four `CREATE OR REPLACE FUNCTION` extensions, each preserving its own function's existing grants. `git revert` of this checkpoint's commit reverts both the new schema and the four retrofits back to their prior FIN-197/198/200/201 bodies.
+
+#### Errors found and fixed
+
+One genuine implementation defect found and fixed before commit: `app.post_finance_subledger_batch`'s first draft checked tenant membership but never called `app.check_finance_subledger_authority` at all, so a Plain User with no `FIN` grant was not actually rejected by authority. Caught by this checkpoint's own db-test on the first run (the "Plain User denied" assertion instead observed an unrelated validation error), fixed by adding a real `FIN:Edit` check. Zero other implementation defect. Zero Critical/High-severity issue.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-013` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the second of five. `CG-S9-FIN-014` (Prompt 203, Double-Entry Journal) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
