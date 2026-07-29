@@ -5905,6 +5905,40 @@ None. This checkpoint's own read-back of every prior Finance build log, `docs/ad
 
 Self-closing. `CG-S9-FIN-028` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the fifth of the range's substantive Finance tasks (213-218). `CG-S9-FIN-029` (Prompt 218, Finance Closure Verification -- the only task that may set `PHASE_4_VERIFIED`) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-155 — Finance Closure Verification (Phase 4, Prompt 218)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-029` / `218_FINANCE_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | Independent re-verification only -- 1 new closure report, zero migration, zero application code |
+| Baseline evidence | `CG-S9-FIN-028` `VERIFIED` (`docs/build-log/phase-04/FIN-217.md`) |
+| Final status | `COMPLETED` -- `VERIFIED`; **`PHASE_4_VERIFIED` set** |
+| Authorization | Explicit user instruction "lanjut prompt 213 sd 219" naming Finance Phase 4 Prompts 213-219 in order -- sixth and final substantive task in that range |
+
+#### Outcome
+
+Independent, from-scratch re-verification of the entire Finance phase: fresh `rm -rf node_modules && pnpm install --frozen-lockfile`, then every gate re-run and every one of Prompt 218's own 15 required-verification items re-confirmed against live evidence, not carried forward from any prior checkpoint's self-report. Zero bounded repair was needed -- every gate passed on the first fresh run, and the one finding the entire phase produced (`FIN-214`'s log-channel leak) was already closed within the same checkpoint that found it. Two conditions explicitly disclosed as open rather than falsely closed: the seeded Indonesia PPN tax rate remains SME/legal-unconfirmed (RPD-016), and no per-action step-up MFA exists anywhere in the repository yet (RPD-023, repository-wide, not Finance-specific). **`PHASE_4_VERIFIED` is set.** This closes this session's own fresh explicit authorized substantive Finance range (Prompts 213-218); Prompt 219 (Phase 5 kickoff) remains within the same session authorization and follows next.
+
+#### Scope and files
+
+New: `docs/build-log/phase-04/FINANCE_CLOSURE_REPORT.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `218` `VERIFIED`; top-level status set to `PHASE_4_VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md` (Phase 4 row set to `VERIFIED`/100%). 0 new migrations, 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+Fresh install (1.4s) + `pnpm run typecheck` PASS (3.3s) + `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged, 18.4s) + `pnpm run test` PASS -- `node:test` 2165/2165 (20.4s) + `pnpm run db:test` PASS -- 95 migrations/97 db-test files (31.1s) + `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` all PASS + `npx next build` PASS -- 77 routes (31.8s). All independently re-run this checkpoint, all green on the first attempt.
+
+#### Compatibility, rollout, recovery
+
+Independent re-verification only: zero migration, zero application code. `git revert` this checkpoint's own commit removes only the closure report; no code/schema was touched to revert.
+
+#### Errors found and fixed
+
+None -- zero bounded repair was needed. Every required-verification item passed against live evidence on the first fresh run.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-029` is `VERIFIED`. **`PHASE_4_VERIFIED` is set.** This session's explicit authorized range "lanjut prompt 213 sd 219" now has its own substantive Finance portion (Prompts 213-218) fully complete. Prompt 219 (Phase 5 Advanced TMS/WMS kickoff) is next, within the same session authorization -- proceeding directly, unlike a prior phase-closure checkpoint's own precedent of stopping for fresh authorization here.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
