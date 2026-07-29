@@ -97,11 +97,11 @@ Full evidence and root cause: `docs/runtime/ERROR_LEDGER.md` `ERR-2026-003` (new
 
 | Field | Value |
 |---|---|
-| Task ID/name | `CG-S10-ATW-001` -- Advanced TMS/WMS WBS and Runtime Kickoff, `VERIFIED` this checkpoint. **`PHASE_5_IN_PROGRESS` set.** Sole task in this checkpoint's explicit "lanjut prompt 220" authorization (single named task, not a range). |
-| Prompt | `10-phase-05-advanced-tms-wms/220_ADVANCED_TMS_WMS_WBS_RUNTIME_KICKOFF_PROMPT.md` -- `VERIFIED` this checkpoint. Explicit user authorization "lanjut prompt 220" names Prompt 220 only. |
-| Status | **`VERIFIED`.** See `docs/build-log/phase-05/00_ADVANCED_TMS_WMS_WBS.md` and `ADVANCED_TMS_WMS_EXECUTION_INDEX.md`. Docs/index-only, zero schema/code change. Fresh baseline gate suite (install, typecheck, lint, `node:test` 2165/2165, `db:test` 95 migrations/97 files, `docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`, `next build` 77 routes) all re-run and green before any Phase 5 file was written. |
-| Reason | Fresh explicit user authorization ("lanjut prompt 220") named Prompt 220 specifically, following the standing gate recorded at the Phase 4/5 boundary (§ note above) that required exactly this before any Phase 5 runtime task could begin. `CG-S10-ATW-002` (Prompt 221) and `CG-S10-ATW-010` (Prompt 229) are both dependency-clean `READY` but **not** authorized by this same instruction -- per this build's own standing discipline, the next runtime agent/session must obtain fresh explicit user authorization before starting either. |
-| Upstream | `PHASE_4_VERIFIED` (`CG-S9-FIN-029`, `docs/build-log/phase-04/FINANCE_CLOSURE_REPORT.md`) and all prior tasks (Phase 0/1/2/3/4 all closed and `VERIFIED`) |
+| Task ID/name | `CG-S10-ATW-002` -- Multi-Leg and Multimodal Shipment, `VERIFIED` this checkpoint. First task in this session's own "lanjut prompt 221-223" authorized range. |
+| Prompt | `10-phase-05-advanced-tms-wms/221_MULTI_LEG_MULTIMODAL_SHIPMENT_PROMPT.md` -- `VERIFIED` this checkpoint. |
+| Status | **`VERIFIED`.** See `docs/build-log/phase-05/ATW-221.md`. New additive migration `20260729290000_create_advanced_tms_multi_leg_shipment.sql` (96 total), full service layer, UI (list/timeline leg-network panel on the Shipment Order detail page, no interactive map yet -- disclosed), `node:test` 2186/2186, `db:test` PASS across 96 migrations/98 files, `next build` PASS (77 routes, unchanged). |
+| Reason | Fresh explicit user authorization ("lanjut prompt 221-223") names Prompts 221 through 223 in order. `CG-S10-ATW-003` (Prompt 222, Advanced Dispatch Board with Tracking Health) is next, within the same authorized range. |
+| Upstream | `CG-S10-ATW-001` (`VERIFIED`, Phase 5 kickoff); verified Phase 3 Job Order/Shipment Order/lifecycle/milestone/ePOD/cost/readiness and Phase 4 Finance contracts |
 
 ## 5. Work completed (all runs to date, summarized)
 

@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S10-ATW-001` (`CG-AABPP-ATW-220` v0.12.0-multisource-gps)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/220_ADVANCED_TMS_WMS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_5_IN_PROGRESS` — set this checkpoint. Row `220` (`CG-S10-ATW-001`) is `VERIFIED`. `CG-S10-ATW-002` (Prompt 221) and `CG-S10-ATW-010` (Prompt 229) are the only two rows marked `READY`; every other row is `NOT_STARTED` (dependency-correct, not yet authorized/unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
+**Status:** `PHASE_5_IN_PROGRESS`. Rows `220` (`CG-S10-ATW-001`) and `221` (`CG-S10-ATW-002`) are `VERIFIED` this range. `CG-S10-ATW-003` (Prompt 222) is `READY`; `CG-S10-ATW-010` (Prompt 229) remains `READY` (independent Warehouse lane, not yet started); every other row is `NOT_STARTED` (dependency-correct, not yet authorized/unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
 
 ## 0. Checkpoint
 
@@ -10,12 +10,12 @@
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
 | Working branch | `claude/ulangi-prompt-219-7evdpp` |
-| HEAD at authoring time (pre-commit) | this session's own prior commit (Prompt 219 re-read/re-confirmation, 2026-07-29) |
-| Worktree state | Clean except this document, its sibling `00_ADVANCED_TMS_WMS_WBS.md`, and this checkpoint's own runtime-ledger updates |
-| Repository state | `PHASE_4_VERIFIED` (all 29 Finance rows `VERIFIED`); 95 migrations applied, unchanged this checkpoint (zero migration — kickoff/index only) |
-| Mutation performed by this document | Row `220` instantiated `VERIFIED`; `PHASE_5_IN_PROGRESS` set; rows `221`–`248` (37 total task rows, `226` decomposed into 9 children) instantiated at `NOT_STARTED`/`READY` per §1 |
-| Pre-flight collision check | `pnpm run git:check` clean — this branch carries 1 commit ahead of `origin/main`, no other branch collision detected |
-| User authorization | Explicit user instruction "lanjut prompt 220" ("continue prompt 220") — a single named-task authorization, not a range. Authorizes this kickoff only. |
+| HEAD at authoring time (pre-commit) | this session's own prior commit (`CG-S10-ATW-001`, Prompt 220 kickoff, `VERIFIED`) |
+| Worktree state | Clean except this document and this checkpoint's own new migration/service-layer/UI/test files and runtime-ledger updates |
+| Repository state | `PHASE_4_VERIFIED`; 96 migrations applied (1 net new: `20260729290000_create_advanced_tms_multi_leg_shipment.sql`) |
+| Mutation performed by this document | Row `221` instantiated `VERIFIED`; row `222`'s own resume_point updated to reflect dependency-eligible and authorized |
+| Pre-flight collision check | `pnpm run git:check` clean |
+| User authorization | Explicit user instruction "lanjut prompt 221-223" ("continue prompts 221 through 223") — a scoped, multi-task, named-endpoint authorization. `221` is the first task in that range. |
 
 ## 1. Full execution index
 
@@ -54,8 +54,8 @@
 
 | `task_id` | Prompt | Workstream / Capability | `upstream` | `downstream` | `status` | `resume_point` |
 |---|---|---|---|---|---|---|
-| `CG-S10-ATW-002` | 221 — Multi-Leg and Multimodal Shipment | Advanced Transportation / Multi-Leg and Multimodal Shipment | `ATW-220`; verified Phase 3 Job Order/Shipment Order/lifecycle/milestone/ePOD/cost/readiness and Phase 4 Finance contracts | `ATW-222..228`, `ATW-238`, `ATW-243`, `ATW-244` | **`READY`** | Dependency-clean; awaiting explicit authorization |
-| `CG-S10-ATW-003` | 222 — Advanced Dispatch Board with Tracking Health | Advanced Transportation / Dispatcher Control Tower | `ATW-221`, verified Phase 3 dispatch; tracking columns additionally need `ATW-226F`/`226H` (may implement dispatch itself before 226, tracking columns feature-gated until then) | `ATW-223..228`, `ATW-243`, `ATW-245..248`, Customer Portal tracking | `NOT_STARTED` | Blocked on `ATW-221` `VERIFIED` |
+| `CG-S10-ATW-002` | 221 — Multi-Leg and Multimodal Shipment | Advanced Transportation / Multi-Leg and Multimodal Shipment | `ATW-220`; verified Phase 3 Job Order/Shipment Order/lifecycle/milestone/ePOD/cost/readiness and Phase 4 Finance contracts | `ATW-222..228`, `ATW-238`, `ATW-243`, `ATW-244` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-221.md`. `CG-S10-ATW-003` (222) is dependency-clean `READY` |
+| `CG-S10-ATW-003` | 222 — Advanced Dispatch Board with Tracking Health | Advanced Transportation / Dispatcher Control Tower | `ATW-221`, verified Phase 3 dispatch; tracking columns additionally need `ATW-226F`/`226H` (may implement dispatch itself before 226, tracking columns feature-gated until then) | `ATW-223..228`, `ATW-243`, `ATW-245..248`, Customer Portal tracking | **`READY`** | Dependency-clean (`ATW-221` `VERIFIED`); this session's own "lanjut prompt 221-223" range authorizes it |
 | `CG-S10-ATW-004` | 223 — Fleet, Vehicle, Driver, Device and SIM Operational Baseline | Transport Resources / Operational Resource Control | `ATW-221..222`, Platform master/config/entitlement, verified Phase 3 resource assignment | `ATW-224..228`, `ATW-226B/C` | `NOT_STARTED` | Blocked on `ATW-222` `VERIFIED` |
 | `CG-S10-ATW-005` | 224 — Route and Load Planning Using Canonical Position | Advanced Transportation / Constraint-Aware Planning | `ATW-221`, `ATW-223`, verified PostGIS/location/config foundations; live-position replanning additionally needs `ATW-226F` | `ATW-225`, `ATW-227`, `ATW-243` | `NOT_STARTED` | Blocked on `ATW-223` `VERIFIED` |
 | `CG-S10-ATW-006` | 225 — First-, Middle-, and Last-Mile Orchestration with Tracking Policy | Advanced Transportation / End-to-End Mile Execution | `ATW-221`, `ATW-224`, verified Phase 3 milestones/exceptions, resource eligibility `ATW-223` | `ATW-226`(`ATW-226C`), `ATW-228`, `ATW-243`, `ATW-244` | `NOT_STARTED` | Blocked on `ATW-224` `VERIFIED` |
@@ -93,22 +93,22 @@ For every `NOT_STARTED` row above, the remaining required columns (`allowed_path
 |---|---|
 | `atomic_objective` | Extend the verified Shipment Order into ordered multi-pickup, transfer, linehaul and delivery legs across land, air and sea without duplicating the canonical root |
 | `source_ids` | `221_MULTI_LEG_MULTIMODAL_SHIPMENT_PROMPT.md` full; verified `app.shipment_orders` (`OPS-*`) |
-| `allowed_paths` (planned, exact filenames chosen at build time) | New additive `supabase/migrations/<timestamp>_create_advanced_tms_multi_leg_shipment.sql`; `server/{contracts,queries,mutations}/multi-leg-shipment.ts`; `app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/legs/**`; `scripts/db-tests/advanced-tms-multi-leg-shipment.sql` |
-| `forbidden_paths` | Any second Job Order/Shipment Order root; Finance posting surfaces; warehouse-lane paths (`ATW-229`+) |
-| `migration_ids` | none yet — one new additive migration planned when this row starts |
-| `api_contracts` | Planned: leg/stop CRUD + reorder + mode-handoff contract, service-layer only (no REST/GraphQL surface exists repository-wide yet) |
+| `allowed_paths` | `supabase/migrations/20260729290000_create_advanced_tms_multi_leg_shipment.sql`; `server/contracts/multi-leg-shipment/multi-leg-shipment.ts`; `server/queries/multi-leg-shipment.ts`; `server/mutations/multi-leg-shipment.ts` (plus their `.test.ts` files); `app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/leg-network-panel.tsx`, `page.tsx`, `actions.ts` (extended); `scripts/db-tests/advanced-tms-multi-leg-shipment.sql`; `server/contracts/shipment-order/shipment-order.ts` and `server/contracts/basic-dispatch/basic-dispatch.ts` (extended for the new `leg_network_status` column) |
+| `forbidden_paths` | Any second Job Order/Shipment Order root; Finance posting surfaces; warehouse-lane paths (`ATW-229`+) — none touched |
+| `migration_ids` | `20260729290000_create_advanced_tms_multi_leg_shipment.sql` (1 new additive migration; 96 total) |
+| `api_contracts` | Service-layer RPC wrappers only (no REST/GraphQL surface exists repository-wide yet) — 10 new RPCs |
 | `deployment_target` | Serverless Web/API (Vercel) — unchanged existing target |
 | `secret_ownership` | none (no external integration in this row) |
-| `access_controls` | Planned reuse of `app.evaluate_permission`/`has_active_tenant_membership`, mirroring every prior Operations capability |
-| `transport_invariants` | Leg ordering must be contiguous and non-overlapping per shipment; a leg's own mode/carrier must not silently override the parent Shipment Order's already-governed billing/readiness fields |
-| `tests` | Planned `node:test` service-layer coverage + `scripts/db-tests/advanced-tms-multi-leg-shipment.sql` (structural validation, cross-tenant isolation, schema-privilege defense in depth — the standing pattern every capability since `PLT-105` has used) |
+| `access_controls` | Reuses `app.evaluate_permission`(`OPS`:`Create`/`Edit`)/`can_access_record`/`lead_record_scope_org_unit_ids`, mirroring every prior Operations capability |
+| `transport_invariants` | Leg sequence must be contiguous 1..N with no gap/duplicate among non-cancelled legs to confirm; cargo allocation sum across non-cancelled legs never exceeds the parent Shipment Order's own allocation; a leg cannot dispatch until its own network is confirmed; custody events are append-only with server-assigned sequencing |
+| `tests` | `scripts/db-tests/advanced-tms-multi-leg-shipment.sql` (new); `server/contracts\|queries\|mutations/multi-leg-shipment.test.ts` (21 net new `node:test` cases) |
 | `external_evidence_status` | n/a (no external hardware/provider dependency in this capability) |
-| `commands` | Not yet run — deferred to when this row starts |
-| `evidence` | none yet |
-| `rollback` | Planned: `git revert` the row's own commit; migration is additive only, no destructive rollback needed |
-| `owner` | Runtime build agent (unassigned until authorized) |
-| `status` | `READY` |
-| `resume_point` | Awaiting fresh explicit user authorization naming Prompt 221 |
+| `commands` | `pnpm install --frozen-lockfile`; `typecheck`; `lint`; `pnpm run test`; `pnpm run db:test`; `docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`; `next build` — all re-run fresh, all green |
+| `evidence` | `docs/build-log/phase-05/ATW-221.md`; `node:test` 2186/2186; `db:test` PASS across 96 migrations/98 files; `next build` PASS (77 routes, unchanged) |
+| `rollback` | `git revert` the row's own commit; migration is additive only, no destructive rollback needed |
+| `owner` | Runtime build agent |
+| `status` | `VERIFIED` |
+| `resume_point` | `CG-S10-ATW-003` (Prompt 222) is `READY` and named in this session's own "lanjut prompt 221-223" authorization |
 
 #### Row `229` — `CG-S10-ATW-010`
 
@@ -155,11 +155,11 @@ Overall row `226` (`ATW-226`, parent) requires: `ATW-221`, `ATW-223`, `ATW-225`,
 
 | State | Count |
 |---|---|
-| `VERIFIED` | 1 (`220`) |
-| `READY` | 2 (`221`, `229`) |
-| `NOT_STARTED` | 34 (`222`–`225`, `227`, `228`, `230`–`248`, and all 9 `226` children) |
+| `VERIFIED` | 2 (`220`, `221`) |
+| `READY` | 2 (`222`, `229`) |
+| `NOT_STARTED` | 33 (`223`–`225`, `227`, `228`, `230`–`248`, and all 9 `226` children) |
 | **Total task rows** | **37** |
 
 ## 3. Completion statement
 
-This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. This checkpoint's own explicit authorization ("lanjut prompt 220") does not extend to `221`, `229`, or any further row — the next runtime agent/session must obtain fresh explicit user authorization before starting either `READY` row or any further Phase 5 task.
+This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. Row `221` (`CG-S10-ATW-002`) is `VERIFIED` this checkpoint (`docs/build-log/phase-05/ATW-221.md`) — the first task in this session's own "lanjut prompt 221-223" authorized range. `CG-S10-ATW-003` (Prompt 222) is next, within the same authorized range. `CG-S10-ATW-010` (Prompt 229) remains dependency-clean `READY` (independent Warehouse lane) but is not named in this range.

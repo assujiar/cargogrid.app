@@ -59,6 +59,18 @@ import {
 } from "../../../../../../server/mutations/actual-cost.ts";
 import type { ActualCostCategory, ActualCostSourceType } from "../../../../../../server/contracts/actual-cost/actual-cost.ts";
 import { issueShipmentTrackingToken, revokeShipmentTrackingToken, PublicTrackingMutationError } from "../../../../../../server/mutations/public-tracking.ts";
+import {
+  addShipmentLeg,
+  cancelShipmentLeg,
+  addShipmentLegStop,
+  allocateShipmentLegCargo,
+  confirmShipmentLegNetwork,
+  transitionShipmentLeg,
+  recordShipmentLegCustodyEvent,
+  migrateLegacyShipmentToLegNetwork,
+  MultiLegShipmentMutationError,
+} from "../../../../../../server/mutations/multi-leg-shipment.ts";
+import type { ShipmentLegMode, ShipmentLegStopType, ShipmentLegStatus, ShipmentLegCustodyEventType } from "../../../../../../server/contracts/multi-leg-shipment/multi-leg-shipment.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
@@ -1117,6 +1129,285 @@ export async function revokeShipmentTrackingTokenAction(
   } catch (error) {
     if (error instanceof PublicTrackingMutationError) {
       return { error: `Could not revoke the tracking link: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: adds one ordered leg to the shipment's own multi-leg network. */
+export async function addShipmentLegAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  idempotencyKey: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const sequenceNo = Number(formData.get("sequenceNo") ?? 0);
+  const mode = String(formData.get("mode") ?? "") as ShipmentLegMode;
+  const carrierMasterId = String(formData.get("carrierMasterId") ?? "").trim();
+  const plannedDepartureAt = String(formData.get("plannedDepartureAt") ?? "").trim();
+  const plannedArrivalAt = String(formData.get("plannedArrivalAt") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await addShipmentLeg(supabase, {
+      shipmentOrderId,
+      idempotencyKey,
+      sequenceNo,
+      mode,
+      carrierMasterId: carrierMasterId.length === 0 ? null : carrierMasterId,
+      plannedDepartureAt: plannedDepartureAt.length === 0 ? null : new Date(plannedDepartureAt).toISOString(),
+      plannedArrivalAt: plannedArrivalAt.length === 0 ? null : new Date(plannedArrivalAt).toISOString(),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not add this leg: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: planned-only cancellation of one leg -- reason mandatory. */
+export async function cancelShipmentLegAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const reason = String(formData.get("reason") ?? "");
+  const supabase = await createSupabaseServerClient();
+  try {
+    await cancelShipmentLeg(supabase, { shipmentLegId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not cancel this leg: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: adds one ordered stop to a leg -- only while the leg is still planned. */
+export async function addShipmentLegStopAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const stopSequence = Number(formData.get("stopSequence") ?? 0);
+  const stopType = String(formData.get("stopType") ?? "") as ShipmentLegStopType;
+  const locationName = String(formData.get("locationName") ?? "");
+  const address = String(formData.get("address") ?? "").trim();
+  const longitudeRaw = String(formData.get("longitude") ?? "").trim();
+  const latitudeRaw = String(formData.get("latitude") ?? "").trim();
+  const plannedAt = String(formData.get("plannedAt") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await addShipmentLegStop(supabase, {
+      shipmentLegId,
+      stopSequence,
+      stopType,
+      locationName,
+      address: address.length === 0 ? null : address,
+      longitude: longitudeRaw.length === 0 ? null : Number(longitudeRaw),
+      latitude: latitudeRaw.length === 0 ? null : Number(latitudeRaw),
+      plannedAt: plannedAt.length === 0 ? null : new Date(plannedAt).toISOString(),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not add this stop: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: one cargo allocation per leg (upsert) -- the sum across legs is checked server-side against the shipment's own allocation. */
+export async function allocateShipmentLegCargoAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const quantityRaw = String(formData.get("allocatedQuantity") ?? "").trim();
+  const weightRaw = String(formData.get("allocatedWeightKg") ?? "").trim();
+  const volumeRaw = String(formData.get("allocatedVolumeCbm") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await allocateShipmentLegCargo(supabase, {
+      shipmentLegId,
+      allocatedQuantity: quantityRaw.length === 0 ? null : Number(quantityRaw),
+      allocatedWeightKg: weightRaw.length === 0 ? null : Number(weightRaw),
+      allocatedVolumeCbm: volumeRaw.length === 0 ? null : Number(volumeRaw),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not allocate cargo: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: validates leg-sequence contiguity and full cargo allocation, then confirms the network. */
+export async function confirmShipmentLegNetworkAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await confirmShipmentLegNetwork(supabase, { shipmentOrderId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not confirm the leg network: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: a leg cannot leave planned for dispatched until its own shipment's leg network is confirmed. */
+export async function transitionShipmentLegAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  expectedVersion: number,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const toStatus = String(formData.get("toStatus") ?? "") as ShipmentLegStatus;
+  const supabase = await createSupabaseServerClient();
+  try {
+    await transitionShipmentLeg(supabase, { shipmentLegId, toStatus, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not transition this leg: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: append-only custody/handoff lineage for one leg -- to_party is mandatory. */
+export async function recordShipmentLegCustodyEventAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const eventType = String(formData.get("eventType") ?? "") as ShipmentLegCustodyEventType;
+  const fromParty = String(formData.get("fromParty") ?? "").trim();
+  const toParty = String(formData.get("toParty") ?? "").trim();
+  const occurredAt = String(formData.get("occurredAt") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await recordShipmentLegCustodyEvent(supabase, {
+      shipmentLegId,
+      eventType,
+      fromPartySnapshot: fromParty.length === 0 ? null : { party: fromParty },
+      toPartySnapshot: { party: toParty },
+      occurredAt: occurredAt.length === 0 ? new Date().toISOString() : new Date(occurredAt).toISOString(),
+      evidence: null,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not record this custody event: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-221: idempotent expand-only backfill -- creates one is_legacy_compat leg mirroring the shipment's own mode/schedule/allocation/origin/destination, then immediately confirms the network. */
+export async function migrateLegacyShipmentToLegNetworkAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await migrateLegacyShipmentToLegNetwork(supabase, { shipmentOrderId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof MultiLegShipmentMutationError) {
+      return { error: `Could not migrate this shipment to a leg network: ${error.message}` };
     }
     throw error;
   }

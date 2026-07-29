@@ -491,20 +491,29 @@ $$;
 do $$
 declare
   v_count integer;
+  v_tenant1 uuid;
 begin
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.costing_requests' and action = 'request_costing';
+  -- Tenant-scoped (ATW-221's own db-test fixture also calls app.request_costing as
+  -- part of walking the same upstream Commercial pipeline every later-alphabetical
+  -- Operations/Finance/Advanced-TMS db-test file already does -- these assertions
+  -- were originally unscoped and coincidentally survived only because this file ran
+  -- alphabetically before every other file that also calls request_costing; scoping
+  -- by tenant_id makes the assertion correct regardless of file execution order).
+  v_tenant1 := (select id from app.tenants where slug = 'acmecosting');
+
+  select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.costing_requests' and action = 'request_costing';
   if v_count <> 2 then raise exception 'assertion failed: expected exactly 2 request_costing audit events (the main-flow request plus the cancel-test request; the idempotent retry inserted nothing new), found %', v_count; end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.costing_requests' and action = 'assign_costing_request';
+  select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.costing_requests' and action = 'assign_costing_request';
   if v_count <> 1 then raise exception 'assertion failed: expected exactly 1 assign_costing_request audit event, found %', v_count; end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.costing_responses' and action = 'submit_costing_response';
+  select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.costing_responses' and action = 'submit_costing_response';
   if v_count <> 1 then raise exception 'assertion failed: expected exactly 1 submit_costing_response audit event, found %', v_count; end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.costing_requests' and action = 'revise_costing_request';
+  select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.costing_requests' and action = 'revise_costing_request';
   if v_count <> 1 then raise exception 'assertion failed: expected exactly 1 revise_costing_request audit event, found %', v_count; end if;
 
-  select count(*) into v_count from app.audit_logs where resource_type = 'app.costing_requests' and action = 'cancel_costing_request';
+  select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.costing_requests' and action = 'cancel_costing_request';
   if v_count <> 1 then raise exception 'assertion failed: expected exactly 1 cancel_costing_request audit event, found %', v_count; end if;
 end;
 $$;
