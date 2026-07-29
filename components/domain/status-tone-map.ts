@@ -35,6 +35,7 @@ import type { FinanceReceiptStatus } from "../../server/contracts/receipt-alloca
 import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-payable/accounts-payable.ts";
 import type { FinanceVendorBillStatus } from "../../server/contracts/vendor-bill/vendor-bill.ts";
 import type { FinanceSettlementStatus } from "../../server/contracts/settlement/settlement.ts";
+import type { FinanceJournalStatus } from "../../server/contracts/journal/journal.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -167,6 +168,15 @@ export const FINANCE_SETTLEMENT_STATUS_TONE_MAP: Record<FinanceSettlementStatus,
   posted: { tone: "success", label: "Posted" },
   void: { tone: "danger", label: "Void" },
   reversed: { tone: "danger", label: "Reversed" },
+};
+
+/** FIN-203: Double-Entry Journal's own draft -> submitted -> approved -> posted -> void lifecycle -- shared by both manual and system (subledger-sourced) journals, though a system journal only ever appears as posted. */
+export const FINANCE_JOURNAL_STATUS_TONE_MAP: Record<FinanceJournalStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  posted: { tone: "success", label: "Posted" },
+  void: { tone: "danger", label: "Void" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {

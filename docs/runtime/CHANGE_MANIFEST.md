@@ -5395,6 +5395,40 @@ One genuine implementation defect found and fixed before commit: `app.post_finan
 
 Self-closing. `CG-S9-FIN-013` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the second of five. `CG-S9-FIN-014` (Prompt 203, Double-Entry Journal) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-140 — Double-Entry Journal (Phase 4, Prompt 203)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-014` / `203_DOUBLE_ENTRY_JOURNAL_PROMPT.md` |
+| Change type | New capability -- 1 additive migration plus 1 CREATE OR REPLACE FUNCTION extension of an already-shipped function, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-013` `VERIFIED` (`docs/build-log/phase-04/FIN-202.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 201-205 in order -- third task in that range |
+
+#### Outcome
+
+Canonical double-entry journal with exact debit-equals-credit balance, source lineage, and one shared posting service (`app.validate_finance_journal_line_balance`) used by both an authorized manual journal (`draft -> submitted -> approved -> posted`) and every system-sourced posting. `app.post_finance_subledger_batch` (FIN-202) is extended via `CREATE OR REPLACE FUNCTION` to create and post exactly one matching journal immediately after writing its own subledger lines, mirroring them exactly, then sets that batch's own `gl_journal_id` -- closing FIN-202's own disclosed forward reference.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729170000_create_finance_journal.sql`; `server/contracts/journal/journal.ts(.test.ts)`; `server/queries/journal.ts(.test.ts)`; `server/mutations/journal.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/journals/page.tsx`/`actions.ts`/`journal-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-journal.sql`; `docs/build-log/phase-04/FIN-203.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_JOURNAL_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `203` `VERIFIED`, row `204`'s own resume_point updated); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration *file* edited (one function extended via `CREATE OR REPLACE FUNCTION`), 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 2032/2032 (17 net new), `pnpm run db:test` PASS -- 84 migrations/85 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file once staged (standing since `COM-151`), `npx next build` PASS -- 72 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration (3 new tables, 11 new functions) plus one `CREATE OR REPLACE FUNCTION` extension, preserving its own function's existing grants. `git revert` of this checkpoint's commit reverts both the new schema and the one retrofit back to its prior FIN-202 body.
+
+#### Errors found and fixed
+
+Zero implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-014` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the third of five. `CG-S9-FIN-015` (Prompt 204, Posted-Journal Integrity) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

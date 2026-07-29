@@ -11,9 +11,9 @@
 | Repository | `assujiar/cargogrid.app` |
 | Working branch | `claude/prompt-201-205-u8sa38`, tracked to `origin/claude/prompt-201-205-u8sa38` this checkpoint |
 | HEAD at authoring time (pre-commit) | merge of PR #28 (Finance Phase 4 Prompts 190-200 `VERIFIED`) |
-| Worktree state | Clean except this checkpoint's own new Subledger files and runtime-ledger updates |
-| Repository state | `FIN-191..201` (through Settlement) all `VERIFIED`. `app/(tenant)/[tenantSlug]/finance/subledger/` is new this checkpoint. |
-| Mutation performed by this document | Row `202` instantiated `VERIFIED`; row `203`'s own resume_point updated to reflect dependency-eligible and authorized; tally section updated |
+| Worktree state | Clean except this checkpoint's own new Journal files and runtime-ledger updates |
+| Repository state | `FIN-191..202` (through Subledger) all `VERIFIED`. `app/(tenant)/[tenantSlug]/finance/journals/` is new this checkpoint. |
+| Mutation performed by this document | Row `203` instantiated `VERIFIED`; row `204`'s own resume_point updated to reflect dependency-eligible and authorized; tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
 | User authorization | Explicit user instruction: "lanjut prompt 201-205" ("continue prompts 201-205") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted |
 
@@ -397,19 +397,19 @@
 | `source_ids` | FIN-GL-001..004; INV-005/011; financial integrity guardrails |
 | `upstream` | FIN-191..202 |
 | `downstream` | FIN-204 |
-| `allowed_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
-| `forbidden_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-191..202 all reached VERIFIED, so CG-S9-FIN-014 (Prompt 203) is now dependency-eligible; authorized this session -- proceeding next |
+| `allowed_paths` | `supabase/migrations/20260729170000_create_finance_journal.sql`; `server/contracts/journal/`; `server/queries/journal.ts`; `server/mutations/journal.ts`; `app/(tenant)/[tenantSlug]/finance/journals/**`; `docs/build-log/phase-04/FIN-203.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..202 migrations (extend via new migration/CREATE OR REPLACE FUNCTION only) |
+| `migration_ids` | 1 additive migration (`app.finance_journals`, `app.finance_journal_lines`, `app.finance_journal_number_counters`, shared balance/manual/system posting functions) plus 1 CREATE OR REPLACE FUNCTION extension of FIN-202's own app.post_finance_subledger_batch |
+| `api_contracts` | shared prepare-manual/submit/discard/approve/post/system-post/list/lines service layer (one shared balance-validation function underlies both manual and system paths) |
+| `access_controls` | FIN:Edit (manual prepare/submit/discard), FIN:Approve (approve/post), FIN:View (read) |
+| `financial_invariants` | debit total exactly equals credit total and is nonzero before any row is written; idempotent on idempotency_key (manual) or source_type/source_id (system); period-aware; a system journal mirrors its own subledger batch's lines exactly and closes FIN-202's own gl_journal_id forward reference (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (17 net new); scripts/db-tests/finance-journal.sql (shared balance rule, manual validation negative paths, lifecycle authority split, idempotent posting, system journal creation/linkage, cross-tenant isolation, schema-privilege defense in depth, audit trail); FIN-197/198/200/201's own db-test files continue to pass unchanged with the new journal side-effect |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-203.md build log; db-test output (85 files, zero regression); node:test count delta (2015 -> 2032); next build (72 routes) |
+| `rollback` | additive migration only; CREATE OR REPLACE FUNCTION extension reverts cleanly via git revert |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-015 (Prompt 204, Posted-Journal Integrity) is dependency-eligible and authorized this session -- next |
 
 ### Row `204` — Prompt 204, `CG-S9-FIN-015`
 
@@ -425,8 +425,8 @@
 | `source_ids` | FIN-GL-001..004; INV-005; RPD-022/025/036 |
 | `upstream` | FIN-203 |
 | `downstream` | FIN-205 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
+| `allowed_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
+| `forbidden_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
 | `migration_ids` | not instantiated |
 | `api_contracts` | not instantiated |
 | `access_controls` | not instantiated |
@@ -437,7 +437,7 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-203 reaching VERIFIED |
+| `resume_point` | FIN-203 reached VERIFIED, so CG-S9-FIN-015 (Prompt 204) is now dependency-eligible; authorized this session -- proceeding next |
 
 ### Row `205` — Prompt 205, `CG-S9-FIN-016`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`202` are `VERIFIED`** (`202` this checkpoint). This session's explicit authorized range is Prompts 201-205; `203` is now dependency-eligible (`FIN-191..202` all `VERIFIED`) and authorized this session -- proceeding next. **`203`–`218` (16 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `206`–`218` additionally remain out of this session's authorized range.
+Of the 29 rows in this index (`190`–`218`): **`190`–`203` are `VERIFIED`** (`203` this checkpoint). This session's explicit authorized range is Prompts 201-205; `204` is now dependency-eligible (`FIN-203` `VERIFIED`) and authorized this session -- proceeding next. **`204`–`218` (15 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `206`–`218` additionally remain out of this session's authorized range.
 
 ## 3. Collision inspection
 
