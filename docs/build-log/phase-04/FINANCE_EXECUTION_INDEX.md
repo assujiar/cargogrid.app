@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 213 through 219 in order ("lanjut prompt 213 sd 219" -- continue through prompt 219), each as its own commit, following the fully-complete Prompts 190-212 range. Rows `213`-`216` are now instantiated with exact repository paths and marked `VERIFIED` below. Rows `217`-`218` remain to be instantiated within this same authorized range; Prompt 219 is the Phase 5 (Advanced TMS/WMS) kickoff, out of this document's own scope (`10-phase-05-advanced-tms-wms/00_ADVANCED_TMS_WMS_EXECUTION_INDEX.md` once instantiated).
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 213 through 219 in order ("lanjut prompt 213 sd 219" -- continue through prompt 219), each as its own commit, following the fully-complete Prompts 190-212 range. Rows `213`-`217` are now instantiated with exact repository paths and marked `VERIFIED` below. Row `218` remains to be instantiated within this same authorized range; Prompt 219 is the Phase 5 (Advanced TMS/WMS) kickoff, out of this document's own scope (`10-phase-05-advanced-tms-wms/00_ADVANCED_TMS_WMS_EXECUTION_INDEX.md` once instantiated).
 
 ## 0. Checkpoint
 
@@ -10,10 +10,10 @@
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
 | Working branch | `claude/prompt-213-219-tnusu3` |
-| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-026` (Prompt 215, Finance Integrated Verification) commit |
-| Worktree state | Clean except this checkpoint's own new Finance Integrity and Security Hardening files and runtime-ledger updates |
-| Repository state | `FIN-191..215` (through Finance Integrated Verification) all `VERIFIED`. `scripts/db-tests/finance-integrity-security-hardening.sql` is new this checkpoint; zero new migration (zero repair needed). |
-| Mutation performed by this document | Row `216` instantiated `VERIFIED`; row `217`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
+| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-027` (Prompt 216, Finance Integrity and Security Hardening) commit |
+| Worktree state | Clean except this checkpoint's own new Finance Documentation and Handoff files and runtime-ledger updates |
+| Repository state | `FIN-191..216` (through Finance Integrity and Security Hardening) all `VERIFIED`. `docs/build-log/phase-04/FINANCE_HANDOFF_PACKAGE.md`/`FINANCE_DOWNSTREAM_CONTRACTS.md` are new this checkpoint; zero migration (documentation-only). |
+| Mutation performed by this document | Row `217` instantiated `VERIFIED`; row `218`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
 | User authorization | Explicit user instruction: "lanjut prompt 213 sd 219" ("continue prompts 213 through 219") — a scoped, multi-task, named-endpoint authorization covering Prompts 213-219, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. |
 
@@ -785,23 +785,23 @@
 | `epic` | Knowledge and Handoff |
 | `capability` | Finance Documentation and Handoff |
 | `feature_slice` | Phase 5/6/8 contracts, handoff package, downstream contracts |
-| `atomic_objective` | See prompt file `§4 Objective` (191–194 verbatim in `docs/build-log/phase-04/FIN-217.md` §1 once instantiated) |
-| `source_ids` | Phase 5/6/8 contracts |
+| `atomic_objective` | Reconcile all Finance documentation and create a durable Phase 5/6/8/9 handoff for independent closure (Prompt 217 §4, verbatim in `docs/build-log/phase-04/FIN-217.md` §1) |
+| `source_ids` | Phase 5/6/8/9 contracts |
 | `upstream` | FIN-216 |
 | `downstream` | FIN-218 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated (verification/hardening/documentation/closure tasks are not expected to need one) |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | composed re-verification of every prior Phase 4 invariant |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-216 VERIFIED (zero repair needed, residual risks disclosed in `FIN-216.md` §5), so `CG-S9-FIN-028` (Prompt 217) is now dependency-eligible and authorized this session -- next, within the "lanjut prompt 213 sd 219" range |
+| `allowed_paths` | `docs/build-log/phase-04/FINANCE_HANDOFF_PACKAGE.md`; `docs/build-log/phase-04/FINANCE_DOWNSTREAM_CONTRACTS.md`; `docs/build-log/phase-04/FIN-217.md` |
+| `forbidden_paths` | any migration file (documentation-only); any non-Finance domain path |
+| `migration_ids` | none -- documentation-only, zero schema change |
+| `api_contracts` | none new -- reconciled existing contracts only |
+| `access_controls` | unchanged |
+| `financial_invariants` | composed re-verification of every prior Phase 4 invariant -- all held (§4 of the build log) |
+| `tests` | none new -- documentation reconciliation only, verified via `docs:check` and a live forbidden-scope re-run |
+| `commands` | `typecheck`, `lint`, `test`, `db:test`, `next build`, `docs:check`, `security:check`, `data-classification:check`, `threat-model:check`, `standards:check`, `git:check-paths` -- all pass |
+| `evidence` | FIN-217.md build log; `FINANCE_HANDOFF_PACKAGE.md`/`FINANCE_DOWNSTREAM_CONTRACTS.md`; db-test output (97 files, unchanged); node:test unchanged (2165); next build unchanged (77 routes) |
+| `rollback` | `git revert` this checkpoint's own commit removes only the two new documents |
+| `owner` | Claude Code (autonomous build agent) |
+| `status` | `VERIFIED` |
+| `resume_point` | `CG-S9-FIN-029` (Prompt 218, Finance Closure Verification) is dependency-eligible and authorized this session -- next, within the "lanjut prompt 213 sd 219" range |
 
 ### Row `218` — Prompt 218, `CG-S9-FIN-029`
 
@@ -829,11 +829,11 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-217 reaching VERIFIED |
+| `resume_point` | FIN-217 VERIFIED (`FINANCE_HANDOFF_PACKAGE.md`/`FINANCE_DOWNSTREAM_CONTRACTS.md` complete), so `CG-S9-FIN-029` (Prompt 218) is now dependency-eligible and authorized this session -- next, within the "lanjut prompt 213 sd 219" range. **Only this row's own task may set `PHASE_4_VERIFIED`.** |
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`216` are `VERIFIED`** (`216` this checkpoint). This session's fresh explicit authorized range is Prompts 213-219; `217`-`218` remain to be instantiated within this same session, and Prompt 219 (Phase 5 kickoff) is out of this document's own scope. **`217`–`218` (2 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `217` is authorized this session and dependency-eligible next.
+Of the 29 rows in this index (`190`–`218`): **`190`–`217` are `VERIFIED`** (`217` this checkpoint). This session's fresh explicit authorized range is Prompts 213-219; `218` remains to be instantiated within this same session, and Prompt 219 (Phase 5 kickoff) is out of this document's own scope. **`218` (1 row) remains `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `218` is authorized this session and dependency-eligible next -- **only `218` may set `PHASE_4_VERIFIED`**.
 
 ## 3. Collision inspection
 

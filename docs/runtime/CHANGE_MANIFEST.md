@@ -5871,6 +5871,40 @@ None -- the audit's own strongest finding (normal-role posted mutation) confirme
 
 Self-closing. `CG-S9-FIN-027` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the fourth of the range's substantive Finance tasks (213-218). `CG-S9-FIN-028` (Prompt 217, Finance Documentation and Handoff) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-154 — Finance Documentation and Handoff (Phase 4, Prompt 217)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-028` / `217_FINANCE_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | Documentation-only -- 2 new artifacts, zero migration, zero application code |
+| Baseline evidence | `CG-S9-FIN-027` `VERIFIED` (`docs/build-log/phase-04/FIN-216.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 213 sd 219" naming Finance Phase 4 Prompts 213-219 in order -- fifth task in that range |
+
+#### Outcome
+
+Two new artifacts give a fresh Phase 5/6/8/9 agent everything needed to reconstruct Finance's current state and safely start its own next eligible task without any prior session context: `FINANCE_HANDOFF_PACKAGE.md` (verified dependencies, preserved assets across all 24 migrations, verification evidence, ADR/known-issue status, environment commands, residual risks, a rehearsed fresh-context reconstruction check) and `FINANCE_DOWNSTREAM_CONTRACTS.md` (an asymmetric four-section contract: Phase 6's real vendor-bill/AP/`app.master_records` extension boundary; Phase 8's deliberately-deferred invoice/payment visibility contract, stated as a concrete requirement list rather than fabricated; Phase 5's explicit no-dependency boundary; Phase 9's future-Dashboard-consumer note).
+
+#### Scope and files
+
+New: `docs/build-log/phase-04/FINANCE_HANDOFF_PACKAGE.md`; `docs/build-log/phase-04/FINANCE_DOWNSTREAM_CONTRACTS.md`; `docs/build-log/phase-04/FIN-217.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `217` `VERIFIED`; row `218`'s own resume_point updated); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 0 new migrations, 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2165/2165 (unchanged), `pnpm run db:test` PASS -- 97 db-test files (unchanged), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 77 routes (unchanged). Forbidden-scope grep re-run live against current `git ls-files` output, zero matches.
+
+#### Compatibility, rollout, recovery
+
+Documentation-only: zero migration, zero application code. `git revert` this checkpoint's own commit removes only the two new documents.
+
+#### Errors found and fixed
+
+None. This checkpoint's own read-back of every prior Finance build log, `docs/adr/README.md` §6, and `docs/runtime/KNOWN_ISSUES.md` found no stale citation, no missing evidence link, and no orphaned reference to correct.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-028` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the fifth of the range's substantive Finance tasks (213-218). `CG-S9-FIN-029` (Prompt 218, Finance Closure Verification -- the only task that may set `PHASE_4_VERIFIED`) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
