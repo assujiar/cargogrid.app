@@ -28,6 +28,7 @@ import type { ConfigVersionStatus } from "../../server/contracts/config/config.t
 import type { FinanceAccountStatus } from "../../server/contracts/chart-of-accounts/chart-of-accounts.ts";
 import type { FinancePeriodStatus } from "../../server/contracts/fiscal-period/fiscal-period.ts";
 import type { FinanceExchangeRateStatus } from "../../server/contracts/currency-exchange-rate/currency-exchange-rate.ts";
+import type { FinanceTaxRuleStatus } from "../../server/contracts/tax-baseline/tax-baseline.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -101,6 +102,13 @@ export const FINANCE_PERIOD_STATUS_TONE_MAP: Record<FinancePeriodStatus, StatusT
 
 /** FIN-194: Currency Exchange Rate's own draft/approved/archived lifecycle -- versioned-quote status, distinct from FIN-191's config-version and FIN-192's account-lifecycle Record<...>s. */
 export const FINANCE_EXCHANGE_RATE_STATUS_TONE_MAP: Record<FinanceExchangeRateStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  approved: { tone: "success", label: "Approved" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-195: Tax Baseline's own draft/approved/archived lifecycle -- mirrors FIN-194's finance_exchange_rates lifecycle shape exactly (own independently-exhaustiveness-checked Record<...>). */
+export const FINANCE_TAX_RULE_STATUS_TONE_MAP: Record<FinanceTaxRuleStatus, StatusToneEntry> = {
   draft: { tone: "neutral", label: "Draft" },
   approved: { tone: "success", label: "Approved" },
   archived: { tone: "neutral", label: "Archived" },

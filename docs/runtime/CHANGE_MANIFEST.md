@@ -5123,6 +5123,40 @@ Two real defects found and fixed before commit (both via this checkpoint's own d
 
 Self-closing. `CG-S9-FIN-005` is `VERIFIED`. This session's entire explicit authorized range (Finance Phase 4 Prompts 190-194) is now fully complete. `CG-S9-FIN-006` (Prompt 195, Configurable Tax Baseline) is dependency-eligible but **not authorized this session** -- fresh explicit user authorization is required before any further Phase 4 work begins.
 
+### CHG-2026-132 — Tax Baseline (Phase 4, Prompt 195)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-006` / `195_TAX_BASELINE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-005` `VERIFIED` (`docs/build-log/phase-04/FIN-194.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Fresh explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- first task in that range |
+
+#### Outcome
+
+An Indonesia-first, configurable tax-code catalogue plus a versioned, SME-approval-gated tax rule lifecycle (`draft -> approved -> archived`, mirroring `FIN-194`'s own exchange-rate shape), deterministic tenant-then-global resolution, and an exact-decimal calculation service. No legal tax rate, filing rule, or legal conclusion is invented or seeded as approved -- structurally enforced, not merely disclosed (see `FIN-195.md` §3.1). Ties calculation rounding into `FIN-191`'s own `finance_rounding` config rather than a second mechanism.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729090000_create_finance_tax_baseline.sql`; `server/contracts/tax-baseline/tax-baseline.ts(.test.ts)`; `server/queries/tax-baseline.ts(.test.ts)`; `server/mutations/tax-baseline.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/tax-baseline/page.tsx`/`actions.ts`/`tax-baseline-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-tax-baseline.sql`; `docs/build-log/phase-04/FIN-195.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_TAX_RULE_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `195` `VERIFIED`, row `196` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1891/1891 (23 net new), `pnpm run db:test` PASS -- 76 migrations/77 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 62 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (2 new tables, 9 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect. One fixture-completeness correction before commit (not a functional defect): the db-test's own `finance_rounding` publish fixture initially omitted the required `order` key on its `tax_calculation` item (inherited structural requirement from `FIN-191`'s own validator) -- fixed by adding it; `app.calculate_finance_tax` itself never reads `order`.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-006` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-007` (Prompt 196, Accounts Receivable) -- within this session's explicit authorized range (Prompts 195-200).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
