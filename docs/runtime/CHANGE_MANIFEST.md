@@ -5225,6 +5225,40 @@ One real cross-file test-design defect, not a weakening: `FIN-195`'s own db-test
 
 Self-closing. `CG-S9-FIN-008` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-009` (Prompt 198, Receipt and Payment Allocation) -- within this session's explicit authorized range (Prompts 195-200).
 
+### CHG-2026-135 — Receipt and Payment Allocation (Phase 4, Prompt 198)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-009` / `198_RECEIPT_PAYMENT_ALLOCATION_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-008` `VERIFIED` (`docs/build-log/phase-04/FIN-197.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- fourth task in that range |
+
+#### Outcome
+
+Idempotent customer receipt capture and exact, idempotent allocation to FIN-196's own AR open items -- delegating every balance mutation to FIN-196's own row-locked allocator rather than a second, competing mechanism. Governed deallocation (FIN:Approve, mandatory reason) reverses both the receipt's own unapplied amount and the AR open item's own open balance.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729120000_create_finance_receipt_allocation.sql`; `server/contracts/receipt-allocation/receipt-allocation.ts(.test.ts)`; `server/queries/receipt-allocation.ts(.test.ts)`; `server/mutations/receipt-allocation.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/receipts/page.tsx`/`actions.ts`/`receipt-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-receipt-allocation.sql`; `docs/build-log/phase-04/FIN-198.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_RECEIPT_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `198` `VERIFIED`, row `199` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1942/1942 (16 net new), `pnpm run db:test` PASS -- 79 migrations/80 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 65 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 8 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect. Every fixture scenario, including idempotent-replay, over-allocation rejection, and the full governed-reversal round trip, passed on the first `db:test` run.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-009` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-010` (Prompt 199, Accounts Payable) -- within this session's explicit authorized range (Prompts 195-200).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

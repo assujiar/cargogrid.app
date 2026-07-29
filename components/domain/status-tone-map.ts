@@ -31,6 +31,7 @@ import type { FinanceExchangeRateStatus } from "../../server/contracts/currency-
 import type { FinanceTaxRuleStatus } from "../../server/contracts/tax-baseline/tax-baseline.ts";
 import type { FinanceArOpenItemStatus } from "../../server/contracts/accounts-receivable/accounts-receivable.ts";
 import type { FinanceInvoiceStatus } from "../../server/contracts/invoice/invoice.ts";
+import type { FinanceReceiptStatus } from "../../server/contracts/receipt-allocation/receipt-allocation.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -129,6 +130,12 @@ export const FINANCE_INVOICE_STATUS_TONE_MAP: Record<FinanceInvoiceStatus, Statu
   submitted: { tone: "info", label: "Submitted" },
   approved: { tone: "warning", label: "Approved" },
   issued: { tone: "success", label: "Issued" },
+  void: { tone: "danger", label: "Void" },
+};
+
+/** FIN-198: Receipt and Payment Allocation's own captured/void lifecycle -- distinct from every prior FIN capability's own Record<...>. */
+export const FINANCE_RECEIPT_STATUS_TONE_MAP: Record<FinanceReceiptStatus, StatusToneEntry> = {
+  captured: { tone: "success", label: "Captured" },
   void: { tone: "danger", label: "Void" },
 };
 
