@@ -41,6 +41,7 @@ import type { FinancePeriodLockStatus } from "../../server/contracts/period-lock
 import type { FinanceReconciliationRunStatus, FinanceReconciliationExceptionStatus } from "../../server/contracts/reconciliation/reconciliation.ts";
 import type { FinanceBankTransactionMatchStatus } from "../../server/contracts/cash-bank/cash-bank.ts";
 import type { FinanceLifecycleCanonicalState } from "../../server/contracts/lifecycle/lifecycle.ts";
+import type { FinanceProfitabilityStatus } from "../../server/contracts/profitability/profitability.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -187,6 +188,11 @@ export const FINANCE_JOURNAL_STATUS_TONE_MAP: Record<FinanceJournalStatus, Statu
 export const FINANCE_BANK_TRANSACTION_MATCH_STATUS_TONE_MAP: Record<FinanceBankTransactionMatchStatus, StatusToneEntry> = {
   unmatched: { tone: "warning", label: "Unmatched" },
   matched: { tone: "success", label: "Matched" },
+};
+
+export const FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP: Record<FinanceProfitabilityStatus, StatusToneEntry> = {
+  calculated: { tone: "success", label: "Calculated" },
+  unavailable: { tone: "warning", label: "Unavailable" },
 };
 
 export const FINANCE_RECONCILIATION_RUN_STATUS_TONE_MAP: Record<FinanceReconciliationRunStatus, StatusToneEntry> = {

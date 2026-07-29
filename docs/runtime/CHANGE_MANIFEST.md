@@ -5701,6 +5701,40 @@ One real implementation snag found and fixed before commit: `app.get_finance_cas
 
 Self-closing. `CG-S9-FIN-022` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 211-213; this is the first of three. `CG-S9-FIN-023` (Prompt 212, Financial Profitability) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-149 — Job, Customer and Service Profitability (Phase 4, Prompt 212)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-023` / `212_FINANCIAL_PROFITABILITY_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 5 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-022` `VERIFIED` (`docs/build-log/phase-04/FIN-211.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd promp 213" naming Finance Phase 4 prompts 211-213 in order -- second task in that range |
+
+#### Outcome
+
+A versioned, Finance-grade profitability fact per Job Order: billed revenue -- the actual amount from every `issued` `app.finance_invoices` row (`subtotal_amount`, excluding tax) -- minus approved actual cost, reusing OPS-178's own governed actual-cost evidence directly (the same source OPS-179's own operational snapshot already reads, but never OPS-179's own Commercial-estimate `revenue_snapshot`). A named `blocked_reason` (`no_billed_revenue`, `no_approved_cost`, or `mixed_currency`) surfaces rather than a fabricated figure whenever revenue/cost is missing or currencies do not reconcile. Grouped, currency-safe aggregation by customer/branch/service sums only calculated, current facts -- a blocked fact is excluded, never guessed into a total. Every read is denied outright (no partial result) without `FIN:View margin` -- the fact table grants `authenticated` zero table privilege at all, stricter than OPS-179's own base-table grant.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729260000_create_finance_job_profitability.sql`; `scripts/db-tests/finance-job-profitability.sql`; `server/contracts/profitability/profitability.ts(.test.ts)`; `server/queries/profitability.ts(.test.ts)`; `server/mutations/profitability.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/profitability/{page.tsx,actions.ts,profitability-forms.tsx}`; `docs/build-log/phase-04/FIN-212.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `212` `VERIFIED`; row `213`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2144/2144 (12 net new), `pnpm run db:test` PASS -- 94 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 76 routes (1 new: `/[tenantSlug]/finance/profitability`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, five new functions, none of them ever mutating a source table outside their own domain (revenue/cost are read-only from `app.finance_invoices`/`app.shipment_actual_costs`, never written). `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real db-test authorization defect found and fixed before commit: a tenant B Finance Manager role carrying the protected `FIN:View margin` permission was initially self-assigned in the fixture, correctly rejected by `app.assign_role`'s own pre-existing `self_escalation` guard -- fixed by introducing a distinct Admin B actor to perform the assignment, mirroring `OPS-179`'s own db-test precedent for the identical action. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-023` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 211-213; this is the second of three. `CG-S9-FIN-024` (Prompt 213, Finance Dashboard and Reports) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
