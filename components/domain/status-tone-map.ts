@@ -34,6 +34,9 @@ import type { FinanceInvoiceStatus } from "../../server/contracts/invoice/invoic
 import type { FinanceReceiptStatus } from "../../server/contracts/receipt-allocation/receipt-allocation.ts";
 import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-payable/accounts-payable.ts";
 import type { FinanceVendorBillStatus } from "../../server/contracts/vendor-bill/vendor-bill.ts";
+import type { FinanceSettlementStatus } from "../../server/contracts/settlement/settlement.ts";
+import type { FinanceJournalStatus } from "../../server/contracts/journal/journal.ts";
+import type { FinanceLifecycleCanonicalState } from "../../server/contracts/lifecycle/lifecycle.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -155,6 +158,36 @@ export const FINANCE_VENDOR_BILL_STATUS_TONE_MAP: Record<FinanceVendorBillStatus
   approved: { tone: "warning", label: "Approved" },
   posted: { tone: "success", label: "Posted" },
   void: { tone: "danger", label: "Void" },
+};
+
+/** FIN-201: Settlement's own draft -> submitted -> approved -> executed -> posted -> void/reversed lifecycle -- seven states, distinct from FIN-200's own Vendor Bill map (execution is its own canonical state, and a posted settlement's own governed correction is a distinct "reversed" terminal, not the shared "void" pre-execution cancellation). */
+export const FINANCE_SETTLEMENT_STATUS_TONE_MAP: Record<FinanceSettlementStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  executed: { tone: "warning", label: "Executed" },
+  posted: { tone: "success", label: "Posted" },
+  void: { tone: "danger", label: "Void" },
+  reversed: { tone: "danger", label: "Reversed" },
+};
+
+/** FIN-203: Double-Entry Journal's own draft -> submitted -> approved -> posted -> void lifecycle -- shared by both manual and system (subledger-sourced) journals, though a system journal only ever appears as posted. */
+export const FINANCE_JOURNAL_STATUS_TONE_MAP: Record<FinanceJournalStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  posted: { tone: "success", label: "Posted" },
+  void: { tone: "danger", label: "Void" },
+};
+
+/** FIN-205: the one shared canonical-state vocabulary across invoice/vendor_bill/receipt/settlement/subledger_batch/journal (`app.finance_lifecycle_editability_matrix`) -- rendered alongside each domain's own concrete-status badge above, never replacing it, since the canonical bucket deliberately coarsens some domain-specific detail (e.g. a settlement's own 'approved' and 'executed' concrete statuses both render this same 'Approved' canonical tone). */
+export const FINANCE_LIFECYCLE_CANONICAL_STATE_TONE_MAP: Record<FinanceLifecycleCanonicalState, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  in_review: { tone: "info", label: "In review" },
+  approved: { tone: "warning", label: "Approved" },
+  posted: { tone: "success", label: "Posted" },
+  corrected: { tone: "danger", label: "Corrected" },
+  discarded: { tone: "neutral", label: "Discarded" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {

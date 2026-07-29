@@ -169,6 +169,39 @@ begin
 end;
 $$;
 
+\echo '>> FIN-202 fixture prerequisite: a published finance_posting_map so app.issue_finance_invoice''s own new subledger effect can resolve real accounts'
+do $$
+declare
+  v_tenant1 uuid;
+  v_account app.finance_accounts;
+  v_pm_draft app.config_versions;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'acmeinva');
+
+  -- app.create_finance_config_draft/publish_finance_config_version delegate to
+  -- the generic engine's own tenant-scope authority check
+  -- (app.is_support_grant_authority), which requires tenant_admin, not merely
+  -- FIN:Edit/Approve -- mirrors FIN-191's own "Finance Admin (tenant_admin AND
+  -- FIN:Edit/Approve)" two-factor fixture precedent exactly.
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000027503', 'tenant_admin', v_tenant1, null, 'tester');
+
+  select * into v_account from app.create_finance_account_draft(v_tenant1, null, 'AR-CTRL', 'Accounts Receivable Control', 'asset', 'debit', null, false, null, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant1, null, 'REV-DEFAULT', 'Default Revenue', 'revenue', 'credit', null, false, null, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant1, null, 'TAX-PAYABLE-DEFAULT', 'Default Tax Payable', 'liability', 'credit', null, false, null, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+
+  select * into v_pm_draft from app.create_finance_config_draft('finance_posting_map', v_tenant1, 'tenant', null, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  perform app.set_finance_config_items(v_pm_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'ar_control', 'value', jsonb_build_object('accountCodeRef', 'AR-CTRL')),
+    jsonb_build_object('key', 'revenue_default', 'value', jsonb_build_object('accountCodeRef', 'REV-DEFAULT')),
+    jsonb_build_object('key', 'tax_payable_default', 'value', jsonb_build_object('accountCodeRef', 'TAX-PAYABLE-DEFAULT'))
+  ), '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  perform app.publish_finance_config_version(v_pm_draft.id, '00000000-0000-0000-0000-000000027503', null, 'financemanagera');
+end;
+$$;
+
 \echo '>> idempotent preparation: Plain User A is denied; an unknown handoff is rejected; Finance Manager A prepares a draft with the exact governed revenue snapshot (15,000,000 IDR) plus a PPN tax line, and a retried call for the same handoff returns the same invoice unchanged'
 do $$
 declare

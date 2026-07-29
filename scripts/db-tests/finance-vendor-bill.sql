@@ -237,6 +237,38 @@ begin
 end;
 $$;
 
+\echo '>> FIN-202 fixture prerequisite: a published finance_posting_map so app.post_finance_vendor_bill''s own new subledger effect can resolve real accounts'
+do $$
+declare
+  v_tenant_a uuid;
+  v_account app.finance_accounts;
+  v_pm_draft app.config_versions;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmevbilla');
+
+  -- app.create_finance_config_draft/publish_finance_config_version delegate
+  -- to the generic engine's own tenant-scope authority check
+  -- (app.is_support_grant_authority), which requires tenant_admin, not merely
+  -- FIN:Edit/Approve -- mirrors FIN-191's own two-factor fixture precedent.
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000030503', 'tenant_admin', v_tenant_a, null, 'tester');
+
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'AP-CTRL', 'Accounts Payable Control', 'liability', 'credit', null, false, null, '00000000-0000-0000-0000-000000030503', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000030503', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'EXP-DEFAULT', 'Default Expense', 'expense', 'debit', null, false, null, '00000000-0000-0000-0000-000000030503', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000030503', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'INPUT-TAX-DEFAULT', 'Default Input Tax', 'asset', 'debit', null, false, null, '00000000-0000-0000-0000-000000030503', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000030503', 'financemanagera');
+
+  select * into v_pm_draft from app.create_finance_config_draft('finance_posting_map', v_tenant_a, 'tenant', null, '00000000-0000-0000-0000-000000030503', 'financemanagera');
+  perform app.set_finance_config_items(v_pm_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'ap_control', 'value', jsonb_build_object('accountCodeRef', 'AP-CTRL')),
+    jsonb_build_object('key', 'expense_default', 'value', jsonb_build_object('accountCodeRef', 'EXP-DEFAULT')),
+    jsonb_build_object('key', 'input_tax_default', 'value', jsonb_build_object('accountCodeRef', 'INPUT-TAX-DEFAULT'))
+  ), '00000000-0000-0000-0000-000000030503', 'financemanagera');
+  perform app.publish_finance_config_version(v_pm_draft.id, '00000000-0000-0000-0000-000000030503', null, 'financemanagera');
+end;
+$$;
+
 \echo '>> idempotent preparation: Plain User A is denied; an unknown/not-approved actual cost and a vendor with no matching component are each rejected; Finance Manager A prepares a draft summing only the vendor''s own component (10,250,000 IDR) plus a PPN tax line, and a retried call for the same (actual cost, vendor) pair returns the same bill unchanged'
 do $$
 declare
