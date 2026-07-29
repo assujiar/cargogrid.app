@@ -5837,6 +5837,40 @@ Three fixture-authoring defects found and fixed before commit, never production 
 
 Self-closing. `CG-S9-FIN-026` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the third of the range's substantive Finance tasks (213-218). `CG-S9-FIN-027` (Prompt 216, Finance Integrity and Security Hardening) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-153 — Finance Integrity and Security Hardening (Phase 4, Prompt 216)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-027` / `216_FINANCE_INTEGRITY_SECURITY_HARDENING_PROMPT.md` |
+| Change type | Hardening audit -- 1 new db-test file, zero migration (zero repair needed), zero application code |
+| Baseline evidence | `CG-S9-FIN-026` `VERIFIED` (`docs/build-log/phase-04/FIN-215.md`) -- zero critical/high finding |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 213 sd 219" naming Finance Phase 4 Prompts 213-219 in order -- fourth task in that range |
+
+#### Outcome
+
+FIN-215 closed with zero critical/high finding, so this checkpoint's own repair scope ("repair every in-scope critical/high finding from Prompt 215") was empty by definition -- there was nothing to triage or fix. Rather than close with no new evidence, performed the hardening audit Prompt 216 §16 itself names across its five priority areas. Four were already closed or re-confirmed clean at prior checkpoints (tenant/customer/field leakage and secret/log issues at FIN-214; bank/tax exposure at FIN-211; support access unchanged since PLT-115). The fifth, normal-role posted mutation, had never been checked exhaustively across the whole Finance schema at once -- confirmed (already true, no gap existed) and pinned as a real, executable regression guard enumerating all 38 Finance tables `authenticated` holds any privilege on, asserting SELECT-only everywhere. Three residual risks (MFA, `FIN:View cost`, no REST/GraphQL surface) disclosed as tracked, repository-wide, pre-existing states -- not silently claimed fixed.
+
+#### Scope and files
+
+New: `scripts/db-tests/finance-integrity-security-hardening.sql`; `docs/build-log/phase-04/FIN-216.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `216` `VERIFIED`; row `217`'s own resume_point updated); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 0 new migrations, 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2165/2165 (unchanged), `pnpm run db:test` PASS -- 97 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean (no migration touched), `npx next build` PASS -- 77 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Zero migration, zero application code. `git revert` this checkpoint's own commit removes only the new db-test file and documentation.
+
+#### Errors found and fixed
+
+None -- the audit's own strongest finding (normal-role posted mutation) confirmed an already-correct state rather than a defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-027` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the fourth of the range's substantive Finance tasks (213-218). `CG-S9-FIN-028` (Prompt 217, Finance Documentation and Handoff) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
