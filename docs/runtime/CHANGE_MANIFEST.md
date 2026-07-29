@@ -5803,6 +5803,40 @@ One real db-test authoring defect found and fixed before commit: the new FIN-214
 
 Self-closing. `CG-S9-FIN-025` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the second of the range's substantive Finance tasks (213-218). `CG-S9-FIN-026` (Prompt 215, Finance Integrated Verification) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
 
+### CHG-2026-152 — Finance Integrated Verification (Phase 4, Prompt 215)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-026` / `215_FINANCE_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | Read/verify only -- 1 new db-test file, zero migration, zero application code |
+| Baseline evidence | `CG-S9-FIN-025` `VERIFIED` (`docs/build-log/phase-04/FIN-214.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 213 sd 219" naming Finance Phase 4 Prompts 213-219 in order -- third task in that range |
+
+#### Outcome
+
+One continuous cross-capability fixture (order-to-cash + source-to-GL: invoice with a real PPN tax line → partial receipt allocation → matched bank statement → profitability calculation → period lock → AR reconciliation) proved every Finance Dashboard/report read (FIN-213) reflects the exact same figures the underlying capability-level functions (FIN-196..212) independently produce. Every cross-check compared the Dashboard layer against the underlying capability function it wraps, exactly the class of defect an isolated single-capability db-test cannot expose: statement-vs-GL cash matching, a post-partial-allocation remaining balance (not a stale full total), profitability figures, and close/reconciliation state all held. Zero production-code cross-capability defect found -- a legitimate, honest verification outcome, not a gap in effort. Three fixture-authoring defects (never production code) were found and fixed before commit. A 24-capability/24-FIN-anchor coverage matrix is recorded in the build log. Disclosed scope boundary: the procure-to-pay (AP) flow was not driven through this fixture, since no capability built after AP reads AP data through a cross-capability path this fixture would newly exercise.
+
+#### Scope and files
+
+New: `scripts/db-tests/finance-integrated-verification.sql`; `docs/build-log/phase-04/FIN-215.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `215` `VERIFIED`; row `216`'s own resume_point updated); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 0 new migrations, 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2165/2165 (unchanged, no service-layer code this checkpoint), `pnpm run db:test` PASS -- 96 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean (no migration touched, new or applied), `npx next build` PASS -- 77 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Verification-only checkpoint: zero migration, zero application code. `git revert` this checkpoint's own commit removes only the new db-test file and documentation; no prior capability's behavior is affected.
+
+#### Errors found and fixed
+
+Three fixture-authoring defects found and fixed before commit, never production code: (1) a self-escalation attempt assigning a protected-permission (`FIN:View margin`) role to oneself, rejected by `app.assign_role`'s own pre-existing guard, fixed via a distinct actor performing the assignment; (2) a missing approved tenant-scoped PPN tax rule (`app.prepare_finance_invoice_from_readiness` resolves the applicable rule as of the real current date), fixed by adding the same create/attach-evidence/approve sequence `finance-invoice.sql`'s own fixture already establishes; (3) an inverted bank-statement transaction direction convention for an incoming receipt, producing a real detected variance until corrected to match `finance-cash-bank.sql`'s own already-`VERIFIED` convention. Zero production-code (migration/service-layer) defect found. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-026` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 213-219; this is the third of the range's substantive Finance tasks (213-218). `CG-S9-FIN-027` (Prompt 216, Finance Integrity and Security Hardening) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
