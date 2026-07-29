@@ -5157,6 +5157,40 @@ Zero implementation defect. One fixture-completeness correction before commit (n
 
 Self-closing. `CG-S9-FIN-006` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-007` (Prompt 196, Accounts Receivable) -- within this session's explicit authorized range (Prompts 195-200).
 
+### CHG-2026-133 — Accounts Receivable (Phase 4, Prompt 196)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-007` / `196_ACCOUNTS_RECEIVABLE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-006` `VERIFIED` (`docs/build-log/phase-04/FIN-195.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- second task in that range |
+
+#### Outcome
+
+Source-linked AR open items and their balance lifecycle: idempotent posting from a source document, exact-balance allocation/deallocation with status derived purely from balance, and a governed hold/release split. Builds the generic subledger primitive `FIN-197` (Invoice) and `FIN-198` (Receipt and Payment Allocation) are expected to call directly, since Invoice does not exist yet in this dependency order.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729100000_create_finance_accounts_receivable.sql`; `server/contracts/accounts-receivable/accounts-receivable.ts(.test.ts)`; `server/queries/accounts-receivable.ts(.test.ts)`; `server/mutations/accounts-receivable.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/accounts-receivable/page.tsx`/`actions.ts`/`accounts-receivable-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-accounts-receivable.sql`; `docs/build-log/phase-04/FIN-196.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_AR_OPEN_ITEM_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `196` `VERIFIED`, row `197` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1910/1910 (19 net new), `pnpm run db:test` PASS -- 77 migrations/78 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 63 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (2 new tables, 9 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent -- no other capability calls this migration's functions yet.
+
+#### Errors found and fixed
+
+Zero implementation defect. Every fixture scenario, including idempotent-replay and over-allocation/over-reversal boundary cases, passed on the first `db:test` run.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-007` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-008` (Prompt 197, Invoice) -- within this session's explicit authorized range (Prompts 195-200).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

@@ -29,6 +29,7 @@ import type { FinanceAccountStatus } from "../../server/contracts/chart-of-accou
 import type { FinancePeriodStatus } from "../../server/contracts/fiscal-period/fiscal-period.ts";
 import type { FinanceExchangeRateStatus } from "../../server/contracts/currency-exchange-rate/currency-exchange-rate.ts";
 import type { FinanceTaxRuleStatus } from "../../server/contracts/tax-baseline/tax-baseline.ts";
+import type { FinanceArOpenItemStatus } from "../../server/contracts/accounts-receivable/accounts-receivable.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -112,6 +113,13 @@ export const FINANCE_TAX_RULE_STATUS_TONE_MAP: Record<FinanceTaxRuleStatus, Stat
   draft: { tone: "neutral", label: "Draft" },
   approved: { tone: "success", label: "Approved" },
   archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-196: Accounts Receivable's own balance-derived lifecycle (open/partial/paid) -- distinct from every prior FIN capability's own three-state Record<...> (this one is not draft/approve-shaped at all). */
+export const FINANCE_AR_OPEN_ITEM_STATUS_TONE_MAP: Record<FinanceArOpenItemStatus, StatusToneEntry> = {
+  open: { tone: "warning", label: "Open" },
+  partial: { tone: "info", label: "Partial" },
+  paid: { tone: "success", label: "Paid" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {
