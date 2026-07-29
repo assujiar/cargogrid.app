@@ -5191,6 +5191,40 @@ Zero implementation defect. Every fixture scenario, including idempotent-replay 
 
 Self-closing. `CG-S9-FIN-007` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-008` (Prompt 197, Invoice) -- within this session's explicit authorized range (Prompts 195-200).
 
+### CHG-2026-134 — Invoice (Phase 4, Prompt 197)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-008` / `197_INVOICE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-007` `VERIFIED` (`docs/build-log/phase-04/FIN-196.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- third task in that range |
+
+#### Outcome
+
+Versioned customer invoices prepared idempotently from verified Operations BillingReadinessHandoff evidence (one handoff, one invoice), inheriting the exact governed revenue snapshot and integrating FIN-195's own tax calculation service. The draft -> submitted -> approved -> issued lifecycle posts exactly one FIN-196 AR open item on idempotent, period-aware issue.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729110000_create_finance_invoice.sql`; `server/contracts/invoice/invoice.ts(.test.ts)`; `server/queries/invoice.ts(.test.ts)`; `server/mutations/invoice.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/invoices/page.tsx`/`actions.ts`/`invoice-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-invoice.sql`; `docs/build-log/phase-04/FIN-197.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_INVOICE_STATUS_TONE_MAP`); `scripts/db-tests/finance-tax-baseline.sql` (corrected a whole-database "zero approved" assertion to the tenant/scope-appropriate check FIN-195's own header actually guarantees -- see Errors below); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `197` `VERIFIED`, row `198` `READY`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1926/1926 (16 net new), `pnpm run db:test` PASS -- 78 migrations/79 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 64 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 8 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+One real cross-file test-design defect, not a weakening: `FIN-195`'s own db-test asserted "zero seeded approved tax rules" as a whole-database count -- broke once this checkpoint's own fixture legitimately approved a real, evidence-backed tax rule for its own tenant. Fixed by narrowing to the specific invariant FIN-195's own header guarantees (the seeded example fixture never approved; no platform-wide-default rule ever approved) -- a stale-assumption fix, zero coverage removed. Two schema fixes during authoring (not business-logic defects): `finance_invoice_number_counters`' initial nullable-`company_id` primary key (invalid in Postgres) -- fixed via a surrogate `id` PK plus a `coalesce`-based unique index.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-008` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-009` (Prompt 198, Receipt and Payment Allocation) -- within this session's explicit authorized range (Prompts 195-200).
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

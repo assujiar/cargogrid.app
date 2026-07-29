@@ -96,20 +96,18 @@ begin
 end;
 $$;
 
-\echo '>> seed integrity: zero seeded tax rule is approved, and the one seeded example fixture is structurally inert (rate_value = 0, is_example_fixture = true)'
+\echo '>> seed integrity: the seeded example fixture is structurally inert (rate_value = 0, is_example_fixture = true, draft) and is never approved -- checked directly, not via a whole-database "zero approved" count (which would be a false invariant once any other fixture legitimately approves its own tenant-scoped, evidence-backed rule, e.g. FIN-197''s own db-test)'
 do $$
 declare
-  v_approved_count integer;
   v_fixture app.finance_tax_rule_versions;
 begin
-  select count(*) into v_approved_count from app.finance_tax_rule_versions where status = 'approved';
-  if v_approved_count <> 0 then
-    raise exception 'assertion failed: expected zero seeded approved tax rules, found %', v_approved_count;
-  end if;
-
   select * into v_fixture from app.finance_tax_rule_versions where is_example_fixture;
   if not found or v_fixture.rate_value <> 0 or v_fixture.status <> 'draft' then
     raise exception 'assertion failed: expected exactly one seeded example fixture, draft, rate_value 0';
+  end if;
+
+  if exists (select 1 from app.finance_tax_rule_versions where tenant_id is null and status = 'approved') then
+    raise exception 'assertion failed: expected zero platform-wide-default (tenant_id null) tax rule to ever be approved by any seed or fixture in this suite';
   end if;
 
   begin

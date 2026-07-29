@@ -30,6 +30,7 @@ import type { FinancePeriodStatus } from "../../server/contracts/fiscal-period/f
 import type { FinanceExchangeRateStatus } from "../../server/contracts/currency-exchange-rate/currency-exchange-rate.ts";
 import type { FinanceTaxRuleStatus } from "../../server/contracts/tax-baseline/tax-baseline.ts";
 import type { FinanceArOpenItemStatus } from "../../server/contracts/accounts-receivable/accounts-receivable.ts";
+import type { FinanceInvoiceStatus } from "../../server/contracts/invoice/invoice.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -120,6 +121,15 @@ export const FINANCE_AR_OPEN_ITEM_STATUS_TONE_MAP: Record<FinanceArOpenItemStatu
   open: { tone: "warning", label: "Open" },
   partial: { tone: "info", label: "Partial" },
   paid: { tone: "success", label: "Paid" },
+};
+
+/** FIN-197: Customer Invoice's own draft/submitted/approved/issued/void lifecycle -- five states, distinct from every prior FIN capability's own Record<...>. */
+export const FINANCE_INVOICE_STATUS_TONE_MAP: Record<FinanceInvoiceStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  issued: { tone: "success", label: "Issued" },
+  void: { tone: "danger", label: "Void" },
 };
 
 export const QUOTATION_APPROVAL_RULE_STATUS_TONE_MAP: Record<QuotationApprovalRuleStatus, StatusToneEntry> = {
