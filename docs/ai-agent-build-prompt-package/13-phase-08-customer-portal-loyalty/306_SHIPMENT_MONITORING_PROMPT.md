@@ -1,174 +1,168 @@
-# Prompt 306 — Shipment Monitoring
+# Prompt 306 — Customer Shipment Monitoring and Tracking-Health Alerts
 
-**Prompt ID:** `CG-S13-CPL-008`  
-**Package document:** `CG-AABPP-CPL-306`  
-**Version:** `0.14.0`  
-**Runtime build log:** `docs/build-log/phase-08/CPL-306.md`
+    **Prompt ID:** `CG-S13-CPL-008`  
+    **Package document:** `CG-AABPP-CPL-306`  
+    **Version:** `0.15.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-08/CPL-306.md`
 
-Do not begin until Prompt 299 marks this task `READY`, all variables are resolved, and `PHASE_7_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S13-CPL-008` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S13-CPL-008` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 8 — Customer Portal and Loyalty`; package `0.14.0`.
+    `Phase 8 — Customer Portal and Loyalty`; package version `0.15.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Portal Operations Visibility; Epic: Monitoring and Alerts; Capability: Shipment Monitoring; Feature slice: Customer-visible alerts, exceptions, subscriptions and notification preferences; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Portal Operations Visibility; Epic: Monitoring and Alerts; Capability: Shipment Monitoring; Feature slice: customer-safe alerts for milestone and tracking-health changes; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Implement customer shipment monitoring that surfaces safe alerts and subscription preferences without leaking internal workload or triggering notification storms.
+    Implement customer monitoring over canonical approved alerts, including safe stale/no-signal/degraded notifications, without exposing internal source details or creating storms.
 
-## 5. Business value
+    ## 5. Business value
 
-Help customers monitor active shipments and exceptions proactively.
+    Customers proactively know when a shipment is delayed or visibility is degraded.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-CPT-TRK-001..004; Brief Shipment monitoring; UX dashboard/tracking alerts; Delivery Phase 8.. Cite exact source sections, runtime evidence, decisions/config versions and prerequisite task IDs.
+    CPT-TRK-001..004; revised ATW-228 and CPL-305. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, active closures, schemas/migrations/contracts/routes/modules/jobs/integrations, package manager/scripts, environment, baseline and last trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read persistent context/status/task/change/decision/assumption/error/issues/handoff artifacts, Phase 7 closure, relevant build logs and sources. Inspect actual code/schema/policies/APIs/UI/jobs/files/tests, run feasible baselines, state plan/files, and stop on tenant/customer/account/site/Finance/WMS/Operations/Ticketing/loyalty/data/phase-boundary conflict.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-CPL-300, CPL-305 and Platform notification/job contracts.. Every execution-index prerequisite must be `VERIFIED`.
+    CPL-300, CPL-305, Platform notification/jobs and canonical Operations alert projection. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-CPL-313 and Phase 9 reporting/automation boundaries.. Identify affected schemas, services, REST/GraphQL, jobs/integrations/files, Customer Portal, Tenant Internal, Commercial, Operations, WMS, Finance, Ticketing, Loyalty, tests, docs and compatibility contracts.
+    CPL-313 and Phase 9 automation/reporting boundaries. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Use only exact Phase 8 schema, migration, service, UI, job/integration, test and documentation paths authorized by WBS. Resolve repository paths; normally 5–15 files and at most 1–3 additive migrations.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Unrelated domains, duplicate customer/quote/shipment/warehouse/invoice/payment/ticket/loyalty roots, full Step 14–16 implementation, tenant forks, applied-migration edits, destructive cleanup, hidden test/permission weakening and user-owned unrelated changes.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-Store customer alert subscriptions/preferences and emitted notification audit linked to canonical shipment events and customer scope. Preserve canonical source-domain ownership and include tenant_id, customer_id/account_id/site_id where applicable, config/source versions, idempotency, audit and rollback-safe additive migrations.
+    Store customer alert subscriptions/preferences and emitted audit linked to canonical shipment alerts. Do not store raw GPS events.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-Subscribe/unsubscribe/preferences/alerts APIs with idempotency, rate limits and reauthorization against shipment scope. REST and GraphQL must share authentication, authorization, field policy, idempotency, audit and version semantics.
+    Subscribe/unsubscribe/preferences/alerts APIs with per-emission scope revalidation, idempotency, throttle, retry and DLQ.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-Monitoring widgets, alert preferences, notification history and clear opt-in/out per account/site/shipment/event class. Include keyboard/focus/labels, mobile-friendly responsive online-first behavior, loading/empty/error/denied/stale/conflict/degraded states, unsaved-change protection and no dead action.
+    Monitoring widgets, alert history and preferences for milestone delay, exception, no-fresh-position, tracking restored, delivery and document/ePOD availability.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Enforce Layer 4 customer scope in database/service, not UI only; preserve tenant/customer/company/account/site/record/field/file policy, server-only secrets, private scanned files, scoped signed URLs, sensitive-access audit, MFA/current authorization for high-risk actions and RPD-022 residual-risk disclosure.
+    Internal source conflict, provider/device identity, driver data, SLA workload, vendor dispute and root-cause details are excluded.
 
-## 17. Performance impact
+    ## 17. Performance and reliability impact
 
-Use selective projections, server filter/sort/search, cursor pagination, pre-aggregated dashboard/read models where justified, async jobs for heavy work and measured evidence. No `SELECT *`, global realtime fanout, browser-loaded full dataset or unsafe cache shared across customers.
+    Batch fan-out, storm control, idempotent jobs, scoped channels, cursor history and bounded retries.
 
-## 18. Audit impact
+    ## 18. Audit and observability impact
 
-Record actor, customer scope, source/config versions, correlation/idempotency key, before/after or event chain, approval where applicable, file access, denial, outcome and privileged/support access evidence. Evidence must be source-linked and privacy-safe.
+    Audit subscription, scope check, canonical alert source/version, throttle/suppression, delivery attempt and outcome.
 
-## 19. Data migration impact
+    ## 19. Data migration and compatibility impact
 
-Use additive or expand-and-contract migrations; never edit applied migrations. Adopt existing Platform, Commercial, Operations, WMS, Finance, Ticketing and Loyalty references through explicit mapping; rehearse backup, rollback and source/downstream reconciliation.
+    Adopt canonical alert codes; no raw history backfill without approved mapping.
 
-## 20. Detailed implementation tasks
+    ## 20. Detailed implementation tasks
 
-- Define customer-visible alert event classes and severity mapping.
-- Implement subscription/preferences with scope revalidation and idempotent delivery.
-- Build monitoring dashboard, alert list and preference UX.
-- Add notification throttling, retry, DLQ and audit evidence.
-- Test revocation, duplicate event replay, out-of-scope subscription and storm prevention.
+    - Define customer-visible alert allowlist.
+- Map internal tracking-health events to safe messages.
+- Implement preferences, throttling, retry/DLQ.
+- Add tracking-restored and stale/no-signal handling.
+- Test scope revocation and replay storms.
 
-## 21. Main flow
+    ## 21. Main flow
 
-Customer subscribes to allowed shipment alert types and receives dashboard/notification updates only for scoped shipments.
+    Customer subscribes to allowed alerts and receives updates only for currently scoped shipments.
 
-## 22. Alternative flow
+    ## 22. Alternative flow
 
-Customer account admin sets default notification preferences for sites/accounts while individual users manage personal notification channels.
+    Account admin sets defaults; individual users override channels; degraded tracking may produce one bounded alert and one restoration alert.
 
-## 23. Exception flow
+    ## 23. Exception flow
 
-Block forged customer scope, unauthorized field/file/source access, stale version, duplicate idempotency conflict, unscanned file, ledger imbalance, unresolved source mismatch or later-phase scope creep; preserve safe state and exact resume. Record blocker/error/issue, owner and exact safe resume; never hide or bypass failure.
+    Block forged scope, internal detail leakage, duplicate notification storm, stale subscription, unsafe source wording, or failed reauthorization.
 
-## 24. Business rules
+    ## 24. Business rules
 
-- Alert subscription grants no shipment access by itself; each emission revalidates scope.
-- Internal SLA, queue workload, vendor dispute and root-cause notes are not customer alert content.
-- Notification jobs must be idempotent and storm-controlled.
-- Saved preferences must be tenant/customer-scoped and auditable.
-- Automation rule engine remains Step 14 unless already provided as Platform primitive.
-- RPD-004 responsive online-first PWA; no native/offline-sync claim.
-- Layer 4 Customer User scope is company/account/site/shipment/warehouse/invoice/document/ticket/loyalty only and must be database/service enforced.
-- RPD-022 Supreme Admin absolute CRUD is accepted residual risk; never claim immutable-for-all or tamper-proof behavior.
-- RPD-023 MFA/current authorization for privileged customer-admin, reward approval, export and support actions.
+    - Subscription grants no shipment access.
+- Each emission revalidates scope.
+- Internal source identifiers are hidden.
+- Duplicate/replay is storm-controlled.
+- Automation depth remains Phase 9.
 
-## 25. Validation rules
+    ## 25. Validation rules
 
-Validate tenant/customer/company/account/site/user/source-record scope, required fields, lifecycle, source/config version, idempotency, concurrency, file scan status, approval state where applicable and downstream reconciliation before mutation. Reject cross-tenant references, stale updates and unsafe inferred access.
+    - Validate customer scope, alert allowlist, canonical source/version, idempotency and throttle.
+- Reject cross-tenant and revoked membership.
 
-## 26. Access rules
+    ## 26. Access rules
 
-Customer users see and act only inside effective Layer 4 membership. Customer admins manage only delegated users/profile/scope inside their customer scope. Tenant internal roles use internal authorization and must not leak internal-only fields to portal surfaces. Enforce authorization in database/service as applicable, not UI only; list/search/export/report/realtime use the same policy.
+    Customer users manage personal preferences; customer admins manage scoped defaults; internal users configure tenant-safe templates.
 
-## 27. Test data requirement
+    ## 27. Test data requirement
 
-Tenant A/B, multiple customers, accounts, sites, portal admins, portal ops, portal finance, revoked users, forged IDs, shipments, warehouse orders/inventory, invoices/payments, tickets, loyalty accounts/programs/ledgers/rewards/files, duplicate retries, stale versions and target-volume fixtures. Include deterministic IDs, allowed/denied roles and source/config versions.
+    Mobile/device/provider/hybrid underlying alerts, stale/no-signal/restored, duplicate/replay, revoked user, Tenant A/B and high-volume alert bursts.
 
-## 28. Tests to create/update
+    ## 28. Tests to create/update
 
-- Shipment Monitoring unit/service/database/API/contract tests.
-- Layer 4 tenant/customer/account/site/record/field/file isolation and negative tests.
-- REST/GraphQL parity, idempotency, concurrency, source-version and audit tests.
-- Responsive browser/accessibility tests for desktop/mobile customer portal states.
-- Integration tests against Commercial, Operations, WMS, Finance, Ticketing, Platform files/jobs and Loyalty contracts as applicable.
-- Migration/rollback/performance/security smoke coverage proportional to risk.
+    - Subscription/scope tests.
+- Canonical alert mapping and privacy tests.
+- Idempotency/throttle/retry/DLQ tests.
+- Browser/accessibility and notification history.
+- Target-volume storm prevention.
 
-## 29. Regression tests
+    ## 29. Regression tests
 
-Re-run critical Platform identity/access/files/jobs, Commercial quote/customer, Operations shipment/ePOD, WMS inventory/order, Finance invoice/payment, Ticketing customer/SLA/link and previous portal/basic tracking suites touched by this task. Compare baseline before/after.
+    Platform notifications/jobs, Operations/ATW exceptions, CPL-305 tracking, ticketing and customer scope.
 
-## 30. Commands to run
+    ## 30. Commands to run
 
-Detect and run repository equivalents of lint, typecheck, unit/integration/database/API/contract/browser/accessibility/security and build; add relevant migration/type generation, job/replay/load/failure-recovery/reconciliation commands. Do not disable a gate; register proven pre-existing failures.
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-## 31. Documentation to update
+    ## 31. Documentation to update
 
-Update Phase 8 build log, customer portal scope contract, source-domain ownership notes, API/schema/field policy, UX states, runbook, test evidence, traceability, dependency and rollback/handoff artifacts relevant to Shipment Monitoring.
+    Alert allowlist, message wording, freshness/no-signal behavior, preferences, throttling and recovery runbook.
 
-## 32. Rollback/recovery note
+    ## 32. Rollback/recovery note
 
-Disable affected portal/loyalty mutation path, keep source-domain truth intact, revert compatible code/policies and reconcile projections/ledgers/jobs/files before resume. State last trusted checkpoint, reversible steps, reconciliation and exact resume; no destructive Git/database shortcuts.
+    Pause affected alert class, drain/reconcile jobs, preserve subscriptions, and restore last valid mapping/template.
 
-## 33. Acceptance criteria
+    ## 33. Acceptance criteria
 
-- Shipment Monitoring works with canonical source-domain ownership and no duplicate truth.
-- Layer 4 customer scope and field/file policy are enforced across database/service/API/UI/jobs/exports.
-- REST/GraphQL, idempotency, audit, performance, migration, rollback and responsive UX gates pass.
-- Source/config versions and downstream reconciliation evidence are recorded.
-- Mandatory automated/manual gates pass at one recorded checkpoint with source requirement → code/contract/UI → test → documentation evidence.
+    - Alerts are scoped, safe and storm-controlled.
+- Tracking degradation/restoration is understandable.
+- No raw source detail leaks.
+- Delivery history is auditable.
 
-## 34. Definition of Done
+    ## 34. Definition of Done
 
-Scope is implemented without placeholder/fake persistence/dead action; migrations, generated types, RLS/RBAC/field policy, shared APIs, complete UX states, jobs/integrations, tests, docs, audit, performance evidence and rollback are complete; no critical tenant/customer/Finance/WMS/Operations/Ticketing/loyalty/file blocker remains.
+    Monitoring preferences, jobs, APIs, UI, tests, docs and rollback are complete with no critical privacy/storm blocker.
 
-## 35. Completion report format
+    ## 35. Completion report format
 
-Report task/prompt IDs; repository checkpoint; changed files/migrations/contracts; source/config decisions; implementation; commands and baseline/after results; tenant/customer/account/site/access/privacy/file/source-domain/loyalty evidence; idempotency/concurrency/reconciliation/performance; residual errors/issues/risks; docs; rollback/resume; recommended next task. Update persistent ledgers before `VERIFIED`.
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
 
-## 36. Next eligible prompt
+    ## 36. Next eligible prompt
 
-Only the execution index may release the next dependency-clean CPL prompt after this task is `VERIFIED`. Do not set the final Phase 8 closure flag; only Prompt 327 may do so.
-
+    Only the execution index may release the next dependency-clean CPL task. Prompt 327 alone may close Phase 8.

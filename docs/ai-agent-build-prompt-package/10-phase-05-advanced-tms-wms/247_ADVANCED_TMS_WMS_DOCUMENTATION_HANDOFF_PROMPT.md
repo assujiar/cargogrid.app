@@ -1,170 +1,200 @@
 # Prompt 247 — Advanced TMS/WMS Documentation and Handoff
 
-**Prompt ID:** `CG-S10-ATW-028`  
-**Package document:** `CG-AABPP-ATW-247`  
-**Version:** `0.11.0`  
-**Runtime build log:** `docs/build-log/phase-05/ATW-247.md`
+    **Prompt ID:** `CG-S10-ATW-028`  
+    **Package document:** `CG-AABPP-ATW-247`  
+    **Version:** `0.12.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-05/ATW-247.md`
 
-Do not begin until ATW-246 is `VERIFIED` and `PHASE_4_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S10-ATW-028` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S10-ATW-028` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 5 — Advanced TMS and WMS`; package `0.11.0`.
+    `Phase 5 — Advanced TMS and WMS`; package version `0.12.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Phase 5 Operational Readiness; Epic: Documentation and Handoff; Capability: Durable Operator, Developer and Next-Phase Handoff; Feature slice: architecture, contracts, runbooks, training, evidence and boundaries; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Phase 5 Operational Readiness; Epic: Documentation and Handoff; Capability: Durable Operator, Developer and Next-Phase Handoff; Feature slice: architecture, deployment, device/mobile/provider operations, contracts, runbooks and evidence; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Make the verified Phase 5 implementation supportable and consumable by operators, developers and Steps 11–14 without changing runtime behavior.
+    Make the verified Phase 5 implementation supportable by operators, device technicians, drivers, developers, support, and downstream phases.
 
-## 5. Business value
+    ## 5. Business value
 
-Reduce operational error, recovery time and downstream integration ambiguity.
+    Reduce operational error, installation mistakes, outage recovery time and integration ambiguity.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-All Phase 5 OPS/RPD requirements, ATW-221..246 evidence and delivery documentation/handoff controls. Every claim must cite current runtime evidence and versioned contract.
+    All Phase 5 evidence and revised multi-source tracking controls. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, verified checkpoint, current docs/contracts/runbooks/diagrams/training/support artifacts, package scripts, environment and last trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read all persistent ledgers, ATW build logs, requirements/decisions, verified contracts and current documentation. Inventory stale/missing/conflicting material, establish source of truth and stop if documentation reveals an unresolved runtime blocker.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-ATW-246 `VERIFIED` and all ATW-221..245 evidence current at the same compatible checkpoint.
+    ATW-246 verified and all earlier evidence current. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-ATW-248 and Step 11 Procurement/Vendor, Step 12 HR, Step 13 Customer Portal and Step 14 AI/enterprise work. Publish explicit stable contracts, boundaries and prerequisites.
+    ATW-248, Procurement, HR, Customer Portal, Enterprise integrations. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Documentation, diagrams-as-code, examples with sanitized fixtures, runbooks, API/schema references, training/support materials and ATW-247 build log. Tiny doc-generation fixes only when authorized.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Runtime feature changes, new migrations/contracts, production secrets/data, full Step 11–14 scope, duplicate truth, unsupported marketing claims, destructive cleanup and unrelated user changes.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-None. Document canonical entities, relations, constraints, RLS/customer scope, ledger equations, retention and migration/recovery behavior using verified schema versions.
+    None. Document verified canonical entities, relations, RLS, retention and migration behavior.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-None. Publish REST/GraphQL parity, auth/field policy, cursors/idempotency/version/errors, integration callbacks/jobs and sanitized request/response examples from verified contracts.
+    None. Publish verified REST/GraphQL, mobile HTTPS, gateway protocol/deployment, provider adapter, jobs and projection contracts.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-None. Document dispatcher, warehouse scan/task, billing/case and admin/customer-contract flows including roles, states, accessibility/manual alternatives and online-first limitations.
+    Document dispatcher, Driver PWA, device/SIM admin, Fleet Control Tower, customer-safe projection and all degraded states.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Remove secrets/PII/customer data from artifacts; document tenant/customer/warehouse/owner scope, files/URLs, scan/reference authorization, integrations, incident response and RPD-022 residual risk without exposing exploit details unnecessarily.
+    Sanitize secrets/PII/customer data; document purpose/retention, access, incident response and residual risks.
 
-## 17. Performance impact
+    ## 17. Performance and reliability impact
 
-Publish target profiles/budgets, measured environments/results, query/job/realtime limits, backpressure/degraded behavior and capacity/monitoring guidance; do not generalize lab results into unproven production claims.
+    Publish target profiles, measured results, scaling, queue/socket budgets, backpressure and monitoring guidance.
 
-## 18. Audit impact
+    ## 18. Audit and observability impact
 
-Document audit fields/events, correlation/idempotency, access/denial, movement/custody, billing/claim handoffs, retention/redaction and evidence retrieval procedures.
+    Document audit fields, correlations, event order, source switch, denied access and evidence retrieval.
 
-## 19. Data migration impact
+    ## 19. Data migration and compatibility impact
 
-Document clean install, Phase 4→5 upgrade, backup/restore, expand-contract, reconciliation and rollback/forward recovery. Do not prescribe editing applied migrations or fabricating history.
+    Document clean install, gateway deployment, upgrade, backup/restore, replay, reconciliation and rollback.
 
-## 20. Detailed implementation tasks
+    ## 20. Detailed implementation tasks
 
-- Reconcile requirements/decisions/architecture/schema/API/data-flow/traceability docs.
-- Publish user/admin/dispatcher/warehouse/customer-contract/Finance/integration guides.
-- Publish runbooks for telemetry, jobs, labels, inventory mismatch, billing/claim and recovery.
-- Publish test/performance/security evidence index and known limitations.
-- Create explicit Steps 11–14 handoff contracts and closure checklist.
+    Publish at minimum:
+- Phase 5 architecture index and canonical telemetry data flow;
+- subscription/package and entitlement guide;
+- Driver Mobile tracking user/admin guide and limitations;
+- physical GPS procurement, inventory, SIM, installation, configuration, BAST, replacement and RMA guide;
+- Teltonika Codec 8E and GPS Gateway deployment/configuration guide;
+- static endpoint, firewall, health, metrics, log and scaling guide;
+- third-party provider onboarding and credential rotation guide;
+- source arbitration and fallback explanation;
+- Fleet Control Tower and customer projection guide;
+- gateway, Supabase, mobile, provider, Realtime and network outage runbooks;
+- queue/DLQ/replay/reconciliation procedure;
+- privacy, consent and retention guide;
+- deferred physical-device test plan and conditional provider evidence record;
+- Steps 11–14 handoff contracts.
 
-## 21. Main flow
+    ## 21. Main flow
 
-Readers start from one Phase 5 index, choose role/use case, follow current architecture and procedures, verify examples against versioned contracts, and reach exact diagnostics/recovery/escalation guidance.
+    Readers start at one index, choose role/use case, follow versioned procedures, and reach exact diagnostics/recovery.
 
-## 22. Alternative flow
+    ## 22. Alternative flow
 
-Generate reference pages from source contracts where reproducible, retain curated conceptual guidance, and link localized/training variants to one canonical source without divergent rules.
+    Generate contract references from source where reproducible while retaining curated operational guidance.
 
-## 23. Exception flow
+    ## 23. Exception flow
 
-If docs conflict with code/evidence, mark the conflict, register blocker, identify owner and do not invent an answer. If a secret/customer datum is found, remove it safely and record the security process.
+    If docs conflict with code/evidence, register blocker and do not invent behavior. Remove secrets safely.
 
-## 24. Business rules
+    ## 24. Business rules
 
-- Documentation describes only verified behavior at an identified checkpoint/version.
-- One canonical term/entity/state/contract definition is reused across audiences.
-- Customer inventory access is a Phase 5 backend contract; full Portal is Step 13.
-- Warehouse billing/claims hand off readiness to Finance and do not own accounting truth.
-- Step 11 vendor/PO/compliance/rate, Step 12 HR/payroll and Step 14 AI depth remain deferred.
-- RPD-004 online-first and RPD-022 CRUD risk remain explicit; no partial-GA claim.
+    - Docs describe only verified behavior.
+- External tests are labeled accurately.
+- One canonical term/entity/state definition is reused.
+- Customer-safe and restricted docs are separated.
+- No unsupported marketing claim.
 
-## 25. Validation rules
+    ## 25. Validation rules
 
-- Every capability/requirement/decision/contract/runbook links to current evidence.
-- Commands/examples/links/diagrams render and match verified schemas/APIs.
-- No secret, private URL, production/customer data, dead link or contradictory state name.
-- Handoff consumers can identify prerequisites, owned data and forbidden mutations.
+    - Links/examples/commands match verified contracts.
+- No secret/private URL/customer data.
+- Runbooks are executable.
+- Downstream consumers know owned data and forbidden mutations.
 
-## 26. Access rules
+    ## 26. Access rules
 
-Separate public/customer-safe, tenant-admin, operator, developer and restricted security/Finance content. Documentation access follows the same least-privilege/field policy as the underlying system.
+    Separate public/customer-safe, tenant admin, operations, driver, installer, developer and restricted security content.
 
-## 27. Test data requirement
+    ## 27. Test data requirement
 
-Use deterministic sanitized examples covering multi-leg transport, telemetry, WMS inbound→outbound, ledger/count, labels, billing, customer scope and claim; never paste production identifiers, files or secrets.
+    Sanitized mobile/device/provider/hybrid, outage, installation, replay and customer examples.
 
-## 28. Tests to create/update
+    ## 28. Tests to create/update
 
-- Link, formatting, generated-reference drift and example/schema/API validation.
-- Secret/PII scanning and access-classification checks.
-- Runbook tabletop for outage, job replay, inventory mismatch and integration failure.
-- Fresh-reader walkthrough of critical operator and next-phase handoffs.
+    - Link/format/schema/API example validation.
+- Secret/PII scanning.
+- Runbook tabletop for gateway/provider/mobile/database outage.
+- Fresh-reader walkthrough and deferred-test procedure review.
 
-## 29. Regression tests
 
-Re-run docs build/lint/link/schema/API example validation and verify Phase 1–4 cross-links remain valid. Documentation-only work must not change runtime artifacts or invalidate verified tests.
+### External-evidence policy
 
-## 30. Commands to run
+The implementation must not be blocked merely because physical hardware or a live third-party provider is unavailable at the active checkpoint.
 
-Run repository documentation build/lint/link checks, contract/example validation, diagram generation, secret/PII scans and required no-runtime-diff checks. Record exact commands/results.
+1. **Physical GPS device testing**
+   - Hardware-in-the-loop testing with an actual Teltonika or equivalent installed device is deferred until a device is available.
+   - Before verification, protocol simulators and recorded vendor frames must prove IMEI handshake, Codec 8 Extended parsing, CRC validation, ACK behavior, duplicate/replay handling, reconnect, malformed payload rejection, buffering, database outage recovery, and canonical projection.
+   - Record the deferred item as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE`, including owner, target device/model, installation prerequisites, exact future test procedure, expected evidence, and safe activation gate.
+   - Do not claim “tested on physical device” until that future evidence exists.
 
-## 31. Documentation to update
+2. **Third-party GPS platform testing**
+   - A live provider test is conditional on approved credentials, API access, legal/commercial permission, documented rate limits, and a stable provider contract.
+   - When those prerequisites are unavailable, mark the live-provider test `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE`.
+   - The provider adapter contract, authentication/signature checks, mapping, retry, rate-limit, schema-drift, idempotency, and failure behavior must still be tested with deterministic mocks, contract fixtures, or a sandbox when available.
+   - Do not claim a named provider is live or certified without live evidence.
 
-This task owns the complete Phase 5 docs set: index, architecture, domain/schema, REST/GraphQL/integrations, role guides, runbooks, test/security/performance evidence, traceability, limitations, release/handoff and ATW-247 log.
+3. **Closure treatment**
+   - These two deferred/conditional external tests are non-blocking when all repository-controlled implementation, simulator/contract, security, migration, load, recovery, and canonical-data gates pass.
+   - Any unresolved repository-controlled defect remains blocking.
 
-## 32. Rollback/recovery note
+    ## 29. Regression tests
 
-Revert only incorrect doc changes to the last verified version, preserve evidence/history, repair links/generation and republish. If runtime conflict is found, keep closure blocked and resume at the owning prompt.
+    Docs build/lint/link checks and Phase 1–4 cross-links.
 
-## 33. Acceptance criteria
+    ## 30. Commands to run
 
-- Phase 5 documentation is complete, consistent, searchable and evidence-backed.
-- Critical runbooks/examples are executable and sanitized.
-- Steps 11–14 receive explicit stable contracts and boundaries.
-- No open documentation conflict masks a runtime blocker.
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-## 34. Definition of Done
+    ## 31. Documentation to update
 
-All role guides, references, runbooks, evidence indexes and handoffs are current at one checkpoint; validation and secret scans pass; no dead links/placeholders/unsupported claims remain.
+    This task owns the complete Phase 5 docs, runbooks, evidence index and downstream handoff.
 
-## 35. Completion report format
+    ## 32. Rollback/recovery note
 
-Report IDs/checkpoint; created/updated docs; source/evidence mapping; validation commands/results; walkthrough/tabletop outcomes; sanitization/access results; remaining limitations; rollback/resume; ATW-248 recommendation. Update ledgers before `VERIFIED`.
+    Revert incorrect docs to last verified version, preserve evidence, and block closure on runtime conflict.
 
-## 36. Next eligible prompt
+    ## 33. Acceptance criteria
 
-Only the execution index may release ATW-248 after ATW-247 is `VERIFIED`. Do not set `PHASE_5_VERIFIED`; only Prompt 248 may do so.
+    - Documentation is complete and evidence-backed.
+- Critical runbooks and installation/deployment guides are usable.
+- External-evidence status is explicit.
+- Downstream handoffs are stable.
+
+    ## 34. Definition of Done
+
+    All role guides, contracts, runbooks, evidence indexes and handoffs are current at one checkpoint with no placeholder or unsupported claim.
+
+    ## 35. Completion report format
+
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+
+    ## 36. Next eligible prompt
+
+    Only the execution index may release ATW-248 after ATW-247 is verified. Prompt 248 alone may close Phase 5.

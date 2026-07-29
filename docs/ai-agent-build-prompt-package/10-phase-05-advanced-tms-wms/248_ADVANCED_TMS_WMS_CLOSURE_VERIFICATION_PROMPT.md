@@ -2,51 +2,93 @@
 
 **Prompt ID:** `CG-S10-ATW-029`  
 **Package document:** `CG-AABPP-ATW-248`  
-**Version:** `0.11.0`  
+**Version:** `0.12.0-multisource-gps`  
 **Runtime output:** `docs/build-log/phase-05/ADVANCED_TMS_WMS_CLOSURE_REPORT.md`
 
-Do not begin until Prompt 247 is `VERIFIED`, the active checkpoint still carries `PHASE_4_VERIFIED`, and all Phase 5 capability, integrated-verification, hardening and handoff evidence is available for independent review.
+Do not begin until Prompt 247 is `VERIFIED`, all Phase 5 evidence is available, and the active checkpoint still carries the required Phase 4 closure.
 
 ## Objective
 
-Independently verify Phase 5 Advanced TMS/WMS runtime completeness, transport/inventory integrity, tenant/customer security and readiness for Phase 6 Procurement/Vendor implementation.
+Independently verify Phase 5 completeness, including multi-source GPS architecture, without requiring unavailable physical hardware or unavailable third-party credentials to fabricate evidence.
 
 ## Required verification
 
-1. Verify Prompts 220–247 at one repository/schema/environment checkpoint and reconcile every WBS, dependency, traceability and evidence link.
-2. Confirm all 24 master Phase 5 capabilities have implementation, migration/contract/UI as applicable, tests, documentation and owner: multi-leg/multimodal shipment; dispatch board; fleet/driver; route/load planning; first/middle/last mile; GPS/telematics; capacity/utilization; advanced milestones/exceptions; warehouse/zone; bin/racking; inbound; receiving; putaway; inventory ledger; lot/batch/serial/expiry; picking; packing; outbound; cycle count/adjustment; label/barcode; warehouse billing; customer inventory access; high-volume controls; advanced claim/incident.
-3. Confirm all 24 advanced anchors across `OPS-SHP-001..004`, `OPS-TMS-001..004`, `OPS-WMS-001..004`, `OPS-TRK-001..004`, `OPS-DOC-001..004` and `OPS-CST-001..004` map to durable runtime evidence with no orphan.
-4. Prove canonical Phase 3/4 Shipment Order, customer, document, inventory and Finance contracts were extended without duplicate roots, silent re-entry or tenant-specific forks.
-5. Prove multi-leg/multimodal planning → governed dispatch → fleet/driver/capacity assignment → first/middle/last-mile execution → scoped GPS/telematics → ordered milestone/exception → delivery/custody/claim evidence, including retries, stale data and recovery.
-6. Prove the critical `Inbound → Receiving → Putaway → Inventory Ledger → Pick → Pack → Outbound` WMS flow, including `OPS-WMS-US-001`, scan/task/ledger/load/integration gates and exact source-to-destination reconciliation.
-7. Prove every stock change is an authorized idempotent ledger movement with exact UOM/conversion/rounding, configured FIFO/FEFO/lot/batch/serial/expiry identity, reservation/custody linkage and no normal-role direct balance patch/delete.
-8. Prove cycle count supports blind observations including zero, snapshot/concurrency control, governed recount/approval and exactly one reconciling adjustment movement.
-9. Prove governed label/barcode template/version/identifier/print/reprint/void lineage, printer-job recovery and authorization after every scan; barcode possession must never grant access.
-10. Prove warehouse billing events retain source/activity/contract/rate/UOM/currency/tax/rounding versions, hand off idempotent readiness to Finance and never mutate invoice, AR/AP, GL, settlement or cash truth.
-11. Prove customer inventory access is read-only and intersects tenant, customer account, company/site, warehouse and owner scope across RLS/service, REST, GraphQL, lists/search/filters/aggregates/exports/jobs/caches/realtime; confirm full Portal remains Step 13.
-12. Prove advanced claim/incident extends the Step 8 canonical case; evidence is private/scanned/source-linked; liability/reserve/recovery/closure decisions are human-governed; Finance handoff and operational reconciliation are exact.
-13. Prove RPD-038 case-specific GPS/telematics adapters, signature/replay/rate-limit/failure controls and PostGIS geospatial correctness where applicable; reject a speculative universal provider abstraction or tenant fork.
-14. Prove route/load planning is explainable decision support with constraints, alternatives and human commitment; no false optimum or autonomous operational/legal/financial decision.
-15. Prove RPD-004 responsive online-first PWA behavior with no native/offline synchronization; RPD-032 scan-before-file access; RPD-033 REST/GraphQL parity; and complete accessible loading/empty/error/success/denied/conflict/degraded states.
-16. Prove RPD-014 target-volume profiles and budgets for dispatch, task/scan, ledger, telemetry, jobs, billing and claims; use cursor pagination, selective queries, PostgreSQL durable jobs, bounded backpressure and limited scoped realtime with reconciliation under failure.
-17. Prove tenant/customer/company/branch/warehouse/owner/record/field/file/job/realtime isolation; RLS/RBAC and service authorization must cover forged IDs, scans, exports, aggregates, callbacks and support/admin access.
-18. Confirm RPD-022 explicitly allows Supreme Admin absolute CRUD. Verify normal-role protection, audit/warnings and recovery, but reject every tamper-proof, immutable-for-all or non-repudiation claim.
-19. Prove RPD-025 retention/archival and recovery, RPD-035 support/observability/runbooks, clean install and Phase 4→5 upgrade, migration/type generation, backup/restore and no unreconciled ledger/event/job/Finance receipt.
-20. Confirm full vendor/PO/compliance/rate lifecycle remains Step 11; employee/attendance/payroll remains Step 12; full Customer Portal remains Step 13; AI/predictive/enterprise depth remains Step 14. Phase 5 did not smuggle later-phase scope.
-21. Confirm no production, external-pilot, partial-GA or market-ready claim. RPD-001/034/036 still require all major modules and complete validation before direct GA.
-22. Confirm no unresolved critical/high tenant, customer, access, security, transport, inventory, financial, file, integration, schema, migration, performance or evidence blocker.
+1. Reconcile Prompts 220–247 at one repository/schema/deployment checkpoint.
+2. Confirm all Phase 5 capabilities have implementation, migrations/contracts/UI/jobs/deployment as applicable, tests, documentation, owner, rollback, and evidence.
+3. Prove canonical Phase 3/4 roots were extended without duplicate shipment, vehicle, trip, telemetry, milestone, customer, inventory, or Finance truth.
+4. Prove multi-leg planning → dispatch → resource assignment → mile execution → tracking → milestone/exception → delivery/custody.
+5. Prove `DRIVER_MOBILE` works through authenticated active tracking sessions, assignment, entitlement, consent/permission/freshness, canonical normalization, geofence and customer-safe projection.
+6. Prove `DIRECT_DEVICE` repository-controlled implementation:
+   - always-on gateway deployment definition;
+   - TCP listener and configurable endpoint;
+   - Teltonika Codec 8 Extended simulator/recorded-frame tests;
+   - IMEI handshake, CRC, parsing, ACK, duplicate/order, reconnect, buffering, Supabase ingestion, restart, outage and recovery;
+   - container health/readiness/metrics/logging and secret controls.
+7. Physical hardware-in-loop evidence may remain `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE` and does not block closure when all item 6 evidence passes. The closure report must not claim physical-device validation.
+8. Prove `THIRD_PARTY_PLATFORM` adapter framework, authentication, schema mapping, rate-limit/retry/replay, mapping, failure and deterministic contract tests.
+9. A live third-party provider test may be `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE` when credentials/API/legal/commercial prerequisites are absent. The closure report must not claim the provider is live.
+10. Prove `HYBRID` arbitration for priority, freshness, accuracy, conflict, fallback, source switch, hysteresis and complete source history.
+11. Prove subscription entitlements prevent unauthorized tracking modes and limits.
+12. Prove route/load planning consumes only canonical current position.
+13. Prove dispatch board, milestone/exception and capacity/utilization consume canonical projections.
+14. Prove Fleet Control Tower and Customer Portal use the same canonical data with different field visibility.
+15. Prove no raw telemetry directly mutates shipment lifecycle.
+16. Prove source histories, event/received time, order, dedup, retention and reconciliation.
+17. Prove critical WMS flow and exact inventory controls.
+18. Prove target-volume profiles for mobile, TCP gateway, provider contract, hybrid, jobs, Realtime and WMS.
+19. Prove tenant/customer/company/branch/warehouse/owner/record/field/file/job/realtime isolation.
+20. Prove secrets are server-only and logs/metrics are redacted.
+21. Prove clean install, upgrade, gateway deployment, backup/restore, rollback and forward recovery.
+22. Confirm no unresolved critical/high repository-controlled blocker.
+23. Confirm later-phase boundaries and no production/pilot/GA claim.
+
+## External-evidence policy
+
+### External-evidence policy
+
+The implementation must not be blocked merely because physical hardware or a live third-party provider is unavailable at the active checkpoint.
+
+1. **Physical GPS device testing**
+   - Hardware-in-the-loop testing with an actual Teltonika or equivalent installed device is deferred until a device is available.
+   - Before verification, protocol simulators and recorded vendor frames must prove IMEI handshake, Codec 8 Extended parsing, CRC validation, ACK behavior, duplicate/replay handling, reconnect, malformed payload rejection, buffering, database outage recovery, and canonical projection.
+   - Record the deferred item as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE`, including owner, target device/model, installation prerequisites, exact future test procedure, expected evidence, and safe activation gate.
+   - Do not claim “tested on physical device” until that future evidence exists.
+
+2. **Third-party GPS platform testing**
+   - A live provider test is conditional on approved credentials, API access, legal/commercial permission, documented rate limits, and a stable provider contract.
+   - When those prerequisites are unavailable, mark the live-provider test `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE`.
+   - The provider adapter contract, authentication/signature checks, mapping, retry, rate-limit, schema-drift, idempotency, and failure behavior must still be tested with deterministic mocks, contract fixtures, or a sandbox when available.
+   - Do not claim a named provider is live or certified without live evidence.
+
+3. **Closure treatment**
+   - These two deferred/conditional external tests are non-blocking when all repository-controlled implementation, simulator/contract, security, migration, load, recovery, and canonical-data gates pass.
+   - Any unresolved repository-controlled defect remains blocking.
 
 ## Closure states
 
-- `PHASE_5_VERIFIED`: every mandatory Advanced TMS/WMS runtime gate passes.
-- `PHASE_5_PARTIALLY_COMPLETE`: bounded non-critical evidence remains; Phase 6 is blocked.
-- `PHASE_5_BLOCKED`: a critical tenant/customer/access/security/transport/inventory/financial/file/integration/schema/contract/evidence gate fails.
-- `PHASE_5_ROLLED_BACK`: the phase returned to a trusted checkpoint and must resume.
+- `PHASE_5_VERIFIED`: every repository-controlled runtime gate passes; physical hardware and/or live provider may remain properly deferred/conditionally skipped.
+- `PHASE_5_PARTIALLY_COMPLETE`: a bounded repository-controlled non-critical gate remains; downstream phase remains blocked unless policy explicitly permits.
+- `PHASE_5_BLOCKED`: a critical repository-controlled security, tenant, tracking, transport, inventory, Finance, migration, deployment, or evidence gate fails.
+- `PHASE_5_ROLLED_BACK`: phase returned to a trusted checkpoint.
 
 ## Required output
 
-Write artifact/task/capability/requirement checklist; checkpoint/schema/API/UI/access matrix; 24-capability × 24-anchor evidence map; transport and critical WMS E2E results; ledger/UOM/tracked-stock/cycle-count reconciliation; labels/scans; telemetry/geospatial/integration; billing/Finance and claim evidence; customer isolation/field/export/aggregate results; performance/job/realtime/failure recovery; security/files/audit/retention; migration/build/accessibility/observability results; later-phase boundary audit; RPD-022 and provider/legal residual-risk disclosure; residual issues; closure state/rationale; Phase 6 eligibility; and exact resume/next prompt.
+Write:
+
+- checkpoint, schema, service, container and deployment inventory;
+- capability/requirement evidence matrix;
+- four tracking-package E2E results;
+- physical-device deferred evidence record;
+- third-party live-test conditional status;
+- simulator/contract test evidence;
+- gateway/mobile/provider/hybrid security and load evidence;
+- canonical telemetry and customer projection reconciliation;
+- WMS/Finance and customer isolation results;
+- migration/build/accessibility/observability evidence;
+- residual issues and risks;
+- closure state and rationale;
+- next-phase eligibility and exact resume.
 
 ## Completion gate
 
-Set `PHASE_5_VERIFIED` only if every mandatory runtime check passes. This is not production, market, pilot or GA status. For package generation, the exact next command after Step 10 validation is `LANJUT STEP 11`.
+Set `PHASE_5_VERIFIED` only when all repository-controlled mandatory checks pass and external-evidence statuses comply with this prompt. Never convert deferred or skipped evidence into a claim that testing occurred.

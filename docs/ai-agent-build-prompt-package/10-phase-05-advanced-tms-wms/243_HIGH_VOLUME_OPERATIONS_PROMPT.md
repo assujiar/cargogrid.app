@@ -1,170 +1,198 @@
-# Prompt 243 — High-Volume TMS/WMS Controls
+# Prompt 243 — High-Volume TMS/WMS and Multi-Source Telemetry Controls
 
-**Prompt ID:** `CG-S10-ATW-024`  
-**Package document:** `CG-AABPP-ATW-243`  
-**Version:** `0.11.0`  
-**Runtime build log:** `docs/build-log/phase-05/ATW-243.md`
+    **Prompt ID:** `CG-S10-ATW-024`  
+    **Package document:** `CG-AABPP-ATW-243`  
+    **Version:** `0.12.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-05/ATW-243.md`
 
-Do not begin until Prompt 220 marks this task `READY`, all variables are resolved, and `PHASE_4_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S10-ATW-024` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S10-ATW-024` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 5 — Advanced TMS and WMS`; package `0.11.0`.
+    `Phase 5 — Advanced TMS and WMS`; package version `0.12.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Operational Scale; Epic: High-Volume Reliability; Capability: TMS/WMS Throughput, Backpressure and Reconciliation Controls; Feature slice: target profiles, query/job budgets, batching, concurrency, limited realtime, observability and recovery; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Operational Scale; Epic: High-Volume Reliability; Capability: Throughput, Backpressure and Reconciliation; Feature slice: transport/WMS hot paths plus mobile, TCP gateway, provider and hybrid telemetry workloads; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Prove and harden the Phase 5 transport and warehouse workflows at declared target volumes without weakening consistency, authorization or user feedback.
+    Prove and harden Phase 5 at declared target volumes, including all repository-controlled multi-source tracking paths.
 
-## 5. Business value
+    ## 5. Business value
 
-Keep dispatch and warehouse operations responsive and recoverable under peak workload.
+    Keep dispatch, tracking and warehouse operations responsive and recoverable under peak workload.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-OPS-SHP/TMS/WMS/TRK/DOC/CST-001..004 scale slices; RPD-014/025/033/035. Cite exact source budgets, runtime evidence, environment/data profile and prerequisite task IDs.
+    All advanced OPS scale slices; RPD-014/025/033/035; revised ATW-226. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, deployment topology, database/query/job/realtime/observability components, package manager/scripts, environment, baseline and trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read all persistent ledgers/build logs, performance decisions and source requirements. Inspect every ATW-221..242 hot path, explain test-environment limits, establish reproducible baseline/profile and stop on correctness/security/data-integrity conflict.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-ATW-221..242. Every execution-index prerequisite must be `VERIFIED`.
+    ATW-221..242, including all required ATW-226 child tasks. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-ATW-244..248 and all later phases consuming transport, inventory, billing or customer contracts. Identify affected queries/indexes/jobs/realtime/APIs/UI/observability/tests/docs.
+    ATW-244..248 and downstream portal/enterprise consumers. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Use exact measured Advanced TMS/WMS query, index/migration, service/job, UI feedback, test/fixture, observability and documentation paths authorized by WBS. Any partition/cache addition requires evidence and rollback.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Speculative rewrites, unbounded cache/queue, client-loaded full datasets, global realtime fan-out, correctness/security relaxation, tenant forks, applied-migration edits, destructive cleanup, full Step 11–14 work and unrelated user changes.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-Add only measured composite/partial indexes, bounded claim/lease metadata, reconciliation checkpoints or archival/partition structures justified by plans. Preserve canonical ledger/event truth, constraints, RLS and migration safety.
+    Add measured indexes, bounded job/queue metadata, reconciliation checkpoints, archival/partition structures, and source-health aggregates only where evidence justifies them.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-Enforce server filters/sorts/search, stable cursor pagination, request/batch limits, idempotency, rate/backpressure semantics, asynchronous job receipts and REST/GraphQL parity on high-volume operations.
+    Enforce cursor pagination, batch limits, rate/backpressure, async receipts, idempotency and consistent failure semantics across mobile, gateway and provider paths.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-Keep dispatch boards and scan/task queues responsive using bounded windows, clear progress, queued/degraded/partial-data/retry states and limited realtime invalidation. Online-first responsive accessible UX; never fake completion.
+    Show queued/degraded/partial/retry states in boards, Driver PWA, device admin and tracking views.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Load tests include tenant/customer isolation, scoped jobs/cursors/channels and abuse controls. Backpressure must fail safely; caches, logs, metrics and traces must not leak restricted data. Preserve RLS/RBAC and server-only secrets.
+    Load and abuse tests preserve RLS, scoped jobs/channels, secret redaction, socket limits, and customer privacy.
 
-## 17. Performance impact
+    ## 17. Performance and reliability impact
 
-Define target data/concurrency profiles and budgets for p50/p95/p99 latency, throughput, queue age, error/retry rate, lock time and resource usage. Capture explain/analyze plans, before/after evidence and no-regression thresholds.
+    Declare separate target profiles:
+- Driver Mobile HTTPS: active sessions, interval, reconnect burst, permission/freshness heartbeat.
+- Direct Device Gateway: concurrent TCP sockets, AVL records/sec, ACK p50/p95/p99, reconnect, buffer depth, database outage.
+- Third-Party Platform: webhook burst, polling batch, rate limit, cursor catch-up, provider outage.
+- Hybrid: duplicate/conflicting coordinates, arbitration throughput, source switch and hysteresis.
+- Canonical projection: database write latency, current-position latency, Realtime latency, route history query, geofence and milestone-candidate throughput.
 
-## 18. Audit impact
+Measure queue age, retry/DLQ rate, drop count, duplicate/stale ratio, CPU/memory/network, lock time, storage growth, and recovery backlog.
 
-Record performance change/config version, dataset/profile, run/environment, job batches/attempts, throttling, dead-letter/replay, reconciliation outcome and correlation IDs without logging sensitive payloads.
+    ## 18. Audit and observability impact
 
-## 19. Data migration impact
+    Record profile/environment, config versions, source class, batch/socket/job metrics, throttle, retry, DLQ, replay, reconciliation and residual limits without logging sensitive payloads.
 
-Rehearse online-safe indexes/partitions/retention changes at representative scale, including lock/time/disk budgets, rollback and reconciliation. Never edit applied migrations or discard business/audit evidence outside approved RPD-025 policy.
+    ## 19. Data migration and compatibility impact
 
-## 20. Detailed implementation tasks
+    Rehearse indexes, retention and partition changes at representative scale; preserve audit and accepted event evidence.
 
-- Profile all Phase 5 list/board/scan/ledger/job/integration hot paths.
-- Declare representative datasets, concurrency, budgets and measurement method.
-- Fix measured query/index/N+1/locking/batch/backpressure/realtime bottlenecks.
-- Add durable job lease/retry/dead-letter/replay and reconciliation where needed.
-- Run repeatable transport/WMS load, soak, failure and isolation tests.
+    ## 20. Detailed implementation tasks
 
-## 21. Main flow
+    - Profile all TMS/WMS and telemetry hot paths.
+- Define reproducible workload fixtures and budgets.
+- Fix measured query/socket/batch/locking/backpressure issues.
+- Add monitoring and saturation alerts.
+- Run load, soak, failure, restart and recovery reconciliation.
 
-Representative concurrent dispatch and warehouse work stays within declared budgets; bounded requests and jobs apply backpressure, preserve order/idempotency, expose honest progress and reconcile all accepted work.
+    ## 21. Main flow
 
-## 22. Alternative flow
+    Representative concurrent operations remain within budgets; accepted work is buffered/queued, processed idempotently, and reconciled.
 
-Degrade to polling/manual refresh, queue bounded bulk operations, pause noncritical jobs, scale workers within safe lease limits or replay a reconciled dead-letter batch.
+    ## 22. Alternative flow
 
-## 23. Exception flow
+    Degrade to polling/manual refresh, pause noncritical jobs, scale workers, or replay bounded DLQ batches.
 
-Fail safely on saturation, lock contention, queue lag, external throttling, worker loss, duplicate delivery, cursor invalidation or realtime disconnect. Do not drop/duplicate accepted work; expose recovery and reconcile.
+    ## 23. Exception flow
 
-## 24. Business rules
+    Fail safely on socket saturation, queue lag, provider throttling, worker loss, duplicate delivery, database outage, Realtime disconnect, or retention pressure.
 
-- Performance claims name environment, dataset, concurrency, commands and measured result.
-- Heavy work uses PostgreSQL-backed durable jobs; realtime is limited and scoped.
-- Cursor ordering is stable and scope-bound; batch/retry operations are idempotent.
-- Optimization never weakens ledger equations, event order, authorization or audit.
-- Partitioning/caching/materialization is evidence-driven and has invalidation/reconciliation/rollback.
-- No tenant fork, autonomous AI commitment, offline sync, tamper-proof claim or partial-GA claim.
+    ## 24. Business rules
 
-## 25. Validation rules
+    - Performance claims name environment/profile/result.
+- ACK and accepted-buffer semantics are explicit.
+- No accepted event is silently dropped.
+- Backpressure never weakens authorization/order.
+- Partition/cache changes are evidence-driven.
 
-- Target profile and budgets are approved and reproducible.
-- Accepted work count, ledger/event equations and job outcomes reconcile before/after load.
-- Reject unscoped cursor/job/channel, unsafe batch size, stale lease and config mismatch.
-- No critical correctness, isolation or latency regression exceeds declared threshold.
+    ## 25. Validation rules
 
-## 26. Access rules
+    - Reconcile accepted, processed, duplicated, rejected, dead-lettered and replayed counts.
+- Reject unsafe batch/socket limits and unscoped channels.
+- Verify recovery from restart/outage.
 
-Operational roles run normal workloads; only authorized admins trigger bulk/replay/diagnostic actions; performance data is field-filtered. Enforce database/service/job/realtime authorization, not UI only.
+    ## 26. Access rules
 
-## 27. Test data requirement
+    Normal roles use workloads; only authorized admins trigger diagnostics/replay; metrics and traces are filtered.
 
-Representative tenant/customer/warehouse/fleet/shipment/leg/task/item/lot/package/billing volumes; mixed hot/cold statuses; concurrent scanners/dispatchers; slow/failing integrations; duplicate jobs and Tenant A/B isolation probes.
+    ## 27. Test data requirement
 
-## 28. Tests to create/update
+    Representative tenants, fleets, sessions, sockets, providers, warehouses, jobs, duplicate/replay/outage fixtures and target volumes.
 
-- Query-plan/index/N+1/cursor stability and database-concurrency tests.
-- Job lease/backpressure/retry/dead-letter/replay/idempotency/reconciliation tests.
-- Dispatch board, GPS ingestion and WMS scan/load/soak tests at target profile.
-- RLS/cache/channel isolation, failure recovery and browser responsiveness tests.
+    ## 28. Tests to create/update
 
-## 29. Regression tests
+    - Query plan/index/cursor tests.
+- Socket/ACK/buffer/restart tests using simulator.
+- Mobile/provider/hybrid load tests.
+- Job retry/DLQ/replay reconciliation.
+- RLS/cache/channel isolation.
+- Browser responsiveness and observability tests.
 
-ATW-221..242 behavior, Platform/Finance contracts, audit/retention and critical transport/WMS E2Es. Compare correctness and baseline/after metrics using the same profile; record variance and environment limits.
 
-## 30. Commands to run
+### External-evidence policy
 
-Run repository lint/typecheck/test/build plus migrations, explain/analyze, load/soak/concurrency, job failure/replay, database reconciliation, security and browser-performance commands. Never bypass gates or present synthetic-only results as production proof.
+The implementation must not be blocked merely because physical hardware or a live third-party provider is unavailable at the active checkpoint.
 
-## 31. Documentation to update
+1. **Physical GPS device testing**
+   - Hardware-in-the-loop testing with an actual Teltonika or equivalent installed device is deferred until a device is available.
+   - Before verification, protocol simulators and recorded vendor frames must prove IMEI handshake, Codec 8 Extended parsing, CRC validation, ACK behavior, duplicate/replay handling, reconnect, malformed payload rejection, buffering, database outage recovery, and canonical projection.
+   - Record the deferred item as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE`, including owner, target device/model, installation prerequisites, exact future test procedure, expected evidence, and safe activation gate.
+   - Do not claim “tested on physical device” until that future evidence exists.
 
-Target profile/budgets/results, query/index/job/realtime architecture, observability dashboards/alerts and saturation/replay/reconciliation runbooks. Update persistent ledgers, traceability, schema/API/data flow/build log and operations/support docs.
+2. **Third-party GPS platform testing**
+   - A live provider test is conditional on approved credentials, API access, legal/commercial permission, documented rate limits, and a stable provider contract.
+   - When those prerequisites are unavailable, mark the live-provider test `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE`.
+   - The provider adapter contract, authentication/signature checks, mapping, retry, rate-limit, schema-drift, idempotency, and failure behavior must still be tested with deterministic mocks, contract fixtures, or a sandbox when available.
+   - Do not claim a named provider is live or certified without live evidence.
 
-## 32. Rollback/recovery note
+3. **Closure treatment**
+   - These two deferred/conditional external tests are non-blocking when all repository-controlled implementation, simulator/contract, security, migration, load, recovery, and canonical-data gates pass.
+   - Any unresolved repository-controlled defect remains blocking.
 
-Disable only new optimization/config via approved switch, drain/reconcile jobs, revert compatible indexes/code safely and restore baseline behavior. Preserve accepted events and evidence; state resume command.
+    ## 29. Regression tests
 
-## 33. Acceptance criteria
+    All ATW-221..242 behavior, Platform/Finance contracts, audit/retention, and critical E2E.
 
-- Target-volume dispatch and WMS critical flows meet declared budgets or record an explicit blocker.
-- Accepted work remains exact, isolated, idempotent and reconcilable under failure.
-- Boards/tasks expose honest bounded/degraded behavior.
-- Before/after evidence and recovery runbooks are complete.
+    ## 30. Commands to run
 
-## 34. Definition of Done
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-Measured bottlenecks are resolved without placeholder/fake proof; migrations, RLS/RBAC, APIs, jobs, UX states, load/failure tests, docs, audit/observability, performance evidence and rollback are complete; no critical blocker remains.
+    ## 31. Documentation to update
 
-## 35. Completion report format
+    Target profiles, budgets, results, dashboard/alerts, saturation, scaling, replay and reconciliation runbooks.
 
-Report IDs/checkpoint; profile/environment; changed files/indexes/configs; commands/results and before/after table; correctness/isolation/job/reconciliation evidence; residual limits/risks; docs; rollback/resume; next task. Update ledgers before `VERIFIED`.
+    ## 32. Rollback/recovery note
 
-## 36. Next eligible prompt
+    Disable only new optimization, drain/reconcile queues, restore baseline settings, preserve accepted events, and rerun affected profiles.
 
-Only the execution index may release ATW-244 or another dependency-clean task after this task is `VERIFIED`. Do not set `PHASE_5_VERIFIED`; only Prompt 248 may do so.
+    ## 33. Acceptance criteria
+
+    - Declared budgets pass or explicit non-critical limits are documented.
+- Accepted work remains exact and isolated.
+- Gateway/mobile/provider/hybrid recovery is proven with simulators/contracts.
+- No critical performance or correctness blocker remains.
+
+    ## 34. Definition of Done
+
+    Measured bottlenecks, observability, tests, docs, and rollback are complete; external hardware/live-provider absence is treated under Prompt 226 policy.
+
+    ## 35. Completion report format
+
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+
+    ## 36. Next eligible prompt
+
+    Only the execution index may release ATW-244 or another dependency-clean task. Prompt 248 alone may close Phase 5.

@@ -1,174 +1,168 @@
-# Prompt 224 — Route and Load Planning
+# Prompt 224 — Route and Load Planning Using Canonical Position
 
-**Prompt ID:** `CG-S10-ATW-005`  
-**Package document:** `CG-AABPP-ATW-224`  
-**Version:** `0.11.0`  
-**Runtime build log:** `docs/build-log/phase-05/ATW-224.md`
+    **Prompt ID:** `CG-S10-ATW-005`  
+    **Package document:** `CG-AABPP-ATW-224`  
+    **Version:** `0.12.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-05/ATW-224.md`
 
-Do not begin until Prompt 220 marks this task `READY`, all variables are resolved, and `PHASE_4_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S10-ATW-005` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S10-ATW-005` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 5 — Advanced TMS and WMS`; package `0.11.0`.
+    `Phase 5 — Advanced TMS and WMS`; package version `0.12.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Advanced Transportation; Epic: Constraint-Aware Planning; Capability: Route and Load Planning; Feature slice: stops, time windows, capacity/UOM, compatibility, distance/time/cost score, explainable plan and human override; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Advanced Transportation; Epic: Constraint-Aware Planning; Capability: Route and Load Planning; Feature slice: versioned planning using canonical authoritative current position; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Implement versioned explainable route and load planning for multi-stop legs using PostGIS and approved constraints without claiming guaranteed optimality.
+    Implement explainable route and load planning without reading raw mobile, direct-device, or third-party telemetry.
 
-## 5. Business value
+    ## 5. Business value
 
-Improve asset use and execution feasibility while keeping planners accountable for final decisions.
+    Improve route feasibility and replanning while ensuring all location-dependent decisions use one trusted, source-arbitrated projection.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-OPS-TMS-001..004 route/load slice; RPD-015; RPD-038; NFR-PERF. Cite exact source sections, runtime evidence, ADR/configuration versions and prerequisite task IDs.
+    OPS-TMS-001..004; PostGIS; revised ATW-219/226 canonical tracking architecture. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, active closure IDs, schema/migrations/contracts/routes/modules, package manager/scripts, environment, baseline and last trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs and source requirements. Inspect repository/schema/API/UI/jobs/integrations/tests, detect package manager, run feasible baseline gates, state plan/expected files, and stop on tenant/customer/data/inventory/security/financial/phase-boundary conflict.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-ATW-221 and ATW-223; verified location/PostGIS and configuration foundations. Every execution-index prerequisite must be `VERIFIED`.
+    ATW-221, ATW-223, verified PostGIS/location/config foundations. Replanning based on live position requires ATW-226F. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-ATW-225, ATW-227..228, ATW-243..248. Identify affected schemas, services, REST/GraphQL, jobs/integrations/files, Finance/portal contracts, tests, docs and compatibility consumers.
+    ATW-225, ATW-227..228, ATW-243..248. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Use only exact Advanced TMS/WMS schema, migration, service, UI, integration/job, test and documentation paths authorized by the WBS. Resolve paths from the repository; normally 5–15 files and at most 1–3 additive migrations.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Unrelated domains, duplicate Phase 3 roots, full Step 11–14 implementations, tenant forks, applied-migration edits, destructive cleanup, hidden test/permission weakening and user-owned unrelated changes. Preserve Phase 1–4 contracts and protected decisions.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-Add planning request/scenario/version, stops/time windows, cargo/UOM/capacity constraints, compatibility, distance/time/cost inputs, score/components, selected plan and override evidence.
+    Add planning scenarios, stops, constraints, score components, selected plans, overrides, and references to canonical current-position snapshot/version when used.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-Shared REST/GraphQL prepare, validate, execute-async, compare-scenarios, select/override and read-lineage operations; case-specific map/routing calls remain explicit. REST and GraphQL share one service, auth, field policy, idempotency, audit and version semantics.
+    Provide prepare, validate, execute-async, compare, select, override, and replan APIs. Live-location input must be fetched through canonical current-position service and include freshness/confidence metadata.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-Planner workspace with stop/load constraints, capacity visualization, map/sequence, scenario comparison, infeasibility reasons, selected plan and human override audit. Include loading, empty, error, success, permission-denied and degraded states; responsive online-first PWA, keyboard/focus/labels, scan alternatives, unsaved-change protection and no dead action.
+    Planner workspace shows route/load constraints, current trusted position, freshness, source class label at safe granularity, alternatives, infeasibility, and human override.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Restrict customer locations, rates/cost and driver/resource details; external routing input is minimized and secrets remain server-only. Preserve tenant/customer isolation, RLS, RBAC, company/branch/warehouse/owner scope, field/record policy, server-only secrets, file controls and RPD-022 risk disclosure.
+    Restrict customer locations, cost, driver, and source details. External routing inputs are minimized. Raw device/mobile/provider data never leaves telemetry services.
 
-## 17. Performance impact
+    ## 17. Performance and reliability impact
 
-Run non-trivial planning asynchronously, cache safe distance matrices by governed key, bound scenario size/time and preserve timeout/cancel/progress evidence. Use selective columns, server filter/sort/search/cursor pagination, query budgets, async heavy work, limited realtime and before/after evidence; no `SELECT *` or browser-loaded full dataset.
+    Bound scenarios and matrix size; run non-trivial planning asynchronously; cache safe matrices; reject stale canonical position beyond configured tolerance.
 
-## 18. Audit impact
+    ## 18. Audit and observability impact
 
-Record algorithm/rule version, inputs, external-source version, scenarios/scores, infeasibility, selected plan, human override/reason and downstream effect. Include correlation/idempotency key, actor/context, source/config versions, before/after or movement/event chain, outcome and privileged evidence.
+    Audit algorithm/rule/source version, canonical-position snapshot, freshness/confidence, scenarios, selection, override, and replan trigger.
 
-## 19. Data migration impact
+    ## 19. Data migration and compatibility impact
 
-No historical re-optimization; migrate only active draft planning inputs with source/version reconciliation. Use additive or expand-and-contract migrations; never edit an applied migration. Inventory/operational history changes require backup, rehearsal and reconciliation.
+    No historical re-optimization. Additive schema only; existing plans remain linked to their captured inputs.
 
-## 20. Detailed implementation tasks
+    ## 20. Detailed implementation tasks
 
-- Inventory planning inputs, PostGIS/map adapters and operational constraints.
-- Define exact UOM/capacity/time-window/scenario/score contracts.
-- Implement deterministic baseline planner, async job, APIs and planner UX.
-- Integrate route/load selection with legs/dispatch and override evidence.
-- Run correctness, infeasibility, privacy, load and compatibility tests.
+    - Define canonical-position input contract.
+- Define hard/soft constraints and stale-position policy.
+- Implement deterministic baseline planner and async jobs.
+- Integrate human selection/override and position-aware replan.
+- Test stale, conflicting, no-position, and fallback source cases.
 
-## 21. Main flow
+    ## 21. Main flow
 
-Planner submits authorized stops/cargo/resources/constraints, service validates and produces explainable feasible scenarios, human selects or overrides one, then commits a versioned plan to unstarted legs.
+    Planner submits authorized stops/cargo/resources; service validates constraints and optionally reads canonical current position; human selects a versioned plan.
 
-## 22. Alternative flow
+    ## 22. Alternative flow
 
-Plan manually with server validation, compare route/load scenarios, replan only affected unstarted legs or use a contracted case-specific routing adapter.
+    Plan manually when no trusted position exists, or replan unstarted legs after an approved tracking-derived exception.
 
-## 23. Exception flow
+    ## 23. Exception flow
 
-Block infeasible capacity/time window/service/location, missing/invalid UOM conversion, stale leg/resource version, external timeout ambiguity, unsafe override or attempt to mutate started execution. Record blocker/error/issue, preserve evidence and exact safe resume point; never hide or bypass failure.
+    Block raw-source access, stale/low-confidence position use, infeasible constraints, external timeout ambiguity, stale plan/resource versions, or mutation of started execution.
 
-## 24. Business rules
+    ## 24. Business rules
 
-- A plan is decision support and may be called optimal only with proven objective/constraint evidence.
-- Every score and constraint result is explainable from captured versioned inputs.
-- Human override requires authority/reason and cannot bypass hard safety/capacity rules.
-- Extend canonical Phase 3/4 records and source/version lineage; no silent re-entry or duplicate source of truth.
-- When stock/quantity changes, use exact UOM and idempotent ledger/task events; normal roles never directly patch balances.
-- RPD-022 prevents any tamper-proof/immutable-for-all claim; no tenant fork, autonomous AI commitment, offline sync or partial-GA claim.
+    - Planning is decision support.
+- Only canonical current position may influence planning.
+- Source arbitration remains Prompt 226 ownership.
+- Stale positions are rejected or explicitly degraded.
+- Human commitment is required.
 
-## 25. Validation rules
+    ## 25. Validation rules
 
-- Stops, cargo/UOM, vehicle/resource capacity, time windows, service and location data are complete.
-- Scenario satisfies all hard constraints and labels soft violations explicitly.
-- Selected plan references current source versions and unstarted compatible legs.
-- Reject tenant/company/branch/warehouse/customer-owner/source/config/version mismatch and stale concurrent mutation.
-- Every state, assignment, movement or external event must be authorized, idempotency-safe and source-reconcilable.
+    - Validate stops, UOM, resource capacity, time windows, position freshness/confidence, source version, and unstarted legs.
+- Reject tenant/source mismatch and stale concurrency.
 
-## 26. Access rules
+    ## 26. Access rules
 
-Planners create/select; managers approve configured overrides; dispatch receives selected plan; restricted cost/location/resource fields use policy-safe projections. Enforce authorization in database/service as applicable, not UI only; list/search/export/report/realtime use the same field and record policy.
+    Planners create/select; managers approve configured overrides; dispatch consumes selected plans; customers never see internal scoring or source details.
 
-## 27. Test data requirement
+    ## 27. Test data requirement
 
-Multi-stop/multi-leg loads, weight/volume/pallet limits, time windows, incompatible cargo/resource, no-feasible plan, external timeout, stale version and Tenant A/B. Include deterministic IDs, exact quantities/UOM where relevant, source/config versions, allowed/denied roles, Tenant A/B, customer owners and retry/concurrency fixtures.
+    Multi-stop cases with fresh mobile/device/provider/hybrid positions, stale/conflict/no-position, fallback, infeasible loads, Tenant A/B.
 
-## 28. Tests to create/update
+    ## 28. Tests to create/update
 
-- Constraint/UOM/capacity/sequence/score/infeasibility unit/property tests.
-- PostGIS/adapter/async/API/leg/dispatch integration and idempotency tests.
-- RLS/RBAC/field/privacy, performance/cancel, accessibility and human-override audit tests.
-- Unit/component/integration/API contract/database/migration/audit/smoke coverage proportional to risk.
-- Inventory equation/ledger/reconciliation or transport state/capacity/event-order tests wherever applicable.
+    - Constraint and score tests.
+- Canonical-position contract and stale-policy tests.
+- PostGIS/adapter/async/API tests.
+- RLS/privacy and override audit tests.
+- Load/cancel/recovery tests.
 
-## 29. Regression tests
+    ## 29. Regression tests
 
-Shipment legs, fleet/driver, dispatch, milestones, cost/profitability and provider integration policy. Re-run relevant tenant/customer isolation, inventory/operational integrity, Finance/API compatibility, browser/accessibility and critical E2E suites; compare baseline before/after.
+    Shipment legs, resources, dispatch, Prompt 226 canonical telemetry, milestones, cost/profitability, and provider integration policy.
 
-## 30. Commands to run
+    ## 30. Commands to run
 
-Detect and run repository equivalents of lint, typecheck, unit/integration tests and build; add relevant E2E, database reset/migration/type generation, security/dependency, job/integration and target-volume TMS/WMS commands. Do not disable a gate; separate proven pre-existing failures in `ERROR_LEDGER.md`.
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-## 31. Documentation to update
+    ## 31. Documentation to update
 
-Planning constraint/objective/algorithm/version contract, provider boundary and infeasible/timeout/replan runbook. Update persistent context/status/task/change/regression/traceability/schema/API/data-flow/dependency/build-log artifacts and user/admin/API/support docs plus release note when behavior changes.
+    Planning contract, canonical-position dependency, source/freshness limitations, provider boundary, and replan runbook.
 
-## 32. Rollback/recovery note
+    ## 32. Rollback/recovery note
 
-Cancel incomplete job, retain prior selected plan, remove only uncommitted scenario data and reconcile any downstream reservations before resume. State last trusted checkpoint, reversible steps, data/ledger/event reconciliation and exact resume command; do not use destructive Git/database shortcuts.
+    Cancel incomplete planning jobs, retain prior selected plan, reconcile downstream reservations, and fall back to manual validated planning.
 
-## 33. Acceptance criteria
+    ## 33. Acceptance criteria
 
-- Feasible plans satisfy captured hard constraints.
-- No false optimality or hidden autonomous commitment exists.
-- Selection/override is versioned, auditable and dispatch-compatible.
-- All mandatory automated/manual gates pass at one recorded checkpoint.
-- Completion evidence maps source requirement → task → code/migration/contract/UI → test → documentation.
+    - Feasible plans satisfy hard constraints.
+- No raw telemetry dependency exists.
+- Position-aware replanning is freshness-controlled.
+- Selection remains human-governed.
 
-## 34. Definition of Done
+    ## 34. Definition of Done
 
-Scope is implemented without placeholder/fake persistence/dead action; migrations, generated types, RLS/RBAC/field policy, shared APIs, complete UX states, jobs/integrations, tests, docs, audit, performance evidence and rollback are complete; no critical tenant/security/inventory/financial blocker remains.
+    Planner services, position contract, APIs, UX, tests, docs, and rollback are complete without false optimality or critical privacy blocker.
 
-## 35. Completion report format
+    ## 35. Completion report format
 
-Report task/prompt IDs; repository checkpoint; changed files/migrations/contracts; source/config decisions; implementation summary; commands and baseline/after results; tenant/customer/access/inventory/transport/Finance evidence; idempotency/concurrency/reconciliation/performance results; residual errors/issues/risks; docs; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
 
-## 36. Next eligible prompt
+    ## 36. Next eligible prompt
 
-Only the execution index may release ATW-225 or another dependency-clean atomic task after this task is `VERIFIED`. Do not set `PHASE_5_VERIFIED`; only Prompt 248 may do so.
-
+    Only the execution index may release ATW-225 or another dependency-clean task. Prompt 248 alone may close Phase 5.

@@ -1,176 +1,189 @@
-# Prompt 343 — Maps GPS Telematics Integrations
+# Prompt 343 — Enterprise Maps, GPS and Telematics Integrations
 
-**Prompt ID:** `CG-S14-IAE-015`  
-**Package document:** `CG-AABPP-IAE-343`  
-**Version:** `0.15.0`  
-**Runtime build log:** `docs/build-log/phase-09/IAE-343.md`
+    **Prompt ID:** `CG-S14-IAE-015`  
+    **Package document:** `CG-AABPP-IAE-343`  
+    **Version:** `0.16.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-09/IAE-343.md`
 
-Do not begin until Prompt 329 marks this task `READY`, all variables are resolved, and `PHASE_8_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S14-IAE-015` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S14-IAE-015` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 9 — Intelligence, Automation, and Enterprise Expansion`; package `0.15.0`.
+    `Phase 9 — Intelligence, Automation, and Enterprise Expansion`; package version `0.16.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Operations Integrations; Epic: Location Providers; Capability: Maps, GPS and Telematics; Feature slice: Maps, geocoding, tracking, telematics event ingestion and privacy controls; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Operations Integrations; Epic: Location Providers; Capability: Maps, GPS and Telematics Enterprise Integrations; Feature slice: additional enterprise provider adapters and maps services extending, never replacing, ATW-226; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Integrate maps/GPS/telematics providers through governed adapters while preserving Operations source truth and privacy.
+    Add enterprise maps/geocoding/routing and additional approved GPS/telematics provider adapters through the existing Prompt 226 canonical ingestion architecture.
 
-## 5. Business value
+    ## 5. Business value
 
-Improve shipment visibility and operational planning without leaking location or driver data.
+    Expand integration choices without creating a second telemetry truth or bypassing TMS entitlements, source arbitration, privacy, and customer projections.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-Phase 9 Maps, GPS, telematics; Product Brief future; Delivery integration/performance/security.. Cite exact source sections, runtime evidence, decisions/config versions and prerequisite task IDs.
+    Phase 9 maps/GPS/telematics; revised ATW-226; Integration Hub. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, active closures, schemas/migrations/contracts/routes/modules/jobs/integrations, package manager/scripts, environment, baseline and last trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read persistent context/status/task/change/decision/assumption/error/issues/handoff artifacts, Phase 8 closure, relevant build logs and sources. Inspect actual code/schema/policies/APIs/UI/jobs/files/tests, run feasible baselines, state plan/files, and stop on tenant/RLS/access/AI-governance/API/integration/Finance/legal/security/performance/enterprise-boundary conflict.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-Operations TMS/WMS, Platform jobs/secrets, IAE-336 integration hub.. Every execution-index prerequisite must be `VERIFIED`.
+    Verified Phase 5 multi-source telemetry, Phase 8 customer tracking, Platform jobs/secrets, IAE-336 Integration Hub. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-Predictive ETA, route optimization and customer tracking surfaces.. Identify affected schemas, services, REST/GraphQL, jobs/integrations/files, AI provider boundary, reports/dashboards, public API/webhooks, enterprise IAM/deployment/monitoring, tests, docs and compatibility contracts.
+    Predictive ETA, route optimization, public APIs/webhooks and enterprise monitoring. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Use only exact Phase 9 schema, migration, service, UI, job/integration, test and documentation paths authorized by WBS. Resolve repository paths; normally 5–15 files and at most 1–3 additive migrations.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Unrelated domains, duplicate source-domain roots, autonomous AI critical actions, provider secrets in client/logs, tenant forks, applied-migration edits, destructive cleanup, Step 15–16 full release/hardening work, hidden test/permission weakening and user-owned unrelated changes.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-Provider connection, device/vehicle mapping, location event ingestion, geocode cache, privacy policy, freshness and audit records. Preserve canonical domain ownership, tenant_id, source/config/model/provider versions, idempotency, audit, retention and rollback-safe additive migrations.
+    Add provider connection/config/catalog records only where not already owned by Prompt 226/Integration Hub. New adapters map into the existing canonical telemetry contract; no duplicate current-position/history tables.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-Provider ingest/sync/test/geocode/route APIs with idempotency, throttling, source mapping and field policy. REST and GraphQL must share authentication, authorization, field policy, idempotency, audit, version and compatibility semantics.
+    Provide provider setup/test/sync/geocode/route APIs, adapter registration, metering and health. GPS events must enter through ATW-226 adapter interfaces and canonical normalization/arbitration.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-Provider setup, device mapping, health, event freshness and privacy warnings. Include keyboard/focus/labels, responsive online-first behavior, loading/empty/error/denied/stale/degraded/conflict states, human-review states for AI/automation and no dead action.
+    Enterprise provider catalogue, setup, mapping, health, usage/cost, schema version, test result and degraded state.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Enforce tenant/RLS/RBAC/field/record/file/API-key/webhook/signature/IP/MFA/session/support policy in database/service as applicable, not UI only. Protect secrets, AI prompts/outputs, provider payloads and enterprise evidence. Preserve RPD-022 residual-risk disclosure.
+    Protect secrets, provider payloads, location/driver data, customer scope and support access. No provider credential in client/log.
 
-## 17. Performance impact
+    ## 17. Performance and reliability impact
 
-Use selective projections, server filter/sort/search, cursor pagination, materialized views/read models where justified, async jobs/queues/backpressure for heavy work and measured evidence. No `SELECT *`, global realtime fanout, browser-loaded full dataset, unbounded AI/report/API workload or unsafe cross-tenant cache.
+    Async sync, rate/backpressure, metering, bounded caches, target-volume tests and no global Realtime.
 
-## 18. Audit impact
+    ## 18. Audit and observability impact
 
-Record actor, tenant/scope, source/config/model/provider version, correlation/idempotency key, input/output hash where useful, before/after or event chain, approval/human decision, file/API/webhook access, denial, cost/usage and privileged/support evidence. Evidence must be source-linked and privacy-safe.
+    Audit provider/version/config, credential lifecycle, test/sync, cost/usage, mapping, canonical outcome and support action.
 
-## 19. Data migration impact
+    ## 19. Data migration and compatibility impact
 
-Use additive or expand-and-contract migrations; never edit applied migrations. Adopt existing Platform, Commercial, Operations, WMS, Procurement, Finance, HRIS, Ticketing, Customer Portal and Loyalty references through explicit mapping; rehearse backup, rollback and reconciliation.
+    Adopt existing mappings explicitly; no raw history import without retention/dedup/reconciliation.
 
-## 20. Detailed implementation tasks
+    ## 20. Detailed implementation tasks
 
-- Define location data classification and provider adapter contracts.
-- Implement idempotent event ingestion and device/vehicle mapping.
-- Add geocode/cache and rate limit controls.
-- Build setup/health/freshness UI.
-- Test stale events, spoofed provider, driver privacy, customer visibility and cost metering.
+    - Inventory existing ATW-226 adapters and ownership.
+- Add only approved enterprise provider/map adapters.
+- Reuse canonical telemetry and source arbitration.
+- Add metering/health and setup UX.
+- Test contract, failure, privacy and non-duplication.
 
-## 21. Main flow
+    ## 21. Main flow
 
-Telematics provider sends location event; system validates signature/source, maps to vehicle/shipment and updates scoped tracking projection.
+    Admin configures an approved provider; adapter validates and maps data into existing canonical telemetry or map/routing contract.
 
-## 22. Alternative flow
+    ## 22. Alternative flow
 
-Provider unavailable; system shows stale/degraded status and preserves last trusted location without fabricating data.
+    If provider unavailable, show degraded status and retain last trusted canonical state; use contract fixtures for implementation verification.
 
-## 23. Exception flow
+    ## 23. Exception flow
 
-Block unauthorized scope, missing source version, unsafe AI/automation action, provider failure, webhook spoofing, duplicate API retry, unscanned file, stale analytics, incompatible schema, secret leakage, SSO lockout, unsupported enterprise claim or later-phase scope creep; preserve safe state and exact resume. Record blocker/error/issue, owner and safe resume; never hide or bypass failure.
+    Block duplicate telemetry roots, provider spoofing, schema drift, credential leak, wrong mapping, rate-limit failure, or direct shipment mutation.
 
-## 24. Business rules
+    ## 24. Business rules
 
-- Location data is sensitive and purpose-bound.
-- Customer views only approved shipment-level location granularity.
-- Provider location does not overwrite canonical shipment milestones without domain rules.
-- Maps/telematics costs are metered where billable.
-- Predictive use of location is governed by AI/analytics prompts.
-- RPD-004 responsive online-first PWA remains the supported client model; no native/offline-sync claim.
-- RPD-011 shared database/shared schema with RLS remains default; dedicated instance is a paid Enterprise option only.
-- RPD-013 APAC is default region; dedicated region/hosting is a contractual Enterprise option.
-- RPD-017 Enterprise IAM order is OIDC, then SAML, then SCIM unless a signed contract changes priority.
-- RPD-021 OpenAI multimodal is the default AI/OCR provider boundary; human approval is mandatory before financial/legal posting or critical status changes.
-- RPD-022 Supreme Admin absolute CRUD is accepted residual risk; never claim immutable-for-all or tamper-proof behavior.
+    - Prompt 226 remains telemetry source owner.
+- Phase 9 adds adapters/enterprise controls, not a second gateway.
+- Provider events never overwrite canonical milestones directly.
+- Costs are metered where applicable.
+- Live provider evidence is optional when unavailable.
 
-## 25. Validation rules
+    ## 25. Validation rules
 
-Validate tenant/scope, role/field/record policy, source/config/model/provider version, idempotency, concurrency, approval, usage/cost meter, retention, compatibility, performance budget and downstream reconciliation before mutation. Reject cross-tenant references, stale updates, untrusted prompt/document instructions and unsafe inferred access.
+    - Validate tenant/scope, provider/config/schema version, mapping, idempotency, rate, retention, compatibility and canonical outcome.
+- Reject duplicate ownership or cross-tenant mapping.
 
-## 26. Access rules
+    ## 26. Access rules
 
-Supreme Admin, tenant admins, internal users, customer users, support users, API clients, webhook endpoints, automation jobs and AI/service accounts each require explicit least-privilege policy. Support/impersonation and enterprise admin actions are case-, purpose- and time-bound with MFA/current authorization.
+    Enterprise admins manage provider connections; Operations consumes normalized state; customers see only Phase 8 sanitized projection.
 
-## 27. Test data requirement
+    ## 27. Test data requirement
 
-Tenant A/B, enterprise tenant, shared and dedicated deployment fixtures, multiple roles, API clients, webhook endpoints, failed providers, AI request/evidence cases, reports/dashboards, integrations, SSO/SCIM identities, high-volume events, secrets redaction, revoked users, malicious payloads and target-volume fixtures. Include deterministic IDs, allowed/denied roles and source/config/model versions.
+    Tenant A/B, multiple provider contracts, schema drift, outage, rate limit, credential rotation, mapping collision and cost-meter fixtures.
 
-## 28. Tests to create/update
+    ## 28. Tests to create/update
 
-- Maps, GPS and Telematics unit/service/database/API/contract/job/UI tests.
-- Tenant/RLS/RBAC/field/file/API/webhook/AI/enterprise isolation and negative tests.
-- REST/GraphQL parity, idempotency, concurrency, version/compatibility and audit tests.
-- Provider failure, retry/DLQ, backpressure, cost-meter and secret-redaction tests where applicable.
-- Responsive browser/accessibility and no-dead-action tests.
-- Migration/rollback/performance/security smoke coverage proportional to risk.
+    - Provider adapter contract tests.
+- Integration Hub and canonical telemetry tests.
+- Secret/RLS/webhook/API negative tests.
+- Failure/retry/DLQ/metering tests.
+- Browser/accessibility and migration tests.
 
-## 29. Regression tests
 
-Re-run critical Platform, Commercial, Operations, Advanced TMS/WMS, Procurement, Finance, HRIS/Ticketing and Customer Portal/Loyalty tests touched by this task, especially source-domain ownership, API/webhook, jobs, files, audit, reporting, AI governance and enterprise access suites.
+### External-evidence policy
 
-## 30. Commands to run
+The implementation must not be blocked merely because physical hardware or a live third-party provider is unavailable at the active checkpoint.
 
-Detect and run repository equivalents of lint, typecheck, unit/integration/database/API/contract/job/browser/accessibility/security/build; add migration/type generation, API spec generation, webhook replay, AI eval, load/performance, backup/restore, failure-recovery and reconciliation commands as relevant. Do not disable a gate; register proven pre-existing failures.
+1. **Physical GPS device testing**
+   - Hardware-in-the-loop testing with an actual Teltonika or equivalent installed device is deferred until a device is available.
+   - Before verification, protocol simulators and recorded vendor frames must prove IMEI handshake, Codec 8 Extended parsing, CRC validation, ACK behavior, duplicate/replay handling, reconnect, malformed payload rejection, buffering, database outage recovery, and canonical projection.
+   - Record the deferred item as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE`, including owner, target device/model, installation prerequisites, exact future test procedure, expected evidence, and safe activation gate.
+   - Do not claim “tested on physical device” until that future evidence exists.
 
-## 31. Documentation to update
+2. **Third-party GPS platform testing**
+   - A live provider test is conditional on approved credentials, API access, legal/commercial permission, documented rate limits, and a stable provider contract.
+   - When those prerequisites are unavailable, mark the live-provider test `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE`.
+   - The provider adapter contract, authentication/signature checks, mapping, retry, rate-limit, schema-drift, idempotency, and failure behavior must still be tested with deterministic mocks, contract fixtures, or a sandbox when available.
+   - Do not claim a named provider is live or certified without live evidence.
 
-Update Phase 9 build log, source-domain ownership notes, AI/automation/API/integration/enterprise runbooks, API specs, webhook event docs, report/dashboard metric docs, security/retention/DR docs, traceability, dependency, rollback and handoff artifacts relevant to Maps, GPS and Telematics.
+3. **Closure treatment**
+   - These two deferred/conditional external tests are non-blocking when all repository-controlled implementation, simulator/contract, security, migration, load, recovery, and canonical-data gates pass.
+   - Any unresolved repository-controlled defect remains blocking.
 
-## 32. Rollback/recovery note
+    ## 29. Regression tests
 
-Disable affected Phase 9 feature flag, pause jobs/integrations/API clients/AI provider path, preserve source-domain truth, revert compatible code/policies and reconcile queued jobs/events/reports/AI outputs before resume. State last trusted checkpoint, reversible steps, reconciliation and exact resume; no destructive Git/database shortcuts.
+    Platform, ATW-226, Customer Portal, Integration Hub, public API/webhook and enterprise monitoring.
 
-## 33. Acceptance criteria
+    ## 30. Commands to run
 
-- Maps, GPS and Telematics works with canonical source-domain ownership and no duplicate truth.
-- Tenant/access/field/file/API/webhook/AI/enterprise controls are enforced across database/service/API/UI/jobs/exports.
-- Human governance, idempotency, audit, performance, migration, rollback and documentation gates pass.
-- Source/config/model/provider versions and downstream reconciliation evidence are recorded.
-- Mandatory automated/manual gates pass at one recorded checkpoint with source requirement → code/contract/UI/job → test → documentation evidence.
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-## 34. Definition of Done
+    ## 31. Documentation to update
 
-Scope is implemented without placeholder/fake persistence/dead action; migrations, generated types/specs, RLS/RBAC/field policy, shared APIs, complete UX states, jobs/integrations, tests, docs, audit, performance evidence and rollback are complete; no critical tenant/security/AI/API/integration/enterprise blocker remains.
+    Provider catalogue, adapter ownership, credential rotation, schema drift/outage, metering and canonical-data-flow docs.
 
-## 35. Completion report format
+    ## 32. Rollback/recovery note
 
-Report task/prompt IDs; repository checkpoint; changed files/migrations/contracts/specs; source/config/model/provider decisions; implementation; commands and baseline/after results; tenant/access/API/webhook/AI/integration/security/performance evidence; idempotency/concurrency/reconciliation/cost-meter evidence; residual errors/issues/risks; docs; rollback/resume; recommended next task. Update persistent ledgers before `VERIFIED`.
+    Disable affected adapter, revoke credentials, pause jobs, preserve canonical truth, reconcile queued events and restore last trusted config.
 
-## 36. Next eligible prompt
+    ## 33. Acceptance criteria
 
-Only the execution index may release the next dependency-clean IAE prompt after this task is `VERIFIED`. Do not set the final Phase 9 closure flag; only Prompt 367 may do so.
+    - New adapters reuse canonical telemetry.
+- No duplicate gateway/current-position/history exists.
+- Security, metering, failure and compatibility gates pass.
+- Live provider test may be conditionally skipped.
 
+    ## 34. Definition of Done
+
+    Enterprise adapter code/config/UI/tests/docs/rollback are complete with no critical duplication/security blocker.
+
+    ## 35. Completion report format
+
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+
+    ## 36. Next eligible prompt
+
+    Only the execution index may release the next dependency-clean IAE task. Prompt 367 alone may close Phase 9.

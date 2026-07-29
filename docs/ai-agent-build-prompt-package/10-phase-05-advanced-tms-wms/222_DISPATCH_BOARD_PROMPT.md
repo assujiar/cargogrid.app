@@ -1,174 +1,170 @@
-# Prompt 222 — Dispatch Board
+# Prompt 222 — Advanced Dispatch Board with Tracking Health
 
-**Prompt ID:** `CG-S10-ATW-003`  
-**Package document:** `CG-AABPP-ATW-222`  
-**Version:** `0.11.0`  
-**Runtime build log:** `docs/build-log/phase-05/ATW-222.md`
+    **Prompt ID:** `CG-S10-ATW-003`  
+    **Package document:** `CG-AABPP-ATW-222`  
+    **Version:** `0.12.0-multisource-gps`  
+    **Runtime build log:** `docs/build-log/phase-05/ATW-222.md`
 
-Do not begin until Prompt 220 marks this task `READY`, all variables are resolved, and `PHASE_4_VERIFIED` matches the active checkpoint.
+    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-## 1. Prompt ID
+    ## 1. Prompt ID
 
-`{{TASK_ID}}` mapped to `CG-S10-ATW-003` and exactly one approved WBS/task-ledger item.
+    `{{TASK_ID}}` maps to `CG-S10-ATW-003` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-## 2. Parent phase
+    ## 2. Parent phase
 
-`Phase 5 — Advanced TMS and WMS`; package `0.11.0`.
+    `Phase 5 — Advanced TMS and WMS`; package version `0.12.0-multisource-gps`.
 
-## 3. Workstream
+    ## 3. Workstream
 
-Workstream: Advanced Transportation; Epic: Dispatcher Control Tower; Capability: Advanced Dispatch Board; Feature slice: date/branch/resource queue, board-map-list, conflict-safe assignment, hold/reassign and live active-state updates; Atomic task: `{{WBS_TASK_ID}}`.
+    Workstream: Advanced Transportation; Epic: Dispatcher Control Tower; Capability: Advanced Dispatch Board; Feature slice: board/list/map dispatch plus canonical tracking-health projection; Atomic task: `{{WBS_TASK_ID}}`.
 
-## 4. Objective
+    ## 4. Objective
 
-Extend Phase 3 basic dispatch into a high-density permission-safe board for leg/trip assignment, readiness, hold, reassign and execution monitoring.
+    Extend Phase 3 dispatch into a high-density, permission-safe control board that exposes assignment readiness and canonical tracking health without reading raw GPS sources.
 
-## 5. Business value
+    ## 5. Business value
 
-Let dispatchers coordinate many active movements quickly without double-booking resources or loading the whole dataset.
+    Dispatchers can assign and monitor many movements while immediately seeing whether a trip is tracked, stale, degraded, conflicting, or running on fallback.
 
-## 6. Source requirement
+    ## 6. Source requirement
 
-OPS-TMS-001..004 advanced dispatch; UX OPS-DSP-001; Delivery Phase 5 dispatch-performance gate. Cite exact source sections, runtime evidence, ADR/configuration versions and prerequisite task IDs.
+    OPS-TMS/TRK-001..004; UX dispatch controls; revised ATW-219 multi-source architecture. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-## 7. Current repository context
+    ## 7. Current repository context
 
-Record repository root, branch, HEAD, dirty-worktree ownership, active closure IDs, schema/migrations/contracts/routes/modules, package manager/scripts, environment, baseline and last trusted checkpoint.
+    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-## 8. Preconditions
+    ## 8. Preconditions
 
-Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs and source requirements. Inspect repository/schema/API/UI/jobs/integrations/tests, detect package manager, run feasible baseline gates, state plan/expected files, and stop on tenant/customer/data/inventory/security/financial/phase-boundary conflict.
+    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-## 9. Upstream dependencies
+    ## 9. Upstream dependencies
 
-ATW-221 and verified Phase 3 basic assignment/dispatch; later ATW-223/224/227 extensions must trigger impacted re-verification. Every execution-index prerequisite must be `VERIFIED`.
+    ATW-221, verified Phase 3 dispatch, and the tracking projection contract from ATW-226F/H for live tracking fields. The board may be implemented before 226, but tracking columns remain feature-gated and must be reverified after 226. Every execution-index prerequisite must be `VERIFIED`.
 
-## 10. Downstream impact
+    ## 10. Downstream impact
 
-ATW-223..228, ATW-243..248. Identify affected schemas, services, REST/GraphQL, jobs/integrations/files, Finance/portal contracts, tests, docs and compatibility consumers.
+    ATW-223..228, ATW-243, ATW-245..248, Customer Portal tracking. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-## 11. Allowed files/folders
+    ## 11. Allowed files/folders
 
-Use only exact Advanced TMS/WMS schema, migration, service, UI, integration/job, test and documentation paths authorized by the WBS. Resolve paths from the repository; normally 5–15 files and at most 1–3 additive migrations.
+    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-## 12. Forbidden files/folders
+    ## 12. Forbidden files/folders
 
-Unrelated domains, duplicate Phase 3 roots, full Step 11–14 implementations, tenant forks, applied-migration edits, destructive cleanup, hidden test/permission weakening and user-owned unrelated changes. Preserve Phase 1–4 contracts and protected decisions.
+    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-## 13. Database impact
+    ## 13. Database impact
 
-Add only needed dispatch queue/read model, assignment claim/version, hold/reassign reason and indexed active-window projections; canonical trip/leg/resource records remain authoritative.
+    Add or extend bounded dispatch read models with canonical `tracking_status`, `authoritative_source_type`, `last_position_at`, `freshness_status`, `accuracy_meters`, `fallback_active`, `tracking_entitled`, and `tracking_exception_count`. Never duplicate position history.
 
-## 14. API impact
+    ## 14. API and integration impact
 
-Shared REST/GraphQL board-window, unassigned queue, readiness, assign/hold/reassign/dispatch operations with optimistic concurrency and idempotency. REST and GraphQL share one service, auth, field policy, idempotency, audit and version semantics.
+    Provide shared REST/GraphQL window, queue, assign, hold, reassign, dispatch, tracking-health detail, and canonical map-position reads. Every map marker must originate from the source-arbitrated current-position service.
 
-## 15. UI/UX impact
+    ## 15. UI/UX impact
 
-Desktop board with table/map/board toggle, virtualized/paginated lanes, filters/saved views, conflict/readiness detail; tablet compact board and mobile task list, never a drag-only workflow. Include loading, empty, error, success, permission-denied and degraded states; responsive online-first PWA, keyboard/focus/labels, scan alternatives, unsaved-change protection and no dead action.
+    Add board/list/map views showing source type, last update, freshness, accuracy, fallback, no-signal warning, and entitlement. Include keyboard/mobile alternatives and honest stale/degraded states.
 
-## 16. Security impact
+    ## 16. Security and privacy impact
 
-Branch/service/resource/cost fields and actions follow scope; drag/drop cannot bypass server authorization; map data/customer locations are restricted. Preserve tenant/customer isolation, RLS, RBAC, company/branch/warehouse/owner scope, field/record policy, server-only secrets, file controls and RPD-022 risk disclosure.
+    Map and driver fields are scoped; raw IMEI, phone telemetry, provider credential, and private payload are never exposed. Drag/drop cannot bypass server authorization.
 
-## 17. Performance impact
+    ## 17. Performance and reliability impact
 
-Window and cursor based reads, selective subscriptions only for active filtered scope, batched lookups, virtualization and target-volume latency budgets. Use selective columns, server filter/sort/search/cursor pagination, query budgets, async heavy work, limited realtime and before/after evidence; no `SELECT *` or browser-loaded full dataset.
+    Use cursor/window reads, selective subscriptions, bounded map viewport, batched tracking-health lookup, virtualization, and polling fallback. No global vehicle subscription.
 
-## 18. Audit impact
+    ## 18. Audit and observability impact
 
-Record board filter/context, assignment before/after, readiness snapshot, conflict, override/hold/reassign/dispatch actor/reason and event correlation. Include correlation/idempotency key, actor/context, source/config versions, before/after or movement/event chain, outcome and privileged evidence.
+    Audit assignment actions plus the tracking snapshot visible at decision time, source switch, degraded-state acknowledgement, and override reason.
 
-## 19. Data migration impact
+    ## 19. Data migration and compatibility impact
 
-Adopt existing basic dispatch records without copying them; backfill only version/claim/read-model fields with reconciliation. Use additive or expand-and-contract migrations; never edit an applied migration. Inventory/operational history changes require backup, rehearsal and reconciliation.
+    Adopt existing dispatch records additively and join canonical telemetry projections by trip/vehicle. No historical position copy into dispatch tables.
 
-## 20. Detailed implementation tasks
+    ## 20. Detailed implementation tasks
 
-- Profile Phase 3 dispatch queries/actions and target workload.
-- Define board window/read model, assignment claim and active realtime contract.
-- Implement shared operations, REST/GraphQL and accessible board/map/list UX.
-- Add conflict/readiness/hold/reassign and selective update handling.
-- Run concurrency, isolation, realtime/load, accessibility and regression gates.
+    - Define board projection fields and tracking status taxonomy.
+- Integrate canonical position and tracking-health service.
+- Add feature-gated columns, filters, alerts, and map markers.
+- Preserve conflict-safe assignment and dispatch.
+- Test stale, fallback, no-entitlement, and cross-tenant behavior.
 
-## 21. Main flow
+    ## 21. Main flow
 
-Dispatcher opens an authorized date/branch window, reviews ready legs/trips and resource state, assigns or dispatches through a conflict-safe server action and sees scoped updates.
+    Dispatcher opens an authorized operational window, sees ready movements and canonical tracking state, assigns/dispatches through server checks, and receives scoped updates.
 
-## 22. Alternative flow
+    ## 22. Alternative flow
 
-Bulk assign only compatible items, hold with reason, reassign after impact check, or use keyboard/list actions instead of drag/drop.
+    When live updates fail, show last trusted position with timestamp and degraded state; allow manual refresh and operational follow-up.
 
-## 23. Exception flow
+    ## 23. Exception flow
 
-Block stale board version, double-booking, not-ready leg, inactive/out-of-scope resource, capacity violation, unauthorized override, realtime gap or hidden partial failure. Record blocker/error/issue, preserve evidence and exact safe resume point; never hide or bypass failure.
+    Block double assignment, stale board version, unentitled tracking access, raw-source leakage, wrong vehicle-trip mapping, and silent map freshness failure.
 
-## 24. Business rules
+    ## 24. Business rules
 
-- Board is a projection; canonical assignments/states change only through shared services.
-- Every assign/reassign/dispatch checks current readiness, resource availability and concurrency token.
-- Realtime is filtered and selective; polling/revalidation provides safe recovery.
-- Extend canonical Phase 3/4 records and source/version lineage; no silent re-entry or duplicate source of truth.
-- When stock/quantity changes, use exact UOM and idempotent ledger/task events; normal roles never directly patch balances.
-- RPD-022 prevents any tamper-proof/immutable-for-all claim; no tenant fork, autonomous AI commitment, offline sync or partial-GA claim.
+    - The board is a projection, not a tracking source.
+- Tracking state never grants dispatch authority.
+- Raw telemetry is never read directly by the browser.
+- A stale position is labeled stale, never displayed as live.
+- Feature-disabled tenants see no inactive control.
 
-## 25. Validation rules
+    ## 25. Validation rules
 
-- Leg/trip/resource/window/scope and readiness versions remain compatible at commit.
-- Bulk operations report per-item result and never silently partially succeed.
-- All actions have non-drag keyboard/mobile alternatives.
-- Reject tenant/company/branch/warehouse/customer-owner/source/config/version mismatch and stale concurrent mutation.
-- Every state, assignment, movement or external event must be authorized, idempotency-safe and source-reconcilable.
+    - Verify record scope before map/list output.
+- Verify canonical source, freshness, assignment, and entitlement versions.
+- Ensure bulk operations return per-item results.
+- Reject forged vehicle/trip IDs and stale concurrency tokens.
 
-## 26. Access rules
+    ## 26. Access rules
 
-Dispatchers act within authorized branch/service/date/resource scopes; managers approve configured overrides; other users see only safe projections. Enforce authorization in database/service as applicable, not UI only; list/search/export/report/realtime use the same field and record policy.
+    Dispatchers see authorized branches/services/trips; managers approve configured overrides; customer users never access this internal board.
 
-## 27. Test data requirement
+    ## 27. Test data requirement
 
-High-volume active windows, unassigned/held/dispatched items, resource conflicts, stale boards, bulk partial errors, denied branches and Tenant A/B. Include deterministic IDs, exact quantities/UOM where relevant, source/config versions, allowed/denied roles, Tenant A/B, customer owners and retry/concurrency fixtures.
+    Active trips across mobile, direct-device, third-party, hybrid, untracked, stale, conflict, fallback, and revoked-entitlement scenarios for Tenant A/B.
 
-## 28. Tests to create/update
+    ## 28. Tests to create/update
 
-- Read-model/readiness/claim/assignment/concurrency/idempotency tests.
-- REST/GraphQL/board-map-list/selective-realtime and Phase 3 dispatch integration tests.
-- RLS/RBAC/field/customer isolation, load/virtualization, accessibility/browser and degraded-update tests.
-- Unit/component/integration/API contract/database/migration/audit/smoke coverage proportional to risk.
-- Inventory equation/ledger/reconciliation or transport state/capacity/event-order tests wherever applicable.
+    - Board projection and canonical-position contract tests.
+- Assign/dispatch concurrency and idempotency tests.
+- RLS/field/privacy negative tests.
+- Selective realtime and degraded-polling tests.
+- Browser/accessibility and target-window load tests.
 
-## 29. Regression tests
+    ## 29. Regression tests
 
-Phase 3 basic dispatch/assignment, milestones/exceptions, notifications, PostGIS/map and later fleet/planning/capacity contracts. Re-run relevant tenant/customer isolation, inventory/operational integrity, Finance/API compatibility, browser/accessibility and critical E2E suites; compare baseline before/after.
+    Re-run Phase 3 dispatch/assignment, ATW-223 resources, ATW-224 planning, ATW-226 telemetry, ATW-228 exceptions, and PostGIS/map tests.
 
-## 30. Commands to run
+    ## 30. Commands to run
 
-Detect and run repository equivalents of lint, typecheck, unit/integration tests and build; add relevant E2E, database reset/migration/type generation, security/dependency, job/integration and target-volume TMS/WMS commands. Do not disable a gate; separate proven pre-existing failures in `ERROR_LEDGER.md`.
+    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-## 31. Documentation to update
+    ## 31. Documentation to update
 
-Dispatch-board query/action/realtime/access contract, keyboard/mobile guide and conflict/degraded-state runbook. Update persistent context/status/task/change/regression/traceability/schema/API/data-flow/dependency/build-log artifacts and user/admin/API/support docs plus release note when behavior changes.
+    Dispatch-board data dictionary, tracking-health UI guide, stale/fallback/no-signal runbook, and access/realtime architecture.
 
-## 32. Rollback/recovery note
+    ## 32. Rollback/recovery note
 
-Disable advanced board actions, fall back to verified basic dispatch service, reconcile outstanding claims/assignments and resume from exact failed window. State last trusted checkpoint, reversible steps, data/ledger/event reconciliation and exact resume command; do not use destructive Git/database shortcuts.
+    Feature-disable tracking columns and fall back to verified dispatch behavior; reconcile pending assignments and preserve canonical telemetry.
 
-## 33. Acceptance criteria
+    ## 33. Acceptance criteria
 
-- Board remains responsive at target volume.
-- Concurrent users cannot double-assign or bypass readiness.
-- Every visible action works with server authority and complete feedback.
-- All mandatory automated/manual gates pass at one recorded checkpoint.
-- Completion evidence maps source requirement → task → code/migration/contract/UI → test → documentation.
+    - Board remains responsive at target window.
+- No raw-source or cross-tenant data leaks.
+- Stale/fallback states are honest and actionable.
+- Assignment authority remains server-enforced.
 
-## 34. Definition of Done
+    ## 34. Definition of Done
 
-Scope is implemented without placeholder/fake persistence/dead action; migrations, generated types, RLS/RBAC/field policy, shared APIs, complete UX states, jobs/integrations, tests, docs, audit, performance evidence and rollback are complete; no critical tenant/security/inventory/financial blocker remains.
+    Dispatch board, canonical tracking projection, access controls, UX states, tests, docs, and rollback are complete with no critical blocker.
 
-## 35. Completion report format
+    ## 35. Completion report format
 
-Report task/prompt IDs; repository checkpoint; changed files/migrations/contracts; source/config decisions; implementation summary; commands and baseline/after results; tenant/customer/access/inventory/transport/Finance evidence; idempotency/concurrency/reconciliation/performance results; residual errors/issues/risks; docs; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
 
-## 36. Next eligible prompt
+    ## 36. Next eligible prompt
 
-Only the execution index may release ATW-223 or another dependency-clean atomic task after this task is `VERIFIED`. Do not set `PHASE_5_VERIFIED`; only Prompt 248 may do so.
-
+    Only the execution index may release the next dependency-clean ATW task. Prompt 248 alone may close Phase 5.
