@@ -4953,6 +4953,176 @@ None. Independent re-verification found no defect requiring repair -- every gate
 
 Self-closing. `CG-S8-OPS-022` is `VERIFIED`. **`PHASE_3_VERIFIED` is set this checkpoint -- Phase 3 (Operations) is CLOSED.** This also completes this session's entire authorized range in full (the original "LANJUT PROMP 176 SD PROM 183" range, extended via "lanjut sd prompt 188" through `OPS-188`). **No further task -- Operations, Finance, Advanced TMS/WMS, or Customer Portal -- may run this session without fresh explicit user authorization**, per `OPERATIONS_CLOSURE_REPORT.md` §9.
 
+### CHG-2026-127 — Finance WBS and Runtime Kickoff (Phase 4, Prompt 190)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-001` / `190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md` |
+| Change type | Planning/index only (0 migration, 0 schema, 0 Finance-domain code) |
+| Baseline evidence | `PHASE_3_VERIFIED` (`docs/build-log/phase-03/OPERATIONS_CLOSURE_REPORT.md`) |
+| Final status | `COMPLETED` -- `VERIFIED`. **`PHASE_4_IN_PROGRESS` is set by this entry.** |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190, 191, 192, 193, and 194 in that exact order, one commit each, pushed after each commit |
+
+#### Outcome
+
+Instantiated the repository-specific Phase 4 hierarchy (`Phase 4 -> Workstream -> Epic -> Capability -> Feature slice -> Atomic task`), dependency graph, atomic task ledger, and execution index for all 28 rows (`190`-`218`). Only `191`-`194` are instantiated with exact repository paths and marked `READY`; `195`-`218` are dependency-mapped by reference but remain `NOT_STARTED`, not authorized this session. Entry gate independently re-verified (`RUNTIME_DISCOVERY_VERIFIED`/`RUNTIME_ARCHITECTURE_VERIFIED`/`PHASE_0_VERIFIED`/`PHASE_1_VERIFIED`/`PHASE_2_VERIFIED`/`PHASE_3_VERIFIED` all current).
+
+#### Scope and files
+
+New: `docs/build-log/phase-04/00_FINANCE_WBS.md`, `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md`. Modified: `scripts/docs/check-doc-links.ts` (added the two new kickoff documents to `PLANNING_DOCUMENT_EXCLUSIONS`, the same forward-referencing-kickoff-document exclusion every prior phase's own kickoff pair required). Runtime ledgers updated: `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `CARGOGRID_CONTEXT.md`, this file. No migration, no application/domain code. 3 new/changed files outside `docs/build-log/phase-04/` plus 3 runtime-ledger updates.
+
+#### Tests and quality evidence
+
+Baseline gates re-run fresh before any Finance file was written, then re-confirmed after this checkpoint's own commit: `pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1747/1747 (one transient pre-commit-state failure disclosed and cleared, see `TASK_LEDGER.md` `CG-S9-FIN-001`), `pnpm run db:test` PASS -- 71 migrations/72 db-test files (unchanged), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 56 routes (unchanged). No gate fabricated or skipped.
+
+#### Compatibility, rollout, recovery
+
+Planning-only -- zero schema/code dependency. `git revert` of this checkpoint's commit is trivially safe (removes only the WBS/execution-index documents, the doc-checker exclusion, and ledger updates).
+
+#### Errors found and fixed
+
+None requiring repair. One disclosed, transient, pre-commit-state test artifact (`checkWorktreeCollision`'s "branch has commits ahead of origin/main" assertion, expected to fail on a freshly checked-out branch with zero own commits and confirmed to clear once this checkpoint's own commit landed) -- not a defect in any capability, a property of this session's own starting git state.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-001` is `VERIFIED`. **`PHASE_4_IN_PROGRESS` is set this checkpoint.** `CG-S9-FIN-002` (Prompt 191, Finance Configuration) is `READY` and proceeds next, within this session's explicit authorized range.
+
+### CHG-2026-128 — Finance Configuration (Phase 4, Prompt 191)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-002` / `191_FINANCE_CONFIGURATION_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, portal guard, UI route |
+| Baseline evidence | `CG-S9-FIN-001` `VERIFIED` (`docs/build-log/phase-04/00_FINANCE_WBS.md`); `PLT-121` Configuration Engine `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- second task in that range |
+
+#### Outcome
+
+Tenant/company-scoped versioned Finance policy (accounting dimensions, document numbering, posting-map references, rounding rules, budget/accrual/recognition, close-policy baseline) reusing `PLT-121`'s Configuration Engine directly. Two-factor authority (`FIN:Edit`/`FIN:Approve` AND `tenant_admin`/Supreme, the latter inherited from the reused engine) discovered and disclosed, proven both directions in the db-test.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728200000_create_finance_configuration.sql`; `server/contracts/finance-config/finance-config.ts(.test.ts)`; `server/queries/finance-config.ts(.test.ts)`; `server/mutations/finance-config.ts(.test.ts)`; `lib/portal/finance-guard.ts`/`finance-guard-deps.server.ts`/`resolve-finance-access.server.ts`/`finance-guard.test.ts`; `app/(tenant)/[tenantSlug]/finance/config/page.tsx`/`actions.ts`/`finance-config-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-configuration.sql`; `docs/build-log/phase-04/FIN-191.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_CONFIG_VERSION_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `191`). 1 new migration, 0 prior migration edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1792/1792 (45 net new), `pnpm run db:test` PASS -- 72 migrations/73 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 57 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (6 new `config_types` rows, 1 new reference table, 11 new functions) -- dropping them is safe, no other capability depends on them yet. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Three fixture-authoring issues (UUID-range collision, invite-before-assign-role ordering, ambiguous-column join) -- see `docs/build-log/phase-04/FIN-191.md` §8. Zero defect in the migration's own logic once corrected. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-002` is `VERIFIED`. `CG-S9-FIN-003` (Prompt 192, Chart of Accounts) proceeds next, within this session's explicit authorized range.
+
+### CHG-2026-129 — Chart of Accounts (Phase 4, Prompt 192)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-003` / `192_CHART_OF_ACCOUNTS_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (incl. 1 `CREATE OR REPLACE FUNCTION` extension), service layer, UI route |
+| Baseline evidence | `CG-S9-FIN-002` `VERIFIED` (`docs/build-log/phase-04/FIN-191.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- third task in that range |
+
+#### Outcome
+
+Tenant/company-aware chart of accounts (canonical type/normal-balance matching, hierarchy, control/posting eligibility, draft/active/inactive lifecycle). Closes `FIN-191`'s own disclosed forward reference: `finance_posting_map` publish now validates every account-code reference against a real, active, postable `app.finance_accounts` row.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728210000_create_finance_chart_of_accounts.sql`; `server/contracts/chart-of-accounts/chart-of-accounts.ts(.test.ts)`; `server/queries/chart-of-accounts.ts(.test.ts)`; `server/mutations/chart-of-accounts.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/chart-of-accounts/page.tsx`/`actions.ts`/`chart-of-accounts-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-chart-of-accounts.sql`; `docs/build-log/phase-04/FIN-192.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_ACCOUNT_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `192`). 1 new migration (which itself `CREATE OR REPLACE FUNCTION`s `FIN-191`'s own `app.publish_finance_config_version`, the established later-migration-extends-an-earlier-one's-function pattern), 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1812/1812 (20 net new), `pnpm run db:test` PASS -- 73 migrations/74 db-test files (1 net new, zero regression, including `FIN-191`'s own file re-run unmodified), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 58 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (1 new table, 9 new functions) plus one `CREATE OR REPLACE FUNCTION` extension (reverting it restores `FIN-191`'s own prior publish behavior). `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+None -- zero implementation defect found during authoring. Zero regression to any prior capability, including `FIN-191`'s own db-test.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-003` is `VERIFIED`. `CG-S9-FIN-004` (Prompt 193, Fiscal Period) proceeds next, within this session's explicit authorized range.
+
+### CHG-2026-130 — Fiscal Period (Phase 4, Prompt 193)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-004` / `193_FISCAL_PERIOD_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 2 UI routes |
+| Baseline evidence | `CG-S9-FIN-003` `VERIFIED` (`docs/build-log/phase-04/FIN-192.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- fourth task in that range |
+
+#### Outcome
+
+Tenant/company fiscal calendars and a governed period lifecycle (open -> soft_closed -> closed, plus governed reopen) with a deterministic date-to-period resolver. Closes `FIN-191`'s `finance_close_policy` config class into a real consumer -- each generated period pins a governed checklist snapshot.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728220000_create_finance_fiscal_period.sql`; `server/contracts/fiscal-period/fiscal-period.ts(.test.ts)`; `server/queries/fiscal-period.ts(.test.ts)`; `server/mutations/fiscal-period.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/fiscal-periods/page.tsx`/`actions.ts`/`fiscal-period-forms.tsx`/`loading.tsx` and `.../[periodId]/page.tsx`/`loading.tsx`; `scripts/db-tests/finance-fiscal-period.sql`; `docs/build-log/phase-04/FIN-193.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_PERIOD_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `193`). 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1835/1835 (23 net new), `pnpm run db:test` PASS -- 74 migrations/75 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 60 routes (2 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (4 new tables, 11 new functions). `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+None -- zero implementation defect found during authoring. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-004` is `VERIFIED`. `CG-S9-FIN-005` (Prompt 194, Currency and Exchange Rate) proceeds next -- the final task within this session's explicit authorized range.
+
+### CHG-2026-131 — Currency and Exchange Rate (Phase 4, Prompt 194)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-005` / `194_CURRENCY_EXCHANGE_RATE_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (plus `CREATE OR REPLACE FUNCTION` on `PLT-119`'s own `app.validate_currency_code`), service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-004` `VERIFIED` (`docs/build-log/phase-04/FIN-193.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 190-194 in order -- fifth and final task in that range |
+
+#### Outcome
+
+A real, governed currency registry and versioned exchange-rate quotes (`draft -> approved -> archived`) with deterministic tenant-then-global resolution and a convert-preview service that never silently substitutes a stale/default/missing rate. Closes `PLT-119`'s own disclosed forward reference (widens `app.validate_currency_code` from its two-code placeholder to the real registry). Ties FX-conversion rounding into `FIN-191`'s own `finance_rounding` config rather than a second mechanism. This session's entire explicit authorized range (Prompts 190-194) is now fully complete.
+
+#### Scope and files
+
+New: `supabase/migrations/20260728230000_create_finance_currency_exchange_rate.sql`; `server/contracts/currency-exchange-rate/currency-exchange-rate.ts(.test.ts)`; `server/queries/currency-exchange-rate.ts(.test.ts)`; `server/mutations/currency-exchange-rate.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/exchange-rates/page.tsx`/`actions.ts`/`exchange-rate-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-currency-exchange-rate.sql`; `docs/build-log/phase-04/FIN-194.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_EXCHANGE_RATE_STATUS_TONE_MAP`); `scripts/db-tests/localization.sql` (corrected three stale `'EUR'`-as-unsupported-currency assertions to `'GBP'`, per this checkpoint's own real registry widening -- see Errors below); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `194`, plus header status note recording this session's entire authorized range as fully complete). 1 new migration, 0 prior migration file edited in place, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1868/1868 (33 net new), `pnpm run db:test` PASS -- 75 migrations/76 db-test files (1 net new, zero regression, one pre-existing Platform Core test corrected), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file (standing since `COM-151`), `npx next build` PASS -- 61 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 10 new functions), plus a strictly-additive `CREATE OR REPLACE FUNCTION` widening of `PLT-119`'s own `app.validate_currency_code` (every code it already accepted, IDR/USD, remains accepted; its `service_role`-only grant preserved untouched). `git revert` of this checkpoint's commit is safe and independent -- reverting `app.validate_currency_code` restores `PLT-119`'s own placeholder exactly.
+
+#### Errors found and fixed
+
+Two real defects found and fixed before commit (both via this checkpoint's own db-test, before any commit; full detail in `FIN-194.md` §3.2/§3.1): (1) `app.resolve_finance_exchange_rate` was declared as a bare composite return rather than `setof`, which silently broke `FOUND`-based missing-rate detection in `app.convert_finance_amount` -- fixed by declaring it `setof`. (2) the platform-wide-default (`tenant_id null`) authority path had no route to succeed -- fixed by falling back to Supreme Admin authority for a `null` tenant, mirroring `PLT-121`'s own global-scope precedent. One real regression found and fixed in a pre-existing Platform Core test (`scripts/db-tests/localization.sql`, three stale `'EUR'`-as-unsupported assertions corrected to `'GBP'`) -- a stale-assumption fix, not a weakening; zero coverage removed.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-005` is `VERIFIED`. This session's entire explicit authorized range (Finance Phase 4 Prompts 190-194) is now fully complete. `CG-S9-FIN-006` (Prompt 195, Configurable Tax Baseline) is dependency-eligible but **not authorized this session** -- fresh explicit user authorization is required before any further Phase 4 work begins.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

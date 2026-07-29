@@ -24,6 +24,10 @@ import type { ReportRunStatus } from "../../server/contracts/report/report.ts";
 import type { UserStatus } from "../../server/contracts/user-lifecycle/user-lifecycle.ts";
 import type { JobOrderStatus } from "../../server/contracts/job-order/job-order.ts";
 import type { ShipmentOrderStatus } from "../../server/contracts/shipment-order/shipment-order.ts";
+import type { ConfigVersionStatus } from "../../server/contracts/config/config.ts";
+import type { FinanceAccountStatus } from "../../server/contracts/chart-of-accounts/chart-of-accounts.ts";
+import type { FinancePeriodStatus } from "../../server/contracts/fiscal-period/fiscal-period.ts";
+import type { FinanceExchangeRateStatus } from "../../server/contracts/currency-exchange-rate/currency-exchange-rate.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -71,6 +75,34 @@ export const SALES_PLAN_STATUS_TONE_MAP: Record<SalesPlanStatus, StatusToneEntry
 export const MARGIN_RULE_STATUS_TONE_MAP: Record<MarginRuleStatus, StatusToneEntry> = {
   draft: { tone: "neutral", label: "Draft" },
   published: { tone: "success", label: "Published" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-191: Finance Configuration reuses PLT-121's own ConfigVersionStatus enum directly (draft/published/archived) -- one more independently-exhaustiveness-checked Record<...>, matching this file's own established "each domain gets its own Record" convention. */
+export const FINANCE_CONFIG_VERSION_STATUS_TONE_MAP: Record<ConfigVersionStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  published: { tone: "success", label: "Published" },
+  archived: { tone: "neutral", label: "Archived" },
+};
+
+/** FIN-192: Chart of Accounts' own draft/active/inactive lifecycle -- a real domain table, not the reused Configuration Engine, so its own three-state Record<...> (distinct from FINANCE_CONFIG_VERSION_STATUS_TONE_MAP's draft/published/archived above). */
+export const FINANCE_ACCOUNT_STATUS_TONE_MAP: Record<FinanceAccountStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  active: { tone: "success", label: "Active" },
+  inactive: { tone: "neutral", label: "Inactive" },
+};
+
+/** FIN-193: Fiscal Period's own open/soft_closed/closed lifecycle -- a real domain table, own three-state Record<...>, distinct from FIN-192's draft/active/inactive one. */
+export const FINANCE_PERIOD_STATUS_TONE_MAP: Record<FinancePeriodStatus, StatusToneEntry> = {
+  open: { tone: "success", label: "Open" },
+  soft_closed: { tone: "warning", label: "Soft-closed" },
+  closed: { tone: "neutral", label: "Closed" },
+};
+
+/** FIN-194: Currency Exchange Rate's own draft/approved/archived lifecycle -- versioned-quote status, distinct from FIN-191's config-version and FIN-192's account-lifecycle Record<...>s. */
+export const FINANCE_EXCHANGE_RATE_STATUS_TONE_MAP: Record<FinanceExchangeRateStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  approved: { tone: "success", label: "Approved" },
   archived: { tone: "neutral", label: "Archived" },
 };
 

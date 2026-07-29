@@ -3,9 +3,9 @@
 **Instance of:** `CG-AABPP-GOV-012`
 **Instance version:** `0.2.0`
 **Instance owner:** Runtime build agent (repository owner: asujiar@gmail.com / SAIKI Group)
-**Last updated:** 2026-07-15 (discovered and recorded `ERR-2026-003`; consolidated this file from multiple stacked entries into one coherent document — no facts lost, see `docs/runtime/CHANGE_MANIFEST.md` `CHG-2026-023`)
-**Last verified commit:** `origin/main`@`b7653cb` (merge of PR #11; contains PR #10's content too — see `ERR-2026-003`, content trust caveat below)
-**Context status:** `CURRENT`, but see §4/§10 — `docs/architecture/14..16_*.md` content is `NOT_TRUSTED` pending operator reconciliation
+**Last updated:** 2026-07-15 (discovered and recorded `ERR-2026-003`; consolidated this file from multiple stacked entries into one coherent document — no facts lost, see `docs/runtime/CHANGE_MANIFEST.md` `CHG-2026-023`); **§4/§10 refreshed 2026-07-28 at `CG-S9-FIN-001` (Prompt 190, Finance WBS and Runtime Kickoff)** — this file's own per-checkpoint delivery-context narrative was not kept current across Phases 1–3 (`docs/runtime/HANDOFF.md` §3 discloses the same gap for its own per-checkpoint narrative between `PLT-121` and `PLT-132`); `CARGOGRID_BUILD_STATUS.md`/`TASK_LEDGER.md` remained the live source of truth throughout and are reconciled with this file now.
+**Last verified commit:** this checkpoint's own commit, branch `claude/prompt-189-sd-184-gtivdr` (Phases 0–3 fully `VERIFIED` since; `ERR-2026-003` `RECOVERED` — see `ERROR_LEDGER.md`)
+**Context status:** `CURRENT` — `docs/architecture/14..16_*.md` reconciled to single coherent Lineage A documents (`ERR-2026-003` `RECOVERED`, 2026-07-15); §4/§10 below now reflect the Phase 4 kickoff checkpoint, not the historical Phase 0 blocker
 **Canonical context location:** `docs/runtime/` (decision `CHG-2026-002`; duplicate root-level set removed)
 
 > Single durable orientation point. Facts verified at the checkpoint above. There is no competing copy at repo root. This file previously accumulated duplicate "Last updated" headers and duplicate §5/§10 paragraphs from two divergent lineages merged without reconciliation — rewritten this checkpoint as one coherent document.
@@ -85,18 +85,20 @@ Tenant context preserved across DB/storage/cache/jobs/logs/search/reports/export
 
 ## 10. Current delivery context
 
+**[Corrected 2026-07-28 at `CG-S9-FIN-001` — this section previously described the 2026-07-15 `ERR-2026-003` Phase 0 halt, stale since Phase 0 closed twelve checkpoints ago; `CARGOGRID_BUILD_STATUS.md`/`TASK_LEDGER.md` remained the live source of truth throughout the gap, per this file's own header note.]**
+
 | Field | Value |
 |---|---|
-| Active phase/workstream | Step 3 Prompts 36–48 closed and trustworthy; Prompts 49–51 content-corrupted (`ERR-2026-003`); Phase 0 — Foundation `PHASE_0_IN_PROGRESS`, **halted** |
-| Current task | `CG-S5-PH0-004` — Repository Audit Adoption and Gap Closure — **would be next, but `BLOCKED`** |
-| Task status | `BLOCKED` — see `HANDOFF.md` §1/§4 |
-| Branch/commit | `agent/cargogrid-autonomous-build`, recreated from `origin/main`@`b7653cb` this checkpoint |
-| Last known good checkpoint (both lineages agree) | `origin/main`@`27389a4` (PR #8) |
-| Latest applied migration | none |
-| Last fully passing gate set | none (no gates exist; confirmed `UNKNOWN` baseline, not a failure) |
-| Active blockers | `ERR-2026-003` (Sev-1/Critical, `BLOCKED_DECISION`) |
-| Known issues affecting work | `ISS-2026-002` (5 occurrences, now Critical/blocking); `ISS-2026-003` (due at `PH0-087`, non-blocking for now); `ISS-2026-001` `RESOLVED` |
-| Next eligible task | **NONE until `ERR-2026-003` is resolved** — see `HANDOFF.md` §1 for the exact operator decision needed |
+| Active phase/workstream | Phases 0–3 all `VERIFIED` (Discovery/Foundation, Platform Core, Commercial, Operations). **Phase 4 — Finance is `PHASE_4_IN_PROGRESS`** (`CG-S9-FIN-001`, Prompt 190, WBS and Runtime Kickoff, `VERIFIED` this checkpoint) |
+| Current task | `CG-S9-FIN-001` `VERIFIED` this checkpoint; `CG-S9-FIN-002` (Prompt 191, Finance Configuration) is `READY` |
+| Task status | `VERIFIED` (kickoff/index only, zero Finance-domain schema/code) |
+| Branch/commit | `claude/prompt-189-sd-184-gtivdr`, this checkpoint's own commit |
+| Last known good checkpoint | this checkpoint's own commit (Phase 3 closure: `docs/build-log/phase-03/OPERATIONS_CLOSURE_REPORT.md`) |
+| Latest applied migration | 71 migrations applied (unchanged this checkpoint — kickoff adds zero schema) |
+| Last fully passing gate set | `typecheck`/`lint`/`test` (1747/1747)/`db:test` (71 migrations/72 files)/`next build` (56 routes) — all re-run fresh this checkpoint, see `docs/build-log/phase-04/00_FINANCE_WBS.md` §3/§9 |
+| Active blockers | **None.** `ERR-2026-003` `RECOVERED` since 2026-07-15; zero `OPEN` error, zero Critical/High-severity issue |
+| Known issues affecting work | none blocking Finance; see `KNOWN_ISSUES.md` for the two long-standing non-blocking Low/Medium issues (`ISS-2026-005`/`007`) |
+| Next eligible task | `CG-S9-FIN-002` (Prompt 191, Finance Configuration) — authorized this session, dependency-`READY` |
 
 ## 11. Active constraints and accepted risks
 

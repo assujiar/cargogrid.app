@@ -70,6 +70,18 @@ const PLANNING_DOCUMENT_EXCLUSIONS = new Set([
   // (`COMMERCIAL_EXECUTION_INDEX.md`, not `00_COMMERCIAL_EXECUTION_INDEX.md`).
   "docs/build-log/phase-02/COMMERCIAL_EXECUTION_INDEX.md",
   "docs/build-log/phase-02/00_COMMERCIAL_WBS.md",
+  // Same forward-referencing kickoff pair, two phases later still (CG-S9-FIN-001,
+  // Prompt 190 Finance WBS/Runtime Kickoff) — names FIN-191..218's not-yet-
+  // created build-log paths for the same structural reason. Unlike
+  // `OPERATIONS_EXECUTION_INDEX.md` (phase-03), which only backfills a row's
+  // `docs/build-log/phase-03/OPS-NNN.md` citation once that file exists in the
+  // very same commit, this phase's index cites the full 28-row catalogue's
+  // planned build-log paths up front at kickoff time (190_*.md's own required
+  // task 3: "map all 24 master Finance capabilities... to... atomic tasks"),
+  // so the forward-reference exclusion is needed here the same way it was for
+  // Phase 0/1/2's own kickoff pairs.
+  "docs/build-log/phase-04/00_FINANCE_WBS.md",
+  "docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md",
 ]);
 
 // Historical, append-only evidence records (build logs, and the checkpoints
