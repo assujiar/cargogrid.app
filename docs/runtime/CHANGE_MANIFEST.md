@@ -5293,6 +5293,40 @@ Zero implementation defect. Every fixture scenario passed on the first `db:test`
 
 Self-closing. `CG-S9-FIN-010` is `VERIFIED`. This checkpoint proceeds directly to `CG-S9-FIN-011` (Prompt 200, Vendor Bill) -- the final task in this session's explicit authorized range (Prompts 195-200).
 
+### CHG-2026-137 — Vendor Bill (Phase 4, Prompt 200)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-011` / `200_VENDOR_BILL_PROMPT.md` |
+| Change type | New capability -- 1 additive migration, service layer, 1 UI route |
+| Baseline evidence | `CG-S9-FIN-010` `VERIFIED` (`docs/build-log/phase-04/FIN-199.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 195-200 in order -- sixth and final task in that range |
+
+#### Outcome
+
+Vendor bills prepared from one verified, approved Operations actual cost -- the vendor-side mirror of FIN-197's own Invoice design: sums only the requested vendor's own components, computes basic-match variance disclosure (never itself blocking approval), an optional FIN-195 tax line, and idempotent, period-aware posting composing directly with FIN-199's own AP subledger. Vendor reference reuses OPS-172's own existing `master_records` vendor type -- no new vendor-identity table, no Step 11 scope smuggled in, no AI/OCR capture built.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729140000_create_finance_vendor_bill.sql`; `server/contracts/vendor-bill/vendor-bill.ts(.test.ts)`; `server/queries/vendor-bill.ts(.test.ts)`; `server/mutations/vendor-bill.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/vendor-bills/page.tsx`/`actions.ts`/`vendor-bill-forms.tsx`/`loading.tsx`; `scripts/db-tests/finance-vendor-bill.sql`; `docs/build-log/phase-04/FIN-200.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_VENDOR_BILL_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `200` `VERIFIED`, row `201`'s own resume_point updated to dependency-eligible-but-not-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 0 new permission-catalogue row.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors), `pnpm run test` PASS -- `node:test` 1979/1979 (18 net new), `pnpm run db:test` PASS -- 81 migrations/82 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` disclosed known false positive on the new migration file once staged (standing since `COM-151`), `npx next build` PASS -- 67 routes (1 new).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only (3 new tables, 8 new functions), zero prior migration function touched. `git revert` of this checkpoint's commit is safe and independent.
+
+#### Errors found and fixed
+
+Zero implementation defect in the migration itself. One genuine test-design gap found and fixed during this checkpoint's own authoring, before commit: the first draft of `scripts/db-tests/finance-vendor-bill.sql`'s "basic match" scenario group contained only a placeholder assertion with a comment inaccurately claiming the `requires_approval` variance branch was tested elsewhere -- fixed by adding two distinct, independent shipment/actual-cost/vendor fixtures and two real end-to-end assertions (full detail in `docs/build-log/phase-04/FIN-200.md` §8).
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-011` is `VERIFIED`. This session's entire explicit authorized range (Finance Phase 4 Prompts 195-200) is now fully complete. `CG-S9-FIN-012` (Prompt 201) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any Prompt 201 work begins.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
