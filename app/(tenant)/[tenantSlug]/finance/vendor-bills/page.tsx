@@ -5,7 +5,8 @@ import { listFinanceVendorBills, VendorBillQueryError } from "../../../../../ser
 import type { FinanceVendorBill } from "../../../../../server/contracts/vendor-bill/vendor-bill.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
-import { FINANCE_VENDOR_BILL_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { FINANCE_VENDOR_BILL_STATUS_TONE_MAP, FINANCE_LIFECYCLE_CANONICAL_STATE_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { resolveFinanceLifecycleEditability } from "../../../../../server/contracts/lifecycle/lifecycle-editability-matrix.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import {
@@ -69,6 +70,20 @@ export default async function VendorBillsPage({ params }: { params: Promise<{ te
       render: (bill) => {
         const { tone, label } = FINANCE_VENDOR_BILL_STATUS_TONE_MAP[bill.status];
         return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    {
+      key: "lifecycle",
+      header: "Lifecycle",
+      render: (bill) => {
+        const editability = resolveFinanceLifecycleEditability("vendor_bill", bill.status);
+        const { tone, label } = FINANCE_LIFECYCLE_CANONICAL_STATE_TONE_MAP[editability.canonicalState];
+        return (
+          <div className="flex flex-col gap-1">
+            <StatusBadge tone={tone} label={label} />
+            {editability.lockedReason ? <span className="text-xs text-text-secondary">{editability.lockedReason.replaceAll("_", " ")}</span> : null}
+          </div>
+        );
       },
     },
     {

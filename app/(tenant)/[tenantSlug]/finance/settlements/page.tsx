@@ -5,7 +5,8 @@ import { listFinanceSettlements, SettlementQueryError } from "../../../../../ser
 import type { FinanceSettlement } from "../../../../../server/contracts/settlement/settlement.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
-import { FINANCE_SETTLEMENT_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { FINANCE_SETTLEMENT_STATUS_TONE_MAP, FINANCE_LIFECYCLE_CANONICAL_STATE_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { resolveFinanceLifecycleEditability } from "../../../../../server/contracts/lifecycle/lifecycle-editability-matrix.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import {
@@ -70,6 +71,20 @@ export default async function SettlementsPage({ params }: { params: Promise<{ te
       render: (settlement) => {
         const { tone, label } = FINANCE_SETTLEMENT_STATUS_TONE_MAP[settlement.status];
         return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    {
+      key: "lifecycle",
+      header: "Lifecycle",
+      render: (settlement) => {
+        const editability = resolveFinanceLifecycleEditability("settlement", settlement.status);
+        const { tone, label } = FINANCE_LIFECYCLE_CANONICAL_STATE_TONE_MAP[editability.canonicalState];
+        return (
+          <div className="flex flex-col gap-1">
+            <StatusBadge tone={tone} label={label} />
+            {editability.lockedReason ? <span className="text-xs text-text-secondary">{editability.lockedReason.replaceAll("_", " ")}</span> : null}
+          </div>
+        );
       },
     },
     {

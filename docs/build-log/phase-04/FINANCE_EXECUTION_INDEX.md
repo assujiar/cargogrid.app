@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 201, 202, 203, 204, and 205 in order, each as its own commit. Row `201` is now instantiated with exact repository paths and marked `VERIFIED` below. Prompts 202-218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `202`-`205` are authorized this session and will be instantiated as each is completed; rows `206`-`218` remain `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 201, 202, 203, 204, and 205 in order, each as its own commit. Rows `201`-`205` are now all instantiated with exact repository paths and marked `VERIFIED` below -- this session's entire explicit authorized range is now fully complete. Prompts 206-218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `206`-`218` remain `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
 
 ## 0. Checkpoint
 
@@ -12,10 +12,10 @@
 | Working branch | `claude/prompt-201-205-u8sa38`, tracked to `origin/claude/prompt-201-205-u8sa38` this checkpoint |
 | HEAD at authoring time (pre-commit) | merge of PR #28 (Finance Phase 4 Prompts 190-200 `VERIFIED`) |
 | Worktree state | Clean except this checkpoint's own new Journal files and runtime-ledger updates |
-| Repository state | `FIN-191..203` (through Double-Entry Journal) all `VERIFIED`. `supabase/migrations/20260729180000_create_finance_posted_journal_integrity.sql` is new this checkpoint. |
-| Mutation performed by this document | Row `204` instantiated `VERIFIED`; row `205`'s own resume_point updated to reflect dependency-eligible and authorized; tally section updated |
+| Repository state | `FIN-191..204` (through Posted-Journal Integrity) all `VERIFIED`. `supabase/migrations/20260729190000_create_finance_lifecycle_state_control.sql` is new this checkpoint. |
+| Mutation performed by this document | Row `205` instantiated `VERIFIED`; row `206`'s own resume_point updated to reflect dependency-eligible but NOT authorized; checkpoint header and tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
-| User authorization | Explicit user instruction: "lanjut prompt 201-205" ("continue prompts 201-205") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted |
+| User authorization | Explicit user instruction: "lanjut prompt 201-205" ("continue prompts 201-205") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. **This session's entire authorized range is now fully complete as of this checkpoint.** |
 
 ## 1. Full execution index
 
@@ -453,19 +453,19 @@
 | `source_ids` | FIN-GL/AR/AP-001..004; master Phase 4 draft-versus-posted requirement |
 | `upstream` | FIN-196..204 |
 | `downstream` | FIN-206 |
-| `allowed_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
-| `forbidden_paths` | not instantiated yet (authorized this session; instantiated when this row's own checkpoint is authored) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-204 reached VERIFIED, so CG-S9-FIN-016 (Prompt 205) is now dependency-eligible; authorized this session -- proceeding next, the final task in this session's explicit authorized range |
+| `allowed_paths` | `supabase/migrations/20260729190000_create_finance_lifecycle_state_control.sql`; `server/contracts/lifecycle/`; `server/queries/lifecycle.ts`; `components/domain/status-tone-map.ts`; `app/(tenant)/[tenantSlug]/finance/{invoices,vendor-bills,receipts,settlements,subledger,journals}/page.tsx`; `docs/build-log/phase-04/FIN-205.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..204 migrations (extend via new migration only; zero prior migration file edited, zero existing function body changed) |
+| `migration_ids` | 1 additive migration (`app.finance_lifecycle_editability_matrix` reference table, 26 seed rows; `app.get_finance_lifecycle_editability`, `app.get_finance_lifecycle_record_state`) |
+| `api_contracts` | one new shared read (`get_finance_lifecycle_record_state`) composing each domain's own already-vetted `check_finance_*_authority('View', ...)` directly; no new mutation surface |
+| `access_controls` | `FIN:View` (composed per-domain, unchanged); the static reference table is world-readable to `authenticated` (no tenant_id column, mirrors FIN-194's own `finance_currencies` policy) |
+| `financial_invariants` | one canonical state (draft/in_review/approved/posted/corrected/discarded) and a deterministic allowed-actions list per real (entity_type, concrete_status) pair across all six Finance document types; posting state and accounting effect never diverge silently (no new posting path added); an unmapped/unsupported/nonexistent input is rejected with a distinct named exception, never a silent default (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries unit tests (14 net new); scripts/db-tests/finance-lifecycle-state-control.sql (static matrix completeness/correctness across all 26 rows, unmapped-state/unsupported-entity-type rejection, a real journal driven end-to-end through draft->submitted->approved->posted, a real settlement driven end-to-end through draft->submitted->approved->executed->posted->reversed proving the approved/executed canonical coarsening and the corrected terminal state, authority and cross-tenant denial, nonexistent-record rejection, schema-privilege defense in depth) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-205.md build log; db-test output (87 files, zero regression); node:test count delta (2032 -> 2046); next build (72 routes, unchanged) |
+| `rollback` | additive migration only; `git revert` removes the new reference table, its two functions, and the six UI pages' own new column, with zero data loss |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | This session's entire explicit authorized range (Prompts 201-205) is now fully complete. CG-S9-FIN-017 (Prompt 206, Reversal and Adjustment) is dependency-eligible per this index but NOT authorized this session -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds |
 
 ### Row `206` — Prompt 206, `CG-S9-FIN-017`
 
@@ -493,7 +493,7 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-203..205 reaching VERIFIED |
+| `resume_point` | FIN-203..205 all reached VERIFIED this session, so CG-S9-FIN-017 (Prompt 206) is now dependency-eligible; NOT authorized this session -- this session's explicit authorized range (Prompts 201-205) is now fully complete, and fresh explicit user authorization is required before any Prompt 206 work begins |
 
 ### Row `207` — Prompt 207, `CG-S9-FIN-018`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`204` are `VERIFIED`** (`204` this checkpoint). This session's explicit authorized range is Prompts 201-205; `205` is now dependency-eligible (`FIN-204` `VERIFIED`) and authorized this session -- proceeding next, the final task in this session's explicit authorized range. **`205`–`218` (14 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `206`–`218` additionally remain out of this session's authorized range.
+Of the 29 rows in this index (`190`–`218`): **`190`–`205` are `VERIFIED`** (`205` this checkpoint). This session's entire explicit authorized range (Prompts 201-205) is now fully complete. **`206`–`218` (13 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths, and remain out of this session's authorized range -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
 
 ## 3. Collision inspection
 

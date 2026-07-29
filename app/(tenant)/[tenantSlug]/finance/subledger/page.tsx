@@ -10,6 +10,9 @@ import {
 } from "../../../../../server/queries/subledger.ts";
 import type { FinanceSubledgerBatch, FinanceSubledgerLine, FinanceSubledgerReconciliationSummary } from "../../../../../server/contracts/subledger/subledger.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { FINANCE_LIFECYCLE_CANONICAL_STATE_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import { resolveFinanceLifecycleEditability } from "../../../../../server/contracts/lifecycle/lifecycle-editability-matrix.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 
@@ -61,6 +64,20 @@ export default async function SubledgerPage({
     { key: "currency", header: "Currency", render: (batch) => batch.currency },
     { key: "total", header: "Total", render: (batch) => batch.totalAmount },
     { key: "status", header: "Status", render: (batch) => batch.status },
+    {
+      key: "lifecycle",
+      header: "Lifecycle",
+      render: (batch) => {
+        const editability = resolveFinanceLifecycleEditability("subledger_batch", batch.status);
+        const { tone, label } = FINANCE_LIFECYCLE_CANONICAL_STATE_TONE_MAP[editability.canonicalState];
+        return (
+          <div className="flex flex-col gap-1">
+            <StatusBadge tone={tone} label={label} />
+            {editability.lockedReason ? <span className="text-xs text-text-secondary">{editability.lockedReason.replaceAll("_", " ")}</span> : null}
+          </div>
+        );
+      },
+    },
     { key: "glJournal", header: "GL journal", render: (batch) => batch.glJournalId ?? "(not yet linked -- FIN-203)" },
     { key: "postedAt", header: "Posted at", render: (batch) => batch.postedAt },
     { key: "view", header: "Lines", render: (batch) => <Link href={`?batchId=${batch.id}`}>View lines</Link> },
