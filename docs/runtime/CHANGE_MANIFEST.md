@@ -5497,6 +5497,244 @@ One db-test authoring collision, not an implementation defect: this checkpoint's
 
 Self-closing. `CG-S9-FIN-016` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 201-205; this is the fifth and final task in that range -- **this session's entire authorized range is now fully complete**. `CG-S9-FIN-017` (Prompt 206, Reversal and Adjustment) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
 
+### CHG-2026-143 — Reversal and Adjustment (Phase 4, Prompt 206)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-017` / `206_REVERSAL_ADJUSTMENT_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 6 new functions, 2 widened `CHECK` constraints, 1 function-signature extension), a new full service layer, a new UI route, 1 existing UI page gaining one link |
+| Baseline evidence | `CG-S9-FIN-016` `VERIFIED` (`docs/build-log/phase-04/FIN-205.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- first task in that range |
+
+#### Outcome
+
+Governed correction of a posted journal (FIN-203) through a new linked record, never a rewrite of normal-role history -- closing two disclosed forward references named by earlier checkpoints: FIN-203's own "reverse posted journal via FIN-206" and FIN-202's own reserved `finance_subledger_batches.status = 'reversed'`. One correction table (`app.finance_journal_corrections`) carries `draft -> submitted -> approved -> posted`/`discarded` for both a `reversal` (system-derived exact opposite lines of the original, capped at one active per original) and an `adjustment` (preparer-supplied lines, validated up front by FIN-203's own shared balance rule, uncapped). The original posted journal is never rewritten -- FIN-204's own triggers already make that impossible; posting a correction calls FIN-203's own shared system-journal posting path with `source_type = 'correction'`. A subledger-sourced reversal additionally marks its source batch `reversed`; the AR/AP open item balance itself is untouched, a disclosed bound (that remains FIN-196/199's own separately-governed reversal path).
+
+#### Scope and files
+
+New: `supabase/migrations/20260729200000_create_finance_reversal_adjustment.sql`; `scripts/db-tests/finance-reversal-adjustment.sql`; `server/contracts/journal-correction/journal-correction.ts(.test.ts)`; `server/queries/journal-correction.ts(.test.ts)`; `server/mutations/journal-correction.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/corrections/{page.tsx,actions.ts,correction-forms.tsx}`; `docs/build-log/phase-04/FIN-206.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_CORRECTION_STATUS_TONE_MAP`); `app/(tenant)/[tenantSlug]/finance/journals/page.tsx` (one added "Correct via FIN-206" link on posted rows); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `206` `VERIFIED`; row `207`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2066/2066 (20 net new), `pnpm run db:test` PASS -- 88 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 73 routes (1 new: `/[tenantSlug]/finance/corrections`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, six new functions, two `CHECK`-constraint replacements (both strictly widening, no existing row affected), and one function-signature extension whose prior overload was explicitly dropped rather than left dangling. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+Two real implementation snags found and fixed during authoring, before commit, both caught by a real `db:test` run rather than by design review alone: (1) appending a trailing parameter to `app.create_and_post_finance_system_journal` left the prior 9-argument overload in place alongside the new 10-argument one (`CREATE OR REPLACE FUNCTION` does not replace a function whose own signature changed), making FIN-202's own existing 9-argument call site ambiguous (`function ... is not unique`) -- fixed with an explicit `drop function if exists` immediately before the new `create function`. (2) two of FIN-203's own `CHECK` constraints (`finance_journals_source_type_check`, `finance_journals_source_check`) only recognized `manual`/`subledger`, rejecting the new `'correction'` source type -- fixed by dropping and re-adding each with an identical, strictly wider condition. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-017` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the first of five. `CG-S9-FIN-018` (Prompt 207, Period Lock and Governed Reopen) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
+### CHG-2026-144 — Period Lock and Governed Reopen (Phase 4, Prompt 207)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-018` / `207_PERIOD_LOCK_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (2 new tables, 9 new functions, 3 signature-unchanged `CREATE OR REPLACE FUNCTION` extensions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-017` `VERIFIED` (`docs/build-log/phase-04/FIN-206.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- second task in that range |
+
+#### Outcome
+
+Company/ledger/module-aware period locks (`app.finance_period_locks`) layered on top of FIN-193's own fiscal-period lifecycle, enforced by one authoritative guard (`app.assert_finance_period_open_for_posting`) that every GL-affecting posting path calls -- FIN-203's own `app.post_finance_journal` (manual) and `app.create_and_post_finance_system_journal` (system: subledger and FIN-206 correction), the only two chokepoints any posting path in this repository funnels through. `app.post_finance_subledger_batch` derives the real `ar`/`ap` scope from its own already-known `source_type` and threads it through. A reopen (`app.request_finance_period_reopen` -> `app.approve_finance_period_reopen`) is minimum-scope, reasoned, approved, and time-boxed; the guard treats an expired `reopen_window_expires_at` as still-locked even before an explicit `app.relock_finance_period` call, proven directly in the db-test by simulating expiry.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729210000_create_finance_period_lock.sql`; `scripts/db-tests/finance-period-lock.sql`; `server/contracts/period-lock/period-lock.ts(.test.ts)`; `server/queries/period-lock.ts(.test.ts)`; `server/mutations/period-lock.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/period-locks/{page.tsx,actions.ts,lock-forms.tsx}`; `docs/build-log/phase-04/FIN-207.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_PERIOD_LOCK_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `207` `VERIFIED`; row `208`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2081/2081 (15 net new), `pnpm run db:test` PASS -- 89 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 74 routes (1 new: `/[tenantSlug]/finance/period-locks`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: two new tables, nine new functions, and three `CREATE OR REPLACE FUNCTION` extensions each keeping its own prior signature byte-for-byte unchanged (function body only gained one new guard call each) -- deliberately avoiding the overload-ambiguity class of defect FIN-206 hit. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+Zero implementation defect found during authoring -- every fixture scenario, including the simulated reopen-window-expiry and cross-tenant/authority-denial paths, passed on the first `db:test` run. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-018` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the second of five. `CG-S9-FIN-019` (Prompt 208, Idempotent Posting) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
+### CHG-2026-145 — Idempotent Posting (Phase 4, Prompt 208)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-019` / `208_IDEMPOTENT_POSTING_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 5 new functions, 1 signature-unchanged `CREATE OR REPLACE FUNCTION` extension), a new read-only service layer, one pre-existing db-test assertion deliberately tightened |
+| Baseline evidence | `CG-S9-FIN-018` `VERIFIED` (`docs/build-log/phase-04/FIN-207.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- third task in that range |
+
+#### Outcome
+
+One shared idempotency claim ledger (`app.finance_idempotency_claims`) closes the one real gap left by five already-idempotent Finance domains (invoice, receipt allocation, vendor bill, settlement, journal): each already returned an unchanged original on a byte-identical retry, but none detected a *different* payload reusing the same key, silently returning the stale original instead of rejecting the mismatch. `app.claim_finance_idempotency_key` now closes that gap -- a fingerprint match returns the identical claim, a mismatch raises `finance_idempotency_fingerprint_conflict` before any domain row is written. Wired into FIN-203's own `app.create_finance_journal_draft` as the one real adopter this checkpoint; the other five domains keep their own existing behavior, a disclosed forward-integration bound matching the capability's own named end-state.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729220000_create_finance_idempotent_posting.sql`; `scripts/db-tests/finance-idempotent-posting.sql`; `server/contracts/idempotency/idempotency.ts(.test.ts)`; `server/queries/idempotency.ts(.test.ts)`; `docs/build-log/phase-04/FIN-208.md`. Modified: `server/mutations/journal.ts` and `server/mutations/journal-correction.ts` (each gained the newly-possible `finance_idempotency_fingerprint_conflict`/`finance_period_locked` error-code classifications); `scripts/db-tests/finance-journal.sql` (its own retry assertion split into an identical-retry-unchanged case and a mismatched-retry-rejected case); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `208` `VERIFIED`; row `209`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 0 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2087/2087 (6 net new), `pnpm run db:test` PASS -- 90 db-test files (1 net new, zero regression including the deliberately-tightened `finance-journal.sql` assertion), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 74 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, five new functions, one `CREATE OR REPLACE FUNCTION` extension keeping its own prior signature byte-for-byte unchanged. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited. The one pre-existing db-test file this checkpoint modified reverts alongside it without orphaning any other assertion.
+
+#### Errors found and fixed
+
+One real implementation snag found and fixed before commit: a pre-existing FIN-203 db-test deliberately retried the same idempotency_key with a genuinely different payload to prove the old, now-superseded "any retry returns the original" contract -- exactly the gap this checkpoint exists to close, so that assertion now correctly failed under the new, stricter contract. Fixed by splitting it into a byte-identical-retry assertion (still returns the original unchanged) and a mismatched-payload-retry assertion (now a named conflict) -- a disclosed, deliberate tightening, not a regression. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-019` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the third of five. `CG-S9-FIN-020` (Prompt 209, Reconciliation) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
+### CHG-2026-146 — Reconciliation (Phase 4, Prompt 209)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-020` / `209_RECONCILIATION_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (2 new tables, 7 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-019` `VERIFIED` (`docs/build-log/phase-04/FIN-208.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- fourth task in that range |
+
+#### Outcome
+
+A deterministic, as-of, certifiable reconciliation run formalizes FIN-202's own already-real live control-account comparison (`app.get_finance_subledger_reconciliation_summary`) into a persisted, governed workflow -- one aggregate control-account total compared against one aggregate open-item total per (scope, as-of date), with an exception opened when the variance exceeds a stated tolerance. Certification (`FIN:Approve`) requires zero open exceptions, each resolved independently (`FIN:Edit`) with a mandatory reason. Every function is strictly read-only against every source table -- reconciliation never silently writes a balance to force equality.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729230000_create_finance_reconciliation.sql`; `scripts/db-tests/finance-reconciliation.sql`; `server/contracts/reconciliation/reconciliation.ts(.test.ts)`; `server/queries/reconciliation.ts(.test.ts)`; `server/mutations/reconciliation.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/reconciliation/{page.tsx,actions.ts,reconciliation-forms.tsx}`; `docs/build-log/phase-04/FIN-209.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_RECONCILIATION_RUN_STATUS_TONE_MAP`/`FINANCE_RECONCILIATION_EXCEPTION_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `209` `VERIFIED`; row `210`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2102/2102 (15 net new), `pnpm run db:test` PASS -- 91 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 75 routes (1 new: `/[tenantSlug]/finance/reconciliation`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: two new tables, seven new functions, none of them ever mutating a source table (`app.finance_ar_open_items`/`app.finance_ap_open_items`/`app.finance_subledger_lines`). `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real implementation snag found and fixed before commit: `app.finance_subledger_batches` carries no direct business posting-date column (only `posted_at`, a wall-clock insert timestamp, and `posting_period_id`); an initial draft bounded the control-account side by `posted_at::date <= as_of_date`, which would have silently used insert time rather than business date. Fixed by joining `app.finance_fiscal_periods` and bounding by the resolved period's own `end_date <= as_of_date` instead, verified against a real db-test scenario spanning two distinct as-of dates before commit. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-020` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the fourth of five. `CG-S9-FIN-021` (Prompt 210, AR and AP Aging) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
+
+### CHG-2026-147 — AR and AP Aging (Phase 4, Prompt 210)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-021` / `210_AGING_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 9 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-020` `VERIFIED` (`docs/build-log/phase-04/FIN-209.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction naming Finance Phase 4 prompts 206-210 in order -- fifth and final task in that range |
+
+#### Outcome
+
+A derived, as-of AR/AP aging report and summary, with versioned, non-overlapping, contiguous bucket definitions (`app.finance_aging_bucket_configs`) -- never a stored summary balance. `app.validate_finance_aging_buckets` rejects every malformed bucket shape (empty set, missing field, first bucket not covering current, non-open-ended final bucket, gap/overlap) with a distinct named exception; a tenant with no configured override resolves to a disclosed system default (version 0), never a silent empty result. `app.get_finance_aging_summary` always reconciles exactly to `app.get_finance_aging_report`'s own detail rows, since it aggregates them directly.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729240000_create_finance_aging.sql`; `scripts/db-tests/finance-aging.sql`; `server/contracts/aging/aging.ts(.test.ts)`; `server/queries/aging.ts(.test.ts)`; `server/mutations/aging.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/aging/{page.tsx,actions.ts,aging-forms.tsx}`; `docs/build-log/phase-04/FIN-210.md`. Modified: `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `210` `VERIFIED`; row `211`'s own resume_point updated to dependency-eligible-but-not-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2115/2115 (13 net new), `pnpm run db:test` PASS -- 92 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 74 routes (1 new: `/[tenantSlug]/finance/aging`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, nine new functions, none of them ever mutating a source table. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One documentation-accuracy issue found and disclosed, not an implementation defect: a precise recount of the real `next build` route listing at this checkpoint found the actual pre-`FIN-210` count was 73 routes, not the 74/75 narrated across `FIN-206`-`FIN-209`'s own build-log prose -- an uncorrected arithmetic slip in text only, the underlying build artifact itself was always correct. Disclosed in `docs/build-log/phase-04/FIN-210.md` §3.1 rather than silently carried forward; not corrected retroactively in the already-pushed prior commits. Zero implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-021` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 206-210; this is the fifth and final task in that range -- **this session's entire authorized range is now fully complete**. `CG-S9-FIN-022` (Prompt 211, Cash and Bank Baseline) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` but **NOT authorized this session** -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
+
+### CHG-2026-148 — Cash and Bank Baseline (Phase 4, Prompt 211)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-022` / `211_CASH_BANK_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (3 new tables, 10 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-021` `VERIFIED` (`docs/build-log/phase-04/FIN-210.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd promp 213" naming Finance Phase 4 prompts 211-213 in order -- first task in that range |
+
+#### Outcome
+
+Bank/cash account control with masked account numbers only (`account_number_last4`, never a full account number), a staged idempotent statement import with real per-line deduplication (`app.finance_bank_transactions`'s own unique `(bank_account_id, line_hash)` index, not merely an application check), governed transaction matching (`FIN:Edit` matches, `FIN:Approve` governs an unmatch with a mandatory reason), and a reconciled cash position comparing the statement-derived balance against the shared `cash_default`-mapped GL account -- the identical account FIN-198's own receipt allocation and FIN-201's own settlement already post to. No live bank-provider adapter is built; statement ingestion is a caller-supplied, already-parsed batch.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729250000_create_finance_cash_bank.sql`; `scripts/db-tests/finance-cash-bank.sql`; `server/contracts/cash-bank/cash-bank.ts(.test.ts)`; `server/queries/cash-bank.ts(.test.ts)`; `server/mutations/cash-bank.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/cash-bank/{page.tsx,actions.ts,cash-bank-forms.tsx}`; `docs/build-log/phase-04/FIN-211.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_BANK_TRANSACTION_MATCH_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `211` `VERIFIED`; row `212`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2132/2132 (17 net new), `pnpm run db:test` PASS -- 93 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 75 routes (1 new: `/[tenantSlug]/finance/cash-bank`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: three new tables, ten new functions, none of them ever mutating a source table outside their own domain. `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real implementation snag found and fixed before commit: `app.get_finance_cash_position`'s own `RETURNS TABLE` column name `bank_account_id` collided with the identical column name on `app.finance_bank_transactions` inside the function body, producing a genuine ambiguous-column-reference error caught by the first `db:test` run -- fixed by qualifying the query with an explicit table alias. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-022` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 211-213; this is the first of three. `CG-S9-FIN-023` (Prompt 212, Financial Profitability) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next.
+
+### CHG-2026-149 — Job, Customer and Service Profitability (Phase 4, Prompt 212)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S9-FIN-023` / `212_FINANCIAL_PROFITABILITY_PROMPT.md` |
+| Change type | New capability -- 1 additive migration (1 new table, 5 new functions), a new full service layer, a new UI route |
+| Baseline evidence | `CG-S9-FIN-022` `VERIFIED` (`docs/build-log/phase-04/FIN-211.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd promp 213" naming Finance Phase 4 prompts 211-213 in order -- second task in that range |
+
+#### Outcome
+
+A versioned, Finance-grade profitability fact per Job Order: billed revenue -- the actual amount from every `issued` `app.finance_invoices` row (`subtotal_amount`, excluding tax) -- minus approved actual cost, reusing OPS-178's own governed actual-cost evidence directly (the same source OPS-179's own operational snapshot already reads, but never OPS-179's own Commercial-estimate `revenue_snapshot`). A named `blocked_reason` (`no_billed_revenue`, `no_approved_cost`, or `mixed_currency`) surfaces rather than a fabricated figure whenever revenue/cost is missing or currencies do not reconcile. Grouped, currency-safe aggregation by customer/branch/service sums only calculated, current facts -- a blocked fact is excluded, never guessed into a total. Every read is denied outright (no partial result) without `FIN:View margin` -- the fact table grants `authenticated` zero table privilege at all, stricter than OPS-179's own base-table grant.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729260000_create_finance_job_profitability.sql`; `scripts/db-tests/finance-job-profitability.sql`; `server/contracts/profitability/profitability.ts(.test.ts)`; `server/queries/profitability.ts(.test.ts)`; `server/mutations/profitability.ts(.test.ts)`; `app/(tenant)/[tenantSlug]/finance/profitability/{page.tsx,actions.ts,profitability-forms.tsx}`; `docs/build-log/phase-04/FIN-212.md`. Modified: `components/domain/status-tone-map.ts` (added `FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP`); `docs/build-log/phase-04/FINANCE_EXECUTION_INDEX.md` (row `212` `VERIFIED`; row `213`'s own resume_point updated to dependency-eligible-and-authorized); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration, 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 75 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2144/2144 (12 net new), `pnpm run db:test` PASS -- 94 db-test files (1 net new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `pnpm run git:check-paths` clean, `npx next build` PASS -- 76 routes (1 new: `/[tenantSlug]/finance/profitability`).
+
+#### Compatibility, rollout, recovery
+
+Additive migration only: one new table, five new functions, none of them ever mutating a source table outside their own domain (revenue/cost are read-only from `app.finance_invoices`/`app.shipment_actual_costs`, never written). `git revert` of this checkpoint's commit removes all of it cleanly; no prior migration file was edited.
+
+#### Errors found and fixed
+
+One real db-test authorization defect found and fixed before commit: a tenant B Finance Manager role carrying the protected `FIN:View margin` permission was initially self-assigned in the fixture, correctly rejected by `app.assign_role`'s own pre-existing `self_escalation` guard -- fixed by introducing a distinct Admin B actor to perform the assignment, mirroring `OPS-179`'s own db-test precedent for the identical action. Zero other implementation defect. Zero Critical/High-severity issue. Zero regression to any prior capability.
+
+#### Approval and closure
+
+Self-closing. `CG-S9-FIN-023` is `VERIFIED`. This session's explicit authorized range is Finance Phase 4 Prompts 211-213; this is the second of three. `CG-S9-FIN-024` (Prompt 213, Finance Dashboard and Reports) is dependency-eligible per `FINANCE_EXECUTION_INDEX.md` and authorized this session -- proceeding next, the final task in this session's range.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

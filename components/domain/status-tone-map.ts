@@ -36,7 +36,12 @@ import type { FinanceApOpenItemStatus } from "../../server/contracts/accounts-pa
 import type { FinanceVendorBillStatus } from "../../server/contracts/vendor-bill/vendor-bill.ts";
 import type { FinanceSettlementStatus } from "../../server/contracts/settlement/settlement.ts";
 import type { FinanceJournalStatus } from "../../server/contracts/journal/journal.ts";
+import type { FinanceCorrectionStatus } from "../../server/contracts/journal-correction/journal-correction.ts";
+import type { FinancePeriodLockStatus } from "../../server/contracts/period-lock/period-lock.ts";
+import type { FinanceReconciliationRunStatus, FinanceReconciliationExceptionStatus } from "../../server/contracts/reconciliation/reconciliation.ts";
+import type { FinanceBankTransactionMatchStatus } from "../../server/contracts/cash-bank/cash-bank.ts";
 import type { FinanceLifecycleCanonicalState } from "../../server/contracts/lifecycle/lifecycle.ts";
+import type { FinanceProfitabilityStatus } from "../../server/contracts/profitability/profitability.ts";
 
 export interface StatusToneEntry {
   readonly tone: StatusTone;
@@ -178,6 +183,40 @@ export const FINANCE_JOURNAL_STATUS_TONE_MAP: Record<FinanceJournalStatus, Statu
   approved: { tone: "warning", label: "Approved" },
   posted: { tone: "success", label: "Posted" },
   void: { tone: "danger", label: "Void" },
+};
+
+export const FINANCE_BANK_TRANSACTION_MATCH_STATUS_TONE_MAP: Record<FinanceBankTransactionMatchStatus, StatusToneEntry> = {
+  unmatched: { tone: "warning", label: "Unmatched" },
+  matched: { tone: "success", label: "Matched" },
+};
+
+export const FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP: Record<FinanceProfitabilityStatus, StatusToneEntry> = {
+  calculated: { tone: "success", label: "Calculated" },
+  unavailable: { tone: "warning", label: "Unavailable" },
+};
+
+export const FINANCE_RECONCILIATION_RUN_STATUS_TONE_MAP: Record<FinanceReconciliationRunStatus, StatusToneEntry> = {
+  completed: { tone: "info", label: "Completed" },
+  certified: { tone: "success", label: "Certified" },
+};
+
+export const FINANCE_RECONCILIATION_EXCEPTION_STATUS_TONE_MAP: Record<FinanceReconciliationExceptionStatus, StatusToneEntry> = {
+  open: { tone: "danger", label: "Open" },
+  resolved: { tone: "success", label: "Resolved" },
+};
+
+export const FINANCE_PERIOD_LOCK_STATUS_TONE_MAP: Record<FinancePeriodLockStatus, StatusToneEntry> = {
+  locked: { tone: "danger", label: "Locked" },
+  reopen_requested: { tone: "warning", label: "Reopen requested" },
+  reopened: { tone: "info", label: "Reopened" },
+};
+
+export const FINANCE_CORRECTION_STATUS_TONE_MAP: Record<FinanceCorrectionStatus, StatusToneEntry> = {
+  draft: { tone: "neutral", label: "Draft" },
+  submitted: { tone: "info", label: "Submitted" },
+  approved: { tone: "warning", label: "Approved" },
+  posted: { tone: "success", label: "Posted" },
+  discarded: { tone: "neutral", label: "Discarded" },
 };
 
 /** FIN-205: the one shared canonical-state vocabulary across invoice/vendor_bill/receipt/settlement/subledger_batch/journal (`app.finance_lifecycle_editability_matrix`) -- rendered alongside each domain's own concrete-status badge above, never replacing it, since the canonical bucket deliberately coarsens some domain-specific detail (e.g. a settlement's own 'approved' and 'executed' concrete statuses both render this same 'Approved' canonical tone). */

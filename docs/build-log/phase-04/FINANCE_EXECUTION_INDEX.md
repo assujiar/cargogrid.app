@@ -2,20 +2,20 @@
 
 **Prompt:** `CG-S9-FIN-001` (`CG-AABPP-FIN-190` v0.10.0)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/09-phase-04-finance/190_FINANCE_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 201, 202, 203, 204, and 205 in order, each as its own commit. Rows `201`-`205` are now all instantiated with exact repository paths and marked `VERIFIED` below -- this session's entire explicit authorized range is now fully complete. Prompts 206-218 remain mapped (workstream/epic/capability/feature-slice/source/dependency) per `190_*.md` required task 3; rows `206`-`218` remain `NOT_STARTED`/`BLOCKED` — not authorized this session, and not instantiated with exact file paths (the same discipline `OPERATIONS_EXECUTION_INDEX.md` applied to its own out-of-range rows).
+**Status:** `PHASE_4_IN_PROGRESS` — a fresh explicit user authorization named Prompts 211, 212, and 213 in order ("lanjut sd promp 213" -- continue through prompt 213), each as its own commit, following the fully-complete Prompts 206-210 range. Rows `211`-`212` are now instantiated with exact repository paths and marked `VERIFIED` below. Prompt 213 remains to be instantiated within this same authorized range; rows `214`-`218` remain `NOT_STARTED`/`BLOCKED`, out of this session's authorized range.
 
 ## 0. Checkpoint
 
 | Field | Value |
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
-| Working branch | `claude/prompt-201-205-u8sa38`, tracked to `origin/claude/prompt-201-205-u8sa38` this checkpoint |
-| HEAD at authoring time (pre-commit) | merge of PR #28 (Finance Phase 4 Prompts 190-200 `VERIFIED`) |
-| Worktree state | Clean except this checkpoint's own new Journal files and runtime-ledger updates |
-| Repository state | `FIN-191..204` (through Posted-Journal Integrity) all `VERIFIED`. `supabase/migrations/20260729190000_create_finance_lifecycle_state_control.sql` is new this checkpoint. |
-| Mutation performed by this document | Row `205` instantiated `VERIFIED`; row `206`'s own resume_point updated to reflect dependency-eligible but NOT authorized; checkpoint header and tally section updated |
+| Working branch | `claude/prompt-206-210-dpxtmu` (continued -- the prior range's own branch was not yet merged when this fresh authorization arrived), tracked to `origin/claude/prompt-206-210-dpxtmu` this checkpoint |
+| HEAD at authoring time (pre-commit) | this session's own `CG-S9-FIN-022` (Prompt 211, Cash and Bank Baseline) commit |
+| Worktree state | Clean except this checkpoint's own new Job, Customer and Service Profitability files and runtime-ledger updates |
+| Repository state | `FIN-191..211` (through Cash and Bank Baseline) all `VERIFIED`. `supabase/migrations/20260729260000_create_finance_job_profitability.sql` is new this checkpoint. |
+| Mutation performed by this document | Row `212` instantiated `VERIFIED`; row `213`'s own resume_point updated to reflect dependency-eligible and authorized this session; checkpoint header and tally section updated |
 | Pre-flight collision check | `git status --short --branch` clean; single-session, single-branch, no collision risk |
-| User authorization | Explicit user instruction: "lanjut prompt 201-205" ("continue prompts 201-205") — a scoped, multi-task, named-endpoint authorization, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. **This session's entire authorized range is now fully complete as of this checkpoint.** |
+| User authorization | Explicit user instruction: "lanjut sd promp 213" ("continue through prompt 213") — a scoped, multi-task, named-endpoint authorization covering Prompts 211-213, the same class `OPERATIONS_EXECUTION_INDEX.md` §0 already accepted. |
 
 ## 1. Full execution index
 
@@ -481,19 +481,19 @@
 | `source_ids` | FIN-GL-001..004; FIN-AR/AP; INV-005; financial correction guardrail |
 | `upstream` | FIN-203..205 |
 | `downstream` | FIN-207 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | FIN-203..205 all reached VERIFIED this session, so CG-S9-FIN-017 (Prompt 206) is now dependency-eligible; NOT authorized this session -- this session's explicit authorized range (Prompts 201-205) is now fully complete, and fresh explicit user authorization is required before any Prompt 206 work begins |
+| `allowed_paths` | `supabase/migrations/20260729200000_create_finance_reversal_adjustment.sql`; `server/contracts/journal-correction/`; `server/queries/journal-correction.ts`; `server/mutations/journal-correction.ts`; `app/(tenant)/[tenantSlug]/finance/corrections/**`; `app/(tenant)/[tenantSlug]/finance/journals/page.tsx` (one added link); `components/domain/status-tone-map.ts` (one added tone map); `docs/build-log/phase-04/FIN-206.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..205 migrations (extend via new migration/`CREATE OR REPLACE FUNCTION` only; the one signature-changing extension explicitly drops its own prior overload first, disclosed in FIN-206.md §3.1) |
+| `migration_ids` | 1 additive migration (`app.finance_journal_corrections` table; 6 new functions; 2 `CHECK`-constraint replacements on `app.finance_journals` widening `source_type`/`source_check` to include `'correction'`; 1 function-signature extension of FIN-203's own `app.create_and_post_finance_system_journal`) |
+| `api_contracts` | shared prepare-reversal/prepare-adjustment/submit/discard/approve/post/list/read-chain service layer |
+| `access_controls` | `FIN:Edit` (prepare reversal/adjustment, submit, discard), `FIN:Approve` (approve, post), `FIN:View` (list, read-chain) |
+| `financial_invariants` | at most one active reversal per original posted journal; an adjustment's own lines must already balance (FIN-203's own shared rule); the original posted journal is never rewritten (FIN-204's own triggers already enforce this); a reversal's own lines are the exact opposite of the original's stored lines, never independently entered; idempotent prepare and idempotent post (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (20 net new); scripts/db-tests/finance-reversal-adjustment.sql (authority/precondition rejection, idempotent prepare, duplicate-active-reversal rejection, lifecycle authority split, idempotent post, exact-opposite-lines proof with the original left unchanged, unbalanced-adjustment rejection, a second independent adjustment, discard boundary, subledger-batch-reversed proof, cross-tenant isolation, schema-privilege defense in depth, audit trail) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-206.md build log; db-test output (88 files, zero regression); node:test count delta (2046 -> 2066); next build (73 routes) |
+| `rollback` | additive migration only; both `CHECK`-constraint replacements strictly widen (no existing row affected); the one function-signature extension's prior overload is explicitly dropped, not left dangling; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-018 (Prompt 207, Period Lock and Governed Reopen) is dependency-eligible and authorized this session -- next |
 
 ### Row `207` — Prompt 207, `CG-S9-FIN-018`
 
@@ -509,19 +509,19 @@
 | `source_ids` | FIN-CLS-001..004; FIN-GL; master Phase 4 period-lock requirement |
 | `upstream` | FIN-193 + FIN-203..206 |
 | `downstream` | FIN-208 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-193 + FIN-203..206 reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729210000_create_finance_period_lock.sql`; `server/contracts/period-lock/`; `server/queries/period-lock.ts`; `server/mutations/period-lock.ts`; `app/(tenant)/[tenantSlug]/finance/period-locks/**`; `components/domain/status-tone-map.ts` (one added tone map); `docs/build-log/phase-04/FIN-207.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..206 migrations (extend via new migration/`CREATE OR REPLACE FUNCTION` only; every extension in this checkpoint keeps its own prior function signature unchanged) |
+| `migration_ids` | 1 additive migration (`app.finance_period_locks`, `app.finance_period_lock_events`; 9 new functions including the one authoritative guard; 3 `CREATE OR REPLACE FUNCTION` extensions of FIN-203's own `post_finance_journal`/`create_and_post_finance_system_journal` and FIN-202/203's own `post_finance_subledger_batch`, each signature-unchanged) |
+| `api_contracts` | shared lock/request-reopen/approve-reopen/relock/list/read-events service layer |
+| `access_controls` | `FIN:Approve` (lock, approve-reopen, relock), `FIN:Edit` (request-reopen), `FIN:View` (list, read-events) |
+| `financial_invariants` | period lock is authoritative at the database layer, enforced by every GL-affecting posting chokepoint, never UI-only; a reopen is minimum-scope/time, approved, reasoned and audited, and the guard treats an expired window as still-locked even before an explicit re-lock; RPD-022 exception disclosed, not re-implemented (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (15 net new); scripts/db-tests/finance-period-lock.sql (authority/validation rejection, guard blocking manual/system posting once locked, idempotent lock, cross-tenant isolation, full governed reopen cycle including simulated window expiry and explicit re-lock, unrelated-scope non-interference, schema-privilege defense in depth, audit trail) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-207.md build log; db-test output (89 files, zero regression); node:test count delta (2066 -> 2081); next build (74 routes) |
+| `rollback` | additive migration only; every `CREATE OR REPLACE FUNCTION` extension keeps its own prior signature unchanged; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-019 (Prompt 208, Idempotent Posting) is dependency-eligible and authorized this session -- next |
 
 ### Row `208` — Prompt 208, `CG-S9-FIN-019`
 
@@ -537,19 +537,19 @@
 | `source_ids` | FIN-GL/AR/AP-001..004; INV-011; master Phase 4 idempotent-posting requirement |
 | `upstream` | FIN-197..207 |
 | `downstream` | FIN-209 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-197..207 reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729220000_create_finance_idempotent_posting.sql`; `server/contracts/idempotency/`; `server/queries/idempotency.ts`; `server/mutations/journal.ts` (error-code classification only); `server/mutations/journal-correction.ts` (error-code classification only); `scripts/db-tests/finance-journal.sql` (retry assertion tightened); `docs/build-log/phase-04/FIN-208.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..207 migrations (extend via new migration/`CREATE OR REPLACE FUNCTION` only; the one extension in this checkpoint keeps its own prior function signature unchanged) |
+| `migration_ids` | 1 additive migration (`app.finance_idempotency_claims`; 5 new functions including the one shared claim primitive; 1 `CREATE OR REPLACE FUNCTION` extension of FIN-203's own `app.create_finance_journal_draft`, signature-unchanged) |
+| `api_contracts` | one shared read (`get_finance_idempotency_claim`); `claim`/`complete`/`fail` are internal building blocks, not a standalone client-facing mutation surface this checkpoint |
+| `access_controls` | `FIN:View` (read claim status); `claim`/`complete`/`fail` require only an active tenant membership, relying on the calling domain function's own already-checked `FIN:Edit`/`FIN:Approve` |
+| `financial_invariants` | one stable scoped idempotency key maps to exactly one canonical request fingerprint; a fingerprint-matching retry returns the identical prior result; a mismatch is a named conflict, never a silent overwrite or a second effect (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries unit tests (6 net new); scripts/db-tests/finance-idempotent-posting.sql (claim/retry/conflict, idempotent complete, fail-rejects-completed, authority-gated read raising for an unknown key, the real adopter's own end-to-end proof, cross-tenant isolation, schema-privilege defense in depth); scripts/db-tests/finance-journal.sql's own retry assertion split into an identical-retry-unchanged case and a mismatched-retry-rejected case |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-208.md build log; db-test output (90 files, zero regression); node:test count delta (2081 -> 2087) |
+| `rollback` | additive migration only; the one `CREATE OR REPLACE FUNCTION` extension keeps its own prior signature unchanged; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-020 (Prompt 209, Reconciliation) is dependency-eligible and authorized this session -- next |
 
 ### Row `209` — Prompt 209, `CG-S9-FIN-020`
 
@@ -565,19 +565,19 @@
 | `source_ids` | FIN-GL/AR/AP/TAX-001..004; Phase 4 reconciliation requirement; FINTEST financial scenarios |
 | `upstream` | FIN-196..208 (FIN-211 later adds bank/cash inputs) |
 | `downstream` | FIN-210 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-196..208 (FIN-211 later adds bank/cash inputs) reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729230000_create_finance_reconciliation.sql`; `server/contracts/reconciliation/`; `server/queries/reconciliation.ts`; `server/mutations/reconciliation.ts`; `app/(tenant)/[tenantSlug]/finance/reconciliation/**`; `components/domain/status-tone-map.ts` (two added tone maps); `docs/build-log/phase-04/FIN-209.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..208 migrations (extend via new migration only; zero prior migration file edited, zero existing function body changed) |
+| `migration_ids` | 1 additive migration (`app.finance_reconciliation_runs`, `app.finance_reconciliation_exceptions`; 7 new functions including the deterministic engine) |
+| `api_contracts` | shared execute/resolve-exception/certify/list-runs/list-exceptions service layer |
+| `access_controls` | `FIN:Edit` (execute a run, resolve an exception), `FIN:Approve` (certify), `FIN:View` (list) |
+| `financial_invariants` | reconciliation never silently writes a balance to force equality (strictly read-only against every source table); certification requires zero open exceptions and an independent authority; every certified result is reproducible from its own exact scope/as-of/tolerance (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (15 net new); scripts/db-tests/finance-reconciliation.sql (authority/validation rejection, a real posted batch driving a real control-account balance, a real open item reconciling exactly as of period-end, a later open item opening exactly one exception once as-of extends past it, certification blocked-then-succeeding with the full authority split, as-of-date bounding, cross-tenant isolation, schema-privilege defense in depth, audit trail) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-209.md build log; db-test output (91 files, zero regression); node:test count delta (2087 -> 2102); next build (75 routes) |
+| `rollback` | additive migration only; every function is strictly read-only against every source table; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-021 (Prompt 210, AR and AP Aging) is dependency-eligible and authorized this session -- next, the final task in this session's explicit authorized range |
 
 ### Row `210` — Prompt 210, `CG-S9-FIN-021`
 
@@ -593,19 +593,19 @@
 | `source_ids` | FIN-AR-004, FIN-AP-004; master Phase 4 aging requirement |
 | `upstream` | FIN-196, FIN-198..201, FIN-206, FIN-209 |
 | `downstream` | FIN-211 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-196, FIN-198..201, FIN-206, FIN-209 reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729240000_create_finance_aging.sql`; `server/contracts/aging/`; `server/queries/aging.ts`; `server/mutations/aging.ts`; `app/(tenant)/[tenantSlug]/finance/aging/**`; `docs/build-log/phase-04/FIN-210.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..209 migrations (extend via new migration only; zero prior migration file edited, zero existing function body changed) |
+| `migration_ids` | 1 additive migration (`app.finance_aging_bucket_configs`; 9 new functions including the deterministic as-of report/summary engine) |
+| `api_contracts` | shared set-bucket-config/resolve-buckets/report/summary/list-configs service layer |
+| `access_controls` | `FIN:Approve` (set bucket configuration -- a governance decision, not a routine edit), `FIN:View` (report, summary, list) |
+| `financial_invariants` | aging is derived, never manually editable; bucket boundaries are explicit, non-overlapping, contiguous and versioned; summary always equals authorized detail and reconciles to the same open-item rows (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (13 net new); scripts/db-tests/finance-aging.sql (bucket-config structural validation, system-default resolution, governed versioned config change, real open items bucketing correctly, summary-reconciles-to-detail, held-item inclusion/exclusion, paid-item exclusion, as-of-date bounding, cross-tenant isolation, schema-privilege defense in depth, audit trail) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-210.md build log; db-test output (92 files, zero regression); node:test count delta (2102 -> 2115); next build (74 routes) |
+| `rollback` | additive migration only; every read function is strictly read-only against every source table; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | This session's entire explicit authorized range (Prompts 206-210) is now fully complete. CG-S9-FIN-022 (Prompt 211, Cash and Bank Baseline) is dependency-eligible per this index but NOT authorized this session -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds |
 
 ### Row `211` — Prompt 211, `CG-S9-FIN-022`
 
@@ -621,19 +621,19 @@
 | `source_ids` | FIN-TAX-001..004; master Phase 4 cash-and-bank requirement; RPD-038 |
 | `upstream` | FIN-191..195, FIN-198/201, FIN-208; reconciliation FIN-209 |
 | `downstream` | FIN-212 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..195, FIN-198/201, FIN-208; reconciliation FIN-209 reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729250000_create_finance_cash_bank.sql`; `server/contracts/cash-bank/`; `server/queries/cash-bank.ts`; `server/mutations/cash-bank.ts`; `app/(tenant)/[tenantSlug]/finance/cash-bank/**`; `components/domain/status-tone-map.ts` (one added tone map); `docs/build-log/phase-04/FIN-211.md` |
+| `forbidden_paths` | any Step 10/11/13 file; FIN-191..210 migrations (extend via new migration only; zero prior migration file edited, zero existing function body changed); no live bank/payment-provider adapter |
+| `migration_ids` | 1 additive migration (`app.finance_bank_accounts`, `app.finance_bank_statement_batches`, `app.finance_bank_transactions`; 10 new functions) |
+| `api_contracts` | shared create-account/import-statement/match/unmatch/position/list service layer |
+| `access_controls` | `FIN:Approve` (bank-account creation, governed unmatch), `FIN:Edit` (statement import, match), `FIN:View` (list, position) |
+| `financial_invariants` | bank account numbers are masked at rest (last 1-4 characters only); every statement line is deduplicated by a real unique index, never merely an application check; cash position reconciles the statement-derived balance against the shared cash_default-mapped GL account, never a direct summary-balance edit (per 189_FINANCE_README.md §5/§6) |
+| `tests` | contracts/queries/mutations unit tests (17 net new); scripts/db-tests/finance-cash-bank.sql (creation authority/validation, idempotent import, real per-line deduplication, match/unmatch authority split and validation, a real posted receipt allocation reconciling exactly against a matching bank transaction, cross-tenant isolation, schema-privilege defense in depth, audit trail) |
+| `commands` | typecheck, lint, test, db:test, docs:check, security:check, data-classification:check, threat-model:check, standards:check, git:check-paths, next build |
+| `evidence` | FIN-211.md build log; db-test output (93 files, zero regression); node:test count delta (2115 -> 2132); next build (75 routes) |
+| `rollback` | additive migration only; `git revert` removes all of it cleanly |
+| `owner` | Runtime build agent |
+| `status` | VERIFIED |
+| `resume_point` | CG-S9-FIN-023 (Prompt 212, Financial Profitability) is dependency-eligible and authorized this session -- next |
 
 ### Row `212` — Prompt 212, `CG-S9-FIN-023`
 
@@ -649,19 +649,19 @@
 | `source_ids` | FIN-PRF-001..004; OPS-CST-001..004 finance depth; BR-FIN-PRF |
 | `upstream` | FIN-191..211 + Operations actual-cost/basic-profitability evidence |
 | `downstream` | FIN-213 |
-| `allowed_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `forbidden_paths` | not instantiated (BLOCKED, out of this session's authorized range) |
-| `migration_ids` | not instantiated |
-| `api_contracts` | not instantiated |
-| `access_controls` | not instantiated |
-| `financial_invariants` | per 189_FINANCE_README.md §5/§6 (balanced/exact-decimal/idempotent/period-aware/reconcilable, applied once instantiated) |
-| `tests` | not instantiated |
-| `commands` | not instantiated |
-| `evidence` | not instantiated |
-| `rollback` | not instantiated |
-| `owner` | unassigned |
-| `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..211 + Operations actual-cost/basic-profitability evidence reaching VERIFIED |
+| `allowed_paths` | `supabase/migrations/20260729260000_create_finance_job_profitability.sql`; `server/contracts/profitability/`; `server/queries/profitability.ts`; `server/mutations/profitability.ts`; `app/(tenant)/[tenantSlug]/finance/profitability/**`; `components/domain/status-tone-map.ts` (one added tone map); `docs/build-log/phase-04/FIN-212.md` |
+| `forbidden_paths` | any prior migration file; any Operations actual-cost/job-profitability file (`OPS-178`/`OPS-179`, read-only source, never edited) |
+| `migration_ids` | `20260729260000_create_finance_job_profitability` |
+| `api_contracts` | `app.calculate_finance_job_profitability`; `app.get_finance_job_profitability`; `app.get_finance_profitability_summary` |
+| `access_controls` | `FIN:Edit` + `FIN:View margin` gates calculation; `FIN:View margin` alone gates every read (deny outright, no partial result) |
+| `financial_invariants` | per 189_FINANCE_README.md §5/§6 -- revenue read from FIN-197's own issued invoices, cost read from OPS-178's own approved actual-cost versions, exact decimals throughout, blocked_reason surfaces rather than a fabricated figure, versioned/never-overwritten fact |
+| `tests` | `server/contracts/profitability/profitability.test.ts`; `server/queries/profitability.test.ts`; `server/mutations/profitability.test.ts`; `scripts/db-tests/finance-job-profitability.sql` |
+| `commands` | `typecheck`, `lint`, `test`, `db:test`, `next build`, `docs:check`, `security:check`, `data-classification:check`, `threat-model:check`, `standards:check`, `git:check-paths` |
+| `evidence` | FIN-212.md build log; db-test output (94 files, zero regression); node:test count delta (2132 -> 2144); next build (76 routes) |
+| `rollback` | additive migration only (one table, five functions); `git revert` this checkpoint's own commit |
+| `owner` | this session |
+| `status` | VERIFIED |
+| `resume_point` | This session's entire explicit authorized range now needs only CG-S9-FIN-024 (Prompt 213, Finance Dashboard and Reports) to be fully complete -- next |
 
 ### Row `213` — Prompt 213, `CG-S9-FIN-024`
 
@@ -689,7 +689,7 @@
 | `rollback` | not instantiated |
 | `owner` | unassigned |
 | `status` | NOT_STARTED |
-| `resume_point` | blocked on FIN-191..212 reaching VERIFIED |
+| `resume_point` | FIN-191..212 all VERIFIED, so CG-S9-FIN-024 (Prompt 213) is now dependency-eligible and authorized this session -- next, the final task in this session's explicit authorized range |
 
 ### Row `214` — Prompt 214, `CG-S9-FIN-025`
 
@@ -833,7 +833,7 @@
 
 ## 2. Tally
 
-Of the 29 rows in this index (`190`–`218`): **`190`–`205` are `VERIFIED`** (`205` this checkpoint). This session's entire explicit authorized range (Prompts 201-205) is now fully complete. **`206`–`218` (13 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths, and remain out of this session's authorized range -- fresh explicit user authorization is required before any further Finance Phase 4 work proceeds.
+Of the 29 rows in this index (`190`–`218`): **`190`–`212` are `VERIFIED`** (`212` this checkpoint). This session's fresh explicit authorized range is Prompts 211-213; `213` remains to be instantiated within this same session. **`213`–`218` (6 rows) remain `NOT_STARTED`**, dependency-mapped but not yet instantiated with exact paths; `213` is authorized this session and dependency-eligible, while `214`-`218` remain out of this session's authorized range.
 
 ## 3. Collision inspection
 

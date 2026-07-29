@@ -1,0 +1,79 @@
+"use client";
+
+/** Job, Customer and Service Profitability client forms (FIN-212, CG-S9-FIN-023). Same `useActionState`/bound-action split every prior capability's own forms already use. */
+
+import { useActionState } from "react";
+import { Button } from "../../../../../components/ui/button.tsx";
+import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
+import type { FinanceProfitabilityFormState } from "./actions.ts";
+
+const INITIAL_STATE: FinanceProfitabilityFormState = { error: null, fact: null };
+
+type BoundAction = (prevState: FinanceProfitabilityFormState, formData: FormData) => Promise<FinanceProfitabilityFormState>;
+
+export function CalculateFinanceJobProfitabilityForm({ action }: { action: BoundAction }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+
+  return (
+    <form action={formAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4" noValidate>
+      <h2 className="text-sm font-semibold text-text-primary">Calculate Job Order profitability</h2>
+      <p className="text-xs text-text-secondary">
+        Requires FIN:Edit and FIN:View margin. Resolves billed revenue (every issued invoice for the Job Order) minus approved actual cost --
+        reports a named blocked reason (<code>no_billed_revenue</code>, <code>no_approved_cost</code>, or <code>mixed_currency</code>) rather than
+        a fabricated figure. The first calculation needs no reason; recalculating an existing fact requires one.
+      </p>
+
+      <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="profitability-jobOrderId" className="text-sm font-medium text-text-primary">
+            Job Order id
+          </label>
+          <input id="profitability-jobOrderId" name="jobOrderId" type="text" required className="w-80 rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
+        </div>
+
+        <div className="flex flex-1 flex-col gap-1">
+          <label htmlFor="profitability-recalculationReason" className="text-sm font-medium text-text-primary">
+            Recalculation reason (only required if a fact already exists)
+          </label>
+          <input id="profitability-recalculationReason" name="recalculationReason" type="text" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      {state.error ? (
+        <p role="alert" className="text-sm text-danger">
+          {state.error}
+        </p>
+      ) : null}
+
+      {state.fact ? (
+        <dl className="grid grid-cols-2 gap-2 rounded-md border border-neutral-200 p-3 text-sm sm:grid-cols-4">
+          <dt className="text-text-secondary">Status</dt>
+          <dd>
+            <StatusBadge tone={FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP[state.fact.status].tone} label={FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP[state.fact.status].label} />
+          </dd>
+          <dt className="text-text-secondary">Blocked reason</dt>
+          <dd>{state.fact.blockedReason ?? "-"}</dd>
+          <dt className="text-text-secondary">Revenue ({state.fact.revenueBasis})</dt>
+          <dd>
+            {state.fact.revenueAmount ?? "-"} {state.fact.revenueCurrency ?? ""}
+          </dd>
+          <dt className="text-text-secondary">Cost</dt>
+          <dd>
+            {state.fact.costAmount ?? "-"} {state.fact.costCurrency ?? ""}
+          </dd>
+          <dt className="text-text-secondary">Profit</dt>
+          <dd>{state.fact.profitAmount ?? "-"}</dd>
+          <dt className="text-text-secondary">Margin %</dt>
+          <dd>{state.fact.marginPercent === null ? "-" : `${state.fact.marginPercent}%`}</dd>
+          <dt className="text-text-secondary">Version</dt>
+          <dd>{state.fact.versionNumber}</dd>
+        </dl>
+      ) : null}
+
+      <Button type="submit" loading={pending} loadingLabel="Calculating…" className="w-fit">
+        Calculate
+      </Button>
+    </form>
+  );
+}

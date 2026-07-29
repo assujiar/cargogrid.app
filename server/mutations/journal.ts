@@ -38,6 +38,9 @@ export const JOURNAL_KNOWN_MUTATION_ERROR_CODES = [
   "finance_journal_not_cancellable",
   "finance_journal_period_not_found",
   "finance_journal_period_not_open",
+  "finance_period_locked",
+  "finance_idempotency_fingerprint_conflict",
+  "finance_idempotency_fingerprint_required",
   "stale_version",
 ] as const;
 type KnownJournalMutationErrorCode = (typeof JOURNAL_KNOWN_MUTATION_ERROR_CODES)[number];
