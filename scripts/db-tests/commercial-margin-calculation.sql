@@ -268,8 +268,17 @@ begin
   -- v_calc1 (the requires_approval result) was already touched once by the recalculation
   -- in the prior scenario group (its is_current flag flipped to false), bumping
   -- record_version to 2 -- fetched fresh here rather than assumed to still be 1.
-  select id, record_version into v_calc1_id, v_calc1_version from app.margin_calculations where margin_pct = 16.67;
-  select id, record_version into v_calc2_id, v_calc2_version from app.margin_calculations where margin_pct = 33.33;
+  -- Scoped to this fixture's own rate selection (not just margin_pct) -- margin_pct is a
+  -- coincidental round number another tenant's own fixture can independently produce
+  -- (confirmed: ATW-222's own dispatch-board fixture produces an unrelated 16.67 margin
+  -- for a different tenant), so matching on margin_pct alone is not safely unique
+  -- across the whole cumulative test database.
+  select id, record_version into v_calc1_id, v_calc1_version from app.margin_calculations
+  where margin_pct = 16.67
+    and rate_selection_id = (select id from app.rate_selections where costing_request_id = (select id from app.costing_requests where opportunity_id = (select id from app.opportunities where name = 'Contoso Jakarta-Surabaya margin lane')));
+  select id, record_version into v_calc2_id, v_calc2_version from app.margin_calculations
+  where margin_pct = 33.33
+    and rate_selection_id = (select id from app.rate_selections where costing_request_id = (select id from app.costing_requests where opportunity_id = (select id from app.opportunities where name = 'Contoso Jakarta-Surabaya margin lane')));
 
   begin
     perform app.override_margin_threshold(v_calc1_id, v_calc1_version, '', '00000000-0000-0000-0000-000000009102', 'tester');

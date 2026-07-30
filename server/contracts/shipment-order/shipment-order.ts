@@ -65,6 +65,8 @@ export const ShipmentOrderSchema = z.object({
   createdBy: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** ATW-221: null until a leg network is first declared; draft while planning; confirmed once app.confirm_shipment_leg_network validates it. Never mutates this Shipment Order's own canonical status. */
+  legNetworkStatus: z.enum(["draft", "confirmed"]).nullable(),
 });
 export type ShipmentOrder = z.infer<typeof ShipmentOrderSchema>;
 
@@ -100,6 +102,7 @@ export function parseShipmentOrder(row: Record<string, unknown>): ShipmentOrder 
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    legNetworkStatus: row.leg_network_status ?? null,
   });
 }
 

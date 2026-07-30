@@ -13,6 +13,14 @@ import { getShipmentDocumentChecklist, evaluateShipmentDocumentChecklistComplete
 import { getEpodCaptureHistory, EpodCaptureReviewQueryError } from "../../../../../../server/queries/epod-capture-review.ts";
 import { getShipmentActualCost, listActualCostComponents, evaluateActualCostVariance, ActualCostQueryError } from "../../../../../../server/queries/actual-cost.ts";
 import { getActiveShipmentTrackingToken, PublicTrackingQueryError } from "../../../../../../server/queries/public-tracking.ts";
+import {
+  listShipmentLegs,
+  listShipmentLegStops,
+  getShipmentLegCargoAllocation,
+  listShipmentLegCustodyEvents,
+  getShipmentLegNetworkState,
+  MultiLegShipmentQueryError,
+} from "../../../../../../server/queries/multi-leg-shipment.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -33,6 +41,7 @@ import { DocumentChecklistPanel } from "./document-checklist-panel.tsx";
 import { EpodPanel } from "./epod-panel.tsx";
 import { ActualCostPanel } from "./actual-cost-panel.tsx";
 import { TrackingPanel } from "./tracking-panel.tsx";
+import { LegNetworkPanel, type LegNetworkEntry } from "./leg-network-panel.tsx";
 import {
   confirmShipmentOrderAction,
   transitionShipmentOrderAction,
@@ -64,6 +73,14 @@ import {
   createActualCostAdjustmentAction,
   issueShipmentTrackingTokenAction,
   revokeShipmentTrackingTokenAction,
+  addShipmentLegAction,
+  cancelShipmentLegAction,
+  addShipmentLegStopAction,
+  allocateShipmentLegCargoAction,
+  confirmShipmentLegNetworkAction,
+  transitionShipmentLegAction,
+  recordShipmentLegCustodyEventAction,
+  migrateLegacyShipmentToLegNetworkAction,
   type ShipmentOrderFormState,
   type IssueTrackingTokenFormState,
 } from "./actions.ts";
@@ -235,6 +252,26 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return <ErrorState description="Something went wrong loading the tracking link. Please try again." />;
   }
 
+  let legNetworkEntries: LegNetworkEntry[];
+  let legNetworkAggregateState;
+  try {
+    const legs = await listShipmentLegs(supabase, shipment.id);
+    legNetworkEntries = await Promise.all(
+      legs.map(async (leg) => ({
+        leg,
+        stops: await listShipmentLegStops(supabase, leg.id),
+        cargoAllocation: await getShipmentLegCargoAllocation(supabase, leg.id),
+        custodyEvents: await listShipmentLegCustodyEvents(supabase, leg.id),
+      })),
+    );
+    legNetworkAggregateState = await getShipmentLegNetworkState(supabase, shipment.id);
+  } catch (error) {
+    if (!(error instanceof MultiLegShipmentQueryError)) {
+      throw error;
+    }
+    return <ErrorState description="Something went wrong loading the leg network. Please try again." />;
+  }
+
   const { tone, label } = SHIPMENT_ORDER_STATUS_TONE_MAP[shipment.status];
   const consignee = shipment.consigneeSnapshot as { legal_name?: string; contact_name?: string };
   const boundConfirmAction = confirmShipmentOrderAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
@@ -285,6 +322,15 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
     return issueShipmentTrackingTokenAction(tenantSlug, shipment.id, validityDays, prevState, formData);
   };
   const boundRevokeTrackingTokenAction = revokeShipmentTrackingTokenAction.bind(null, tenantSlug, shipment.id);
+  const addLegIdempotencyKey = randomUUID();
+  const boundAddLegAction = addShipmentLegAction.bind(null, tenantSlug, shipment.id, addLegIdempotencyKey);
+  const boundConfirmLegNetworkAction = confirmShipmentLegNetworkAction.bind(null, tenantSlug, shipment.id, shipment.recordVersion);
+  const boundMigrateLegacyAction = migrateLegacyShipmentToLegNetworkAction.bind(null, tenantSlug, shipment.id);
+  const boundAddStopActionFor = (shipmentLegId: string) => addShipmentLegStopAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
+  const boundAllocateCargoActionFor = (shipmentLegId: string) => allocateShipmentLegCargoAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
+  const boundCancelLegActionFor = (shipmentLegId: string, expectedVersion: number) => cancelShipmentLegAction.bind(null, tenantSlug, shipment.id, shipmentLegId, expectedVersion);
+  const boundTransitionLegActionFor = (shipmentLegId: string, expectedVersion: number) => transitionShipmentLegAction.bind(null, tenantSlug, shipment.id, shipmentLegId, expectedVersion);
+  const boundRecordCustodyEventActionFor = (shipmentLegId: string) => recordShipmentLegCustodyEventAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -320,6 +366,23 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           <dt className="text-neutral-600">Planned delivery</dt>
           <dd className="text-neutral-900">{shipment.plannedDeliveryAt ? new Date(shipment.plannedDeliveryAt).toLocaleString() : "—"}</dd>
         </dl>
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Multi-leg network</h2>
+        <LegNetworkPanel
+          networkStatus={shipment.legNetworkStatus}
+          aggregateState={legNetworkAggregateState}
+          legs={legNetworkEntries}
+          addLegAction={boundAddLegAction}
+          confirmNetworkAction={boundConfirmLegNetworkAction}
+          migrateLegacyAction={boundMigrateLegacyAction}
+          addStopActionFor={boundAddStopActionFor}
+          allocateCargoActionFor={boundAllocateCargoActionFor}
+          cancelLegActionFor={boundCancelLegActionFor}
+          transitionLegActionFor={boundTransitionLegActionFor}
+          recordCustodyEventActionFor={boundRecordCustodyEventActionFor}
+        />
       </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">

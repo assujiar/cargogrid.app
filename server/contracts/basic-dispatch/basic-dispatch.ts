@@ -71,6 +71,7 @@ export function parseDispatchReadyQueueRow(row: Record<string, unknown>): Dispat
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    legNetworkStatus: row.leg_network_status ?? null,
     isReady: row.is_ready,
     blockers: row.blockers,
   });
