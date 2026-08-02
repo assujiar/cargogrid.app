@@ -338,6 +338,9 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
         <h1 className="text-xl font-semibold text-neutral-900">{shipment.shipmentNumber}</h1>
         <StatusBadge tone={tone} label={label} />
         <Badge tone="neutral">{shipment.mode}</Badge>
+        <a href={`/${tenantSlug}/operations/shipment-orders/${shipment.id}/route-planning`} className="ml-auto text-sm font-medium text-primary underline">
+          Route and load planning
+        </a>
       </div>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
