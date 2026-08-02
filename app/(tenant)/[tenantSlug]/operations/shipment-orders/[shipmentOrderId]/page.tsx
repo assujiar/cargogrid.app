@@ -21,6 +21,12 @@ import {
   getShipmentLegNetworkState,
   MultiLegShipmentQueryError,
 } from "../../../../../../server/queries/multi-leg-shipment.ts";
+import {
+  getShipmentLegTrackingPolicy,
+  getCurrentShipmentLegTrackingSession,
+  resolveLegTrackingPolicy,
+  MileOrchestrationQueryError,
+} from "../../../../../../server/queries/mile-orchestration.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import { SHIPMENT_ORDER_STATUS_TONE_MAP } from "../../../../../../components/domain/status-tone-map.ts";
@@ -81,6 +87,11 @@ import {
   transitionShipmentLegAction,
   recordShipmentLegCustodyEventAction,
   migrateLegacyShipmentToLegNetworkAction,
+  upsertShipmentLegTrackingPolicyAction,
+  startLegTrackingSessionAction,
+  handoffLegTrackingSessionAction,
+  endLegTrackingSessionAction,
+  evaluateLegNoSignalEscalationAction,
   type ShipmentOrderFormState,
   type IssueTrackingTokenFormState,
 } from "./actions.ts";
@@ -257,16 +268,22 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   try {
     const legs = await listShipmentLegs(supabase, shipment.id);
     legNetworkEntries = await Promise.all(
-      legs.map(async (leg) => ({
-        leg,
-        stops: await listShipmentLegStops(supabase, leg.id),
-        cargoAllocation: await getShipmentLegCargoAllocation(supabase, leg.id),
-        custodyEvents: await listShipmentLegCustodyEvents(supabase, leg.id),
-      })),
+      legs.map(async (leg) => {
+        const trackingPolicy = await getShipmentLegTrackingPolicy(supabase, leg.id);
+        return {
+          leg,
+          stops: await listShipmentLegStops(supabase, leg.id),
+          cargoAllocation: await getShipmentLegCargoAllocation(supabase, leg.id),
+          custodyEvents: await listShipmentLegCustodyEvents(supabase, leg.id),
+          trackingPolicy,
+          resolvedTrackingPolicy: trackingPolicy?.trackingRequired ? await resolveLegTrackingPolicy(supabase, { shipmentLegId: leg.id, actorAuthUserId: access.authUserId }) : null,
+          currentTrackingSession: await getCurrentShipmentLegTrackingSession(supabase, leg.id),
+        };
+      }),
     );
     legNetworkAggregateState = await getShipmentLegNetworkState(supabase, shipment.id);
   } catch (error) {
-    if (!(error instanceof MultiLegShipmentQueryError)) {
+    if (!(error instanceof MultiLegShipmentQueryError) && !(error instanceof MileOrchestrationQueryError)) {
       throw error;
     }
     return <ErrorState description="Something went wrong loading the leg network. Please try again." />;
@@ -331,6 +348,11 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundCancelLegActionFor = (shipmentLegId: string, expectedVersion: number) => cancelShipmentLegAction.bind(null, tenantSlug, shipment.id, shipmentLegId, expectedVersion);
   const boundTransitionLegActionFor = (shipmentLegId: string, expectedVersion: number) => transitionShipmentLegAction.bind(null, tenantSlug, shipment.id, shipmentLegId, expectedVersion);
   const boundRecordCustodyEventActionFor = (shipmentLegId: string) => recordShipmentLegCustodyEventAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
+  const boundUpsertTrackingPolicyActionFor = (shipmentLegId: string) => upsertShipmentLegTrackingPolicyAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
+  const boundStartTrackingSessionActionFor = (shipmentLegId: string) => startLegTrackingSessionAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
+  const boundHandoffTrackingSessionActionFor = (shipmentLegId: string) => handoffLegTrackingSessionAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
+  const boundEndTrackingSessionActionFor = (shipmentLegId: string) => endLegTrackingSessionAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
+  const boundEvaluateEscalationActionFor = (shipmentLegId: string) => evaluateLegNoSignalEscalationAction.bind(null, tenantSlug, shipment.id, shipmentLegId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -385,6 +407,11 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           cancelLegActionFor={boundCancelLegActionFor}
           transitionLegActionFor={boundTransitionLegActionFor}
           recordCustodyEventActionFor={boundRecordCustodyEventActionFor}
+          upsertTrackingPolicyActionFor={boundUpsertTrackingPolicyActionFor}
+          startTrackingSessionActionFor={boundStartTrackingSessionActionFor}
+          handoffTrackingSessionActionFor={boundHandoffTrackingSessionActionFor}
+          endTrackingSessionActionFor={boundEndTrackingSessionActionFor}
+          evaluateEscalationActionFor={boundEvaluateEscalationActionFor}
         />
       </section>
 

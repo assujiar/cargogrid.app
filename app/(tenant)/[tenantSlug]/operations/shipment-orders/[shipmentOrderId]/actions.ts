@@ -71,6 +71,15 @@ import {
   MultiLegShipmentMutationError,
 } from "../../../../../../server/mutations/multi-leg-shipment.ts";
 import type { ShipmentLegMode, ShipmentLegStopType, ShipmentLegStatus, ShipmentLegCustodyEventType } from "../../../../../../server/contracts/multi-leg-shipment/multi-leg-shipment.ts";
+import {
+  upsertShipmentLegTrackingPolicy,
+  startLegTrackingSession,
+  handoffLegTrackingSession,
+  endLegTrackingSession,
+  evaluateLegNoSignalEscalation,
+  MileOrchestrationMutationError,
+} from "../../../../../../server/mutations/mile-orchestration.ts";
+import type { TrackingSourceType, TrackingResourceKind, TrackingStartTrigger, TrackingEndTrigger } from "../../../../../../server/contracts/mile-orchestration/mile-orchestration.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import type { SetShipmentModeProfileInput, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
@@ -1408,6 +1417,203 @@ export async function migrateLegacyShipmentToLegNetworkAction(
   } catch (error) {
     if (error instanceof MultiLegShipmentMutationError) {
       return { error: `Could not migrate this shipment to a leg network: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-225: one tracking policy per leg (upsert). tracking_required=false requires empty source arrays -- enforced by the RPC's own CHECK constraint. */
+export async function upsertShipmentLegTrackingPolicyAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const trackingRequired = formData.get("trackingRequired") === "on";
+  const allowedSources = formData.getAll("allowedSources") as TrackingSourceType[];
+  const preferredSourceRaw = String(formData.get("preferredSource") ?? "").trim();
+  const fallbackOrder = trackingRequired ? allowedSources : [];
+  const startTrigger = String(formData.get("startTrigger") ?? "leg_dispatch") as TrackingStartTrigger;
+  const endTrigger = String(formData.get("endTrigger") ?? "leg_complete") as TrackingEndTrigger;
+  const noSignalRaw = String(formData.get("noSignalEscalationSeconds") ?? "").trim();
+  const customerVisible = formData.get("customerVisible") === "on";
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await upsertShipmentLegTrackingPolicy(supabase, {
+      shipmentLegId,
+      trackingRequired,
+      allowedSources: trackingRequired ? allowedSources : [],
+      preferredSource: trackingRequired && preferredSourceRaw.length > 0 ? (preferredSourceRaw as TrackingSourceType) : null,
+      fallbackOrder,
+      freshnessToleranceSeconds: null,
+      accuracyToleranceMeters: null,
+      pingIntervalSeconds: null,
+      startTrigger,
+      endTrigger,
+      geofencePolicy: null,
+      customerVisible,
+      noSignalEscalationSeconds: noSignalRaw.length === 0 ? null : Number(noSignalRaw),
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MileOrchestrationMutationError) {
+      return { error: `Could not save this tracking policy: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-225: requires a defined, tracking_required policy and real ATW-223 eligibility for the chosen source/resource. */
+export async function startLegTrackingSessionAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const sourceType = String(formData.get("sourceType") ?? "") as TrackingSourceType;
+  const resourceKind = String(formData.get("resourceKind") ?? "") as TrackingResourceKind;
+  const resourceMasterId = String(formData.get("resourceMasterId") ?? "");
+  const deviceId = String(formData.get("deviceId") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await startLegTrackingSession(supabase, {
+      shipmentLegId,
+      sourceType,
+      resourceKind,
+      resourceMasterId,
+      deviceId: deviceId.length === 0 ? null : deviceId,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MileOrchestrationMutationError) {
+      return { error: `Could not start this tracking session: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-225: supersedes the current session (end_reason=handoff) -- a non-empty reason is always required. */
+export async function handoffLegTrackingSessionAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const sourceType = String(formData.get("sourceType") ?? "") as TrackingSourceType;
+  const resourceKind = String(formData.get("resourceKind") ?? "") as TrackingResourceKind;
+  const resourceMasterId = String(formData.get("resourceMasterId") ?? "");
+  const deviceId = String(formData.get("deviceId") ?? "").trim();
+  const handoffReason = String(formData.get("handoffReason") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await handoffLegTrackingSession(supabase, {
+      shipmentLegId,
+      sourceType,
+      resourceKind,
+      resourceMasterId,
+      deviceId: deviceId.length === 0 ? null : deviceId,
+      handoffReason,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MileOrchestrationMutationError) {
+      return { error: `Could not hand off this tracking session: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-225: leg_completed/manual_stop require OPS:Edit; unauthorized_override requires OPS:Override plus a mandatory reason. */
+export async function endLegTrackingSessionAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const endReason = String(formData.get("endReason") ?? "leg_completed") as "leg_completed" | "manual_stop" | "unauthorized_override";
+  const reasonNote = String(formData.get("reasonNote") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await endLegTrackingSession(supabase, {
+      shipmentLegId,
+      endReason,
+      reasonNote: reasonNote.length === 0 ? null : reasonNote,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof MileOrchestrationMutationError) {
+      return { error: `Could not end this tracking session: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
+  return { error: null };
+}
+
+/** ATW-225: an orchestration-level staleness check -- ends a session left active past its own no_signal_escalation_seconds and raises a real exception. No live poller runs this automatically yet (disclosed NOT_RUN); this button is the honest manual stand-in. */
+export async function evaluateLegNoSignalEscalationAction(
+  tenantSlug: string,
+  shipmentOrderId: string,
+  shipmentLegId: string,
+  _prevState: ShipmentOrderFormState,
+  _formData: FormData,
+): Promise<ShipmentOrderFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await evaluateLegNoSignalEscalation(supabase, { shipmentLegId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof MileOrchestrationMutationError) {
+      return { error: `Could not evaluate no-signal escalation: ${error.message}` };
     }
     throw error;
   }

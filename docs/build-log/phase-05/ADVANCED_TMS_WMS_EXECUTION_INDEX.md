@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S10-ATW-001` (`CG-AABPP-ATW-220` v0.12.0-multisource-gps)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/220_ADVANCED_TMS_WMS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_5_IN_PROGRESS`. Rows `220`–`224` (`CG-S10-ATW-001..005`) are `VERIFIED`. `CG-S10-ATW-006` (Prompt 225) is dependency-clean `READY` (unblocked by `224`'s own verification) and `CG-S10-ATW-010` (Prompt 229) remains `READY` (independent Warehouse lane) — neither is authorized to start in this session; both await fresh explicit user authorization naming their own prompt number. Every other row is `NOT_STARTED` (dependency-correct, not yet unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
+**Status:** `PHASE_5_IN_PROGRESS`. Rows `220`–`225` (`CG-S10-ATW-001..006`) are `VERIFIED`. `CG-S10-ATW-010` (Prompt 229) remains `READY` (independent Warehouse lane) — not authorized to start in this session; awaits fresh explicit user authorization naming its own prompt number. `ATW-226`'s own nine children remain `NOT_STARTED` pending a dedicated reconciliation. Every other row is `NOT_STARTED` (dependency-correct, not yet unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
 
 ## 0. Checkpoint
 
@@ -10,12 +10,12 @@
 |---|---|
 | Repository | `assujiar/cargogrid.app` |
 | Working branch | `claude/prompt-224-n1ek85` |
-| HEAD at authoring time (pre-commit) | this session's own prior commit (`CG-S10-ATW-004`, Prompt 223, `VERIFIED`) |
+| HEAD at authoring time (pre-commit) | this session's own prior commit (`CG-S10-ATW-005`, Prompt 224, `VERIFIED`) |
 | Worktree state | Clean except this document and this checkpoint's own new migration/service-layer/UI/test files and runtime-ledger updates |
-| Repository state | `PHASE_4_VERIFIED`; 98 migrations applied (1 net new: `20260729320000_create_advanced_tms_route_load_planning.sql`) |
-| Mutation performed by this document | Row `224` instantiated `VERIFIED`; row `225`'s own resume_point updated to reflect dependency-eligible (not authorized this session) |
+| Repository state | `PHASE_4_VERIFIED`; 99 migrations applied (1 net new: `20260729330000_create_advanced_tms_mile_orchestration.sql`) |
+| Mutation performed by this document | Row `225` instantiated `VERIFIED`; no other row becomes newly dependency-clean this checkpoint (`ATW-226`'s children remain blocked; `CG-S10-ATW-010`/Prompt 229 remains the only other `READY` row) |
 | Pre-flight collision check | `pnpm run git:check` clean |
-| User authorization | Explicit user instruction "lanjut prompt 224" ("continue prompt 224") — a scoped, single-task, named authorization naming exactly the row this index's own prior checkpoint left `READY`. |
+| User authorization | Explicit user instruction "lanjut 225" ("continue 225") — a scoped, single-task, named authorization naming exactly the row this index's own prior checkpoint left `READY`. |
 
 ## 1. Full execution index
 
@@ -58,7 +58,7 @@
 | `CG-S10-ATW-003` | 222 — Advanced Dispatch Board with Tracking Health | Advanced Transportation / Dispatcher Control Tower | `ATW-221`, verified Phase 3 dispatch; tracking columns additionally need `ATW-226F`/`226H` (may implement dispatch itself before 226, tracking columns feature-gated until then) | `ATW-223..228`, `ATW-243`, `ATW-245..248`, Customer Portal tracking | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-222.md`. `CG-S10-ATW-004` (223) is dependency-clean `READY` |
 | `CG-S10-ATW-004` | 223 — Fleet, Vehicle, Driver, Device and SIM Operational Baseline | Transport Resources / Operational Resource Control | `ATW-221..222`, Platform master/config/entitlement, verified Phase 3 resource assignment | `ATW-224..228`, `ATW-226B/C` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-223.md`. `CG-S10-ATW-005` (224) is dependency-clean `READY` |
 | `CG-S10-ATW-005` | 224 — Route and Load Planning Using Canonical Position | Advanced Transportation / Constraint-Aware Planning | `ATW-221`, `ATW-223`, verified PostGIS/location/config foundations; live-position replanning additionally needs `ATW-226F` | `ATW-225`, `ATW-227`, `ATW-243` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-224.md`. `CG-S10-ATW-006` (225) is dependency-clean `READY` |
-| `CG-S10-ATW-006` | 225 — First-, Middle-, and Last-Mile Orchestration with Tracking Policy | Advanced Transportation / End-to-End Mile Execution | `ATW-221`, `ATW-224`, verified Phase 3 milestones/exceptions, resource eligibility `ATW-223` | `ATW-226`(`ATW-226C`), `ATW-228`, `ATW-243`, `ATW-244` | `READY` | Dependency-clean (`ATW-224` `VERIFIED`); awaiting fresh explicit user authorization naming Prompt 225 |
+| `CG-S10-ATW-006` | 225 — First-, Middle-, and Last-Mile Orchestration with Tracking Policy | Advanced Transportation / End-to-End Mile Execution | `ATW-221`, `ATW-224`, verified Phase 3 milestones/exceptions, resource eligibility `ATW-223` | `ATW-226`(`ATW-226C`), `ATW-228`, `ATW-243`, `ATW-244` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-225.md`. No other row newly dependency-clean; `CG-S10-ATW-010` (229) remains the only other `READY` row |
 | §1.4 | 226 — Multi-Source GPS and Telematics Integration | Transportation Integration / Trusted Movement Events | see §1.4 (decomposed into `ATW-226A`..`226I`) | `ATW-227`, `ATW-228`, `ATW-243` | `NOT_STARTED` | See §1.4 |
 | `CG-S10-ATW-008` | 227 — Capacity, Utilization and Tracking Coverage | Transport Resources / Capacity Control | `ATW-223`..`226` (all `ATW-226` children), verified exact cargo/UOM data | `ATW-243` | `NOT_STARTED` | Blocked on `ATW-226I` `VERIFIED` |
 | `CG-S10-ATW-009` | 228 — Advanced Milestone and Exception with Multi-Source Telemetry | Operations Control Tower / Predictable Network Execution | `ATW-221`, `ATW-225..227`, Prompt 226 canonical telemetry (`ATW-226F/G`), verified Phase 3 milestone/exception contracts | `ATW-243`, `ATW-244` | `NOT_STARTED` | Blocked on `ATW-227` `VERIFIED` |
@@ -85,7 +85,7 @@
 
 For every `NOT_STARTED` row above, the remaining required columns (`allowed_paths`, `forbidden_paths`, `migration_ids`, `api_contracts`, `deployment_target`, `secret_ownership`, `access_controls`, `transport_invariants`, `tests`, `external_evidence_status`, `commands`, `evidence`, `rollback`, `owner`) are **not yet instantiated** — deferred to the checkpoint that authorizes each row, per WBS §13's own atomic-sizing discipline (identical to `00_FINANCE_WBS.md` §8's precedent for its own not-yet-authorized rows). Instantiating exact paths before a row's own upstream is `VERIFIED` risks stale paths, the same reasoning every prior phase kickoff applied.
 
-### 1.3 Full-column detail — the two `READY` rows at authoring time (row `221` and row `229`), plus row `224` now `VERIFIED`
+### 1.3 Full-column detail — the two `READY` rows at authoring time (row `221` and row `229`), plus rows `224` and `225` now `VERIFIED`
 
 #### Row `221` — `CG-S10-ATW-002`
 
@@ -133,6 +133,29 @@ For every `NOT_STARTED` row above, the remaining required columns (`allowed_path
 | `status` | `VERIFIED` |
 | `resume_point` | `CG-S10-ATW-006` (Prompt 225) is dependency-clean `READY`; not authorized this session — awaiting fresh explicit user authorization naming Prompt 225 |
 
+#### Row `225` — `CG-S10-ATW-006`
+
+| Column | Value |
+|---|---|
+| `atomic_objective` | Implement a tracking-policy and session-orchestration layer for each shipment leg's first-, middle-, and last-mile execution — deciding and recording which authoritative source should be tracking a leg and why, never ingesting or storing raw telemetry itself |
+| `source_ids` | `225_MILE_ORCHESTRATION_TRACKING_POLICY_PROMPT.md` full; verified `app.shipment_legs` (`ATW-221`); `app.shipment_tracking_health`/`app.is_shipment_tracking_entitled` (`ATW-222`); `app.vehicle_operational_profiles`/`app.driver_operational_profiles`/`app.gps_devices`/`app.provider_vehicle_mappings` (`ATW-223`); `app.resource_assignments` (`OPS-172`); `app.report_exception` (`OPS-174`) |
+| `allowed_paths` | `supabase/migrations/20260729330000_create_advanced_tms_mile_orchestration.sql`; `server/contracts/mile-orchestration/mile-orchestration.ts`; `server/queries/mile-orchestration.ts`; `server/mutations/mile-orchestration.ts` (plus their `.test.ts` files); `app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/mile-tracking-panel.tsx` (new); `leg-network-panel.tsx`, `actions.ts`, `page.tsx` (extended); `scripts/db-tests/advanced-tms-mile-orchestration.sql` |
+| `forbidden_paths` | Any raw telemetry ingestion/storage path (reserved for `ATW-226`); any mutation of `app.transition_shipment_leg` or other already-applied `ATW-221` functions; warehouse-lane paths (`ATW-229`+) — none touched |
+| `migration_ids` | `20260729330000_create_advanced_tms_mile_orchestration.sql` (1 new additive migration; 100 total) |
+| `api_contracts` | Service-layer RPC wrappers only (no REST/GraphQL surface exists repository-wide yet) — 8 new RPCs |
+| `deployment_target` | Serverless Web/API (Vercel) — unchanged existing target |
+| `secret_ownership` | none (no external integration in this row) |
+| `access_controls` | Reuses `app.evaluate_permission`(`OPS`:`Create`/`Edit`/`Override`)/`can_access_record`, mirroring every prior Operations capability; `OPS`:`Override` (already-seeded, not new) gates the `unauthorized_override` end path and requires a mandatory reason note |
+| `transport_invariants` | A leg may have at most one current tracking session (`is_current`, enforced by partial unique index); session start/handoff/end always requires real, currently-eligible source assignment (`app.check_leg_tracking_source_eligible`), never entitlement alone; entitlement is disclosed (`tracking_entitled_at_start`) but never a hard gate on orchestration bookkeeping; a stale session past its policy's own `no_signal_escalation_seconds` is provably ended and raises a real, deduplicated `app.operational_exceptions` row; session history is append-only (`is_current`/`superseded_by_id`, never overwritten in place) |
+| `tests` | `scripts/db-tests/advanced-tms-mile-orchestration.sql` (new); `server/contracts\|queries\|mutations/mile-orchestration.test.ts` (23 net new `node:test` cases) |
+| `external_evidence_status` | n/a (no external hardware/provider dependency in this capability; real eligibility is checked against `ATW-223`'s own already-verified operational-profile/device/provider-mapping data, never a live feed) |
+| `commands` | `pnpm install --frozen-lockfile`; `typecheck`; `lint`; `pnpm run test`; `pnpm run db:test`; `docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`; `next build` — all re-run fresh, all green |
+| `evidence` | `docs/build-log/phase-05/ATW-225.md`; `node:test` 2253/2253; `db:test` PASS across 100 migrations/102 files; `next build` PASS (81 routes, unchanged — an existing route extended, not a new one) |
+| `rollback` | `git revert` the row's own commit; migration is additive only, no destructive rollback needed |
+| `owner` | Runtime build agent |
+| `status` | `VERIFIED` |
+| `resume_point` | No other row became newly dependency-clean this checkpoint; `CG-S10-ATW-010` (Prompt 229) remains the only other `READY` row, awaiting fresh explicit user authorization naming Prompt 229 |
+
 #### Row `229` — `CG-S10-ATW-010`
 
 | Column | Value |
@@ -172,17 +195,17 @@ Reproduced from `220_*.md`'s own mandatory table, each child retaining parent pr
 | `ATW-226H` | Fleet Control Tower, device administration, and sanitized projections | `ATW-226F`/`G` | `NOT_STARTED` | n/a |
 | `ATW-226I` | Deployment, observability, load, security, outage, and recovery verification | `ATW-226A`..`H` | `NOT_STARTED` | Both statuses above re-confirmed at this closing child |
 
-Overall row `226` (`ATW-226`, parent) requires: `ATW-221`, `ATW-223`, `ATW-225`, Platform API/webhook/job/PostGIS/entitlement/secrets controls, and an approved initial Teltonika protocol specification. A live third-party provider contract is optional at this checkpoint (§8 above). `ATW-223` is now `VERIFIED`, but none of the nine children are dependency-clean yet against the full parent-level gate — every one is still blocked, directly or transitively, on `ATW-225`, which remains `NOT_STARTED`. This row is left `NOT_STARTED` for all nine children pending a dedicated reconciliation once `ATW-225` itself is authorized and started.
+Overall row `226` (`ATW-226`, parent) requires: `ATW-221`, `ATW-223`, `ATW-225`, Platform API/webhook/job/PostGIS/entitlement/secrets controls, and an approved initial Teltonika protocol specification. A live third-party provider contract is optional at this checkpoint (§8 above). `ATW-225` is now `VERIFIED`, so the parent-level upstream gate (`ATW-221`, `ATW-223`, `ATW-225`) is fully satisfied, but none of the nine children are instantiated `READY` yet — this row is left `NOT_STARTED` for all nine children pending a dedicated reconciliation, deferred rather than folded into this checkpoint since it was not the row named by this session's own "lanjut 225" authorization.
 
 ## 2. Tally
 
 | State | Count |
 |---|---|
-| `VERIFIED` | 5 (`220`, `221`, `222`, `223`, `224`) |
-| `READY` | 2 (`225`, `229`) |
+| `VERIFIED` | 6 (`220`, `221`, `222`, `223`, `224`, `225`) |
+| `READY` | 1 (`229`) |
 | `NOT_STARTED` | 30 (`227`, `228`, `230`–`248`, and all 9 `226` children) |
 | **Total task rows** | **37** |
 
 ## 3. Completion statement
 
-This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. Row `224` (`CG-S10-ATW-005`) is `VERIFIED` this checkpoint (`docs/build-log/phase-05/ATW-224.md`), authorized by explicit user instruction "lanjut prompt 224" naming exactly the row this index's own prior checkpoint left `READY`. `CG-S10-ATW-006` (Prompt 225) is newly dependency-clean `READY` (unblocked by `224`'s own verification), and `CG-S10-ATW-010` (Prompt 229) remains dependency-clean `READY` (independent Warehouse lane) — neither is authorized this session, and per this repository's own standing discipline this session stops here, awaiting fresh explicit user authorization before starting either or any further Phase 5 task.
+This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. Row `225` (`CG-S10-ATW-006`) is `VERIFIED` this checkpoint (`docs/build-log/phase-05/ATW-225.md`), authorized by explicit user instruction "lanjut 225" naming exactly the row this index's own prior checkpoint left `READY`. No other Phase 5 row became newly dependency-clean this checkpoint — `ATW-226`'s own nine children remain blocked pending a dedicated reconciliation, and `CG-S10-ATW-010` (Prompt 229) remains the only other dependency-clean `READY` row (independent Warehouse lane) — it is not authorized this session, and per this repository's own standing discipline this session stops here, awaiting fresh explicit user authorization before starting it or any further Phase 5 task.

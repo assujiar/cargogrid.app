@@ -15,6 +15,8 @@ import {
   type LegNetworkStatus,
   type LegNetworkAggregateState,
 } from "../../../../../../server/contracts/multi-leg-shipment/multi-leg-shipment.ts";
+import { MileTrackingPanel, type MileTrackingFormAction } from "./mile-tracking-panel.tsx";
+import type { ShipmentLegTrackingPolicy, ShipmentLegTrackingSession, ResolvedLegTrackingPolicy } from "../../../../../../server/contracts/mile-orchestration/mile-orchestration.ts";
 
 const INITIAL_STATE: ShipmentOrderFormState = { error: null };
 
@@ -48,6 +50,9 @@ export interface LegNetworkEntry {
   readonly stops: readonly ShipmentLegStop[];
   readonly cargoAllocation: ShipmentLegCargoAllocation | null;
   readonly custodyEvents: readonly ShipmentLegCustodyEvent[];
+  readonly trackingPolicy: ShipmentLegTrackingPolicy | null;
+  readonly resolvedTrackingPolicy: ResolvedLegTrackingPolicy | null;
+  readonly currentTrackingSession: ShipmentLegTrackingSession | null;
 }
 
 export type LegNetworkFormAction = (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
@@ -65,6 +70,11 @@ export function LegNetworkPanel({
   cancelLegActionFor,
   transitionLegActionFor,
   recordCustodyEventActionFor,
+  upsertTrackingPolicyActionFor,
+  startTrackingSessionActionFor,
+  handoffTrackingSessionActionFor,
+  endTrackingSessionActionFor,
+  evaluateEscalationActionFor,
 }: {
   networkStatus: LegNetworkStatus;
   aggregateState: LegNetworkAggregateState;
@@ -77,6 +87,11 @@ export function LegNetworkPanel({
   cancelLegActionFor: (shipmentLegId: string, expectedVersion: number) => LegNetworkFormAction;
   transitionLegActionFor: (shipmentLegId: string, expectedVersion: number) => LegNetworkFormAction;
   recordCustodyEventActionFor: (shipmentLegId: string) => LegNetworkFormAction;
+  upsertTrackingPolicyActionFor: (shipmentLegId: string) => MileTrackingFormAction;
+  startTrackingSessionActionFor: (shipmentLegId: string) => MileTrackingFormAction;
+  handoffTrackingSessionActionFor: (shipmentLegId: string) => MileTrackingFormAction;
+  endTrackingSessionActionFor: (shipmentLegId: string) => MileTrackingFormAction;
+  evaluateEscalationActionFor: (shipmentLegId: string) => MileTrackingFormAction;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -100,6 +115,11 @@ export function LegNetworkPanel({
               cancelLegAction={cancelLegActionFor(entry.leg.id, entry.leg.recordVersion)}
               transitionLegAction={transitionLegActionFor(entry.leg.id, entry.leg.recordVersion)}
               recordCustodyEventAction={recordCustodyEventActionFor(entry.leg.id)}
+              upsertTrackingPolicyAction={upsertTrackingPolicyActionFor(entry.leg.id)}
+              startTrackingSessionAction={startTrackingSessionActionFor(entry.leg.id)}
+              handoffTrackingSessionAction={handoffTrackingSessionActionFor(entry.leg.id)}
+              endTrackingSessionAction={endTrackingSessionActionFor(entry.leg.id)}
+              evaluateEscalationAction={evaluateEscalationActionFor(entry.leg.id)}
             />
           ))}
         </ol>
@@ -189,6 +209,11 @@ function LegCard({
   cancelLegAction,
   transitionLegAction,
   recordCustodyEventAction,
+  upsertTrackingPolicyAction,
+  startTrackingSessionAction,
+  handoffTrackingSessionAction,
+  endTrackingSessionAction,
+  evaluateEscalationAction,
 }: {
   entry: LegNetworkEntry;
   addStopAction: LegNetworkFormAction;
@@ -196,8 +221,13 @@ function LegCard({
   cancelLegAction: LegNetworkFormAction;
   transitionLegAction: LegNetworkFormAction;
   recordCustodyEventAction: LegNetworkFormAction;
+  upsertTrackingPolicyAction: MileTrackingFormAction;
+  startTrackingSessionAction: MileTrackingFormAction;
+  handoffTrackingSessionAction: MileTrackingFormAction;
+  endTrackingSessionAction: MileTrackingFormAction;
+  evaluateEscalationAction: MileTrackingFormAction;
 }) {
-  const { leg, stops, cargoAllocation, custodyEvents } = entry;
+  const { leg, stops, cargoAllocation, custodyEvents, trackingPolicy, resolvedTrackingPolicy, currentTrackingSession } = entry;
   const nextStatuses = NEXT_STATUS_BY_STATUS[leg.legStatus];
 
   return (
@@ -259,6 +289,19 @@ function LegCard({
           <TransitionLegForm action={transitionLegAction} nextStatuses={nextStatuses} />
         </div>
       ) : null}
+
+      <div className="border-t border-neutral-100 pt-2">
+        <MileTrackingPanel
+          policy={trackingPolicy}
+          resolved={resolvedTrackingPolicy}
+          currentSession={currentTrackingSession}
+          upsertPolicyAction={upsertTrackingPolicyAction}
+          startSessionAction={startTrackingSessionAction}
+          handoffSessionAction={handoffTrackingSessionAction}
+          endSessionAction={endTrackingSessionAction}
+          evaluateEscalationAction={evaluateEscalationAction}
+        />
+      </div>
 
       <div className="border-t border-neutral-100 pt-2">
         <RecordCustodyEventForm action={recordCustodyEventAction} />
