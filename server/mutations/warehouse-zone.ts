@@ -46,6 +46,8 @@ export const WAREHOUSE_ZONE_KNOWN_MUTATION_ERROR_CODES = [
   "invalid_status",
   "reason_required",
   "warehouse_has_active_zones",
+  "warehouse_has_active_locations",
+  "zone_has_active_locations",
   "account_not_found",
   "eligibility_not_found",
   "invalid_transition",
