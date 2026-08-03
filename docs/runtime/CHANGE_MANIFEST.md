@@ -6213,6 +6213,40 @@ Five found and fixed during authoring, before any full-suite gate run (none in t
 
 Self-closing. `ATW-226H` is `VERIFIED`. `226A` through `226H` are now all `VERIFIED`. `ATW-226I` is now the only remaining child, every one of its own prerequisites satisfied. Per this session's own explicit range authorization, proceeding directly to `ATW-226I` next.
 
+### CHG-2026-164 — Deployment, Observability, Load, Security, Outage, and Recovery Verification (Phase 5, Prompt 226's closing decomposition child `ATW-226I`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226I` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226I`'s own scope line) plus §§15/16/17/18/23/26/27/28/31/32 |
+| Change type | Closing/integrated-verification checkpoint -- 1 new migration (2 new nullable columns, 1 function widened via same-signature `CREATE OR REPLACE`, 2 new functions), widened service layer, 3 new runbooks, 0 new routes. **Closes row `226` (`CG-S10-ATW-007`) itself.** |
+| Baseline evidence | `ATW-226A` through `ATW-226H` all `VERIFIED` (`docs/build-log/phase-05/ATW-226A.md` through `ATW-226H.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` (child and parent row `226`) |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- ninth and final task in that range |
+
+#### Outcome
+
+Compresses this repository's own `PLT-137`(integrated verification)/`PLT-138`(hardening)/closure-report precedent into the one closing child `226_*.md` itself allocated. Re-derives live verification evidence for every named requirement across deployment/observability/load/security/outage/recovery -- all PASS, with load/live-deployment execution honestly `NOT_RUN` (no infrastructure exists) and one disclosed, deliberately out-of-scope UI gap (no Driver PWA exists anywhere, confirmed by direct search). Closes the one real repair this pass found: `app.third_party_provider_connections.consecutive_failure_count` (`ATW-226E`) never auto-disabled a misbehaving connection, unlike `app.webhook_endpoints` (`PLT-129`/`ADR-0011`) -- `app.ingest_third_party_provider_webhook_event` now auto-disables at exactly 10 consecutive signature failures, with two new manual recovery RPCs (`disable_third_party_provider_connection`/`reenable_third_party_provider_connection`). A new integrated-verification db-test composes a `third_party_platform`-sourced report through arbitration (`226F`) -> geofence dwell -> milestone candidate (`226G`) -> confirm -> tenant-wide read (`226H`) -> the widened public tracking projection (`226H`/`OPS-180`) in one continuous scenario -- the first time this family proved the geofence evaluator composes correctly through a source other than `direct_device`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730110000_harden_advanced_tms_third_party_provider_connection_recovery.sql`; `scripts/db-tests/advanced-tms-gps-telematics-integrated-verification.sql`; `docs/runbooks/{gps-gateway-outage,third-party-provider-outage,gps-ingestion-database-outage}.md`; `docs/build-log/phase-05/ATW-226I.md`. Modified: `server/contracts/third-party-provider-adapter/third-party-provider-adapter.ts`(+test, `autoDisabledAt`/`disabledReason` fields, 2 new input schemas); `server/mutations/third-party-provider-adapter.ts`(+test, 2 new functions); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226I` `NOT_STARTED`->`VERIFIED`; row `226` itself `IN_PROGRESS`->`VERIFIED`; row `227` `NOT_STARTED`->`READY`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (109 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 85 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2397/2397 (5 net new), `pnpm run db:test` PASS -- 109 migrations/111 db-test files (1 new, zero regression, including every pre-existing `226A`-`226H` db-test re-passing unmodified against the widened `app.ingest_third_party_provider_webhook_event`), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged.
+
+#### Compatibility, rollout, recovery
+
+Additive apart from the one same-signature `CREATE OR REPLACE` widening, proven backward-compatible by every pre-existing `226C`-`226H` db-test re-passing unmodified. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+One critical, self-caught authoring mistake, found and fixed before any commit: the widened `app.ingest_third_party_provider_webhook_event`'s first draft was based on `ATW-226E`'s own *original* migration file rather than its *current* live definition after `ATW-226F`'s own already-applied widening (which added the canonicalization call to `app.arbitrate_and_project_vehicle_position`). Applying the first draft would have silently reverted the function to its pre-`226F` state -- a severe regression a full `db:test` run caught immediately (`advanced-tms-canonical-telemetry-arbitration.sql`'s own "cross-source switch suppressed" scenario failed). Diagnosed via a manual, single-session `psql` reproduction; fixed by re-deriving the widened body from `226F`'s own current migration file, preserving its own arbitration call verbatim; re-verified via a full clean `db:test` re-run, all green. Full detail: `docs/build-log/phase-05/ATW-226I.md` §6.
+
+#### Approval and closure
+
+Self-closing. `ATW-226I` is `VERIFIED`. **Row `226` (`CG-S10-ATW-007`) is itself now `VERIFIED`** -- all nine children `226A`-`226I` complete; `226I` was this family's own designated closing child, so this checkpoint is the one authorized to set the parent-level status directly. `CG-S10-ATW-008` (Prompt 227) is now dependency-clean, marked `READY`. This session's own explicit range authorization ("lanjut sd prompt terakhir di 226 (226a-226i)") is now fully spent -- the next runtime agent must stop and obtain fresh explicit user authorization before starting `227` or any further Phase 5 row.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

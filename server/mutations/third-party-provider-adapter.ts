@@ -21,6 +21,8 @@ import {
   RotateThirdPartyProviderWebhookSecretInputSchema,
   UpdateThirdPartyProviderPollCursorInputSchema,
   IngestThirdPartyProviderWebhookEventInputSchema,
+  DisableThirdPartyProviderConnectionInputSchema,
+  ReenableThirdPartyProviderConnectionInputSchema,
   parseRegisterThirdPartyProviderConnectionResult,
   parseRotateThirdPartyProviderWebhookSecretResult,
   parseThirdPartyProviderConnection,
@@ -29,6 +31,8 @@ import {
   type RotateThirdPartyProviderWebhookSecretInput,
   type UpdateThirdPartyProviderPollCursorInput,
   type IngestThirdPartyProviderWebhookEventInput,
+  type DisableThirdPartyProviderConnectionInput,
+  type ReenableThirdPartyProviderConnectionInput,
   type RegisterThirdPartyProviderConnectionResult,
   type RotateThirdPartyProviderWebhookSecretResult,
   type ThirdPartyProviderConnection,
@@ -149,4 +153,45 @@ export async function ingestThirdPartyProviderWebhookEvent(
     throw new ThirdPartyProviderAdapterMutationError("invalid_response", "ingest_third_party_provider_webhook_event returned no row");
   }
   return parseIngestThirdPartyProviderWebhookEventResult(row as Record<string, unknown>);
+}
+
+/** ATW-226I: the manual counterpart to the automated 10-consecutive-signature-failure auto-disable. Idempotent-safe on an already-disabled connection. */
+export async function disableThirdPartyProviderConnection(
+  client: ThirdPartyProviderAdapterMutationRpcClient,
+  input: DisableThirdPartyProviderConnectionInput,
+): Promise<ThirdPartyProviderConnection> {
+  const parsedInput = DisableThirdPartyProviderConnectionInputSchema.parse(input);
+  const { data, error } = await client.rpc("disable_third_party_provider_connection", {
+    p_connection_id: parsedInput.connectionId,
+    p_reason: parsedInput.reason,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_actor_label: parsedInput.actorLabel,
+  });
+  if (error) {
+    throw new ThirdPartyProviderAdapterMutationError(classifyError(error.message), error.message);
+  }
+  if (!data || typeof data !== "object") {
+    throw new ThirdPartyProviderAdapterMutationError("invalid_response", "disable_third_party_provider_connection returned no row");
+  }
+  return parseThirdPartyProviderConnection(data as Record<string, unknown>);
+}
+
+/** ATW-226I: resets the failure counter -- the operator is asserting the connection (or its secret, out-of-band) is now believed healthy. */
+export async function reenableThirdPartyProviderConnection(
+  client: ThirdPartyProviderAdapterMutationRpcClient,
+  input: ReenableThirdPartyProviderConnectionInput,
+): Promise<ThirdPartyProviderConnection> {
+  const parsedInput = ReenableThirdPartyProviderConnectionInputSchema.parse(input);
+  const { data, error } = await client.rpc("reenable_third_party_provider_connection", {
+    p_connection_id: parsedInput.connectionId,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_actor_label: parsedInput.actorLabel,
+  });
+  if (error) {
+    throw new ThirdPartyProviderAdapterMutationError(classifyError(error.message), error.message);
+  }
+  if (!data || typeof data !== "object") {
+    throw new ThirdPartyProviderAdapterMutationError("invalid_response", "reenable_third_party_provider_connection returned no row");
+  }
+  return parseThirdPartyProviderConnection(data as Record<string, unknown>);
 }

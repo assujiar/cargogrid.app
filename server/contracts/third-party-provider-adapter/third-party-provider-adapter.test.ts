@@ -29,6 +29,28 @@ test("parseThirdPartyProviderConnection defaults a null poll_cursor", () => {
   });
   assert.equal(parsed.pollCursor, null);
   assert.equal(parsed.integrationMode, "webhook");
+  assert.equal(parsed.autoDisabledAt, null);
+  assert.equal(parsed.disabledReason, null);
+});
+
+test("parseThirdPartyProviderConnection maps a real auto-disabled row (ATW-226I)", () => {
+  const parsed = parseThirdPartyProviderConnection({
+    id: CONN_ID,
+    tenant_id: TENANT_ID,
+    provider_code: "acmegps",
+    integration_mode: "webhook",
+    poll_cursor: null,
+    status: "disabled",
+    consecutive_failure_count: 10,
+    last_successful_ingest_at: null,
+    auto_disabled_at: "2026-08-03T04:00:00.000Z",
+    disabled_reason: "consecutive_failure_threshold_exceeded",
+    created_at: "2026-08-01T00:00:00Z",
+    updated_at: "2026-08-03T04:00:00.000Z",
+  });
+  assert.equal(parsed.status, "disabled");
+  assert.equal(parsed.consecutiveFailureCount, 10);
+  assert.equal(parsed.disabledReason, "consecutive_failure_threshold_exceeded");
 });
 
 test("parseRegisterThirdPartyProviderConnectionResult defaults a null raw_webhook_secret (idempotent re-register)", () => {

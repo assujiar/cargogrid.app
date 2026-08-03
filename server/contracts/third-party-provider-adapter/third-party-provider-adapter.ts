@@ -32,12 +32,14 @@ export const ThirdPartyProviderConnectionSchema = z.object({
   status: ThirdPartyProviderConnectionStatusSchema,
   consecutiveFailureCount: z.number().int(),
   lastSuccessfulIngestAt: z.string().nullable(),
+  autoDisabledAt: z.string().nullable(),
+  disabledReason: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type ThirdPartyProviderConnection = z.infer<typeof ThirdPartyProviderConnectionSchema>;
 
-/** Never includes webhook_secret_value -- that column carries zero authenticated/anon grant, disclosed exactly once via registerThirdPartyProviderConnection/rotateThirdPartyProviderWebhookSecret's own return row. */
+/** Never includes webhook_secret_value -- that column carries zero authenticated/anon grant, disclosed exactly once via registerThirdPartyProviderConnection/rotateThirdPartyProviderWebhookSecret's own return row. autoDisabledAt/disabledReason (ATW-226I) are set by either the automated 10-consecutive-signature-failure auto-disable or disableThirdPartyProviderConnection, and cleared together by reenableThirdPartyProviderConnection. */
 export function parseThirdPartyProviderConnection(row: Record<string, unknown>): ThirdPartyProviderConnection {
   return ThirdPartyProviderConnectionSchema.parse({
     id: row.id,
@@ -48,6 +50,8 @@ export function parseThirdPartyProviderConnection(row: Record<string, unknown>):
     status: row.status,
     consecutiveFailureCount: row.consecutive_failure_count,
     lastSuccessfulIngestAt: row.last_successful_ingest_at ?? null,
+    autoDisabledAt: row.auto_disabled_at ?? null,
+    disabledReason: row.disabled_reason ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -182,3 +186,19 @@ export const ThirdPartyProviderReferenceWebhookPayloadSchema = z.object({
   heading_degrees: z.number().min(0).max(360).optional(),
 });
 export type ThirdPartyProviderReferenceWebhookPayload = z.infer<typeof ThirdPartyProviderReferenceWebhookPayloadSchema>;
+
+/** ATW-226I: the manual counterpart to the automated 10-consecutive-signature-failure auto-disable (see the migration's own design note 1). */
+export const DisableThirdPartyProviderConnectionInputSchema = z.object({
+  connectionId: z.string().uuid(),
+  reason: z.string().nullable().default(null),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+});
+export type DisableThirdPartyProviderConnectionInput = z.input<typeof DisableThirdPartyProviderConnectionInputSchema>;
+
+export const ReenableThirdPartyProviderConnectionInputSchema = z.object({
+  connectionId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+});
+export type ReenableThirdPartyProviderConnectionInput = z.input<typeof ReenableThirdPartyProviderConnectionInputSchema>;
