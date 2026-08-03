@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolveOperationsAccessForRequest } from "../../../../../lib/portal/resolve-operations-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
@@ -78,6 +79,9 @@ export default async function WarehouseZonePage({ params }: { params: Promise<{ 
                   <p>
                     {warehouse.activeZoneCount} active / {warehouse.zoneCount} zone{warehouse.zoneCount === 1 ? "" : "s"}
                   </p>
+                  <Link href={`/${tenantSlug}/operations/warehouses/${warehouse.id}/locations`} className="underline">
+                    Bin and racking locations →
+                  </Link>
                 </div>
               </div>
 

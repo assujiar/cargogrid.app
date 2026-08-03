@@ -6349,6 +6349,40 @@ Three found and fixed during authoring, before commit (none in the final committ
 
 Self-closing. `ATW-229` is `VERIFIED`. `CG-S10-ATW-011` (Prompt 230, Bin and Racking) is now dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `230` next.
 
+### CHG-2026-168 — Bin and Racking (Phase 5, Prompt 230, `CG-S10-ATW-011`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-011` / `230_BIN_RACKING_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new migration (1 new table, 1 new composite type, 9 new functions incl. 2 triggers), new service layer, 1 new route |
+| Baseline evidence | `CG-S10-ATW-010` (Prompt 229, `VERIFIED`, this session) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- fourth and final task in that range, executed in ascending order |
+
+#### Outcome
+
+A flexible rack/shelf/floor/staging/dock/bin location hierarchy under a warehouse (and optionally a zone), matching this prompt's own §4 objective. Reuses `app.org_units`'s own materialized-path mechanism (PLT-109) verbatim -- the exact `path uuid[]`/`depth integer` + shape/cycle-guard-then-recompute trigger pair, and `app.move_org_unit`'s own descendant-path-splice cascade -- rather than inventing a second hierarchy mechanism or adopting `ltree` (absent from this repository, confirmed by direct search); this is the "repository-approved indexed hierarchy" Prompt 230 §17 itself asks for. `location_type` is a real closed CHECK enum (rack/shelf/floor/staging/dock/bin), unlike `zone_type`/`service_type` in `ATW-229`, since Prompt 230's own §4/§13/§27 all independently name the identical six-value taxonomy, a repeated sourced set, not a single test-data mention. Depth is bounded by a governed constant function (`app.warehouse_location_max_depth()` = 8, a disclosed reasoned default, the same class `ATW-224`'s own speed constant already used). A zone, when assigned to a location, must belong to the same warehouse and be active; a location may never move to a different warehouse, and moving is restricted to a `draft`-status node (Prompt 230 §22's own "relocate an empty unused draft node" verbatim). A barcode resolves a candidate location but never itself authorizes anything (`app.resolve_warehouse_location_by_barcode`, Prompt 230 §24 verbatim) -- barcode uniqueness is enforced tenant-wide. A location cannot deactivate while any draft/active child still exists under it (a real, checkable dependency); deeper stock/task dependency checking is disclosed as deferred to `ATW-231`, since no bin/inventory table exists yet.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730150000_create_advanced_tms_bin_racking.sql`; `server/contracts/bin-racking/bin-racking.ts`(+test); `server/queries/bin-racking.ts`(+test); `server/mutations/bin-racking.ts`(+test); `scripts/db-tests/advanced-tms-bin-racking.sql`; `app/(tenant)/[tenantSlug]/operations/warehouses/[warehouseId]/locations/{page,loading}.tsx`; `docs/build-log/phase-05/ATW-230.md`. Modified: `app/(tenant)/[tenantSlug]/operations/warehouses/page.tsx` (one added link per warehouse into its own location topology); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `230` `READY`->`VERIFIED`; row `231` reconciled to disclose it is not yet dependency-clean); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (113 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2497/2497 (22 net new), `pnpm run db:test` PASS -- 113 migrations/115 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 90 routes, 1 new (`/[tenantSlug]/operations/warehouses/[warehouseId]/locations`).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 1 new table, 1 new composite type, 9 new functions (incl. 2 triggers), no existing function widened. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+One found and fixed during authoring, before commit (none in the final committed state): a test-authoring mistake, not a schema/RPC defect -- the db-test's own first-drafted cross-warehouse-move assertion targeted a location subquery against an empty second warehouse (`WH-B` had zero locations at that point), so the subquery returned `NULL`, and moving a node to `parent_id = NULL` is always legal (it means "move to root") -- the move silently succeeded instead of raising `cross_warehouse_parent`. Fixed by creating a real root location in `WH-B` first and targeting it directly, so the assertion actually exercises the cross-warehouse guard. Full detail: `docs/build-log/phase-05/ATW-230.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-230` is `VERIFIED`. This completes the fourth and final task within this session's own explicit range authorization ("lanjut prompt 227-230") -- every named task (227, 228, 229, 230) is now `VERIFIED`. `CG-S10-ATW-012` (Prompt 231, WMS Inbound) is **not** yet dependency-clean: its own §9 upstream additionally requires "verified customer/item/master... contracts," and no item/SKU/product master type has ever been registered anywhere in this repository (confirmed against `app.master_types`'s own seeded rows: only `vendor_rate`/`vendor`/`fleet`/`vehicle`/`driver` exist). Fresh explicit user authorization, naming a task beyond this range, is required before any further Phase 5 row begins.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
