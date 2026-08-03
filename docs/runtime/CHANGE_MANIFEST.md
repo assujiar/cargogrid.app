@@ -6077,6 +6077,40 @@ Four found and fixed during authoring, before any full-suite gate run (none in t
 
 Self-closing. `ATW-226D` is `VERIFIED`. `226A`/`226B`/`226C`/`226D` are now all `VERIFIED`. `ATW-226E` is now the only other genuinely dependency-unblocked child (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226E` next.
 
+### CHG-2026-160 — Third-Party GPS Platform Adapter Contract (Phase 5, Prompt 226 decomposition child `ATW-226E`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226E` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §16 (`226E`'s own scope line) plus §8 (external-evidence policy) |
+| Change type | New capability -- 1 new additive migration, new service layer, 1 new dynamic route |
+| Baseline evidence | `ATW-226D` `VERIFIED` (`docs/build-log/phase-05/ATW-226D.md`); `CG-S10-ATW-004`/`PLT-129` both `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- fifth task in that range |
+
+#### Outcome
+
+A third distinct trust model (unauthenticated PWA bearer token for `226C`, trusted-backend scoped API key for `226D`, external-vendor HMAC signature for `226E`), each reusing the closest real precedent rather than inventing a fourth. `app.ingest_third_party_provider_webhook_event` is the third `anon`-granted function in this repository, authorized entirely by HMAC-SHA256 signature verification over the raw webhook body -- ADR-0011's own scheme (`app.compute_webhook_signature`/`app.verify_webhook_signature`, `PLT-129`), reused verbatim for the inbound direction. `app.third_party_provider_connections.webhook_secret_value` reuses `app.webhook_endpoints.secret_value`'s own accepted "raw, retrievable, zero grant" shape, since a signing secret cannot be a one-way hash and still be verifiable. Unmapped vehicles are quarantined (raw payload preserved) rather than dropped; replay defense is two-layered (ADR-0011's 5-minute timestamp window plus `provider_event_id` idempotency). Third-party adapters are case-specific (`226_*.md` §16) -- this checkpoint defines one repository-owned reference webhook JSON contract, disclosed as representative, never a certified named-vendor integration.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729380000_create_advanced_tms_third_party_provider_adapter.sql`; `server/contracts/third-party-provider-adapter/third-party-provider-adapter.ts`(+test); `server/queries/third-party-provider-adapter.ts`(+test); `server/mutations/third-party-provider-adapter.ts`(+test); `app/api/webhooks/third-party-gps/[connectionId]/route.ts`; `scripts/db-tests/advanced-tms-third-party-provider-adapter.sql`; `docs/build-log/phase-05/ATW-226E.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226E` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (105 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2343/2343 (20 net new), `pnpm run db:test` PASS -- 105 migrations/107 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 83 routes (1 new: `/api/webhooks/third-party-gps/[connectionId]`).
+
+#### Compatibility, rollout, recovery
+
+Additive only (three new tables, six new functions, zero prior schema touched). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `gen_random_bytes(integer) does not exist` -- three functions' own `search_path` excluded `public`, breaking pgcrypto resolution -- fixed by adding `public`; (2) an ambiguous column reference (`RETURNS TABLE`'s own `provider_code` output column colliding with a bare `where provider_code = ...`) -- fixed by table-aliasing; (3) a missing `RETURN;` after an early `RETURN QUERY` let the idempotent-registration branch fall through into a duplicate-key `INSERT` -- fixed by adding it; (4) a foreign-key violation logging an "invalid" attempt for a non-existent `connection_id` -- fixed by inserting the looked-up row's own (possibly-null) id instead of the caller-supplied value. Full detail: `docs/build-log/phase-05/ATW-226E.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226E` is `VERIFIED`. `226A` through `226E` are now all `VERIFIED`. `ATW-226F` is now the only dependency-unblocked child (`226C`+`226D`+`226E` all `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226F` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
