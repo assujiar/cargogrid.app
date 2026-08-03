@@ -398,6 +398,74 @@ begin
   end;
 end $$;
 
+\echo '>> hardening (inserted alongside ATW-011A): app.set_warehouse_zone_status/app.set_warehouse_status now block deactivation while draft/active app.warehouse_locations still reference them -- ZONE-ACTIVE still has an active child (RACK-A) and WH-B still has a draft root location (WHB-ROOT) from earlier in this fixture, so both guards are exercised against real, already-existing dependents, not a fabricated new fixture'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmerack');
+  v_wh_a_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-A');
+  v_wh_b_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-B');
+  v_zone_active_id uuid := (select id from app.warehouse_zones where tenant_id = v_tenant1 and warehouse_id = v_wh_a_id and code = 'ZONE-ACTIVE');
+  v_rack app.warehouse_locations;
+  v_shelf app.warehouse_locations;
+  v_bin app.warehouse_locations;
+  v_whb_root app.warehouse_locations;
+  v_zone app.warehouse_zones;
+  v_wh app.warehouses;
+begin
+  select * into v_rack from app.warehouse_locations where tenant_id = v_tenant1 and warehouse_id = v_wh_a_id and code = 'RACK-A';
+  select * into v_shelf from app.warehouse_locations where tenant_id = v_tenant1 and warehouse_id = v_wh_a_id and code = 'SHELF-A1';
+  select * into v_bin from app.warehouse_locations where tenant_id = v_tenant1 and warehouse_id = v_wh_a_id and code = 'BIN-A1-1';
+  select * into v_whb_root from app.warehouse_locations where tenant_id = v_tenant1 and warehouse_id = v_wh_b_id and code = 'WHB-ROOT';
+  if v_rack.status <> 'active' or v_shelf.status <> 'draft' or v_bin.status <> 'draft' or v_whb_root.status <> 'draft' then
+    raise exception 'assertion failed: fixture precondition -- expected RACK-A active, SHELF-A1/BIN-A1-1/WHB-ROOT draft going into the hardening test, got RACK-A=%/SHELF-A1=%/BIN-A1-1=%/WHB-ROOT=%', v_rack.status, v_shelf.status, v_bin.status, v_whb_root.status;
+  end if;
+  -- SHELF-A1/BIN-A1-1 were moved under DOCK-1 earlier in this file, but a move never
+  -- changes zone_id (confirmed by direct inspection of app.move_warehouse_location) --
+  -- both still reference ZONE-ACTIVE, so the zone's own dependent count is 3
+  -- (RACK-A + SHELF-A1 + BIN-A1-1), not just the one obviously-still-attached RACK-A.
+  if v_shelf.zone_id <> v_zone_active_id or v_bin.zone_id <> v_zone_active_id then
+    raise exception 'assertion failed: fixture precondition -- expected SHELF-A1/BIN-A1-1 to still carry zone_id=ZONE-ACTIVE after their earlier move to a new parent';
+  end if;
+
+  select * into v_zone from app.warehouse_zones where id = v_zone_active_id;
+  begin
+    perform app.set_warehouse_zone_status(v_zone_active_id, 'inactive', 'attempting to deactivate', v_zone.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+    raise exception 'assertion failed: expected zone_has_active_locations -- ZONE-ACTIVE still has 3 draft/active dependents (RACK-A/SHELF-A1/BIN-A1-1)';
+  exception
+    when others then
+      if sqlerrm not like 'zone_has_active_locations%' then raise; end if;
+  end;
+
+  select * into v_wh from app.warehouses where id = v_wh_b_id;
+  begin
+    perform app.set_warehouse_status(v_wh_b_id, 'inactive', 'attempting to deactivate', v_wh.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+    raise exception 'assertion failed: expected warehouse_has_active_locations -- WH-B still has draft root location WHB-ROOT (no zone)';
+  exception
+    when others then
+      if sqlerrm not like 'warehouse_has_active_locations%' then raise; end if;
+  end;
+
+  -- Wind every dependent down (leaf-first: BIN-A1-1, then its parent SHELF-A1, then
+  -- the standalone RACK-A), then confirm the guard reopens exactly like
+  -- app.warehouse_zones'/app.warehouses' own pre-existing zone-count guards do.
+  perform app.set_warehouse_location_status(v_bin.id, 'inactive', 'wound down for hardening test', v_bin.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+  select * into v_shelf from app.warehouse_locations where id = v_shelf.id;
+  perform app.set_warehouse_location_status(v_shelf.id, 'inactive', 'wound down for hardening test', v_shelf.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+  perform app.set_warehouse_location_status(v_rack.id, 'inactive', 'wound down for hardening test', v_rack.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+  select * into v_zone from app.warehouse_zones where id = v_zone_active_id;
+  v_zone := app.set_warehouse_zone_status(v_zone_active_id, 'inactive', 'no active locations remain', v_zone.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+  if v_zone.status <> 'inactive' then
+    raise exception 'assertion failed: expected ZONE-ACTIVE to deactivate once every dependent location was wound down';
+  end if;
+
+  perform app.set_warehouse_location_status(v_whb_root.id, 'inactive', 'wound down for hardening test', v_whb_root.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+  select * into v_wh from app.warehouses where id = v_wh_b_id;
+  v_wh := app.set_warehouse_status(v_wh_b_id, 'inactive', 'no active locations remain', v_wh.record_version, '00000000-0000-0000-0000-000000071102', 'rep');
+  if v_wh.status <> 'inactive' then
+    raise exception 'assertion failed: expected WH-B to deactivate once WHB-ROOT was wound down';
+  end if;
+end $$;
+
 \echo '>> schema-privilege defense in depth (ERR-2026-004): anon holds no direct table/EXECUTE access; authenticated has RLS-scoped SELECT but no direct INSERT/UPDATE/DELETE; only service_role may write directly'
 do $$
 begin
