@@ -15,6 +15,12 @@ const VEHICLE_POSITION_STATUS_MESSAGE: Record<string, string> = {
   unavailable: "No live position is currently available for this shipment.",
 };
 
+const LIVE_ETA_STATUS_MESSAGE: Record<string, string> = {
+  on_time: "On time based on the vehicle's current position.",
+  delayed: "Running behind schedule based on the vehicle's current position.",
+  unavailable: "No live ETA is currently available for this shipment.",
+};
+
 /**
  * Public shipment tracking page (OPS-180, CG-S8-OPS-014). Deliberately outside every
  * tenant-authenticated portal guard (`app/(public)/`, the same route group
@@ -88,6 +94,12 @@ export default async function PublicTrackingPage({ params }: { params: Promise<{
             <p className="text-xs text-neutral-500">
               {result.vehiclePosition.coordinates[1].toFixed(4)}, {result.vehiclePosition.coordinates[0].toFixed(4)}
               {result.vehiclePositionUpdatedAt ? ` — updated ${new Date(result.vehiclePositionUpdatedAt).toLocaleString()}` : ""}
+            </p>
+          ) : null}
+          {result.liveEtaStatus ? (
+            <p className="text-sm text-neutral-700">
+              {LIVE_ETA_STATUS_MESSAGE[result.liveEtaStatus] ?? "ETA status unavailable."}
+              {result.liveEtaAt ? ` Estimated arrival: ${new Date(result.liveEtaAt).toLocaleString()}.` : ""}
             </p>
           ) : null}
         </section>

@@ -31,7 +31,8 @@ export const SIGNAL_STATUSES = ["pending", "confirmed", "dismissed"] as const;
 export const SignalStatusSchema = z.enum(SIGNAL_STATUSES);
 export type SignalStatus = z.infer<typeof SignalStatusSchema>;
 
-export const EXCEPTION_SIGNAL_TYPES = ["route_deviation", "overdue_geofence_arrival"] as const;
+/** tracking_health_no_signal was added at ATW-228 (app.detect_shipment_leg_tracking_health_signals) -- reuses this same table/confirm/dismiss path, never a second staging table. */
+export const EXCEPTION_SIGNAL_TYPES = ["route_deviation", "overdue_geofence_arrival", "tracking_health_no_signal"] as const;
 export const ExceptionSignalTypeSchema = z.enum(EXCEPTION_SIGNAL_TYPES);
 export type ExceptionSignalType = z.infer<typeof ExceptionSignalTypeSchema>;
 

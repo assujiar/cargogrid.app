@@ -100,6 +100,27 @@ describe("parseOperationalException", () => {
     assert.equal(exception.slaHours, null);
     assert.equal(exception.dueAt, null);
   });
+
+  test("defaults telemetry provenance to null for a manual exception", () => {
+    const exception = parseOperationalException(BASE_EXCEPTION_ROW);
+    assert.equal(exception.sourceClass, null);
+    assert.equal(exception.sourceConfidenceScore, null);
+    assert.equal(exception.sourceSignalId, null);
+  });
+
+  test("maps real telemetry provenance (ATW-228 widening)", () => {
+    const exception = parseOperationalException({
+      ...BASE_EXCEPTION_ROW,
+      source: "system",
+      source_class: "third_party_platform",
+      source_confidence_score: "0.4",
+      source_freshness_status: "stale",
+      source_signal_id: "923e4567-e89b-12d3-a456-426614174000",
+    });
+    assert.equal(exception.sourceClass, "third_party_platform");
+    assert.equal(exception.sourceConfidenceScore, 0.4);
+    assert.equal(exception.sourceFreshnessStatus, "stale");
+  });
 });
 
 describe("parseExceptionDirectoryRow", () => {

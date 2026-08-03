@@ -6247,6 +6247,142 @@ One critical, self-caught authoring mistake, found and fixed before any commit: 
 
 Self-closing. `ATW-226I` is `VERIFIED`. **Row `226` (`CG-S10-ATW-007`) is itself now `VERIFIED`** -- all nine children `226A`-`226I` complete; `226I` was this family's own designated closing child, so this checkpoint is the one authorized to set the parent-level status directly. `CG-S10-ATW-008` (Prompt 227) is now dependency-clean, marked `READY`. This session's own explicit range authorization ("lanjut sd prompt terakhir di 226 (226a-226i)") is now fully spent -- the next runtime agent must stop and obtain fresh explicit user authorization before starting `227` or any further Phase 5 row.
 
+### CHG-2026-165 — Capacity, Utilization and Tracking Coverage (Phase 5, Prompt 227, `CG-S10-ATW-008`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-008` / `227_CAPACITY_UTILIZATION_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new migration (1 new table, 1 new composite type, 5 new functions), new service layer, 1 new route |
+| Baseline evidence | Row `226` (`CG-S10-ATW-007`), all nine `226A`-`226I` children, `VERIFIED` (`docs/build-log/phase-05/ATW-226I.md`); `CG-S10-ATW-004` (Prompt 223, `VERIFIED`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- first task in that range, executed in ascending order |
+
+#### Outcome
+
+A real capacity-reservation ledger (`app.vehicle_capacity_reservations`) and tracking coverage/utilization read projections (`app.get_tenant_tracking_coverage`, `app.get_tenant_tracking_utilization_summary`), matching this prompt's own §24 business rule that "capacity and tracking usage are separate dimensions." `app.reserve_vehicle_capacity`/`app.consume_vehicle_capacity_reservation`/`app.release_vehicle_capacity_reservation` reserve/consume/release exact weight/volume capacity against a leg's own currently-assigned vehicle (derived from `app.resource_assignments`, OPS-172, never caller-supplied), preventing overbooking by locking the vehicle's own `app.vehicle_operational_profiles` row before summing overlapping active reservations against the leg's own planned window. The two new reads compose `226A`'s entitlement/limits, `223`'s device/eligibility data, `226F`'s live position/health, and `225`'s tracking-required-leg detection into one tenant-wide coverage table and one tenant-wide utilization summary, never re-deriving or mutating any of them.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730120000_create_advanced_tms_capacity_utilization.sql`; `server/contracts/capacity-utilization/capacity-utilization.ts`(+test); `server/queries/capacity-utilization.ts`(+test); `server/mutations/capacity-utilization.ts`(+test); `scripts/db-tests/advanced-tms-capacity-utilization.sql`; `app/(tenant)/[tenantSlug]/operations/capacity/{page,loading}.tsx`; `docs/build-log/phase-05/ATW-227.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `227` `READY`->`VERIFIED`, row `228` `NOT_STARTED`->`READY`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (110 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2425/2425 (28 net new), `pnpm run db:test` PASS -- 110 migrations/112 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 88 routes, 1 new (`/[tenantSlug]/operations/capacity`) appears in the manifest.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 1 new table, 1 new composite type, 5 new functions, no existing function widened. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before commit (none in the final committed state): (1) the db-test fixture's own "rep" role initially lacked `OPS:Assign`, required by both `app.assign_device_to_vehicle` (`223`) and `app.assign_resource` (OPS-172) -- fixed by widening the fixture role's grants; (2) `app.allocate_shipment_leg_cargo`'s own cumulative-quantity-across-legs reconciliation check (`cargo_over_allocated`), not anticipated from `app.confirm_shipment_leg_network`'s weaker per-leg-existence check alone -- fixed by declaring a generously large shipment total up front; (3) two test-fixture lookups queried a non-existent `vehicle_operational_profiles.code` column instead of joining `app.master_records` (the same join `app.get_tenant_vehicle_tracking_overview`, `226H`, already establishes) -- fixed; (4) a narrow idempotency/partial-unique-index interaction in `app.reserve_vehicle_capacity`'s own `unique_violation` exception handler, which would have silently returned an all-null row for a genuinely new idempotency key against an already-active leg rather than a clear error -- fixed with an explicit `reservation_already_active` pre-check plus a hardened exception-handler fallback, both paths exercised directly in the db-test. Full detail: `docs/build-log/phase-05/ATW-227.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-227` is `VERIFIED`. `CG-S10-ATW-009` (Prompt 228, Advanced Milestone and Exception with Multi-Source Telemetry) is now dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `228` next.
+
+### CHG-2026-166 — Advanced Milestone and Exception with Multi-Source Telemetry (Phase 5, Prompt 228, `CG-S10-ATW-009`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-009` / `228_ADVANCED_MILESTONE_EXCEPTION_PROMPT.md` (all 36 sections) |
+| Change type | Extension of an already-`VERIFIED` capability -- 1 new migration (1 new composite type/function, 4 widened functions via `DROP`+`CREATE`, 2 widened via same-signature `CREATE OR REPLACE`, 2 new authenticated RPCs, 1 new scan detector, 2 tables widened additively), widened + new service layer, 0 new routes |
+| Baseline evidence | `CG-S10-ATW-008` (Prompt 227, `VERIFIED`, this session); `ATW-226F`/`226G` (`VERIFIED`); Phase 3 `OPS-173`/`174` (`VERIFIED`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- second task in that range, executed in ascending order |
+
+#### Outcome
+
+Extends `ATW-226G`'s own already-staged milestone-candidate/exception-signal design with real telemetry provenance, a new tracking-health signal type, a fixed pre-existing defect, dependency-aware live ETA, and an explicit rebaseline operation -- deliberately never re-implementing `226G`'s own staging/confirm/dismiss mechanics. `app.evaluate_telemetry_confidence_and_freshness` computes a real confidence score and freshness status from the canonical telemetry event backing a candidate/signal, now populated on `app.milestone_events`/`app.operational_exceptions` at confirmation time (honestly null for a manual record or a signal with no backing event). A new `tracking_health_no_signal` signal type reuses `app.shipment_exception_signals` via a new scan-based, storm-proof, self-healing detector. `app.evaluate_leg_no_signal_escalation` (`ATW-225`) is fixed to measure a session's staleness from the vehicle's own actual last-received telemetry rather than session age. `app.get_shipment_leg_eta_projection` gives a real, honestly-bounded live ETA (never fabricated when the position is absent/stale); `app.rebaseline_shipment_leg_schedule` gives an explicit, audited schedule change for unstarted legs only. The public tracking projection gains a customer-safe `live_eta_status`/`live_eta_at`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730130000_create_advanced_tms_milestone_exception_telemetry.sql`; `server/contracts/milestone-exception-telemetry/milestone-exception-telemetry.ts`(+test); `server/queries/milestone-exception-telemetry.ts`(+test); `server/mutations/milestone-exception-telemetry.ts`(+test); `scripts/db-tests/advanced-tms-milestone-exception-telemetry.sql`; `docs/build-log/phase-05/ATW-228.md`. Modified: `server/contracts/milestone-management/milestone-management.ts`(+test, `MilestoneEvent` +4 provenance fields); `server/contracts/exception-escalation/exception-escalation.ts`(+test, `OperationalException` +4 provenance fields); `server/contracts/geofence-route-deviation-signals/geofence-route-deviation-signals.ts` (`EXCEPTION_SIGNAL_TYPES` +1); `server/contracts/public-tracking/public-tracking.ts`(+test, +`liveEtaStatus`/`liveEtaAt`); `app/(public)/tracking/[token]/page.tsx` (renders the 2 new fields); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `228` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (111 total), 0 prior migration file edited (6 functions widened in place via the applied-migration-safe `DROP`+`CREATE`/`CREATE OR REPLACE` techniques), 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2440/2440 (15 net new), `pnpm run db:test` PASS -- 111 migrations/113 db-test files (1 new, zero regression -- including `OPS-173`/`OPS-174`/`226G`'s own db-tests re-passing unmodified against every widened function), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 88 routes, unchanged.
+
+#### Compatibility, rollout, recovery
+
+Additive apart from six widened functions: two signature-changing (`DROP`+`CREATE`, `app.ingest_milestone_event`/`app.report_exception`, trailing defaulted params -- every existing call site unaffected) and four same-signature (`CREATE OR REPLACE`, `app.confirm_milestone_candidate`/`app.confirm_exception_signal`/`app.evaluate_leg_no_signal_escalation`/`app.lookup_public_shipment_tracking`, the last also `DROP`+`CREATE` since it gained two new output columns). Every one proven backward-compatible by its own capability's pre-existing db-test re-passing unmodified. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Seven found and fixed during authoring, before commit (none in the final committed state): (1) a real, pre-existing defect in `ATW-225`'s own `app.evaluate_leg_no_signal_escalation` (measured session age, not telemetry recency) -- the primary subject of design note 3, fixed as part of this checkpoint's own scope, not merely worked around; (2) `CREATE OR REPLACE` on a trailing-parameter-widened function silently creates an ambiguous second overload rather than replacing it, caught immediately by a `COMMENT ON FUNCTION ... is not unique` error -- fixed via `DROP`+`CREATE` (`226C`'s own precedent) for both widened ingestion functions; (3) `make_interval(hours => numeric)` does not exist (integer-only parameter) -- fixed via numeric-times-interval multiplication; (4) a literal `'success'`/`'ok'` copy-paste bug in the widened `lookup_public_shipment_tracking`'s own success path, caught immediately by `226H`'s own pre-existing db-test re-failing on the very first full-suite run; (5) a missing `public` schema in `app.detect_shipment_leg_tracking_health_signals`'s own `search_path` (the identical `226E`/`226G` bug class), breaking `validate_geography_point` inlining during an unrelated-column `UPDATE`; (6) a miscounted `app.capture_audit_event` call in `app.rebaseline_shipment_leg_schedule` (wrong argument order, and the "before" state read after the row was already overwritten); (7) two test-authoring mistakes (`app.audit_logs.resource_id` misnamed `record_id`; an actor lacking record-level shipment access via `can_access_record`). Full detail: `docs/build-log/phase-05/ATW-228.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-228` is `VERIFIED`. `CG-S10-ATW-010` (Prompt 229, Warehouse and Zone) was already independently dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `229` next.
+
+### CHG-2026-167 — Warehouse and Zone (Phase 5, Prompt 229, `CG-S10-ATW-010`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-010` / `229_WAREHOUSE_ZONE_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new migration (3 new tables, 1 new composite type, 12 new functions), new service layer, 1 new route |
+| Baseline evidence | `CG-S10-ATW-001` (Prompt 220, `VERIFIED`); verified Platform master/config/access and location/PostGIS foundations |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- third task in that range, executed in ascending order |
+
+#### Outcome
+
+Tenant/company warehouse and zone masters with versioned topology, explicit customer/owner eligibility, and dependency-checked deactivation, matching this prompt's own §4 objective. Confirmed up front that `app.entitlement_modules` (PLT-106) already seeds `OPS` covering "Operations (Job/Shipment, TMS, WMS, Milestone, ePOD)" -- reused verbatim as the module code for every new RPC's authority check, no separate `WMS` code invented. Zones are deliberately flat (one level under a warehouse) since Prompt 229's own "Facility Topology" epic covers only facility+zone identity, while Prompt 230's own "Location Topology" epic owns the deeper rack/shelf/bin hierarchy -- a zone's `warehouse_id`/`code`/`zone_type` are immutable once created, structurally preventing a cross-warehouse link or a duplicate code. `service_type_eligibility`/`zone_type` stay free text (matching `service_type`'s own established convention elsewhere; Prompt 229 §27's "ambient/cold/secure zones" are honored as sourced test-data examples, not treated as an exhaustive enum). `timezone`/`site_geog`/`environment`/`restrictions`/company-branch record scope all reuse already-governed primitives (`app.validate_timezone_name`, `app.geojson_point_to_geography`/`app.validate_geography_point`, `app.validate_master_attributes`, `app.lead_record_scope_org_unit_ids`) rather than re-deriving them. Customer eligibility is an explicit grant/revoke ledger mirroring `app.role_assignments`'s own shape. A warehouse cannot deactivate while any active/on_hold zone still exists under it (a real, checkable dependency); zone-level stock/task dependency checking is disclosed as deferred to `ATW-230`, since no bin/inventory table exists yet.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730140000_create_advanced_tms_warehouse_zone.sql`; `server/contracts/warehouse-zone/warehouse-zone.ts`(+test); `server/queries/warehouse-zone.ts`(+test); `server/mutations/warehouse-zone.ts`(+test); `scripts/db-tests/advanced-tms-warehouse-zone.sql`; `app/(tenant)/[tenantSlug]/operations/warehouses/{page,loading}.tsx`; `docs/build-log/phase-05/ATW-229.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `229` `READY`->`VERIFIED`, row `230` `NOT_STARTED`->`READY`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (112 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2475/2475 (35 net new), `pnpm run db:test` PASS -- 112 migrations/114 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 89 routes, 1 new (`/[tenantSlug]/operations/warehouses`).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 3 new tables, 1 new composite type, 12 new functions, no existing function widened. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Three found and fixed during authoring, before commit (none in the final committed state): (1) a test-authoring ordering mistake -- the first-drafted `warehouse_code_conflict` negative assertion used an actor who correctly failed earlier on `insufficient_authority` (wrong org-unit scope) rather than reaching the duplicate-code check -- fixed by using an actor who genuinely holds both the permission and the record scope; (2) a real, previously-unknown defect: `app.list_warehouse_customer_eligibility`'s own `RETURNS TABLE` column named `id` shadowed a bare `id` reference inside its own function body (Postgres implicitly declares each `RETURNS TABLE` output column as a same-named plpgsql variable), raising `column reference "id" is ambiguous` at runtime -- fixed by table-qualifying the lookup; (3) two db-test `declare`-block row-type initializers used a scalar-subquery assignment, which cannot bind a whole-row type in plpgsql `declare` -- fixed via a bare declaration plus a `select ... into` statement in the block body. Full detail: `docs/build-log/phase-05/ATW-229.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-229` is `VERIFIED`. `CG-S10-ATW-011` (Prompt 230, Bin and Racking) is now dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `230` next.
+
+### CHG-2026-168 — Bin and Racking (Phase 5, Prompt 230, `CG-S10-ATW-011`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-011` / `230_BIN_RACKING_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new migration (1 new table, 1 new composite type, 9 new functions incl. 2 triggers), new service layer, 1 new route |
+| Baseline evidence | `CG-S10-ATW-010` (Prompt 229, `VERIFIED`, this session) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- fourth and final task in that range, executed in ascending order |
+
+#### Outcome
+
+A flexible rack/shelf/floor/staging/dock/bin location hierarchy under a warehouse (and optionally a zone), matching this prompt's own §4 objective. Reuses `app.org_units`'s own materialized-path mechanism (PLT-109) verbatim -- the exact `path uuid[]`/`depth integer` + shape/cycle-guard-then-recompute trigger pair, and `app.move_org_unit`'s own descendant-path-splice cascade -- rather than inventing a second hierarchy mechanism or adopting `ltree` (absent from this repository, confirmed by direct search); this is the "repository-approved indexed hierarchy" Prompt 230 §17 itself asks for. `location_type` is a real closed CHECK enum (rack/shelf/floor/staging/dock/bin), unlike `zone_type`/`service_type` in `ATW-229`, since Prompt 230's own §4/§13/§27 all independently name the identical six-value taxonomy, a repeated sourced set, not a single test-data mention. Depth is bounded by a governed constant function (`app.warehouse_location_max_depth()` = 8, a disclosed reasoned default, the same class `ATW-224`'s own speed constant already used). A zone, when assigned to a location, must belong to the same warehouse and be active; a location may never move to a different warehouse, and moving is restricted to a `draft`-status node (Prompt 230 §22's own "relocate an empty unused draft node" verbatim). A barcode resolves a candidate location but never itself authorizes anything (`app.resolve_warehouse_location_by_barcode`, Prompt 230 §24 verbatim) -- barcode uniqueness is enforced tenant-wide. A location cannot deactivate while any draft/active child still exists under it (a real, checkable dependency); deeper stock/task dependency checking is disclosed as deferred to `ATW-231`, since no bin/inventory table exists yet.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730150000_create_advanced_tms_bin_racking.sql`; `server/contracts/bin-racking/bin-racking.ts`(+test); `server/queries/bin-racking.ts`(+test); `server/mutations/bin-racking.ts`(+test); `scripts/db-tests/advanced-tms-bin-racking.sql`; `app/(tenant)/[tenantSlug]/operations/warehouses/[warehouseId]/locations/{page,loading}.tsx`; `docs/build-log/phase-05/ATW-230.md`. Modified: `app/(tenant)/[tenantSlug]/operations/warehouses/page.tsx` (one added link per warehouse into its own location topology); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `230` `READY`->`VERIFIED`; row `231` reconciled to disclose it is not yet dependency-clean); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (113 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2497/2497 (22 net new), `pnpm run db:test` PASS -- 113 migrations/115 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 90 routes, 1 new (`/[tenantSlug]/operations/warehouses/[warehouseId]/locations`).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 1 new table, 1 new composite type, 9 new functions (incl. 2 triggers), no existing function widened. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+One found and fixed during authoring, before commit (none in the final committed state): a test-authoring mistake, not a schema/RPC defect -- the db-test's own first-drafted cross-warehouse-move assertion targeted a location subquery against an empty second warehouse (`WH-B` had zero locations at that point), so the subquery returned `NULL`, and moving a node to `parent_id = NULL` is always legal (it means "move to root") -- the move silently succeeded instead of raising `cross_warehouse_parent`. Fixed by creating a real root location in `WH-B` first and targeting it directly, so the assertion actually exercises the cross-warehouse guard. Full detail: `docs/build-log/phase-05/ATW-230.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-230` is `VERIFIED`. This completes the fourth and final task within this session's own explicit range authorization ("lanjut prompt 227-230") -- every named task (227, 228, 229, 230) is now `VERIFIED`. `CG-S10-ATW-012` (Prompt 231, WMS Inbound) is **not** yet dependency-clean: its own §9 upstream additionally requires "verified customer/item/master... contracts," and no item/SKU/product master type has ever been registered anywhere in this repository (confirmed against `app.master_types`'s own seeded rows: only `vendor_rate`/`vendor`/`fleet`/`vehicle`/`driver` exist). Fresh explicit user authorization, naming a task beyond this range, is required before any further Phase 5 row begins.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

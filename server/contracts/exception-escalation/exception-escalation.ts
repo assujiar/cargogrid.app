@@ -69,6 +69,14 @@ export function parseExceptionSlaPolicyVersion(row: Record<string, unknown>): Ex
   });
 }
 
+export const EXCEPTION_SOURCE_CLASSES = ["driver_mobile", "direct_device", "third_party_platform"] as const;
+export const ExceptionSourceClassSchema = z.enum(EXCEPTION_SOURCE_CLASSES);
+export type ExceptionSourceClass = z.infer<typeof ExceptionSourceClassSchema>;
+
+export const EXCEPTION_FRESHNESS_STATUSES = ["healthy", "stale", "offline"] as const;
+export const ExceptionFreshnessStatusSchema = z.enum(EXCEPTION_FRESHNESS_STATUSES);
+export type ExceptionFreshnessStatus = z.infer<typeof ExceptionFreshnessStatusSchema>;
+
 export const OperationalExceptionSchema = z.object({
   id: z.string().uuid(),
   tenantId: z.string().uuid(),
@@ -97,9 +105,14 @@ export const OperationalExceptionSchema = z.object({
   createdBy: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  sourceClass: ExceptionSourceClassSchema.nullable(),
+  sourceConfidenceScore: z.coerce.number().min(0).max(1).nullable(),
+  sourceFreshnessStatus: ExceptionFreshnessStatusSchema.nullable(),
+  sourceSignalId: z.string().uuid().nullable(),
 });
 export type OperationalException = z.infer<typeof OperationalExceptionSchema>;
 
+/** sourceClass/sourceConfidenceScore/sourceFreshnessStatus/sourceSignalId were added at ATW-228 -- always null for a manual exception, a historical row predating this widening, or a tracking_health_no_signal signal (whose premise is the absence of a telemetry event). */
 function baseExceptionFields(row: Record<string, unknown>) {
   return {
     id: row.id,
@@ -125,6 +138,10 @@ function baseExceptionFields(row: Record<string, unknown>) {
     createdBy: row.created_by ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    sourceClass: row.source_class ?? null,
+    sourceConfidenceScore: row.source_confidence_score ?? null,
+    sourceFreshnessStatus: row.source_freshness_status ?? null,
+    sourceSignalId: row.source_signal_id ?? null,
   };
 }
 
