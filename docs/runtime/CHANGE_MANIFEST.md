@@ -6247,6 +6247,40 @@ One critical, self-caught authoring mistake, found and fixed before any commit: 
 
 Self-closing. `ATW-226I` is `VERIFIED`. **Row `226` (`CG-S10-ATW-007`) is itself now `VERIFIED`** -- all nine children `226A`-`226I` complete; `226I` was this family's own designated closing child, so this checkpoint is the one authorized to set the parent-level status directly. `CG-S10-ATW-008` (Prompt 227) is now dependency-clean, marked `READY`. This session's own explicit range authorization ("lanjut sd prompt terakhir di 226 (226a-226i)") is now fully spent -- the next runtime agent must stop and obtain fresh explicit user authorization before starting `227` or any further Phase 5 row.
 
+### CHG-2026-165 — Capacity, Utilization and Tracking Coverage (Phase 5, Prompt 227, `CG-S10-ATW-008`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-008` / `227_CAPACITY_UTILIZATION_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new migration (1 new table, 1 new composite type, 5 new functions), new service layer, 1 new route |
+| Baseline evidence | Row `226` (`CG-S10-ATW-007`), all nine `226A`-`226I` children, `VERIFIED` (`docs/build-log/phase-05/ATW-226I.md`); `CG-S10-ATW-004` (Prompt 223, `VERIFIED`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- first task in that range, executed in ascending order |
+
+#### Outcome
+
+A real capacity-reservation ledger (`app.vehicle_capacity_reservations`) and tracking coverage/utilization read projections (`app.get_tenant_tracking_coverage`, `app.get_tenant_tracking_utilization_summary`), matching this prompt's own §24 business rule that "capacity and tracking usage are separate dimensions." `app.reserve_vehicle_capacity`/`app.consume_vehicle_capacity_reservation`/`app.release_vehicle_capacity_reservation` reserve/consume/release exact weight/volume capacity against a leg's own currently-assigned vehicle (derived from `app.resource_assignments`, OPS-172, never caller-supplied), preventing overbooking by locking the vehicle's own `app.vehicle_operational_profiles` row before summing overlapping active reservations against the leg's own planned window. The two new reads compose `226A`'s entitlement/limits, `223`'s device/eligibility data, `226F`'s live position/health, and `225`'s tracking-required-leg detection into one tenant-wide coverage table and one tenant-wide utilization summary, never re-deriving or mutating any of them.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730120000_create_advanced_tms_capacity_utilization.sql`; `server/contracts/capacity-utilization/capacity-utilization.ts`(+test); `server/queries/capacity-utilization.ts`(+test); `server/mutations/capacity-utilization.ts`(+test); `scripts/db-tests/advanced-tms-capacity-utilization.sql`; `app/(tenant)/[tenantSlug]/operations/capacity/{page,loading}.tsx`; `docs/build-log/phase-05/ATW-227.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `227` `READY`->`VERIFIED`, row `228` `NOT_STARTED`->`READY`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (110 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2425/2425 (28 net new), `pnpm run db:test` PASS -- 110 migrations/112 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 88 routes, 1 new (`/[tenantSlug]/operations/capacity`) appears in the manifest.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 1 new table, 1 new composite type, 5 new functions, no existing function widened. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before commit (none in the final committed state): (1) the db-test fixture's own "rep" role initially lacked `OPS:Assign`, required by both `app.assign_device_to_vehicle` (`223`) and `app.assign_resource` (OPS-172) -- fixed by widening the fixture role's grants; (2) `app.allocate_shipment_leg_cargo`'s own cumulative-quantity-across-legs reconciliation check (`cargo_over_allocated`), not anticipated from `app.confirm_shipment_leg_network`'s weaker per-leg-existence check alone -- fixed by declaring a generously large shipment total up front; (3) two test-fixture lookups queried a non-existent `vehicle_operational_profiles.code` column instead of joining `app.master_records` (the same join `app.get_tenant_vehicle_tracking_overview`, `226H`, already establishes) -- fixed; (4) a narrow idempotency/partial-unique-index interaction in `app.reserve_vehicle_capacity`'s own `unique_violation` exception handler, which would have silently returned an all-null row for a genuinely new idempotency key against an already-active leg rather than a clear error -- fixed with an explicit `reservation_already_active` pre-check plus a hardened exception-handler fallback, both paths exercised directly in the db-test. Full detail: `docs/build-log/phase-05/ATW-227.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-227` is `VERIFIED`. `CG-S10-ATW-009` (Prompt 228, Advanced Milestone and Exception with Multi-Source Telemetry) is now dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `228` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
