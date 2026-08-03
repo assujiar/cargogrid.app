@@ -5939,6 +5939,42 @@ None -- zero bounded repair was needed. Every required-verification item passed 
 
 Self-closing. `CG-S9-FIN-029` is `VERIFIED`. **`PHASE_4_VERIFIED` is set.** This session's explicit authorized range "lanjut prompt 213 sd 219" now has its own substantive Finance portion (Prompts 213-218) fully complete. Prompt 219 (Phase 5 Advanced TMS/WMS kickoff) is next, within the same session authorization -- proceeding directly, unlike a prior phase-closure checkpoint's own precedent of stopping for fresh authorization here.
 
+### CHG-2026-156 — Tracking Entitlement and Source Policy (Phase 5, Prompt 226 decomposition child `ATW-226A`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226A` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226A`'s own scope line) |
+| Change type | New capability -- 1 new additive migration, 1 replaced (`CREATE OR REPLACE`) function, new service layer, 0 new routes |
+| Baseline evidence | `CG-S10-ATW-006` `VERIFIED` (`docs/build-log/phase-05/ATW-225.md`); Platform Configuration Engine `PLT-121` `VERIFIED`; `CG-S10-ATW-004` `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 226," read per the prior reconciliation checkpoint's own recorded default naming `226A` the natural first pick |
+
+**Note on this manifest's own completeness:** the checkpoints between `CHG-2026-155` (Prompt 218, Finance Closure) and this entry -- Prompt 219 (Phase 5 README, no `CG-S*` id), `CG-S10-ATW-001..006` (Prompts 220-225), and the `ATW-226` decomposition reconciliation checkpoint -- did not add their own `CHG-2026-*` entries to this file, despite each having a real build log/execution-index row. This is the same failure mode `ISS-2026-005` already tracks for Prompts 83-90 (Phase 0), now recurring for Phase 5; see that issue's own updated entry in `docs/runtime/KNOWN_ISSUES.md` §4. Backfilling six-plus historical entries this checkpoint did not author is out of `ATW-226A`'s own scope (the identical reasoning `ISS-2026-005`'s own discovery checkpoint, `PH0-091`, already applied) -- this entry uses the correct next sequential number given the file's real content (`156`), and the gap is disclosed rather than silently left unremarked.
+
+#### Outcome
+
+Real per-tenant tracking entitlement/package/limits resolution and a tenant-level default multi-source policy now exist. `app.is_shipment_tracking_entitled` (`ATW-222`'s own always-false disclosed stub) has a real implementation, delegating to a new `app.resolve_tenant_tracking_package` that reuses Configuration Engine (`PLT-121`) directly -- exactly the mechanism `ATW-222`'s own migration header cited, not a new entitlement schema. A new `app.tenant_tracking_source_policies` table plus `app.upsert_tenant_tracking_source_policy`/`app.resolve_tenant_tracking_source_policy` give later `ATW-226` children a tenant-level default (priority/freshness/accuracy/hysteresis) that `ATW-223`'s own per-vehicle `app.vehicle_tracking_source_priorities` can fall back to -- a distinct grain, not a duplicate. No production-code defect found; one db-test fixture identifier collision (tenant slug `acmetrack`, already claimed by `operations-public-tracking.sql`) found and fixed before the first full-suite run completed.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729340000_create_advanced_tms_tracking_entitlement_source_policy.sql`; `server/contracts/tracking-source-policy/tracking-source-policy.ts`(+test); `server/queries/tracking-source-policy.ts`(+test); `server/mutations/tracking-source-policy.ts`(+test); `scripts/db-tests/advanced-tms-tracking-entitlement-source-policy.sql`; `docs/build-log/phase-05/ATW-226A.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226A` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (101 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2273/2273 (20 net new), `pnpm run db:test` PASS -- 101 migrations/103 db-test files (1 new), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 81 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one new composite type, one new table, three new functions, one function replaced via `CREATE OR REPLACE` with an identical signature (its existing grant preserved). `git revert` this checkpoint's own commit is safe and complete; no other capability's data or behavior is affected.
+
+#### Errors found and fixed
+
+None in production code. One db-test fixture identifier collision (§ above), found and fixed before the first full-suite `db:test` run completed.
+
+#### Approval and closure
+
+Self-closing. `ATW-226A` is `VERIFIED`. `ATW-226B`/`226C` remain dependency-clean `READY`, unaffected (no dependency relationship among the three siblings); `CG-S10-ATW-010` (Prompt 229) remains the only other independently `READY` row. Per this repository's own standing one-checkpoint-one-task discipline, this session stops here and awaits fresh explicit user authorization before starting `ATW-226B`, `ATW-226C`, or any further task.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
