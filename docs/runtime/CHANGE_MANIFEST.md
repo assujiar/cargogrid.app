@@ -6179,6 +6179,40 @@ Seven found and fixed during authoring, before any full-suite gate run (none in 
 
 Self-closing. `ATW-226G` is `VERIFIED`. `226A` through `226G` are now all `VERIFIED`. `ATW-226H` is now the only dependency-unblocked child (`226F`+`226G` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226H` next.
 
+### CHG-2026-163 — Fleet Control Tower, Device Administration, and Sanitized Projections (Phase 5, Prompt 226 decomposition child `ATW-226H`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226H` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226H`'s own scope line) plus §§15/16/21/26 |
+| Change type | New capability -- 1 new migration (3 new tenant-wide aggregating reads, 1 function widened via signature-changing `DROP`+`CREATE`), new service layer, **3 new routes -- the first genuinely UI-heavy `226` child** |
+| Baseline evidence | `ATW-226F` + `ATW-226G` both `VERIFIED` (`docs/build-log/phase-05/ATW-226F.md`, `ATW-226G.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- eighth task in that range |
+
+#### Outcome
+
+Closes the Fleet Control Tower/administration/sanitized-projection gap `226_*.md` §15 named. Three new tenant-wide aggregating reads (`app.get_tenant_vehicle_tracking_overview`, `app.get_tenant_pending_milestone_candidates`, `app.get_tenant_pending_exception_signals`) give the Fleet Control Tower list/map view and review queues one call each instead of one-per-vehicle/one-per-shipment. `app.lookup_public_shipment_tracking` (`OPS-180`) is widened (signature-changing `DROP`+`CREATE`, three new trailing output columns) to project a sanitized vehicle position -- gated on the shipment's own currently-executing leg's `customer_visible` tracking policy (`ATW-225`, reused not reinvented), exposing only a coarse `live`/`delayed`/`unavailable` status, never a raw source type. A real Leaflet-based live map (vanilla `leaflet`, dynamically imported client-side only) closes the gap both `operations/fleet` and `operations/dispatch-board` had already disclosed as deferred. The pending-signal review UI wires `226G`'s own already-authority-gated `confirm_*`/`dismiss_*` RPCs directly, never bypassing them -- this checkpoint creates no new path into `app.milestone_events`/`app.operational_exceptions`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730100000_create_advanced_tms_fleet_control_tower.sql`; `server/contracts/fleet-control-tower/fleet-control-tower.ts`(+test); `server/queries/fleet-control-tower.ts`(+test); `scripts/db-tests/advanced-tms-fleet-control-tower.sql`; `app/(tenant)/[tenantSlug]/admin/tracking/*`; `app/(tenant)/[tenantSlug]/operations/fleet-control-tower/*` (incl. `[vehicleMasterId]/*`); `docs/build-log/phase-05/ATW-226H.md`. Modified: `server/contracts/public-tracking/public-tracking.ts`(+test, widened with 3 new sanitized nullable fields); `app/(tenant)/[tenantSlug]/admin/layout.tsx` (new "Tracking" nav link); `app/(tenant)/[tenantSlug]/operations/fleet/{page.tsx,actions.ts,fleet-panel.tsx}` (two new sections wiring `226B`'s own already-shipped provider-mapping/source-priority mutations); `app/(public)/tracking/[token]/page.tsx` (renders the 3 new fields); `package.json` (`leaflet`, `@types/leaflet`); `scripts/db-tests/advanced-tms-geofence-route-deviation-signals.sql` (`226G`'s own file, cross-file contamination fix, see Errors below); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226H` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (108 total), 0 prior migration file edited, 3 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, up from 80 pre-existing -- a mechanical consequence of 3 new routes on the pre-existing `@next/next/no-html-link-for-pages` rule, confirmed via a temporary `git worktree` diff against `226G`'s own commit, zero new warning location), `pnpm run test` PASS -- `node:test` 2392/2392 (12 net new), `pnpm run db:test` PASS -- 108 migrations/110 db-test files (1 new, zero regression once the `226G` contamination fix landed, including `OPS-180`'s own db-test re-passing unmodified against the widened `app.lookup_public_shipment_tracking`), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 3 new routes appear in the manifest. UI verification bounded by this sandbox's own disclosed no-real-browser condition (`PLT-117`'s precedent): `next build` plus `next dev`+`curl` reachability probing against `playwright.config.ts`'s own placeholder Supabase env values, confirming both new tenant-scoped routes fail safe (real `notFound()` content, never a crash) with no session.
+
+#### Compatibility, rollout, recovery
+
+Additive apart from the one signature-changing `DROP`+`CREATE` widening on `app.lookup_public_shipment_tracking`, proven backward-compatible by its own pre-existing db-test re-passing unmodified (every original output column unchanged, all field-name-based assertions). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Five found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) a stray, redundant `alter table app.shipment_tracking_tokens enable row level security` copy-paste leftover in the migration's first draft -- caught and removed before the first apply attempt; (2) the db-test's own first-drafted device fixture only transitioned to `'assigned'`, but `app.ingest_direct_device_telemetry_batch` requires `('installed','active','offline')` -- fixed by adding an explicit `'installed'` transition; (3) **cross-file db-test contamination of `ATW-226G`'s own already-committed test file** -- this checkpoint's new test file sorts alphabetically before `226G`'s own and inserts fixture rows directly into `app.shipment_milestone_candidates`/`app.shipment_exception_signals`, breaking four of `226G`'s own previously-unscoped assertions (the identical bug class `226F`'s own build log already found in two other files, hit a third time) -- fixed by scoping five queries to `tenant_id = v_tenant1` in `226G`'s own file, re-verified via a full clean `db:test` re-run; (4) a reachability smoke test against a placeholder Supabase URL surfaced a pre-existing, unmodified `fetch failed` in `lookupPublicShipmentTracking`'s own RPC call for `/tracking/[token]` -- not this checkpoint's own widened parsing code, which never executes since the RPC call fails first; (5) the pre-existing `@next/next/no-html-link-for-pages` warning count mechanically increased from 80 to 85 alongside this checkpoint's 3 new routes, confirmed via a `git worktree` diff to be a rule-multiplicity artifact unrelated to any line this checkpoint wrote in the affected files. Full detail: `docs/build-log/phase-05/ATW-226H.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226H` is `VERIFIED`. `226A` through `226H` are now all `VERIFIED`. `ATW-226I` is now the only remaining child, every one of its own prerequisites satisfied. Per this session's own explicit range authorization, proceeding directly to `ATW-226I` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

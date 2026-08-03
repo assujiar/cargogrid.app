@@ -108,4 +108,45 @@ describe("parsePublicShipmentTrackingResult", () => {
     });
     assert.equal(result.lookupStatus, "rate_limited");
   });
+
+  test("a row with no vehicle_position_* keys at all defaults every one of the three fields to null (ATW-226H)", () => {
+    const result = parsePublicShipmentTrackingResult({
+      lookup_status: "ok",
+      shipment_number: "SHP-0001",
+      status: "in_transit",
+      mode: "sea",
+      origin: "Jakarta",
+      destination: "Surabaya",
+      planned_delivery_at: "2026-08-05T00:00:00.000Z",
+      current_eta: null,
+      is_delayed: false,
+      milestones: [],
+      epod_available: false,
+    });
+    assert.equal(result.vehiclePosition, null);
+    assert.equal(result.vehiclePositionUpdatedAt, null);
+    assert.equal(result.vehiclePositionStatus, null);
+  });
+
+  test("maps a real, customer_visible=true vehicle position (ATW-226H widening)", () => {
+    const result = parsePublicShipmentTrackingResult({
+      lookup_status: "ok",
+      shipment_number: "SHP-0001",
+      status: "in_transit",
+      mode: "sea",
+      origin: "Jakarta",
+      destination: "Surabaya",
+      planned_delivery_at: "2026-08-05T00:00:00.000Z",
+      current_eta: null,
+      is_delayed: false,
+      milestones: [],
+      epod_available: false,
+      vehicle_position_geojson: { type: "Point", coordinates: [106.845599, -6.208763] },
+      vehicle_position_updated_at: "2026-08-03T04:00:00.000Z",
+      vehicle_position_status: "live",
+    });
+    assert.deepEqual(result.vehiclePosition, { type: "Point", coordinates: [106.845599, -6.208763] });
+    assert.equal(result.vehiclePositionUpdatedAt, "2026-08-03T04:00:00.000Z");
+    assert.equal(result.vehiclePositionStatus, "live");
+  });
 });

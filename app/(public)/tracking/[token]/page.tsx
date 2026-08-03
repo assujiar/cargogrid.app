@@ -9,6 +9,12 @@ const STATUS_MESSAGE: Record<string, string> = {
   rate_limited: "Too many lookups from this connection. Please try again in a few minutes.",
 };
 
+const VEHICLE_POSITION_STATUS_MESSAGE: Record<string, string> = {
+  live: "Live position available.",
+  delayed: "Last known position (updates are currently delayed).",
+  unavailable: "No live position is currently available for this shipment.",
+};
+
 /**
  * Public shipment tracking page (OPS-180, CG-S8-OPS-014). Deliberately outside every
  * tenant-authenticated portal guard (`app/(public)/`, the same route group
@@ -72,6 +78,19 @@ export default async function PublicTrackingPage({ params }: { params: Promise<{
         <p role="status" className="rounded-md border border-neutral-200 p-3 text-sm text-neutral-900">
           Proof of delivery is available for this shipment. Please contact your logistics provider for a copy.
         </p>
+      ) : null}
+
+      {result.vehiclePositionStatus ? (
+        <section className="flex flex-col gap-1 rounded-md border border-neutral-200 p-3">
+          <h2 className="text-sm font-semibold text-neutral-900">Live tracking</h2>
+          <p className="text-sm text-neutral-700">{VEHICLE_POSITION_STATUS_MESSAGE[result.vehiclePositionStatus] ?? "Position status unavailable."}</p>
+          {result.vehiclePosition ? (
+            <p className="text-xs text-neutral-500">
+              {result.vehiclePosition.coordinates[1].toFixed(4)}, {result.vehiclePosition.coordinates[0].toFixed(4)}
+              {result.vehiclePositionUpdatedAt ? ` — updated ${new Date(result.vehiclePositionUpdatedAt).toLocaleString()}` : ""}
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
       <section className="flex flex-col gap-2">

@@ -6,12 +6,15 @@ import {
   listDriverOperationalProfiles,
   listGpsDevices,
   listSimCards,
+  listProviderVehicleMappings,
+  listVehicleTrackingSourcePriorities,
   FleetDriverDeviceQueryError,
 } from "../../../../../server/queries/fleet-driver-device.ts";
 import { searchMasterRecords, MasterDataQueryError, type MasterDataQueryRpcClient } from "../../../../../server/queries/master-data.ts";
 import type { MasterRecord } from "../../../../../server/contracts/master-data/master-data.ts";
+import type { ProviderVehicleMapping, VehicleTrackingSourcePriority } from "../../../../../server/contracts/fleet-driver-device/fleet-driver-device.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
-import { VehicleSection, DriverSection, DeviceSection, SimSection } from "./fleet-panel.tsx";
+import { VehicleSection, DriverSection, DeviceSection, SimSection, ProviderMappingSection, SourcePrioritySection } from "./fleet-panel.tsx";
 import {
   registerVehicleAction,
   registerDriverAction,
@@ -23,6 +26,8 @@ import {
   registerSimAction,
   assignSimToDeviceAction,
   unassignSimFromDeviceAction,
+  registerProviderMappingAction,
+  setVehicleSourcePriorityAction,
 } from "./actions.ts";
 
 function masterMap(records: readonly MasterRecord[]): ReadonlyMap<string, MasterRecord> {
@@ -52,6 +57,8 @@ export default async function FleetPage({ params }: { params: Promise<{ tenantSl
   let drivers: Awaited<ReturnType<typeof listDriverOperationalProfiles>> = [];
   let devices: Awaited<ReturnType<typeof listGpsDevices>> = [];
   let sims: Awaited<ReturnType<typeof listSimCards>> = [];
+  let providerMappings: ProviderVehicleMapping[] = [];
+  let sourcePriorities: VehicleTrackingSourcePriority[] = [];
   let vehicleMasterById: ReadonlyMap<string, MasterRecord> = new Map();
   let driverMasterById: ReadonlyMap<string, MasterRecord> = new Map();
 
@@ -77,6 +84,16 @@ export default async function FleetPage({ params }: { params: Promise<{ tenantSl
     sims = simCards;
     vehicleMasterById = masterMap(vehicleMasters);
     driverMasterById = masterMap(driverMasters);
+
+    // Flattened across every vehicle -- an admin workspace's own one-time page load,
+    // not a hot ingestion path (226_*.md §17's own "no one-request-per-item" rule
+    // governs telemetry ingestion, not this bounded, infrequently-loaded screen).
+    const [mappingsPerVehicle, prioritiesPerVehicle] = await Promise.all([
+      Promise.all(vehicleProfiles.map((vehicle) => listProviderVehicleMappings(supabase, vehicle.vehicleMasterId))),
+      Promise.all(vehicleProfiles.map((vehicle) => listVehicleTrackingSourcePriorities(supabase, vehicle.vehicleMasterId))),
+    ]);
+    providerMappings = mappingsPerVehicle.flat();
+    sourcePriorities = prioritiesPerVehicle.flat();
   } catch (error) {
     if (!(error instanceof FleetDriverDeviceQueryError) && !(error instanceof MasterDataQueryError)) {
       throw error;
@@ -122,6 +139,20 @@ export default async function FleetPage({ params }: { params: Promise<{ tenantSl
         registerAction={registerSimAction.bind(null, tenantSlug)}
         assignActionFor={(simId) => assignSimToDeviceAction.bind(null, tenantSlug, simId)}
         unassignActionFor={(simId) => unassignSimFromDeviceAction.bind(null, tenantSlug, simId)}
+      />
+
+      <ProviderMappingSection
+        mappings={providerMappings}
+        vehicles={vehicles}
+        vehicleMasterById={vehicleMasterById}
+        registerAction={registerProviderMappingAction.bind(null, tenantSlug)}
+      />
+
+      <SourcePrioritySection
+        priorities={sourcePriorities}
+        vehicles={vehicles}
+        vehicleMasterById={vehicleMasterById}
+        setAction={setVehicleSourcePriorityAction.bind(null, tenantSlug)}
       />
     </div>
   );

@@ -13,6 +13,8 @@ import {
   type GpsDevice,
   type SimCard,
   type GpsDeviceStatus,
+  type ProviderVehicleMapping,
+  type VehicleTrackingSourcePriority,
 } from "../../../../../server/contracts/fleet-driver-device/fleet-driver-device.ts";
 import type { MasterRecord } from "../../../../../server/contracts/master-data/master-data.ts";
 
@@ -465,6 +467,185 @@ function RegisterSimForm({ action }: { action: FleetFormAction }) {
       <input name="carrier" type="text" placeholder="Carrier (optional)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register
+      </Button>
+      {state.error ? (
+        <p role="alert" className="basis-full text-sm text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+/**
+ * ATW-226H: renders app.provider_vehicle_mappings/app.vehicle_tracking_source_priorities
+ * (ATW-223) -- both already-shipped mutations that had zero UI until this checkpoint.
+ * Flattened across every vehicle (a per-vehicle detail page is Fleet Control Tower's own
+ * scope, not this operational-baseline workspace's).
+ */
+export function ProviderMappingSection({
+  mappings,
+  vehicles,
+  vehicleMasterById,
+  registerAction,
+}: {
+  mappings: readonly ProviderVehicleMapping[];
+  vehicles: readonly VehicleOperationalProfile[];
+  vehicleMasterById: ReadonlyMap<string, MasterRecord>;
+  registerAction: FleetFormAction;
+}) {
+  return (
+    <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Third-party provider mappings</h2>
+      {mappings.length === 0 ? (
+        <p className="text-sm text-neutral-500">No provider mappings registered yet.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-neutral-500">
+              <th className="pb-1">Vehicle</th>
+              <th className="pb-1">Provider</th>
+              <th className="pb-1">External vehicle ID</th>
+              <th className="pb-1">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mappings.map((mapping) => (
+              <tr key={mapping.id} className="border-t border-neutral-100">
+                <td className="py-1">{masterLabel(vehicleMasterById, mapping.vehicleMasterId)}</td>
+                <td className="py-1">{mapping.providerCode}</td>
+                <td className="py-1">{mapping.externalVehicleId}</td>
+                <td className="py-1">
+                  <StatusBadge tone={mapping.status === "active" ? "success" : "neutral"} label={mapping.status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div className="border-t border-neutral-200 pt-3">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Register mapping</h3>
+        <RegisterProviderMappingForm vehicles={vehicles} action={registerAction} />
+      </div>
+    </section>
+  );
+}
+
+function RegisterProviderMappingForm({ vehicles, action }: { vehicles: readonly VehicleOperationalProfile[]; action: FleetFormAction }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
+      <select name="vehicleMasterId" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+        <option value="" disabled>
+          Vehicle…
+        </option>
+        {vehicles.map((vehicle) => (
+          <option key={vehicle.vehicleMasterId} value={vehicle.vehicleMasterId}>
+            {vehicle.vehicleMasterId}
+          </option>
+        ))}
+      </select>
+      <input name="providerCode" type="text" required placeholder="Provider code" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <input name="externalVehicleId" type="text" required placeholder="External vehicle ID" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Registering…" className="w-fit">
+        Register
+      </Button>
+      {state.error ? (
+        <p role="alert" className="basis-full text-sm text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+export function SourcePrioritySection({
+  priorities,
+  vehicles,
+  vehicleMasterById,
+  setAction,
+}: {
+  priorities: readonly VehicleTrackingSourcePriority[];
+  vehicles: readonly VehicleOperationalProfile[];
+  vehicleMasterById: ReadonlyMap<string, MasterRecord>;
+  setAction: FleetFormAction;
+}) {
+  return (
+    <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+      <div>
+        <h2 className="text-sm font-semibold text-neutral-900">Per-vehicle source priority overrides</h2>
+        <p className="text-xs text-neutral-500">
+          Overrides the tenant-default source priority (Admin → Tracking) for one vehicle. A source with is_enabled unchecked can never win arbitration for that
+          vehicle, regardless of priority.
+        </p>
+      </div>
+      {priorities.length === 0 ? (
+        <p className="text-sm text-neutral-500">No per-vehicle overrides set yet.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-neutral-500">
+              <th className="pb-1">Vehicle</th>
+              <th className="pb-1">Source</th>
+              <th className="pb-1">Rank</th>
+              <th className="pb-1">Enabled</th>
+            </tr>
+          </thead>
+          <tbody>
+            {priorities.map((priority) => (
+              <tr key={priority.id} className="border-t border-neutral-100">
+                <td className="py-1">{masterLabel(vehicleMasterById, priority.vehicleMasterId)}</td>
+                <td className="py-1">{priority.sourceType}</td>
+                <td className="py-1">{priority.priorityRank}</td>
+                <td className="py-1">
+                  <StatusBadge tone={priority.isEnabled ? "success" : "danger"} label={priority.isEnabled ? "enabled" : "disabled"} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div className="border-t border-neutral-200 pt-3">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Set override</h3>
+        <SetSourcePriorityForm vehicles={vehicles} action={setAction} />
+      </div>
+    </section>
+  );
+}
+
+function SetSourcePriorityForm({ vehicles, action }: { vehicles: readonly VehicleOperationalProfile[]; action: FleetFormAction }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
+      <select name="vehicleMasterId" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+        <option value="" disabled>
+          Vehicle…
+        </option>
+        {vehicles.map((vehicle) => (
+          <option key={vehicle.vehicleMasterId} value={vehicle.vehicleMasterId}>
+            {vehicle.vehicleMasterId}
+          </option>
+        ))}
+      </select>
+      <select name="sourceType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+        <option value="" disabled>
+          Source…
+        </option>
+        {(["driver_mobile", "direct_device", "third_party_platform"] as const).map((sourceType) => (
+          <option key={sourceType} value={sourceType}>
+            {sourceType}
+          </option>
+        ))}
+      </select>
+      <input name="priorityRank" type="number" min={1} required placeholder="Rank" className="w-20 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <label className="flex items-center gap-1 text-xs text-neutral-600">
+        <input name="isEnabled" type="checkbox" defaultChecked />
+        Enabled
+      </label>
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="w-fit">
+        Save
       </Button>
       {state.error ? (
         <p role="alert" className="basis-full text-sm text-danger">

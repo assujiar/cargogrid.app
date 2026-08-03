@@ -218,6 +218,7 @@ end $$;
 \echo '>> geofence entry: a report inside the pickup radius creates a pending-dwell state row; no candidate yet'
 do $$
 declare
+  v_tenant1 uuid := (select value::uuid from geo_test_state where key = 'tenant_id');
   v_device_id uuid := (select value::uuid from geo_test_state where key = 'device_id');
   v_api_key text := (select value from geo_test_state where key = 'api_key');
   v_pickup_stop_id uuid := (select value::uuid from geo_test_state where key = 'pickup_stop_id');
@@ -238,7 +239,7 @@ begin
     raise exception 'assertion failed: expected entered_pending_dwell with no confirmed_at, got state=% confirmed_at=%', v_state.state, v_state.confirmed_at;
   end if;
 
-  select count(*) into v_candidate_count from app.shipment_milestone_candidates;
+  select count(*) into v_candidate_count from app.shipment_milestone_candidates where tenant_id = v_tenant1;
   if v_candidate_count <> 0 then
     raise exception 'assertion failed: expected zero milestone candidates before dwell confirms, found %', v_candidate_count;
   end if;
@@ -518,6 +519,7 @@ end $$;
 \echo '>> route deviation: two off-corridor reports at least deviation_sustained_seconds apart confirm one exception signal; a recovery in between resets the episode; a second episode gets its own distinct correlation_key'
 do $$
 declare
+  v_tenant1 uuid := (select value::uuid from geo_test_state where key = 'tenant_id');
   v_device_id uuid := (select value::uuid from geo_test_state where key = 'device_id');
   v_api_key text := (select value from geo_test_state where key = 'api_key');
   v_leg_id uuid := (select value::uuid from geo_test_state where key = 'shipment_leg_id');
@@ -550,11 +552,11 @@ begin
     raise exception 'assertion failed: expected off_corridor with confirmed_at set after the sustained window, got state=% confirmed_at=%', v_state.state, v_state.confirmed_at;
   end if;
 
-  select count(*) into v_signal_count from app.shipment_exception_signals where signal_type = 'route_deviation';
+  select count(*) into v_signal_count from app.shipment_exception_signals where signal_type = 'route_deviation' and tenant_id = v_tenant1;
   if v_signal_count <> 1 then
     raise exception 'assertion failed: expected exactly 1 route_deviation exception signal, found %', v_signal_count;
   end if;
-  select * into v_signal1 from app.shipment_exception_signals where signal_type = 'route_deviation';
+  select * into v_signal1 from app.shipment_exception_signals where signal_type = 'route_deviation' and tenant_id = v_tenant1;
   if v_signal1.exception_type <> 'delay' or v_signal1.severity <> 'medium' or v_signal1.status <> 'pending' then
     raise exception 'assertion failed: unexpected first route_deviation signal %', v_signal1;
   end if;
@@ -581,11 +583,11 @@ begin
     jsonb_build_array(jsonb_build_object('report_type', 'location', 'event_at', (now() + interval '559 minutes')::text, 'longitude', 107.39, 'latitude', -6.59, 'speed_kmh', 60)),
     'test-gateway'
   );
-  select count(*) into v_signal_count from app.shipment_exception_signals where signal_type = 'route_deviation';
+  select count(*) into v_signal_count from app.shipment_exception_signals where signal_type = 'route_deviation' and tenant_id = v_tenant1;
   if v_signal_count <> 2 then
     raise exception 'assertion failed: expected a second, distinct route_deviation exception signal after a fresh episode, found %', v_signal_count;
   end if;
-  select * into v_signal2 from app.shipment_exception_signals where signal_type = 'route_deviation' and id <> v_signal1.id;
+  select * into v_signal2 from app.shipment_exception_signals where signal_type = 'route_deviation' and tenant_id = v_tenant1 and id <> v_signal1.id;
   if v_signal2.correlation_key = v_signal1.correlation_key then
     raise exception 'assertion failed: expected the two episodes to carry distinct correlation_key values, both were %', v_signal1.correlation_key;
   end if;
