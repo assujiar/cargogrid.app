@@ -2,7 +2,7 @@
 
 **Prompt:** `CG-S10-ATW-001` (`CG-AABPP-ATW-220` v0.12.0-multisource-gps)
 **Runtime output of:** `docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/220_ADVANCED_TMS_WMS_WBS_RUNTIME_KICKOFF_PROMPT.md`
-**Status:** `PHASE_5_IN_PROGRESS`. Rows `220`–`225` (`CG-S10-ATW-001..006`) are `VERIFIED`. Row `226`'s own nine-child decomposition: `ATW-226A` (Tracking entitlement and source policy) is now **`VERIFIED`** (this checkpoint); `ATW-226B`/`226C` remain dependency-clean `READY`; `ATW-226D`–`226I` remain `NOT_STARTED`, each still blocked on its own real child dependency. `CG-S10-ATW-010` (Prompt 229) also remains independently `READY` (Warehouse lane), but per standing user instruction this session's own execution order stays strictly ascending by row number — the `ATW-226` family is worked before `ATW-229` is touched, regardless of which row became dependency-clean first. Every other row is `NOT_STARTED` (dependency-correct, not yet unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
+**Status:** `PHASE_5_IN_PROGRESS`. Rows `220`–`225` (`CG-S10-ATW-001..006`) are `VERIFIED`. Row `226`'s own nine-child decomposition: `ATW-226A` (Tracking entitlement and source policy) and `ATW-226B` (Device/SIM/provider/installation/mapping management) are now **`VERIFIED`**; `ATW-226C` remains dependency-clean `READY`; `ATW-226D`–`226I` remain `NOT_STARTED`, each still blocked on its own real child dependency (`226D`/`226E` are now unblocked on their own upstream, `226A`+`226B`, both `VERIFIED` — pending this session's own ascending in-family order). This session is executing an explicit range authorization ("lanjut sd prompt terakhir di 226 (226a-226i)") through the full `226` family before touching `CG-S10-ATW-010` (Prompt 229, Warehouse lane). Every other row is `NOT_STARTED` (dependency-correct, not yet unblocked). Only Prompt 248 may set `PHASE_5_VERIFIED`.
 
 ## 0. Checkpoint
 
@@ -59,7 +59,7 @@
 | `CG-S10-ATW-004` | 223 — Fleet, Vehicle, Driver, Device and SIM Operational Baseline | Transport Resources / Operational Resource Control | `ATW-221..222`, Platform master/config/entitlement, verified Phase 3 resource assignment | `ATW-224..228`, `ATW-226B/C` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-223.md`. `CG-S10-ATW-005` (224) is dependency-clean `READY` |
 | `CG-S10-ATW-005` | 224 — Route and Load Planning Using Canonical Position | Advanced Transportation / Constraint-Aware Planning | `ATW-221`, `ATW-223`, verified PostGIS/location/config foundations; live-position replanning additionally needs `ATW-226F` | `ATW-225`, `ATW-227`, `ATW-243` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-224.md`. `CG-S10-ATW-006` (225) is dependency-clean `READY` |
 | `CG-S10-ATW-006` | 225 — First-, Middle-, and Last-Mile Orchestration with Tracking Policy | Advanced Transportation / End-to-End Mile Execution | `ATW-221`, `ATW-224`, verified Phase 3 milestones/exceptions, resource eligibility `ATW-223` | `ATW-226`(`ATW-226C`), `ATW-228`, `ATW-243`, `ATW-244` | **`VERIFIED`** | Complete — `docs/build-log/phase-05/ATW-225.md`. No other row newly dependency-clean; `CG-S10-ATW-010` (229) remains the only other `READY` row |
-| §1.4 | 226 — Multi-Source GPS and Telematics Integration | Transportation Integration / Trusted Movement Events | see §1.4 (decomposed into `ATW-226A`..`226I`) | `ATW-227`, `ATW-228`, `ATW-243` | `IN_PROGRESS` (1 of 9 children `VERIFIED`: `226A`; 2 `READY`: `226B`/`226C`; 6 `NOT_STARTED`) | See §1.4 — `226A` `VERIFIED` this checkpoint (`docs/build-log/phase-05/ATW-226A.md`); `226B`/`226C` dependency-clean, awaiting fresh explicit authorization |
+| §1.4 | 226 — Multi-Source GPS and Telematics Integration | Transportation Integration / Trusted Movement Events | see §1.4 (decomposed into `ATW-226A`..`226I`) | `ATW-227`, `ATW-228`, `ATW-243` | `IN_PROGRESS` (2 of 9 children `VERIFIED`: `226A`/`226B`; 1 `READY`: `226C`; 6 `NOT_STARTED`) | See §1.4 — `226A`/`226B` `VERIFIED` (`docs/build-log/phase-05/ATW-226A.md`/`ATW-226B.md`); `226C` dependency-clean; this session executing an explicit range through `226I` |
 | `CG-S10-ATW-008` | 227 — Capacity, Utilization and Tracking Coverage | Transport Resources / Capacity Control | `ATW-223`..`226` (all `ATW-226` children), verified exact cargo/UOM data | `ATW-243` | `NOT_STARTED` | Blocked on `ATW-226I` `VERIFIED` |
 | `CG-S10-ATW-009` | 228 — Advanced Milestone and Exception with Multi-Source Telemetry | Operations Control Tower / Predictable Network Execution | `ATW-221`, `ATW-225..227`, Prompt 226 canonical telemetry (`ATW-226F/G`), verified Phase 3 milestone/exception contracts | `ATW-243`, `ATW-244` | `NOT_STARTED` | Blocked on `ATW-227` `VERIFIED` |
 | `CG-S10-ATW-010` | 229 — Warehouse and Zone | Warehouse Foundation / Facility Topology | `ATW-220`, verified Platform master/config/access and location/PostGIS foundations | `ATW-230..242` | **`READY`** | Dependency-clean; awaiting explicit authorization |
@@ -85,7 +85,7 @@
 
 For every `NOT_STARTED` row above, the remaining required columns (`allowed_paths`, `forbidden_paths`, `migration_ids`, `api_contracts`, `deployment_target`, `secret_ownership`, `access_controls`, `transport_invariants`, `tests`, `external_evidence_status`, `commands`, `evidence`, `rollback`, `owner`) are **not yet instantiated** — deferred to the checkpoint that authorizes each row, per WBS §13's own atomic-sizing discipline (identical to `00_FINANCE_WBS.md` §8's precedent for its own not-yet-authorized rows). Instantiating exact paths before a row's own upstream is `VERIFIED` risks stale paths, the same reasoning every prior phase kickoff applied.
 
-### 1.3 Full-column detail — `READY` rows (`229`, `226B`, `226C`), plus rows `224`, `225`, and `226A` now `VERIFIED`
+### 1.3 Full-column detail — `READY` rows (`229`, `226C`), plus rows `224`, `225`, `226A`, and `226B` now `VERIFIED`
 
 #### Row `221` — `CG-S10-ATW-002`
 
@@ -206,24 +206,24 @@ For every `NOT_STARTED` row above, the remaining required columns (`allowed_path
 
 | Column | Value |
 |---|---|
-| `atomic_objective` | Extend `ATW-223`'s own `app.gps_devices`/`app.provider_vehicle_mappings` baseline with the SIM, installation-evidence, and mobile-eligibility mapping records `226D`/`226E`/`226C` will each depend on |
-| `source_ids` | `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226B`'s own scope line); verified `app.gps_devices`/`app.vehicle_operational_profiles`/`app.driver_operational_profiles`/`app.provider_vehicle_mappings` (`ATW-223`) |
-| `allowed_paths` (planned, exact filenames chosen at build time) | New additive `supabase/migrations/<timestamp>_extend_advanced_tms_device_provider_mapping.sql`; `server/{contracts,queries,mutations}/device-provider-mapping.ts` (or an extension of `ATW-223`'s own fleet-resource files if additive-column shaped rather than new-table shaped); `scripts/db-tests/advanced-tms-device-provider-mapping.sql`; device/SIM/installation/provider mapping administration UI (§15) |
-| `forbidden_paths` | Any edit to `ATW-223`'s own already-applied migration; any raw telemetry ingestion path (reserved for later children) |
-| `migration_ids` | none yet — one new additive migration planned when this child starts |
-| `api_contracts` | Planned: SIM/installation/mapping CRUD, service-layer only |
+| `atomic_objective` | Extend `ATW-223`'s own `app.gps_devices`/`app.provider_vehicle_mappings` baseline with the one genuine gap a direct re-read found: real, evidenced installation proof (device/SIM/provider/mobile-eligibility mapping identity itself was already fully built at `ATW-223`) |
+| `source_ids` | `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226B`'s own scope line); verified `app.gps_devices`/`app.device_vehicle_assignments`/`app.vehicle_operational_profiles`/`app.driver_operational_profiles`/`app.provider_vehicle_mappings` (`ATW-223`); Document and File Engine `app.files`/`app.initiate_file_upload`/`app.record_file_scan_result` (`PLT-128`) |
+| `allowed_paths` | `supabase/migrations/20260729350000_create_advanced_tms_device_installation_evidence.sql`; `server/contracts/gps-device-installation/gps-device-installation.ts`; `server/queries/gps-device-installation.ts`; `server/mutations/gps-device-installation.ts` (plus their `.test.ts` files); `scripts/db-tests/advanced-tms-device-installation-evidence.sql`; `docs/build-log/phase-05/ATW-226B.md` |
+| `forbidden_paths` | Any edit to `ATW-223`'s own already-applied migration; any raw telemetry ingestion path (reserved for later children); any second file-storage mechanism bypassing `PLT-128` -- none touched |
+| `migration_ids` | `20260729350000_create_advanced_tms_device_installation_evidence.sql` (1 new additive migration; 102 total) |
+| `api_contracts` | Service-layer RPC wrappers only -- 2 new RPCs (`record_gps_device_installation`, `verify_gps_device_installation`) |
 | `deployment_target` | Serverless Web/API (Vercel) — unchanged existing target |
-| `secret_ownership` | Provider API credentials, server-side only (§16) — exact secret registry entries planned when this child starts |
-| `access_controls` | Planned reuse of `app.evaluate_permission`(`OPS`)/`can_access_record`, mirroring `ATW-223`'s own resource-record shape |
-| `transport_invariants` | n/a at this child (mapping/administration only — no telemetry event exists yet) |
-| `tests` | Planned `node:test` service-layer coverage + a dedicated db-test file |
+| `secret_ownership` | none this child (provider API credentials remain `226E`'s own scope -- this child only closes the installation-evidence gap, not provider connection/credential management) |
+| `access_controls` | Reuses `app.evaluate_permission`(`OPS`:`Edit`), the same tier `ATW-223`'s own device/status functions already use |
+| `transport_invariants` | One installation-evidence row per `app.device_vehicle_assignments` row (unique constraint); evidence is mandatory and clean-scan-validated before the device's own `assigned`->`installed` transition is ever composed; a superseded assignment cannot receive new evidence |
+| `tests` | `scripts/db-tests/advanced-tms-device-installation-evidence.sql` (new); `server/contracts\|queries\|mutations/gps-device-installation.test.ts` (13 net new `node:test` cases) |
 | `external_evidence_status` | n/a for this child itself |
-| `commands` | Not yet run — deferred to when this child starts |
-| `evidence` | none yet |
-| `rollback` | Planned: `git revert` the child's own commit; migration is additive only |
-| `owner` | Runtime build agent (unassigned until authorized) |
-| `status` | `READY` |
-| `resume_point` | Dependency-clean this checkpoint; awaiting fresh explicit user authorization naming `226B` (or `226` generally) |
+| `commands` | `pnpm run typecheck`/`lint`/`test`/`db:test`; `docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check`; `next build` — all re-run fresh, all green |
+| `evidence` | `docs/build-log/phase-05/ATW-226B.md`; `node:test` 2286/2286; `db:test` PASS across 102 migrations/104 files; `next build` PASS (81 routes, unchanged) |
+| `rollback` | `git revert` the child's own commit; migration is additive only, no destructive rollback needed |
+| `owner` | Runtime build agent |
+| `status` | `VERIFIED` |
+| `resume_point` | `ATW-226C` remains dependency-clean `READY`; `226D`/`226E` are now unblocked on their own upstream (`226A`+`226B` both `VERIFIED`) but wait on this session's own ascending in-family order. This session's own explicit range authorization covers `226C` next |
 
 #### Child `226C` — Driver Mobile GPS session and HTTPS ingestion
 
@@ -255,7 +255,7 @@ Reproduced from `220_*.md`'s own mandatory table, each child retaining parent pr
 | `task_id` | Atomic scope | `upstream` | `status` | `external_evidence_status` |
 |---|---|---|---|---|
 | `ATW-226A` | Tracking entitlement and source policy | Platform entitlement/config (`PLT-121`, `VERIFIED`); parent-level `ATW-221`/`223`/`225` (all `VERIFIED`) | **`VERIFIED`** — `docs/build-log/phase-05/ATW-226A.md` | n/a |
-| `ATW-226B` | Device, SIM, provider, installation, and mapping management | `ATW-223` (`VERIFIED`) | **`READY`** — dependency-clean this checkpoint | n/a |
+| `ATW-226B` | Device, SIM, provider, installation, and mapping management | `ATW-223` (`VERIFIED`) | **`VERIFIED`** — `docs/build-log/phase-05/ATW-226B.md` | n/a |
 | `ATW-226C` | Driver Mobile GPS session and HTTPS ingestion | `ATW-223`/`225` (both `VERIFIED`) | **`READY`** — dependency-clean this checkpoint | n/a |
 | `ATW-226D` | Always-on GPS Gateway and Teltonika Codec 8E adapter | `ATW-226A`/`B` | `NOT_STARTED` — blocked until both are `VERIFIED` | `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE` (WBS §8) |
 | `ATW-226E` | Third-party GPS platform adapter contract | `ATW-226A`/`B` | `NOT_STARTED` — blocked until both are `VERIFIED` | `CONDITIONALLY_SKIPPED_PROVIDER_UNAVAILABLE` (WBS §8) |
@@ -264,17 +264,17 @@ Reproduced from `220_*.md`'s own mandatory table, each child retaining parent pr
 | `ATW-226H` | Fleet Control Tower, device administration, and sanitized projections | `ATW-226F`/`G` | `NOT_STARTED` — blocked until both are `VERIFIED` | n/a |
 | `ATW-226I` | Deployment, observability, load, security, outage, and recovery verification | `ATW-226A`..`H` | `NOT_STARTED` — blocked until every prior child is `VERIFIED` | Both statuses above re-confirmed at this closing child |
 
-Overall row `226` (`ATW-226`, parent) requires: `ATW-221`, `ATW-223`, `ATW-225`, Platform API/webhook/job/PostGIS/entitlement/secrets controls, and an approved initial Teltonika protocol specification. A live third-party provider contract is optional at this checkpoint (§8 above). `ATW-225` is `VERIFIED`, so the parent-level upstream gate (`ATW-221`, `ATW-223`, `ATW-225`) is fully satisfied. **`ATW-226A` is now `VERIFIED`** (this checkpoint, `docs/build-log/phase-05/ATW-226A.md`) — real entitlement/package-limits resolution (Configuration Engine reuse) and a tenant-level default source policy now exist. `226B`/`226C` remain dependency-clean `READY` (no dependency relationship among the three siblings). `226D`/`226E` still each need `226A`+`226B` verified — `226A` alone is not sufficient, `226B` remains outstanding. `226F` needs `226C`+`226D`+`226E`, `226G` needs `226F`, `226H` needs `226F`+`226G`, and `226I` (the closing child) needs every prior child verified. Neither `226B` nor `226C` is authorized to start by this checkpoint — awaiting fresh explicit user authorization naming a specific next task.
+Overall row `226` (`ATW-226`, parent) requires: `ATW-221`, `ATW-223`, `ATW-225`, Platform API/webhook/job/PostGIS/entitlement/secrets controls, and an approved initial Teltonika protocol specification. A live third-party provider contract is optional at this checkpoint (§8 above). `ATW-225` is `VERIFIED`, so the parent-level upstream gate (`ATW-221`, `ATW-223`, `ATW-225`) is fully satisfied. **`ATW-226A` and `ATW-226B` are now `VERIFIED`** (`docs/build-log/phase-05/ATW-226A.md`/`ATW-226B.md`) — real entitlement/package-limits resolution (Configuration Engine reuse), a tenant-level default source policy, and evidenced device installation now all exist. `226C` remains dependency-clean `READY`. `226D`/`226E` are now genuinely unblocked (both `226A`+`226B` `VERIFIED`) and will be worked next in this session's own explicit range authorization, after `226C`. `226F` needs `226C`+`226D`+`226E`, `226G` needs `226F`, `226H` needs `226F`+`226G`, and `226I` (the closing child) needs every prior child verified.
 
 ## 2. Tally
 
 | State | Count |
 |---|---|
-| `VERIFIED` | 7 (`220`, `221`, `222`, `223`, `224`, `225`, `226A`) |
-| `READY` | 3 (`226B`, `226C`, `229`) |
+| `VERIFIED` | 8 (`220`, `221`, `222`, `223`, `224`, `225`, `226A`, `226B`) |
+| `READY` | 2 (`226C`, `229`) |
 | `NOT_STARTED` | 27 (`227`, `228`, `230`–`248`, and the 6 remaining `226` children `226D`–`226I`) |
 | **Total task rows** | **37** |
 
 ## 3. Completion statement
 
-This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. This checkpoint corrects row `226`'s own §1.4 decomposition table: `ATW-226A` (Tracking entitlement and source policy) moves `READY` → **`VERIFIED`** (`docs/build-log/phase-05/ATW-226A.md`) — real per-tenant entitlement/package-limits resolution (reusing Configuration Engine, `PLT-121`, per `ATW-222`'s own citation) and a tenant-level default source policy (priority/freshness/accuracy/hysteresis, complementing `ATW-223`'s own per-vehicle `app.vehicle_tracking_source_priorities`) now exist. `ATW-226B`/`226C` remain dependency-clean `READY`, unaffected (no dependency relationship among the three siblings). `ATW-226D`–`226I` remain correctly `NOT_STARTED`, each still blocked on an unverified child per its own dependency chain (`226D`/`226E` need `226A`+`226B` — `226B` is still outstanding; `226F` needs `226C`+`226D`+`226E`; `226G` needs `226F`; `226H` needs `226F`+`226G`; `226I`, the closing child, needs every prior child). Authorized by explicit user instruction "lanjut prompt 226," read per the prior checkpoint's own recorded default (`226A` as the natural first pick). Per this repository's own standing one-checkpoint-one-task discipline, this session stops here, awaiting fresh explicit user authorization naming a specific next task (most naturally `226B` or `226C`, or `226` generally, to preserve the requested ascending order; `229` remains available but is deliberately not the default next pick per the user's own stated preference).
+This index satisfies `220_*.md`'s "Required execution-index columns" and "mark only dependency-clean tasks `READY`" instructions. `PHASE_5_IN_PROGRESS` is set; `PHASE_5_VERIFIED` remains reserved for Prompt 248 alone. This checkpoint corrects row `226`'s own §1.4 decomposition table: `ATW-226B` (Device, SIM, provider, installation, and mapping management) moves `READY` → **`VERIFIED`** (`docs/build-log/phase-05/ATW-226B.md`) — a direct re-read of `ATW-223`'s own already-applied migration found device/SIM/provider-mapping identity fully built already; the one genuine gap (evidenced installation proof) is now closed. `ATW-226C` remains dependency-clean `READY`, unaffected. `ATW-226D`/`226E` are now genuinely dependency-unblocked (`226A`+`226B` both `VERIFIED`) and are next in this session's own explicit range, after `226C`. Authorized by explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" — a scoped range covering the full `226` family through its closing child. Per that authorization, this session proceeds directly to `ATW-226C` next without a further authorization pause.

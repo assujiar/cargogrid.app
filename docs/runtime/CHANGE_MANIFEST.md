@@ -5975,6 +5975,40 @@ None in production code. One db-test fixture identifier collision (§ above), fo
 
 Self-closing. `ATW-226A` is `VERIFIED`. `ATW-226B`/`226C` remain dependency-clean `READY`, unaffected (no dependency relationship among the three siblings); `CG-S10-ATW-010` (Prompt 229) remains the only other independently `READY` row. Per this repository's own standing one-checkpoint-one-task discipline, this session stops here and awaits fresh explicit user authorization before starting `ATW-226B`, `ATW-226C`, or any further task.
 
+### CHG-2026-157 — Device, SIM, Provider, Installation, and Mapping Management (Phase 5, Prompt 226 decomposition child `ATW-226B`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226B` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226B`'s own scope line) |
+| Change type | New capability -- 1 new additive migration, new service layer, 0 new routes |
+| Baseline evidence | `ATW-226A` `VERIFIED` (`docs/build-log/phase-05/ATW-226A.md`); `CG-S10-ATW-004` `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- an explicit range through `226I`; this is the second task in that range |
+
+#### Outcome
+
+A direct re-read of `ATW-223`'s own already-applied migration found device/SIM/provider-mapping/mobile-eligibility identity fully built already -- the one genuine gap was evidenced installation proof (`app.transition_gps_device_status` allowed a bare, unevidenced status flip to `installed`). Closed via a new `app.gps_device_installations` table plus `app.record_gps_device_installation` (composes `ATW-223`'s own status-transition function rather than duplicating it) and `app.verify_gps_device_installation`, reusing the Document and File Engine (`PLT-128`) exactly as ePOD already established for evidence storage/clean-scan validation.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729350000_create_advanced_tms_device_installation_evidence.sql`; `server/contracts/gps-device-installation/gps-device-installation.ts`(+test); `server/queries/gps-device-installation.ts`(+test); `server/mutations/gps-device-installation.ts`(+test); `scripts/db-tests/advanced-tms-device-installation-evidence.sql`; `docs/build-log/phase-05/ATW-226B.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226B` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (102 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2286/2286 (13 net new), `pnpm run db:test` PASS -- 102 migrations/104 db-test files (1 new), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 81 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one new table, two new functions. `git revert` this checkpoint's own commit is safe and complete; no other capability's data or behavior is affected.
+
+#### Errors found and fixed
+
+Three db-test authoring defects found and fixed before any full-suite gate run (not production code): (1) setup assumed `assign_device_to_vehicle` itself transitions device status -- it does not; (2) hardcoded `expected_device_version` literals masked an intended authority-check assertion; (3) `assign_device_to_vehicle` also requires `OPS:Assign`. Full detail: `docs/build-log/phase-05/ATW-226B.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226B` is `VERIFIED`. `ATW-226C` remains dependency-clean `READY`, unaffected; `ATW-226D`/`226E` are now genuinely dependency-unblocked (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226C` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
