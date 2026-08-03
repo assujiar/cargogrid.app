@@ -121,8 +121,13 @@ const chartGovernancePatterns = {
 // deprecated `next lint` CLI wrapper that used to inject this ignore automatically)
 // does not exclude it on its own. Explicit and load-bearing, not decorative: without
 // this, `eslint .` lints Next's own minified production bundle as if it were source.
+// ATW-226D: services/gps-gateway is a standalone, independently-deployed Node package
+// (its own package.json, its own tsconfig.json, own typecheck/test scripts) -- deliberately
+// not wired into this repository's own Next.js-oriented lint config, the identical
+// "independent deployment from Vercel" boundary tsconfig.json's own exclude entry already
+// draws. Its own gate surface (typecheck + test, no lint) is disclosed in its own README.md.
 const ignores = {
-  ignores: [".next/**", "playwright-report/**", "test-results/**"],
+  ignores: [".next/**", "playwright-report/**", "test-results/**", "services/**"],
 };
 
 const config = [ignores, ...next, boundaryRules, bannedPatterns, chartGovernancePatterns];

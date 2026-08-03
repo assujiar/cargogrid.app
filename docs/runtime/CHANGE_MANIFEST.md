@@ -6043,6 +6043,40 @@ Three found and fixed during authoring, before any full-suite gate run (none in 
 
 Self-closing. `ATW-226C` is `VERIFIED`. All three of `226A`/`226B`/`226C` are now `VERIFIED`. `ATW-226D`/`226E` are now genuinely dependency-unblocked (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226D` next.
 
+### CHG-2026-159 — Always-on GPS Gateway and Direct-Device Telemetry Ingestion (Phase 5, Prompt 226 decomposition child `ATW-226D`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226D` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §14B (`226D`'s own scope line) plus §8 (external-evidence policy) |
+| Change type | New capability -- 1 new additive migration (1 additive column), new service layer, new standalone deployable package (`services/gps-gateway`), 2 additive root config entries (`tsconfig.json`/`eslint.config.js` exclude/ignore) |
+| Baseline evidence | `ATW-226C` `VERIFIED` (`docs/build-log/phase-05/ATW-226C.md`); `CG-S10-ATW-004`/`PLT-129` both `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- fourth task in that range |
+
+#### Outcome
+
+The first capability in this repository requiring a standalone deployable unit distinct from the Next.js app. A real, byte-level Teltonika Codec 8 Extended raw TCP listener (`services/gps-gateway`) plus its Supabase-side `service_role`-only ingestion RPCs (`app.resolve_gps_device_for_handshake`, `app.ingest_direct_device_telemetry_batch`, `app.get_direct_device_telemetry_reports`), reusing `PLT-129`'s `app.authenticate_api_key`/`app.api_key_has_scope` for the gateway's own scoped, independently-revocable credential -- a fundamentally different trust model than `226C`'s deliberate `anon` exception, since this gateway is a trusted CargoGrid-operated backend process, never a public browser session. Raw telemetry storage only (`app.direct_device_telemetry_reports`) -- `ATW-226F`'s own canonical normalization/arbitration layer is the real future consumer. `app.jobs` is deliberately not used for live ingestion (durable buffering lives at the edge, in `services/gps-gateway` itself).
+
+#### Scope and files
+
+New: `supabase/migrations/20260729370000_create_advanced_tms_gps_gateway_ingestion.sql`; `server/contracts/gps-gateway-ingestion/gps-gateway-ingestion.ts`(+test); `server/queries/gps-gateway-ingestion.ts`(+test); `server/mutations/gps-gateway-ingestion.ts`(+test); `scripts/db-tests/advanced-tms-gps-gateway-ingestion.sql`; `services/gps-gateway/` in full (`src/codec8e.ts`, `src/server.ts`, `src/buffer.ts`, `src/ingestClient.ts`, `src/health.ts`, `src/logger.ts`, `src/index.ts`, `test/*.test.ts`, `package.json`, `pnpm-lock.yaml`, `tsconfig.json`, `Dockerfile`, `README.md`); `docs/build-log/phase-05/ATW-226D.md`. Modified: `tsconfig.json`/`eslint.config.js` (one additive `services/**` exclude/ignore entry each); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226D` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (104 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+Root: `pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2323/2323 (16 net new), `pnpm run db:test` PASS -- 104 migrations/106 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged. Separately, `services/gps-gateway`'s own gate surface: `pnpm run typecheck` PASS, `pnpm run test` PASS -- 26/26 (`test/codec8e.test.ts` 16, `test/buffer.test.ts` 5, `test/server.test.ts` 5, the latter a real `net.Socket` integration test against the real server code).
+
+#### Compatibility, rollout, recovery
+
+Additive only (one new table, one new additive column, three new `service_role`-only functions, two additive root config entries). `git revert` this checkpoint's own commit is safe and complete. `services/gps-gateway` was never deployed to any live infrastructure -- there is no running service to roll back.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `received_at` non-determinism within one ingestion batch (Postgres's `now()` frozen at transaction start) -- fixed with `clock_timestamp()`; (2) a race between overlapping TCP `'data'` events on the same connection -- fixed by serializing chunk processing through a promise chain; (3) TypeScript 5.9's `Buffer<ArrayBufferLike>` generic made `Buffer.concat()`/`.subarray()` results unassignable to a bare `Buffer` -- fixed with a shared `Bytes` type alias; (4) `node --experimental-strip-types` does not support TypeScript constructor parameter properties -- fixed by declaring the field explicitly. Full detail: `docs/build-log/phase-05/ATW-226D.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226D` is `VERIFIED`. `226A`/`226B`/`226C`/`226D` are now all `VERIFIED`. `ATW-226E` is now the only other genuinely dependency-unblocked child (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226E` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
