@@ -6281,6 +6281,40 @@ Four found and fixed during authoring, before commit (none in the final committe
 
 Self-closing. `ATW-227` is `VERIFIED`. `CG-S10-ATW-009` (Prompt 228, Advanced Milestone and Exception with Multi-Source Telemetry) is now dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `228` next.
 
+### CHG-2026-166 — Advanced Milestone and Exception with Multi-Source Telemetry (Phase 5, Prompt 228, `CG-S10-ATW-009`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-009` / `228_ADVANCED_MILESTONE_EXCEPTION_PROMPT.md` (all 36 sections) |
+| Change type | Extension of an already-`VERIFIED` capability -- 1 new migration (1 new composite type/function, 4 widened functions via `DROP`+`CREATE`, 2 widened via same-signature `CREATE OR REPLACE`, 2 new authenticated RPCs, 1 new scan detector, 2 tables widened additively), widened + new service layer, 0 new routes |
+| Baseline evidence | `CG-S10-ATW-008` (Prompt 227, `VERIFIED`, this session); `ATW-226F`/`226G` (`VERIFIED`); Phase 3 `OPS-173`/`174` (`VERIFIED`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- second task in that range, executed in ascending order |
+
+#### Outcome
+
+Extends `ATW-226G`'s own already-staged milestone-candidate/exception-signal design with real telemetry provenance, a new tracking-health signal type, a fixed pre-existing defect, dependency-aware live ETA, and an explicit rebaseline operation -- deliberately never re-implementing `226G`'s own staging/confirm/dismiss mechanics. `app.evaluate_telemetry_confidence_and_freshness` computes a real confidence score and freshness status from the canonical telemetry event backing a candidate/signal, now populated on `app.milestone_events`/`app.operational_exceptions` at confirmation time (honestly null for a manual record or a signal with no backing event). A new `tracking_health_no_signal` signal type reuses `app.shipment_exception_signals` via a new scan-based, storm-proof, self-healing detector. `app.evaluate_leg_no_signal_escalation` (`ATW-225`) is fixed to measure a session's staleness from the vehicle's own actual last-received telemetry rather than session age. `app.get_shipment_leg_eta_projection` gives a real, honestly-bounded live ETA (never fabricated when the position is absent/stale); `app.rebaseline_shipment_leg_schedule` gives an explicit, audited schedule change for unstarted legs only. The public tracking projection gains a customer-safe `live_eta_status`/`live_eta_at`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730130000_create_advanced_tms_milestone_exception_telemetry.sql`; `server/contracts/milestone-exception-telemetry/milestone-exception-telemetry.ts`(+test); `server/queries/milestone-exception-telemetry.ts`(+test); `server/mutations/milestone-exception-telemetry.ts`(+test); `scripts/db-tests/advanced-tms-milestone-exception-telemetry.sql`; `docs/build-log/phase-05/ATW-228.md`. Modified: `server/contracts/milestone-management/milestone-management.ts`(+test, `MilestoneEvent` +4 provenance fields); `server/contracts/exception-escalation/exception-escalation.ts`(+test, `OperationalException` +4 provenance fields); `server/contracts/geofence-route-deviation-signals/geofence-route-deviation-signals.ts` (`EXCEPTION_SIGNAL_TYPES` +1); `server/contracts/public-tracking/public-tracking.ts`(+test, +`liveEtaStatus`/`liveEtaAt`); `app/(public)/tracking/[token]/page.tsx` (renders the 2 new fields); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `228` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (111 total), 0 prior migration file edited (6 functions widened in place via the applied-migration-safe `DROP`+`CREATE`/`CREATE OR REPLACE` techniques), 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2440/2440 (15 net new), `pnpm run db:test` PASS -- 111 migrations/113 db-test files (1 new, zero regression -- including `OPS-173`/`OPS-174`/`226G`'s own db-tests re-passing unmodified against every widened function), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 88 routes, unchanged.
+
+#### Compatibility, rollout, recovery
+
+Additive apart from six widened functions: two signature-changing (`DROP`+`CREATE`, `app.ingest_milestone_event`/`app.report_exception`, trailing defaulted params -- every existing call site unaffected) and four same-signature (`CREATE OR REPLACE`, `app.confirm_milestone_candidate`/`app.confirm_exception_signal`/`app.evaluate_leg_no_signal_escalation`/`app.lookup_public_shipment_tracking`, the last also `DROP`+`CREATE` since it gained two new output columns). Every one proven backward-compatible by its own capability's pre-existing db-test re-passing unmodified. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Seven found and fixed during authoring, before commit (none in the final committed state): (1) a real, pre-existing defect in `ATW-225`'s own `app.evaluate_leg_no_signal_escalation` (measured session age, not telemetry recency) -- the primary subject of design note 3, fixed as part of this checkpoint's own scope, not merely worked around; (2) `CREATE OR REPLACE` on a trailing-parameter-widened function silently creates an ambiguous second overload rather than replacing it, caught immediately by a `COMMENT ON FUNCTION ... is not unique` error -- fixed via `DROP`+`CREATE` (`226C`'s own precedent) for both widened ingestion functions; (3) `make_interval(hours => numeric)` does not exist (integer-only parameter) -- fixed via numeric-times-interval multiplication; (4) a literal `'success'`/`'ok'` copy-paste bug in the widened `lookup_public_shipment_tracking`'s own success path, caught immediately by `226H`'s own pre-existing db-test re-failing on the very first full-suite run; (5) a missing `public` schema in `app.detect_shipment_leg_tracking_health_signals`'s own `search_path` (the identical `226E`/`226G` bug class), breaking `validate_geography_point` inlining during an unrelated-column `UPDATE`; (6) a miscounted `app.capture_audit_event` call in `app.rebaseline_shipment_leg_schedule` (wrong argument order, and the "before" state read after the row was already overwritten); (7) two test-authoring mistakes (`app.audit_logs.resource_id` misnamed `record_id`; an actor lacking record-level shipment access via `can_access_record`). Full detail: `docs/build-log/phase-05/ATW-228.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-228` is `VERIFIED`. `CG-S10-ATW-010` (Prompt 229, Warehouse and Zone) was already independently dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `229` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

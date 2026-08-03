@@ -149,4 +149,42 @@ describe("parsePublicShipmentTrackingResult", () => {
     assert.equal(result.vehiclePositionUpdatedAt, "2026-08-03T04:00:00.000Z");
     assert.equal(result.vehiclePositionStatus, "live");
   });
+
+  test("a row with no live_eta_* keys at all defaults both new fields to null (ATW-228)", () => {
+    const result = parsePublicShipmentTrackingResult({
+      lookup_status: "ok",
+      shipment_number: "SHP-0001",
+      status: "in_transit",
+      mode: "sea",
+      origin: "Jakarta",
+      destination: "Surabaya",
+      planned_delivery_at: "2026-08-05T00:00:00.000Z",
+      current_eta: null,
+      is_delayed: false,
+      milestones: [],
+      epod_available: false,
+    });
+    assert.equal(result.liveEtaStatus, null);
+    assert.equal(result.liveEtaAt, null);
+  });
+
+  test("maps a real, computable live ETA (ATW-228 widening)", () => {
+    const result = parsePublicShipmentTrackingResult({
+      lookup_status: "ok",
+      shipment_number: "SHP-0001",
+      status: "in_transit",
+      mode: "sea",
+      origin: "Jakarta",
+      destination: "Surabaya",
+      planned_delivery_at: "2026-08-05T00:00:00.000Z",
+      current_eta: null,
+      is_delayed: false,
+      milestones: [],
+      epod_available: false,
+      live_eta_status: "delayed",
+      live_eta_at: "2026-08-03T06:00:00.000Z",
+    });
+    assert.equal(result.liveEtaStatus, "delayed");
+    assert.equal(result.liveEtaAt, "2026-08-03T06:00:00.000Z");
+  });
 });

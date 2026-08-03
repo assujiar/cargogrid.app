@@ -72,6 +72,34 @@ describe("parseMilestoneEvent", () => {
     });
     assert.equal(event.location?.label, "Jakarta");
     assert.equal(event.correctsEventId, null);
+    assert.equal(event.sourceClass, null);
+    assert.equal(event.sourceConfidenceScore, null);
+  });
+
+  test("maps real telemetry provenance (ATW-228 widening)", () => {
+    const event = parseMilestoneEvent({
+      id: EVENT_ID,
+      tenant_id: TENANT_ID,
+      shipment_order_id: SHIPMENT_ID,
+      milestone_code: "picked_up",
+      event_time: "2026-07-27T08:00:00.000Z",
+      received_time: "2026-07-27T08:05:00.000Z",
+      location: { lat: -6.2, lng: 106.8, label: "Jakarta" },
+      source: "system",
+      reason: "confirmed_geofence_candidate",
+      corrects_event_id: null,
+      idempotency_key: "idem-1",
+      sequence_no: 1,
+      created_by: "dispatcher",
+      created_at: "2026-07-27T08:05:00.000Z",
+      source_class: "direct_device",
+      source_confidence_score: "0.7",
+      source_freshness_status: "healthy",
+      source_candidate_id: "823e4567-e89b-12d3-a456-426614174000",
+    });
+    assert.equal(event.sourceClass, "direct_device");
+    assert.equal(event.sourceConfidenceScore, 0.7);
+    assert.equal(event.sourceFreshnessStatus, "healthy");
   });
 });
 

@@ -98,6 +98,14 @@ export const MilestoneLocationSchema = z.object({
 });
 export type MilestoneLocation = z.infer<typeof MilestoneLocationSchema>;
 
+export const MILESTONE_EVENT_SOURCE_CLASSES = ["driver_mobile", "direct_device", "third_party_platform"] as const;
+export const MilestoneEventSourceClassSchema = z.enum(MILESTONE_EVENT_SOURCE_CLASSES);
+export type MilestoneEventSourceClass = z.infer<typeof MilestoneEventSourceClassSchema>;
+
+export const MILESTONE_EVENT_FRESHNESS_STATUSES = ["healthy", "stale", "offline"] as const;
+export const MilestoneEventFreshnessStatusSchema = z.enum(MILESTONE_EVENT_FRESHNESS_STATUSES);
+export type MilestoneEventFreshnessStatus = z.infer<typeof MilestoneEventFreshnessStatusSchema>;
+
 export const MilestoneEventSchema = z.object({
   id: z.string().uuid(),
   tenantId: z.string().uuid(),
@@ -113,9 +121,14 @@ export const MilestoneEventSchema = z.object({
   sequenceNo: z.number().int().positive(),
   createdBy: z.string().nullable(),
   createdAt: z.string(),
+  sourceClass: MilestoneEventSourceClassSchema.nullable(),
+  sourceConfidenceScore: z.coerce.number().min(0).max(1).nullable(),
+  sourceFreshnessStatus: MilestoneEventFreshnessStatusSchema.nullable(),
+  sourceCandidateId: z.string().uuid().nullable(),
 });
 export type MilestoneEvent = z.infer<typeof MilestoneEventSchema>;
 
+/** sourceClass/sourceConfidenceScore/sourceFreshnessStatus/sourceCandidateId were added at ATW-228 -- always null for a manually-filed event or a historical row predating this widening (never backfilled, 228_*.md §19). */
 export function parseMilestoneEvent(row: Record<string, unknown>): MilestoneEvent {
   return MilestoneEventSchema.parse({
     id: row.id,
@@ -132,6 +145,10 @@ export function parseMilestoneEvent(row: Record<string, unknown>): MilestoneEven
     sequenceNo: row.sequence_no,
     createdBy: row.created_by ?? null,
     createdAt: row.created_at,
+    sourceClass: row.source_class ?? null,
+    sourceConfidenceScore: row.source_confidence_score ?? null,
+    sourceFreshnessStatus: row.source_freshness_status ?? null,
+    sourceCandidateId: row.source_candidate_id ?? null,
   });
 }
 

@@ -89,6 +89,10 @@ const PublicTrackingGeoJsonPointSchema = z.object({
   coordinates: z.tuple([z.number(), z.number()]),
 });
 
+export const LIVE_ETA_STATUSES = ["on_time", "delayed", "unavailable"] as const;
+export const LiveEtaStatusSchema = z.enum(LIVE_ETA_STATUSES);
+export type LiveEtaStatus = z.infer<typeof LiveEtaStatusSchema>;
+
 /**
  * app.lookup_public_shipment_tracking always returns exactly one row -- lookupStatus
  * tells the caller the outcome; every other field is null unless lookupStatus='ok'.
@@ -97,7 +101,12 @@ const PublicTrackingGeoJsonPointSchema = z.object({
  * always null unless the currently-executing leg's own tracking policy explicitly
  * marked customer_visible, a real position exists, and the shipment carries an
  * assigned vehicle -- never a raw source_type, only a coarse live/delayed/unavailable
- * status (226_*.md §16: "customers see sanitized shipment-level projections").
+ * status (226_*.md §16: "customers see sanitized shipment-level projections"). The
+ * two liveEta* fields were added at ATW-228 -- the real, telemetry-based ETA
+ * (app._compute_shipment_leg_eta), deliberately distinct from currentEta/isDelayed
+ * (OPS-173's own disclosed milestone-only heuristic), gated on the identical
+ * customer_visible flag, coarsened to on_time/delayed/unavailable, never a raw
+ * distance/delay-minutes figure.
  */
 export const PublicShipmentTrackingResultSchema = z.object({
   lookupStatus: LookupStatusSchema,
@@ -114,6 +123,8 @@ export const PublicShipmentTrackingResultSchema = z.object({
   vehiclePosition: PublicTrackingGeoJsonPointSchema.nullable(),
   vehiclePositionUpdatedAt: z.string().nullable(),
   vehiclePositionStatus: VehiclePositionStatusSchema.nullable(),
+  liveEtaStatus: LiveEtaStatusSchema.nullable(),
+  liveEtaAt: z.string().nullable(),
 });
 export type PublicShipmentTrackingResult = z.infer<typeof PublicShipmentTrackingResultSchema>;
 
@@ -134,6 +145,8 @@ export function parsePublicShipmentTrackingResult(row: Record<string, unknown>):
     vehiclePosition: row.vehicle_position_geojson ?? null,
     vehiclePositionUpdatedAt: row.vehicle_position_updated_at ?? null,
     vehiclePositionStatus: row.vehicle_position_status ?? null,
+    liveEtaStatus: row.live_eta_status ?? null,
+    liveEtaAt: row.live_eta_at ?? null,
   });
 }
 
