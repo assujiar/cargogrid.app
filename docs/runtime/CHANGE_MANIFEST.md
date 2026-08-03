@@ -6315,6 +6315,40 @@ Seven found and fixed during authoring, before commit (none in the final committ
 
 Self-closing. `ATW-228` is `VERIFIED`. `CG-S10-ATW-010` (Prompt 229, Warehouse and Zone) was already independently dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `229` next.
 
+### CHG-2026-167 — Warehouse and Zone (Phase 5, Prompt 229, `CG-S10-ATW-010`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-010` / `229_WAREHOUSE_ZONE_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new migration (3 new tables, 1 new composite type, 12 new functions), new service layer, 1 new route |
+| Baseline evidence | `CG-S10-ATW-001` (Prompt 220, `VERIFIED`); verified Platform master/config/access and location/PostGIS foundations |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 227-230" -- third task in that range, executed in ascending order |
+
+#### Outcome
+
+Tenant/company warehouse and zone masters with versioned topology, explicit customer/owner eligibility, and dependency-checked deactivation, matching this prompt's own §4 objective. Confirmed up front that `app.entitlement_modules` (PLT-106) already seeds `OPS` covering "Operations (Job/Shipment, TMS, WMS, Milestone, ePOD)" -- reused verbatim as the module code for every new RPC's authority check, no separate `WMS` code invented. Zones are deliberately flat (one level under a warehouse) since Prompt 229's own "Facility Topology" epic covers only facility+zone identity, while Prompt 230's own "Location Topology" epic owns the deeper rack/shelf/bin hierarchy -- a zone's `warehouse_id`/`code`/`zone_type` are immutable once created, structurally preventing a cross-warehouse link or a duplicate code. `service_type_eligibility`/`zone_type` stay free text (matching `service_type`'s own established convention elsewhere; Prompt 229 §27's "ambient/cold/secure zones" are honored as sourced test-data examples, not treated as an exhaustive enum). `timezone`/`site_geog`/`environment`/`restrictions`/company-branch record scope all reuse already-governed primitives (`app.validate_timezone_name`, `app.geojson_point_to_geography`/`app.validate_geography_point`, `app.validate_master_attributes`, `app.lead_record_scope_org_unit_ids`) rather than re-deriving them. Customer eligibility is an explicit grant/revoke ledger mirroring `app.role_assignments`'s own shape. A warehouse cannot deactivate while any active/on_hold zone still exists under it (a real, checkable dependency); zone-level stock/task dependency checking is disclosed as deferred to `ATW-230`, since no bin/inventory table exists yet.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730140000_create_advanced_tms_warehouse_zone.sql`; `server/contracts/warehouse-zone/warehouse-zone.ts`(+test); `server/queries/warehouse-zone.ts`(+test); `server/mutations/warehouse-zone.ts`(+test); `scripts/db-tests/advanced-tms-warehouse-zone.sql`; `app/(tenant)/[tenantSlug]/operations/warehouses/{page,loading}.tsx`; `docs/build-log/phase-05/ATW-229.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `229` `READY`->`VERIFIED`, row `230` `NOT_STARTED`->`READY`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`. 1 new migration (112 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` PASS -- `node:test` 2475/2475 (35 net new), `pnpm run db:test` PASS -- 112 migrations/114 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check` all PASS, `npx next build` PASS -- 89 routes, 1 new (`/[tenantSlug]/operations/warehouses`).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 3 new tables, 1 new composite type, 12 new functions, no existing function widened. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Three found and fixed during authoring, before commit (none in the final committed state): (1) a test-authoring ordering mistake -- the first-drafted `warehouse_code_conflict` negative assertion used an actor who correctly failed earlier on `insufficient_authority` (wrong org-unit scope) rather than reaching the duplicate-code check -- fixed by using an actor who genuinely holds both the permission and the record scope; (2) a real, previously-unknown defect: `app.list_warehouse_customer_eligibility`'s own `RETURNS TABLE` column named `id` shadowed a bare `id` reference inside its own function body (Postgres implicitly declares each `RETURNS TABLE` output column as a same-named plpgsql variable), raising `column reference "id" is ambiguous` at runtime -- fixed by table-qualifying the lookup; (3) two db-test `declare`-block row-type initializers used a scalar-subquery assignment, which cannot bind a whole-row type in plpgsql `declare` -- fixed via a bare declaration plus a `select ... into` statement in the block body. Full detail: `docs/build-log/phase-05/ATW-229.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-229` is `VERIFIED`. `CG-S10-ATW-011` (Prompt 230, Bin and Racking) is now dependency-clean, marked `READY`. Per this session's own explicit range authorization ("lanjut prompt 227-230"), proceeding directly to `230` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
