@@ -6009,6 +6009,40 @@ Three db-test authoring defects found and fixed before any full-suite gate run (
 
 Self-closing. `ATW-226B` is `VERIFIED`. `ATW-226C` remains dependency-clean `READY`, unaffected; `ATW-226D`/`226E` are now genuinely dependency-unblocked (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226C` next.
 
+### CHG-2026-158 — Driver Mobile GPS Session and HTTPS Ingestion (Phase 5, Prompt 226 decomposition child `ATW-226C`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226C` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226C`'s own scope line) plus §§14A/16/21-23/26 |
+| Change type | New capability -- 1 new additive migration (1 function widened via drop+recreate), new service layer, 1 new route |
+| Baseline evidence | `ATW-226B` `VERIFIED` (`docs/build-log/phase-05/ATW-226B.md`); `CG-S10-ATW-006` `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- third task in that range |
+
+#### Outcome
+
+The first genuinely real telemetry-producing HTTPS surface this repository builds. Integrates with (never duplicates) `ATW-225`'s own orchestration layer: a new bearer-token session layer (`app.driver_mobile_tracking_sessions`) authenticates a Driver PWA, which holds no CargoGrid portal login at all, against an already-started `ATW-225` tracking session. Raw telemetry storage only (`app.driver_mobile_position_reports`) -- `ATW-226F`'s own canonical normalization/arbitration layer is the real future consumer. The one `anon`-granted function (`app.ingest_driver_mobile_report`) follows `app.lookup_public_shipment_tracking`'s (`OPS-180`) exact proven token-gated, rate-limited shape. `app.end_leg_tracking_session` (`ATW-225`) is widened via `DROP`+`CREATE` (not `CREATE OR REPLACE`, which would have created an ambiguous overload) so a driver's own "stop" report can end their session without an `OPS:Edit` grant -- every existing call site proven unaffected by a dedicated backward-compatibility test. First real HTTP API route: `app/api/tracking/driver-mobile/route.ts`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729360000_create_advanced_tms_driver_mobile_tracking.sql`; `server/contracts/driver-mobile-tracking/driver-mobile-tracking.ts`(+test); `server/queries/driver-mobile-tracking.ts`(+test); `server/mutations/driver-mobile-tracking.ts`(+test); `app/api/tracking/driver-mobile/route.ts`; `scripts/db-tests/advanced-tms-driver-mobile-tracking.sql`; `docs/build-log/phase-05/ATW-226C.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226C` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (103 total), 0 prior migration *file* edited (one function dropped+recreated within this new migration), 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2307/2307 (21 net new), `pnpm run db:test` PASS -- 103 migrations/105 db-test files (1 new, zero regression including `ATW-225`'s own db-test re-confirmed passing unmodified against the widened function), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 82 routes (1 new: `/api/tracking/driver-mobile`).
+
+#### Compatibility, rollout, recovery
+
+Additive apart from one signature-widening drop+recreate, proven backward-compatible directly (every existing 5-argument call site still resolves unambiguously). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Three found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) a `CREATE OR REPLACE FUNCTION` with an added parameter would have created an ambiguous overload rather than replacing the function -- fixed via `DROP`+`CREATE`; (2) a plain (non-partial) unique constraint made "revoke, then reissue" structurally impossible -- fixed with a partial unique index; (3) this migration's own header initially, incorrectly claimed to be the first `anon`-EXECUTE grant in the repository -- corrected after directly querying `information_schema.routine_privileges` found five pre-existing ones. Full detail: `docs/build-log/phase-05/ATW-226C.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226C` is `VERIFIED`. All three of `226A`/`226B`/`226C` are now `VERIFIED`. `ATW-226D`/`226E` are now genuinely dependency-unblocked (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226D` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
