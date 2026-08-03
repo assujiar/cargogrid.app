@@ -48,3 +48,6 @@ pnpm-debug.log*
 
 # Vercel
 .vercel/
+
+# Claude Code — personal local overrides, never shared/committed
+.claude/settings.local.json
