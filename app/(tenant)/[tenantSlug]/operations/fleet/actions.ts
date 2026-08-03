@@ -19,6 +19,8 @@ import {
   registerSimCard,
   assignSimToDevice,
   unassignSimFromDevice,
+  registerProviderVehicleMapping,
+  setVehicleTrackingSourcePriority,
   FleetDriverDeviceMutationError,
 } from "../../../../../server/mutations/fleet-driver-device.ts";
 import type { VehicleOwnershipType, DeviceOwnershipType, GpsDeviceStatus } from "../../../../../server/contracts/fleet-driver-device/fleet-driver-device.ts";
@@ -281,6 +283,71 @@ export async function unassignSimFromDeviceAction(tenantSlug: string, simId: str
   } catch (error) {
     if (error instanceof FleetDriverDeviceMutationError) {
       return { error: `Could not unassign this SIM: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/fleet`);
+  return { error: null };
+}
+
+/** ATW-226H: closes ATW-223's own already-shipped-mutation, never-rendered-UI gap for the two remaining tracking-configuration forms. */
+export async function registerProviderMappingAction(tenantSlug: string, _prevState: FleetFormState, formData: FormData): Promise<FleetFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const vehicleMasterId = String(formData.get("vehicleMasterId") ?? "");
+  const providerCode = String(formData.get("providerCode") ?? "");
+  const externalVehicleId = String(formData.get("externalVehicleId") ?? "");
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await registerProviderVehicleMapping(supabase, {
+      tenantId: access.tenant.id,
+      vehicleMasterId,
+      providerCode,
+      externalVehicleId,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof FleetDriverDeviceMutationError) {
+      return { error: `Could not register this provider mapping: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/fleet`);
+  return { error: null };
+}
+
+export async function setVehicleSourcePriorityAction(tenantSlug: string, _prevState: FleetFormState, formData: FormData): Promise<FleetFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const vehicleMasterId = String(formData.get("vehicleMasterId") ?? "");
+  const sourceType = String(formData.get("sourceType") ?? "") as "driver_mobile" | "direct_device" | "third_party_platform";
+  const priorityRank = Number(formData.get("priorityRank") ?? 0);
+  const isEnabled = formData.get("isEnabled") === "on";
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await setVehicleTrackingSourcePriority(supabase, {
+      tenantId: access.tenant.id,
+      vehicleMasterId,
+      sourceType,
+      priorityRank,
+      isEnabled,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof FleetDriverDeviceMutationError) {
+      return { error: `Could not set this vehicle's source priority: ${error.message}` };
     }
     throw error;
   }

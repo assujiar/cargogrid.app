@@ -75,6 +75,9 @@ export default async function TenantAdminLayout({
           <a href={`/${access.tenant.slug}/admin/users`} className="text-neutral-700 hover:text-neutral-900">
             Users
           </a>
+          <a href={`/${access.tenant.slug}/admin/tracking`} className="text-neutral-700 hover:text-neutral-900">
+            Tracking
+          </a>
         </nav>
       </header>
       <main className="flex-1 px-6 py-6">{children}</main>

@@ -1,0 +1,22 @@
+{
+  "name": "@cargogrid/gps-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Always-on GPS Gateway (ATW-226D) -- raw TCP Teltonika Codec 8 Extended listener, independently deployed from the CargoGrid Next.js app (see README.md).",
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test 'test/**/*.test.ts'",
+    "start": "node --experimental-strip-types src/index.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.110.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "typescript": "5.9.3"
+  }
+}

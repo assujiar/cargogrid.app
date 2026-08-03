@@ -5939,6 +5939,314 @@ None -- zero bounded repair was needed. Every required-verification item passed 
 
 Self-closing. `CG-S9-FIN-029` is `VERIFIED`. **`PHASE_4_VERIFIED` is set.** This session's explicit authorized range "lanjut prompt 213 sd 219" now has its own substantive Finance portion (Prompts 213-218) fully complete. Prompt 219 (Phase 5 Advanced TMS/WMS kickoff) is next, within the same session authorization -- proceeding directly, unlike a prior phase-closure checkpoint's own precedent of stopping for fresh authorization here.
 
+### CHG-2026-156 — Tracking Entitlement and Source Policy (Phase 5, Prompt 226 decomposition child `ATW-226A`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226A` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226A`'s own scope line) |
+| Change type | New capability -- 1 new additive migration, 1 replaced (`CREATE OR REPLACE`) function, new service layer, 0 new routes |
+| Baseline evidence | `CG-S10-ATW-006` `VERIFIED` (`docs/build-log/phase-05/ATW-225.md`); Platform Configuration Engine `PLT-121` `VERIFIED`; `CG-S10-ATW-004` `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut prompt 226," read per the prior reconciliation checkpoint's own recorded default naming `226A` the natural first pick |
+
+**Note on this manifest's own completeness:** the checkpoints between `CHG-2026-155` (Prompt 218, Finance Closure) and this entry -- Prompt 219 (Phase 5 README, no `CG-S*` id), `CG-S10-ATW-001..006` (Prompts 220-225), and the `ATW-226` decomposition reconciliation checkpoint -- did not add their own `CHG-2026-*` entries to this file, despite each having a real build log/execution-index row. This is the same failure mode `ISS-2026-005` already tracks for Prompts 83-90 (Phase 0), now recurring for Phase 5; see that issue's own updated entry in `docs/runtime/KNOWN_ISSUES.md` §4. Backfilling six-plus historical entries this checkpoint did not author is out of `ATW-226A`'s own scope (the identical reasoning `ISS-2026-005`'s own discovery checkpoint, `PH0-091`, already applied) -- this entry uses the correct next sequential number given the file's real content (`156`), and the gap is disclosed rather than silently left unremarked.
+
+#### Outcome
+
+Real per-tenant tracking entitlement/package/limits resolution and a tenant-level default multi-source policy now exist. `app.is_shipment_tracking_entitled` (`ATW-222`'s own always-false disclosed stub) has a real implementation, delegating to a new `app.resolve_tenant_tracking_package` that reuses Configuration Engine (`PLT-121`) directly -- exactly the mechanism `ATW-222`'s own migration header cited, not a new entitlement schema. A new `app.tenant_tracking_source_policies` table plus `app.upsert_tenant_tracking_source_policy`/`app.resolve_tenant_tracking_source_policy` give later `ATW-226` children a tenant-level default (priority/freshness/accuracy/hysteresis) that `ATW-223`'s own per-vehicle `app.vehicle_tracking_source_priorities` can fall back to -- a distinct grain, not a duplicate. No production-code defect found; one db-test fixture identifier collision (tenant slug `acmetrack`, already claimed by `operations-public-tracking.sql`) found and fixed before the first full-suite run completed.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729340000_create_advanced_tms_tracking_entitlement_source_policy.sql`; `server/contracts/tracking-source-policy/tracking-source-policy.ts`(+test); `server/queries/tracking-source-policy.ts`(+test); `server/mutations/tracking-source-policy.ts`(+test); `scripts/db-tests/advanced-tms-tracking-entitlement-source-policy.sql`; `docs/build-log/phase-05/ATW-226A.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226A` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (101 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2273/2273 (20 net new), `pnpm run db:test` PASS -- 101 migrations/103 db-test files (1 new), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 81 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one new composite type, one new table, three new functions, one function replaced via `CREATE OR REPLACE` with an identical signature (its existing grant preserved). `git revert` this checkpoint's own commit is safe and complete; no other capability's data or behavior is affected.
+
+#### Errors found and fixed
+
+None in production code. One db-test fixture identifier collision (§ above), found and fixed before the first full-suite `db:test` run completed.
+
+#### Approval and closure
+
+Self-closing. `ATW-226A` is `VERIFIED`. `ATW-226B`/`226C` remain dependency-clean `READY`, unaffected (no dependency relationship among the three siblings); `CG-S10-ATW-010` (Prompt 229) remains the only other independently `READY` row. Per this repository's own standing one-checkpoint-one-task discipline, this session stops here and awaits fresh explicit user authorization before starting `ATW-226B`, `ATW-226C`, or any further task.
+
+### CHG-2026-157 — Device, SIM, Provider, Installation, and Mapping Management (Phase 5, Prompt 226 decomposition child `ATW-226B`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226B` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226B`'s own scope line) |
+| Change type | New capability -- 1 new additive migration, new service layer, 0 new routes |
+| Baseline evidence | `ATW-226A` `VERIFIED` (`docs/build-log/phase-05/ATW-226A.md`); `CG-S10-ATW-004` `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- an explicit range through `226I`; this is the second task in that range |
+
+#### Outcome
+
+A direct re-read of `ATW-223`'s own already-applied migration found device/SIM/provider-mapping/mobile-eligibility identity fully built already -- the one genuine gap was evidenced installation proof (`app.transition_gps_device_status` allowed a bare, unevidenced status flip to `installed`). Closed via a new `app.gps_device_installations` table plus `app.record_gps_device_installation` (composes `ATW-223`'s own status-transition function rather than duplicating it) and `app.verify_gps_device_installation`, reusing the Document and File Engine (`PLT-128`) exactly as ePOD already established for evidence storage/clean-scan validation.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729350000_create_advanced_tms_device_installation_evidence.sql`; `server/contracts/gps-device-installation/gps-device-installation.ts`(+test); `server/queries/gps-device-installation.ts`(+test); `server/mutations/gps-device-installation.ts`(+test); `scripts/db-tests/advanced-tms-device-installation-evidence.sql`; `docs/build-log/phase-05/ATW-226B.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226B` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (102 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2286/2286 (13 net new), `pnpm run db:test` PASS -- 102 migrations/104 db-test files (1 new), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 81 routes (unchanged).
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- one new table, two new functions. `git revert` this checkpoint's own commit is safe and complete; no other capability's data or behavior is affected.
+
+#### Errors found and fixed
+
+Three db-test authoring defects found and fixed before any full-suite gate run (not production code): (1) setup assumed `assign_device_to_vehicle` itself transitions device status -- it does not; (2) hardcoded `expected_device_version` literals masked an intended authority-check assertion; (3) `assign_device_to_vehicle` also requires `OPS:Assign`. Full detail: `docs/build-log/phase-05/ATW-226B.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226B` is `VERIFIED`. `ATW-226C` remains dependency-clean `READY`, unaffected; `ATW-226D`/`226E` are now genuinely dependency-unblocked (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226C` next.
+
+### CHG-2026-158 — Driver Mobile GPS Session and HTTPS Ingestion (Phase 5, Prompt 226 decomposition child `ATW-226C`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226C` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226C`'s own scope line) plus §§14A/16/21-23/26 |
+| Change type | New capability -- 1 new additive migration (1 function widened via drop+recreate), new service layer, 1 new route |
+| Baseline evidence | `ATW-226B` `VERIFIED` (`docs/build-log/phase-05/ATW-226B.md`); `CG-S10-ATW-006` `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- third task in that range |
+
+#### Outcome
+
+The first genuinely real telemetry-producing HTTPS surface this repository builds. Integrates with (never duplicates) `ATW-225`'s own orchestration layer: a new bearer-token session layer (`app.driver_mobile_tracking_sessions`) authenticates a Driver PWA, which holds no CargoGrid portal login at all, against an already-started `ATW-225` tracking session. Raw telemetry storage only (`app.driver_mobile_position_reports`) -- `ATW-226F`'s own canonical normalization/arbitration layer is the real future consumer. The one `anon`-granted function (`app.ingest_driver_mobile_report`) follows `app.lookup_public_shipment_tracking`'s (`OPS-180`) exact proven token-gated, rate-limited shape. `app.end_leg_tracking_session` (`ATW-225`) is widened via `DROP`+`CREATE` (not `CREATE OR REPLACE`, which would have created an ambiguous overload) so a driver's own "stop" report can end their session without an `OPS:Edit` grant -- every existing call site proven unaffected by a dedicated backward-compatibility test. First real HTTP API route: `app/api/tracking/driver-mobile/route.ts`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729360000_create_advanced_tms_driver_mobile_tracking.sql`; `server/contracts/driver-mobile-tracking/driver-mobile-tracking.ts`(+test); `server/queries/driver-mobile-tracking.ts`(+test); `server/mutations/driver-mobile-tracking.ts`(+test); `app/api/tracking/driver-mobile/route.ts`; `scripts/db-tests/advanced-tms-driver-mobile-tracking.sql`; `docs/build-log/phase-05/ATW-226C.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226C` `READY`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (103 total), 0 prior migration *file* edited (one function dropped+recreated within this new migration), 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2307/2307 (21 net new), `pnpm run db:test` PASS -- 103 migrations/105 db-test files (1 new, zero regression including `ATW-225`'s own db-test re-confirmed passing unmodified against the widened function), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 82 routes (1 new: `/api/tracking/driver-mobile`).
+
+#### Compatibility, rollout, recovery
+
+Additive apart from one signature-widening drop+recreate, proven backward-compatible directly (every existing 5-argument call site still resolves unambiguously). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Three found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) a `CREATE OR REPLACE FUNCTION` with an added parameter would have created an ambiguous overload rather than replacing the function -- fixed via `DROP`+`CREATE`; (2) a plain (non-partial) unique constraint made "revoke, then reissue" structurally impossible -- fixed with a partial unique index; (3) this migration's own header initially, incorrectly claimed to be the first `anon`-EXECUTE grant in the repository -- corrected after directly querying `information_schema.routine_privileges` found five pre-existing ones. Full detail: `docs/build-log/phase-05/ATW-226C.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226C` is `VERIFIED`. All three of `226A`/`226B`/`226C` are now `VERIFIED`. `ATW-226D`/`226E` are now genuinely dependency-unblocked (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226D` next.
+
+### CHG-2026-159 — Always-on GPS Gateway and Direct-Device Telemetry Ingestion (Phase 5, Prompt 226 decomposition child `ATW-226D`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226D` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §14B (`226D`'s own scope line) plus §8 (external-evidence policy) |
+| Change type | New capability -- 1 new additive migration (1 additive column), new service layer, new standalone deployable package (`services/gps-gateway`), 2 additive root config entries (`tsconfig.json`/`eslint.config.js` exclude/ignore) |
+| Baseline evidence | `ATW-226C` `VERIFIED` (`docs/build-log/phase-05/ATW-226C.md`); `CG-S10-ATW-004`/`PLT-129` both `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- fourth task in that range |
+
+#### Outcome
+
+The first capability in this repository requiring a standalone deployable unit distinct from the Next.js app. A real, byte-level Teltonika Codec 8 Extended raw TCP listener (`services/gps-gateway`) plus its Supabase-side `service_role`-only ingestion RPCs (`app.resolve_gps_device_for_handshake`, `app.ingest_direct_device_telemetry_batch`, `app.get_direct_device_telemetry_reports`), reusing `PLT-129`'s `app.authenticate_api_key`/`app.api_key_has_scope` for the gateway's own scoped, independently-revocable credential -- a fundamentally different trust model than `226C`'s deliberate `anon` exception, since this gateway is a trusted CargoGrid-operated backend process, never a public browser session. Raw telemetry storage only (`app.direct_device_telemetry_reports`) -- `ATW-226F`'s own canonical normalization/arbitration layer is the real future consumer. `app.jobs` is deliberately not used for live ingestion (durable buffering lives at the edge, in `services/gps-gateway` itself).
+
+#### Scope and files
+
+New: `supabase/migrations/20260729370000_create_advanced_tms_gps_gateway_ingestion.sql`; `server/contracts/gps-gateway-ingestion/gps-gateway-ingestion.ts`(+test); `server/queries/gps-gateway-ingestion.ts`(+test); `server/mutations/gps-gateway-ingestion.ts`(+test); `scripts/db-tests/advanced-tms-gps-gateway-ingestion.sql`; `services/gps-gateway/` in full (`src/codec8e.ts`, `src/server.ts`, `src/buffer.ts`, `src/ingestClient.ts`, `src/health.ts`, `src/logger.ts`, `src/index.ts`, `test/*.test.ts`, `package.json`, `pnpm-lock.yaml`, `tsconfig.json`, `Dockerfile`, `README.md`); `docs/build-log/phase-05/ATW-226D.md`. Modified: `tsconfig.json`/`eslint.config.js` (one additive `services/**` exclude/ignore entry each); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226D` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (104 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+Root: `pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2323/2323 (16 net new), `pnpm run db:test` PASS -- 104 migrations/106 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged. Separately, `services/gps-gateway`'s own gate surface: `pnpm run typecheck` PASS, `pnpm run test` PASS -- 26/26 (`test/codec8e.test.ts` 16, `test/buffer.test.ts` 5, `test/server.test.ts` 5, the latter a real `net.Socket` integration test against the real server code).
+
+#### Compatibility, rollout, recovery
+
+Additive only (one new table, one new additive column, three new `service_role`-only functions, two additive root config entries). `git revert` this checkpoint's own commit is safe and complete. `services/gps-gateway` was never deployed to any live infrastructure -- there is no running service to roll back.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `received_at` non-determinism within one ingestion batch (Postgres's `now()` frozen at transaction start) -- fixed with `clock_timestamp()`; (2) a race between overlapping TCP `'data'` events on the same connection -- fixed by serializing chunk processing through a promise chain; (3) TypeScript 5.9's `Buffer<ArrayBufferLike>` generic made `Buffer.concat()`/`.subarray()` results unassignable to a bare `Buffer` -- fixed with a shared `Bytes` type alias; (4) `node --experimental-strip-types` does not support TypeScript constructor parameter properties -- fixed by declaring the field explicitly. Full detail: `docs/build-log/phase-05/ATW-226D.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226D` is `VERIFIED`. `226A`/`226B`/`226C`/`226D` are now all `VERIFIED`. `ATW-226E` is now the only other genuinely dependency-unblocked child (`226A`+`226B` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226E` next.
+
+### CHG-2026-160 — Third-Party GPS Platform Adapter Contract (Phase 5, Prompt 226 decomposition child `ATW-226E`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226E` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §16 (`226E`'s own scope line) plus §8 (external-evidence policy) |
+| Change type | New capability -- 1 new additive migration, new service layer, 1 new dynamic route |
+| Baseline evidence | `ATW-226D` `VERIFIED` (`docs/build-log/phase-05/ATW-226D.md`); `CG-S10-ATW-004`/`PLT-129` both `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- fifth task in that range |
+
+#### Outcome
+
+A third distinct trust model (unauthenticated PWA bearer token for `226C`, trusted-backend scoped API key for `226D`, external-vendor HMAC signature for `226E`), each reusing the closest real precedent rather than inventing a fourth. `app.ingest_third_party_provider_webhook_event` is the third `anon`-granted function in this repository, authorized entirely by HMAC-SHA256 signature verification over the raw webhook body -- ADR-0011's own scheme (`app.compute_webhook_signature`/`app.verify_webhook_signature`, `PLT-129`), reused verbatim for the inbound direction. `app.third_party_provider_connections.webhook_secret_value` reuses `app.webhook_endpoints.secret_value`'s own accepted "raw, retrievable, zero grant" shape, since a signing secret cannot be a one-way hash and still be verifiable. Unmapped vehicles are quarantined (raw payload preserved) rather than dropped; replay defense is two-layered (ADR-0011's 5-minute timestamp window plus `provider_event_id` idempotency). Third-party adapters are case-specific (`226_*.md` §16) -- this checkpoint defines one repository-owned reference webhook JSON contract, disclosed as representative, never a certified named-vendor integration.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729380000_create_advanced_tms_third_party_provider_adapter.sql`; `server/contracts/third-party-provider-adapter/third-party-provider-adapter.ts`(+test); `server/queries/third-party-provider-adapter.ts`(+test); `server/mutations/third-party-provider-adapter.ts`(+test); `app/api/webhooks/third-party-gps/[connectionId]/route.ts`; `scripts/db-tests/advanced-tms-third-party-provider-adapter.sql`; `docs/build-log/phase-05/ATW-226E.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226E` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (105 total), 0 prior migration file edited, 1 new route.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2343/2343 (20 net new), `pnpm run db:test` PASS -- 105 migrations/107 db-test files (1 new, zero regression), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 83 routes (1 new: `/api/webhooks/third-party-gps/[connectionId]`).
+
+#### Compatibility, rollout, recovery
+
+Additive only (three new tables, six new functions, zero prior schema touched). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `gen_random_bytes(integer) does not exist` -- three functions' own `search_path` excluded `public`, breaking pgcrypto resolution -- fixed by adding `public`; (2) an ambiguous column reference (`RETURNS TABLE`'s own `provider_code` output column colliding with a bare `where provider_code = ...`) -- fixed by table-aliasing; (3) a missing `RETURN;` after an early `RETURN QUERY` let the idempotent-registration branch fall through into a duplicate-key `INSERT` -- fixed by adding it; (4) a foreign-key violation logging an "invalid" attempt for a non-existent `connection_id` -- fixed by inserting the looked-up row's own (possibly-null) id instead of the caller-supplied value. Full detail: `docs/build-log/phase-05/ATW-226E.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226E` is `VERIFIED`. `226A` through `226E` are now all `VERIFIED`. `ATW-226F` is now the only dependency-unblocked child (`226C`+`226D`+`226E` all `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226F` next.
+
+### CHG-2026-161 — Canonical Telemetry, Dedup/Order, Current Position, History, Source Arbitration, and Conflict/Fallback (Phase 5, Prompt 226 decomposition child `ATW-226F`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226F` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226F`'s own scope line) plus §§13/14/21/24/25 |
+| Change type | New capability -- 1 new migration (4 new tables, 6 new functions, 3 existing functions widened via same-signature `CREATE OR REPLACE`), new service layer, 0 new routes |
+| Baseline evidence | `ATW-226E` `VERIFIED` (`docs/build-log/phase-05/ATW-226E.md`); `ATW-226C`/`226D` both `VERIFIED` -- the first `226` child with all three of its own prerequisites satisfied at kickoff |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- sixth task in that range |
+
+#### Outcome
+
+The convergence point for all three telemetry source classes (`226C` driver_mobile, `226D` direct_device, `226E` third_party_platform): a single deterministic, auditable arbitration service, `app.arbitrate_and_project_vehicle_position()`, evaluated in strict order -- source-priority-disabled, heartbeat-carries-no-location, accuracy-below-threshold, stale-event-time (current position never moves backward to an older `event_at` merely because it arrived later), impossible-movement (>200 km/h implied speed against that *same source's own* last-known position, never a cross-source comparison), then same-source-continuation or hysteresis-gated cross-source-switch. Per-vehicle priority (`ATW-223`'s own `app.vehicle_tracking_source_priorities`) wins over the tenant default (`226A`'s own `app.tenant_tracking_source_policies`). Every rejected candidate is still stored with its own `rejection_reason` -- never silently dropped; `app.vehicle_source_health` updates unconditionally regardless of arbitration outcome, since a rejected/disabled report is still evidence the source is alive. Current position (`app.vehicle_current_positions`, one row per vehicle) is kept structurally separate from history (`app.canonical_telemetry_events`, append-only, every accepted-or-rejected candidate) -- no third, redundant table. Widens (does not fork) `226C`/`226D`/`226E`'s own three ingestion RPCs via same-signature `CREATE OR REPLACE FUNCTION`, each calling the arbitrator once only after its own raw insert (and, for `226C`, the anon-facing success status) has already committed, so canonicalization failure/skip can never break the already-proven raw ingestion contract.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729390000_create_advanced_tms_canonical_telemetry_arbitration.sql`; `server/contracts/canonical-telemetry/canonical-telemetry.ts`(+test); `server/queries/canonical-telemetry.ts`(+test); `scripts/db-tests/advanced-tms-canonical-telemetry-arbitration.sql`; `docs/build-log/phase-05/ATW-226F.md`. Modified: `scripts/db-tests/advanced-tms-device-installation-evidence.sql`/`advanced-tms-driver-mobile-tracking.sql` (pre-existing, unrelated tenant-scoping fragility fixes, disclosed in full below); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226F` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (106 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2356/2356 (13 net new), `pnpm run db:test` PASS -- 106 migrations/108 db-test files (1 new, zero regression once the two pre-existing-bug fixes below landed), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged (this checkpoint added no `app/` files).
+
+#### Compatibility, rollout, recovery
+
+Additive only (four new tables, six new functions, zero prior schema touched; the three widened ingestion RPCs keep their own exact pre-existing signatures, so every existing `226C`/`226D`/`226E` db-test and TS caller re-passes unmodified). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `CREATE FUNCTION` used instead of `CREATE OR REPLACE FUNCTION` for the three widened ingestion RPCs, causing an immediate "function already exists with same argument types" migration failure -- fixed via a targeted 3-occurrence correction; (2) impossible-movement compared a candidate against the *current winning position* regardless of source, producing a spurious `impossible_movement` rejection when two independently-clocked sources were compared against each other instead of reaching the intended cross-source switch-suppression logic -- fixed by adding `last_location` to `app.vehicle_source_health` and comparing each candidate against that *same source's own* last-known position instead; (3) a db-test-only timing collision, not an arbitration bug -- the stale-fallback scenario ran within `switch_hysteresis_seconds` (120s) of an earlier bootstrap switch purely due to fast sequential script execution -- fixed by explicitly backdating `vehicle_source_switches.switched_at` in the fixture; (4) two pre-existing, unrelated test-fragility defects found in *other* capabilities' own db-test files (the identical class `ATW-222`'s own build log already documented for a different file) -- `advanced-tms-device-installation-evidence.sql` (`226B`) and `advanced-tms-driver-mobile-tracking.sql` (`226C`) each selected a fixture row via an unscoped `limit 1` query that this checkpoint's own new, alphabetically-earlier-sorting db-test file exposed for the first time by populating the same shared tables -- fixed by scoping both queries to their own file's own tenant, re-verified via a full clean `db:test` re-run with zero regression. Full detail: `docs/build-log/phase-05/ATW-226F.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226F` is `VERIFIED`. `226A` through `226F` are now all `VERIFIED`. `ATW-226G` is now the only dependency-unblocked child (`226F` `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226G` next.
+
+### CHG-2026-162 — Geofence, Route Deviation, Milestone Candidate, and Exception Signals (Phase 5, Prompt 226 decomposition child `ATW-226G`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226G` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226G`'s own scope line) plus §§13/21/24/25 |
+| Change type | New capability -- 1 new migration (4 new tables, 2 functions widened via same-signature `CREATE OR REPLACE` -- one of them a pre-Phase-5 function -- 1 widening-only `ALTER TABLE`), new service layer, 0 new routes |
+| Baseline evidence | `ATW-226F` `VERIFIED` (`docs/build-log/phase-05/ATW-226F.md`); `OPS-173`/`OPS-174`/`PLT-134` all `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- seventh task in that range |
+
+#### Outcome
+
+Closes the last capability gap `226_*.md` §13 named ("geofence events... vehicle events") after `226F` already closed source health/conflicts/switches. `app.evaluate_geofence_and_deviation_signals()` -- the one entry point `226F`'s own arbitration function now calls for every canonical event that wins arbitration -- resolves stop-linked circular geofence dwell (arrival/departure, confirmed only after a configured sustained duration) and straight-line-corridor route deviation (confirmed only after a configured sustained duration off-corridor), each producing a *staged* signal in a new table, never a direct write to Operations' own real records. **Every derived signal is staged and reviewed, a structural consequence, not a policy choice**: direct inspection of `app.ingest_milestone_event`/`app.report_exception` before writing any code confirmed both fail closed for a null/absent actor identity, and no "system identity" exists anywhere in this repository's RBAC model -- `app.confirm_milestone_candidate`/`app.confirm_exception_signal` are the sole promotion path, each requiring the confirming human's own real, RBAC-checked `OPS:Create` identity. `app.detect_overdue_geofence_arrivals` adds a third signal source (a scan-based, cron-deferred detector, mirroring `OPS-174`'s own already-disclosed posture for `app.escalate_exception`).
+
+#### Scope and files
+
+New: `supabase/migrations/20260730090000_create_advanced_tms_geofence_route_deviation_signals.sql`; `server/contracts/geofence-route-deviation-signals/geofence-route-deviation-signals.ts`(+test); `server/queries/geofence-route-deviation-signals.ts`(+test); `server/mutations/geofence-route-deviation-signals.ts`(+test); `scripts/db-tests/advanced-tms-geofence-route-deviation-signals.sql`; `docs/build-log/phase-05/ATW-226G.md`. Modified: `server/contracts/milestone-management/milestone-management.ts` (`MILESTONE_EVENT_SOURCES` widened to add `'system'`, mirroring the database-level widening); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226G` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (107 total), 0 prior migration file edited (both widenings are same-signature `CREATE OR REPLACE`/a widening-only `ALTER TABLE` inside this new migration only), 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2380/2380 (24 net new), `pnpm run db:test` PASS -- 107 migrations/109 db-test files (1 new, zero regression, including `OPS-173`/`OPS-174`'s own db-tests re-passing unmodified against the widened `app.ingest_milestone_event`/`app.milestone_events`), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged.
+
+#### Compatibility, rollout, recovery
+
+Additive only (four new tables, zero prior schema touched beyond two same-signature/widening-only changes each proven backward-compatible by the existing `226F`/`OPS-173` db-tests re-passing unmodified). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Seven found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `app.detect_overdue_geofence_arrivals`'s own exclusion query only checked `state='confirmed_inside'`, missing that a departed stop transitions to `'exited'` and would be wrongly re-flagged overdue -- fixed by excluding both states; (2) the identical PostGIS/`search_path` gap `226E` already found, affecting four functions that insert/update a location-CHECK-constrained row without `public` in their own search_path -- fixed; (3) the db-test's own first-drafted coordinates implied thousands of km/h between consecutive reports, triggering `226F`'s own `impossible_movement` rejection and silently preventing this checkpoint's own evaluator from running -- fixed by redesigning the whole timeline with physically realistic elapsed-time gaps; (4) a SQL NULL-comparison masked defect 3 during initial authoring (PL/pgSQL treats a NULL `IF` condition as false) -- fixed by switching to `IS DISTINCT FROM` throughout; (5) the identical `RETURNS TABLE(...)` output-column-shadowing bug class `226E` already found, newly triggered once the read functions were widened to GeoJSON-project their own location columns -- fixed by table-aliasing; (6) a route-deviation reference-line contamination risk caught during test design before it could manifest, resolved by placing the overdue-test's own third stop collinear with the original corridor; (7) a TS-layer test-authoring mistake modeling a zero-row RPC response as `data: null` for a function that intentionally throws on non-array -- fixed by correcting the fixture to `data: []`. Full detail: `docs/build-log/phase-05/ATW-226G.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226G` is `VERIFIED`. `226A` through `226G` are now all `VERIFIED`. `ATW-226H` is now the only dependency-unblocked child (`226F`+`226G` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226H` next.
+
+### CHG-2026-163 — Fleet Control Tower, Device Administration, and Sanitized Projections (Phase 5, Prompt 226 decomposition child `ATW-226H`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226H` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226H`'s own scope line) plus §§15/16/21/26 |
+| Change type | New capability -- 1 new migration (3 new tenant-wide aggregating reads, 1 function widened via signature-changing `DROP`+`CREATE`), new service layer, **3 new routes -- the first genuinely UI-heavy `226` child** |
+| Baseline evidence | `ATW-226F` + `ATW-226G` both `VERIFIED` (`docs/build-log/phase-05/ATW-226F.md`, `ATW-226G.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- eighth task in that range |
+
+#### Outcome
+
+Closes the Fleet Control Tower/administration/sanitized-projection gap `226_*.md` §15 named. Three new tenant-wide aggregating reads (`app.get_tenant_vehicle_tracking_overview`, `app.get_tenant_pending_milestone_candidates`, `app.get_tenant_pending_exception_signals`) give the Fleet Control Tower list/map view and review queues one call each instead of one-per-vehicle/one-per-shipment. `app.lookup_public_shipment_tracking` (`OPS-180`) is widened (signature-changing `DROP`+`CREATE`, three new trailing output columns) to project a sanitized vehicle position -- gated on the shipment's own currently-executing leg's `customer_visible` tracking policy (`ATW-225`, reused not reinvented), exposing only a coarse `live`/`delayed`/`unavailable` status, never a raw source type. A real Leaflet-based live map (vanilla `leaflet`, dynamically imported client-side only) closes the gap both `operations/fleet` and `operations/dispatch-board` had already disclosed as deferred. The pending-signal review UI wires `226G`'s own already-authority-gated `confirm_*`/`dismiss_*` RPCs directly, never bypassing them -- this checkpoint creates no new path into `app.milestone_events`/`app.operational_exceptions`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730100000_create_advanced_tms_fleet_control_tower.sql`; `server/contracts/fleet-control-tower/fleet-control-tower.ts`(+test); `server/queries/fleet-control-tower.ts`(+test); `scripts/db-tests/advanced-tms-fleet-control-tower.sql`; `app/(tenant)/[tenantSlug]/admin/tracking/*`; `app/(tenant)/[tenantSlug]/operations/fleet-control-tower/*` (incl. `[vehicleMasterId]/*`); `docs/build-log/phase-05/ATW-226H.md`. Modified: `server/contracts/public-tracking/public-tracking.ts`(+test, widened with 3 new sanitized nullable fields); `app/(tenant)/[tenantSlug]/admin/layout.tsx` (new "Tracking" nav link); `app/(tenant)/[tenantSlug]/operations/fleet/{page.tsx,actions.ts,fleet-panel.tsx}` (two new sections wiring `226B`'s own already-shipped provider-mapping/source-priority mutations); `app/(public)/tracking/[token]/page.tsx` (renders the 3 new fields); `package.json` (`leaflet`, `@types/leaflet`); `scripts/db-tests/advanced-tms-geofence-route-deviation-signals.sql` (`226G`'s own file, cross-file contamination fix, see Errors below); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226H` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (108 total), 0 prior migration file edited, 3 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, up from 80 pre-existing -- a mechanical consequence of 3 new routes on the pre-existing `@next/next/no-html-link-for-pages` rule, confirmed via a temporary `git worktree` diff against `226G`'s own commit, zero new warning location), `pnpm run test` PASS -- `node:test` 2392/2392 (12 net new), `pnpm run db:test` PASS -- 108 migrations/110 db-test files (1 new, zero regression once the `226G` contamination fix landed, including `OPS-180`'s own db-test re-passing unmodified against the widened `app.lookup_public_shipment_tracking`), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- 3 new routes appear in the manifest. UI verification bounded by this sandbox's own disclosed no-real-browser condition (`PLT-117`'s precedent): `next build` plus `next dev`+`curl` reachability probing against `playwright.config.ts`'s own placeholder Supabase env values, confirming both new tenant-scoped routes fail safe (real `notFound()` content, never a crash) with no session.
+
+#### Compatibility, rollout, recovery
+
+Additive apart from the one signature-changing `DROP`+`CREATE` widening on `app.lookup_public_shipment_tracking`, proven backward-compatible by its own pre-existing db-test re-passing unmodified (every original output column unchanged, all field-name-based assertions). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Five found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) a stray, redundant `alter table app.shipment_tracking_tokens enable row level security` copy-paste leftover in the migration's first draft -- caught and removed before the first apply attempt; (2) the db-test's own first-drafted device fixture only transitioned to `'assigned'`, but `app.ingest_direct_device_telemetry_batch` requires `('installed','active','offline')` -- fixed by adding an explicit `'installed'` transition; (3) **cross-file db-test contamination of `ATW-226G`'s own already-committed test file** -- this checkpoint's new test file sorts alphabetically before `226G`'s own and inserts fixture rows directly into `app.shipment_milestone_candidates`/`app.shipment_exception_signals`, breaking four of `226G`'s own previously-unscoped assertions (the identical bug class `226F`'s own build log already found in two other files, hit a third time) -- fixed by scoping five queries to `tenant_id = v_tenant1` in `226G`'s own file, re-verified via a full clean `db:test` re-run; (4) a reachability smoke test against a placeholder Supabase URL surfaced a pre-existing, unmodified `fetch failed` in `lookupPublicShipmentTracking`'s own RPC call for `/tracking/[token]` -- not this checkpoint's own widened parsing code, which never executes since the RPC call fails first; (5) the pre-existing `@next/next/no-html-link-for-pages` warning count mechanically increased from 80 to 85 alongside this checkpoint's 3 new routes, confirmed via a `git worktree` diff to be a rule-multiplicity artifact unrelated to any line this checkpoint wrote in the affected files. Full detail: `docs/build-log/phase-05/ATW-226H.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226H` is `VERIFIED`. `226A` through `226H` are now all `VERIFIED`. `ATW-226I` is now the only remaining child, every one of its own prerequisites satisfied. Per this session's own explicit range authorization, proceeding directly to `ATW-226I` next.
+
+### CHG-2026-164 — Deployment, Observability, Load, Security, Outage, and Recovery Verification (Phase 5, Prompt 226's closing decomposition child `ATW-226I`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226I` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226I`'s own scope line) plus §§15/16/17/18/23/26/27/28/31/32 |
+| Change type | Closing/integrated-verification checkpoint -- 1 new migration (2 new nullable columns, 1 function widened via same-signature `CREATE OR REPLACE`, 2 new functions), widened service layer, 3 new runbooks, 0 new routes. **Closes row `226` (`CG-S10-ATW-007`) itself.** |
+| Baseline evidence | `ATW-226A` through `ATW-226H` all `VERIFIED` (`docs/build-log/phase-05/ATW-226A.md` through `ATW-226H.md`) |
+| Final status | `COMPLETED` -- `VERIFIED` (child and parent row `226`) |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- ninth and final task in that range |
+
+#### Outcome
+
+Compresses this repository's own `PLT-137`(integrated verification)/`PLT-138`(hardening)/closure-report precedent into the one closing child `226_*.md` itself allocated. Re-derives live verification evidence for every named requirement across deployment/observability/load/security/outage/recovery -- all PASS, with load/live-deployment execution honestly `NOT_RUN` (no infrastructure exists) and one disclosed, deliberately out-of-scope UI gap (no Driver PWA exists anywhere, confirmed by direct search). Closes the one real repair this pass found: `app.third_party_provider_connections.consecutive_failure_count` (`ATW-226E`) never auto-disabled a misbehaving connection, unlike `app.webhook_endpoints` (`PLT-129`/`ADR-0011`) -- `app.ingest_third_party_provider_webhook_event` now auto-disables at exactly 10 consecutive signature failures, with two new manual recovery RPCs (`disable_third_party_provider_connection`/`reenable_third_party_provider_connection`). A new integrated-verification db-test composes a `third_party_platform`-sourced report through arbitration (`226F`) -> geofence dwell -> milestone candidate (`226G`) -> confirm -> tenant-wide read (`226H`) -> the widened public tracking projection (`226H`/`OPS-180`) in one continuous scenario -- the first time this family proved the geofence evaluator composes correctly through a source other than `direct_device`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730110000_harden_advanced_tms_third_party_provider_connection_recovery.sql`; `scripts/db-tests/advanced-tms-gps-telematics-integrated-verification.sql`; `docs/runbooks/{gps-gateway-outage,third-party-provider-outage,gps-ingestion-database-outage}.md`; `docs/build-log/phase-05/ATW-226I.md`. Modified: `server/contracts/third-party-provider-adapter/third-party-provider-adapter.ts`(+test, `autoDisabledAt`/`disabledReason` fields, 2 new input schemas); `server/mutations/third-party-provider-adapter.ts`(+test, 2 new functions); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226I` `NOT_STARTED`->`VERIFIED`; row `226` itself `IN_PROGRESS`->`VERIFIED`; row `227` `NOT_STARTED`->`READY`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (109 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 85 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2397/2397 (5 net new), `pnpm run db:test` PASS -- 109 migrations/111 db-test files (1 new, zero regression, including every pre-existing `226A`-`226H` db-test re-passing unmodified against the widened `app.ingest_third_party_provider_webhook_event`), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged.
+
+#### Compatibility, rollout, recovery
+
+Additive apart from the one same-signature `CREATE OR REPLACE` widening, proven backward-compatible by every pre-existing `226C`-`226H` db-test re-passing unmodified. `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+One critical, self-caught authoring mistake, found and fixed before any commit: the widened `app.ingest_third_party_provider_webhook_event`'s first draft was based on `ATW-226E`'s own *original* migration file rather than its *current* live definition after `ATW-226F`'s own already-applied widening (which added the canonicalization call to `app.arbitrate_and_project_vehicle_position`). Applying the first draft would have silently reverted the function to its pre-`226F` state -- a severe regression a full `db:test` run caught immediately (`advanced-tms-canonical-telemetry-arbitration.sql`'s own "cross-source switch suppressed" scenario failed). Diagnosed via a manual, single-session `psql` reproduction; fixed by re-deriving the widened body from `226F`'s own current migration file, preserving its own arbitration call verbatim; re-verified via a full clean `db:test` re-run, all green. Full detail: `docs/build-log/phase-05/ATW-226I.md` §6.
+
+#### Approval and closure
+
+Self-closing. `ATW-226I` is `VERIFIED`. **Row `226` (`CG-S10-ATW-007`) is itself now `VERIFIED`** -- all nine children `226A`-`226I` complete; `226I` was this family's own designated closing child, so this checkpoint is the one authorized to set the parent-level status directly. `CG-S10-ATW-008` (Prompt 227) is now dependency-clean, marked `READY`. This session's own explicit range authorization ("lanjut sd prompt terakhir di 226 (226a-226i)") is now fully spent -- the next runtime agent must stop and obtain fresh explicit user authorization before starting `227` or any further Phase 5 row.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

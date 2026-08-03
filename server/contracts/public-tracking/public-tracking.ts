@@ -80,7 +80,25 @@ export const PublicTrackingMilestoneSchema = z.object({
 });
 export type PublicTrackingMilestone = z.infer<typeof PublicTrackingMilestoneSchema>;
 
-/** app.lookup_public_shipment_tracking always returns exactly one row -- lookupStatus tells the caller the outcome; every other field is null unless lookupStatus='ok'. Never an exception (a raise would abort the transaction before the attempt-log insert could commit). */
+export const VEHICLE_POSITION_STATUSES = ["live", "delayed", "unavailable"] as const;
+export const VehiclePositionStatusSchema = z.enum(VEHICLE_POSITION_STATUSES);
+export type VehiclePositionStatus = z.infer<typeof VehiclePositionStatusSchema>;
+
+const PublicTrackingGeoJsonPointSchema = z.object({
+  type: z.literal("Point"),
+  coordinates: z.tuple([z.number(), z.number()]),
+});
+
+/**
+ * app.lookup_public_shipment_tracking always returns exactly one row -- lookupStatus
+ * tells the caller the outcome; every other field is null unless lookupStatus='ok'.
+ * Never an exception (a raise would abort the transaction before the attempt-log
+ * insert could commit). The three vehiclePosition* fields were added at ATW-226H --
+ * always null unless the currently-executing leg's own tracking policy explicitly
+ * marked customer_visible, a real position exists, and the shipment carries an
+ * assigned vehicle -- never a raw source_type, only a coarse live/delayed/unavailable
+ * status (226_*.md §16: "customers see sanitized shipment-level projections").
+ */
 export const PublicShipmentTrackingResultSchema = z.object({
   lookupStatus: LookupStatusSchema,
   shipmentNumber: z.string().nullable(),
@@ -93,6 +111,9 @@ export const PublicShipmentTrackingResultSchema = z.object({
   isDelayed: z.boolean().nullable(),
   milestones: z.array(PublicTrackingMilestoneSchema),
   epodAvailable: z.boolean().nullable(),
+  vehiclePosition: PublicTrackingGeoJsonPointSchema.nullable(),
+  vehiclePositionUpdatedAt: z.string().nullable(),
+  vehiclePositionStatus: VehiclePositionStatusSchema.nullable(),
 });
 export type PublicShipmentTrackingResult = z.infer<typeof PublicShipmentTrackingResultSchema>;
 
@@ -110,6 +131,9 @@ export function parsePublicShipmentTrackingResult(row: Record<string, unknown>):
     isDelayed: row.is_delayed ?? null,
     milestones: rawMilestones.map((m) => ({ code: m.code, eventTime: m.eventTime })),
     epodAvailable: row.epod_available ?? null,
+    vehiclePosition: row.vehicle_position_geojson ?? null,
+    vehiclePositionUpdatedAt: row.vehicle_position_updated_at ?? null,
+    vehiclePositionStatus: row.vehicle_position_status ?? null,
   });
 }
 
