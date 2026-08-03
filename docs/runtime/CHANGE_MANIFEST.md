@@ -6145,6 +6145,40 @@ Four found and fixed during authoring, before any full-suite gate run (none in t
 
 Self-closing. `ATW-226F` is `VERIFIED`. `226A` through `226F` are now all `VERIFIED`. `ATW-226G` is now the only dependency-unblocked child (`226F` `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226G` next.
 
+### CHG-2026-162 — Geofence, Route Deviation, Milestone Candidate, and Exception Signals (Phase 5, Prompt 226 decomposition child `ATW-226G`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226G` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226G`'s own scope line) plus §§13/21/24/25 |
+| Change type | New capability -- 1 new migration (4 new tables, 2 functions widened via same-signature `CREATE OR REPLACE` -- one of them a pre-Phase-5 function -- 1 widening-only `ALTER TABLE`), new service layer, 0 new routes |
+| Baseline evidence | `ATW-226F` `VERIFIED` (`docs/build-log/phase-05/ATW-226F.md`); `OPS-173`/`OPS-174`/`PLT-134` all `VERIFIED` |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- seventh task in that range |
+
+#### Outcome
+
+Closes the last capability gap `226_*.md` §13 named ("geofence events... vehicle events") after `226F` already closed source health/conflicts/switches. `app.evaluate_geofence_and_deviation_signals()` -- the one entry point `226F`'s own arbitration function now calls for every canonical event that wins arbitration -- resolves stop-linked circular geofence dwell (arrival/departure, confirmed only after a configured sustained duration) and straight-line-corridor route deviation (confirmed only after a configured sustained duration off-corridor), each producing a *staged* signal in a new table, never a direct write to Operations' own real records. **Every derived signal is staged and reviewed, a structural consequence, not a policy choice**: direct inspection of `app.ingest_milestone_event`/`app.report_exception` before writing any code confirmed both fail closed for a null/absent actor identity, and no "system identity" exists anywhere in this repository's RBAC model -- `app.confirm_milestone_candidate`/`app.confirm_exception_signal` are the sole promotion path, each requiring the confirming human's own real, RBAC-checked `OPS:Create` identity. `app.detect_overdue_geofence_arrivals` adds a third signal source (a scan-based, cron-deferred detector, mirroring `OPS-174`'s own already-disclosed posture for `app.escalate_exception`).
+
+#### Scope and files
+
+New: `supabase/migrations/20260730090000_create_advanced_tms_geofence_route_deviation_signals.sql`; `server/contracts/geofence-route-deviation-signals/geofence-route-deviation-signals.ts`(+test); `server/queries/geofence-route-deviation-signals.ts`(+test); `server/mutations/geofence-route-deviation-signals.ts`(+test); `scripts/db-tests/advanced-tms-geofence-route-deviation-signals.sql`; `docs/build-log/phase-05/ATW-226G.md`. Modified: `server/contracts/milestone-management/milestone-management.ts` (`MILESTONE_EVENT_SOURCES` widened to add `'system'`, mirroring the database-level widening); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226G` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (107 total), 0 prior migration file edited (both widenings are same-signature `CREATE OR REPLACE`/a widening-only `ALTER TABLE` inside this new migration only), 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2380/2380 (24 net new), `pnpm run db:test` PASS -- 107 migrations/109 db-test files (1 new, zero regression, including `OPS-173`/`OPS-174`'s own db-tests re-passing unmodified against the widened `app.ingest_milestone_event`/`app.milestone_events`), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged.
+
+#### Compatibility, rollout, recovery
+
+Additive only (four new tables, zero prior schema touched beyond two same-signature/widening-only changes each proven backward-compatible by the existing `226F`/`OPS-173` db-tests re-passing unmodified). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Seven found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `app.detect_overdue_geofence_arrivals`'s own exclusion query only checked `state='confirmed_inside'`, missing that a departed stop transitions to `'exited'` and would be wrongly re-flagged overdue -- fixed by excluding both states; (2) the identical PostGIS/`search_path` gap `226E` already found, affecting four functions that insert/update a location-CHECK-constrained row without `public` in their own search_path -- fixed; (3) the db-test's own first-drafted coordinates implied thousands of km/h between consecutive reports, triggering `226F`'s own `impossible_movement` rejection and silently preventing this checkpoint's own evaluator from running -- fixed by redesigning the whole timeline with physically realistic elapsed-time gaps; (4) a SQL NULL-comparison masked defect 3 during initial authoring (PL/pgSQL treats a NULL `IF` condition as false) -- fixed by switching to `IS DISTINCT FROM` throughout; (5) the identical `RETURNS TABLE(...)` output-column-shadowing bug class `226E` already found, newly triggered once the read functions were widened to GeoJSON-project their own location columns -- fixed by table-aliasing; (6) a route-deviation reference-line contamination risk caught during test design before it could manifest, resolved by placing the overdue-test's own third stop collinear with the original corridor; (7) a TS-layer test-authoring mistake modeling a zero-row RPC response as `data: null` for a function that intentionally throws on non-array -- fixed by correcting the fixture to `data: []`. Full detail: `docs/build-log/phase-05/ATW-226G.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226G` is `VERIFIED`. `226A` through `226G` are now all `VERIFIED`. `ATW-226H` is now the only dependency-unblocked child (`226F`+`226G` both `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226H` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

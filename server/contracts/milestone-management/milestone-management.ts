@@ -25,7 +25,12 @@ export const MILESTONE_TEMPLATE_STATUSES = ["draft", "published", "archived"] as
 export const MilestoneTemplateStatusSchema = z.enum(MILESTONE_TEMPLATE_STATUSES);
 export type MilestoneTemplateStatus = z.infer<typeof MilestoneTemplateStatusSchema>;
 
-export const MILESTONE_EVENT_SOURCES = ["manual", "api", "webhook", "import"] as const;
+// Widened at ATW-226G (supabase/migrations/20260730090000_create_advanced_tms_geofence_
+// route_deviation_signals.sql) to add 'system' -- a GPS-derived, human-confirmed
+// milestone (app.confirm_milestone_candidate) is honestly neither manual/api/webhook/
+// import; mirrors the same widening already applied to app.milestone_events'
+// milestone_events_source_check and app.ingest_milestone_event's own internal check.
+export const MILESTONE_EVENT_SOURCES = ["manual", "api", "webhook", "import", "system"] as const;
 export const MilestoneEventSourceSchema = z.enum(MILESTONE_EVENT_SOURCES);
 export type MilestoneEventSource = z.infer<typeof MilestoneEventSourceSchema>;
 
