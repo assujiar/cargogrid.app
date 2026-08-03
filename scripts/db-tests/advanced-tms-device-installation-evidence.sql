@@ -158,7 +158,7 @@ end $$;
 \echo '>> app.verify_gps_device_installation: OPS:Edit-gated, idempotent-by-reassertion, never mutates the original evidence'
 do $$
 declare
-  v_installation_id uuid := (select id from app.gps_device_installations limit 1);
+  v_installation_id uuid := (select id from app.gps_device_installations where tenant_id = (select id from app.tenants where slug = 'acmeinstall') limit 1);
   v_verified app.gps_device_installations;
   v_reverified app.gps_device_installations;
 begin

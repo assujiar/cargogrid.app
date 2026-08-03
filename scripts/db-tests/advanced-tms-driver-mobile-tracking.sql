@@ -149,7 +149,7 @@ end $$;
 \echo '>> app.start_driver_mobile_session: authority-gated, rejects a nonexistent/non-driver_mobile session; a real call mints a real dmt_-prefixed token exactly once and a second call on the same tracking session is rejected'
 do $$
 declare
-  v_session_id uuid := (select id from app.shipment_leg_tracking_sessions where is_current and status = 'active' limit 1);
+  v_session_id uuid := (select id from app.shipment_leg_tracking_sessions where tenant_id = (select id from app.tenants where slug = 'acmemobile') and is_current and status = 'active' limit 1);
   v_result record;
 begin
   begin
@@ -207,7 +207,7 @@ end $$;
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'acmemobile');
-  v_slts_id uuid := (select id from app.shipment_leg_tracking_sessions where is_current and status = 'active' limit 1);
+  v_slts_id uuid := (select id from app.shipment_leg_tracking_sessions where tenant_id = (select id from app.tenants where slug = 'acmemobile') and is_current and status = 'active' limit 1);
   v_dms_id uuid;
   v_raw_token text;
   v_result record;

@@ -6111,6 +6111,40 @@ Four found and fixed during authoring, before any full-suite gate run (none in t
 
 Self-closing. `ATW-226E` is `VERIFIED`. `226A` through `226E` are now all `VERIFIED`. `ATW-226F` is now the only dependency-unblocked child (`226C`+`226D`+`226E` all `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226F` next.
 
+### CHG-2026-161 — Canonical Telemetry, Dedup/Order, Current Position, History, Source Arbitration, and Conflict/Fallback (Phase 5, Prompt 226 decomposition child `ATW-226F`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `ATW-226F` / `226_GPS_TELEMATICS_INTEGRATION_PROMPT.md` §20 (`226F`'s own scope line) plus §§13/14/21/24/25 |
+| Change type | New capability -- 1 new migration (4 new tables, 6 new functions, 3 existing functions widened via same-signature `CREATE OR REPLACE`), new service layer, 0 new routes |
+| Baseline evidence | `ATW-226E` `VERIFIED` (`docs/build-log/phase-05/ATW-226E.md`); `ATW-226C`/`226D` both `VERIFIED` -- the first `226` child with all three of its own prerequisites satisfied at kickoff |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user instruction "lanjut sd prompt terakhir di 226 (226a-226i)" -- sixth task in that range |
+
+#### Outcome
+
+The convergence point for all three telemetry source classes (`226C` driver_mobile, `226D` direct_device, `226E` third_party_platform): a single deterministic, auditable arbitration service, `app.arbitrate_and_project_vehicle_position()`, evaluated in strict order -- source-priority-disabled, heartbeat-carries-no-location, accuracy-below-threshold, stale-event-time (current position never moves backward to an older `event_at` merely because it arrived later), impossible-movement (>200 km/h implied speed against that *same source's own* last-known position, never a cross-source comparison), then same-source-continuation or hysteresis-gated cross-source-switch. Per-vehicle priority (`ATW-223`'s own `app.vehicle_tracking_source_priorities`) wins over the tenant default (`226A`'s own `app.tenant_tracking_source_policies`). Every rejected candidate is still stored with its own `rejection_reason` -- never silently dropped; `app.vehicle_source_health` updates unconditionally regardless of arbitration outcome, since a rejected/disabled report is still evidence the source is alive. Current position (`app.vehicle_current_positions`, one row per vehicle) is kept structurally separate from history (`app.canonical_telemetry_events`, append-only, every accepted-or-rejected candidate) -- no third, redundant table. Widens (does not fork) `226C`/`226D`/`226E`'s own three ingestion RPCs via same-signature `CREATE OR REPLACE FUNCTION`, each calling the arbitrator once only after its own raw insert (and, for `226C`, the anon-facing success status) has already committed, so canonicalization failure/skip can never break the already-proven raw ingestion contract.
+
+#### Scope and files
+
+New: `supabase/migrations/20260729390000_create_advanced_tms_canonical_telemetry_arbitration.sql`; `server/contracts/canonical-telemetry/canonical-telemetry.ts`(+test); `server/queries/canonical-telemetry.ts`(+test); `scripts/db-tests/advanced-tms-canonical-telemetry-arbitration.sql`; `docs/build-log/phase-05/ATW-226F.md`. Modified: `scripts/db-tests/advanced-tms-device-installation-evidence.sql`/`advanced-tms-driver-mobile-tracking.sql` (pre-existing, unrelated tenant-scoping fragility fixes, disclosed in full below); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `ATW-226F` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 1 new migration (106 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors, 80 pre-existing warnings unchanged), `pnpm run test` PASS -- `node:test` 2356/2356 (13 net new), `pnpm run db:test` PASS -- 106 migrations/108 db-test files (1 new, zero regression once the two pre-existing-bug fixes below landed), `pnpm run docs:check`/`security:check`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths`/`git:check` all PASS, `npx next build` PASS -- route count unchanged (this checkpoint added no `app/` files).
+
+#### Compatibility, rollout, recovery
+
+Additive only (four new tables, six new functions, zero prior schema touched; the three widened ingestion RPCs keep their own exact pre-existing signatures, so every existing `226C`/`226D`/`226E` db-test and TS caller re-passes unmodified). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+Four found and fixed during authoring, before any full-suite gate run (none in the final committed state): (1) `CREATE FUNCTION` used instead of `CREATE OR REPLACE FUNCTION` for the three widened ingestion RPCs, causing an immediate "function already exists with same argument types" migration failure -- fixed via a targeted 3-occurrence correction; (2) impossible-movement compared a candidate against the *current winning position* regardless of source, producing a spurious `impossible_movement` rejection when two independently-clocked sources were compared against each other instead of reaching the intended cross-source switch-suppression logic -- fixed by adding `last_location` to `app.vehicle_source_health` and comparing each candidate against that *same source's own* last-known position instead; (3) a db-test-only timing collision, not an arbitration bug -- the stale-fallback scenario ran within `switch_hysteresis_seconds` (120s) of an earlier bootstrap switch purely due to fast sequential script execution -- fixed by explicitly backdating `vehicle_source_switches.switched_at` in the fixture; (4) two pre-existing, unrelated test-fragility defects found in *other* capabilities' own db-test files (the identical class `ATW-222`'s own build log already documented for a different file) -- `advanced-tms-device-installation-evidence.sql` (`226B`) and `advanced-tms-driver-mobile-tracking.sql` (`226C`) each selected a fixture row via an unscoped `limit 1` query that this checkpoint's own new, alphabetically-earlier-sorting db-test file exposed for the first time by populating the same shared tables -- fixed by scoping both queries to their own file's own tenant, re-verified via a full clean `db:test` re-run with zero regression. Full detail: `docs/build-log/phase-05/ATW-226F.md` §4.1.
+
+#### Approval and closure
+
+Self-closing. `ATW-226F` is `VERIFIED`. `226A` through `226F` are now all `VERIFIED`. `ATW-226G` is now the only dependency-unblocked child (`226F` `VERIFIED`). Per this session's own explicit range authorization, proceeding directly to `ATW-226G` next.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
