@@ -16,9 +16,30 @@ describe("checkProtectedPaths", () => {
   });
 
   test("flags an applied migration as FORBIDDEN, but not a new/unapplied one", () => {
-    const findings = checkProtectedPaths(["supabase/migrations/20260101000000_init.sql"]);
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0]?.severity, "FORBIDDEN");
+    // A bare path with no known git status is the conservative case (e.g. a
+    // manual single-path check) -- still flagged, since "no status" cannot
+    // prove the file is new.
+    const bareFindings = checkProtectedPaths(["supabase/migrations/20260101000000_init.sql"]);
+    assert.equal(bareFindings.length, 1);
+    assert.equal(bareFindings[0]?.severity, "FORBIDDEN");
+
+    // A real git-status-aware entry is what `main()` actually passes
+    // (`git diff --name-status`). Status "M" (modifying an already-applied
+    // migration) is FORBIDDEN...
+    const modified = checkProtectedPaths([{ path: "supabase/migrations/20260101000000_init.sql", status: "M" }]);
+    assert.equal(modified.length, 1);
+    assert.equal(modified[0]?.severity, "FORBIDDEN");
+
+    // ...but status "A" (a brand-new migration file, never previously
+    // committed -- the normal, expected shape of every checkpoint's own new
+    // migration) must NOT be flagged. Regression test for the real defect
+    // this repository's own git:check-paths gate exhibited every checkpoint
+    // that added a new migration: the path-pattern-only check could never
+    // tell a new file from an edit to an applied one, so it flagged both
+    // identically -- confirmed live (ATW-017, 2026-08-04) when running the
+    // gate against a real staged new-migration diff for the first time.
+    const added = checkProtectedPaths([{ path: "supabase/migrations/20260101000000_init.sql", status: "A" }]);
+    assert.equal(added.length, 0);
   });
 
   test("flags .env / .env.local as FORBIDDEN but not .env.example", () => {
