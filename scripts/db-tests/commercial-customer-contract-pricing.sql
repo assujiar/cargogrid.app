@@ -185,7 +185,7 @@ declare
   v_contract_id uuid;
   v_expected_version integer;
 begin
-  select id, record_version into v_contract_id, v_expected_version from app.customer_contracts where version_number = 1;
+  select id, record_version into v_contract_id, v_expected_version from app.customer_contracts where version_number = 1 and tenant_id = (select id from app.tenants where slug = 'acmectr');
 
   begin
     perform app.publish_customer_contract(v_contract_id, v_expected_version, '00000000-0000-0000-0000-000000009902', 'rep');
@@ -205,7 +205,7 @@ declare
   v_component2 app.customer_contract_price_components;
   v_count integer;
 begin
-  select id into v_contract_id from app.customer_contracts where version_number = 1;
+  select id into v_contract_id from app.customer_contracts where version_number = 1 and tenant_id = (select id from app.tenants where slug = 'acmectr');
 
   select * into v_component1 from app.add_customer_contract_price_component(
     v_contract_id, 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', '20ft', 'IDR', 12000000, null, 5, '[]'::jsonb,
@@ -244,7 +244,7 @@ declare
   v_expected_version integer;
   v_contract app.customer_contracts;
 begin
-  select id, record_version into v_contract_id, v_expected_version from app.customer_contracts where version_number = 1;
+  select id, record_version into v_contract_id, v_expected_version from app.customer_contracts where version_number = 1 and tenant_id = (select id from app.tenants where slug = 'acmectr');
 
   begin
     perform app.publish_customer_contract(v_contract_id, v_expected_version, '00000000-0000-0000-0000-000000009903', 'viewer');
@@ -303,7 +303,7 @@ declare
   v_root_id uuid;
   v_copied_count integer;
 begin
-  select id, root_contract_id into v_source_id, v_root_id from app.customer_contracts where version_number = 1;
+  select id, root_contract_id into v_source_id, v_root_id from app.customer_contracts where version_number = 1 and tenant_id = (select id from app.tenants where slug = 'acmectr');
 
   begin
     perform app.create_customer_contract_draft(null, v_source_id, now() + interval '15 days', now() + interval '60 days', null, '00000000-0000-0000-0000-000000009902', 'rep');
@@ -331,7 +331,7 @@ declare
   v_renewal_id uuid;
   v_expected_version integer;
 begin
-  select id, record_version into v_renewal_id, v_expected_version from app.customer_contracts where version_number = 2;
+  select id, record_version into v_renewal_id, v_expected_version from app.customer_contracts where version_number = 2 and tenant_id = (select id from app.tenants where slug = 'acmectr');
 
   begin
     perform app.publish_customer_contract(v_renewal_id, v_expected_version, '00000000-0000-0000-0000-000000009902', 'rep');
@@ -354,7 +354,7 @@ declare
   v_account_id uuid;
   v_base_amount numeric;
 begin
-  select id, root_contract_id into v_source_id, v_root_id from app.customer_contracts where version_number = 1;
+  select id, root_contract_id into v_source_id, v_root_id from app.customer_contracts where version_number = 1 and tenant_id = (select id from app.tenants where slug = 'acmectr');
 
   select * into v_v3 from app.create_customer_contract_draft(null, v_source_id, now() + interval '30 days', now() + interval '90 days', 'Second renewal, no overlap', '00000000-0000-0000-0000-000000009902', 'rep');
   if v_v3.version_number <> 3 or v_v3.root_contract_id <> v_root_id then
@@ -393,7 +393,7 @@ declare
   v_tenant uuid;
   v_account_id uuid;
 begin
-  select id, record_version into v_v1_id, v_expected_version from app.customer_contracts where version_number = 1;
+  select id, record_version into v_v1_id, v_expected_version from app.customer_contracts where version_number = 1 and tenant_id = (select id from app.tenants where slug = 'acmectr');
 
   begin
     perform app.retire_customer_contract(v_v1_id, v_expected_version, null, '00000000-0000-0000-0000-000000009902', 'rep');
@@ -453,7 +453,7 @@ do $$
 declare
   v_component_id uuid;
 begin
-  select id into v_component_id from app.customer_contract_price_components limit 1;
+  select id into v_component_id from app.customer_contract_price_components where contract_id in (select id from app.customer_contracts where tenant_id = (select id from app.tenants where slug = 'acmectr')) limit 1;
 
   set local role authenticated;
   set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000009902", "role": "authenticated"}';
