@@ -438,4 +438,44 @@ begin
 end;
 $$;
 
+\echo '>> ATW-032 (ISS-2026-032): an authority check is not an identity check. A function that gates on app.evaluate_permission(p_actor_auth_user_id, ...) is covered by ATW-031, which wired app.assert_actor_is_session_identity into that one choke point. A function that instead asks its own question -- is_support_grant_authority(p_actor_auth_user_id, ...), recipient_auth_user_id <> p_actor_auth_user_id -- validates the CLAIMED actor and never the caller, so any authenticated session could pass a colleague UUID and act as them. Every side-effecting, client-callable function taking p_actor_auth_user_id must therefore reach one of the two checks.'
+do $$
+declare
+  v_unguarded text[];
+begin
+  -- The same transitive closure the ATW-032 classification pass used: start at the two
+  -- actor-check primitives and walk callers, so a function that delegates its authority
+  -- decision to a checked helper counts as covered rather than being flagged.
+  with recursive fn as (
+    select p.oid, p.proname, pg_get_functiondef(p.oid) as def, p.provolatile,
+           has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth_exec,
+           pg_get_function_identity_arguments(p.oid) as args
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.prokind = 'f'
+  ),
+  edge as (
+    select c.proname as caller, e.proname as callee
+    from fn c join fn e on c.oid <> e.oid
+    where c.def ~ ('\mapp\.' || e.proname || '\s*\(')
+  ),
+  covered(proname) as (
+    select proname from fn where proname in ('evaluate_permission', 'assert_actor_is_session_identity')
+    union
+    select e.caller from edge e join covered on e.callee = covered.proname
+  )
+  select array_agg(f.proname order by f.proname) into v_unguarded
+  from fn f
+  where f.args ~ 'p_actor_auth_user_id'   -- claims to act as somebody
+    and f.auth_exec                       -- and a logged-in session can call it
+    and f.provolatile = 'v'               -- and it has a side effect (pure reads are exempt)
+    and f.proname not in (select proname from covered);
+
+  if v_unguarded is not null then
+    raise exception 'assertion failed: % side-effecting function(s) are granted to authenticated and take p_actor_auth_user_id but reach neither app.evaluate_permission nor app.assert_actor_is_session_identity, so any authenticated session may pass another identity UUID and act as them: %', array_length(v_unguarded, 1), v_unguarded;
+  end if;
+
+  raise notice 'ATW-032 actor-authority proof: no side-effecting client-callable function accepts a p_actor_auth_user_id it never proves belongs to the caller';
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'

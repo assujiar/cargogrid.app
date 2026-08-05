@@ -34,6 +34,54 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
+/**
+ * A tenant user as a LIST read sees it (ATW-032, closes part of ISS-2026-034).
+ *
+ * Deliberately distinct from `UserSchema`, and the difference is the `email` column.
+ * `20260716110430_create_field_record_access.sql` revokes the table-level SELECT on
+ * `app.users` from `authenticated` and re-grants it on an explicit 17-column list that
+ * omits `email`, so the only way an `authenticated` caller may read an address at all is
+ * through `app.users_directory`, whose projection masks it (`a***@example.test`) unless the
+ * caller holds the real `HRS:View personal data` permission. A masked address is not a
+ * syntactically valid email, so this schema types `email` as a plain string and carries
+ * `emailMasked` alongside it -- the same treatment `UserDirectoryEntrySchema` already uses.
+ *
+ * `UserSchema` stays as it is and keeps `z.string().email()`, because its own read path is
+ * the RPC composite returned by `app.invite_user` and friends: a function return value is
+ * not subject to the table's column-level ACL, so that row genuinely does carry the real
+ * address.
+ */
+export const TenantUserSchema = UserSchema.omit({ email: true }).extend({
+  email: z.string(),
+  emailMasked: z.boolean(),
+});
+export type TenantUser = z.infer<typeof TenantUserSchema>;
+
+/** Maps a granted-columns app.users row plus its app.users_directory email projection. */
+export function parseTenantUser(row: Record<string, unknown>, directory: { email: unknown; email_masked: unknown }): TenantUser {
+  return TenantUserSchema.parse({
+    id: row.id,
+    tenantId: row.tenant_id,
+    authUserId: row.auth_user_id,
+    email: directory.email,
+    emailMasked: directory.email_masked,
+    displayName: row.display_name,
+    status: row.status,
+    orgUnitId: row.org_unit_id,
+    invitedBy: row.invited_by,
+    invitedAt: row.invited_at,
+    inviteExpiresAt: row.invite_expires_at,
+    activatedAt: row.activated_at,
+    suspendedAt: row.suspended_at,
+    suspendedReason: row.suspended_reason,
+    revokedAt: row.revoked_at,
+    revokedReason: row.revoked_reason,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
 export const InviteUserInputSchema = z.object({
   tenantId: z.string().uuid(),
   authUserId: z.string().uuid(),
