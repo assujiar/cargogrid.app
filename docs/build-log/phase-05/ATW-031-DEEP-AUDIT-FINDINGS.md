@@ -865,3 +865,60 @@ Only `tracked_vehicle_limit_remaining` (line 514) needs that combined figure. Be
 
 **Proposed fix.** Compute the subscription figure in a local variable instead of mutating the output field: `v_limit_basis := coalesce(tracked,0) + coalesce(stale,0);` then `v_result.tracked_vehicle_limit_remaining := v_package.max_tracked_vehicles - v_limit_basis;`, leaving `v_result.tracked_vehicle_count` as the disjoint fresh-only count the four-way partition and the UI both assume.
 
+
+---
+
+# Verification outcome (`CG-S10-ATW-032`)
+
+The register above was written before any of it had been checked. It has now been checked
+against the ratified design and the live schema, and **the majority of it does not survive**.
+Recording that is as important as recording the findings were, because acting on an
+unverified register is how a codebase acquires changes it never needed.
+
+## What the design documents settle
+
+Read before verifying: `docs/blueprint/` (six primary sources),
+`00-control/02_CONFIRMED_DECISION_REGISTER.md` (CPD-001..023, RPD-001..040, INV-001..012),
+and `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` (the authoritative RLS policy-family
+assignment).
+
+Several findings are not defects at all once the design is read:
+
+- **`06_RLS_RBAC_WORKSTREAM.md` §4 assigns each table exactly one policy family.** Only
+  the `customer_portal_scoped` family — "`shipments`, `invoices`, `tickets`,
+  `warehouse_orders` — portal-visible subset" — requires `tenant_id + customer_account_id`.
+  `skus` (and therefore `item_masters`) are explicitly listed under
+  `standard_tenant_scoped`, whose tenant key IS just `tenant_id`. So "policy X is
+  tenant-only" is a defect **only** where the design designates that table
+  customer-portal-scoped, and correct behaviour everywhere else. Several of the RLS
+  findings above assume the opposite.
+- **The customer-portal boundary is Phase 8 (Step 13) scope.** No live `customer_user`
+  principal exists yet. `ISS-2026-010` already records this correctly, and Phase 8's own
+  prompt defines which subset is portal-visible — deciding that here would be inventing
+  the contract that prompt exists to define.
+- **`RPD-022`** gives Supreme Admin absolute CRUD including audit and ledger records, so
+  any claim of the form "Supreme Admin can bypass X" describes ratified behaviour.
+- **`RPD-014`** ratifies dashboards reading transactional data directly.
+
+## Disposition of the critical findings
+
+| Claim | Verdict |
+|---|---|
+| `publish_milestone_template_version` archives a cross-tenant supersede target | **REAL** — fixed, `ISS-2026-035` |
+| `dispatch_shipment_order` records a dispatch without applying the status transition | **REFUTED** — it calls `app.transition_shipment_order(..., 'dispatched', ...)` directly |
+| `consume_inventory_reservation` can never consume a fully-reserved balance | **REFUTED** — `post_inventory_movement` enforces `on_hand >= 0`, not `on_hand >= reserved`; `advanced-tms-inventory-ledger.sql` exercises this exact path and passes |
+| `allocate_finance_receipt` derives a per-item key without the receipt | **REFUTED** — its batch lookup is already scoped `receipt_id = p_receipt_id` |
+| `recalculate_quotation_totals` / `generate_route_planning_candidates` / `next_quotation_number` reachable by any user | **ALREADY FIXED** this session (`20260730460000`) |
+| `approve_rate_version` trusts `p_actor_auth_user_id` | **ALREADY FIXED** (`20260730440000`, the `auth.uid()` cross-check) |
+| `transition_shipment_order` / `prepare_finance_settlement` idempotency replay | **ALREADY FIXED** (`20260730390000`) |
+| `accounts` / `finance_invoices` / `item_masters` / `customer_contracts` owner-scope | **PHASE 8 SCOPE** — see above; tracked by `ISS-2026-010` |
+
+## What this means for the rest of the register
+
+The remaining medium/low entries are **still unverified** and must be treated the same way:
+re-derive each from the live schema and the ratified design before acting. On the evidence
+so far the false-positive rate is high, and the dominant causes are (a) the claim describes
+behaviour a later migration already changed, and (b) the claim assumes a design constraint
+the design does not actually impose.
+
+`ISS-2026-034` remains open for exactly that work.
