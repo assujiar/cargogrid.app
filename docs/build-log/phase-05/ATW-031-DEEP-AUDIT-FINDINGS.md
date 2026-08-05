@@ -922,3 +922,80 @@ behaviour a later migration already changed, and (b) the claim assumes a design 
 the design does not actually impose.
 
 `ISS-2026-034` remains open for exactly that work.
+
+---
+
+# Verification round 2 — the medium/low register (`CG-S10-ATW-032`)
+
+The first outcome section above disposed of the critical band and left the medium/low entries
+explicitly unverified. They have now been verified the same way: re-derived from the live
+post-migration catalogue (`pg_get_functiondef`, `pg_policy`, `pg_constraint`,
+`information_schema`), judged against the ratified design, and repaired only where they
+survived. 32 claims were individually checked in this round.
+
+| Disposition | Count |
+|---|---|
+| CONFIRMED — repaired | 20 |
+| ALREADY-FIXED by a later migration | 7 |
+| BY-DESIGN — ratified, quoted | 5 |
+
+## Confirmed and repaired
+
+| Claim | Landed in |
+|---|---|
+| `reserve_inventory` replay ignores the reserved balance and quantity | `20260730530000` |
+| `post_inventory_movement` never checks `reserved + held` (raw 23514) | `20260730530000` |
+| Serial `on_hand <= 1` reads one arbitrary row instead of summing | `20260730530000` |
+| `cancel_shipment_order` admits out-of-matrix edges (closed → cancelled) | `20260730530000` |
+| Job-order allocation basis written and read by disagreeing rules | `20260730530000` |
+| Tenant-wide Fleet Control Tower queues skip `can_access_record` | `20260730530000` |
+| Geofence/deviation evaluator resolves one leg per vehicle, no tiebreak | `20260730530000` |
+| Direct-device telemetry has no replay dedup | `20260730530000` |
+| `complete_epod_capture` missing the family's row lock | `20260730530000` |
+| `transition_shipment_order` commits history without applying the status | `20260730520000` |
+| 74 version-predicated UPDATEs silently no-op and fabricate a `success` audit row | `20260730520000` |
+| `ingest_milestone_event`'s idempotency guard is swallowed by its own handler | `20260730520000` |
+| FinanceJournal contract omits the `correction` source_type | contract |
+| `IMPORT_EXPORT_JOB_TYPES` drift (`print_label`, `route_load_planning`) | contract |
+| Audit-log read RPCs accept an unbounded limit | contract + `20260730550000` |
+| `listTenantUsers` does `select("*")` on a column-restricted table | query layer |
+| Invoice/vendor-bill discard permanently wedges the source handoff | `20260730540000` |
+| Settlement stuck in `executed` after a competing settlement consumed its AP item | `20260730540000` |
+| Reconciliation compares two different as-of bases; `p_company_id` never filtered | `20260730540000` |
+| Fixed-amount tax rules applied without checking the rule's own currency | `20260730540000` |
+| Numbering republish wedges allocation permanently | `20260730550000` |
+| `set_custom_field_values` retry destroys newer values | `20260730550000` |
+| Driver-mobile rate limit bound only to the caller-controlled `client_key` | `20260730550000` |
+
+## Already fixed before this round
+
+`resolve_config` cross-tenant read (`20260730460000`); `enqueue_job` idempotency spanning job
+types, `add_actual_cost_component` replay (`20260730390000`); ePOD and actual-cost
+`record_version` checks (`20260730480000`); rejected telemetry advancing
+`vehicle_source_health.last_location` (`20260730430000`).
+
+## By design — with the ratified text that settles it
+
+- **`generate_wms_pick_task` auto-select ignoring available stock.** `20260730240000` design
+  note 10 ratifies auto-selecting the first FIFO/FEFO candidate; note 11 enumerates what is
+  re-verified and quantity is deliberately not among it. Skipping a small oldest lot for a
+  large newer one is what FEFO exists to prevent, and the path is not wedged.
+- **19 WMS policies admitting a `customer_user` actor.** `20260730311000`'s own closing
+  paragraph scopes that migration to the four live-implicated tables and hands the rest to
+  `ISS-2026-010`/Phase 8.
+- **As-of aging using current `open_amount`.** `20260729240000`'s header discloses this in the
+  same words and explicitly refuses the point-in-time reading the claim assumes.
+- **Ten forged-signature webhook posts disabling a connection.** `20260730110000`'s header
+  names forged-signature probing as the condition it was written to respond to, and ships
+  `reenable_third_party_provider_connection` as the recovery path.
+- **MFA/step-up as a caller-supplied timestamp.** Ratified in five places as the disclosed
+  no-live-MFA-provider boundary; the claim's distinguishing premise (that the service_role
+  sibling has a trusted attester) is also false — it passes the value through unmodified too.
+
+## What this register is worth, on the evidence
+
+Across both rounds the finder phase produced real defects at a meaningful rate — 20 confirmed
+in this round alone, including two against this audit's own predecessors that nothing else
+would have caught. It also produced a large majority of claims that did not survive contact
+with the live schema or the design documents. Both halves are the lesson: an unverified
+register is worth keeping and worth verifying, and is never worth fixing from directly.

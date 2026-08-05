@@ -23,6 +23,9 @@ import {
 export type ReconciliationMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
 export const RECONCILIATION_KNOWN_MUTATION_ERROR_CODES = [
+  // ATW-032: a run whose as-of date precedes any fully elapsed fiscal period is refused
+  // rather than returning a vacuous 0-vs-0 comparison as certifiable close evidence.
+  "finance_reconciliation_no_elapsed_period",
   "insufficient_authority",
   "finance_reconciliation_invalid_scope",
   "finance_reconciliation_invalid_tolerance",

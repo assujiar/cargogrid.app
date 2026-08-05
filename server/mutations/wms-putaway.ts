@@ -55,6 +55,10 @@ export const WMS_PUTAWAY_KNOWN_MUTATION_ERROR_CODES = [
   "invalid_transition",
   "has_confirmed_quantity",
   "insufficient_stock",
+  // ATW-032: app.inventory_balances carries a non-deferrable (reserved + held) <= on_hand
+  // CHECK that post_inventory_movement never tested, so a cycle-count variance approved
+  // against pre-freeze reserved stock died on a raw 23514 no caller classified.
+  "insufficient_unreserved_stock",
   "item_not_eligible",
   "location_not_eligible",
   "serial_conflict",

@@ -26,6 +26,9 @@ import {
 export type SettlementMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
 export const SETTLEMENT_KNOWN_MUTATION_ERROR_CODES = [
+  // ATW-032: an executed settlement whose AP open item was consumed by a competitor can
+  // now be voided under FIN:Approve with a mandatory reason -- these are its two new codes.
+  "finance_settlement_void_reason_required",
   "insufficient_authority",
   "idempotency_key_required",
   "finance_settlement_vendor_not_found",

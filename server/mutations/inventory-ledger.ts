@@ -40,6 +40,10 @@ export const INVENTORY_LEDGER_KNOWN_MUTATION_ERROR_CODES = [
   "item_not_eligible",
   "location_not_eligible",
   "insufficient_stock",
+  // ATW-032: app.inventory_balances carries a non-deferrable (reserved + held) <= on_hand
+  // CHECK that post_inventory_movement never tested, so a cycle-count variance approved
+  // against pre-freeze reserved stock died on a raw 23514 no caller classified.
+  "insufficient_unreserved_stock",
   "serial_conflict",
   "unbalanced_transfer",
   "balance_not_found",
