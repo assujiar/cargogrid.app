@@ -376,6 +376,8 @@ declare
   v_pos_before record;
   v_pos_after record;
   v_impossible_count integer;
+  v_health_before record;
+  v_health_after record;
 begin
   -- direct_device is not the current winner at this point (driver_mobile is, the
   -- tenant-default highest-priority source, still fresh) -- nothing can dislodge it by
@@ -395,6 +397,10 @@ begin
     raise exception 'assertion failed (test setup): expected direct_device to be current before the impossible-movement probe, got %', v_pos_before.source_type;
   end if;
 
+  -- ATW-031 (ISS-2026-025): snapshot the per-source plausibility baseline before the probe.
+  select last_location, last_seen_event_at, last_seen_received_at into v_health_before
+    from app.vehicle_source_health where vehicle_master_id = v_vehicle_id and source_type = 'direct_device';
+
   -- ~500km away, 10 seconds later -- structurally impossible for a ground vehicle.
   perform app.ingest_direct_device_telemetry_batch(
     v_api_key, v_device_id,
@@ -410,6 +416,29 @@ begin
   if v_impossible_count <> 1 then
     raise exception 'assertion failed: expected exactly 1 impossible_movement canonical event, found %', v_impossible_count;
   end if;
+
+  -- ATW-031 (ISS-2026-025): the rejected report must NOT have seeded the very baseline it
+  -- just failed against. Before this repair app.vehicle_source_health.last_location and
+  -- last_seen_event_at advanced unconditionally on every candidate, so an
+  -- impossible_movement rejection still moved the reference point the NEXT report is
+  -- measured from -- the plausibility rule partially defeating itself, and the mechanism
+  -- behind the "salami-slicing" path ATW-027's adversarial probe live-observed.
+  select last_location, last_seen_event_at, last_seen_received_at into v_health_after
+    from app.vehicle_source_health where vehicle_master_id = v_vehicle_id and source_type = 'direct_device';
+  if ST_Distance(v_health_after.last_location, v_health_before.last_location) > 1 then
+    raise exception 'assertion failed: an impossible_movement-rejected report moved the direct_device plausibility baseline (last_location) -- ISS-2026-025 is still open';
+  end if;
+  if v_health_after.last_seen_event_at <> v_health_before.last_seen_event_at then
+    raise exception 'assertion failed: an impossible_movement-rejected report advanced last_seen_event_at from % to %', v_health_before.last_seen_event_at, v_health_after.last_seen_event_at;
+  end if;
+  -- Liveness evidence, by contrast, MUST still advance: a rejected report still proves the
+  -- source is alive and talking, and external freshness reads depend on that distinction
+  -- (ATW-027 Finding 2).
+  if v_health_after.last_seen_received_at < v_health_before.last_seen_received_at then
+    raise exception 'assertion failed: last_seen_received_at went backwards -- liveness evidence must advance even for a rejected report';
+  end if;
+
+  raise notice 'ATW-031 baseline proof: an impossible_movement-rejected report leaves last_location/last_seen_event_at untouched while last_seen_received_at still advances';
 end $$;
 
 \echo '>> heartbeat: stored as a canonical event with rejection_reason=heartbeat_no_location, current position untouched, source_health last_seen advances'
