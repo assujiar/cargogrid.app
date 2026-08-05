@@ -6628,3 +6628,40 @@ Self-closing. `ATW-029` is `VERIFIED`. **`PHASE_5_VERIFIED` is set.** The tenth 
 3. Never claim compatibility without contract and migration evidence.
 4. Never omit a failed gate; link the Error Ledger and set status truthfully.
 5. Reconcile every entry with task ledger, build status, build log, and commit.
+
+### CHG-2026-176 — Post-Closure Codebase Audit and Repair (Phase 5, post-Prompt-248, `CG-S10-ATW-030`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-030` — operator-requested full codebase audit of everything implemented up to and including Prompt 248, with repairs applied before Prompt 249 |
+| Change type | Audit + bounded repair. 1 additive migration (`CREATE OR REPLACE FUNCTION` only), 3 TypeScript files, 3 test files. No new capability, table, column, index, constraint, policy, grant, route, or contract |
+| Baseline evidence | `e381d89` (PR #43, `CG-S10-ATW-029`/Prompt 248, `PHASE_5_VERIFIED`). Full gate suite re-run fresh before any edit — `db:test` **FAILED** at baseline (`ISS-2026-024`), every other gate green |
+| Final status | `COMPLETED` — 3 High-severity and 1 Low-severity defect closed, each live-reproduced before repair and re-proven by a committed regression test |
+| Authorization | Explicit operator instruction: "lakukan audit menyeluruh seluruh codebase … berikan report semua yg menjadi issue serta … implementasikan perbaikan tersebut sebelum saya lanjut ke prompt 249" |
+
+#### Outcome
+
+Four defects found, all open at the moment `PHASE_5_VERIFIED` was declared, none of them newly introduced by this checkpoint:
+
+- **F-1 (High)** — 20 Phase 5 WMS mutation functions matched their idempotent-replay short-circuit on `(tenant_id, idempotency_key)` alone and never verified the found row belonged to the requested target. Live-reproduced **deterministically, with zero concurrency**: `app.generate_wms_pick_task` called for outbound order line Y under a key already used by line X returned **line X's own task** with no error. Two damage shapes — silent misattribution (wrong row returned) and silent no-op (the requested operation skipped entirely while appearing to succeed: a scanned package line never recorded, a pick never confirmed, a shipment never load-confirmed). `p_idempotency_key` is user-supplied free text in this product, so key reuse is an ordinary operator typo, not an attack. Fixed across 29 replay short-circuits. **`ISS-2026-024` is reclassified from "flaky test" to this real defect** — the hypothesised timing root cause was wrong; no content-mismatch check existed at all.
+- **F-2 (High)** — the GPS Gateway TCP listener silently dropped any packet arriving while the previous packet's ingest round-trip was in flight: no ACK, not buffered, and `packetsRejected` stayed `0`, so the loss was invisible to the gateway's own metrics. Live-reproduced.
+- **F-3 (High)** — `DurableTelemetryBuffer.flush()` rewrote the whole queue file from a stale snapshot, destroying any batch `enqueue()` appended during the flush — the durable buffer losing precisely the telemetry it exists to protect. Live-reproduced.
+- **F-4 (Low)** — `getThirdPartyProviderConnection`'s `select("*")` against a column-restricted table (`ISS-2026-026`, now `RESOLVED`).
+
+Two new issues raised and deliberately **not** repaired here, each larger than this checkpoint's bounded scope: `ISS-2026-029` (the same replay defect class still open in ~35 Finance/Operations/Platform/TMS functions — spans four already-`VERIFIED` phases, needs its own task) and `ISS-2026-030` (a torn final line permanently wedges the gateway buffer). Full detail: `docs/build-log/phase-05/ATW-030.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730380000_harden_advanced_tms_wms_idempotency_target_mismatch.sql` (20 functions, `CREATE OR REPLACE` on identical signatures, each body its own live `pg_get_functiondef` output with only the replay short-circuit patched); `docs/build-log/phase-05/ATW-030.md`. Modified: `services/gps-gateway/src/server.ts`, `services/gps-gateway/src/buffer.ts`, `server/queries/third-party-provider-adapter.ts`, `services/gps-gateway/test/server.test.ts` (+1 regression test), `services/gps-gateway/test/buffer.test.ts` (+2), `scripts/db-tests/advanced-tms-wms-picking.sql` (+1 deterministic regression block; the pre-existing keyrace assertion was **not** weakened or modified), `docs/runtime/KNOWN_ISSUES.md`/`TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` 0 errors; `pnpm run lint` 0 errors / 85 warnings (identical pre-existing set); root `pnpm test` **3084/3084**; `services/gps-gateway` typecheck 0 errors, `test` **44/44** (41 + 3 new); `pnpm exec next build` exit 0, 90 routes unchanged; `pnpm run db:test` **ALL PASSED, run twice from scratch on separate disposable databases** — 138 migrations, all test files green both runs, including the previously-intermittent keyrace assertion now passing deterministically; `docs:check`/`security:check`/`data-classification:check`/`standards:check`/`threat-model:check`/`git:check-paths` all PASS. The baseline `db:test` failure is gone. `ISS-2026-020` did not trigger on either run and remains `OPEN`, untouched.
+
+#### Compatibility, rollout, recovery
+
+Fully backward compatible for every correct caller: a genuine retry (same key, same target) still replays identically and returns the same row — proven explicitly by the new regression block. Only a key reused across genuinely different targets now raises `idempotency_key_conflict`, which previously corrupted silently. The migration is purely additive (`CREATE OR REPLACE FUNCTION`, identical signatures, no table/grant/policy touched, no already-applied migration file edited); `git revert` restores the prior definitions with no data implication. The 138-migration clean-install path was proven twice this checkpoint. Last known good checkpoint: `e381d89`.
+
+#### Correction to a prior checkpoint's claim
+
+`ADVANCED_TMS_WMS_CLOSURE_REPORT.md` §7 stated "Zero Critical/High-severity repository-controlled issue is open anywhere". Three High-severity repository-controlled defects (F-1/F-2/F-3) were open at that moment. `PHASE_5_VERIFIED` is **not withdrawn** — every defect was repository-controlled, bounded, and is now closed with live evidence, and no Phase 5 capability is missing or unproven — but the zero-High claim is corrected here and in `KNOWN_ISSUES.md` rather than by silently editing that report's own committed text. Root cause recorded in `ATW-030.md` §9: `ATW-029` verified that prior evidence existed and re-ran the existing gate suite, but did not adversarially probe the code, and a re-run of an existing suite cannot surface a defect that suite's own assumptions share with the code.

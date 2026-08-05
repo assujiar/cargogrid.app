@@ -1488,6 +1488,88 @@ begin
   raise notice 'idempotency-key-reuse-across-different-operations race proof: exactly 1 of 2 different-line requests won (x=%/y=%), the loser failed cleanly with idempotency_key_conflict, never a raw uncaught error', v_task_count_x, v_task_count_y;
 end $$;
 
+\echo '>> ATW-030 DETERMINISTIC regression proof (no race window required): one idempotency key reused across two genuinely DIFFERENT outbound order lines must raise idempotency_key_conflict, and the SAME key against the SAME line must still replay identically. This is the real defect ISS-2026-024 previously mis-recorded as a timing flake: app.generate_wms_pick_task carried no content-mismatch check at all, so whenever the second request simply arrived AFTER the first committed -- the ordinary, non-racing case -- it silently received the FIRST line''s own task, a different item and potentially a different customer, with no error whatsoever. The two-process proof above only ever exercised the unique-index collision path, which is why the defect survived every prior checkpoint.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'wmspick1');
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-PICK-1');
+  v_rack_a_id uuid := (select id from app.warehouse_locations where tenant_id = v_tenant1 and code = 'RACK-PICK-A');
+  v_rack_b_id uuid := (select id from app.warehouse_locations where tenant_id = v_tenant1 and code = 'RACK-PICK-B');
+  v_account_alpha_id uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'WmsPick Customer Alpha');
+  v_item_p app.item_masters;
+  v_item_q app.item_masters;
+  v_order_p app.wms_outbound_orders;
+  v_order_q app.wms_outbound_orders;
+  v_line_p app.wms_outbound_order_lines;
+  v_line_q app.wms_outbound_order_lines;
+  v_first app.wms_pick_tasks;
+  v_replay app.wms_pick_tasks;
+  v_conflict_raised boolean := false;
+  v_q_task_count integer;
+begin
+  -- Two fully independent targets: different items, different orders, different lines,
+  -- different source racks -- nothing about them contends, so nothing but the shared
+  -- idempotency key can relate the two requests.
+  v_item_p := app.create_item_master(v_tenant1, v_account_alpha_id, 'SKU-PICK-ATW030-P', 'ATW-030 Deterministic Target P', null, 'PCS', false, false, false, '00000000-0000-0000-0000-000000180102', 'rep');
+  v_item_q := app.create_item_master(v_tenant1, v_account_alpha_id, 'SKU-PICK-ATW030-Q', 'ATW-030 Deterministic Target Q', null, 'PCS', false, false, false, '00000000-0000-0000-0000-000000180102', 'rep');
+
+  perform app.post_inventory_movement(
+    v_tenant1, v_warehouse_id, 'opening_balance', 'manual', null, 'idem-atw030-open-p', 'atw030 opening p',
+    jsonb_build_array(jsonb_build_object('owner_account_id', v_account_alpha_id, 'item_master_id', v_item_p.id, 'location_id', v_rack_a_id, 'uom_code', 'PCS', 'signed_quantity', 4, 'status', 'on_hand')),
+    '00000000-0000-0000-0000-000000180102', 'rep'
+  );
+  perform app.post_inventory_movement(
+    v_tenant1, v_warehouse_id, 'opening_balance', 'manual', null, 'idem-atw030-open-q', 'atw030 opening q',
+    jsonb_build_array(jsonb_build_object('owner_account_id', v_account_alpha_id, 'item_master_id', v_item_q.id, 'location_id', v_rack_b_id, 'uom_code', 'PCS', 'signed_quantity', 4, 'status', 'on_hand')),
+    '00000000-0000-0000-0000-000000180102', 'rep'
+  );
+
+  v_order_p := app.create_manual_wms_outbound_order(v_tenant1, v_warehouse_id, v_account_alpha_id, 'atw030 order p', 'idem-atw030-order-p', null, '00000000-0000-0000-0000-000000180102', 'rep');
+  v_line_p := app.add_wms_outbound_order_line(v_order_p.id, v_item_p.id, 'PCS', 4, null, '00000000-0000-0000-0000-000000180102', 'rep');
+  perform app.confirm_wms_outbound_order(v_order_p.id, v_order_p.record_version, '00000000-0000-0000-0000-000000180102', 'rep');
+
+  v_order_q := app.create_manual_wms_outbound_order(v_tenant1, v_warehouse_id, v_account_alpha_id, 'atw030 order q', 'idem-atw030-order-q', null, '00000000-0000-0000-0000-000000180102', 'rep');
+  v_line_q := app.add_wms_outbound_order_line(v_order_q.id, v_item_q.id, 'PCS', 4, null, '00000000-0000-0000-0000-000000180102', 'rep');
+  perform app.confirm_wms_outbound_order(v_order_q.id, v_order_q.record_version, '00000000-0000-0000-0000-000000180102', 'rep');
+
+  -- 1. The first, legitimate request claims the key for line P.
+  v_first := app.generate_wms_pick_task(v_line_p.id, 4, null, null, null, null, null, 'idem-atw030-shared-key', '00000000-0000-0000-0000-000000180102', 'rep');
+  if v_first.outbound_order_line_id <> v_line_p.id then
+    raise exception 'assertion failed: the first request must produce a task for its own line P, got %', v_first.outbound_order_line_id;
+  end if;
+
+  -- 2. A genuine retry -- same key, SAME line -- must still replay identically. The
+  --    repair must not break real idempotency, only cross-target misattribution.
+  v_replay := app.generate_wms_pick_task(v_line_p.id, 4, null, null, null, null, null, 'idem-atw030-shared-key', '00000000-0000-0000-0000-000000180102', 'rep');
+  if v_replay.id <> v_first.id then
+    raise exception 'assertion failed: a same-key/same-target retry must replay the identical task (% expected, got %)', v_first.id, v_replay.id;
+  end if;
+
+  -- 3. The defect itself: same key, DIFFERENT line, no race, no concurrency. This must
+  --    raise, never silently hand back line P''s own task.
+  begin
+    perform app.generate_wms_pick_task(v_line_q.id, 4, null, null, null, null, null, 'idem-atw030-shared-key', '00000000-0000-0000-0000-000000180102', 'rep');
+  exception when unique_violation then
+    if sqlerrm not like '%idempotency_key_conflict%' then
+      raise exception 'assertion failed: expected a classified idempotency_key_conflict, got: %', sqlerrm;
+    end if;
+    v_conflict_raised := true;
+  end;
+
+  if not v_conflict_raised then
+    raise exception 'assertion failed: reusing one idempotency key across two DIFFERENT outbound order lines silently succeeded -- line Q''s request was misattributed to line P''s task instead of being rejected';
+  end if;
+
+  -- 4. And the rejected request left no trace: line Q has no task, so the caller is never
+  --    left believing work was allocated against it.
+  select count(*) into v_q_task_count from app.wms_pick_tasks where outbound_order_line_id = v_line_q.id and status <> 'cancelled';
+  if v_q_task_count <> 0 then
+    raise exception 'assertion failed: the rejected cross-target request must leave line Q with zero pick tasks, got %', v_q_task_count;
+  end if;
+
+  raise notice 'ATW-030 deterministic proof: same-key/same-target replays identically; same-key/different-target raises idempotency_key_conflict and allocates nothing -- no race window required in either direction';
+end $$;
+
 \echo '>> REAL two-process concurrent claim race (L5): two genuinely independent psql client processes (rep and rep2) both attempt to claim the SAME real unclaimed task at (as close to) the same wall-clock time -- exactly one must win; the other must be rejected task_already_claimed, never both'
 do $$
 declare

@@ -181,3 +181,71 @@ test("ATW-246 finding 3: a PERMANENT failure for a later batch still lets every 
     assert.equal(stillPending, 2);
   });
 });
+
+test("ATW-030: a batch enqueued while a flush is in flight survives the flush's own queue rewrite", async () => {
+  await withTempBuffer(async (buffer) => {
+    await buffer.enqueue({ deviceId: "device-already-buffered", reports: [REPORT], enqueuedAt: "2026-08-05T00:00:00Z" });
+
+    // The live socket path fails over and buffers a NEW batch while this flush is still
+    // awaiting its own ingest round-trip -- the exact window the previous whole-file
+    // overwrite silently destroyed.
+    let enqueuedDuringFlush = false;
+    const outcome = await buffer.flush(
+      fakeClient(async (deviceId, reports): Promise<IngestBatchResult> => {
+        if (!enqueuedDuringFlush) {
+          enqueuedDuringFlush = true;
+          await buffer.enqueue({ deviceId: "device-enqueued-mid-flush", reports: [REPORT], enqueuedAt: "2026-08-05T00:00:01Z" });
+        }
+        return { deviceId, tenantId: "tenant-1", acceptedCount: reports.length, deviceStatus: "active" };
+      }),
+    );
+
+    assert.equal(enqueuedDuringFlush, true, "the mid-flush enqueue must actually have run");
+    assert.equal(outcome.flushedCount, 1);
+    assert.equal(outcome.deadLettered.length, 0);
+    // The mid-flush batch is still queued -- never ingested by this pass, never destroyed.
+    assert.equal(await buffer.pendingCount(), 1);
+
+    const nextPass: string[] = [];
+    const second = await buffer.flush(
+      fakeClient(async (deviceId, reports): Promise<IngestBatchResult> => {
+        nextPass.push(deviceId);
+        return { deviceId, tenantId: "tenant-1", acceptedCount: reports.length, deviceStatus: "active" };
+      }),
+    );
+    assert.equal(second.flushedCount, 1);
+    assert.deepEqual(nextPass, ["device-enqueued-mid-flush"]);
+    assert.equal(await buffer.pendingCount(), 0);
+  });
+});
+
+test("ATW-030: a batch enqueued while a flush is HALTED by a transient failure is retained behind the halted batch, in order", async () => {
+  await withTempBuffer(async (buffer) => {
+    await buffer.enqueue({ deviceId: "device-network-blip", reports: [REPORT], enqueuedAt: "2026-08-05T00:00:00Z" });
+
+    let enqueuedDuringFlush = false;
+    const outcome = await buffer.flush(
+      fakeClient(async (deviceId): Promise<IngestBatchResult> => {
+        if (!enqueuedDuringFlush) {
+          enqueuedDuringFlush = true;
+          await buffer.enqueue({ deviceId: "device-enqueued-mid-halt", reports: [REPORT], enqueuedAt: "2026-08-05T00:00:01Z" });
+        }
+        throw new Error(`fetch failed for ${deviceId}`);
+      }),
+    );
+
+    assert.equal(outcome.flushedCount, 0);
+    // Nothing flushed and nothing dead-lettered means no rewrite happened at all, so both
+    // the halted batch and the mid-flush arrival are still queued, oldest first.
+    assert.equal(await buffer.pendingCount(), 2);
+
+    const order: string[] = [];
+    await buffer.flush(
+      fakeClient(async (deviceId, reports): Promise<IngestBatchResult> => {
+        order.push(deviceId);
+        return { deviceId, tenantId: "tenant-1", acceptedCount: reports.length, deviceStatus: "active" };
+      }),
+    );
+    assert.deepEqual(order, ["device-network-blip", "device-enqueued-mid-halt"]);
+  });
+});

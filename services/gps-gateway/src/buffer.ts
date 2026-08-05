@@ -83,26 +83,52 @@ export class DurableTelemetryBuffer {
     await appendFile(this.filePath, `${JSON.stringify(batch)}\n`, "utf8");
   }
 
-  private async readPending(): Promise<BufferedBatch[]> {
-    let raw: string;
+  private async readRaw(): Promise<string> {
     try {
-      raw = await readFile(this.filePath, "utf8");
+      return await readFile(this.filePath, "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return [];
+        return "";
       }
       throw error;
     }
+  }
+
+  private static parse(raw: string): BufferedBatch[] {
     return raw
       .split("\n")
       .filter((line) => line.trim().length > 0)
       .map((line) => JSON.parse(line) as BufferedBatch);
   }
 
-  private async writePending(batches: BufferedBatch[]): Promise<void> {
+  private async readPending(): Promise<BufferedBatch[]> {
+    return DurableTelemetryBuffer.parse(await this.readRaw());
+  }
+
+  /**
+   * ATW-030: rewrites the queue to `batches` WITHOUT destroying anything `enqueue()`
+   * appended while the flush was in flight.
+   *
+   * `flush()` necessarily awaits a real ingest round-trip per batch, and `enqueue()` is
+   * called on the live socket path during exactly that window whenever an ingest fails
+   * over to the buffer. The previous whole-file overwrite replaced the file with only
+   * the retained snapshot, silently destroying every batch appended in between -- a
+   * durable-buffer implementation losing precisely the telemetry it exists to protect.
+   *
+   * `snapshotByteLength` is the byte length this pass originally read. Anything beyond
+   * it is an append that arrived since, so it is carried over verbatim (appends are
+   * O_APPEND whole-line writes, so the tail is always a clean line boundary).
+   */
+  private async writePending(batches: BufferedBatch[], snapshotByteLength: number): Promise<void> {
+    const currentRaw = await this.readRaw();
+    const appendedSinceSnapshot = Buffer.from(currentRaw, "utf8").subarray(snapshotByteLength).toString("utf8");
+
+    const retained = batches.map((batch) => JSON.stringify(batch)).join("\n") + (batches.length > 0 ? "\n" : "");
+    const next = retained + appendedSinceSnapshot;
+
     const tempPath = `${this.filePath}.tmp`;
     await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(tempPath, batches.map((batch) => JSON.stringify(batch)).join("\n") + (batches.length > 0 ? "\n" : ""), "utf8");
+    await writeFile(tempPath, next, "utf8");
     await rename(tempPath, this.filePath);
   }
 
@@ -121,7 +147,11 @@ export class DurableTelemetryBuffer {
     }
     this.flushing = true;
     try {
-      const pending = await this.readPending();
+      // ATW-030: capture the exact byte length this pass is responsible for, so
+      // writePending() can carry over anything enqueue() appends during the flush.
+      const snapshotRaw = await this.readRaw();
+      const snapshotByteLength = Buffer.byteLength(snapshotRaw, "utf8");
+      const pending = DurableTelemetryBuffer.parse(snapshotRaw);
       const retained: BufferedBatch[] = [];
       const deadLettered: DeadLetteredBatch[] = [];
       let flushedCount = 0;
@@ -155,7 +185,7 @@ export class DurableTelemetryBuffer {
       }
 
       if (flushedCount > 0 || deadLettered.length > 0) {
-        await this.writePending(retained);
+        await this.writePending(retained, snapshotByteLength);
       }
       return { flushedCount, deadLettered };
     } finally {
