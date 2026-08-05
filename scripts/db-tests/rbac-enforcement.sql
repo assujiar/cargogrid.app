@@ -288,4 +288,49 @@ begin
 end;
 $$;
 
+\echo '>> ATW-031 (ISS-2026-017): an authenticated session may not act as another identity. Every SECURITY DEFINER RPC takes the acting identity as an ordinary parameter; until this repair none cross-checked it against auth.uid(), so any authenticated session could pass an arbitrary UUID and have authority, record scope and audit all evaluated as that other user. app.evaluate_permission -- the single authority gate 416 functions share -- now calls app.assert_actor_is_session_identity first.'
+do $$
+declare
+  v_self uuid := '00000000-0000-0000-0000-000000000401';
+  v_victim uuid := '00000000-0000-0000-0000-000000000402';
+  v_raised boolean := false;
+  v_wired boolean;
+begin
+  -- 1. The wiring: app.evaluate_permission really does call the assertion. Proven against
+  --    the live function body, not assumed from the migration text.
+  select prosrc like '%assert_actor_is_session_identity%' into v_wired
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.proname = 'evaluate_permission';
+  if not coalesce(v_wired, false) then
+    raise exception 'assertion failed: app.evaluate_permission does not call app.assert_actor_is_session_identity -- the ISS-2026-017 cross-check is not wired in';
+  end if;
+
+  -- 2. No JWT -- the service_role/superuser/db-test/nested-definer path. auth.uid() is
+  --    NULL, so the check is a deliberate no-op and no existing caller is affected.
+  perform app.assert_actor_is_session_identity(v_victim);
+
+  -- 3. A genuine authenticated session claiming to be SOMEONE ELSE must be refused.
+  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text, 'role', 'authenticated')::text, true);
+  begin
+    perform app.assert_actor_is_session_identity(v_victim);
+    raise exception 'assertion failed: a session authenticated as % was allowed to act as % -- ISS-2026-017 is still open', v_self, v_victim;
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected actor_identity_mismatch';
+  end if;
+
+  -- 4. The same session acting as ITSELF is completely unaffected -- which is exactly what
+  --    this repository's own TypeScript service layer always does (it derives the actor
+  --    from the server-resolved session, never from user input).
+  perform app.assert_actor_is_session_identity(v_self);
+
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'ATW-031 actor-identity proof: app.evaluate_permission is wired to the check; an authenticated session may act only as itself; a NULL session identity remains an intentional no-op';
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'
