@@ -6451,6 +6451,40 @@ See `docs/build-log/phase-05/ATW-024.md` §3.3 for the full adversarial-review f
 
 Self-closing. `ATW-024` is `VERIFIED`. Fifth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-025` (Prompt 244) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
 
+### CHG-2026-171 — Advanced Claim and Incident Operations (Phase 5, Prompt 244, `CG-S10-ATW-025`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-025` / `244_ADVANCED_CLAIM_INCIDENT_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new additive migration (8 tables, 30+ functions) extending an existing canonical case; new service layer; 0 new routes |
+| Baseline evidence | Verified Step 8 basic incident/claim (`OPS-174`), `CG-S10-ATW-221/228/232/234/238/243` (all `VERIFIED`), verified Finance handoff precedent |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- sixth task in that range |
+
+#### Outcome
+
+Extends the existing `app.operational_exceptions` canonical case (`OPS-174`) with a full claim/incident lifecycle (itemization, evidence linking, investigation, responsibility proposal/decision with enforced separation of duties, recovery tracking, Finance settlement handoff) -- zero duplicate case root, zero Finance-schema writes. Adversarial review live-reproduced and fixed a HIGH-severity lost-update race, an access-control inconsistency across evidence-management RPCs, an unmasked-reserve-amount read-path gap, a zero-evidence closure gap, and a same-tenant cross-customer evidence-linking gap (the last of which was also live in the shipped test fixture itself). Incidentally discovered and root-caused a pre-existing, unrelated `ATW-016` test-ordering flake. Full detail: `docs/build-log/phase-05/ATW-025.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730340000_create_advanced_tms_claim_incident_operations.sql`; `server/contracts/claim-incident/`(+test); `server/queries/claim-incident.ts`(+test); `server/mutations/claim-incident.ts`(+test); `scripts/db-tests/advanced-tms-claim-incident-operations.sql`; `docs/build-log/phase-05/ATW-025.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `244` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (new `ISS-2026-020`). 1 new migration (135 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` -- `node:test` 3084/3084, `pnpm run db:test` PASS -- ALL PASSED (1 new migration; the pre-existing, unrelated `ATW-016` flake this checkpoint discovered is non-deterministic and did not trigger this run), `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 1 new migration, `app.operational_exceptions`' own already-applied migration untouched (confirmed via `git diff`). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+See `docs/build-log/phase-05/ATW-025.md` §3.3 for the full adversarial-review finding list (5 HIGH, one live-reproduced MEDIUM, two more MEDIUM, two LOW -- all confirmed real, zero false positives, each fixed or explicitly disclosed as a deferred residual gap). Also see §3.3 item 13 for the incidentally-discovered, unrelated `ATW-016` flake (new `ISS-2026-020`, not fixed by this checkpoint -- out of scope, no authorization to edit an unrelated already-applied migration/test file).
+
+#### Approval and closure
+
+Self-closing. `ATW-025` is `VERIFIED`. Sixth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-026` (Prompt 245) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
