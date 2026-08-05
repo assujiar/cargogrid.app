@@ -17,7 +17,19 @@
 import { z } from "zod";
 import { ImportExportJobTypeSchema, type ImportExportJobType } from "../import-export/import-export.ts";
 
-/** The eight job_type codes this capability's own generic queue mechanics serve -- import/export keep their own dedicated app.create_import_export_job() entrypoint (PLT-131). */
+/**
+ * The job_type codes this capability's own generic queue mechanics serve -- import/export
+ * keep their own dedicated app.create_import_export_job() entrypoint (PLT-131).
+ *
+ * SOURCE OF TRUTH: `app.generic_job_types()`
+ * (supabase/migrations/20260730410000_harden_job_type_single_source_of_truth.sql).
+ * ATW-031 (ISS-2026-012) widened this list from eight to ten: `route_load_planning`
+ * (ATW-224) and `print_label` (ATW-021) were both accepted by the app.jobs CHECK
+ * constraint and by app.enqueue_job, but had never been added here or to
+ * app.dispatch_event_as_job -- so a caller using either value failed contract parsing
+ * before it could reach a database that would have accepted it. Keep this array
+ * set-equal to app.generic_job_types(); background-job.test.ts asserts the exact list.
+ */
 export const GENERIC_JOB_TYPES = [
   "report_generation",
   "notification_batch",
@@ -27,6 +39,8 @@ export const GENERIC_JOB_TYPES = [
   "loyalty_expiration",
   "recurring_billing",
   "integration_sync",
+  "route_load_planning",
+  "print_label",
 ] as const;
 export const GenericJobTypeSchema = z.enum(GENERIC_JOB_TYPES);
 export type GenericJobType = z.infer<typeof GenericJobTypeSchema>;

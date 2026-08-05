@@ -58,9 +58,19 @@ async function main(): Promise<void> {
   const flushTimer = setInterval(() => {
     buffer
       .flush(ingestClient)
-      .then(({ flushedCount, deadLettered }) => {
+      .then(({ flushedCount, deadLettered, quarantinedLineCount }) => {
         if (flushedCount > 0) {
           log("info", "durable buffer flush", { flushedCount });
+        }
+        // ATW-031 (ISS-2026-030): a line that could not be parsed at all -- the signature
+        // of a crash mid-append. It no longer wedges every future flush; it is moved to
+        // the `.corrupt` sidecar and reported here. This is real telemetry lost before it
+        // was ever durable, so it logs at error, never info.
+        if (quarantinedLineCount > 0) {
+          log("error", "durable buffer quarantined unparseable line(s)", {
+            quarantinedLineCount,
+            corruptFilePath: buffer.corruptFilePath,
+          });
         }
         // ATW-246 (poison-pill finding): a permanently-failing batch no longer blocks
         // every other device's own telemetry -- it is skipped and reported here instead,

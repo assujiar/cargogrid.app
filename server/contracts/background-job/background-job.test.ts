@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseEventLog,
+  GENERIC_JOB_TYPES,
   GenericJobTypeSchema,
   EnqueueJobInputSchema,
   ClaimNextJobInputSchema,
@@ -14,17 +15,8 @@ const JOB_ID = "423e4567-e89b-12d3-a456-426614174000";
 const AUTH_USER_ID = "523e4567-e89b-12d3-a456-426614174000";
 
 describe("GenericJobTypeSchema", () => {
-  test("accepts the eight generic job_type codes", () => {
-    for (const jobType of [
-      "report_generation",
-      "notification_batch",
-      "webhook_retry",
-      "document_generation",
-      "dashboard_refresh",
-      "loyalty_expiration",
-      "recurring_billing",
-      "integration_sync",
-    ]) {
+  test("accepts every generic job_type code", () => {
+    for (const jobType of GENERIC_JOB_TYPES) {
       assert.equal(GenericJobTypeSchema.parse(jobType), jobType);
     }
   });
@@ -100,4 +92,29 @@ describe("DispatchEventAsJobInputSchema", () => {
 
     assert.throws(() => DispatchEventAsJobInputSchema.parse({ eventId: EVENT_ID, jobType: "export", actorLabel: "outbox-drain" }));
   });
+});
+
+test("ATW-031 (ISS-2026-012): GENERIC_JOB_TYPES matches app.generic_job_types() exactly", () => {
+  // The SQL source of truth is app.generic_job_types()
+  // (supabase/migrations/20260730410000_harden_job_type_single_source_of_truth.sql).
+  // This list previously held only the first eight, so `route_load_planning` (ATW-224)
+  // and `print_label` (ATW-021) failed contract parsing even though both the app.jobs
+  // CHECK constraint and app.enqueue_job accepted them. Keep the two in lockstep;
+  // scripts/db-tests/background-job-framework.sql asserts the SQL half against the
+  // app.jobs CHECK constraint.
+  assert.deepEqual(
+    [...GENERIC_JOB_TYPES],
+    [
+      "report_generation",
+      "notification_batch",
+      "webhook_retry",
+      "document_generation",
+      "dashboard_refresh",
+      "loyalty_expiration",
+      "recurring_billing",
+      "integration_sync",
+      "route_load_planning",
+      "print_label",
+    ],
+  );
 });

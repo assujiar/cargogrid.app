@@ -44,6 +44,13 @@ export interface FlushOutcome {
   flushedCount: number;
   /** Batches permanently, non-retryably rejected this pass -- removed from the queue, never retried. */
   deadLettered: DeadLetteredBatch[];
+  /**
+   * ATW-031 (ISS-2026-030): lines that could not be parsed as a batch at all -- the
+   * signature of a crash mid-`appendFile`. Removed from the queue this pass and appended
+   * verbatim to `<buffer>.corrupt` for forensics, never silently dropped. Non-zero here
+   * means real telemetry was lost before it was ever durable, and is worth alerting on.
+   */
+  quarantinedLineCount: number;
 }
 
 // ATW-246 hardening: the exact set of app.ingest_direct_device_telemetry_batch's own
@@ -94,15 +101,72 @@ export class DurableTelemetryBuffer {
     }
   }
 
-  private static parse(raw: string): BufferedBatch[] {
-    return raw
-      .split("\n")
-      .filter((line) => line.trim().length > 0)
-      .map((line) => JSON.parse(line) as BufferedBatch);
+  /**
+   * ATW-031 (closes ISS-2026-030): parses the queue file, QUARANTINING any line that is
+   * not valid JSON instead of throwing.
+   *
+   * `appendFile` is not atomic for a payload larger than the kernel's pipe buffer, so a
+   * crash or power loss mid-append leaves a truncated final line. The previous
+   * implementation let `JSON.parse` throw straight out of `readPending()`, which made
+   * every subsequent `flush()` AND `pendingCount()` throw, permanently, for that file --
+   * a file-level poison pill that wedged the whole gateway's durable buffer rather than
+   * losing the one damaged batch. Distinct from the per-batch poison pill ATW-027 fixed
+   * (that one classifies an ingest *rejection*; this one never reaches ingest at all).
+   *
+   * A damaged line is real evidence of data loss and is never silently discarded: it is
+   * returned to the caller, which appends it to a `.corrupt` sidecar and logs it, so the
+   * bytes remain on disk for forensics while the intact batches keep flushing.
+   */
+  private static parse(raw: string): { batches: BufferedBatch[]; corruptLines: string[] } {
+    const batches: BufferedBatch[] = [];
+    const corruptLines: string[] = [];
+    for (const line of raw.split("\n")) {
+      if (line.trim().length === 0) {
+        continue;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        corruptLines.push(line);
+        continue;
+      }
+      // A syntactically valid line that is not a batch is equally unusable downstream --
+      // `ingestBatch(undefined, undefined)` would fail forever. Treat it as corrupt too.
+      const candidate = parsed as Partial<BufferedBatch> | null;
+      if (
+        candidate === null ||
+        typeof candidate !== "object" ||
+        typeof candidate.deviceId !== "string" ||
+        !Array.isArray(candidate.reports)
+      ) {
+        corruptLines.push(line);
+        continue;
+      }
+      batches.push(candidate as BufferedBatch);
+    }
+    return { batches, corruptLines };
+  }
+
+  /** Where quarantined lines are preserved -- never deleted, never re-parsed. */
+  get corruptFilePath(): string {
+    return `${this.filePath}.corrupt`;
+  }
+
+  private async quarantine(lines: string[]): Promise<void> {
+    if (lines.length === 0) {
+      return;
+    }
+    await mkdir(dirname(this.filePath), { recursive: true });
+    await appendFile(this.corruptFilePath, lines.map((line) => `${line}\n`).join(""), "utf8");
   }
 
   private async readPending(): Promise<BufferedBatch[]> {
-    return DurableTelemetryBuffer.parse(await this.readRaw());
+    const { batches, corruptLines } = DurableTelemetryBuffer.parse(await this.readRaw());
+    // A read-only caller (pendingCount) must not mutate the queue, so quarantine happens
+    // in flush() -- but a damaged line is never counted as pending work either.
+    void corruptLines;
+    return batches;
   }
 
   /**
@@ -143,7 +207,7 @@ export class DurableTelemetryBuffer {
    */
   async flush(client: GpsGatewayIngestClientLike): Promise<FlushOutcome> {
     if (this.flushing) {
-      return { flushedCount: 0, deadLettered: [] };
+      return { flushedCount: 0, deadLettered: [], quarantinedLineCount: 0 };
     }
     this.flushing = true;
     try {
@@ -151,7 +215,11 @@ export class DurableTelemetryBuffer {
       // writePending() can carry over anything enqueue() appends during the flush.
       const snapshotRaw = await this.readRaw();
       const snapshotByteLength = Buffer.byteLength(snapshotRaw, "utf8");
-      const pending = DurableTelemetryBuffer.parse(snapshotRaw);
+      const { batches: pending, corruptLines } = DurableTelemetryBuffer.parse(snapshotRaw);
+      // ATW-031: quarantine before flushing, so a torn line is preserved on disk and
+      // removed from the queue in this pass's own rewrite instead of wedging every
+      // future pass.
+      await this.quarantine(corruptLines);
       const retained: BufferedBatch[] = [];
       const deadLettered: DeadLetteredBatch[] = [];
       let flushedCount = 0;
@@ -184,10 +252,10 @@ export class DurableTelemetryBuffer {
         }
       }
 
-      if (flushedCount > 0 || deadLettered.length > 0) {
+      if (flushedCount > 0 || deadLettered.length > 0 || corruptLines.length > 0) {
         await this.writePending(retained, snapshotByteLength);
       }
-      return { flushedCount, deadLettered };
+      return { flushedCount, deadLettered, quarantinedLineCount: corruptLines.length };
     } finally {
       this.flushing = false;
     }

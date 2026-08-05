@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, appendFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DurableTelemetryBuffer } from "../src/buffer.ts";
@@ -10,6 +10,19 @@ async function withTempBuffer<T>(fn: (buffer: DurableTelemetryBuffer) => Promise
   const dir = await mkdtemp(join(tmpdir(), "gps-gateway-buffer-test-"));
   try {
     return await fn(new DurableTelemetryBuffer(join(dir, "buffer.jsonl")));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** ATW-031: variant exposing the raw queue path, so a test can simulate a torn append. */
+async function withTempBufferPath<T>(
+  fn: (buffer: DurableTelemetryBuffer, bufferPath: string) => Promise<T>,
+): Promise<T> {
+  const dir = await mkdtemp(join(tmpdir(), "gps-gateway-buffer-test-"));
+  const bufferPath = join(dir, "buffer.jsonl");
+  try {
+    return await fn(new DurableTelemetryBuffer(bufferPath), bufferPath);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -247,5 +260,73 @@ test("ATW-030: a batch enqueued while a flush is HALTED by a transient failure i
       }),
     );
     assert.deepEqual(order, ["device-network-blip", "device-enqueued-mid-halt"]);
+  });
+});
+
+test("ATW-031 (ISS-2026-030): a torn final line does NOT wedge the buffer -- intact batches still flush and the damaged line is quarantined", async () => {
+  await withTempBufferPath(async (buffer, bufferPath) => {
+    await buffer.enqueue({ deviceId: "device-intact-1", reports: [REPORT], enqueuedAt: "2026-08-05T00:00:00Z" });
+    await buffer.enqueue({ deviceId: "device-intact-2", reports: [REPORT], enqueuedAt: "2026-08-05T00:00:01Z" });
+    // Simulate a crash part-way through appendFile: a truncated, unparseable final line.
+    await appendFile(bufferPath, '{"deviceId":"device-torn","reports":[{"reportTy', "utf8");
+
+    // Before ATW-031 this threw straight out of readPending() and every subsequent call
+    // threw with it, permanently.
+    assert.equal(await buffer.pendingCount(), 2, "the two intact batches are still countable");
+
+    const flushed: string[] = [];
+    const outcome = await buffer.flush(
+      fakeClient(async (deviceId, reports): Promise<IngestBatchResult> => {
+        flushed.push(deviceId);
+        return { deviceId, tenantId: "tenant-1", acceptedCount: reports.length, deviceStatus: "active" };
+      }),
+    );
+
+    assert.deepEqual(flushed, ["device-intact-1", "device-intact-2"], "both intact batches flushed, in order");
+    assert.equal(outcome.flushedCount, 2);
+    assert.equal(outcome.quarantinedLineCount, 1, "the torn line is reported, never silently dropped");
+    assert.equal(await buffer.pendingCount(), 0, "the torn line is removed from the live queue");
+
+    // The bytes are preserved on disk for forensics.
+    const corrupt = await readFile(buffer.corruptFilePath, "utf8");
+    assert.match(corrupt, /device-torn/);
+  });
+});
+
+test("ATW-031: a syntactically valid line that is not a batch is quarantined too, never handed to ingestBatch", async () => {
+  await withTempBufferPath(async (buffer, bufferPath) => {
+    await buffer.enqueue({ deviceId: "device-ok", reports: [REPORT], enqueuedAt: "2026-08-05T00:00:00Z" });
+    // Valid JSON, wrong shape -- ingestBatch(undefined, undefined) would fail forever.
+    await appendFile(bufferPath, '{"unexpected":"shape"}\n[1,2,3]\n"a string"\n', "utf8");
+
+    const seen: unknown[] = [];
+    const outcome = await buffer.flush(
+      fakeClient(async (deviceId, reports): Promise<IngestBatchResult> => {
+        seen.push(deviceId);
+        return { deviceId, tenantId: "tenant-1", acceptedCount: reports.length, deviceStatus: "active" };
+      }),
+    );
+
+    assert.deepEqual(seen, ["device-ok"], "only the real batch reached ingest");
+    assert.equal(outcome.quarantinedLineCount, 3);
+    assert.equal(await buffer.pendingCount(), 0);
+  });
+});
+
+test("ATW-031: a buffer file that is ENTIRELY corrupt still drains rather than throwing forever", async () => {
+  await withTempBufferPath(async (buffer, bufferPath) => {
+    await appendFile(bufferPath, '{"broken\n{"also broken\n', "utf8");
+
+    assert.equal(await buffer.pendingCount(), 0);
+    const outcome = await buffer.flush(
+      fakeClient(async (deviceId, reports): Promise<IngestBatchResult> => ({
+        deviceId, tenantId: "tenant-1", acceptedCount: reports.length, deviceStatus: "active",
+      })),
+    );
+    assert.equal(outcome.flushedCount, 0);
+    assert.equal(outcome.quarantinedLineCount, 2);
+    // The queue is now genuinely empty, not permanently poisoned.
+    assert.equal(await buffer.pendingCount(), 0);
+    assert.match(await readFile(buffer.corruptFilePath, "utf8"), /also broken/);
   });
 });
