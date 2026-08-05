@@ -6587,6 +6587,40 @@ None fixed (docs-only checkpoint, no authorization to touch code). Two new findi
 
 Self-closing. `ATW-028` is `VERIFIED`. Ninth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-029` (Prompt 248, the final Phase 5 task) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
 
+### CHG-2026-175 — Advanced TMS/WMS Closure Verification, `PHASE_5_VERIFIED` set (Phase 5, Prompt 248, `CG-S10-ATW-029`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-029` / `248_ADVANCED_TMS_WMS_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | Independent verification only -- zero migration, zero product/service/UI code. One fresh full load-test harness run (real Postgres cluster restart) as the recorded closure evidence |
+| Baseline evidence | `CG-S10-ATW-028` (Prompt 247) verified; all Phase 5 evidence current; Phase 4 closure still holds |
+| Final status | `COMPLETED` -- `VERIFIED`, **`PHASE_5_VERIFIED` set** |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- the tenth and final task in that range |
+
+#### Outcome
+
+All 23 items in Prompt 248's own "Required verification" list addressed with live, freshly re-run evidence (not carried forward from any prior checkpoint's own self-report) -- mirroring `PLATFORM_CORE_CLOSURE_REPORT.md`/`FINANCE_CLOSURE_REPORT.md`'s own precedent. No new multi-agent fan-out was needed since the substantive proof-work was already produced at `ATW-026`/`ATW-027`; this checkpoint's own job was reconciliation, a fresh twice-run full gate suite (including a fresh, full `scripts/load-tests/run.sh` run closing a gap neither `ATW-027` fix agent had closed), and a direct, exhaustive audit of `KNOWN_ISSUES.md` confirming zero Critical/High-severity issue remains open anywhere. Three inaccuracies caught and corrected during this checkpoint's own self-review before finalizing (an imprecise "3 writers" restatement, a wrong claim about Prompt 249 not existing, and an unqualified "vendor" grep result) -- each independently re-verified against real source rather than left as an unverified assertion. Full detail: `docs/build-log/phase-05/ADVANCED_TMS_WMS_CLOSURE_REPORT.md`.
+
+#### Scope and files
+
+New: `docs/build-log/phase-05/ADVANCED_TMS_WMS_CLOSURE_REPORT.md`. Modified: `scripts/load-tests/results/RESULTS_CG-S10-ATW-024.txt` (refreshed, real numbers from this checkpoint's own fresh load-test run); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `248` `NOT_STARTED`->`VERIFIED`, Tally now 40/40, closure note appended); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md` (final checkpoint entries, `PHASE_5_VERIFIED` set). 0 new migrations, 0 code files touched, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors, 85 warnings unchanged); root `pnpm run test` -- `node:test` 3084/3084 (unchanged); `services/gps-gateway` package `test` 41/41; `pnpm run db:test` PASS -- ALL PASSED, run twice fresh: 137 migrations, 133 test files, neither known flake (`ISS-2026-020`/`024`) triggered; `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`threat-model:check`/`git:check-paths`/`git:check` all PASS; `pnpm exec next build` exit 0, 90 routes unchanged; `bash scripts/load-tests/run.sh` -- all 8 scenarios PASS, including a real Postgres cluster restart/recovery and a fresh 64,509-transaction hybrid-arbitration run.
+
+#### Compatibility, rollout, recovery
+
+Zero code/schema/service file changed. `git revert` this checkpoint's own commit is trivially safe and complete.
+
+#### Errors found and fixed
+
+None (independent-verification-only checkpoint; zero bounded repair needed, matching every prior phase's own closure precedent). Zero new issue registered -- the 13 currently-`OPEN` issues relevant to Phase 5 were all already known before this checkpoint began.
+
+#### Approval and closure
+
+Self-closing. `ATW-029` is `VERIFIED`. **`PHASE_5_VERIFIED` is set.** The tenth and final task within the "lanjut prompt 239-248" range -- that range is now fully spent. Next eligible: Prompt 250 (`CG-S11-PRC-001`, Phase 6 Procurement/Vendor WBS and Runtime Kickoff), requiring fresh, separate, explicit operator authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
