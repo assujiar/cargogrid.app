@@ -45,6 +45,37 @@
 
 ## 2. Change entries
 
+> **Known ID collision — `CHG-2026-024` … `CHG-2026-031` are each used TWICE.** Resolved
+> as `ACCEPTED_RISK` at `CG-S10-ATW-031` (`ISS-2026-005`). Read this before citing any ID
+> in that range.
+>
+> * In **§1 Change index**, `CHG-2026-024`–`CHG-2026-031` label `CG-S5-PH0-004`–`011`
+>   (Prompts 83–90).
+> * In **§2 Change entries** below, the `###` sections carrying those same eight IDs are
+>   `CG-S5-PH0-091`–`098` (Prompts 91–98) — different tasks entirely.
+>
+> The cause: Prompts 83–90 each stated in their own build log that a `CHG-2026-0NN` entry
+> had been added, but none ever was. `PH0-091` then assigned `CHG-2026-024` as "the next
+> sequential number given the file's real content", not knowing eight phantom index rows
+> already claimed it. `PH0-099` spotted the collision and adopted "lowest ID not used
+> anywhere" for its own entry (`CHG-2026-032`) so no further collision was added while the
+> issue stayed open.
+>
+> **Why it is not being renumbered.** Renumbering either half would falsify the other's
+> committed citations: the Prompt 83–90 logs under `docs/build-log/phase-00/` each name their ID
+> in text, and so do the `PH0-091`–`098` logs. Rewriting eight historical evidence records
+> so a later index reads tidily is precisely the append-only violation `ISS-2026-006`
+> already declined to commit for the same class of problem ("evidence, once committed, is
+> not revised to look retroactively correct"). Disambiguating here costs nothing and
+> falsifies nothing.
+>
+> **To resolve an ID in this range unambiguously:** a `CHG-2026-02x` reference from a
+> Phase 0 build log means that log's own task; the `###` sections below are authoritative
+> only for Prompts 91–98. For Prompts 83–90 the §1 index row plus
+> its own `docs/build-log/phase-00/` log together are the record — there is no `###` section
+> for them, and none will be fabricated after the fact.
+
+
 ### CHG-2026-001 — Runtime bootstrap (session A, superseded)
 
 Session A instantiated `AGENTS.md` + `docs/runtime/*` and produced `docs/discovery/01_REPOSITORY_INVENTORY.md` at checkpoint `53e3d4a` (431 files, before blueprint upload). Merged via PR #2. Superseded by CHG-2026-002 after the parallel-session collision; its `docs/runtime/*` structure was retained as the canonical location, but its facts were re-anchored. See `ERROR_LEDGER.md` ERR-2026-001.
