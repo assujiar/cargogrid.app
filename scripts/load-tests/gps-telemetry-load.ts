@@ -241,7 +241,13 @@ async function main() {
 
   outage.active = false;
   const ingestedBatchesBeforeFlush = ingestState.ingestedBatches;
-  const flushedCount = await buffer.flush(ingestClient);
+  // ATW-246 (Prompt 246): DurableTelemetryBuffer.flush() now returns a FlushOutcome
+  // ({ flushedCount, deadLettered }) instead of a bare number, so a permanently-failing
+  // batch for one device can be reported separately from the count of genuinely
+  // successful flushes -- see services/gps-gateway/src/buffer.ts's own updated header.
+  // This load-test scenario has no permanently-failing batches (only a transient outage
+  // window), so deadLettered is expected empty here.
+  const { flushedCount, deadLettered } = await buffer.flush(ingestClient);
   const pendingAfterFlush = await buffer.pendingCount();
   const ingestedBatchesAfterFlush = ingestState.ingestedBatches;
 
@@ -250,13 +256,14 @@ async function main() {
     bufferedDuringOutage === OUTAGE_DEVICE_COUNT &&
     pendingAfterOutage === OUTAGE_DEVICE_COUNT &&
     flushedCount === OUTAGE_DEVICE_COUNT &&
+    deadLettered.length === 0 &&
     pendingAfterFlush === 0 &&
     ingestedBatchesAfterFlush - ingestedBatchesBeforeFlush === OUTAGE_DEVICE_COUNT;
 
   console.log(`\n=== Outage & durable-buffer recovery (real concurrent load) ===`);
   console.log(`outage_devices=${OUTAGE_DEVICE_COUNT} acks_during_outage_failed=${outageAckFailures} (expected 0 -- ACK still sent, custody transferred to the durable buffer)`);
   console.log(`reports_buffered_during_outage=${bufferedDuringOutage} pending_after_outage=${pendingAfterOutage} (expected ${OUTAGE_DEVICE_COUNT} each)`);
-  console.log(`flushed_after_recovery=${flushedCount} pending_after_flush=${pendingAfterFlush} live_batches_ingested_by_flush=${ingestedBatchesAfterFlush - ingestedBatchesBeforeFlush} (expected ${OUTAGE_DEVICE_COUNT}/0/${OUTAGE_DEVICE_COUNT})`);
+  console.log(`flushed_after_recovery=${flushedCount} dead_lettered_after_recovery=${deadLettered.length} pending_after_flush=${pendingAfterFlush} live_batches_ingested_by_flush=${ingestedBatchesAfterFlush - ingestedBatchesBeforeFlush} (expected ${OUTAGE_DEVICE_COUNT}/0/0/${OUTAGE_DEVICE_COUNT})`);
   console.log(`OUTAGE_BUFFER_RECOVERY_SCENARIO: ${outagePass ? "PASS" : "FAIL"}`);
 
   // Malformed-frame rejection under load -- one deliberately corrupt connection,

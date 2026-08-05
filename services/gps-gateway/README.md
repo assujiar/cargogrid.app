@@ -35,10 +35,17 @@ supports a long-lived raw TCP listener). This directory is therefore:
   (`awaiting_handshake` -> `awaiting_avl_data`); serializes concurrent `'data'` events
   through a promise chain so an in-flight RPC round-trip never races a later chunk.
   Malformed/oversized packets close the connection immediately, never crash the process.
+  Since `CG-S10-ATW-027` (Prompt 246): rejects a second concurrent handshake for an IMEI
+  that already has an open connection; every connection carries an idle-read timeout and
+  the server enforces a `maxConnections` cap (see "Known, disclosed limitations" below).
 - `src/buffer.ts` -- durable local buffering (`226_GPS_TELEMATICS_INTEGRATION_
   PROMPT.md` §14B). A live ingest failure durably persists the batch to a local
   newline-delimited JSON file rather than dropping it or blocking the device's own ACK;
-  `src/index.ts` runs a periodic background flush loop against it.
+  `src/index.ts` runs a periodic background flush loop against it. Since `CG-S10-ATW-027`
+  (Prompt 246): a flush pass classifies each failure as PERMANENT (dead-lettered --
+  skipped, removed from the queue, logged, never retried) or TRANSIENT (halts the pass,
+  preserving oldest-first ordering) -- one device going permanently bad no longer blocks
+  every other device sharing this one buffer file indefinitely.
 - `src/ingestClient.ts` -- calls `app.resolve_gps_device_for_handshake`/
   `app.ingest_direct_device_telemetry_batch` (both `service_role`-only,
   `supabase/migrations/20260729370000_create_advanced_tms_gps_gateway_ingestion.sql`)
@@ -48,6 +55,12 @@ supports a long-lived raw TCP listener). This directory is therefore:
   secret.
 - `src/health.ts` -- `/healthz`, `/readyz`, `/metrics` (plain-text) HTTP endpoints.
 - `src/index.ts` -- entrypoint; env-var-only configuration (see below).
+- `src/logger.ts` -- structured JSON-line logging. Since `CG-S10-ATW-027` (Prompt 246):
+  redaction now scans STRING VALUES (both the free-text `message` and every string field
+  value, not just `fields`' own keys) for a credential-shaped pattern, and `message` is
+  truncated to a bounded length -- closing the gap where server.ts's own dominant
+  logging pathway (dynamic/error-derived content routed through `message`) bypassed the
+  original key-only redaction entirely.
 
 ## Configuration (environment variables)
 
@@ -63,6 +76,8 @@ supports a long-lived raw TCP listener). This directory is therefore:
 | `GPS_GATEWAY_HEALTH_HOST` | no | `0.0.0.0` | Health HTTP bind address |
 | `GPS_GATEWAY_BUFFER_FILE_PATH` | no | `./data/telemetry-buffer.jsonl` | Durable buffer file path |
 | `GPS_GATEWAY_FLUSH_INTERVAL_MS` | no | `30000` | Background buffer-flush interval |
+| `GPS_GATEWAY_IDLE_TIMEOUT_MS` | no | `60000` | Per-connection idle-read timeout (`CG-S10-ATW-027`) |
+| `GPS_GATEWAY_MAX_CONNECTIONS` | no | `10000` | `net.Server.maxConnections` cap (`CG-S10-ATW-027`) |
 
 ## Running
 
@@ -89,7 +104,27 @@ Disclosed as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE` in
 
 - IMEI is looked up globally (across every tenant) at handshake time -- see
   `app.resolve_gps_device_for_handshake`'s own migration header design note 3. A
-  duplicate IMEI registered under two tenants is refused, never silently routed.
+  duplicate IMEI registered under two tenants is refused, never silently routed
+  (`app.register_gps_device` itself now rejects registering an IMEI a different tenant
+  already holds -- `imei_registered_to_another_tenant`, `CG-S10-ATW-027`/Prompt 246 --
+  and `app.deregister_gps_device`, `OPS:Override`-gated, clears a spurious/erroneous
+  registration so it stops ambiguating a victim's own handshake).
+- **Accepted residual risk (`CG-S10-ATW-027`/Prompt 246 adversarial review, disclosed in
+  full in `supabase/migrations/20260730360000_..._device_driver_mobile_tracking.sql`'s
+  own header design note 2):** the raw Teltonika protocol authenticates a device by IMEI
+  alone, and an IMEI is not secret (printed on the device/box, often externally
+  queryable). `src/server.ts` now rejects a SECOND CONCURRENT connection presenting an
+  IMEI that already has one open -- a cheap, always-available, bounded fix -- but a
+  patient attacker who waits for the real device's own connection to genuinely end
+  (rather than racing a still-open one) is unaffected and can still pass a fresh
+  handshake with a known victim IMEI. If that spoofed traffic also respects the existing
+  200 km/h impossible-movement ceiling (`app.arbitrate_and_project_vehicle_position`,
+  `ATW-226F`), it can still inject plausible false telemetry. Fully closing this would
+  require a real device-level PKI/certificate provisioning scheme -- out of reach without
+  physical Teltonika hardware to design or validate against (this package's own
+  External-evidence policy below) and beyond a bounded hardening task's own scope. Never
+  represent the direct-device raw-TCP channel as providing device-identity authentication
+  beyond bare IMEI presentation in any customer-facing material.
 - `report_type` (`location` vs `heartbeat`) is inferred from whether the AVL record's
   GPS element carries a non-zero fix, since Codec 8 Extended itself has no explicit
   heartbeat/keepalive record type -- a device sending a genuine `(0, 0)` fix (mid-ocean,
@@ -98,3 +133,33 @@ Disclosed as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE` in
 - Offline-detection (a device that stops reporting) is not this package's concern --
   `ATW-226F`'s own canonical-telemetry/health layer owns that, matching
   `app.vehicle_tracking_source_priorities`' (`ATW-223`) own disclosed scope boundary.
+
+## Related documentation (`CG-S10-ATW-028`, Prompt 247)
+
+This README stays the terse, canonical operational reference for this package (architecture,
+configuration table, running instructions, known limitations). The following documents were
+published at `CG-S10-ATW-028` (Prompt 247, Advanced TMS/WMS Documentation and Handoff) to hold
+the narrative/procedural detail this README deliberately does not duplicate -- read this file
+first, then the one below that matches the task at hand:
+
+- `docs/build-log/phase-05/guides/teltonika-codec8e-gateway-deployment-guide.md` -- the full
+  Dockerfile/env-var/wire-protocol/deployment walkthrough, and the IMEI-spoofing residual risk
+  (above) explained for a deployment audience, including the network-layer compensating
+  controls it requires.
+- `docs/build-log/phase-05/guides/gps-gateway-endpoints-firewall-health-metrics-scaling-guide.md`
+  -- `/healthz`/`/readyz`/`/metrics` in detail, firewall posture for both ports, and honest
+  scaling guidance grounded in `scripts/load-tests/`'s own real, currently-committed numbers
+  (not a projection).
+- `docs/build-log/phase-05/guides/gps-hardware-procurement-installation-guide.md` -- the
+  physical-hardware side this package's own protocol serves: procurement, SIM provisioning,
+  installation evidence, and replacement/RMA, explicit about which steps are real/tested
+  software and which are documented procedure not yet exercised against real hardware.
+- `docs/build-log/phase-05/queue-dlq-replay-reconciliation-procedure.md` -- `src/buffer.ts`'s
+  own durable buffer explained alongside (and distinguished from) the unrelated `app.jobs`
+  platform queue, with real load/recovery evidence for both.
+- `docs/build-log/phase-05/deferred-physical-device-test-plan-and-provider-evidence-record.md`
+  -- the formal `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE` record for this package's own External-
+  evidence policy above: owner, target device/model, exact future test procedure, and the
+  safe activation gate before any claim of physical-hardware testing may be made.
+- `docs/runbooks/gps-gateway-outage.md` -- incident response when `/healthz`/`/readyz`
+  indicate trouble.

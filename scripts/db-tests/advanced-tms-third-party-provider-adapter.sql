@@ -220,6 +220,64 @@ begin
   end if;
 end $$;
 
+\echo '>> CG-S10-ATW-027 Finding 3 regression: 6 malformed-but-validly-signed field values (each individually crashed this RPC with an uncaught exception before this fix -- non-numeric/out-of-range timestamp/latitude/longitude/heading_degrees/speed_kmh) now all return a clean invalid outcome, never raise, and each still increments third_party_provider_ingestion_attempts (so rate-limit/auto-disable counters can see it)'
+do $$
+declare
+  v_tenant1 uuid := (select value::uuid from provider_test_state where key = 'tenant_id');
+  v_vehicle_master_id uuid := (select value::uuid from provider_test_state where key = 'vehicle_master_id');
+  v_connection_id uuid;
+  v_conn record;
+  v_secret text;
+  v_ts bigint := extract(epoch from now())::bigint;
+  v_result record;
+  v_signature text;
+  v_before integer;
+  v_after integer;
+  v_case record;
+begin
+  -- Its own dedicated connection (same rate-limit-isolation rationale as the Finding
+  -- 4 regression tests above): Finding 4's own fix now correctly accumulates invalid
+  -- attempts per connection_id regardless of client_key, so 6 sequential invalid
+  -- attempts here would otherwise inherit the earlier tests' own already-accumulated
+  -- invalid-attempt history on the shared connection and trip rate_limited mid-loop,
+  -- masking this test's own real subject (clean-rejection behavior, not rate limiting).
+  select * into v_conn from app.register_third_party_provider_connection(v_tenant1, 'acmegps-malformed-fields', 'webhook', '00000000-0000-0000-0000-000000044101', 'admin');
+  v_connection_id := v_conn.connection_id;
+  v_secret := v_conn.raw_webhook_secret;
+  perform app.register_provider_vehicle_mapping(v_tenant1, v_vehicle_master_id, 'acmegps-malformed-fields', 'EXT-VEH-001-MALFORMED', '00000000-0000-0000-0000-000000044101', 'admin');
+
+  for v_case in
+    select * from (values
+      -- C1: non-numeric timestamp string -- crashed at (payload->>'timestamp')::timestamptz.
+      ('crash-c1-timestamp', jsonb_build_object('event_id', 'crash-c1', 'vehicle_id', 'EXT-VEH-001-MALFORMED', 'event_type', 'heartbeat', 'timestamp', 'not-a-valid-timestamp')),
+      -- C2: non-numeric latitude string -- crashed at (payload->>'latitude')::numeric.
+      ('crash-c2-latitude-nonnumeric', jsonb_build_object('event_id', 'crash-c2', 'vehicle_id', 'EXT-VEH-001-MALFORMED', 'event_type', 'location', 'timestamp', now()::text, 'latitude', 'garbage', 'longitude', 106.8)),
+      -- C3: latitude out of range (999) -- crashed inside app.geojson_point_to_geography's own explicit spatial_coordinate_out_of_range raise.
+      ('crash-c3-latitude-out-of-range', jsonb_build_object('event_id', 'crash-c3', 'vehicle_id', 'EXT-VEH-001-MALFORMED', 'event_type', 'location', 'timestamp', now()::text, 'latitude', 999, 'longitude', 106.8)),
+      -- C4: heading_degrees out of range (999) -- crashed on the final INSERT's own third_party_telemetry_reports_heading_check CHECK constraint.
+      ('crash-c4-heading-out-of-range', jsonb_build_object('event_id', 'crash-c4', 'vehicle_id', 'EXT-VEH-001-MALFORMED', 'event_type', 'location', 'timestamp', now()::text, 'latitude', -6.2, 'longitude', 106.8, 'heading_degrees', 999)),
+      -- C5: negative speed_kmh -- crashed on the final INSERT's own third_party_telemetry_reports_speed_check CHECK constraint.
+      ('crash-c5-negative-speed', jsonb_build_object('event_id', 'crash-c5', 'vehicle_id', 'EXT-VEH-001-MALFORMED', 'event_type', 'location', 'timestamp', now()::text, 'latitude', -6.2, 'longitude', 106.8, 'speed_kmh', -5)),
+      -- C6: longitude out of range (-999) -- crashed inside app.geojson_point_to_geography.
+      ('crash-c6-longitude-out-of-range', jsonb_build_object('event_id', 'crash-c6', 'vehicle_id', 'EXT-VEH-001-MALFORMED', 'event_type', 'location', 'timestamp', now()::text, 'latitude', -6.2, 'longitude', -999))
+    ) as t(client_key, payload)
+  loop
+    v_signature := encode(hmac(v_ts::text || '.' || v_case.payload::text, v_secret, 'sha256'), 'hex');
+    select count(*) into v_before from app.third_party_provider_ingestion_attempts where client_key = v_case.client_key;
+
+    select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, v_case.client_key, v_case.payload::text, v_ts, v_signature);
+
+    select count(*) into v_after from app.third_party_provider_ingestion_attempts where client_key = v_case.client_key;
+
+    if v_result.ingest_status <> 'invalid' then
+      raise exception 'assertion failed (Finding 3 REGRESSED, %): expected a clean invalid outcome (not a raised exception), got %', v_case.client_key, v_result.ingest_status;
+    end if;
+    if v_after <> v_before + 1 then
+      raise exception 'assertion failed (Finding 3 REGRESSED, %): expected exactly 1 new ingestion_attempts row so rate-limit/auto-disable counters can see this attempt, before=% after=%', v_case.client_key, v_before, v_after;
+    end if;
+  end loop;
+end $$;
+
 \echo '>> app.get_third_party_telemetry_reports: GeoJSON projection matches the exact coordinates ingested'
 do $$
 declare
@@ -238,11 +296,24 @@ end $$;
 \echo '>> rate limiting: 10 consecutive invalid (bad-signature) attempts from the same client_key trip rate_limited on the 11th'
 do $$
 declare
-  v_connection_id uuid := (select value::uuid from provider_test_state where key = 'connection_id');
+  v_tenant1 uuid := (select value::uuid from provider_test_state where key = 'tenant_id');
+  v_connection_id uuid;
+  v_conn record;
   v_ts bigint := extract(epoch from now())::bigint;
   v_result record;
   i integer;
 begin
+  -- CG-S10-ATW-027 (Finding 4 fix pass): this test now gets its OWN dedicated
+  -- connection rather than reusing provider_test_state's own shared connection_id --
+  -- the rate-limit count is now bound to connection_id (in addition to client_key,
+  -- see the new Finding 4 regression test immediately below), so reusing the shared
+  -- connection here would inherit the several already-invalid attempts the earlier
+  -- tests above already recorded against it and trip rate_limited early, well before
+  -- this test's own 11th attempt. Same isolation technique the ATW-027 adversarial
+  -- probe itself used for the identical reason (its own Probe D0).
+  select * into v_conn from app.register_third_party_provider_connection(v_tenant1, 'acmegps-ratelimit-baseline', 'webhook', '00000000-0000-0000-0000-000000044101', 'admin');
+  v_connection_id := v_conn.connection_id;
+
   for i in 1..10 loop
     select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'client-ratelimit', 'irrelevant payload', v_ts, 'totally-wrong-signature');
     if v_result.ingest_status <> 'invalid' then
@@ -253,6 +324,54 @@ begin
   select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'client-ratelimit', 'irrelevant payload', v_ts, 'totally-wrong-signature');
   if v_result.ingest_status <> 'rate_limited' then
     raise exception 'assertion failed: expected rate_limited on the 11th bad attempt, got %', v_result.ingest_status;
+  end if;
+end $$;
+
+\echo '>> CG-S10-ATW-027 Finding 4 regression: rate limiting is bound to connection_id, not just caller-controlled client_key -- reproduces the adversarial probe''s exact exploit (many bad-signature attempts against the SAME connection, each with a DISTINCT client_key, simulating an attacker rotating the x-forwarded-for header app/api/webhooks/third-party-gps/[connectionId]/route.ts derives client_key from) and confirms rate_limited now trips regardless'
+do $$
+declare
+  v_tenant1 uuid := (select value::uuid from provider_test_state where key = 'tenant_id');
+  v_connection_id uuid;
+  v_conn record;
+  v_ts bigint := extract(epoch from now())::bigint;
+  v_result record;
+  i integer;
+  v_rate_limited_count integer := 0;
+  v_distinct_keys_before_limit integer := 0;
+begin
+  -- Its own dedicated connection (same isolation rationale as immediately above) --
+  -- proves the fix on a clean connection with zero prior invalid-attempt history.
+  select * into v_conn from app.register_third_party_provider_connection(v_tenant1, 'acmegps-ratelimit-bypass', 'webhook', '00000000-0000-0000-0000-000000044101', 'admin');
+  v_connection_id := v_conn.connection_id;
+
+  for i in 1..15 loop
+    select * into v_result from app.ingest_third_party_provider_webhook_event(
+      v_connection_id, 'attacker-rotated-key-' || i, 'irrelevant payload', v_ts, 'totally-wrong-signature'
+    );
+    if v_result.ingest_status = 'rate_limited' then
+      v_rate_limited_count := v_rate_limited_count + 1;
+    else
+      v_distinct_keys_before_limit := v_distinct_keys_before_limit + 1;
+    end if;
+  end loop;
+
+  if v_rate_limited_count = 0 then
+    raise exception 'assertion failed (Finding 4 REGRESSED): 15 bad-signature attempts against the same connection, each with a distinct client_key, never tripped rate_limited (0/15) -- the rate limit is bypassable by rotating client_key exactly as the adversarial probe demonstrated';
+  end if;
+
+  -- Deterministic: 10 distinct-key attempts accumulate as invalid (each below the
+  -- connection-scoped threshold) before the 11th-and-onward trip rate_limited,
+  -- regardless of client_key varying on every single call.
+  if v_distinct_keys_before_limit <> 10 or v_rate_limited_count <> 5 then
+    raise exception 'assertion failed: expected exactly 10 invalid + 5 rate_limited across 15 varied-client_key attempts, got %/% ', v_distinct_keys_before_limit, v_rate_limited_count;
+  end if;
+
+  -- Confirm the connection-scoped count is real, not merely a coincidental repeat of
+  -- the shared-key baseline above: every one of the 15 client_keys used here was
+  -- unique, yet rate_limited still fired.
+  select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'attacker-rotated-key-final-check', 'irrelevant payload', v_ts, 'totally-wrong-signature');
+  if v_result.ingest_status <> 'rate_limited' then
+    raise exception 'assertion failed: expected a 16th attempt with yet another distinct client_key to still be rate_limited, got %', v_result.ingest_status;
   end if;
 end $$;
 
@@ -339,15 +458,153 @@ begin
   end if;
 end $$;
 
+\echo '>> CG-S10-ATW-027 Finding 1 regression: webhook_secret_value is no longer readable by a same-tenant authenticated member with ZERO role/permission assignment via a direct table SELECT -- every other legitimate column remains readable for that same tenant-scoped row'
+do $$
+declare
+  v_tenant1 uuid := (select value::uuid from provider_test_state where key = 'tenant_id');
+  v_connection_id uuid := (select value::uuid from provider_test_state where key = 'connection_id');
+  v_real_secret text := (select value from provider_test_state where key = 'webhook_secret');
+  v_leaked_secret text;
+  v_denied boolean := false;
+  v_status text;
+  v_provider_code text;
+begin
+  -- The weakest possible legitimate identity still satisfying has_active_tenant_
+  -- membership: invited, activated, but never granted any role/permission at all --
+  -- exactly the adversarial probe's own zero-permission caller (Probe A).
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000044188', 'noperm@acmeprovider.test');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000044188', 'noperm@acmeprovider.test', 'No Permission User', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'noperm@acmeprovider.test'), 'active', 'onboarded', 'tester');
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000044188", "role": "authenticated"}';
+
+  begin
+    select webhook_secret_value into v_leaked_secret from app.third_party_provider_connections where id = v_connection_id;
+  exception
+    when insufficient_privilege then
+      v_denied := true;
+  end;
+
+  -- The SAME zero-permission caller, same row -- every OTHER column must still be
+  -- readable (this is a column-scoped fix, never a table-wide lockout).
+  select status, provider_code into v_status, v_provider_code from app.third_party_provider_connections where id = v_connection_id;
+  reset role;
+
+  if not v_denied then
+    raise exception 'assertion failed (Finding 1 REGRESSED): a zero-permission same-tenant authenticated member read webhook_secret_value (got %, real value %) via a direct table SELECT instead of being denied', v_leaked_secret, v_real_secret;
+  end if;
+
+  if v_status is distinct from 'active' or v_provider_code is distinct from 'acmegps' then
+    raise exception 'assertion failed: expected the same zero-permission caller to still read every other legitimate column for its own tenant-scoped row (status=%, provider_code=%)', v_status, v_provider_code;
+  end if;
+end $$;
+
+\echo '>> CG-S10-ATW-027 Finding 1 regression (defense-in-depth verification): the same zero-permission caller cannot reach the raw secret via app.rotate_third_party_provider_webhook_secret either -- confirms its own OPS:Edit gate remains the only legitimate way to ever see/rotate the secret, and that the fix above closed specifically the raw table GRANT, not a broader RBAC collapse'
+do $$
+declare
+  v_connection_id uuid := (select value::uuid from provider_test_state where key = 'connection_id');
+  v_rejected boolean := false;
+begin
+  begin
+    perform app.rotate_third_party_provider_webhook_secret(v_connection_id, '00000000-0000-0000-0000-000000044188', 'noperm');
+  exception
+    when others then
+      if sqlerrm like 'insufficient_authority%' then
+        v_rejected := true;
+      else
+        raise;
+      end if;
+  end;
+
+  if not v_rejected then
+    raise exception 'assertion failed (Finding 1 REGRESSED): a zero-permission caller was able to rotate/see the webhook secret via app.rotate_third_party_provider_webhook_secret''s own RPC layer';
+  end if;
+end $$;
+
+\echo '>> CG-S10-ATW-027 Finding 1 regression (exploit chain closed): the leaked-secret-forged-signature exploit the probe live-reproduced no longer has a secret to leak in the first place -- attempting to forge a signature with a wrong/guessed secret is still cleanly rejected as invalid'
+do $$
+declare
+  v_connection_id uuid := (select value::uuid from provider_test_state where key = 'connection_id');
+  v_payload text;
+  v_ts bigint := extract(epoch from now())::bigint;
+  v_signature text;
+  v_result record;
+  v_pos_before record;
+  v_pos_after record;
+  v_vehicle_id uuid := (select value::uuid from provider_test_state where key = 'vehicle_master_id');
+begin
+  v_payload := jsonb_build_object(
+    'event_id', 'evt-forged-no-secret', 'vehicle_id', 'EXT-VEH-001', 'event_type', 'location',
+    'timestamp', now()::text, 'latitude', -6.9, 'longitude', 107.6, 'speed_kmh', 55, 'heading_degrees', 10
+  )::text;
+  v_signature := encode(hmac(v_ts::text || '.' || v_payload, 'a-guessed-or-wrong-secret', 'sha256'), 'hex');
+
+  select * into v_pos_before from app.get_vehicle_current_position(v_vehicle_id);
+  select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'attacker-without-leaked-secret', v_payload, v_ts, v_signature);
+  select * into v_pos_after from app.get_vehicle_current_position(v_vehicle_id);
+
+  if v_result.ingest_status <> 'invalid' then
+    raise exception 'assertion failed: expected a wrong-secret-signed payload to be rejected invalid, got %', v_result.ingest_status;
+  end if;
+  if v_pos_after.source_type is distinct from v_pos_before.source_type or v_pos_after.event_at is distinct from v_pos_before.event_at then
+    raise exception 'assertion failed: current position must not change when the signature cannot be forged';
+  end if;
+end $$;
+
+\echo '>> CG-S10-ATW-027 Finding 5 regression: anon now holds USAGE on schema app -- the documented anon-callable webhook RPC path no longer fails with "permission denied for schema app"; it still correctly accepts/rejects based on signature validity exactly as before'
+do $$
+declare
+  v_connection_id uuid := (select value::uuid from provider_test_state where key = 'connection_id');
+  v_secret text := (select value from provider_test_state where key = 'webhook_secret');
+  v_payload text;
+  v_ts bigint := extract(epoch from now())::bigint;
+  v_signature text;
+  v_result record;
+  v_schema_denied boolean := false;
+  v_usage boolean;
+begin
+  select has_schema_privilege('anon', 'app', 'USAGE') into v_usage;
+  if not v_usage then
+    raise exception 'assertion failed (Finding 5 REGRESSED): has_schema_privilege(anon, app, USAGE) is still false';
+  end if;
+
+  v_payload := jsonb_build_object('event_id', 'evt-anon-liveness', 'vehicle_id', 'EXT-VEH-001', 'event_type', 'heartbeat', 'timestamp', now()::text)::text;
+  v_signature := encode(hmac(v_ts::text || '.' || v_payload, v_secret, 'sha256'), 'hex');
+
+  set local role anon;
+  begin
+    select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'anon-liveness-client', v_payload, v_ts, v_signature);
+  exception
+    when insufficient_privilege then
+      v_schema_denied := true;
+  end;
+  reset role;
+
+  if v_schema_denied then
+    raise exception 'assertion failed (Finding 5 REGRESSED): a literal anon-role call to app.ingest_third_party_provider_webhook_event still fails with permission denied for schema app';
+  end if;
+
+  -- Still correctly gated on signature validity, not merely schema access -- a
+  -- well-formed, correctly-signed heartbeat called literally AS anon succeeds.
+  if v_result.ingest_status <> 'ok' then
+    raise exception 'assertion failed: expected a well-formed, correctly-signed heartbeat invoked literally as anon to be accepted (ok), got %', v_result.ingest_status;
+  end if;
+end $$;
+
 \echo '>> audit trail: register/rotate each recorded a real app.audit_logs event; the anon-facing ingestion path never calls app.capture_audit_event (matches app.driver_mobile_position_reports'' own precedent -- high-volume raw ingestion is not audit_logs-worthy per row)'
 do $$
 declare
   v_tenant1 uuid := (select value::uuid from provider_test_state where key = 'tenant_id');
   v_count integer;
 begin
+  -- 5, not 2: acmegps + anotherprovider (original setup) plus the CG-S10-ATW-027
+  -- Finding 3/4 regression tests' own 3 dedicated isolation connections
+  -- (acmegps-malformed-fields, acmegps-ratelimit-baseline, acmegps-ratelimit-bypass)
+  -- registered above.
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.third_party_provider_connections' and action = 'register_third_party_provider_connection';
-  if v_count <> 2 then
-    raise exception 'assertion failed: expected exactly 2 register audit events (acmegps + anotherprovider), found %', v_count;
+  if v_count <> 5 then
+    raise exception 'assertion failed: expected exactly 5 register audit events (acmegps + anotherprovider + acmegps-malformed-fields + acmegps-ratelimit-baseline + acmegps-ratelimit-bypass), found %', v_count;
   end if;
 
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.third_party_provider_connections' and action = 'rotate_third_party_provider_webhook_secret';

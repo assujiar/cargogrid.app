@@ -376,6 +376,126 @@ begin
   end if;
 end $$;
 
+\echo '>> ATW-246 finding 1: app.register_gps_device rejects a cross-tenant IMEI collision (imei_registered_to_another_tenant), without disturbing the victim''s own idempotent re-registration; app.deregister_gps_device (OPS:Override) clears a spurious registration without touching the legitimate device, and only after clearing it does app.resolve_gps_device_for_handshake stop reporting imei_ambiguous_across_tenants for the victim'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmegateway');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'acmegatewaytwo');
+  v_raw_key1 text := (select raw_key from gateway_test_keys where tenant_slug = 'acmegateway');
+  v_alpha_device app.gps_devices;
+  v_spurious app.gps_devices;
+  v_handshake record;
+  v_returned app.gps_devices;
+begin
+  select * into v_alpha_device from app.gps_devices where imei = '868712345600001'; -- tenant1's real, active device (fixture above)
+  if v_alpha_device.tenant_id <> v_tenant1 or v_alpha_device.status <> 'active' then
+    raise exception 'assertion failed: fixture precondition -- expected the 868712345600001 device to belong to tenant1 and be active, got tenant %/status %', v_alpha_device.tenant_id, v_alpha_device.status;
+  end if;
+
+  -- Beta (tenant2), holding real OPS:Create in its own tenant, attempts to self-register
+  -- Alpha's (tenant1's) real, active device IMEI.
+  begin
+    perform app.register_gps_device(v_tenant2, '868712345600001', 'Attacker Clone', 'partner', '00000000-0000-0000-0000-000000043102', 'admin2');
+    raise exception 'assertion failed: expected imei_registered_to_another_tenant when Beta tries to register Alpha''s active IMEI';
+  exception
+    when others then
+      if sqlerrm not like 'imei_registered_to_another_tenant%' then raise; end if;
+  end;
+
+  -- No new row was created by the rejected attempt -- still exactly one row for this IMEI.
+  if (select count(*) from app.gps_devices where imei = '868712345600001') <> 1 then
+    raise exception 'assertion failed: expected the rejected cross-tenant attempt to create zero rows';
+  end if;
+
+  -- Alpha's own legitimate re-registration of its OWN existing IMEI remains completely
+  -- unaffected -- still idempotent, still returns the exact same row.
+  select * into v_returned from app.register_gps_device(v_tenant1, '868712345600001', 'Teltonika FMC920', 'cargogrid', '00000000-0000-0000-0000-000000043101', 'admin');
+  if v_returned.id <> v_alpha_device.id then
+    raise exception 'assertion failed: expected Alpha''s own re-registration of its own IMEI to remain idempotent and unaffected by the new cross-tenant guard';
+  end if;
+
+  -- Simulate a PRE-EXISTING spurious cross-tenant row (as if created before this
+  -- checkpoint's own new register_gps_device guard existed -- exactly what app.
+  -- deregister_gps_device exists to clean up; the RPC-level guard above cannot
+  -- retroactively undo data that already exists).
+  insert into app.gps_devices (tenant_id, imei, device_model, ownership_type, status, created_by)
+  values (v_tenant2, '868712345600001', 'Spurious Duplicate', 'partner', 'stock', 'legacy-fixture')
+  returning * into v_spurious;
+
+  -- The victim's own real device now fails handshake -- ambiguous.
+  select * into v_handshake from app.resolve_gps_device_for_handshake(v_raw_key1, '868712345600001', 'test-gateway');
+  if v_handshake.accepted or v_handshake.rejection_reason <> 'imei_ambiguous_across_tenants' then
+    raise exception 'assertion failed: expected the victim''s own handshake to now be ambiguous, got accepted=% reason=%', v_handshake.accepted, v_handshake.rejection_reason;
+  end if;
+
+  -- An ordinary OPS:Edit/Create/Assign-only actor (Beta's own admin, who holds no
+  -- OPS:Override anywhere in this fixture) cannot deregister ANY device, including its
+  -- own spurious one.
+  begin
+    perform app.deregister_gps_device(v_spurious.id, 'self-cleanup attempt', v_spurious.record_version, '00000000-0000-0000-0000-000000043102', 'admin2');
+    raise exception 'assertion failed: expected insufficient_authority for an OPS:Override-lacking actor';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- The spurious row is untouched by the rejected attempt.
+  if (select status from app.gps_devices where id = v_spurious.id) <> 'stock' then
+    raise exception 'assertion failed: expected the rejected deregister attempt to leave the spurious row unchanged';
+  end if;
+
+  -- Only a real supreme_admin (the one identity in this fixture holding cross-tenant
+  -- authority -- see app.evaluate_permission's own supreme_admin exception, RPD-022) can
+  -- clear Beta's spurious row.
+  select * into v_returned from app.deregister_gps_device(v_spurious.id, 'clearing erroneous cross-tenant registration', v_spurious.record_version, '00000000-0000-0000-0000-000000043103', 'supreme');
+  if v_returned.status <> 'retired' then
+    raise exception 'assertion failed: expected the spurious row to be retired, got status %', v_returned.status;
+  end if;
+
+  -- Alpha's own legitimate device row is completely untouched by the remediation.
+  select * into v_alpha_device from app.gps_devices where id = v_alpha_device.id;
+  if v_alpha_device.status <> 'active' then
+    raise exception 'assertion failed: expected the victim''s own legitimate device to remain unaffected (still active), got %', v_alpha_device.status;
+  end if;
+
+  -- The victim's own real device now handshakes successfully again -- the remediation
+  -- actually restores functionality, not merely renames the spurious row's status.
+  select * into v_handshake from app.resolve_gps_device_for_handshake(v_raw_key1, '868712345600001', 'test-gateway');
+  if not v_handshake.accepted or v_handshake.device_id <> v_alpha_device.id then
+    raise exception 'assertion failed: expected the victim''s own device to handshake successfully once the spurious row is retired, got accepted=% device_id=% (expected %)', v_handshake.accepted, v_handshake.device_id, v_alpha_device.id;
+  end if;
+
+  -- The retired spurious row can never be resurrected via app.register_gps_device --
+  -- (tenant2, imei) remains permanently claimed by tenant2's own retired row (still
+  -- idempotent, still no new active row created).
+  select * into v_returned from app.register_gps_device(v_tenant2, '868712345600001', 'Attacker Clone Retry', 'partner', '00000000-0000-0000-0000-000000043102', 'admin2');
+  if v_returned.id <> v_spurious.id or v_returned.status <> 'retired' then
+    raise exception 'assertion failed: expected a repeat same-tenant register_gps_device call to remain idempotent against the retired row, not create a new active one';
+  end if;
+
+  -- app.deregister_gps_device itself is idempotent-safe on an already-retired row --
+  -- called with the CURRENT version (v_returned, refreshed by the immediately-preceding
+  -- register_gps_device idempotent return above; the touch trigger already advanced the
+  -- spurious row's own record_version to 2 on the very first successful deregister call,
+  -- so v_spurious's own now-stale, pre-deregister version would correctly raise
+  -- stale_version instead -- optimistic concurrency intentionally still applies even to
+  -- an idempotent-shaped call, matching app.transition_gps_device_status's own identical
+  -- version-checked-before-anything-else convention on this same table).
+  select * into v_returned from app.deregister_gps_device(v_spurious.id, 'idempotent re-deregister', v_returned.record_version, '00000000-0000-0000-0000-000000043103', 'supreme');
+  if v_returned.status <> 'retired' then
+    raise exception 'assertion failed: expected a repeat deregister call on an already-retired device (with its own current version) to remain a no-op';
+  end if;
+
+  -- A mandatory, non-empty reason is required.
+  begin
+    perform app.deregister_gps_device(v_alpha_device.id, '', v_alpha_device.record_version, '00000000-0000-0000-0000-000000043103', 'supreme');
+    raise exception 'assertion failed: expected deregister_reason_required for an empty reason';
+  exception
+    when others then
+      if sqlerrm not like 'deregister_reason_required%' then raise; end if;
+  end;
+end $$;
+
 drop table gateway_test_keys;
 
 \echo 'ALL ATW-226D db-test assertions passed.'

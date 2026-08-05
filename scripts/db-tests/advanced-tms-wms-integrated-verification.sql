@@ -144,7 +144,13 @@ begin
   select * into v_driver from app.register_driver_operational_profile(v_tenant, 'DRV-ATW026-A', 'Driver ATW026 A', 'B2', (now() + interval '2 years')::date, v_actor, 'admin');
   select * into v_driver from app.set_driver_mobile_tracking_consent(v_driver.id, true, v_driver.record_version, v_actor, 'admin');
 
-  select * into v_device from app.register_gps_device(v_tenant, '868712345603001', 'Teltonika FMC920', 'cargogrid', v_actor, 'admin');
+  -- ATW-246 hardening note: this literal was previously '868712345603001', coincidentally
+  -- identical to the fixture IMEI advanced-tms-fleet-control-tower.sql/advanced-tms-
+  -- milestone-exception-telemetry.sql also use for their own, unrelated tenants -- harmless
+  -- before app.register_gps_device gained a real cross-tenant collision guard (this
+  -- checkpoint's own migration 20260730360000), but a same-shared-database, order-dependent
+  -- failure afterward. Changed to a value unique across every scripts/db-tests/*.sql fixture.
+  select * into v_device from app.register_gps_device(v_tenant, '868712345603201', 'Teltonika FMC920', 'cargogrid', v_actor, 'admin');
   select * into v_device from app.transition_gps_device_status(v_device.id, 'assigned', v_device.record_version, v_actor, 'admin');
   perform app.assign_device_to_vehicle(v_device.id, v_vehicle.id, 'atw026 golden fixture', v_actor, 'admin');
   v_assignment_id := (select id from app.device_vehicle_assignments where device_id = v_device.id and is_current);

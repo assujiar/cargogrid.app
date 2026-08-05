@@ -595,6 +595,152 @@ begin
   end if;
 end $$;
 
+\echo '>> CG-S10-ATW-027 Finding 2 regression (bootstrap path): a forged far-future event_at is now rejected event_time_implausible_future on the very first-ever report for a vehicle -- never applied unconditionally -- and the tenant''s own highest-priority source still bootstraps normally afterward (no permanent lockout)'
+do $$
+declare
+  v_tenant1 uuid := (select value::uuid from canon_test_state where key = 'tenant_id');
+  v_connection_id uuid := (select value::uuid from canon_test_state where key = 'connection_id');
+  v_secret text := (select value from canon_test_state where key = 'webhook_secret');
+  v_vehicle app.vehicle_operational_profiles;
+  v_vehicle_id uuid;
+  v_payload text;
+  v_ts bigint := extract(epoch from now())::bigint;
+  v_signature text;
+  v_result record;
+  v_pos record;
+  v_implausible_count integer;
+  v_event app.canonical_telemetry_events;
+begin
+  select * into v_vehicle from app.register_vehicle_operational_profile(v_tenant1, 'VEH-CANON-B01', 'Canon Truck B01', 'owned', 2000, 20, '00000000-0000-0000-0000-000000045101', 'admin');
+  perform app.register_provider_vehicle_mapping(v_tenant1, v_vehicle.vehicle_master_id, 'acmecanongps', 'EXT-CANON-B01', '00000000-0000-0000-0000-000000045101', 'admin');
+  v_vehicle_id := v_vehicle.vehicle_master_id;
+
+  -- Mirrors the CG-S10-ATW-027 adversarial probe's own Probe B1 exactly: the
+  -- FIRST-EVER report for this vehicle, from the lowest-tenant-default-priority
+  -- source (third_party_platform), with a forged event_at ~73 years in the future.
+  v_payload := jsonb_build_object(
+    'event_id', 'canon-evt-poison-bootstrap', 'vehicle_id', 'EXT-CANON-B01', 'event_type', 'location',
+    'timestamp', '2099-01-01T00:00:00Z', 'latitude', 1.234, 'longitude', 103.456, 'speed_kmh', 40, 'heading_degrees', 0
+  )::text;
+  v_signature := encode(hmac(v_ts::text || '.' || v_payload, v_secret, 'sha256'), 'hex');
+
+  select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'canon-poison-client', v_payload, v_ts, v_signature);
+  if v_result.ingest_status <> 'ok' then
+    raise exception 'assertion failed (test setup): expected the forged payload to still be RAW-accepted (ok) -- only canonicalization/arbitration rejects it, got %', v_result.ingest_status;
+  end if;
+
+  select * into v_pos from app.get_vehicle_current_position(v_vehicle_id);
+  if v_pos.source_type is not null then
+    raise exception 'assertion failed (Finding 2 REGRESSED): the forged 2099-01-01 bootstrap report became the current position (source=%/event_at=%) -- an implausible-future candidate must never win arbitration, even on the bootstrap path', v_pos.source_type, v_pos.event_at;
+  end if;
+
+  select count(*) into v_implausible_count from app.canonical_telemetry_events where vehicle_master_id = v_vehicle_id and rejection_reason = 'event_time_implausible_future';
+  if v_implausible_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 event_time_implausible_future canonical event, found %', v_implausible_count;
+  end if;
+
+  -- Recovery: the tenant's own highest-priority source (driver_mobile) then reports a
+  -- real, current position -- must succeed normally, proving the vehicle was never
+  -- permanently locked out despite the earlier forged bootstrap attempt (mirrors the
+  -- probe's own Probe B2: calling the shared arbitration entry point directly is the
+  -- identical, precedented technique the idempotency test above already uses).
+  v_event := app.arbitrate_and_project_vehicle_position(
+    v_tenant1, v_vehicle_id, 'driver_mobile', gen_random_uuid(), now(), now(),
+    app.geojson_point_to_geography(jsonb_build_object('type', 'Point', 'coordinates', jsonb_build_array(106.8, -6.2))),
+    35::numeric, 90::numeric, 5::numeric
+  );
+  if v_event.rejection_reason is not null then
+    raise exception 'assertion failed (Finding 2 REGRESSED -- permanent lockout): a real, present-day report from the tenant''s own highest-priority source was rejected (%) after the earlier forged bootstrap attempt', v_event.rejection_reason;
+  end if;
+
+  select * into v_pos from app.get_vehicle_current_position(v_vehicle_id);
+  if v_pos.source_type <> 'driver_mobile' then
+    raise exception 'assertion failed: expected driver_mobile to now hold current position after recovering from the poisoned bootstrap, got %', v_pos.source_type;
+  end if;
+end $$;
+
+\echo '>> CG-S10-ATW-027 Finding 2 regression (stale-fallback path): the identical lockout is not achievable via the normal stale-fallback takeover path either -- a forged far-future event_at from a lower-priority source is rejected event_time_implausible_future, current position stays exactly where it was, and the highest-priority source recovers normally afterward'
+do $$
+declare
+  v_tenant1 uuid := (select value::uuid from canon_test_state where key = 'tenant_id');
+  v_connection_id uuid := (select value::uuid from canon_test_state where key = 'connection_id');
+  v_secret text := (select value from canon_test_state where key = 'webhook_secret');
+  v_vehicle app.vehicle_operational_profiles;
+  v_vehicle_id uuid;
+  v_bootstrap_event_at timestamptz := now() - interval '10 minutes';
+  v_payload text;
+  v_ts bigint := extract(epoch from now())::bigint;
+  v_signature text;
+  v_result record;
+  v_pos_before record;
+  v_pos_after record;
+  v_event app.canonical_telemetry_events;
+  v_recovery_event app.canonical_telemetry_events;
+begin
+  select * into v_vehicle from app.register_vehicle_operational_profile(v_tenant1, 'VEH-CANON-B02', 'Canon Truck B02', 'owned', 2000, 20, '00000000-0000-0000-0000-000000045101', 'admin');
+  perform app.register_provider_vehicle_mapping(v_tenant1, v_vehicle.vehicle_master_id, 'acmecanongps', 'EXT-CANON-B02', '00000000-0000-0000-0000-000000045101', 'admin');
+  v_vehicle_id := v_vehicle.vehicle_master_id;
+
+  -- Healthy, legitimate bootstrap via the highest-priority source (driver_mobile),
+  -- real event_at -- mirrors the adversarial probe's own Probe B3 setup.
+  v_event := app.arbitrate_and_project_vehicle_position(
+    v_tenant1, v_vehicle_id, 'driver_mobile', gen_random_uuid(), v_bootstrap_event_at, v_bootstrap_event_at,
+    app.geojson_point_to_geography(jsonb_build_object('type', 'Point', 'coordinates', jsonb_build_array(106.8, -6.2))),
+    30::numeric, 90::numeric, 5::numeric
+  );
+  if v_event.rejection_reason is not null then
+    raise exception 'assertion failed (test setup): expected the legitimate driver_mobile bootstrap to apply cleanly, got rejection_reason=%', v_event.rejection_reason;
+  end if;
+
+  -- Simulate driver_mobile having genuinely gone quiet beyond the freshness threshold
+  -- -- identical backdating technique this file's own earlier tests (4/6) already use,
+  -- since no RPC exists to backdate a real clock, nor should one.
+  update app.vehicle_current_positions set received_at = now() - interval '1 hour' where vehicle_master_id = v_vehicle_id;
+  update app.vehicle_source_switches set switched_at = now() - interval '1 hour' where vehicle_master_id = v_vehicle_id;
+
+  select * into v_pos_before from app.get_vehicle_current_position(v_vehicle_id);
+
+  -- The lower-priority third_party_platform source takes over via the legitimate
+  -- stale-fallback path (lower priority is allowed to win specifically because the
+  -- incumbent is stale) and forges a ~73-years-out event_at in the very report that
+  -- attempts the takeover -- mirrors the probe's own Probe B3 exploit exactly.
+  v_payload := jsonb_build_object(
+    'event_id', 'canon-evt-poison-fallback', 'vehicle_id', 'EXT-CANON-B02', 'event_type', 'location',
+    'timestamp', '2099-06-15T00:00:00Z', 'latitude', 2.5, 'longitude', 104.5
+  )::text;
+  v_signature := encode(hmac(v_ts::text || '.' || v_payload, v_secret, 'sha256'), 'hex');
+  select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'canon-poison-client-2', v_payload, v_ts, v_signature);
+  if v_result.ingest_status <> 'ok' then
+    raise exception 'assertion failed (test setup): expected the forged payload to still be RAW-accepted (ok) -- only canonicalization/arbitration rejects it, got %', v_result.ingest_status;
+  end if;
+
+  select * into v_pos_after from app.get_vehicle_current_position(v_vehicle_id);
+  if v_pos_after.source_type <> v_pos_before.source_type or v_pos_after.event_at <> v_pos_before.event_at then
+    raise exception 'assertion failed (Finding 2 REGRESSED): the forged 2099-06-15 stale-fallback report changed current position from %/% to %/% -- an implausible-future candidate must be rejected even via the legitimate stale-fallback takeover path', v_pos_before.source_type, v_pos_before.event_at, v_pos_after.source_type, v_pos_after.event_at;
+  end if;
+
+  if not exists (select 1 from app.canonical_telemetry_events where vehicle_master_id = v_vehicle_id and source_type = 'third_party_platform' and rejection_reason = 'event_time_implausible_future') then
+    raise exception 'assertion failed: expected a stored third_party_platform canonical event with rejection_reason=event_time_implausible_future';
+  end if;
+
+  -- Recovery: the highest-priority source (driver_mobile) then reports a real,
+  -- present-day position -- must succeed normally, proving no permanent lockout via
+  -- the stale-fallback path either.
+  v_recovery_event := app.arbitrate_and_project_vehicle_position(
+    v_tenant1, v_vehicle_id, 'driver_mobile', gen_random_uuid(), now(), now(),
+    app.geojson_point_to_geography(jsonb_build_object('type', 'Point', 'coordinates', jsonb_build_array(106.81, -6.21))),
+    30::numeric, 90::numeric, 5::numeric
+  );
+  if v_recovery_event.rejection_reason is not null then
+    raise exception 'assertion failed (Finding 2 REGRESSED -- permanent lockout): a real, present-day report from the highest-priority source was rejected (%) after the earlier forged stale-fallback attempt', v_recovery_event.rejection_reason;
+  end if;
+
+  select * into v_pos_after from app.get_vehicle_current_position(v_vehicle_id);
+  if v_pos_after.source_type <> 'driver_mobile' or v_pos_after.event_at <> v_recovery_event.event_at then
+    raise exception 'assertion failed: expected driver_mobile to hold current position with the real recovered event_at after the forged fallback attempt, got source=%/event_at=%', v_pos_after.source_type, v_pos_after.event_at;
+  end if;
+end $$;
+
 drop table canon_test_state;
 
 \echo 'ALL ATW-226F db-test assertions passed.'

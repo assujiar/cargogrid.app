@@ -86,7 +86,13 @@ begin
   -- status's own hardcoded status-edge check, confirmed by direct inspection of
   -- 20260729310000; this fixture is deliberately not re-testing that already-
   -- covered evidence flow, ATW-226B's own scope).
-  select * into v_device from app.register_gps_device(v_tenant1, '868712345602001', 'Teltonika FMC920', 'cargogrid', '00000000-0000-0000-0000-000000047201', 'admin');
+  -- ATW-246 hardening note: this literal was previously '868712345602001', coincidentally
+  -- identical to the fixture IMEI advanced-tms-geofence-route-deviation-signals.sql also
+  -- uses for its own, unrelated tenant -- harmless before app.register_gps_device gained a
+  -- real cross-tenant collision guard (this checkpoint's own migration 20260730360000), but
+  -- a same-shared-database, order-dependent failure afterward. Changed to a value unique
+  -- across every scripts/db-tests/*.sql fixture.
+  select * into v_device from app.register_gps_device(v_tenant1, '868712345602101', 'Teltonika FMC920', 'cargogrid', '00000000-0000-0000-0000-000000047201', 'admin');
   select * into v_device from app.transition_gps_device_status(v_device.id, 'assigned', v_device.record_version, '00000000-0000-0000-0000-000000047201', 'admin');
   select * into v_device from app.transition_gps_device_status(v_device.id, 'installed', v_device.record_version, '00000000-0000-0000-0000-000000047201', 'admin');
   perform app.assign_device_to_vehicle(v_device.id, v_vehicle_a.id, 'health fixture', '00000000-0000-0000-0000-000000047201', 'admin');

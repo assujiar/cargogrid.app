@@ -6519,6 +6519,108 @@ None fixed (verification-only checkpoint by design). Three new Low/Low-Medium fi
 
 Self-closing. `ATW-026` is `VERIFIED`. Seventh task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-027` (Prompt 246) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
 
+### CHG-2026-173 — Advanced TMS/WMS Integrity and Security Hardening (Phase 5, Prompt 246, `CG-S10-ATW-027`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-027` / `246_ADVANCED_TMS_WMS_INTEGRITY_SECURITY_HARDENING_PROMPT.md` |
+| Change type | Repair/hardening only, no new functional capability -- 3 new purely additive migrations; TypeScript changes confined to `services/gps-gateway/`; existing db-test files extended, 0 new db-test files |
+| Baseline evidence | `CG-S10-ATW-026` (Prompt 245) verified with findings classified |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- eighth task in that range |
+
+#### Outcome
+
+Two parallel adversarial-probe agents live-reproduced 12 real vulnerabilities across all 4 GPS source classes (1 Critical, 5 High, 4 Medium, 2 Low) -- the most severe finding set of this build. Two parallel fix agents repaired all but 2 explicitly disclosed residuals. Most seriously: a CRITICAL table-wide grant exposed a third-party webhook secret to any tenant member (fixed with a column-scoped grant, independently re-verified via direct privilege inspection); a HIGH unbounded future timestamp could permanently poison vehicle-position arbitration (fixed with a disclosed 24-hour bound); a HIGH cross-tenant IMEI collision could permanently deny service to a victim device with no admin remediation path (fixed with a rejection plus a new deregistration RPC); a HIGH durable-buffer poison-pill could block all telemetry indefinitely (fixed via permanent/transient failure classification); a HIGH consent-revocation gap let location collection continue after consent was withdrawn (fixed with a live re-check). Also closed all 3 findings `ATW-026` itself registered. Full detail: `docs/build-log/phase-05/ATW-027.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730350000_harden_advanced_tms_third_party_hybrid_tracking.sql`; `supabase/migrations/20260730360000_harden_advanced_tms_device_driver_mobile_tracking.sql`; `supabase/migrations/20260730370000_correct_route_planning_staleness_tolerance_comment.sql`; `services/gps-gateway/test/logger.test.ts`; `docs/build-log/phase-05/ATW-027.md`. Modified: `services/gps-gateway/src/{buffer,server,logger,index}.ts`; `services/gps-gateway/test/{buffer,server}.test.ts`; `services/gps-gateway/README.md`; `docs/runbooks/gps-gateway-outage.md`; `scripts/db-tests/advanced-tms-{third-party-provider-adapter,canonical-telemetry-arbitration,gps-telematics-integrated-verification,gps-gateway-ingestion,driver-mobile-tracking,wms-picking}.sql`; `scripts/db-tests/advanced-tms-{milestone-exception-telemetry,wms-integrated-verification,shipment-tracking-health-writer}.sql` (IMEI-literal compatibility fix only); `scripts/load-tests/gps-telemetry-load.ts` (buffer return-type compat fix); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `246` `NOT_STARTED`->`VERIFIED`, `CG-S10-ATW-011B` row added); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (3 issues closed `RESOLVED`, 3 new issues recorded). 3 new migrations (137 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS (root and `services/gps-gateway`), `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), root `pnpm run test` -- `node:test` 3084/3084 (unchanged), `services/gps-gateway` `pnpm run test` -- 41/41 (7 buffer, 16 codec8e unchanged, 8 logger new, 10 server), `pnpm run db:test` PASS -- ALL PASSED, independently re-run twice fresh: 137 migrations, 133 test files (0 new files, existing files extended), the pre-existing `ATW-016` flake (`ISS-2026-020`) did not trigger on either run. `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 3 new migrations, no already-applied migration file edited. `git revert` is safe and complete except for one caveat: the CRITICAL secret-column fix has real production consequence if reverted (restores the live vulnerability) -- a revert of this checkpoint's commit should not be performed without immediately re-applying at least that fix.
+
+#### Errors found and fixed
+
+See `docs/build-log/phase-05/ATW-027.md` §3 for the full 12-finding list (1 Critical, 5 High, 4 Medium, 2 Low, all confirmed real, zero false positives) and §4 for the 3 `ATW-026`-registered findings closed. Two findings explicitly disclosed, not fixed, as new registered issues (`ISS-2026-025` Medium, `ISS-2026-026` Low, §3.13); one unrelated, incidentally-discovered pre-existing flake registered (`ISS-2026-024` Medium, §5).
+
+#### Approval and closure
+
+Self-closing. `ATW-027` is `VERIFIED`. Eighth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-028` (Prompt 247) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
+### CHG-2026-174 — Advanced TMS/WMS Documentation and Handoff (Phase 5, Prompt 247, `CG-S10-ATW-028`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-028` / `247_ADVANCED_TMS_WMS_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | Documentation only -- zero migration, zero product/service/UI code (Prompt 247 §13/§14: "None" database/API impact) |
+| Baseline evidence | `CG-S10-ATW-027` (Prompt 246) verified and all earlier evidence current |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- ninth task in that range |
+
+#### Outcome
+
+Two parallel single-pass writing agents produced the complete Phase 5 documentation and handoff package: a master `ADVANCED_TMS_WMS_HANDOFF_PACKAGE.md` (mirroring the established one-per-phase precedent), a `STEPS_11_14_HANDOFF_CONTRACT.md`, 10 topic guides (architecture/data-flow, entitlement, Driver Mobile, source arbitration, Fleet Control Tower/customer projection, privacy/retention, GPS hardware procurement/installation, gateway deployment, gateway endpoints/scaling, third-party provider onboarding), a queue/DLQ/reconciliation procedure, a deferred physical-device/provider-evidence record, and 2 new outage runbooks. Every claim grounded in real, already-`VERIFIED` evidence; zero code file touched. Two real, disclosed, non-blocking issues incidentally discovered and registered (`ISS-2026-027`/`028`). Full detail: `docs/build-log/phase-05/ATW-028.md`.
+
+#### Scope and files
+
+New (16): `docs/build-log/phase-05/ADVANCED_TMS_WMS_HANDOFF_PACKAGE.md`; `STEPS_11_14_HANDOFF_CONTRACT.md`; `queue-dlq-replay-reconciliation-procedure.md`; `deferred-physical-device-test-plan-and-provider-evidence-record.md`; `guides/architecture-index-and-canonical-telemetry-data-flow.md`; `guides/subscription-package-and-entitlement-guide.md`; `guides/driver-mobile-tracking-guide.md`; `guides/source-arbitration-and-fallback-explanation.md`; `guides/fleet-control-tower-and-customer-projection-guide.md`; `guides/privacy-consent-and-retention-guide.md`; `guides/gps-hardware-procurement-installation-guide.md`; `guides/teltonika-codec8e-gateway-deployment-guide.md`; `guides/gps-gateway-endpoints-firewall-health-metrics-scaling-guide.md`; `guides/third-party-provider-onboarding-and-credential-rotation-guide.md`; `docs/runbooks/driver-mobile-outage.md`; `docs/runbooks/realtime-outage.md`; `docs/build-log/phase-05/ATW-028.md`. Modified: `services/gps-gateway/README.md` (additive cross-links only); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `247` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (2 new issues). 0 new migrations, 0 code files touched, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run docs:check` PASS (link resolution, including every cross-link between both agents' own deliverables); `pnpm run security:check` PASS (no secret-shaped pattern); `pnpm run git:check-paths` PASS (17 files checked, 0 forbidden); `pnpm run standards:check`/`data-classification:check` PASS. `typecheck`/`lint`/`node:test`/`db:test` deliberately not re-run -- zero code file was touched by this checkpoint, independently confirmed via `git diff --cached --stat` against every migration/server/app/service path.
+
+#### Compatibility, rollout, recovery
+
+Purely additive documentation -- zero migration, zero application code changed. `git revert` this checkpoint's own commit is trivially safe and complete.
+
+#### Errors found and fixed
+
+None fixed (docs-only checkpoint, no authorization to touch code). Two new findings incidentally discovered during documentation research and registered for a future checkpoint: `ISS-2026-027` (Medium -- ratified retention policy has no enforcement mechanism in code) and `ISS-2026-028` (Low-Medium -- the Fleet workspace UI bypasses the evidence-mandatory device-installation RPC). See `docs/build-log/phase-05/ATW-028.md` §4.
+
+#### Approval and closure
+
+Self-closing. `ATW-028` is `VERIFIED`. Ninth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-029` (Prompt 248, the final Phase 5 task) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
+### CHG-2026-175 — Advanced TMS/WMS Closure Verification, `PHASE_5_VERIFIED` set (Phase 5, Prompt 248, `CG-S10-ATW-029`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-029` / `248_ADVANCED_TMS_WMS_CLOSURE_VERIFICATION_PROMPT.md` |
+| Change type | Independent verification only -- zero migration, zero product/service/UI code. One fresh full load-test harness run (real Postgres cluster restart) as the recorded closure evidence |
+| Baseline evidence | `CG-S10-ATW-028` (Prompt 247) verified; all Phase 5 evidence current; Phase 4 closure still holds |
+| Final status | `COMPLETED` -- `VERIFIED`, **`PHASE_5_VERIFIED` set** |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- the tenth and final task in that range |
+
+#### Outcome
+
+All 23 items in Prompt 248's own "Required verification" list addressed with live, freshly re-run evidence (not carried forward from any prior checkpoint's own self-report) -- mirroring `PLATFORM_CORE_CLOSURE_REPORT.md`/`FINANCE_CLOSURE_REPORT.md`'s own precedent. No new multi-agent fan-out was needed since the substantive proof-work was already produced at `ATW-026`/`ATW-027`; this checkpoint's own job was reconciliation, a fresh twice-run full gate suite (including a fresh, full `scripts/load-tests/run.sh` run closing a gap neither `ATW-027` fix agent had closed), and a direct, exhaustive audit of `KNOWN_ISSUES.md` confirming zero Critical/High-severity issue remains open anywhere. Three inaccuracies caught and corrected during this checkpoint's own self-review before finalizing (an imprecise "3 writers" restatement, a wrong claim about Prompt 249 not existing, and an unqualified "vendor" grep result) -- each independently re-verified against real source rather than left as an unverified assertion. Full detail: `docs/build-log/phase-05/ADVANCED_TMS_WMS_CLOSURE_REPORT.md`.
+
+#### Scope and files
+
+New: `docs/build-log/phase-05/ADVANCED_TMS_WMS_CLOSURE_REPORT.md`. Modified: `scripts/load-tests/results/RESULTS_CG-S10-ATW-024.txt` (refreshed, real numbers from this checkpoint's own fresh load-test run); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `248` `NOT_STARTED`->`VERIFIED`, Tally now 40/40, closure note appended); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md` (final checkpoint entries, `PHASE_5_VERIFIED` set). 0 new migrations, 0 code files touched, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck`/`lint` PASS (0 errors, 85 warnings unchanged); root `pnpm run test` -- `node:test` 3084/3084 (unchanged); `services/gps-gateway` package `test` 41/41; `pnpm run db:test` PASS -- ALL PASSED, run twice fresh: 137 migrations, 133 test files, neither known flake (`ISS-2026-020`/`024`) triggered; `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`threat-model:check`/`git:check-paths`/`git:check` all PASS; `pnpm exec next build` exit 0, 90 routes unchanged; `bash scripts/load-tests/run.sh` -- all 8 scenarios PASS, including a real Postgres cluster restart/recovery and a fresh 64,509-transaction hybrid-arbitration run.
+
+#### Compatibility, rollout, recovery
+
+Zero code/schema/service file changed. `git revert` this checkpoint's own commit is trivially safe and complete.
+
+#### Errors found and fixed
+
+None (independent-verification-only checkpoint; zero bounded repair needed, matching every prior phase's own closure precedent). Zero new issue registered -- the 13 currently-`OPEN` issues relevant to Phase 5 were all already known before this checkpoint began.
+
+#### Approval and closure
+
+Self-closing. `ATW-029` is `VERIFIED`. **`PHASE_5_VERIFIED` is set.** The tenth and final task within the "lanjut prompt 239-248" range -- that range is now fully spent. Next eligible: Prompt 250 (`CG-S11-PRC-001`, Phase 6 Procurement/Vendor WBS and Runtime Kickoff), requiring fresh, separate, explicit operator authorization before starting.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

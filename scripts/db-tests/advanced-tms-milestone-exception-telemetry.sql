@@ -87,7 +87,13 @@ begin
   select * into v_vehicle from app.register_vehicle_operational_profile(v_tenant1, 'VEH-MS-A', 'Milestone Truck A', 'owned', 2000, 20, '00000000-0000-0000-0000-000000060101', 'admin');
   select * into v_vehicle from app.set_vehicle_tracking_eligibility(v_vehicle.id, false, true, false, v_vehicle.record_version, '00000000-0000-0000-0000-000000060101', 'admin');
 
-  select * into v_device from app.register_gps_device(v_tenant1, '868712345603001', 'Teltonika FMC920', 'cargogrid', '00000000-0000-0000-0000-000000060101', 'admin');
+  -- ATW-246 hardening note: this literal was previously '868712345603001', coincidentally
+  -- identical to the fixture IMEI advanced-tms-fleet-control-tower.sql/advanced-tms-wms-
+  -- integrated-verification.sql also use for their own, unrelated tenants -- harmless before
+  -- app.register_gps_device gained a real cross-tenant collision guard (this checkpoint's
+  -- own migration 20260730360000), but a same-shared-database, order-dependent failure
+  -- afterward. Changed to a value unique across every scripts/db-tests/*.sql fixture.
+  select * into v_device from app.register_gps_device(v_tenant1, '868712345603101', 'Teltonika FMC920', 'cargogrid', '00000000-0000-0000-0000-000000060101', 'admin');
   select * into v_device from app.transition_gps_device_status(v_device.id, 'assigned', v_device.record_version, '00000000-0000-0000-0000-000000060101', 'admin');
   perform app.assign_device_to_vehicle(v_device.id, v_vehicle.id, 'initial install', '00000000-0000-0000-0000-000000060101', 'admin');
   select * into v_device from app.transition_gps_device_status(v_device.id, 'installed', v_device.record_version, '00000000-0000-0000-0000-000000060101', 'admin');

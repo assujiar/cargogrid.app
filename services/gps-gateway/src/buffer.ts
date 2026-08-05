@@ -8,9 +8,18 @@
  * why the buffer genuinely lives at the edge, in this package, not centrally in Postgres.
  *
  * Each pending entry is flushed in enqueue order (never reordered -- a device's own
- * telemetry history must stay chronological); a failed flush attempt stops the whole
- * flush pass immediately (the entry, and everything enqueued after it, stays buffered)
- * rather than skipping ahead and re-attempting out of order.
+ * telemetry history must stay chronological). ATW-246 hardening (poison-pill finding):
+ * a failure is classified as either PERMANENT (the batch is structurally invalid, or the
+ * owning device/tenant is in a state the server will never accept from -- see
+ * `isPermanentIngestFailure` below) or TRANSIENT (anything else, presumed a network/
+ * connectivity-class failure). A permanent failure for one device's batch is skipped
+ * (dead-lettered: removed from the persisted queue, never retried, reported back to the
+ * caller for logging) so every OTHER device's own batches sharing this one buffer file
+ * keep flushing -- one device going permanently bad (e.g. suspended mid-flight,
+ * `device_not_ingestible`) no longer blocks the whole gateway process's telemetry
+ * indefinitely. A transient failure still halts the whole pass at that point (the entry,
+ * and everything enqueued after it, stays buffered) to preserve strict per-flush-pass
+ * ordering for the genuinely-recoverable case -- unchanged from the original behavior.
  */
 
 import { appendFile, readFile, writeFile, rename, mkdir } from "node:fs/promises";
@@ -21,6 +30,44 @@ export interface BufferedBatch {
   deviceId: string;
   reports: GatewayIngestReport[];
   enqueuedAt: string;
+}
+
+export interface DeadLetteredBatch {
+  deviceId: string;
+  reportCount: number;
+  enqueuedAt: string;
+  reason: string;
+}
+
+export interface FlushOutcome {
+  /** Count of batches successfully ingested this pass. */
+  flushedCount: number;
+  /** Batches permanently, non-retryably rejected this pass -- removed from the queue, never retried. */
+  deadLettered: DeadLetteredBatch[];
+}
+
+// ATW-246 hardening: the exact set of app.ingest_direct_device_telemetry_batch's own
+// `raise exception '<code>: ...'` prefixes that are structurally non-retryable --
+// retrying the identical bytes against the identical device/tenant state will fail
+// identically every time (supabase/migrations/20260729370000_create_advanced_tms_gps_
+// gateway_ingestion.sql, widened at .../20260729390000_..._canonical_telemetry_
+// arbitration.sql -- neither edited by this repair). Deliberately does NOT include
+// `insufficient_authority` (a broken/revoked gateway API key is a GATEWAY-WIDE problem,
+// not a per-device one -- misclassifying it as "permanent" would silently dead-letter
+// every device's telemetry forever instead of correctly halting-and-alerting, so it
+// stays in the default TRANSIENT bucket below). Anything not matching this allowlist
+// defaults to TRANSIENT (halt-and-retry) -- the safe default, since misclassifying a
+// real transient failure as permanent would silently drop real telemetry, while the
+// reverse (a permanent failure kept as transient) only reproduces this finding's own
+// pre-existing behavior for that one unclassified reason, never a new regression.
+const PERMANENT_INGEST_FAILURE_REASON_PATTERN =
+  /^(device_not_ingestible|tenant_mismatch|device_not_found|reports_required|device_id_required|invalid_report_type|event_at_required|location_required):/;
+
+function permanentFailureReason(error: unknown): string | null {
+  if (error instanceof Error && PERMANENT_INGEST_FAILURE_REASON_PATTERN.test(error.message)) {
+    return error.message;
+  }
+  return null;
 }
 
 export class DurableTelemetryBuffer {
@@ -59,27 +106,58 @@ export class DurableTelemetryBuffer {
     await rename(tempPath, this.filePath);
   }
 
-  /** Attempts to flush every currently-pending batch, oldest first, stopping at the first failure. Returns the count actually flushed. Re-entrant calls while a flush is already running are a no-op (returns 0) -- never two concurrent writers racing the same buffer file. */
-  async flush(client: GpsGatewayIngestClientLike): Promise<number> {
+  /**
+   * Attempts to flush every currently-pending batch, oldest first. A PERMANENT failure
+   * (see `PERMANENT_INGEST_FAILURE_REASON_PATTERN`) is skipped -- dead-lettered, removed
+   * from the persisted queue -- and the pass continues past it; a TRANSIENT failure still
+   * stops the whole pass at that point (that entry, and everything enqueued after it,
+   * stays buffered, oldest-first ordering preserved for the next attempt). Re-entrant
+   * calls while a flush is already running are a no-op (returns zero counts) -- never two
+   * concurrent writers racing the same buffer file.
+   */
+  async flush(client: GpsGatewayIngestClientLike): Promise<FlushOutcome> {
     if (this.flushing) {
-      return 0;
+      return { flushedCount: 0, deadLettered: [] };
     }
     this.flushing = true;
     try {
       const pending = await this.readPending();
+      const retained: BufferedBatch[] = [];
+      const deadLettered: DeadLetteredBatch[] = [];
       let flushedCount = 0;
+      let halted = false;
+
       for (const batch of pending) {
+        if (halted) {
+          retained.push(batch);
+          continue;
+        }
         try {
           await client.ingestBatch(batch.deviceId, batch.reports);
           flushedCount += 1;
-        } catch {
-          break;
+        } catch (error) {
+          const permanentReason = permanentFailureReason(error);
+          if (permanentReason !== null) {
+            deadLettered.push({
+              deviceId: batch.deviceId,
+              reportCount: batch.reports.length,
+              enqueuedAt: batch.enqueuedAt,
+              reason: permanentReason,
+            });
+            // Skip-and-continue -- do not retain, do not halt. Every other device's own
+            // batches, including ones enqueued after this one, still get a chance to
+            // flush this same pass.
+          } else {
+            halted = true;
+            retained.push(batch);
+          }
         }
       }
-      if (flushedCount > 0) {
-        await this.writePending(pending.slice(flushedCount));
+
+      if (flushedCount > 0 || deadLettered.length > 0) {
+        await this.writePending(retained);
       }
-      return flushedCount;
+      return { flushedCount, deadLettered };
     } finally {
       this.flushing = false;
     }
