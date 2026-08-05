@@ -133,3 +133,33 @@ Disclosed as `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE` in
 - Offline-detection (a device that stops reporting) is not this package's concern --
   `ATW-226F`'s own canonical-telemetry/health layer owns that, matching
   `app.vehicle_tracking_source_priorities`' (`ATW-223`) own disclosed scope boundary.
+
+## Related documentation (`CG-S10-ATW-028`, Prompt 247)
+
+This README stays the terse, canonical operational reference for this package (architecture,
+configuration table, running instructions, known limitations). The following documents were
+published at `CG-S10-ATW-028` (Prompt 247, Advanced TMS/WMS Documentation and Handoff) to hold
+the narrative/procedural detail this README deliberately does not duplicate -- read this file
+first, then the one below that matches the task at hand:
+
+- `docs/build-log/phase-05/guides/teltonika-codec8e-gateway-deployment-guide.md` -- the full
+  Dockerfile/env-var/wire-protocol/deployment walkthrough, and the IMEI-spoofing residual risk
+  (above) explained for a deployment audience, including the network-layer compensating
+  controls it requires.
+- `docs/build-log/phase-05/guides/gps-gateway-endpoints-firewall-health-metrics-scaling-guide.md`
+  -- `/healthz`/`/readyz`/`/metrics` in detail, firewall posture for both ports, and honest
+  scaling guidance grounded in `scripts/load-tests/`'s own real, currently-committed numbers
+  (not a projection).
+- `docs/build-log/phase-05/guides/gps-hardware-procurement-installation-guide.md` -- the
+  physical-hardware side this package's own protocol serves: procurement, SIM provisioning,
+  installation evidence, and replacement/RMA, explicit about which steps are real/tested
+  software and which are documented procedure not yet exercised against real hardware.
+- `docs/build-log/phase-05/queue-dlq-replay-reconciliation-procedure.md` -- `src/buffer.ts`'s
+  own durable buffer explained alongside (and distinguished from) the unrelated `app.jobs`
+  platform queue, with real load/recovery evidence for both.
+- `docs/build-log/phase-05/deferred-physical-device-test-plan-and-provider-evidence-record.md`
+  -- the formal `DEFERRED_EXTERNAL_HARDWARE_EVIDENCE` record for this package's own External-
+  evidence policy above: owner, target device/model, exact future test procedure, and the
+  safe activation gate before any claim of physical-hardware testing may be made.
+- `docs/runbooks/gps-gateway-outage.md` -- incident response when `/healthz`/`/readyz`
+  indicate trouble.

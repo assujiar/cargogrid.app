@@ -6553,6 +6553,40 @@ See `docs/build-log/phase-05/ATW-027.md` §3 for the full 12-finding list (1 Cri
 
 Self-closing. `ATW-027` is `VERIFIED`. Eighth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-028` (Prompt 247) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
 
+### CHG-2026-174 — Advanced TMS/WMS Documentation and Handoff (Phase 5, Prompt 247, `CG-S10-ATW-028`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-028` / `247_ADVANCED_TMS_WMS_DOCUMENTATION_HANDOFF_PROMPT.md` |
+| Change type | Documentation only -- zero migration, zero product/service/UI code (Prompt 247 §13/§14: "None" database/API impact) |
+| Baseline evidence | `CG-S10-ATW-027` (Prompt 246) verified and all earlier evidence current |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- ninth task in that range |
+
+#### Outcome
+
+Two parallel single-pass writing agents produced the complete Phase 5 documentation and handoff package: a master `ADVANCED_TMS_WMS_HANDOFF_PACKAGE.md` (mirroring the established one-per-phase precedent), a `STEPS_11_14_HANDOFF_CONTRACT.md`, 10 topic guides (architecture/data-flow, entitlement, Driver Mobile, source arbitration, Fleet Control Tower/customer projection, privacy/retention, GPS hardware procurement/installation, gateway deployment, gateway endpoints/scaling, third-party provider onboarding), a queue/DLQ/reconciliation procedure, a deferred physical-device/provider-evidence record, and 2 new outage runbooks. Every claim grounded in real, already-`VERIFIED` evidence; zero code file touched. Two real, disclosed, non-blocking issues incidentally discovered and registered (`ISS-2026-027`/`028`). Full detail: `docs/build-log/phase-05/ATW-028.md`.
+
+#### Scope and files
+
+New (16): `docs/build-log/phase-05/ADVANCED_TMS_WMS_HANDOFF_PACKAGE.md`; `STEPS_11_14_HANDOFF_CONTRACT.md`; `queue-dlq-replay-reconciliation-procedure.md`; `deferred-physical-device-test-plan-and-provider-evidence-record.md`; `guides/architecture-index-and-canonical-telemetry-data-flow.md`; `guides/subscription-package-and-entitlement-guide.md`; `guides/driver-mobile-tracking-guide.md`; `guides/source-arbitration-and-fallback-explanation.md`; `guides/fleet-control-tower-and-customer-projection-guide.md`; `guides/privacy-consent-and-retention-guide.md`; `guides/gps-hardware-procurement-installation-guide.md`; `guides/teltonika-codec8e-gateway-deployment-guide.md`; `guides/gps-gateway-endpoints-firewall-health-metrics-scaling-guide.md`; `guides/third-party-provider-onboarding-and-credential-rotation-guide.md`; `docs/runbooks/driver-mobile-outage.md`; `docs/runbooks/realtime-outage.md`; `docs/build-log/phase-05/ATW-028.md`. Modified: `services/gps-gateway/README.md` (additive cross-links only); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `247` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (2 new issues). 0 new migrations, 0 code files touched, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run docs:check` PASS (link resolution, including every cross-link between both agents' own deliverables); `pnpm run security:check` PASS (no secret-shaped pattern); `pnpm run git:check-paths` PASS (17 files checked, 0 forbidden); `pnpm run standards:check`/`data-classification:check` PASS. `typecheck`/`lint`/`node:test`/`db:test` deliberately not re-run -- zero code file was touched by this checkpoint, independently confirmed via `git diff --cached --stat` against every migration/server/app/service path.
+
+#### Compatibility, rollout, recovery
+
+Purely additive documentation -- zero migration, zero application code changed. `git revert` this checkpoint's own commit is trivially safe and complete.
+
+#### Errors found and fixed
+
+None fixed (docs-only checkpoint, no authorization to touch code). Two new findings incidentally discovered during documentation research and registered for a future checkpoint: `ISS-2026-027` (Medium -- ratified retention policy has no enforcement mechanism in code) and `ISS-2026-028` (Low-Medium -- the Fleet workspace UI bypasses the evidence-mandatory device-installation RPC). See `docs/build-log/phase-05/ATW-028.md` §4.
+
+#### Approval and closure
+
+Self-closing. `ATW-028` is `VERIFIED`. Ninth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-029` (Prompt 248, the final Phase 5 task) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
