@@ -417,4 +417,25 @@ begin
 end;
 $$;
 
+\echo '>> ATW-032: optimistic concurrency must not be a check-then-act race. Every function that takes p_expected_version must either lock the row it checked (select ... for update) or repeat the version predicate in its own UPDATE. Without one of the two, two callers both read version N, both pass the check, and the second silently overwrites the first -- a lost approval, posting or delivery decision, with neither caller told anything.'
+do $$
+declare
+  v_unsafe text[];
+begin
+  select array_agg(p.proname order by p.proname) into v_unsafe
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app'
+    and pg_get_function_arguments(p.oid) like '%p_expected_version%'
+    and p.prosrc ~ 'update app\.'
+    and p.prosrc !~ 'record_version = p_expected_version'   -- no version predicate on the UPDATE
+    and p.prosrc !~* 'for update';                          -- and no row lock on the read
+
+  if v_unsafe is not null then
+    raise exception 'assertion failed: % function(s) take p_expected_version but neither lock the checked row (select ... for update) nor repeat record_version = p_expected_version in their UPDATE, so two concurrent callers can both pass the check and the second silently overwrites the first: %', array_length(v_unsafe, 1), v_unsafe;
+  end if;
+
+  raise notice 'ATW-032 optimistic-concurrency proof: every p_expected_version function either locks the row it checked or re-checks the version at the write';
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'
