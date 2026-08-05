@@ -1330,6 +1330,13 @@ where t.slug = 'wmspick1' and o.idempotency_key = 'idem-pick-main' and l.line_nu
 select id as race_rack_a_id from app.warehouse_locations where tenant_id = (select id from app.tenants where slug = 'wmspick1') and code = 'RACK-PICK-A' \gset
 select id as race_rack_b_id from app.warehouse_locations where tenant_id = (select id from app.tenants where slug = 'wmspick1') and code = 'RACK-PICK-B' \gset
 select current_database() as pg_test_db \gset
+-- ISS-2026-023 fix (CG-S10-ATW-027): race output paths are suffixed with this psql
+-- session's own real backend PID so two concurrent `db:test` invocations on the same
+-- machine never clobber each other's race-process output files (each invocation's own
+-- top-level session has a distinct, real OS/Postgres-assigned PID; captured once here,
+-- reused by every race block below via psql's own :variable interpolation, which applies
+-- inside \setenv values, do $$ ... $$ bodies, and plain SQL text alike).
+select pg_backend_pid()::text as race_bpid \gset
 
 \set race_sql_a 'select app.generate_wms_pick_task(''' :race_line6_id ''', 10, null, ''' :race_rack_a_id ''', null, null, null, ''idem-gen-l6-race-a'', ''00000000-0000-0000-0000-000000180102'', ''rep'');'
 \set race_sql_b 'select app.generate_wms_pick_task(''' :race_line6_id ''', 10, null, ''' :race_rack_b_id ''', null, null, null, ''idem-gen-l6-race-b'', ''00000000-0000-0000-0000-000000180108'', ''rep2'');'
@@ -1337,8 +1344,8 @@ select current_database() as pg_test_db \gset
 \setenv PG_TEST_DB :pg_test_db
 \setenv RACE_SQL_A :race_sql_a
 \setenv RACE_SQL_B :race_sql_b
-\setenv RACE_OUT_A /tmp/cargogrid-wms-pick-race-l6-a.out
-\setenv RACE_OUT_B /tmp/cargogrid-wms-pick-race-l6-b.out
+\setenv RACE_OUT_A /tmp/cargogrid-wms-pick-race-l6-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-wms-pick-race-l6-b-:race_bpid.out
 
 \! bash scripts/db-tests/wms-picking-concurrency-helper.sh
 
@@ -1357,7 +1364,7 @@ begin
 
   select count(*) into v_task_count from app.wms_pick_tasks where outbound_order_line_id = v_line6_id and status <> 'cancelled';
   if v_task_count <> 1 then
-    raise exception 'assertion failed: expected exactly ONE real pick task to have won the concurrent race for L6, got % -- see /tmp/cargogrid-wms-pick-race-l6-a.out and -b.out for both real process outcomes', v_task_count;
+    raise exception 'assertion failed: expected exactly ONE real pick task to have won the concurrent race for L6, got % -- see the RACE_OUT_A/RACE_OUT_B process output captured above', v_task_count;
   end if;
 
   select coalesce(sum(task_quantity - short_quantity), 0) into v_total_allocated from app.wms_pick_tasks where outbound_order_line_id = v_line6_id and status <> 'cancelled';
@@ -1428,13 +1435,22 @@ select current_database() as pg_test_db \gset
 \set race_sql_a 'select app.generate_wms_pick_task(''' :keyrace_line_x_id ''', 5, null, null, null, null, null, ''idem-gen-keyrace-samekey'', ''00000000-0000-0000-0000-000000180102'', ''rep'');'
 \set race_sql_b 'select app.generate_wms_pick_task(''' :keyrace_line_y_id ''', 5, null, null, null, null, null, ''idem-gen-keyrace-samekey'', ''00000000-0000-0000-0000-000000180102'', ''rep'');'
 
+\set race_out_keyrace_a /tmp/cargogrid-wms-pick-race-keyrace-a-:race_bpid.out
+\set race_out_keyrace_b /tmp/cargogrid-wms-pick-race-keyrace-b-:race_bpid.out
 \setenv PG_TEST_DB :pg_test_db
 \setenv RACE_SQL_A :race_sql_a
 \setenv RACE_SQL_B :race_sql_b
-\setenv RACE_OUT_A /tmp/cargogrid-wms-pick-race-keyrace-a.out
-\setenv RACE_OUT_B /tmp/cargogrid-wms-pick-race-keyrace-b.out
+\setenv RACE_OUT_A :race_out_keyrace_a
+\setenv RACE_OUT_B :race_out_keyrace_b
 
 \! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+-- psql does not interpolate :variables inside a do $$ ... $$ body (confirmed empirically
+-- during the ISS-2026-023 fix, CG-S10-ATW-027 -- the same limitation the L5 block's own
+-- comment below already documented). Smuggle the two real, PID-suffixed output paths into
+-- the upcoming do block via a session-level GUC instead, read back with current_setting().
+select set_config('cargogrid.race_out_keyrace_a', :'race_out_keyrace_a', false),
+       set_config('cargogrid.race_out_keyrace_b', :'race_out_keyrace_b', false);
 
 do $$
 declare
@@ -1454,12 +1470,14 @@ begin
   -- key; the other is rejected, never both silently succeed and never does either process
   -- crash with a raw, unclassified error.
   if v_winner_count <> 1 then
-    raise exception 'assertion failed: expected exactly ONE of the two different-line requests to win the shared idempotency key, got % (x=%/y=%) -- see /tmp/cargogrid-wms-pick-race-keyrace-a.out and -b.out', v_winner_count, v_task_count_x, v_task_count_y;
+    raise exception 'assertion failed: expected exactly ONE of the two different-line requests to win the shared idempotency key, got % (x=%/y=%) -- see the RACE_OUT_A/RACE_OUT_B process output captured above', v_winner_count, v_task_count_x, v_task_count_y;
   end if;
 
   -- The loser's own process output must carry the clean, classified error -- never the
   -- raw, uncaught Postgres constraint-violation message this migration used to leak.
-  select pg_read_file('/tmp/cargogrid-wms-pick-race-keyrace-a.out') || pg_read_file('/tmp/cargogrid-wms-pick-race-keyrace-b.out') into v_loser_out;
+  -- Paths read back via current_setting(), not psql :interpolation (does not reach inside
+  -- a dollar-quoted do body -- see the set_config() call immediately before this do block).
+  select pg_read_file(current_setting('cargogrid.race_out_keyrace_a')) || pg_read_file(current_setting('cargogrid.race_out_keyrace_b')) into v_loser_out;
   if v_loser_out not like '%idempotency_key_conflict%' then
     raise exception 'assertion failed: expected the losing process''s own output to carry a clean idempotency_key_conflict error, got: %', v_loser_out;
   end if;
@@ -1496,8 +1514,8 @@ select current_database() as pg_test_db \gset
 \setenv PG_TEST_DB :pg_test_db
 \setenv RACE_SQL_A :race_sql_a
 \setenv RACE_SQL_B :race_sql_b
-\setenv RACE_OUT_A /tmp/cargogrid-wms-pick-race-l5-a.out
-\setenv RACE_OUT_B /tmp/cargogrid-wms-pick-race-l5-b.out
+\setenv RACE_OUT_A /tmp/cargogrid-wms-pick-race-l5-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-wms-pick-race-l5-b-:race_bpid.out
 
 \! bash scripts/db-tests/wms-picking-concurrency-helper.sh
 
@@ -1520,7 +1538,7 @@ begin
   if v_task.claimed_by_auth_user_id not in ('00000000-0000-0000-0000-000000180102', '00000000-0000-0000-0000-000000180108') then
     raise exception 'assertion failed: expected the winning claimant to be one of the two real racing actors, got %', v_task.claimed_by_auth_user_id;
   end if;
-  raise notice 'concurrent claim race proof: task claimed by exactly one real process (claimant=%) -- see /tmp/cargogrid-wms-pick-race-l5-a.out and -b.out for both real process outcomes', v_task.claimed_by_label;
+  raise notice 'concurrent claim race proof: task claimed by exactly one real process (claimant=%) -- see the RACE_OUT_A/RACE_OUT_B process output captured above', v_task.claimed_by_label;
 end $$;
 
 \echo '>> cross-owner read isolation: the customer_user actor (scoped to Account Alpha only) can read an Alpha task via app.get_wms_pick_task/app.list_wms_pick_task_confirmations but is rejected on the Beta task (insufficient_authority, bug class f); a rep (staff, unrestricted) can read both; app.list_wms_pick_tasks for the customer_user actor returns only Alpha rows, never the Beta row, even unfiltered'

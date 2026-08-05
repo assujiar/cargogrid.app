@@ -31,6 +31,11 @@ async function main(): Promise<void> {
   const healthHost = process.env.GPS_GATEWAY_HEALTH_HOST ?? "0.0.0.0";
   const bufferFilePath = process.env.GPS_GATEWAY_BUFFER_FILE_PATH ?? "./data/telemetry-buffer.jsonl";
   const flushIntervalMs = Number(process.env.GPS_GATEWAY_FLUSH_INTERVAL_MS ?? 30_000);
+  // ATW-246 finding 6 (TCP socket exhaustion): overridable, but defaulted sanely inside
+  // GpsGatewayServer itself if unset here -- see that file's own header for the exact
+  // default values and reasoning.
+  const idleTimeoutMs = process.env.GPS_GATEWAY_IDLE_TIMEOUT_MS !== undefined ? Number(process.env.GPS_GATEWAY_IDLE_TIMEOUT_MS) : undefined;
+  const maxConnections = process.env.GPS_GATEWAY_MAX_CONNECTIONS !== undefined ? Number(process.env.GPS_GATEWAY_MAX_CONNECTIONS) : undefined;
 
   const ingestClient = new GpsGatewayIngestClient(supabaseUrl, supabaseServiceRoleKey, rawApiKey, gatewayInstanceLabel);
   const buffer = new DurableTelemetryBuffer(bufferFilePath);
@@ -40,6 +45,8 @@ async function main(): Promise<void> {
     buffer,
     gatewayInstanceLabel,
     onLog: (line) => log("info", line),
+    idleTimeoutMs,
+    maxConnections,
   });
 
   let ready = false;
@@ -51,9 +58,20 @@ async function main(): Promise<void> {
   const flushTimer = setInterval(() => {
     buffer
       .flush(ingestClient)
-      .then((flushedCount) => {
+      .then(({ flushedCount, deadLettered }) => {
         if (flushedCount > 0) {
           log("info", "durable buffer flush", { flushedCount });
+        }
+        // ATW-246 (poison-pill finding): a permanently-failing batch no longer blocks
+        // every other device's own telemetry -- it is skipped and reported here instead,
+        // one clear log line per dead-lettered batch, never a silent drop.
+        for (const batch of deadLettered) {
+          log("error", "durable buffer dead-lettered a permanently-failing batch", {
+            deviceId: batch.deviceId,
+            reportCount: batch.reportCount,
+            enqueuedAt: batch.enqueuedAt,
+            reason: batch.reason,
+          });
         }
       })
       .catch((error: Error) => log("error", "durable buffer flush failed", { error: error.message }));

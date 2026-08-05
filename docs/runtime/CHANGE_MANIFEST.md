@@ -6519,6 +6519,40 @@ None fixed (verification-only checkpoint by design). Three new Low/Low-Medium fi
 
 Self-closing. `ATW-026` is `VERIFIED`. Seventh task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-027` (Prompt 246) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
 
+### CHG-2026-173 — Advanced TMS/WMS Integrity and Security Hardening (Phase 5, Prompt 246, `CG-S10-ATW-027`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-027` / `246_ADVANCED_TMS_WMS_INTEGRITY_SECURITY_HARDENING_PROMPT.md` |
+| Change type | Repair/hardening only, no new functional capability -- 3 new purely additive migrations; TypeScript changes confined to `services/gps-gateway/`; existing db-test files extended, 0 new db-test files |
+| Baseline evidence | `CG-S10-ATW-026` (Prompt 245) verified with findings classified |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- eighth task in that range |
+
+#### Outcome
+
+Two parallel adversarial-probe agents live-reproduced 12 real vulnerabilities across all 4 GPS source classes (1 Critical, 5 High, 4 Medium, 2 Low) -- the most severe finding set of this build. Two parallel fix agents repaired all but 2 explicitly disclosed residuals. Most seriously: a CRITICAL table-wide grant exposed a third-party webhook secret to any tenant member (fixed with a column-scoped grant, independently re-verified via direct privilege inspection); a HIGH unbounded future timestamp could permanently poison vehicle-position arbitration (fixed with a disclosed 24-hour bound); a HIGH cross-tenant IMEI collision could permanently deny service to a victim device with no admin remediation path (fixed with a rejection plus a new deregistration RPC); a HIGH durable-buffer poison-pill could block all telemetry indefinitely (fixed via permanent/transient failure classification); a HIGH consent-revocation gap let location collection continue after consent was withdrawn (fixed with a live re-check). Also closed all 3 findings `ATW-026` itself registered. Full detail: `docs/build-log/phase-05/ATW-027.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730350000_harden_advanced_tms_third_party_hybrid_tracking.sql`; `supabase/migrations/20260730360000_harden_advanced_tms_device_driver_mobile_tracking.sql`; `supabase/migrations/20260730370000_correct_route_planning_staleness_tolerance_comment.sql`; `services/gps-gateway/test/logger.test.ts`; `docs/build-log/phase-05/ATW-027.md`. Modified: `services/gps-gateway/src/{buffer,server,logger,index}.ts`; `services/gps-gateway/test/{buffer,server}.test.ts`; `services/gps-gateway/README.md`; `docs/runbooks/gps-gateway-outage.md`; `scripts/db-tests/advanced-tms-{third-party-provider-adapter,canonical-telemetry-arbitration,gps-telematics-integrated-verification,gps-gateway-ingestion,driver-mobile-tracking,wms-picking}.sql`; `scripts/db-tests/advanced-tms-{milestone-exception-telemetry,wms-integrated-verification,shipment-tracking-health-writer}.sql` (IMEI-literal compatibility fix only); `scripts/load-tests/gps-telemetry-load.ts` (buffer return-type compat fix); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `246` `NOT_STARTED`->`VERIFIED`, `CG-S10-ATW-011B` row added); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (3 issues closed `RESOLVED`, 3 new issues recorded). 3 new migrations (137 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS (root and `services/gps-gateway`), `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), root `pnpm run test` -- `node:test` 3084/3084 (unchanged), `services/gps-gateway` `pnpm run test` -- 41/41 (7 buffer, 16 codec8e unchanged, 8 logger new, 10 server), `pnpm run db:test` PASS -- ALL PASSED, independently re-run twice fresh: 137 migrations, 133 test files (0 new files, existing files extended), the pre-existing `ATW-016` flake (`ISS-2026-020`) did not trigger on either run. `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 3 new migrations, no already-applied migration file edited. `git revert` is safe and complete except for one caveat: the CRITICAL secret-column fix has real production consequence if reverted (restores the live vulnerability) -- a revert of this checkpoint's commit should not be performed without immediately re-applying at least that fix.
+
+#### Errors found and fixed
+
+See `docs/build-log/phase-05/ATW-027.md` §3 for the full 12-finding list (1 Critical, 5 High, 4 Medium, 2 Low, all confirmed real, zero false positives) and §4 for the 3 `ATW-026`-registered findings closed. Two findings explicitly disclosed, not fixed, as new registered issues (`ISS-2026-025` Medium, `ISS-2026-026` Low, §3.13); one unrelated, incidentally-discovered pre-existing flake registered (`ISS-2026-024` Medium, §5).
+
+#### Approval and closure
+
+Self-closing. `ATW-027` is `VERIFIED`. Eighth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-028` (Prompt 247) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

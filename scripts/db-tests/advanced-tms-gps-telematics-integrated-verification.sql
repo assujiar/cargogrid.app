@@ -133,6 +133,20 @@ begin
       v_conn.status, v_conn.consecutive_failure_count, v_conn.auto_disabled_at, v_conn.disabled_reason;
   end if;
 
+  -- CG-S10-ATW-027 (Finding 4 fix pass) note: the rate-limit count is now bound to
+  -- connection_id, not just client_key (see that migration's own header) -- the 10
+  -- consecutive signature failures immediately above already also pushed this exact
+  -- connection_id's own rate-limit count to its own threshold. Backdating those rows
+  -- out of the 15-minute rate-limit window isolates this test's own real subject (the
+  -- connection-status check specifically, immediately below) from an unrelated,
+  -- already-covered concern (rate limiting has its own dedicated regression coverage in
+  -- scripts/db-tests/advanced-tms-third-party-provider-adapter.sql) -- the identical
+  -- "simulate time passing via direct SQL, since no RPC exists to backdate a real
+  -- clock, nor should one" technique this repository's own test suite already uses
+  -- throughout (e.g. advanced-tms-canonical-telemetry-arbitration.sql's own
+  -- received_at/switched_at backdating).
+  update app.third_party_provider_ingestion_attempts set occurred_at = now() - interval '20 minutes' where connection_id = v_connection_id;
+
   -- A fresh client_key, bypassing the unrelated per-client_key rate limiter, with a
   -- CORRECT signature -- proves the connection's own disabled status blocks ingestion
   -- at the connection-status check, not merely that bad signatures keep failing.

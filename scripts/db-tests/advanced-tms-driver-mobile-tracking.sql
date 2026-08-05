@@ -395,4 +395,135 @@ begin
   end if;
 end $$;
 
+\echo '>> ATW-246 findings 4 & 5: app.ingest_driver_mobile_report live re-checks the session''s own driver''s CURRENT mobile_tracking_consent on every call (revoking consent mid-session cleanly rejects the very next call, nothing new persisted, the underlying ATW-225 session itself stays untouched; re-granting consent resumes normal ingestion on the same still-active token), and never raises for a malformed/out-of-range coordinate (a clean invalid result, rate-limit bookkeeping still recorded and correctly accumulating toward the same 10-attempts/15-minute limiter every other invalid input already uses)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmemobile');
+  v_leg_id uuid := (select id from app.shipment_legs where idempotency_key = 'idem-mobile-leg1');
+  v_driver app.driver_operational_profiles;
+  v_new_session app.shipment_leg_tracking_sessions;
+  v_start record;
+  v_raw_token text;
+  v_dms_id uuid;
+  v_result record;
+  v_report_count_before integer;
+  v_report_count_after integer;
+  v_bad_count_before integer;
+  v_bad_count_after integer;
+  i integer;
+begin
+  select * into v_driver from app.driver_operational_profiles where driver_master_id = (select id from app.master_records where tenant_id = v_tenant1 and code = 'DRV-MOBILE-A');
+  if not v_driver.mobile_tracking_consent then
+    raise exception 'assertion failed: fixture precondition -- expected DRV-MOBILE-A to still have consent at this point';
+  end if;
+
+  -- The leg's own first tracking session was already ended (a 'stop' report, earlier in
+  -- this file) -- is_current=false frees the leg's own partial-unique-index slot, so a
+  -- fresh session legitimately starts on the same leg/driver/policy fixture.
+  select * into v_new_session from app.start_leg_tracking_session(v_leg_id, 'driver_mobile', 'driver', v_driver.driver_master_id, null, '00000000-0000-0000-0000-000000042101', 'admin');
+  select * into v_start from app.start_driver_mobile_session(v_new_session.id, 24, '00000000-0000-0000-0000-000000042101', 'admin');
+  v_raw_token := v_start.raw_token;
+  v_dms_id := v_start.driver_mobile_session_id;
+
+  -- ---------------------------------------------------------------------------
+  -- Finding 4: live consent re-check.
+  -- ---------------------------------------------------------------------------
+
+  select * into v_result from app.ingest_driver_mobile_report(v_raw_token, 'client-key-consent-1', 'heartbeat', now(), null, null, 90, true, true, '{}'::jsonb);
+  if v_result.ingest_status <> 'ok' then
+    raise exception 'assertion failed: expected ok for a heartbeat while consent is intact, got %', v_result.ingest_status;
+  end if;
+
+  select count(*) into v_report_count_before from app.driver_mobile_position_reports where driver_mobile_tracking_session_id = v_dms_id;
+
+  -- Revoke consent mid-session via the real, already-verified ATW-223 RPC.
+  select * into v_driver from app.set_driver_mobile_tracking_consent(v_driver.id, false, v_driver.record_version, '00000000-0000-0000-0000-000000042101', 'admin');
+
+  -- The SAME still-unexpired, still-active token is now cleanly rejected -- never
+  -- raised, and nothing new is persisted.
+  select * into v_result from app.ingest_driver_mobile_report(v_raw_token, 'client-key-consent-1', 'heartbeat', now(), null, null, 88, true, true, '{}'::jsonb);
+  if v_result.ingest_status <> 'invalid' then
+    raise exception 'assertion failed: expected invalid immediately after consent is revoked mid-session, got %', v_result.ingest_status;
+  end if;
+
+  select count(*) into v_report_count_after from app.driver_mobile_position_reports where driver_mobile_tracking_session_id = v_dms_id;
+  if v_report_count_after <> v_report_count_before then
+    raise exception 'assertion failed: expected the consent-revoked report to NOT be persisted, count went from % to %', v_report_count_before, v_report_count_after;
+  end if;
+
+  -- The underlying ATW-225 session itself is untouched by a consent-revoked rejection
+  -- (still active/current) -- only the driver's own consent flag changed; this is a
+  -- clean per-call rejection, not a forced session teardown.
+  if (select status from app.shipment_leg_tracking_sessions where id = v_new_session.id) <> 'active'
+     or not (select is_current from app.shipment_leg_tracking_sessions where id = v_new_session.id)
+  then
+    raise exception 'assertion failed: expected the underlying tracking session to remain active/current after a consent-revoked rejection';
+  end if;
+
+  -- Re-granting consent resumes normal ingestion on the SAME still-active token/session --
+  -- a live, reversible re-check on every call, not a one-way flag checked only once at
+  -- session start.
+  select * into v_driver from app.set_driver_mobile_tracking_consent(v_driver.id, true, v_driver.record_version, '00000000-0000-0000-0000-000000042101', 'admin');
+  select * into v_result from app.ingest_driver_mobile_report(v_raw_token, 'client-key-consent-1', 'heartbeat', now(), null, null, 85, true, true, '{}'::jsonb);
+  if v_result.ingest_status <> 'ok' then
+    raise exception 'assertion failed: expected ok again once consent is re-granted, got %', v_result.ingest_status;
+  end if;
+
+  -- ---------------------------------------------------------------------------
+  -- Finding 5: never raise on a malformed/out-of-range coordinate; rate-limit
+  -- bookkeeping still records and correctly accumulates.
+  -- ---------------------------------------------------------------------------
+
+  select count(*) into v_bad_count_before from app.driver_mobile_ingestion_attempts where client_key = 'client-key-outofrange';
+
+  -- Out-of-range longitude/latitude -- app.geojson_point_to_geography would otherwise
+  -- raise spatial_coordinate_out_of_range, uncaught, unwinding this whole anon-facing
+  -- RPC. Must return a clean 'invalid' result instead.
+  select * into v_result from app.ingest_driver_mobile_report(
+    v_raw_token, 'client-key-outofrange', 'location', now(),
+    jsonb_build_object('type', 'Point', 'coordinates', jsonb_build_array(500, 500)),
+    10, 80, true, true, '{}'::jsonb
+  );
+  if v_result.ingest_status <> 'invalid' then
+    raise exception 'assertion failed: expected invalid (never raised) for an out-of-range coordinate, got %', v_result.ingest_status;
+  end if;
+
+  -- A malformed GeoJSON type (spatial_invalid_geojson_type) is caught by the identical
+  -- fix -- the wrap is around the whole conversion call, not just the range check.
+  select * into v_result from app.ingest_driver_mobile_report(
+    v_raw_token, 'client-key-outofrange', 'location', now(),
+    jsonb_build_object('type', 'LineString', 'coordinates', jsonb_build_array(jsonb_build_array(1, 1))),
+    10, 80, true, true, '{}'::jsonb
+  );
+  if v_result.ingest_status <> 'invalid' then
+    raise exception 'assertion failed: expected invalid (never raised) for a malformed GeoJSON type, got %', v_result.ingest_status;
+  end if;
+
+  select count(*) into v_bad_count_after from app.driver_mobile_ingestion_attempts where client_key = 'client-key-outofrange';
+  if v_bad_count_after <> v_bad_count_before + 2 then
+    raise exception 'assertion failed: expected exactly 2 new rate-limit bookkeeping rows (one per out-of-range/malformed attempt) -- the pre-fix bug meant zero, since the exception unwound before the insert ever ran. Went from % to %', v_bad_count_before, v_bad_count_after;
+  end if;
+
+  -- Repeated out-of-range attempts correctly accumulate toward the SAME 10-bad-attempts/
+  -- 15-minute rate limiter every other invalid input in this function already uses -- 8
+  -- more (10 total with the 2 above), then the 11th call is rate_limited, matching this
+  -- file's own established convention for the bogus-token rate-limit test above.
+  for i in 1..8 loop
+    perform app.ingest_driver_mobile_report(
+      v_raw_token, 'client-key-outofrange', 'location', now(),
+      jsonb_build_object('type', 'Point', 'coordinates', jsonb_build_array(999, 999)),
+      10, 80, true, true, '{}'::jsonb
+    );
+  end loop;
+
+  select * into v_result from app.ingest_driver_mobile_report(
+    v_raw_token, 'client-key-outofrange', 'location', now(),
+    jsonb_build_object('type', 'Point', 'coordinates', jsonb_build_array(999, 999)),
+    10, 80, true, true, '{}'::jsonb
+  );
+  if v_result.ingest_status <> 'rate_limited' then
+    raise exception 'assertion failed: expected rate_limited after 10 out-of-range attempts from the same client_key, got %', v_result.ingest_status;
+  end if;
+end $$;
+
 \echo 'advanced-tms-driver-mobile-tracking.sql: ALL PASSED'
