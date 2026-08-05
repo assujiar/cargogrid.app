@@ -1,0 +1,11 @@
+-- Scenario 2a (CG-S10-ATW-024, Prompt 243): concurrent WMS pick-task claiming
+-- (ATW-017's app.claim_wms_pick_task) under many simulated concurrent workers --
+-- proves no double-claim, measures claim throughput. The candidate-selection half
+-- (which unclaimed task to try next) is scripts/load-tests/fixtures/load-test-only
+-- -helpers.sql's own loadtest.claim_any_pick_task -- the actual claim mutation
+-- always goes through the real, unmodified app.claim_wms_pick_task RPC (see that
+-- helper file's own header for why a test-only candidate-selection wrapper is
+-- necessary and does not weaken the proof).
+-- __ADMIN_ACTOR_ID__ is a sed-rendered placeholder -- see inventory-movement.sql's
+-- own header for why (pgbench's own quoted-variable substitution is not used).
+select loadtest.claim_any_pick_task('__ADMIN_ACTOR_ID__', 'loadtest-pgbench-worker-' || pg_backend_pid());

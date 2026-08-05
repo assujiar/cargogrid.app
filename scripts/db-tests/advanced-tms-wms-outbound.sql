@@ -900,19 +900,22 @@ begin
   end if;
 end $$;
 
-\echo '>> raw RLS regression proof: as the authenticated customer_alpha identity, a direct SELECT against app.wms_outbound_shipments/app.wms_billing_eligibility_events (bypassing every RPC) returns only Alpha rows, never Beta -- app.wms_pick_record_scope_ok (ATW-017) reused directly'
+\echo '>> raw RLS regression proof: as the authenticated customer_alpha identity, a direct SELECT against app.wms_outbound_shipments/app.wms_billing_eligibility_events (bypassing every RPC) returns only Alpha rows, never Beta -- app.wms_pick_record_scope_ok (ATW-017) reused directly. Shipment/event ids are resolved by their OWN idempotency_key/shipment_id columns BEFORE the role switch below (never via a join through app.wms_outbound_orders under the customer_alpha session itself) -- 20260730311000 (CG-S10-ATW-023 hardening) denies a customer_user-layer actor''s raw-table read on app.wms_outbound_orders outright, so a join requiring that table to be readable under this role would no longer resolve, independent of this test''s own wms_outbound_shipments/wms_billing_eligibility_events isolation guarantee, which is unaffected (those two tables carry their own warehouse_id/owner_account_id columns and were never gated through app.wms_outbound_orders'' own RLS to begin with).'
 do $$
+declare
+  v_ship_a_id uuid := (select id from app.wms_outbound_shipments where idempotency_key = 'idem-ship-a');
+  v_ship_d_id uuid := (select id from app.wms_outbound_shipments where idempotency_key = 'idem-ship-d');
 begin
   set local role authenticated;
   perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000200207", "role": "authenticated"}', true);
 
-  if exists (select 1 from app.wms_outbound_shipments s join app.wms_outbound_orders o on o.id = s.outbound_order_id where o.idempotency_key = 'idem-out-d') then
+  if exists (select 1 from app.wms_outbound_shipments where id = v_ship_d_id) then
     raise exception 'assertion failed: raw RLS leak -- customer_alpha directly selected a Beta-owned shipment row';
   end if;
-  if not exists (select 1 from app.wms_outbound_shipments s join app.wms_outbound_orders o on o.id = s.outbound_order_id where o.idempotency_key = 'idem-out-a') then
+  if not exists (select 1 from app.wms_outbound_shipments where id = v_ship_a_id) then
     raise exception 'assertion failed: expected RLS to still permit customer_alpha to directly select Alpha''s own SH-A row';
   end if;
-  if exists (select 1 from app.wms_billing_eligibility_events e join app.wms_outbound_orders o on o.id = e.outbound_order_id where o.idempotency_key = 'idem-out-d') then
+  if exists (select 1 from app.wms_billing_eligibility_events where shipment_id = v_ship_d_id) then
     raise exception 'assertion failed: raw RLS leak on app.wms_billing_eligibility_events -- customer_alpha directly selected a Beta-owned event row';
   end if;
 

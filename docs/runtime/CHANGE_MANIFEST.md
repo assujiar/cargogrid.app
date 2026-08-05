@@ -6383,6 +6383,108 @@ One found and fixed during authoring, before commit (none in the final committed
 
 Self-closing. `ATW-230` is `VERIFIED`. This completes the fourth and final task within this session's own explicit range authorization ("lanjut prompt 227-230") -- every named task (227, 228, 229, 230) is now `VERIFIED`. `CG-S10-ATW-012` (Prompt 231, WMS Inbound) is **not** yet dependency-clean: its own §9 upstream additionally requires "verified customer/item/master... contracts," and no item/SKU/product master type has ever been registered anywhere in this repository (confirmed against `app.master_types`'s own seeded rows: only `vendor_rate`/`vendor`/`fleet`/`vehicle`/`driver` exist). Fresh explicit user authorization, naming a task beyond this range, is required before any further Phase 5 row begins.
 
+### CHG-2026-169 — Customer Inventory Access Contract (Phase 5, Prompt 242, `CG-S10-ATW-023`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-023` / `242_CUSTOMER_INVENTORY_ACCESS_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 3 new migrations (1 core contract + 1 RLS-hardening fix + 1 pagination-index migration), new service layer, 0 new routes |
+| Baseline evidence | `CG-S10-ATW-010..022` (all `VERIFIED`), verified platform identity/customer scope, Finance compatibility |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut" continuation of the "lanjut prompt 239-248" range -- fourth task in that range, on branch `claude/terakhir-prompt-brp-yopame` |
+
+#### Outcome
+
+The first genuine, non-OPS-gated customer-facing read authorization path in this repository (`app.evaluate_customer_inventory_access`/`app.resolve_customer_owner_account_scope`), composing two already-shipped, previously-unused primitives -- `ATW-229`'s own `app.warehouse_customer_eligibility` grant ledger and `ATW-016`'s own `customer_account_ref`-as-owner-id convention -- with zero new grant/identity table. 10 new read/export RPCs (permitted balances, tracked-stock lot/serial identities, outbound orders/lines, movement-lineage summary, a bounded audited export, and the customer's own eligibility-grant visibility), cursor-paginated and anti-enumerating throughout. A live adversarial review found and closed a HIGH-severity RLS bypass: 4 pre-existing tables (`ATW-016`/`ATW-016A`) already carried an owner-scope RLS branch built for "a future customer-facing capability," latent until this checkpoint made a `customer_user` grant meaningful, at which point a raw Supabase client read could bypass the new warehouse-eligibility gate entirely -- closed via a dedicated `DROP POLICY`/`CREATE POLICY` hardening migration (pure narrowing, no legitimate access removed), not by editing any already-applied migration. Full detail and the complete finding list: `docs/build-log/phase-05/ATW-023.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730310000_create_advanced_tms_customer_inventory_access.sql`, `20260730311000_harden_customer_inventory_access_rls_isolation.sql`, `20260730312000_add_customer_inventory_access_pagination_indexes.sql`; `server/contracts/customer-inventory-access/customer-inventory-access.ts`(+test); `server/queries/customer-inventory-access.ts`(+test); `server/mutations/customer-inventory-access.ts`(+test); `scripts/db-tests/advanced-tms-customer-inventory-access.sql`; `docs/build-log/phase-05/ATW-023.md`. Modified: `scripts/db-tests/advanced-tms-wms-outbound.sql` (resolves ids via natural key instead of a lookup through the now-narrowed `wms_outbound_orders` RLS policy, no assertion weakened); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `242` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (`ISS-2026-010` narrowed, new `ISS-2026-017` recorded). 3 new migrations (132 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` -- `node:test` 3005/3006 (1 pre-existing, unrelated, self-resolving failure), `pnpm run db:test` PASS -- 130 migrations/129 db-test files (3 new migrations, 1 new db-test file), `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS, `next build` PASS, 0 new routes.
+
+#### Compatibility, rollout, recovery
+
+Additive read contract plus a pure-narrowing RLS fix on 4 already-applied tables (no actor loses access legitimately held before). `git revert` is safe for the base/index migrations; the hardening migration should be re-applied separately rather than reverted if the base contract is ever rolled back for an unrelated reason, per `AGENTS.md`'s "do not loosen policy as rollback" rule.
+
+#### Errors found and fixed
+
+See `docs/build-log/phase-05/ATW-023.md` §3.3 for the full adversarial-review finding list (1 HIGH live-reproduced RLS bypass, 2 more HIGH, 3 MEDIUM, 2 LOW -- all confirmed real, zero false positives, each fixed or explicitly disclosed as a deferred residual gap).
+
+#### Approval and closure
+
+Self-closing. `ATW-023` is `VERIFIED`. Fourth task within the "lanjut prompt 239-248" range, continued via a follow-up explicit "lanjut ... sd prompt 248" instruction naming the remainder of the range. `CG-S10-ATW-024` (Prompt 243) is dependency-clean and next in ascending order -- proceeding directly through Prompt 248 per that instruction, without a further per-task authorization pause.
+
+### CHG-2026-170 — High-Volume TMS/WMS and Multi-Source Telemetry Controls (Phase 5, Prompt 243, `CG-S10-ATW-024`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-024` / `243_HIGH_VOLUME_OPERATIONS_PROMPT.md` (all 36 sections) |
+| Change type | Two deliverables -- 2 new additive migrations (real `app.shipment_tracking_health` writer + one evidence-driven index) and a new `scripts/load-tests/` harness; 0 new routes |
+| Baseline evidence | `CG-S10-ATW-221..242` (all `VERIFIED`), including all required `ATW-226` child tasks |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- fifth task in that range |
+
+#### Outcome
+
+Closed two already-tracked open issues (`ISS-2026-009`, `ISS-2026-014`) for their own core claims. A real writer for `app.shipment_tracking_health` (`app.recalculate_shipment_tracking_health`/`app.reconcile_shipment_tracking_health`), reusing established precedent (`ATW-228`'s vehicle-resolution join, `ATW-226F`'s freshness classifier), wired into `app.arbitrate_and_project_vehicle_position` via a same-signature widening. A real load/concurrency/recovery test harness proving Phase 5 hot paths under real concurrent load for the first time. Adversarial review live-reproduced and fixed a HIGH-severity pre-existing TOCTOU race in vehicle-position arbitration (per-vehicle/per-shipment advisory locks, proven against 59,534 real concurrent transactions) and self-discovered a genuine deadlock bug in the harness's own bash script. Full detail: `docs/build-log/phase-05/ATW-024.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730320000_create_advanced_tms_shipment_tracking_health_writer.sql`, `20260730330000_harden_advanced_tms_background_job_claim_index.sql`; `scripts/db-tests/advanced-tms-shipment-tracking-health-writer.sql`; `scripts/db-tests/lib/setup-disposable-db.sh`; `scripts/load-tests/` (12 files); `docs/build-log/phase-05/ATW-024.md`. Modified: `scripts/db-tests/run.sh` (sources the extracted shared setup lib, behavior-preserving); `.gitignore`; `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `243` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (`ISS-2026-009`/`ISS-2026-014` narrowed to `RESOLVED` for their own core claims; new `ISS-2026-018`/`ISS-2026-019` recorded for residual scope). 2 new migrations (134 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` -- `node:test` 3006/3006, `pnpm run db:test` PASS -- 133 migrations/130 db-test files (2 new), `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS, `scripts/load-tests/run.sh` ALL SCENARIOS PASS (independently re-run fresh by the orchestrating session).
+
+#### Compatibility, rollout, recovery
+
+Additive migrations plus a pure-widening `CREATE OR REPLACE FUNCTION` (every prior side effect preserved byte-for-byte, verified by diff). `git revert` is safe for the additive migrations; the advisory-lock TOCTOU fix should be re-applied separately rather than reverted if this checkpoint is ever rolled back for an unrelated reason, per `AGENTS.md`'s "do not loosen safety as rollback" rule.
+
+#### Errors found and fixed
+
+See `docs/build-log/phase-05/ATW-024.md` §3.3 for the full adversarial-review finding list (1 HIGH live-reproduced pre-existing TOCTOU race, 1 MEDIUM same-class fix, 2 LOW, 1 CRITICAL spec-compliance documentation gap resolved by this checkpoint's own ledger work, several HIGH/MEDIUM spec-compliance coverage gaps disclosed as residual `ISS-2026-018`/`ISS-2026-019` -- all confirmed real, zero false positives).
+
+#### Approval and closure
+
+Self-closing. `ATW-024` is `VERIFIED`. Fifth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-025` (Prompt 244) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
+### CHG-2026-171 — Advanced Claim and Incident Operations (Phase 5, Prompt 244, `CG-S10-ATW-025`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-025` / `244_ADVANCED_CLAIM_INCIDENT_PROMPT.md` (all 36 sections) |
+| Change type | New capability -- 1 new additive migration (8 tables, 30+ functions) extending an existing canonical case; new service layer; 0 new routes |
+| Baseline evidence | Verified Step 8 basic incident/claim (`OPS-174`), `CG-S10-ATW-221/228/232/234/238/243` (all `VERIFIED`), verified Finance handoff precedent |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- sixth task in that range |
+
+#### Outcome
+
+Extends the existing `app.operational_exceptions` canonical case (`OPS-174`) with a full claim/incident lifecycle (itemization, evidence linking, investigation, responsibility proposal/decision with enforced separation of duties, recovery tracking, Finance settlement handoff) -- zero duplicate case root, zero Finance-schema writes. Adversarial review live-reproduced and fixed a HIGH-severity lost-update race, an access-control inconsistency across evidence-management RPCs, an unmasked-reserve-amount read-path gap, a zero-evidence closure gap, and a same-tenant cross-customer evidence-linking gap (the last of which was also live in the shipped test fixture itself). Incidentally discovered and root-caused a pre-existing, unrelated `ATW-016` test-ordering flake. Full detail: `docs/build-log/phase-05/ATW-025.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730340000_create_advanced_tms_claim_incident_operations.sql`; `server/contracts/claim-incident/`(+test); `server/queries/claim-incident.ts`(+test); `server/mutations/claim-incident.ts`(+test); `scripts/db-tests/advanced-tms-claim-incident-operations.sql`; `docs/build-log/phase-05/ATW-025.md`. Modified: `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `244` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (new `ISS-2026-020`). 1 new migration (135 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` -- `node:test` 3084/3084, `pnpm run db:test` PASS -- ALL PASSED (1 new migration; the pre-existing, unrelated `ATW-016` flake this checkpoint discovered is non-deterministic and did not trigger this run), `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS.
+
+#### Compatibility, rollout, recovery
+
+Purely additive -- 1 new migration, `app.operational_exceptions`' own already-applied migration untouched (confirmed via `git diff`). `git revert` this checkpoint's own commit is safe and complete.
+
+#### Errors found and fixed
+
+See `docs/build-log/phase-05/ATW-025.md` §3.3 for the full adversarial-review finding list (5 HIGH, one live-reproduced MEDIUM, two more MEDIUM, two LOW -- all confirmed real, zero false positives, each fixed or explicitly disclosed as a deferred residual gap). Also see §3.3 item 13 for the incidentally-discovered, unrelated `ATW-016` flake (new `ISS-2026-020`, not fixed by this checkpoint -- out of scope, no authorization to edit an unrelated already-applied migration/test file).
+
+#### Approval and closure
+
+Self-closing. `ATW-025` is `VERIFIED`. Sixth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-026` (Prompt 245) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
