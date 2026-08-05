@@ -19,6 +19,7 @@
     "standards:check": "node --experimental-strip-types scripts/standards/check-suppressions.ts",
     "docs:check": "node --experimental-strip-types scripts/docs/check-doc-links.ts",
     "security:check": "node --experimental-strip-types scripts/security/check-secrets.ts",
+    "security:audit": "node --experimental-strip-types scripts/security/check-dependency-audit.ts",
     "data-classification:check": "node --experimental-strip-types scripts/data-classification/check-registry.ts",
     "threat-model:check": "node --experimental-strip-types scripts/security/threat-model.ts",
     "db:test": "bash scripts/db-tests/run.sh"
@@ -29,7 +30,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "echarts": "^6.1.0",
     "leaflet": "^1.9.4",
-    "next": "16.2.10",
+    "next": "16.2.11",
     "radix-ui": "^1.6.4",
     "react": "19.2.7",
     "react-dom": "19.2.7",
@@ -44,8 +45,16 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "eslint": "9.19.0",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "16.2.11",
     "eslint-plugin-import": "2.32.0",
     "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "brace-expansion@>=2.0.0 <5.0.9": ">=5.0.9",
+      "postcss@<8.5.23": ">=8.5.23",
+      "sharp@<0.35.0": ">=0.35.0",
+      "@eslint/plugin-kit@<0.3.4": ">=0.3.4"
+    }
   }
 }

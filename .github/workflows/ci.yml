@@ -97,6 +97,16 @@ jobs:
       - name: Secret scan (docs/standards/SECURITY_STANDARDS.md §3)
         run: pnpm run security:check
 
+      # ATW-031 (closes ISS-2026-007): the repository had NO automated dependency
+      # vulnerability gate from PH0-094 until this checkpoint, because `pnpm audit`
+      # was returning 410 Gone against npm's retired advisory endpoints and PH0-094
+      # correctly refused to wire a fabricated pass. It works again -- and re-running
+      # it found 11 high-severity advisories that had accumulated unseen, four of them
+      # in Next.js itself. The gate fails on critical/high, and also fails (never
+      # silently passes) if the advisory service cannot be reached at all.
+      - name: Dependency vulnerability audit (fails on critical/high)
+        run: pnpm run security:audit
+
       - name: Data-classification registry check (docs/standards/DATA_CLASSIFICATION_STANDARDS.md §6/§7)
         run: pnpm run data-classification:check
 
