@@ -19,53 +19,18 @@ TEST_DB_NAME="${TEST_DB_NAME:-cargogrid_db_test}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-MIGRATIONS_DIR="$REPO_ROOT/supabase/migrations"
 
-echo "==> db-tests: recreating disposable database '$TEST_DB_NAME'"
-psql "$DATABASE_ADMIN_URL" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $TEST_DB_NAME;"
-psql "$DATABASE_ADMIN_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $TEST_DB_NAME;"
-
-TEST_DB_URL="${DATABASE_ADMIN_URL%/*}/$TEST_DB_NAME"
-
-echo "==> db-tests: creating the standard anon/authenticated/service_role roles (mirrors a real Supabase project's role model; this repository has no live Supabase project yet)"
-psql "$TEST_DB_URL" -v ON_ERROR_STOP=1 -c "
-do \$\$
-begin
-  if not exists (select from pg_roles where rolname = 'anon') then
-    create role anon nologin;
-  end if;
-  if not exists (select from pg_roles where rolname = 'authenticated') then
-    create role authenticated nologin;
-  end if;
-  if not exists (select from pg_roles where rolname = 'service_role') then
-    create role service_role nologin bypassrls;
-  end if;
-end
-\$\$;
-"
+# CG-S10-ATW-024 (Prompt 243): the disposable-database create/role/fixture/
+# migration-apply logic below was extracted into a shared, sourced library so
+# scripts/load-tests/'s own harness can reuse it verbatim instead of duplicating
+# it (ISS-2026-014). Behavior is byte-for-byte identical to before the
+# extraction -- re-verified via a full `pnpm run db:test` pass.
+# shellcheck source=lib/setup-disposable-db.sh
+source "$SCRIPT_DIR/lib/setup-disposable-db.sh"
+cargogrid_setup_disposable_db "$DATABASE_ADMIN_URL" "$TEST_DB_NAME" "$REPO_ROOT" "$SCRIPT_DIR/fixtures"
+TEST_DB_URL="$CARGOGRID_TEST_DB_URL"
 
 shopt -s nullglob
-
-fixtures=("$SCRIPT_DIR"/fixtures/*.sql)
-if [ ${#fixtures[@]} -gt 0 ]; then
-  echo "==> db-tests: loading ${#fixtures[@]} local-only test fixture(s) (never real migrations -- see each file's own header)"
-  for fixture in "${fixtures[@]}"; do
-    echo "  -- $(basename "$fixture")"
-    psql "$TEST_DB_URL" -v ON_ERROR_STOP=1 -f "$fixture"
-  done
-fi
-
-migrations=("$MIGRATIONS_DIR"/*.sql)
-if [ ${#migrations[@]} -eq 0 ]; then
-  echo "==> db-tests: no migrations found under $MIGRATIONS_DIR -- nothing to test"
-  exit 0
-fi
-
-echo "==> db-tests: applying ${#migrations[@]} migration(s) in order"
-for migration in "${migrations[@]}"; do
-  echo "  -- $(basename "$migration")"
-  psql "$TEST_DB_URL" -v ON_ERROR_STOP=1 -f "$migration"
-done
 
 test_files=("$SCRIPT_DIR"/*.sql)
 if [ ${#test_files[@]} -eq 0 ]; then

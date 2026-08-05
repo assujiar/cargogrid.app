@@ -34,6 +34,12 @@ coverage/
 playwright-report/
 test-results/
 
+# Load-test run output (CG-S10-ATW-024, Prompt 243) -- per-run pgbench logs and
+# timestamped result captures are disposable; the checkpoint's own committed
+# evidence file is explicitly kept (negation below), per ISS-2026-014.
+scripts/load-tests/results/*
+!scripts/load-tests/results/RESULTS_CG-S10-ATW-024.txt
+
 # Editor / OS
 .vscode/*
 !.vscode/extensions.json

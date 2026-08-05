@@ -6417,6 +6417,40 @@ See `docs/build-log/phase-05/ATW-023.md` §3.3 for the full adversarial-review f
 
 Self-closing. `ATW-023` is `VERIFIED`. Fourth task within the "lanjut prompt 239-248" range, continued via a follow-up explicit "lanjut ... sd prompt 248" instruction naming the remainder of the range. `CG-S10-ATW-024` (Prompt 243) is dependency-clean and next in ascending order -- proceeding directly through Prompt 248 per that instruction, without a further per-task authorization pause.
 
+### CHG-2026-170 — High-Volume TMS/WMS and Multi-Source Telemetry Controls (Phase 5, Prompt 243, `CG-S10-ATW-024`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-024` / `243_HIGH_VOLUME_OPERATIONS_PROMPT.md` (all 36 sections) |
+| Change type | Two deliverables -- 2 new additive migrations (real `app.shipment_tracking_health` writer + one evidence-driven index) and a new `scripts/load-tests/` harness; 0 new routes |
+| Baseline evidence | `CG-S10-ATW-221..242` (all `VERIFIED`), including all required `ATW-226` child tasks |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- fifth task in that range |
+
+#### Outcome
+
+Closed two already-tracked open issues (`ISS-2026-009`, `ISS-2026-014`) for their own core claims. A real writer for `app.shipment_tracking_health` (`app.recalculate_shipment_tracking_health`/`app.reconcile_shipment_tracking_health`), reusing established precedent (`ATW-228`'s vehicle-resolution join, `ATW-226F`'s freshness classifier), wired into `app.arbitrate_and_project_vehicle_position` via a same-signature widening. A real load/concurrency/recovery test harness proving Phase 5 hot paths under real concurrent load for the first time. Adversarial review live-reproduced and fixed a HIGH-severity pre-existing TOCTOU race in vehicle-position arbitration (per-vehicle/per-shipment advisory locks, proven against 59,534 real concurrent transactions) and self-discovered a genuine deadlock bug in the harness's own bash script. Full detail: `docs/build-log/phase-05/ATW-024.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730320000_create_advanced_tms_shipment_tracking_health_writer.sql`, `20260730330000_harden_advanced_tms_background_job_claim_index.sql`; `scripts/db-tests/advanced-tms-shipment-tracking-health-writer.sql`; `scripts/db-tests/lib/setup-disposable-db.sh`; `scripts/load-tests/` (12 files); `docs/build-log/phase-05/ATW-024.md`. Modified: `scripts/db-tests/run.sh` (sources the extracted shared setup lib, behavior-preserving); `.gitignore`; `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `243` `NOT_STARTED`->`VERIFIED`); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (`ISS-2026-009`/`ISS-2026-014` narrowed to `RESOLVED` for their own core claims; new `ISS-2026-018`/`ISS-2026-019` recorded for residual scope). 2 new migrations (134 total), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` -- `node:test` 3006/3006, `pnpm run db:test` PASS -- 133 migrations/130 db-test files (2 new), `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS, `scripts/load-tests/run.sh` ALL SCENARIOS PASS (independently re-run fresh by the orchestrating session).
+
+#### Compatibility, rollout, recovery
+
+Additive migrations plus a pure-widening `CREATE OR REPLACE FUNCTION` (every prior side effect preserved byte-for-byte, verified by diff). `git revert` is safe for the additive migrations; the advisory-lock TOCTOU fix should be re-applied separately rather than reverted if this checkpoint is ever rolled back for an unrelated reason, per `AGENTS.md`'s "do not loosen safety as rollback" rule.
+
+#### Errors found and fixed
+
+See `docs/build-log/phase-05/ATW-024.md` §3.3 for the full adversarial-review finding list (1 HIGH live-reproduced pre-existing TOCTOU race, 1 MEDIUM same-class fix, 2 LOW, 1 CRITICAL spec-compliance documentation gap resolved by this checkpoint's own ledger work, several HIGH/MEDIUM spec-compliance coverage gaps disclosed as residual `ISS-2026-018`/`ISS-2026-019` -- all confirmed real, zero false positives).
+
+#### Approval and closure
+
+Self-closing. `ATW-024` is `VERIFIED`. Fifth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-025` (Prompt 244) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
