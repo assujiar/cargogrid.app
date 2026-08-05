@@ -6696,3 +6696,67 @@ Fully backward compatible for every correct caller: a genuine retry (same key, s
 #### Correction to a prior checkpoint's claim
 
 `ADVANCED_TMS_WMS_CLOSURE_REPORT.md` §7 stated "Zero Critical/High-severity repository-controlled issue is open anywhere". Three High-severity repository-controlled defects (F-1/F-2/F-3) were open at that moment. `PHASE_5_VERIFIED` is **not withdrawn** — every defect was repository-controlled, bounded, and is now closed with live evidence, and no Phase 5 capability is missing or unproven — but the zero-High claim is corrected here and in `KNOWN_ISSUES.md` rather than by silently editing that report's own committed text. Root cause recorded in `ATW-030.md` §9: `ATW-029` verified that prior evidence existed and re-ran the existing gate suite, but did not adversarially probe the code, and a re-run of an existing suite cannot surface a defect that suite's own assumptions share with the code.
+
+---
+
+## `CG-S10-ATW-032` — Audit Register Verification and Repair (2026-08-05)
+
+Branch `claude/codebase-audit-fixes-yag1ow`. The verification phase `ISS-2026-034` was opened
+to demand: `ATW-031` handed forward 60 unverified candidate findings with one instruction
+attached — do not fix from the register directly.
+
+### Migrations added (six; 149 → 155)
+
+| Migration | What it changes |
+|---|---|
+| `20260730500000_harden_rounding_order_and_aggregate_locks.sql` | `convert_finance_amount` now applies the rounding order it resolves and reports; parent-shipment lock on `allocate_shipment_leg_cargo`; rate lock on `approve_finance_exchange_rate` |
+| `20260730510000_harden_actor_identity_unchecked_authority_surface.sql` | 33 functions gain `assert_actor_is_session_identity` — closes `ISS-2026-032` |
+| `20260730520000_harden_stale_version_no_op_and_swallowed_idempotency_guard.sql` | 74 functions raise `stale_version` instead of silently no-opping; `ingest_milestone_event`'s swallowed guard re-raised |
+| `20260730530000_harden_operations_inventory_tracking_record_scope.sql` | Ten findings across shipment lifecycle, inventory, WMS and tracking |
+| `20260730540000_harden_finance_lifecycle_exits_and_reconciliation_basis.sql` | Invoice/vendor-bill handoff wedge, the `executed`-settlement dead end, reconciliation as-of basis and company filter, fixed-amount tax currency |
+| `20260730550000_harden_numbering_continuity_custom_field_replay_and_rate_limits.sql` | Numbering counter carry-forward, durable custom-field idempotency ledger, driver-mobile rate-limit binding, audit-log page-size clamps |
+
+### Schema objects
+
+Two total unique constraints replaced by partial unique indexes excluding voided rows
+(`finance_invoices`, `finance_vendor_bills`); one new table
+(`app.custom_field_value_idempotency_keys`, RLS-enabled with the same posture as
+`app.custom_field_values`, backfilled); one new nullable column on
+`app.driver_mobile_ingestion_attempts`; one new helper
+(`app.carry_forward_numbering_counters`).
+
+### Contract and query-layer changes
+
+- `FINANCE_JOURNAL_SOURCE_TYPES` gains `correction` (the DB CHECK always accepted it).
+- `IMPORT_EXPORT_JOB_TYPES` gains `route_load_planning` and `print_label`, with a parity
+  assertion against `app.all_job_types()` — the assertion whose absence let the drift survive.
+- `ExportAuditLogsInputSchema` split out from the query schema; the two RPCs have genuinely
+  different page-size budgets (500/1000 vs 50/200).
+- `listTenantUsers` reads the granted 17 columns of `app.users` merged with
+  `app.users_directory`'s masked address, instead of a `select("*")` the `authenticated` role
+  can never satisfy.
+- New named error codes added to the settlement, reconciliation, invoice, vendor-bill and
+  inventory mutation whitelists so they surface as themselves rather than `mutation_failed`.
+
+### Backward compatibility
+
+Every function change is `CREATE OR REPLACE` on a byte-identical signature; no signature, no
+already-applied migration file, and no shared history was altered. The behavioural changes are
+all in the failing direction: calls that previously succeeded silently while doing the wrong
+thing now raise a named error. No call that was previously correct changes outcome.
+
+### Test change, stated plainly
+
+`scripts/db-tests/finance-reconciliation.sql`'s as-of scenario asserted `source_total = 500`
+for a run whose control side read `0` — the reconciliation basis defect encoded as an
+expectation, and it cannot survive the fix. It was rewritten to assert the corrected shared
+basis and gained coverage for the period-fallback and no-elapsed-period cases. The original
+intent (the later open item is excluded) is preserved. No assertion was weakened.
+
+### A repair that was wrong first
+
+The 74-function sweep initially blanket re-granted `authenticated, service_role`, which would
+have made `app.transition_gps_device_status` — deliberately un-granted — a public API. The
+standing assertion in `advanced-tms-device-installation-evidence.sql` caught it, and the grant
+block was removed entirely: `CREATE OR REPLACE` preserves an existing ACL, so there was
+nothing to restore.
