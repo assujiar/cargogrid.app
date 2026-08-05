@@ -462,7 +462,7 @@ end $$;
 -- the picking allocation two steps below, not merely exist alongside it.
 -- =============================================================================
 
-\echo '>> Part A: register the lot identity (LOT-IV-A1, matching the receipt/putaway lot_number exactly) and the serial identity (SN-IV-A1) -- both land status=active immediately (published policy, hold_on_unknown_lot=false); app.list_allocation_candidates (ATW-016, FEFO) now returns exactly this lot as the sole candidate for the lot item'
+\echo '>> Part A (ATW-032, ISS-2026-016): the lot identity (LOT-IV-A1) and serial identity (SN-IV-A1) this chain allocates against were registered by RECEIVING ITSELF at commit time, not by this test -- both land status=active immediately (published policy, hold_on_unknown_lot=false), both record source_type=receipt, and app.list_allocation_candidates (ATW-016, FEFO) returns exactly this lot as the sole candidate for the lot item. Before the wiring this block had to register them by hand, because nothing in the system ever called the registry'
 do $$
 declare
   v_item_lot_id uuid := (select value::uuid from iv_a where key = 'item_lot_id');
@@ -475,14 +475,37 @@ declare
   v_candidate_count integer;
   v_candidate record;
 begin
-  v_lot := app.register_lot_identity(v_item_lot_id, 'LOT-IV-A1', current_date - 10, current_date + 300, 'receipt', null, null, ops1, 'ops1');
+  -- ATW-032 (closes ISS-2026-016). This block used to call app.register_lot_identity /
+  -- app.register_serial_identity by hand, and it had to: nothing in the system called them, so
+  -- the live receiving chain above produced balances with no governed identity behind them and
+  -- this verification had to manufacture one before it could assert anything. Receiving now
+  -- registers them itself inside app.commit_wms_receipt_line, so the manual calls are not just
+  -- redundant -- the serial one now correctly raises duplicate_serial against the identity
+  -- receiving already created.
+  --
+  -- Reading what the chain itself produced is the stronger assertion, and it is the one this
+  -- verification was always trying to make: the governance mechanism informs allocation for
+  -- this LIVE chain, rather than for a row the test injected beside it.
+  select * into v_lot from app.lot_identities where item_master_id = v_item_lot_id and lot_number = 'LOT-IV-A1';
+  if not found then
+    raise exception 'assertion failed: committing the receipt must have registered lot LOT-IV-A1 for item % -- receiving is the only registrar in this chain', v_item_lot_id;
+  end if;
   if v_lot.status <> 'active' then
-    raise exception 'assertion failed: expected the freshly registered lot to be active (published policy hold_on_unknown_lot=false), got %', v_lot.status;
+    raise exception 'assertion failed: expected the lot registered by receiving to be active (published policy hold_on_unknown_lot=false), got %', v_lot.status;
+  end if;
+  if v_lot.source_type <> 'receipt' then
+    raise exception 'assertion failed: expected the lot to record source_type=receipt, got %', v_lot.source_type;
   end if;
 
-  v_serial := app.register_serial_identity(v_item_ser_id, 'SN-IV-A1', null, null, null, 'receipt', null, 'idem-iv-serial-reg', ops1, 'ops1');
+  select * into v_serial from app.serial_identities where item_master_id = v_item_ser_id and serial_number = 'SN-IV-A1';
+  if not found then
+    raise exception 'assertion failed: committing the receipt must have registered serial SN-IV-A1 for item % -- receiving is the only registrar in this chain', v_item_ser_id;
+  end if;
   if v_serial.status <> 'active' then
-    raise exception 'assertion failed: expected the freshly registered serial to be active (published policy hold_on_unknown_lot=false), got %', v_serial.status;
+    raise exception 'assertion failed: expected the serial registered by receiving to be active (published policy hold_on_unknown_lot=false), got %', v_serial.status;
+  end if;
+  if v_serial.source_type <> 'receipt' then
+    raise exception 'assertion failed: expected the serial to record source_type=receipt, got %', v_serial.source_type;
   end if;
 end $$;
 

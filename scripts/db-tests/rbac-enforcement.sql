@@ -478,4 +478,29 @@ begin
 end;
 $$;
 
+\echo '>> ATW-032 (ISS-2026-010): a customer_user-layer principal must fail CLOSED by default. app.invite_user writes a tenant_user_identities row and app.has_active_tenant_membership reads exactly that table, so a portal principal satisfies plain tenant membership -- any SELECT policy whose ENTIRE test is that membership admits it. Which records the portal may read is Phase 8 scope; that the default is deny is not, and this gate holds the default.'
+do $$
+declare
+  v_open text[];
+begin
+  select array_agg(c.relname || '.' || pol.polname order by c.relname, pol.polname) into v_open
+  from pg_policy pol
+  join pg_class c on c.oid = pol.polrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'app' and pol.polcmd = 'r'
+    and pg_get_expr(pol.polqual, pol.polrelid) ~* 'has_active_tenant_membership'
+    -- Excluded, and each exclusion is deliberate: a policy carrying an owner-scope branch, a
+    -- warehouse-eligibility gate, app.can_access_record, or an org-unit/branch predicate either
+    -- IS a designed customer-visible path or already fails closed on a customer_user's own NULL
+    -- org_unit_id. Only policies where tenant membership is the whole test are in scope here.
+    and pg_get_expr(pol.polqual, pol.polrelid) !~* 'customer_user_layer|owner_account|customer_account|can_access_record|warehouse|org_unit|branch';
+
+  if v_open is not null then
+    raise exception 'assertion failed: % SELECT policy/policies test tenant membership and nothing else, so a customer_user-layer principal reads them through a raw client with no portal code involved. Narrow each with app.actor_holds_customer_user_layer beside its own membership call: %', array_length(v_open, 1), v_open;
+  end if;
+
+  raise notice 'ATW-032 portal default-deny proof: no SELECT policy admits a customer_user-layer principal on tenant membership alone';
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'
