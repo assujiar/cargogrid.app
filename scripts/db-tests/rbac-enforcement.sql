@@ -333,4 +333,88 @@ begin
 end;
 $$;
 
+\echo '>> ATW-032 (ISS-2026-033): the SECURITY DEFINER authority surface. A SECURITY DEFINER function runs as its owner and bypasses RLS, so granting one to authenticated hands every logged-in user of every tenant whatever it does unless the function checks authority itself. This asserts the sweep stays closed: the internal helpers stay un-granted, the guarded ones stay guarded, and the functions that are correct by design keep the grant they need.'
+do $$
+declare
+  v_fn text;
+  v_unauthorized text[];
+  v_expected text[] := array[
+    -- Anon-facing by design, or authenticated by another mechanism entirely.
+    'ingest_third_party_provider_webhook_event', 'lookup_public_shipment_tracking',
+    'evaluate_tenant_brand', 'resolve_tenant_by_domain', 'resolve_tenant_locale',
+    'resolve_locale_context',
+    -- Authority/scope PRIMITIVES. These are the check, so they cannot check themselves, and
+    -- they must stay executable by authenticated because RLS policy expressions and view
+    -- bodies are evaluated as the QUERYING role -- revoking one breaks every authenticated
+    -- read of the tables whose policies call it.
+    'is_supreme_admin', 'lead_record_scope_org_unit_ids', 'actor_can_view_owner_scoped_row',
+    'actor_holds_customer_user_layer', 'resolve_commercial_record_ref',
+    'pipeline_scope_org_unit_ids', 'assert_actor_is_session_identity',
+    'current_support_session', 'has_active_support_grant',
+    'customer_warehouse_eligibility_active', 'resolve_customer_owner_account_scope',
+    'evaluate_dispatch_readiness'
+  ];
+begin
+  -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor
+  --    parameter, so it cannot check authority even in principle; before ATW-032 any
+  --    logged-in user could call them with another tenant's identifiers -- including
+  --    rewriting that tenant's quotation money columns.
+  foreach v_fn in array array['recalculate_quotation_totals', 'next_quotation_number',
+                              'generate_route_planning_candidates',
+                              'check_leg_tracking_source_eligible', 'dashboard_scope_org_unit_ids'] loop
+    if exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      cross join lateral aclexplode(p.proacl) a
+      where n.nspname = 'app' and p.proname = v_fn
+        and a.privilege_type = 'EXECUTE' and pg_get_userbyid(a.grantee) in ('anon', 'authenticated')
+    ) then
+      raise exception 'assertion failed: app.% must NOT be granted to anon/authenticated -- it takes no actor parameter and cannot check authority (ISS-2026-033)', v_fn;
+    end if;
+  end loop;
+
+  -- 2. The seven client-callable ones must still carry the guard.
+  foreach v_fn in array array['resolve_config', 'verify_config_version_current',
+                              'evaluate_feature_flag', 'record_customer_inventory_access_denial',
+                              'run_next_route_planning_job', 'get_shipment_leg_network_state',
+                              'render_notification_template'] loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = v_fn
+        and p.prosrc like '%assert_session_identity_in_tenant%'
+    ) then
+      raise exception 'assertion failed: app.% must call app.assert_session_identity_in_tenant -- it is granted to authenticated and has no other authority check (ISS-2026-033)', v_fn;
+    end if;
+  end loop;
+
+  -- 3. The sweep itself: no NEW function may join the unauthorized set. This is the part
+  --    that keeps the class closed as Phase 6+ adds surface, rather than re-opening it.
+  with recursive fn as (
+    select p.oid, p.proname, p.prosrc, p.prosecdef, p.proacl
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app'
+  ),
+  edge as (select f.proname caller, m[1] callee from fn f, regexp_matches(f.prosrc, 'app\.([a-z0-9_]+)\s*\(', 'g') m),
+  base as (
+    select distinct proname from fn
+    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant'
+  ),
+  closure as (
+    select proname from base
+    union
+    select e.caller from edge e join closure c on c.proname = e.callee
+  )
+  select array_agg(f.proname order by f.proname) into v_unauthorized
+  from fn f
+  where f.prosecdef
+    and exists (select 1 from aclexplode(f.proacl) a where a.privilege_type = 'EXECUTE' and pg_get_userbyid(a.grantee) = 'authenticated')
+    and f.proname not in (select proname from closure)
+    and f.proname <> all (v_expected);
+
+  if v_unauthorized is not null then
+    raise exception 'assertion failed: % SECURITY DEFINER function(s) are granted to authenticated with no authority check anywhere in their call graph, and are not on the reviewed-and-justified list: %. Either add app.evaluate_permission + app.can_access_record (or app.assert_session_identity_in_tenant), revoke the grant, or -- if it is genuinely correct by design -- add it to v_expected here WITH a written reason (ISS-2026-033)', array_length(v_unauthorized, 1), v_unauthorized;
+  end if;
+
+  raise notice 'ATW-032 authority-surface proof: 5 internal helpers carry no client grant, 7 client-callable functions carry the session-membership guard, and no unreviewed SECURITY DEFINER function is granted to authenticated';
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'
