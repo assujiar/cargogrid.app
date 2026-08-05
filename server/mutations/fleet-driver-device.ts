@@ -184,7 +184,11 @@ export async function registerGpsDevice(client: FleetDriverDeviceMutationRpcClie
 
 export async function transitionGpsDeviceStatus(client: FleetDriverDeviceMutationRpcClient, input: TransitionGpsDeviceStatusInput): Promise<GpsDevice> {
   const parsedInput = TransitionGpsDeviceStatusInputSchema.parse(input);
-  const row = await callRpc(client, "transition_gps_device_status", {
+  // ATW-031 (ISS-2026-028): app.transition_gps_device_status is no longer granted to
+  // authenticated -- it is the internal status-machine core. Clients go through this
+  // entry point, which refuses the evidence-mandatory "installed" transition; that one
+  // belongs exclusively to app.record_gps_device_installation (ATW-226B).
+  const row = await callRpc(client, "request_gps_device_status_transition", {
     p_device_id: parsedInput.deviceId,
     p_to_status: parsedInput.toStatus,
     p_expected_version: parsedInput.expectedVersion,

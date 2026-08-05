@@ -161,6 +161,19 @@ export async function transitionDeviceStatusAction(
   }
 
   const toStatus = String(formData.get("toStatus") ?? "") as GpsDeviceStatus;
+
+  // ATW-031 (ISS-2026-028): this generic control must never be the path to `installed`.
+  // That transition requires real installation evidence and belongs to
+  // app.record_gps_device_installation (ATW-226B). The database enforces this itself
+  // (`installation_evidence_required`); rejecting it here too turns a raw RPC error into
+  // an explanation, and keeps the bypass closed even if the form is posted directly.
+  if (toStatus === "installed") {
+    return {
+      error:
+        "A device cannot be marked installed from here. Record the installation evidence (evidence file and technician) instead — installation is evidence-mandatory.",
+    };
+  }
+
   const supabase = await createSupabaseServerClient();
   try {
     await transitionGpsDeviceStatus(supabase, { deviceId, toStatus, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });

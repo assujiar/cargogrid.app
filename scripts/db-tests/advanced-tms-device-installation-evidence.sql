@@ -268,4 +268,58 @@ begin
   end if;
 end $$;
 
+\echo '>> ATW-031 (ISS-2026-028): the evidence gate is enforced by the GRANT BOUNDARY, in the database, not merely absent from the UI. app.transition_gps_device_status is no longer granted to authenticated/service_role -- it is the internal status-machine core -- and the one entry point clients do hold, app.request_gps_device_status_transition, refuses installed outright. Before this, any caller holding ordinary OPS:Edit (the operations/fleet workspace UI among them) could mark a device installed with no evidence whatsoever.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmeinstall');
+  v_device app.gps_devices;
+  v_after app.gps_devices;
+  v_count integer;
+  v_raised boolean := false;
+begin
+  select * into v_device from app.register_gps_device(v_tenant1, '868712345699977', 'Teltonika FMC920', 'cargogrid', '00000000-0000-0000-0000-000000041101', 'admin');
+  select * into v_device from app.request_gps_device_status_transition(v_device.id, 'assigned', v_device.record_version, '00000000-0000-0000-0000-000000041101', 'admin');
+
+  -- 1. The bypass is closed: the client-reachable entry point refuses installed.
+  begin
+    perform app.request_gps_device_status_transition(v_device.id, 'installed', v_device.record_version, '00000000-0000-0000-0000-000000041101', 'admin');
+    raise exception 'assertion failed: the client-reachable transition entry point still moved a device to installed with zero evidence -- the ISS-2026-028 bypass is open';
+  exception
+    when check_violation then
+      if sqlerrm !~ 'installation_evidence_required' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected installation_evidence_required';
+  end if;
+
+  -- 2. The device really did not move.
+  select * into v_after from app.gps_devices where id = v_device.id;
+  if v_after.status <> 'assigned' then
+    raise exception 'assertion failed: expected the rejected device to remain assigned, got %', v_after.status;
+  end if;
+
+  -- 3. Every other transition still works through the same entry point -- the gate is
+  --    surgical, not a blanket block on the status machine.
+  select * into v_after from app.request_gps_device_status_transition(v_after.id, 'retired', v_after.record_version, '00000000-0000-0000-0000-000000041101', 'admin');
+  if v_after.status <> 'retired' then
+    raise exception 'assertion failed: expected a non-installed transition to still succeed, got %', v_after.status;
+  end if;
+
+  -- 4. The grant boundary IS the enforcement: neither authenticated nor service_role may
+  --    reach the internal core directly, so there is no second route to installed.
+  select count(*) into v_count
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  cross join lateral aclexplode(p.proacl) acl
+  where n.nspname = 'app' and p.proname = 'transition_gps_device_status'
+    and acl.privilege_type = 'EXECUTE'
+    and pg_get_userbyid(acl.grantee) in ('anon', 'authenticated', 'service_role');
+  if v_count <> 0 then
+    raise exception 'assertion failed: app.transition_gps_device_status must carry NO anon/authenticated/service_role EXECUTE grant -- found %', v_count;
+  end if;
+
+  raise notice 'ATW-031 evidence-gate proof: the client-reachable entry point refuses installed and leaves the device untouched, every other transition still works, and the internal core carries zero client grant -- app.record_gps_device_installation is the only route to installed';
+end $$;
+
 \echo 'advanced-tms-device-installation-evidence.sql: ALL PASSED'
