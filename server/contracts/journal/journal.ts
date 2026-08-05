@@ -6,7 +6,18 @@
 
 import { z } from "zod";
 
-export const FINANCE_JOURNAL_SOURCE_TYPES = ["manual", "subledger"] as const;
+/**
+ * ATW-032 (post-Prompt-248 audit, ISS-2026-034): `correction` was missing here while
+ * `app.finance_journals_source_type_check` has always accepted it, and
+ * `app.post_finance_correction` writes exactly that value through
+ * `app.create_and_post_finance_system_journal(..., 'correction', ...)`. Because
+ * `listFinanceJournals` maps the whole result set, one posted correction made
+ * `parseFinanceJournal` throw a ZodError on that row -- and the Journals page rethrows
+ * anything that is not a `JournalQueryError`, so the entire page 500s from then on, for
+ * every user of that tenant, permanently. A contract that mirrors a DB shape has to mirror
+ * all of it.
+ */
+export const FINANCE_JOURNAL_SOURCE_TYPES = ["manual", "subledger", "correction"] as const;
 export const FinanceJournalSourceTypeSchema = z.enum(FINANCE_JOURNAL_SOURCE_TYPES);
 export type FinanceJournalSourceType = z.infer<typeof FinanceJournalSourceTypeSchema>;
 

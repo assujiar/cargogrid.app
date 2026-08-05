@@ -66,7 +66,14 @@ export type SupremeAdminDeleteAuditLogInput = z.infer<typeof SupremeAdminDeleteA
 export const QueryAuditLogsInputSchema = z.object({
   requesterAuthUserId: z.string().uuid(),
   tenantId: z.string().uuid(),
-  limit: z.number().int().positive().default(50),
+  // ATW-032 (ISS-2026-034): 48 of the 50 p_limit-taking RPCs clamp their page size
+  // (`least(greatest(coalesce(p_limit, 50), 1), 200)`); app.query_audit_logs and
+  // app.export_audit_logs were the two that did not, and this contract passed the caller's
+  // number through unchanged. 05_DATABASE_SCHEMA_WORKSTREAM.md names audit_logs as one of the
+  // relations where keyset pagination is mandatory -- an unbounded page size defeats the
+  // bound the cursor exists to enforce. The SQL side carries the same clamp as defence in
+  // depth, so a direct RPC caller cannot bypass this one.
+  limit: z.number().int().positive().max(200).default(50),
   beforeOccurredAt: z.string().nullable().default(null),
   beforeId: z.string().uuid().nullable().default(null),
 });

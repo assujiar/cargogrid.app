@@ -25,10 +25,21 @@
 import { z } from "zod";
 import { ConfigVersionSchema, type ConfigVersion } from "../config/config.ts";
 
+/**
+ * Must stay set-equal to `app.all_job_types()`. ATW-032 (ISS-2026-034) found
+ * `route_load_planning` and `print_label` missing: ISS-2026-012's remediation widened
+ * `GENERIC_JOB_TYPES` but not this array, and this is the one that actually parses the row.
+ * `enqueueJob` validated against `GenericJobTypeSchema` (accepted), the RPC committed the
+ * `app.jobs` row, and then `parseImportExportJob` threw a raw ZodError that no
+ * `KNOWN_MUTATION_ERROR_CODES` member covers -- and `claimNextJob` could never be asked for
+ * either type at all, so a `print_label` job could be enqueued and never worked. The drift
+ * survived because only `GENERIC_JOB_TYPES` carried a parity assertion; this array now has
+ * one too (see import-export.test.ts).
+ */
 export const IMPORT_EXPORT_JOB_TYPES = [
   "import", "export", "report_generation", "notification_batch", "webhook_retry",
   "document_generation", "dashboard_refresh", "loyalty_expiration", "recurring_billing",
-  "integration_sync",
+  "integration_sync", "route_load_planning", "print_label",
 ] as const;
 export const ImportExportJobTypeSchema = z.enum(IMPORT_EXPORT_JOB_TYPES);
 export type ImportExportJobType = z.infer<typeof ImportExportJobTypeSchema>;
