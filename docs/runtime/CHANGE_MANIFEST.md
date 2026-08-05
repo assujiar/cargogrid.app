@@ -6485,6 +6485,40 @@ See `docs/build-log/phase-05/ATW-025.md` §3.3 for the full adversarial-review f
 
 Self-closing. `ATW-025` is `VERIFIED`. Sixth task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-026` (Prompt 245) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
 
+### CHG-2026-172 — Advanced TMS/WMS Integrated Verification (Phase 5, Prompt 245, `CG-S10-ATW-026`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-026` / `245_ADVANCED_TMS_WMS_INTEGRATED_VERIFICATION_PROMPT.md` |
+| Change type | Verification-only -- zero new migration, zero product/service/UI code; 3 new purely additive verification scripts |
+| Baseline evidence | All `CG-S10-ATW-221..244` tasks `VERIFIED` at one compatible checkpoint |
+| Final status | `COMPLETED` -- `VERIFIED` |
+| Authorization | Explicit user "lanjut sd 248" continuation of the "lanjut prompt 239-248" range -- seventh task in that range |
+
+#### Outcome
+
+Three independent, parallel `Agent` calls composed real, continuous cross-capability E2E proofs across all 24 catalogued Phase 5 capabilities: the transport golden path; both mandatory tracking-package proofs (Mobile Tracking; Direct Fleet GPS via a new real-TCP-socket Codec 8 Extended proof against the real, unmodified GPS Gateway); third-party GPS (deterministic half); hybrid source arbitration (a fresh 40,868-transaction pgbench re-run plus a new sequential hysteresis-lineage proof); the accepted-work invariant; and the full WMS golden path (item master through claim, the claim referencing three real cross-capability evidence IDs from the same composed chain) plus cross-tenant/cross-customer isolation, a migration/build check, and a real `SIGKILL`-plus-cluster-restart recovery test. All 11 mandatory verification items PASS. Zero Critical/High finding; zero functional/security defect in any `ATW-221..244` RPC. Full detail: `docs/build-log/phase-05/ATW-026.md`.
+
+#### Scope and files
+
+New: `scripts/db-tests/advanced-tms-wms-integrated-verification.sql`; `scripts/db-tests/advanced-tms-wms-critical-path-verification.sql`; `scripts/verification/atw-026-direct-fleet-gps-canonical-projection.ts`; `docs/build-log/phase-05/ATW-026.md`. Modified: `scripts/load-tests/results/RESULTS_CG-S10-ATW-024.txt` (refreshed with fresh real numbers from this checkpoint's own required gate-suite run); `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md` (row `245` `NOT_STARTED`->`VERIFIED`, §2 Tally table refreshed); `docs/runtime/TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`/`KNOWN_ISSUES.md` (new `ISS-2026-021`/`022`/`023`). 0 new migrations (134 total, unchanged), 0 prior migration file edited, 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` PASS, `pnpm run lint` PASS (0 errors; 85 warnings, unchanged), `pnpm run test` -- `node:test` 3084/3084 (unchanged), `pnpm run db:test` PASS -- ALL PASSED, independently re-run twice fresh: 134 migrations, 133 test files (131 pre-existing + 2 new this checkpoint), the pre-existing `ATW-016` flake (`ISS-2026-020`) did not trigger on either run. `scripts/load-tests/run.sh` ALL PASS (real cluster restart, fresh real concurrency numbers). `pnpm run docs:check`/`security:check`/`data-classification:check`/`standards:check`/`git:check-paths` all PASS. `next build` 90 routes, unchanged (zero `app/`/`components/` file touched, confirmed via `git log`/`git show --stat` across all 15 relevant commits).
+
+#### Compatibility, rollout, recovery
+
+Purely additive and verification-only -- zero migration, zero product/service/UI code changed. `git revert` this checkpoint's own commit is trivially safe and complete.
+
+#### Errors found and fixed
+
+None fixed (verification-only checkpoint by design). Three new Low/Low-Medium findings registered for `ATW-027` (Prompt 246, Integrity and Security Hardening) to triage: `ISS-2026-021` (documentation-bookkeeping bundle -- citation-format inconsistency, `ATW-011B`'s missing execution-index row, a now-refreshed stale Tally table, and a migration-count arithmetic inconsistency in `ATW-024.md`/`ATW-025.md`'s own historical prose, corrected going forward without rewriting committed history); `ISS-2026-022` (a migration comment in `ATW-224`'s own already-applied file is now provably stale, per this checkpoint's own new evidence -- an additive `COMMENT ON FUNCTION` fix is available); `ISS-2026-023` (a pre-existing `ATW-017` test helper script's hardcoded global tmp paths cause a spurious, reproducible cross-run failure under concurrent `db:test` invocations -- confirmed not a product regression). See `docs/build-log/phase-05/ATW-026.md` §4 for full detail. Also clarified: two of the three verification agents each independently flagged a possible "concurrent session" (each observed the other's scratch files/databases) -- checked directly against `KNOWN_ISSUES.md`'s actual `ISS-2026-002` record and confirmed this is categorically different (one orchestrating session's own deliberate parallel fan-out on one branch, zero corruption) -- not a new occurrence, not reopened, recorded as a build-log process note only.
+
+#### Approval and closure
+
+Self-closing. `ATW-026` is `VERIFIED`. Seventh task within the "lanjut prompt 239-248" range, continued via the "lanjut sd 248" instruction. `CG-S10-ATW-027` (Prompt 246) is dependency-clean and next in ascending order -- proceeding directly per that instruction.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.

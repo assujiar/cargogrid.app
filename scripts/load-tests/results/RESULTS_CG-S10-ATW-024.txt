@@ -1,6 +1,6 @@
 ===============================================================
 CargoGrid load-test harness -- CG-S10-ATW-024 (Prompt 243)
-Run started (UTC): 2026-08-05T01:21:03+00:00
+Run started (UTC): 2026-08-05T04:46:22+00:00
 Postgres: PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit
 pgbench: pgbench (PostgreSQL) 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 Node: v22.22.2
@@ -19,7 +19,7 @@ CREATE SCHEMA
 CREATE TABLE
 CREATE FUNCTION
 CREATE FUNCTION
-==> setup-disposable-db: applying 133 migration(s) in order
+==> setup-disposable-db: applying 134 migration(s) in order
   -- 20260716075355_create_tenants.sql
 CREATE SCHEMA
 CREATE EXTENSION
@@ -5289,6 +5289,134 @@ GRANT
   -- 20260730330000_harden_advanced_tms_background_job_claim_index.sql
 CREATE INDEX
 COMMENT
+  -- 20260730340000_create_advanced_tms_claim_incident_operations.sql
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+psql:/home/user/cargogrid.app/supabase/migrations/20260730340000_create_advanced_tms_claim_incident_operations.sql:813: NOTICE:  identifier "claim_settlement_readiness_handoffs_tenant_case_idempotency_unique" will be truncated to "claim_settlement_readiness_handoffs_tenant_case_idempotency_uni"
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+COMMENT
+CREATE FUNCTION
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+REVOKE
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
+GRANT
 
 ### 2. Load-test-only helper functions (loadtest schema) ###
 CREATE SCHEMA
@@ -5337,7 +5465,7 @@ DO
 
 
 ### Resolving seeded fixture ids for scenario parameterization ###
-tenant_id=149717a1-d5ce-4f3b-8258-e5eae5e13a06 warehouse_id=08287ac4-f3ba-483f-9a2f-8c2bec9ccbd1 account_alpha_id=5d4e1312-036d-4e90-8202-d1e469fff8ba hot_item_id=808aa126-ae86-4c44-8bff-0ea49347d31b hot_location_id=a3b117eb-b5a3-4d07-9f39-701bc470078c
+tenant_id=42783ed6-7160-4032-a89b-6a04d06f0860 warehouse_id=3511b8c3-9a3f-4ada-8355-2ad6630a0efa account_alpha_id=7871501c-0b9c-4a0a-bad6-1192509b187c hot_item_id=4d2e03c4-104a-4d23-accf-7d6c45b48e61 hot_location_id=87fd0b95-639d-40d8-b304-3355fdf990ee
 
 ### Scenario 1: concurrent app.post_inventory_movement (shared balance, ATW-015 row-lock proof) ###
 clients=20 duration_seconds=15 on_hand_before=1000000
@@ -5349,17 +5477,17 @@ number of clients: 20
 number of threads: 4
 maximum number of tries: 1
 duration: 15 s
-number of transactions actually processed: 9404
+number of transactions actually processed: 11228
 number of failed transactions: 0 (0.000%)
-latency average = 31.567 ms
-initial connection time = 201.197 ms
-tps = 633.576339 (without initial connection time)
+latency average = 26.506 ms
+initial connection time = 151.922 ms
+tps = 754.541749 (without initial connection time)
 statement latencies in milliseconds and failures:
-        31.493           0  select app.post_inventory_movement(
-real_movements_posted=9404 on_hand_after=990596 expected_on_hand=990596
-SCENARIO 1 RESULT: PASS -- exactly 9404 concurrent posts, no lost update, on_hand exact, no negative on_hand (CHECK constraint would have aborted the whole call otherwise)
+        26.466           0  select app.post_inventory_movement(
+real_movements_posted=11228 on_hand_after=988772 expected_on_hand=988772
+SCENARIO 1 RESULT: PASS -- exactly 11228 concurrent posts, no lost update, on_hand exact, no negative on_hand (CHECK constraint would have aborted the whole call otherwise)
 latency percentiles (whole-call wall time, dominated by FOR UPDATE row-lock wait under contention -- ms):
-  n=9404 p50=22.061ms p95=89.387ms p99=148.018ms max=531.303ms
+  n=11228 p50=18.459ms p95=77.092ms p99=121.338ms max=260.41ms
 
 ### Scenario 2a: concurrent app.claim_wms_pick_task (ATW-017) claiming from 500 unclaimed tasks ###
 pgbench (16.13 (Ubuntu 16.13-0ubuntu0.24.04.1))
@@ -5372,11 +5500,11 @@ maximum number of tries: 1
 number of transactions per client: 30
 number of transactions actually processed: 600/600
 number of failed transactions: 0 (0.000%)
-latency average = 10.002 ms
-initial connection time = 114.238 ms
-tps = 1999.606744 (without initial connection time)
+latency average = 10.434 ms
+initial connection time = 142.833 ms
+tps = 1916.767563 (without initial connection time)
 statement latencies in milliseconds and failures:
-         9.333           0  select loadtest.claim_any_pick_task('00000000-0000-0000-0000-000000090001', 'loadtest-pgbench-worker-' || pg_backend_pid());
+         9.771           0  select loadtest.claim_any_pick_task('00000000-0000-0000-0000-000000090001', 'loadtest-pgbench-worker-' || pg_backend_pid());
 claimed=500 unclaimed_remaining=0 double_claimed_tasks=0 (real evidence: distinct successful claim_wms_pick_task audit_logs rows per resource_id, not a tautological group-by-primary-key check)
 SCENARIO 2a RESULT: PASS -- all 500 seeded pick tasks claimed exactly once, zero double-claims (audit-log verified), zero left unclaimed
 
@@ -5391,14 +5519,14 @@ maximum number of tries: 1
 number of transactions per client: 30
 number of transactions actually processed: 600/600
 number of failed transactions: 0 (0.000%)
-latency average = 9.374 ms
-initial connection time = 108.990 ms
-tps = 2133.492634 (without initial connection time)
+latency average = 8.606 ms
+initial connection time = 145.560 ms
+tps = 2323.906021 (without initial connection time)
 statement latencies in milliseconds and failures:
-         8.694           0  select loadtest.claim_any_putaway_task('00000000-0000-0000-0000-000000090001', 'loadtest-pgbench-worker-' || pg_backend_pid());
+         7.990           0  select loadtest.claim_any_putaway_task('00000000-0000-0000-0000-000000090001', 'loadtest-pgbench-worker-' || pg_backend_pid());
 claimed=500 unclaimed_remaining=0 double_claimed_tasks=0 (real evidence: distinct successful claim_wms_putaway_task audit_logs rows per resource_id)
 SCENARIO 2b RESULT: PASS -- all 500 seeded putaway tasks claimed exactly once, zero double-claims (audit-log verified), zero left unclaimed
-claim latency (pick+putaway combined, ms): n=1200 p50=7.293ms p95=19.047ms
+claim latency (pick+putaway combined, ms): n=1200 p50=7.275ms p95=17.547ms
 
 ### Scenario 3: app.claim_next_job under a 5,000-job backlog (throughput via pgbench) ###
 pending_before=5000
@@ -5406,30 +5534,30 @@ pending_before=5000
 EXPLAIN (ANALYZE) of app.claim_next_job's own WHERE-clause query shape, at this seeded volume (jobs_claim_candidate_idx, 20260730330000, is a real evidence-driven index added this checkpoint after an earlier run of this exact harness measured the pre-index plan -- see that migration's own header for the full before/after comparison and the pre-index EXPLAIN this run's own index now replaces):
                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                  
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=94.13..94.15 rows=1 width=474) (actual time=5.557..5.561 rows=1 loops=1)
+ Limit  (cost=94.13..94.15 rows=1 width=474) (actual time=5.138..5.141 rows=1 loops=1)
    Buffers: shared hit=135
-   ->  LockRows  (cost=94.13..94.15 rows=1 width=474) (actual time=5.556..5.559 rows=1 loops=1)
+   ->  LockRows  (cost=94.13..94.15 rows=1 width=474) (actual time=5.137..5.139 rows=1 loops=1)
          Buffers: shared hit=135
-         ->  Sort  (cost=94.13..94.14 rows=1 width=474) (actual time=5.528..5.530 rows=1 loops=1)
+         ->  Sort  (cost=94.13..94.14 rows=1 width=474) (actual time=5.105..5.106 rows=1 loops=1)
                Sort Key: priority DESC, created_at
                Sort Method: quicksort  Memory: 1125kB
                Buffers: shared hit=134
-               ->  Bitmap Heap Scan on jobs  (cost=42.64..94.12 rows=1 width=474) (actual time=0.327..2.358 rows=5000 loops=1)
+               ->  Bitmap Heap Scan on jobs  (cost=42.64..94.12 rows=1 width=474) (actual time=0.141..2.134 rows=5000 loops=1)
                      Recheck Cond: ((status = 'pending'::text) OR (status = 'in_progress'::text))
                      Filter: ((job_type = ANY ('{report_generation,notification_batch,webhook_retry,document_generation,dashboard_refresh,loyalty_expiration,recurring_billing,integration_sync}'::text[])) AND (((status = 'pending'::text) AND ((next_attempt_at IS NULL) OR (next_attempt_at <= now()))) OR ((status = 'in_progress'::text) AND (locked_until < now()))))
                      Heap Blocks: exact=117
                      Buffers: shared hit=128
-                     ->  BitmapOr  (cost=42.64..42.64 rows=19 width=0) (actual time=0.300..0.301 rows=0 loops=1)
+                     ->  BitmapOr  (cost=42.64..42.64 rows=19 width=0) (actual time=0.118..0.119 rows=0 loops=1)
                            Buffers: shared hit=11
-                           ->  Bitmap Index Scan on jobs_claim_candidate_idx  (cost=0.00..4.32 rows=9 width=0) (actual time=0.126..0.126 rows=5000 loops=1)
+                           ->  Bitmap Index Scan on jobs_claim_candidate_idx  (cost=0.00..4.32 rows=9 width=0) (actual time=0.103..0.103 rows=5000 loops=1)
                                  Buffers: shared hit=6
-                           ->  Bitmap Index Scan on jobs_tenant_status_idx  (cost=0.00..38.32 rows=9 width=0) (actual time=0.173..0.173 rows=0 loops=1)
+                           ->  Bitmap Index Scan on jobs_tenant_status_idx  (cost=0.00..38.32 rows=9 width=0) (actual time=0.014..0.014 rows=0 loops=1)
                                  Index Cond: (status = 'in_progress'::text)
                                  Buffers: shared hit=5
  Planning:
    Buffers: shared hit=297
- Planning Time: 0.834 ms
- Execution Time: 5.777 ms
+ Planning Time: 0.711 ms
+ Execution Time: 5.308 ms
 (24 rows)
 
 pgbench (16.13 (Ubuntu 16.13-0ubuntu0.24.04.1))
@@ -5442,26 +5570,26 @@ maximum number of tries: 1
 number of transactions per client: 200
 number of transactions actually processed: 6000/6000
 number of failed transactions: 0 (0.000%)
-latency average = 26.920 ms
-initial connection time = 176.324 ms
-tps = 1114.410178 (without initial connection time)
+latency average = 25.807 ms
+initial connection time = 161.395 ms
+tps = 1162.480928 (without initial connection time)
 statement latencies in milliseconds and failures:
-        26.560           0  do $$
-duration_seconds=5.614620848 completed=5000 still_pending=0
-throughput_jobs_per_sec=890.5
+        25.501           0  do $$
+duration_seconds=5.371312287 completed=5000 still_pending=0
+throughput_jobs_per_sec=930.8
 queue age percentiles (seconds, completed_at - created_at, seed-backlog jobs only):
- p50_seconds | p95_seconds | p99_seconds | max_seconds 
--------------+-------------+-------------+-------------
-  21.6769195 |  23.3201304 | 23.40684027 |   23.427575
+ p50_seconds | p95_seconds |    p99_seconds     | max_seconds 
+-------------+-------------+--------------------+-------------
+  20.7755485 |  22.3048475 | 22.392952909999998 |   22.418261
 (1 row)
 
 SCENARIO 3 RESULT: PASS -- full 5,000-job backlog drained, no lost/double-claimed jobs (completed=5000)
 
 ### Scenario 3 (continued): scope-bounded manual polling-loop soak driver (job-poll-worker.sh, item 8 -- explicitly NOT a production scheduler, see its own header) against a smaller dedicated 300-job batch, 3 concurrent worker processes, one worker deliberately failing every 5th job to exercise the retry/backoff/dead-letter path under load too ###
 INSERT 0 300
+worker=soak-worker-3 claimed=99 completed=99 failed=0 empty_polls=51
 worker=soak-worker-1 claimed=100 completed=100 failed=0 empty_polls=50
-worker=soak-worker-2 claimed=100 completed=80 failed=20 empty_polls=50
-worker=soak-worker-3 claimed=100 completed=100 failed=0 empty_polls=50
+worker=soak-worker-2 claimed=101 completed=81 failed=20 empty_polls=49
 soak batch (300 jobs): completed=280 dead_letter=0 still_pending_retry=20 (deliberate failures schedule a real backoff retry -- not every failed job reaches dead_letter within this soak window, disclosed not a bug)
 
 ### Scenario 3 (continued): deterministic dead-letter + replay reconciliation (CG-S10-ATW-024 fix-pass addition, adversarial review -- Prompt 243 section 25/28d names 'reconcile ... replayed counts' and 'job retry/DLQ/replay reconciliation' as required; the soak batch above discloses dead_letter=0 within its own soak window by design, so the DLQ->replay path was never actually exercised end to end. This scenario forces it deterministically via max_attempts=1 (dead-letters on the very first recorded failure, no backoff wait needed) and the real app.requeue_dead_letter_job replay RPC, then proves every replayed job actually completes) ###
@@ -5488,8 +5616,8 @@ OUTAGE_BUFFER_RECOVERY_SCENARIO: PASS
 
 === Results ===
 total_packets=1000 errors=0 malformed_frame_rejected_cleanly=true
-ack_latency_ms: p50=2.974 p95=4.565 p99=5.968 avg=2.896 max=6.121
-overall_duration_ms=128.4 throughput_packets_per_sec=7791.2
+ack_latency_ms: p50=3.309 p95=4.926 p99=7.042 avg=3.157 max=7.476
+overall_duration_ms=128.6 throughput_packets_per_sec=7774.7
 reconnect_attempts=10 reconnect_failures=0
 server_metrics={"connectionsOpened":81,"handshakesAccepted":81,"handshakesRejected":0,"packetsDecoded":1020,"packetsRejected":1,"reportsIngestedLive":1010,"reportsBuffered":10}
 fake_ingest_client: handshakes=81 batches=1020 reports=1020
@@ -5500,100 +5628,96 @@ GPS_TELEMETRY_LOAD_SCENARIO: PASS
 === EXPLAIN (ANALYZE): app.list_customer_inventory_balances query shape (app.inventory_balances) ===
                                                                                 QUERY PLAN                                                                                
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=8.31..8.32 rows=1 width=316) (actual time=0.638..0.644 rows=50 loops=1)
-   Buffers: shared hit=38
-   ->  Sort  (cost=8.31..8.32 rows=1 width=316) (actual time=0.637..0.639 rows=50 loops=1)
+ Limit  (cost=8.32..8.32 rows=1 width=316) (actual time=0.605..0.611 rows=50 loops=1)
+   Buffers: shared hit=42
+   ->  Sort  (cost=8.32..8.32 rows=1 width=316) (actual time=0.604..0.606 rows=50 loops=1)
          Sort Key: updated_at DESC, id DESC
-         Sort Method: top-N heapsort  Memory: 48kB
-         Buffers: shared hit=38
-         ->  Index Scan using inventory_balances_tenant_owner_idx on inventory_balances b  (cost=0.28..8.30 rows=1 width=316) (actual time=0.040..0.376 rows=501 loops=1)
-               Index Cond: ((tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06'::uuid) AND (owner_account_id = ANY ('{5d4e1312-036d-4e90-8202-d1e469fff8ba}'::uuid[])))
+         Sort Method: top-N heapsort  Memory: 46kB
+         Buffers: shared hit=42
+         ->  Index Scan using inventory_balances_tenant_owner_idx on inventory_balances b  (cost=0.28..8.31 rows=1 width=316) (actual time=0.027..0.329 rows=501 loops=1)
+               Index Cond: ((tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860'::uuid) AND (owner_account_id = ANY ('{7871501c-0b9c-4a0a-bad6-1192509b187c}'::uuid[])))
                Filter: ((on_hand <> '0'::numeric) OR (reserved <> '0'::numeric) OR (held <> '0'::numeric))
-               Buffers: shared hit=32
+               Buffers: shared hit=36
  Planning:
    Buffers: shared hit=200
- Planning Time: 0.794 ms
- Execution Time: 0.680 ms
+ Planning Time: 0.532 ms
+ Execution Time: 0.645 ms
 (14 rows)
 
 === EXPLAIN (ANALYZE): app.list_customer_lot_identities query shape (app.lot_identities) ===
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=0.27..8.29 rows=1 width=108) (actual time=0.159..0.270 rows=50 loops=1)
-   Buffers: shared hit=41
-   ->  Index Scan using lot_identities_tenant_updated_id_idx on lot_identities l  (cost=0.27..8.29 rows=1 width=108) (actual time=0.158..0.265 rows=50 loops=1)
-         Index Cond: (tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06'::uuid)
-         Filter: (owner_account_id = ANY ('{5d4e1312-036d-4e90-8202-d1e469fff8ba}'::uuid[]))
-         Buffers: shared hit=41
+ Limit  (cost=0.27..8.29 rows=1 width=108) (actual time=0.033..0.067 rows=50 loops=1)
+   Buffers: shared hit=44
+   ->  Index Scan using lot_identities_tenant_updated_id_idx on lot_identities l  (cost=0.27..8.29 rows=1 width=108) (actual time=0.032..0.063 rows=50 loops=1)
+         Index Cond: (tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860'::uuid)
+         Filter: (owner_account_id = ANY ('{7871501c-0b9c-4a0a-bad6-1192509b187c}'::uuid[]))
+         Buffers: shared hit=44
  Planning:
-   Buffers: shared hit=204
- Planning Time: 0.933 ms
- Execution Time: 0.299 ms
+   Buffers: shared hit=205
+ Planning Time: 0.531 ms
+ Execution Time: 0.090 ms
 (10 rows)
 
 === EXPLAIN (ANALYZE): app.list_customer_serial_identities query shape (app.serial_identities) ===
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=8.17..8.18 rows=1 width=104) (actual time=0.447..0.453 rows=50 loops=1)
-   Buffers: shared hit=171
-   ->  Sort  (cost=8.17..8.18 rows=1 width=104) (actual time=0.446..0.449 rows=50 loops=1)
-         Sort Key: updated_at DESC, id DESC
-         Sort Method: top-N heapsort  Memory: 36kB
-         Buffers: shared hit=171
-         ->  Index Scan using serial_identities_tenant_item_status_idx on serial_identities s  (cost=0.14..8.16 rows=1 width=104) (actual time=0.129..0.319 rows=200 loops=1)
-               Index Cond: (tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06'::uuid)
-               Filter: (owner_account_id = ANY ('{5d4e1312-036d-4e90-8202-d1e469fff8ba}'::uuid[]))
-               Buffers: shared hit=165
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.27..8.29 rows=1 width=104) (actual time=0.043..0.083 rows=50 loops=1)
+   Buffers: shared hit=46
+   ->  Index Scan using serial_identities_tenant_updated_id_idx on serial_identities s  (cost=0.27..8.29 rows=1 width=104) (actual time=0.041..0.076 rows=50 loops=1)
+         Index Cond: (tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860'::uuid)
+         Filter: (owner_account_id = ANY ('{7871501c-0b9c-4a0a-bad6-1192509b187c}'::uuid[]))
+         Buffers: shared hit=46
  Planning:
-   Buffers: shared hit=208
- Planning Time: 0.853 ms
- Execution Time: 0.480 ms
-(14 rows)
+   Buffers: shared hit=207
+ Planning Time: 0.723 ms
+ Execution Time: 0.115 ms
+(10 rows)
 
 === EXPLAIN (ANALYZE): app.list_customer_outbound_orders query shape (app.wms_outbound_orders) ===
                                                                                QUERY PLAN                                                                                
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=0.14..8.16 rows=1 width=88) (actual time=0.091..0.193 rows=50 loops=1)
-   Buffers: shared hit=48
-   ->  Index Scan using wms_outbound_orders_tenant_updated_id_idx on wms_outbound_orders o  (cost=0.14..8.16 rows=1 width=88) (actual time=0.090..0.189 rows=50 loops=1)
-         Index Cond: (tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06'::uuid)
-         Filter: (owner_account_id = ANY ('{5d4e1312-036d-4e90-8202-d1e469fff8ba}'::uuid[]))
-         Rows Removed by Filter: 29
-         Buffers: shared hit=48
+ Limit  (cost=0.14..8.16 rows=1 width=88) (actual time=0.020..0.052 rows=50 loops=1)
+   Buffers: shared hit=63
+   ->  Index Scan using wms_outbound_orders_tenant_updated_id_idx on wms_outbound_orders o  (cost=0.14..8.16 rows=1 width=88) (actual time=0.018..0.047 rows=50 loops=1)
+         Index Cond: (tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860'::uuid)
+         Filter: (owner_account_id = ANY ('{7871501c-0b9c-4a0a-bad6-1192509b187c}'::uuid[]))
+         Rows Removed by Filter: 42
+         Buffers: shared hit=63
  Planning:
-   Buffers: shared hit=248
- Planning Time: 1.132 ms
- Execution Time: 0.217 ms
+   Buffers: shared hit=249
+ Planning Time: 0.678 ms
+ Execution Time: 0.088 ms
 (11 rows)
 
 === Index-usage summary (grep-friendly) ===
--- select b.id from app.inventory_balances b where b.tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06' and b.owner_account_id = any(array['5d4e1312-036d-4e90-8202-d1e469fff8ba']::uuid[]) order by b.updated_at desc, b.id desc limit 50
+-- select b.id from app.inventory_balances b where b.tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860' and b.owner_account_id = any(array['7871501c-0b9c-4a0a-bad6-1192509b187c']::uuid[]) order by b.updated_at desc, b.id desc limit 50
 Limit  (cost=8.31..8.31 rows=1 width=24)
   ->  Sort  (cost=8.31..8.31 rows=1 width=24)
         Sort Key: updated_at DESC, id DESC
 
--- select l.id from app.lot_identities l where l.tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06' and l.owner_account_id = any(array['5d4e1312-036d-4e90-8202-d1e469fff8ba']::uuid[]) order by l.updated_at desc, l.id desc limit 50
+-- select l.id from app.lot_identities l where l.tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860' and l.owner_account_id = any(array['7871501c-0b9c-4a0a-bad6-1192509b187c']::uuid[]) order by l.updated_at desc, l.id desc limit 50
 Limit  (cost=0.27..8.29 rows=1 width=24)
   ->  Index Scan using lot_identities_tenant_updated_id_idx on lot_identities l  (cost=0.27..8.29 rows=1 width=24)
-        Index Cond: (tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06'::uuid)
+        Index Cond: (tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860'::uuid)
 
--- select s.id from app.serial_identities s where s.tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06' and s.owner_account_id = any(array['5d4e1312-036d-4e90-8202-d1e469fff8ba']::uuid[]) order by s.updated_at desc, s.id desc limit 50
-Limit  (cost=8.17..8.18 rows=1 width=24)
-  ->  Sort  (cost=8.17..8.18 rows=1 width=24)
-        Sort Key: updated_at DESC, id DESC
+-- select s.id from app.serial_identities s where s.tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860' and s.owner_account_id = any(array['7871501c-0b9c-4a0a-bad6-1192509b187c']::uuid[]) order by s.updated_at desc, s.id desc limit 50
+Limit  (cost=0.27..8.29 rows=1 width=24)
+  ->  Index Scan using serial_identities_tenant_updated_id_idx on serial_identities s  (cost=0.27..8.29 rows=1 width=24)
+        Index Cond: (tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860'::uuid)
 
--- select o.id from app.wms_outbound_orders o where o.tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06' and o.owner_account_id = any(array['5d4e1312-036d-4e90-8202-d1e469fff8ba']::uuid[]) order by o.updated_at desc, o.id desc limit 50
+-- select o.id from app.wms_outbound_orders o where o.tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860' and o.owner_account_id = any(array['7871501c-0b9c-4a0a-bad6-1192509b187c']::uuid[]) order by o.updated_at desc, o.id desc limit 50
 Limit  (cost=0.14..8.16 rows=1 width=24)
   ->  Index Scan using wms_outbound_orders_tenant_updated_id_idx on wms_outbound_orders o  (cost=0.14..8.16 rows=1 width=24)
-        Index Cond: (tenant_id = '149717a1-d5ce-4f3b-8258-e5eae5e13a06'::uuid)
+        Index Cond: (tenant_id = '42783ed6-7160-4032-a89b-6a04d06f0860'::uuid)
 
 
 ### Index evidence for app.claim_next_job's own WHERE-clause (job_type, status) shape at 5,000-row backlog volume -- see Scenario 3's own EXPLAIN above for the exact plan; summarized here ###
  relname |        indexrelname         | idx_scan | idx_tup_read 
 ---------+-----------------------------+----------+--------------
- jobs    | jobs_pkey                   |    15980 |        26349
- jobs    | jobs_tenant_status_idx      |     6476 |     19935539
- jobs    | jobs_claim_candidate_idx    |     6475 |     32484667
+ jobs    | jobs_pkey                   |    15980 |        26355
+ jobs    | jobs_tenant_status_idx      |     6476 |     19935342
+ jobs    | jobs_claim_candidate_idx    |     6475 |     32484952
  jobs    | jobs_idempotency_key_unique |       10 |            0
  jobs    | jobs_dead_letter_idx        |        4 |           30
 (5 rows)
@@ -5601,17 +5725,17 @@ Limit  (cost=0.14..8.16 rows=1 width=24)
 
 ### Scenario 7: restart/recovery (real client kill mid-transaction + real Postgres cluster restart) ###
 == step 1: a real, fully-committed movement (baseline for the idempotent-retry proof) ==
-committed movement id: 4040f9d7-1e7d-45c6-b150-60418ef7c149
+committed movement id: c497be2e-0a24-4060-9c66-f5569b9d53af
 == step 2: an in-flight (never-committed) transaction, killed mid-transaction (SIGKILL on the psql client process, genuinely idle-in-transaction server-side -- not a server-side pg_sleep, which would keep running regardless of client liveness) ==
-5387fc3b-f4cc-4c6f-8f95-8c4bf0756b68
-PASS: killed in-flight transaction left zero committed rows (clean rollback) -- 0 rows for key idem-loadtest-recovery-inflight-29556
+2ced20d1-6734-4695-b45f-2731bb4ed98a
+PASS: killed in-flight transaction left zero committed rows (clean rollback) -- 0 rows for key idem-loadtest-recovery-inflight-14541
 == step 3: restart the actual local Postgres cluster process (real server-level recovery, not merely a client reconnect) ==
 PASS: Postgres cluster restarted and is accepting connections again
 == step 4: post-restart durability -- the committed row from step 1 survived, the on_hand value is unchanged and consistent, the never-committed row from step 2 is still absent ==
-PASS: on_hand unchanged across restart (before=990595, after=990595)
+PASS: on_hand unchanged across restart (before=988771, after=988771)
 PASS: never-committed row still absent after restart (0 rows)
 == step 5: idempotency-key retry after 'recovery' returns the ORIGINAL committed result, never a double-apply ==
-PASS: retry with the same idempotency_key returned the identical original movement id (4040f9d7-1e7d-45c6-b150-60418ef7c149), no double-apply
+PASS: retry with the same idempotency_key returned the identical original movement id (c497be2e-0a24-4060-9c66-f5569b9d53af), no double-apply
 PASS: exactly 1 row in app.inventory_movements for the committed idempotency key across both calls (before restart + after restart) -- exactly-once confirmed
 == recovery scenario: ALL PASSED ==
 
@@ -5625,21 +5749,21 @@ number of clients: 20
 number of threads: 4
 maximum number of tries: 1
 duration: 15 s
-number of transactions actually processed: 59534
+number of transactions actually processed: 46849
 number of failed transactions: 0 (0.000%)
-latency average = 5.015 ms
-initial connection time = 107.568 ms
-tps = 3988.191245 (without initial connection time)
+latency average = 6.401 ms
+initial connection time = 136.908 ms
+tps = 3124.503553 (without initial connection time)
 statement latencies in milliseconds and failures:
-         4.964           0  select app.arbitrate_and_project_vehicle_position(
-canonical_telemetry_events written this scenario=59534 arbitration_throughput_events_per_sec=3968.9
+         6.315           0  select app.arbitrate_and_project_vehicle_position(
+canonical_telemetry_events written this scenario=46849 arbitration_throughput_events_per_sec=3123.2
 -- real regression check for Finding 1 (HIGH, adversarial review): vehicle_current_positions.event_at must equal max(event_at) among this vehicle's own applied_to_current_position=true canonical events -- any mismatch is a live TOCTOU lost-update/backward-movement bug --
 vehicles_with_backward_movement_or_lost_update=0 (expected 0)
 -- source-switch hysteresis under real contention: no two switches for the same vehicle closer together than the tenant default switch_hysteresis_seconds (120s, app.resolve_tenant_tracking_source_policy's own system default) --
 source_switch_hysteresis_violations=0 (expected 0)
 -- idempotent replay under real CONCURRENT resubmission (not merely sequential): 10 concurrent duplicate calls for the SAME already-processed (source_type, source_report_id) must not create a second canonical_telemetry_events row --
-replay_target=(source_type=direct_device source_report_id=64c34f34-9123-44c1-9384-9d73dd0593c8) rows_after_10_concurrent_resubmissions=1 (expected 1)
-HYBRID_ARBITRATION_LOAD_SCENARIO: PASS -- 59534 concurrent conflicting-source events arbitrated, zero backward-movement/lost-update, zero hysteresis violations, replay-safe under real concurrency
+replay_target=(source_type=driver_mobile source_report_id=ebd45ca8-f547-4f79-aecd-5658400b3e7c) rows_after_10_concurrent_resubmissions=1 (expected 1)
+HYBRID_ARBITRATION_LOAD_SCENARIO: PASS -- 46849 concurrent conflicting-source events arbitrated, zero backward-movement/lost-update, zero hysteresis violations, replay-safe under real concurrency
 
 ### Final row-count summary ###
               metric               | count 
@@ -5647,7 +5771,7 @@ HYBRID_ARBITRATION_LOAD_SCENARIO: PASS -- 59534 concurrent conflicting-source ev
  wms_pick_tasks claimed            |   500
  wms_putaway_tasks claimed         |   500
  jobs completed (seed backlog)     |  5000
- inventory_movements (hot balance) |  9404
+ inventory_movements (hot balance) | 11228
 (4 rows)
 
 
@@ -5663,5 +5787,5 @@ Scenario result summary:
   6  app.jobs claim-query index evidence:                  see EXPLAIN output above
   7  restart/recovery:                                     see 'recovery scenario: ALL PASSED' line above
   8  hybrid multi-source arbitration concurrency (real DB):  see HYBRID_ARBITRATION_LOAD_SCENARIO line above
-Run finished (UTC): 2026-08-05T01:22:22+00:00
+Run finished (UTC): 2026-08-05T04:47:42+00:00
 ===============================================================
