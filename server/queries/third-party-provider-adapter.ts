@@ -33,7 +33,16 @@ export async function getThirdPartyProviderConnection(
 ): Promise<ThirdPartyProviderConnection | null> {
   const { data, error } = await client
     .from("third_party_provider_connections")
-    .select("*")
+    // ATW-030 (closes ISS-2026-026): an explicit column list, never `select("*")`.
+    // ATW-027's own Finding 1 fix narrowed this table's `authenticated` grant from
+    // table-wide to these 14 columns precisely to keep `webhook_secret_value`
+    // unreadable; a `select("*")` asks for the ungranted column too, so it would fail
+    // (or, under a broader-privileged client, defeat the restriction outright). This
+    // list matches that grant exactly -- see
+    // `supabase/migrations/20260730350000_harden_advanced_tms_third_party_hybrid_tracking.sql`.
+    .select(
+      "id, tenant_id, provider_code, integration_mode, poll_cursor, status, consecutive_failure_count, last_successful_ingest_at, record_version, created_by, created_at, updated_at, auto_disabled_at, disabled_reason",
+    )
     .eq("tenant_id", tenantId)
     .eq("provider_code", providerCode)
     .maybeSingle();

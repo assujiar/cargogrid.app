@@ -38,9 +38,22 @@ const DEVICE_STATUS_TONE: Record<GpsDeviceStatus, "success" | "warning" | "dange
   retired: "danger",
 };
 
+/**
+ * Which statuses this generic transition control may offer, per current status.
+ *
+ * ATW-031 (ISS-2026-028): `installed` is deliberately ABSENT from `assigned`'s list.
+ * Moving a device to `installed` requires real installation evidence (a malware-scan-
+ * clean evidence file belonging to the device, plus a technician label) and must go
+ * through `app.record_gps_device_installation` (ATW-226B). Offering it here let a staff
+ * user mark a device installed with no evidence at all. The database now refuses that
+ * transition outright (`installation_evidence_required`,
+ * supabase/migrations/20260730420000_harden_gps_device_installation_evidence_gate.sql),
+ * so this removal is the second line of defence, not the enforcement itself -- but
+ * leaving the option visible would only ever produce an error the user cannot act on.
+ */
 const NEXT_DEVICE_STATUSES: Record<GpsDeviceStatus, readonly GpsDeviceStatus[]> = {
   stock: ["assigned", "retired"],
-  assigned: ["installed", "retired"],
+  assigned: ["retired"],
   installed: ["active", "retired"],
   active: ["offline", "suspended", "maintenance", "retired"],
   offline: ["active", "suspended", "maintenance", "retired"],
@@ -292,6 +305,13 @@ function DeviceRow({
         <StatusBadge tone={DEVICE_STATUS_TONE[device.status]} label={device.status} />
         <span className="text-xs text-neutral-500">{device.ownershipType}</span>
       </div>
+
+      {device.status === "assigned" ? (
+        <p className="text-xs text-neutral-500">
+          To mark this device installed, record the installation evidence (evidence file and technician) — a device cannot be
+          moved to <span className="font-medium">installed</span> without it.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {nextStatuses.length > 0 ? (

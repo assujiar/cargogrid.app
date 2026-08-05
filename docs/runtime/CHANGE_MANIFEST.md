@@ -45,6 +45,37 @@
 
 ## 2. Change entries
 
+> **Known ID collision — `CHG-2026-024` … `CHG-2026-031` are each used TWICE.** Resolved
+> as `ACCEPTED_RISK` at `CG-S10-ATW-031` (`ISS-2026-005`). Read this before citing any ID
+> in that range.
+>
+> * In **§1 Change index**, `CHG-2026-024`–`CHG-2026-031` label `CG-S5-PH0-004`–`011`
+>   (Prompts 83–90).
+> * In **§2 Change entries** below, the `###` sections carrying those same eight IDs are
+>   `CG-S5-PH0-091`–`098` (Prompts 91–98) — different tasks entirely.
+>
+> The cause: Prompts 83–90 each stated in their own build log that a `CHG-2026-0NN` entry
+> had been added, but none ever was. `PH0-091` then assigned `CHG-2026-024` as "the next
+> sequential number given the file's real content", not knowing eight phantom index rows
+> already claimed it. `PH0-099` spotted the collision and adopted "lowest ID not used
+> anywhere" for its own entry (`CHG-2026-032`) so no further collision was added while the
+> issue stayed open.
+>
+> **Why it is not being renumbered.** Renumbering either half would falsify the other's
+> committed citations: the Prompt 83–90 logs under `docs/build-log/phase-00/` each name their ID
+> in text, and so do the `PH0-091`–`098` logs. Rewriting eight historical evidence records
+> so a later index reads tidily is precisely the append-only violation `ISS-2026-006`
+> already declined to commit for the same class of problem ("evidence, once committed, is
+> not revised to look retroactively correct"). Disambiguating here costs nothing and
+> falsifies nothing.
+>
+> **To resolve an ID in this range unambiguously:** a `CHG-2026-02x` reference from a
+> Phase 0 build log means that log's own task; the `###` sections below are authoritative
+> only for Prompts 91–98. For Prompts 83–90 the §1 index row plus
+> its own `docs/build-log/phase-00/` log together are the record — there is no `###` section
+> for them, and none will be fabricated after the fact.
+
+
 ### CHG-2026-001 — Runtime bootstrap (session A, superseded)
 
 Session A instantiated `AGENTS.md` + `docs/runtime/*` and produced `docs/discovery/01_REPOSITORY_INVENTORY.md` at checkpoint `53e3d4a` (431 files, before blueprint upload). Merged via PR #2. Superseded by CHG-2026-002 after the parallel-session collision; its `docs/runtime/*` structure was retained as the canonical location, but its facts were re-anchored. See `ERROR_LEDGER.md` ERR-2026-001.
@@ -6628,3 +6659,104 @@ Self-closing. `ATW-029` is `VERIFIED`. **`PHASE_5_VERIFIED` is set.** The tenth 
 3. Never claim compatibility without contract and migration evidence.
 4. Never omit a failed gate; link the Error Ledger and set status truthfully.
 5. Reconcile every entry with task ledger, build status, build log, and commit.
+
+### CHG-2026-176 — Post-Closure Codebase Audit and Repair (Phase 5, post-Prompt-248, `CG-S10-ATW-030`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S10-ATW-030` — operator-requested full codebase audit of everything implemented up to and including Prompt 248, with repairs applied before Prompt 249 |
+| Change type | Audit + bounded repair. 1 additive migration (`CREATE OR REPLACE FUNCTION` only), 3 TypeScript files, 3 test files. No new capability, table, column, index, constraint, policy, grant, route, or contract |
+| Baseline evidence | `e381d89` (PR #43, `CG-S10-ATW-029`/Prompt 248, `PHASE_5_VERIFIED`). Full gate suite re-run fresh before any edit — `db:test` **FAILED** at baseline (`ISS-2026-024`), every other gate green |
+| Final status | `COMPLETED` — 3 High-severity and 1 Low-severity defect closed, each live-reproduced before repair and re-proven by a committed regression test |
+| Authorization | Explicit operator instruction: "lakukan audit menyeluruh seluruh codebase … berikan report semua yg menjadi issue serta … implementasikan perbaikan tersebut sebelum saya lanjut ke prompt 249" |
+
+#### Outcome
+
+Four defects found, all open at the moment `PHASE_5_VERIFIED` was declared, none of them newly introduced by this checkpoint:
+
+- **F-1 (High)** — 20 Phase 5 WMS mutation functions matched their idempotent-replay short-circuit on `(tenant_id, idempotency_key)` alone and never verified the found row belonged to the requested target. Live-reproduced **deterministically, with zero concurrency**: `app.generate_wms_pick_task` called for outbound order line Y under a key already used by line X returned **line X's own task** with no error. Two damage shapes — silent misattribution (wrong row returned) and silent no-op (the requested operation skipped entirely while appearing to succeed: a scanned package line never recorded, a pick never confirmed, a shipment never load-confirmed). `p_idempotency_key` is user-supplied free text in this product, so key reuse is an ordinary operator typo, not an attack. Fixed across 29 replay short-circuits. **`ISS-2026-024` is reclassified from "flaky test" to this real defect** — the hypothesised timing root cause was wrong; no content-mismatch check existed at all.
+- **F-2 (High)** — the GPS Gateway TCP listener silently dropped any packet arriving while the previous packet's ingest round-trip was in flight: no ACK, not buffered, and `packetsRejected` stayed `0`, so the loss was invisible to the gateway's own metrics. Live-reproduced.
+- **F-3 (High)** — `DurableTelemetryBuffer.flush()` rewrote the whole queue file from a stale snapshot, destroying any batch `enqueue()` appended during the flush — the durable buffer losing precisely the telemetry it exists to protect. Live-reproduced.
+- **F-4 (Low)** — `getThirdPartyProviderConnection`'s `select("*")` against a column-restricted table (`ISS-2026-026`, now `RESOLVED`).
+
+Two new issues raised and deliberately **not** repaired here, each larger than this checkpoint's bounded scope: `ISS-2026-029` (the same replay defect class still open in ~35 Finance/Operations/Platform/TMS functions — spans four already-`VERIFIED` phases, needs its own task) and `ISS-2026-030` (a torn final line permanently wedges the gateway buffer). Full detail: `docs/build-log/phase-05/ATW-030.md`.
+
+#### Scope and files
+
+New: `supabase/migrations/20260730380000_harden_advanced_tms_wms_idempotency_target_mismatch.sql` (20 functions, `CREATE OR REPLACE` on identical signatures, each body its own live `pg_get_functiondef` output with only the replay short-circuit patched); `docs/build-log/phase-05/ATW-030.md`. Modified: `services/gps-gateway/src/server.ts`, `services/gps-gateway/src/buffer.ts`, `server/queries/third-party-provider-adapter.ts`, `services/gps-gateway/test/server.test.ts` (+1 regression test), `services/gps-gateway/test/buffer.test.ts` (+2), `scripts/db-tests/advanced-tms-wms-picking.sql` (+1 deterministic regression block; the pre-existing keyrace assertion was **not** weakened or modified), `docs/runtime/KNOWN_ISSUES.md`/`TASK_LEDGER.md`/`CARGOGRID_BUILD_STATUS.md`/`HANDOFF.md`. 0 new routes.
+
+#### Tests and quality evidence
+
+`pnpm run typecheck` 0 errors; `pnpm run lint` 0 errors / 85 warnings (identical pre-existing set); root `pnpm test` **3084/3084**; `services/gps-gateway` typecheck 0 errors, `test` **44/44** (41 + 3 new); `pnpm exec next build` exit 0, 90 routes unchanged; `pnpm run db:test` **ALL PASSED, run twice from scratch on separate disposable databases** — 138 migrations, all test files green both runs, including the previously-intermittent keyrace assertion now passing deterministically; `docs:check`/`security:check`/`data-classification:check`/`standards:check`/`threat-model:check`/`git:check-paths` all PASS. The baseline `db:test` failure is gone. `ISS-2026-020` did not trigger on either run and remains `OPEN`, untouched.
+
+#### Compatibility, rollout, recovery
+
+Fully backward compatible for every correct caller: a genuine retry (same key, same target) still replays identically and returns the same row — proven explicitly by the new regression block. Only a key reused across genuinely different targets now raises `idempotency_key_conflict`, which previously corrupted silently. The migration is purely additive (`CREATE OR REPLACE FUNCTION`, identical signatures, no table/grant/policy touched, no already-applied migration file edited); `git revert` restores the prior definitions with no data implication. The 138-migration clean-install path was proven twice this checkpoint. Last known good checkpoint: `e381d89`.
+
+#### Correction to a prior checkpoint's claim
+
+`ADVANCED_TMS_WMS_CLOSURE_REPORT.md` §7 stated "Zero Critical/High-severity repository-controlled issue is open anywhere". Three High-severity repository-controlled defects (F-1/F-2/F-3) were open at that moment. `PHASE_5_VERIFIED` is **not withdrawn** — every defect was repository-controlled, bounded, and is now closed with live evidence, and no Phase 5 capability is missing or unproven — but the zero-High claim is corrected here and in `KNOWN_ISSUES.md` rather than by silently editing that report's own committed text. Root cause recorded in `ATW-030.md` §9: `ATW-029` verified that prior evidence existed and re-ran the existing gate suite, but did not adversarially probe the code, and a re-run of an existing suite cannot surface a defect that suite's own assumptions share with the code.
+
+---
+
+## `CG-S10-ATW-032` — Audit Register Verification and Repair (2026-08-05)
+
+Branch `claude/codebase-audit-fixes-yag1ow`. The verification phase `ISS-2026-034` was opened
+to demand: `ATW-031` handed forward 60 unverified candidate findings with one instruction
+attached — do not fix from the register directly.
+
+### Migrations added (six; 149 → 155)
+
+| Migration | What it changes |
+|---|---|
+| `20260730500000_harden_rounding_order_and_aggregate_locks.sql` | `convert_finance_amount` now applies the rounding order it resolves and reports; parent-shipment lock on `allocate_shipment_leg_cargo`; rate lock on `approve_finance_exchange_rate` |
+| `20260730510000_harden_actor_identity_unchecked_authority_surface.sql` | 33 functions gain `assert_actor_is_session_identity` — closes `ISS-2026-032` |
+| `20260730520000_harden_stale_version_no_op_and_swallowed_idempotency_guard.sql` | 74 functions raise `stale_version` instead of silently no-opping; `ingest_milestone_event`'s swallowed guard re-raised |
+| `20260730530000_harden_operations_inventory_tracking_record_scope.sql` | Ten findings across shipment lifecycle, inventory, WMS and tracking |
+| `20260730540000_harden_finance_lifecycle_exits_and_reconciliation_basis.sql` | Invoice/vendor-bill handoff wedge, the `executed`-settlement dead end, reconciliation as-of basis and company filter, fixed-amount tax currency |
+| `20260730550000_harden_numbering_continuity_custom_field_replay_and_rate_limits.sql` | Numbering counter carry-forward, durable custom-field idempotency ledger, driver-mobile rate-limit binding, audit-log page-size clamps |
+
+### Schema objects
+
+Two total unique constraints replaced by partial unique indexes excluding voided rows
+(`finance_invoices`, `finance_vendor_bills`); one new table
+(`app.custom_field_value_idempotency_keys`, RLS-enabled with the same posture as
+`app.custom_field_values`, backfilled); one new nullable column on
+`app.driver_mobile_ingestion_attempts`; one new helper
+(`app.carry_forward_numbering_counters`).
+
+### Contract and query-layer changes
+
+- `FINANCE_JOURNAL_SOURCE_TYPES` gains `correction` (the DB CHECK always accepted it).
+- `IMPORT_EXPORT_JOB_TYPES` gains `route_load_planning` and `print_label`, with a parity
+  assertion against `app.all_job_types()` — the assertion whose absence let the drift survive.
+- `ExportAuditLogsInputSchema` split out from the query schema; the two RPCs have genuinely
+  different page-size budgets (500/1000 vs 50/200).
+- `listTenantUsers` reads the granted 17 columns of `app.users` merged with
+  `app.users_directory`'s masked address, instead of a `select("*")` the `authenticated` role
+  can never satisfy.
+- New named error codes added to the settlement, reconciliation, invoice, vendor-bill and
+  inventory mutation whitelists so they surface as themselves rather than `mutation_failed`.
+
+### Backward compatibility
+
+Every function change is `CREATE OR REPLACE` on a byte-identical signature; no signature, no
+already-applied migration file, and no shared history was altered. The behavioural changes are
+all in the failing direction: calls that previously succeeded silently while doing the wrong
+thing now raise a named error. No call that was previously correct changes outcome.
+
+### Test change, stated plainly
+
+`scripts/db-tests/finance-reconciliation.sql`'s as-of scenario asserted `source_total = 500`
+for a run whose control side read `0` — the reconciliation basis defect encoded as an
+expectation, and it cannot survive the fix. It was rewritten to assert the corrected shared
+basis and gained coverage for the period-fallback and no-elapsed-period cases. The original
+intent (the later open item is excluded) is preserved. No assertion was weakened.
+
+### A repair that was wrong first
+
+The 74-function sweep initially blanket re-granted `authenticated, service_role`, which would
+have made `app.transition_gps_device_status` — deliberately un-granted — a public API. The
+standing assertion in `advanced-tms-device-installation-evidence.sql` caught it, and the grant
+block was removed entirely: `CREATE OR REPLACE` preserves an existing ACL, so there was
+nothing to restore.

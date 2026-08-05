@@ -502,3 +502,53 @@ end;
 $$;
 
 \echo '>> PLT-132 (Background Job Framework) test suite passed'
+
+\echo '>> ATW-031 (ISS-2026-012): job_type has ONE source of truth -- app.generic_job_types() is what both app.enqueue_job and app.dispatch_event_as_job accept, and app.all_job_types() stays set-equal to the app.jobs CHECK constraint. This assertion is the drift gate: ATW-224 added route_load_planning and ATW-021 added print_label to the CHECK and to enqueue_job but to neither dispatch_event_as_job nor the TypeScript union, and nothing caught it for two capabilities.'
+do $$
+declare
+  v_check_types text[];
+  v_all_types text[] := app.all_job_types();
+  v_generic text[] := app.generic_job_types();
+  v_missing text[];
+  v_extra text[];
+  v_job app.jobs;
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmejob');
+begin
+  -- Extract the literal list the app.jobs CHECK constraint actually enforces.
+  select array_agg(m[1] order by m[1]) into v_check_types
+  from regexp_matches(
+    (select pg_get_constraintdef(oid) from pg_constraint
+      where conrelid = 'app.jobs'::regclass and conname like '%job_type%'),
+    '''([a-z_]+)''::text', 'g'
+  ) as m;
+
+  select array_agg(t order by t) into v_missing
+    from unnest(v_check_types) t where t <> all (v_all_types);
+  select array_agg(t order by t) into v_extra
+    from unnest(v_all_types) t where t <> all (v_check_types);
+
+  if v_missing is not null or v_extra is not null then
+    raise exception 'assertion failed: the app.jobs job_type CHECK constraint and app.all_job_types() have drifted -- in CHECK but not in all_job_types(): %; in all_job_types() but not in CHECK: %', v_missing, v_extra;
+  end if;
+
+  -- The generic set is exactly all_job_types() minus the two dedicated import/export codes.
+  if not ('import' <> all (v_generic) and 'export' <> all (v_generic)) then
+    raise exception 'assertion failed: app.generic_job_types() must never include import/export -- those keep app.create_import_export_job as their own entrypoint';
+  end if;
+  if array_length(v_generic, 1) + 2 <> array_length(v_all_types, 1) then
+    raise exception 'assertion failed: app.all_job_types() must be app.generic_job_types() plus exactly import/export, got % vs %', array_length(v_generic, 1), array_length(v_all_types, 1);
+  end if;
+
+  -- The two job types the drift had locked out are now genuinely enqueueable, which is
+  -- the live consequence this repair closes (not merely a list-equality assertion).
+  v_job := app.enqueue_job(v_tenant_id, 'route_load_planning', '{}'::jsonb, 0, 'idem-atw031-rlp', 3, '00000000-0000-0000-0000-000000004001', 'requester');
+  if v_job.job_type <> 'route_load_planning' then
+    raise exception 'assertion failed: expected a route_load_planning job to enqueue, got %', v_job.job_type;
+  end if;
+  v_job := app.enqueue_job(v_tenant_id, 'print_label', '{}'::jsonb, 0, 'idem-atw031-lbl', 3, '00000000-0000-0000-0000-000000004001', 'requester');
+  if v_job.job_type <> 'print_label' then
+    raise exception 'assertion failed: expected a print_label job to enqueue, got %', v_job.job_type;
+  end if;
+
+  raise notice 'ATW-031 job_type single-source proof: CHECK constraint and app.all_job_types() are set-equal (% values), generic set is % values, and both previously-locked-out types enqueue', array_length(v_all_types, 1), array_length(v_generic, 1);
+end $$;

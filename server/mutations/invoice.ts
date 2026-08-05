@@ -23,6 +23,8 @@ import {
 export type InvoiceMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
 export const INVOICE_KNOWN_MUTATION_ERROR_CODES = [
+  // ATW-032: a fixed-amount tax rule denominated in a currency other than the document's.
+  "finance_tax_rule_currency_mismatch",
   "insufficient_authority",
   "finance_invoice_handoff_not_found",
   "finance_invoice_job_order_not_found",

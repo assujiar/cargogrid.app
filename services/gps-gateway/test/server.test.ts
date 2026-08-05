@@ -325,3 +325,64 @@ test("ATW-246 finding 6: a connection beyond maxConnections is destroyed by the 
     { maxConnections: 1 },
   );
 });
+
+test("ATW-030: a packet arriving while the previous packet's ingest is still in flight is decoded and ACKed, never silently dropped", async () => {
+  const ingestedBatches: { deviceId: string; reports: GatewayIngestReport[] }[] = [];
+  let slowFirstIngest = true;
+  const client: GpsGatewayIngestClientLike = {
+    resolveHandshake: async (imei: string): Promise<HandshakeResult> =>
+      imei === TEST_IMEI
+        ? { accepted: true, deviceId: TEST_DEVICE_ID, tenantId: TEST_TENANT_ID, rejectionReason: null }
+        : { accepted: false, deviceId: null, tenantId: null, rejectionReason: "imei_not_registered" },
+    ingestBatch: async (deviceId: string, reports: GatewayIngestReport[]): Promise<IngestBatchResult> => {
+      if (slowFirstIngest) {
+        slowFirstIngest = false;
+        // A real Supabase round-trip. The second packet lands on the socket during it --
+        // the exact window in which a snapshot/commit accumulator silently lost bytes.
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+      ingestedBatches.push({ deviceId, reports });
+      return { deviceId, tenantId: TEST_TENANT_ID, acceptedCount: reports.length, deviceStatus: "active" };
+    },
+  };
+
+  await withServer(client, async (server, port) => {
+    const socket = connect(port, "127.0.0.1");
+    await new Promise<void>((resolve) => socket.once("connect", resolve));
+
+    const frames: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => frames.push(chunk));
+
+    socket.write(imeiHandshakeBytes(TEST_IMEI));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    socket.write(
+      encodeAvlDataPacket([
+        { timestampMs: 1_700_000_000_000n, priority: 1, longitude: 106.1, latitude: -6.2, altitudeMeters: 10, angleDegrees: 90, satellites: 8, speedKmh: 40 },
+      ]),
+    );
+    // Still inside the 120ms ingest above.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    socket.write(
+      encodeAvlDataPacket([
+        { timestampMs: 1_700_000_060_000n, priority: 1, longitude: 106.2, latitude: -6.3, altitudeMeters: 12, angleDegrees: 91, satellites: 9, speedKmh: 41 },
+      ]),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    assert.equal(ingestedBatches.length, 2, "both packets must reach ingest");
+    assert.deepEqual(
+      ingestedBatches.map((batch) => batch.reports[0]?.longitude),
+      [106.1, 106.2],
+      "both packets must be ingested, in arrival order",
+    );
+    assert.equal(server.metrics.packetsDecoded, 2);
+    assert.equal(server.metrics.reportsIngestedLive, 2);
+    assert.equal(server.metrics.packetsRejected, 0);
+    // 0x01 handshake + one 4-byte ACK per packet -- the device is told both were accepted.
+    assert.equal(Buffer.concat(frames).toString("hex"), "01" + "00000001" + "00000001");
+
+    socket.destroy();
+  });
+});

@@ -59,6 +59,10 @@ export const WMS_OUTBOUND_KNOWN_MUTATION_ERROR_CODES = [
   "custody_required",
   "partial_fulfillment_not_acknowledged",
   "insufficient_stock",
+  // ATW-032: app.inventory_balances carries a non-deferrable (reserved + held) <= on_hand
+  // CHECK that post_inventory_movement never tested, so a cycle-count variance approved
+  // against pre-freeze reserved stock died on a raw 23514 no caller classified.
+  "insufficient_unreserved_stock",
   "idempotency_key_conflict",
 ] as const;
 type KnownWmsOutboundMutationErrorCode = (typeof WMS_OUTBOUND_KNOWN_MUTATION_ERROR_CODES)[number];

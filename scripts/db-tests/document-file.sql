@@ -205,9 +205,11 @@ declare
   v_other_tenant_id uuid;
   v_file app.files;
   v_replay app.files;
+  v_record_id uuid;
 begin
   v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
   v_other_tenant_id := (select id from app.tenants where slug = 'gizmodoc');
+  v_record_id := gen_random_uuid();
 
   begin
     perform app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'a.pdf', 'application/pdf', 1000, null, false, null, '{}', null, null, '00000000-0000-0000-0000-000000002006', 'outsider tenant admin');
@@ -273,7 +275,7 @@ begin
       if sqlerrm !~ 'document_legal_hold_reason_required' then raise; end if;
   end;
 
-  v_file := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'msa.pdf', 'application/pdf', 204800, null, false, null, '{}', null, 'idem-msa-upload-1', '00000000-0000-0000-0000-000000002001', 'uploader');
+  v_file := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', v_record_id, 'msa.pdf', 'application/pdf', 204800, null, false, null, '{}', null, 'idem-msa-upload-1', '00000000-0000-0000-0000-000000002001', 'uploader');
   if v_file.malware_scan_status <> 'pending' or v_file.classification <> 'confidential' or v_file.lifecycle_status <> 'active' or v_file.version_number <> 1 or not v_file.is_latest_version then
     raise exception 'assertion failed: unexpected initial file state %', v_file;
   end if;
@@ -281,10 +283,26 @@ begin
     raise exception 'assertion failed: expected storage_path to be derived from the file id, never the original filename';
   end if;
 
-  v_replay := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'msa.pdf', 'application/pdf', 204800, null, false, null, '{}', null, 'idem-msa-upload-1', '00000000-0000-0000-0000-000000002001', 'uploader');
+  -- ATW-031 (ISS-2026-029) CORRECTION: this replay call previously passed a FRESH
+  -- gen_random_uuid() as p_record_id, so it was never a replay of the same request at
+  -- all -- it was an upload against a genuinely DIFFERENT record that the unguarded
+  -- short-circuit silently answered with the FIRST record's file row. The assertion
+  -- below therefore asserted the defect, which is exactly why no prior checkpoint
+  -- caught it. A real client retry reuses the same record id, as it now does here.
+  v_replay := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', v_record_id, 'msa.pdf', 'application/pdf', 204800, null, false, null, '{}', null, 'idem-msa-upload-1', '00000000-0000-0000-0000-000000002001', 'uploader');
   if v_replay.id <> v_file.id then
     raise exception 'assertion failed: expected a repeated idempotency_key to return the existing row, not create a duplicate';
   end if;
+
+  -- ATW-031: the same key against a DIFFERENT record must now be rejected outright,
+  -- never answered with another record's own file.
+  begin
+    perform app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'msa.pdf', 'application/pdf', 204800, null, false, null, '{}', null, 'idem-msa-upload-1', '00000000-0000-0000-0000-000000002001', 'uploader');
+    raise exception 'assertion failed: reusing one idempotency_key for a DIFFERENT record silently returned the first record''s file instead of raising idempotency_key_conflict';
+  exception
+    when unique_violation then
+      if sqlerrm !~ 'idempotency_key_conflict' then raise; end if;
+  end;
 end;
 $$;
 

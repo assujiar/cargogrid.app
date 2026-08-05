@@ -245,17 +245,52 @@ begin
 end;
 $$;
 
-\echo '>> as-of-date bounding: a run as of a date between the two seeded open items (2026-06-20 and 2026-07-20) excludes the later one from its own source_total'
+\echo '>> as-of-date bounding is on ONE shared elapsed-fiscal-period basis (ATW-032): a mid-period as-of date falls back to the last period that has fully ended, so both sides move together and no false variance is reported; the later open item is still excluded; an as-of date before any period has ended is refused outright'
 do $$
 declare
   v_tenant_a uuid;
   v_run_early app.finance_reconciliation_runs;
+  v_exception_count integer;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmerecona');
-  select * into v_run_early from app.execute_finance_reconciliation_run(v_tenant_a, null, 'ar', '2026-06-25'::date, 0, '00000000-0000-0000-0000-000000034002', 'financemanagera');
+
+  -- 2026-07-15 is mid-period. The last FULLY ELAPSED period is 2026-06 (ends
+  -- 2026-06-30), so both sides are read on that basis: the 2026-06-20 open item
+  -- (500) is in, the 2026-07-20 one (150) is out, and the GL side reads the same
+  -- 500 -- the as-of bounding this scenario has always asserted, now without the
+  -- basis mismatch that used to accompany it.
+  select * into v_run_early from app.execute_finance_reconciliation_run(v_tenant_a, null, 'ar', '2026-07-15'::date, 0, '00000000-0000-0000-0000-000000034002', 'financemanagera');
   if v_run_early.source_total <> 500 then
-    raise exception 'assertion failed: expected an as-of date between the two seeded open items to exclude the later (2026-07-20) one, got source_total=%', v_run_early.source_total;
+    raise exception 'assertion failed: expected a mid-July as-of date to bound the source side at the 2026-06 period end and exclude the later (2026-07-20) open item, got source_total=%', v_run_early.source_total;
   end if;
+  if v_run_early.control_total <> 500 or not v_run_early.is_within_tolerance then
+    raise exception 'assertion failed: expected the GL side to be read on the SAME elapsed-period basis (control=source=500, within tolerance), got control=% within=%', v_run_early.control_total, v_run_early.is_within_tolerance;
+  end if;
+  select count(*) into v_exception_count from app.finance_reconciliation_exceptions where run_id = v_run_early.id;
+  if v_exception_count <> 0 then
+    raise exception 'assertion failed: a mid-period as-of date must not fabricate an exception out of a basis mismatch, got % exception(s)', v_exception_count;
+  end if;
+
+  -- 2026-06-25 is inside period 2026-06, which has NOT ended. The last elapsed
+  -- period is 2026-05, before either open item -- both sides read zero together
+  -- rather than the source side reading 500 against a GL side of 0.
+  select * into v_run_early from app.execute_finance_reconciliation_run(v_tenant_a, null, 'ar', '2026-06-25'::date, 0, '00000000-0000-0000-0000-000000034002', 'financemanagera');
+  if v_run_early.source_total <> 0 or v_run_early.control_total <> 0 or not v_run_early.is_within_tolerance then
+    raise exception 'assertion failed: expected a 2026-06-25 as-of date to fall back to the 2026-05 period end on BOTH sides (control=source=0, within tolerance), got control=% source=% within=%', v_run_early.control_total, v_run_early.source_total, v_run_early.is_within_tolerance;
+  end if;
+
+  -- No fiscal period of tenant A ends on or before 2025-12-31 (FY2026 starts
+  -- 2026-01-01), so there is no basis to compare on at all -- refused, never a
+  -- vacuous 0-vs-0 run offered as certifiable close evidence.
+  begin
+    perform app.execute_finance_reconciliation_run(v_tenant_a, null, 'ar', '2025-12-31'::date, 0, '00000000-0000-0000-0000-000000034002', 'financemanagera');
+    raise exception 'assertion failed: expected finance_reconciliation_no_elapsed_period for an as-of date before any fiscal period has ended';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_reconciliation_no_elapsed_period' then
+        raise exception 'assertion failed: expected finance_reconciliation_no_elapsed_period, got %', sqlerrm;
+      end if;
+  end;
 end;
 $$;
 

@@ -77,6 +77,24 @@ type ConnectionState =
   | { phase: "awaiting_handshake" }
   | { phase: "awaiting_avl_data"; deviceId: string; imei: string };
 
+/**
+ * ATW-030: one connection's own live protocol state, shared by reference between the
+ * 'data' handler and every drainAccumulator() call on that connection.
+ *
+ * Previously the accumulator was a plain closure variable that drainAccumulator()
+ * snapshotted on entry and wrote back through a `commit` callback on exit. Because a
+ * drain awaits a real ingest round-trip, any chunk arriving during that await was
+ * appended to the closure variable and then destroyed by the commit that followed --
+ * the bytes were silently dropped, no ACK was ever sent for them, and nothing counted
+ * the loss (`packetsRejected` stayed 0). Sharing one mutable holder, and consuming
+ * decoded bytes from it BEFORE awaiting rather than after, makes a concurrent append
+ * land safely after the already-consumed prefix instead of racing a stale snapshot.
+ */
+interface ConnectionBuffers {
+  accumulator: Bytes;
+  state: ConnectionState;
+}
+
 function recordToReport(record: DecodedAvlRecord): GatewayIngestReport {
   const hasFix = record.gps.latitude !== 0 || record.gps.longitude !== 0;
   const ioElements: Record<string, string> = {};
@@ -173,8 +191,10 @@ export class GpsGatewayServer {
 
   private handleConnection(socket: Socket): void {
     this.metrics.connectionsOpened += 1;
-    let accumulator: Bytes = Buffer.alloc(0);
-    let state: ConnectionState = { phase: "awaiting_handshake" };
+    // ATW-030: shared by reference with every drainAccumulator() call on this connection
+    // -- never snapshotted-and-committed, which silently dropped bytes that arrived mid-
+    // ingest. See ConnectionBuffers' own doc comment.
+    const conn: ConnectionBuffers = { accumulator: Buffer.alloc(0), state: { phase: "awaiting_handshake" } };
     let closed = false;
     // ATW-246 finding 2: the exact IMEI (if any) this connection registered into
     // `activeImeis`, so it can be released on close regardless of how the connection
@@ -220,9 +240,9 @@ export class GpsGatewayServer {
       if (closed) {
         return;
       }
-      accumulator = Buffer.concat([accumulator, chunk]);
+      conn.accumulator = Buffer.concat([conn.accumulator, chunk]);
 
-      if (accumulator.length > MAX_BUFFERED_BYTES) {
+      if (conn.accumulator.length > MAX_BUFFERED_BYTES) {
         this.metrics.packetsRejected += 1;
         closeWithLog("oversized_packet");
         return;
@@ -235,12 +255,7 @@ export class GpsGatewayServer {
           }
           return this.drainAccumulator(
             socket,
-            accumulator,
-            state,
-            (nextAccumulator, nextState) => {
-              accumulator = nextAccumulator;
-              state = nextState;
-            },
+            conn,
             closeWithLog,
             (imei) => {
               // ATW-246 finding 2: registers the IMEI as active at the exact synchronous
@@ -273,29 +288,28 @@ export class GpsGatewayServer {
 
   private async drainAccumulator(
     socket: Socket,
-    initialAccumulator: Bytes,
-    initialState: ConnectionState,
-    commit: (accumulator: Bytes, state: ConnectionState) => void,
+    conn: ConnectionBuffers,
     closeWithLog: (reason: string) => void,
     tryRegisterActiveImei: (imei: string) => boolean,
   ): Promise<void> {
-    let accumulator = initialAccumulator;
-    let state = initialState;
-
+    // ATW-030: `conn` is read fresh at the top of every iteration and every consumed
+    // prefix is removed from it BEFORE the following await, so a chunk appended by the
+    // 'data' handler while an ingest/handshake round-trip is in flight is preserved and
+    // decoded on the next pass instead of being overwritten by a stale snapshot.
     for (;;) {
-      if (state.phase === "awaiting_handshake") {
+      if (conn.state.phase === "awaiting_handshake") {
         let handshake;
         try {
-          handshake = decodeImeiHandshake(accumulator);
+          handshake = decodeImeiHandshake(conn.accumulator);
         } catch (error) {
           this.metrics.handshakesRejected += 1;
           closeWithLog(`malformed_handshake: ${(error as Error).message}`);
           return;
         }
         if (!handshake) {
-          break;
+          return;
         }
-        accumulator = accumulator.subarray(handshake.bytesConsumed);
+        conn.accumulator = conn.accumulator.subarray(handshake.bytesConsumed);
 
         let result;
         try {
@@ -327,38 +341,37 @@ export class GpsGatewayServer {
 
         this.metrics.handshakesAccepted += 1;
         socket.write(encodeHandshakeResponse(true));
-        state = { phase: "awaiting_avl_data", deviceId: result.deviceId, imei: handshake.imei };
+        conn.state = { phase: "awaiting_avl_data", deviceId: result.deviceId, imei: handshake.imei };
         continue;
       }
 
       // awaiting_avl_data
       let decoded;
       try {
-        decoded = decodeAvlDataPacket(accumulator);
+        decoded = decodeAvlDataPacket(conn.accumulator);
       } catch (error) {
         this.metrics.packetsRejected += 1;
         closeWithLog(`malformed_avl_packet: ${(error as Error).message}`);
         return;
       }
       if (!decoded) {
-        break;
+        return;
       }
-      accumulator = accumulator.subarray(decoded.bytesConsumed);
+      const deviceId = conn.state.deviceId;
+      conn.accumulator = conn.accumulator.subarray(decoded.bytesConsumed);
       this.metrics.packetsDecoded += 1;
 
       const reports = decoded.packet.records.map(recordToReport);
       try {
-        await this.ingestClient.ingestBatch(state.deviceId, reports);
+        await this.ingestClient.ingestBatch(deviceId, reports);
         this.metrics.reportsIngestedLive += reports.length;
       } catch (error) {
         this.log(`live ingest failed, buffering durably: ${(error as Error).message}`);
-        await this.buffer.enqueue({ deviceId: state.deviceId, reports, enqueuedAt: new Date().toISOString() });
+        await this.buffer.enqueue({ deviceId, reports, enqueuedAt: new Date().toISOString() });
         this.metrics.reportsBuffered += reports.length;
       }
 
       socket.write(encodeAckResponse(decoded.packet.records.length));
     }
-
-    commit(accumulator, state);
   }
 }

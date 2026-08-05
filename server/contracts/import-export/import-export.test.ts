@@ -1,6 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { GENERIC_JOB_TYPES } from "../background-job/background-job.ts";
 import {
+  IMPORT_EXPORT_JOB_TYPES,
   parseImportExportSchema,
   parseImportExportSchemaVersion,
   parseResolvedImportExportSchemaColumns,
@@ -204,4 +206,48 @@ describe("StageImportRowsInputSchema", () => {
     });
     assert.equal(parsed.rows.length, 1);
   });
+});
+
+test("ATW-032 (ISS-2026-034): IMPORT_EXPORT_JOB_TYPES matches app.all_job_types() exactly", () => {
+  // The SQL source of truth is app.all_job_types()
+  // (supabase/migrations/20260730410000_harden_job_type_single_source_of_truth.sql), which is
+  // app.generic_job_types() plus import/export. ISS-2026-012's remediation widened
+  // GENERIC_JOB_TYPES but not this array -- and this is the one that parses the row, so a
+  // print_label or route_load_planning job could be enqueued successfully and then blow up in
+  // parseImportExportJob, while claimNextJob could never be asked for either type at all.
+  // background-job.test.ts asserts the GENERIC_JOB_TYPES half against the same source; this is
+  // the assertion whose absence let the drift survive.
+  assert.deepEqual([...IMPORT_EXPORT_JOB_TYPES].sort(), [...GENERIC_JOB_TYPES, "import", "export"].sort());
+});
+
+test("ATW-032: a print_label job row parses -- it could not before", () => {
+  const row = {
+    job_id: JOB_ID,
+    tenant_id: TENANT_ID,
+    job_type: "print_label",
+    status: "pending",
+    priority: 0,
+    payload: { label_instance_id: JOB_ID },
+    attempts: 0,
+    max_attempts: 3,
+    locked_by: null,
+    locked_until: null,
+    error: null,
+    result_url: null,
+    created_by: "requester",
+    created_at: "2026-08-05T00:00:00.000Z",
+    completed_at: null,
+    requested_by_auth_user_id: AUTH_USER_ID,
+    idempotency_key: "label-print-job-1",
+    import_export_schema_code: null,
+    source_file_id: null,
+    result_file_id: null,
+    total_rows: null,
+    processed_rows: 0,
+    valid_row_count: 0,
+    invalid_row_count: 0,
+    cancel_reason: null,
+    updated_at: "2026-08-05T00:00:00.000Z",
+  };
+  assert.equal(parseImportExportJob(row).jobType, "print_label");
 });

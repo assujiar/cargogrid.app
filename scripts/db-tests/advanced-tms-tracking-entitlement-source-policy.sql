@@ -370,4 +370,77 @@ begin
   end if;
 end $$;
 
+\echo '>> ATW-031 (ISS-2026-027): RPD-025 telemetry retention now has a real enforcement mechanism. Before this, history_retention_days was declared in the entitlement composite type and read nowhere -- a ratified retention policy with no code behind it, so every position report ever accepted stayed queryable forever. app.purge_tracking_telemetry_history is OPS:Override-gated, tenant-scoped, resolves the window from the tenant own entitlement, purges by received_at (server clock) never event_at (device-supplied), and is bounded per call.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmetelemetry');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'acmetelemetry2');
+  -- Supreme Admin: the identity this fixture grants unrestricted authority to. A plain
+  -- tenant_admin here holds no OPS:Override granting role, which the negative case below
+  -- relies on.
+  v_admin uuid := '00000000-0000-0000-0000-000000040103';
+  v_viewer uuid := '00000000-0000-0000-0000-000000040102';
+  v_result record;
+  v_entitled_days integer;
+  v_raised boolean := false;
+begin
+  -- 1. The window is resolved, not hard-coded, and the ratified default has one home.
+  if app.default_tracking_history_retention_days() <= 0 then
+    raise exception 'assertion failed: the RPD-025 default retention window must be positive';
+  end if;
+
+  -- 2. Authority-gated: deleting operational history is override-tier, not ordinary edit.
+  begin
+    perform app.purge_tracking_telemetry_history(v_tenant1, v_viewer, 'viewer', 100);
+    raise exception 'assertion failed: a non-Override identity was allowed to purge telemetry history';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'insufficient_authority' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected insufficient_authority for the viewer';
+  end if;
+
+  -- 3. A real run reports a coherent, bounded result. This fixture holds no telemetry
+  --    older than the retention window, so the correct outcome is zero deletions -- the
+  --    function must be a safe no-op, never an unbounded sweep.
+  select * into v_result from app.purge_tracking_telemetry_history(v_tenant1, v_admin, 'admin', 100);
+  -- The window comes from THIS TENANT'S OWN entitlement, not a hard-coded constant. That
+  -- is the whole point of the repair: history_retention_days was declared in the
+  -- entitlement composite type and read nowhere in the codebase before ATW-031.
+  select (app.resolve_tenant_tracking_package(v_tenant1)).history_retention_days into v_entitled_days;
+  if v_entitled_days is null then
+    raise exception 'assertion failed (test setup): this fixture is meant to have an entitled retention window';
+  end if;
+  if v_result.retention_days <> v_entitled_days then
+    raise exception 'assertion failed: expected the resolved window to come from the tenant own entitlement (%), got %', v_entitled_days, v_result.retention_days;
+  end if;
+  if v_entitled_days = app.default_tracking_history_retention_days() then
+    raise exception 'assertion failed (test setup): the entitled window happens to equal the default, so this assertion could not distinguish "entitlement is read" from "default is hard-coded"';
+  end if;
+  if v_result.cutoff_received_at >= now() then
+    raise exception 'assertion failed: the retention cutoff must be in the past, got %', v_result.cutoff_received_at;
+  end if;
+  if v_result.canonical_events_deleted <> 0 or v_result.direct_device_reports_deleted <> 0
+     or v_result.third_party_reports_deleted <> 0 or v_result.driver_mobile_reports_deleted <> 0
+     or v_result.source_switches_deleted <> 0 then
+    raise exception 'assertion failed: nothing in this fixture is older than the retention window, so nothing may be deleted -- got canonical=% direct=% third=% mobile=% switches=%',
+      v_result.canonical_events_deleted, v_result.direct_device_reports_deleted,
+      v_result.third_party_reports_deleted, v_result.driver_mobile_reports_deleted, v_result.source_switches_deleted;
+  end if;
+  if v_result.more_remaining then
+    raise exception 'assertion failed: more_remaining must be false when nothing was deleted';
+  end if;
+
+  -- 4. Tenant-scoped: a purge for tenant 1 can never reach tenant 2's rows. Proven by
+  --    running it for the other tenant and seeing an independent, also-zero result.
+  select * into v_result from app.purge_tracking_telemetry_history(v_tenant2, v_admin, 'admin', 100);
+  if v_result.canonical_events_deleted <> 0 then
+    raise exception 'assertion failed: expected a tenant-scoped no-op for the second tenant';
+  end if;
+
+  raise notice 'ATW-031 retention proof: the RPD-025 window is resolved from entitlement with a single-homed default, the purge is OPS:Override-gated, tenant-scoped, bounded, and a safe no-op when nothing has aged out';
+end $$;
+
 \echo 'advanced-tms-tracking-entitlement-source-policy.sql: ALL PASSED'

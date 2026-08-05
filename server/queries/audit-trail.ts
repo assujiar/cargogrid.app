@@ -13,6 +13,8 @@
 
 import {
   QueryAuditLogsInputSchema,
+  ExportAuditLogsInputSchema,
+  type ExportAuditLogsInput,
   parseAuditLog,
   type AuditLog,
   type QueryAuditLogsInput,
@@ -75,7 +77,7 @@ export async function queryAuditLogs(client: AuditTrailRpcClient, input: QueryAu
 }
 
 /** Bulk audit export, otherwise identical to queryAuditLogs -- kept a distinct RPC/function so its own self-audit action label (export_audit_logs) is unambiguous evidence of which access pattern occurred. */
-export async function exportAuditLogs(client: AuditTrailRpcClient, input: QueryAuditLogsInput): Promise<AuditLog[]> {
-  const parsedInput = QueryAuditLogsInputSchema.parse(input);
+export async function exportAuditLogs(client: AuditTrailRpcClient, input: ExportAuditLogsInput): Promise<AuditLog[]> {
+  const parsedInput = ExportAuditLogsInputSchema.parse(input);
   return callAndParseRows(client, "export_audit_logs", parsedInput);
 }

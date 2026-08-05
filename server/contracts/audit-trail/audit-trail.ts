@@ -66,11 +66,30 @@ export type SupremeAdminDeleteAuditLogInput = z.infer<typeof SupremeAdminDeleteA
 export const QueryAuditLogsInputSchema = z.object({
   requesterAuthUserId: z.string().uuid(),
   tenantId: z.string().uuid(),
-  limit: z.number().int().positive().default(50),
+  // ATW-032 (ISS-2026-034): 48 of the 50 p_limit-taking RPCs clamp their page size;
+  // app.query_audit_logs and app.export_audit_logs were the two that did not, and this
+  // contract passed the caller's number through unchanged. 05_DATABASE_SCHEMA_WORKSTREAM.md
+  // names audit_logs as one of the relations where keyset pagination is mandatory -- an
+  // unbounded page size defeats the bound the cursor exists to enforce. Each bound below
+  // mirrors its own RPC's SQL clamp exactly, so neither is a surprise to a direct caller and
+  // the SQL half stands as defence in depth.
+  limit: z.number().int().positive().max(200).default(50),
   beforeOccurredAt: z.string().nullable().default(null),
   beforeId: z.string().uuid().nullable().default(null),
 });
 export type QueryAuditLogsInput = z.input<typeof QueryAuditLogsInputSchema>;
+
+/**
+ * The bulk export path is a genuinely different page-size budget, not a copy: its RPC's own
+ * clamp is `least(greatest(coalesce(p_limit, 500), 1), 1000)` against query's
+ * `(..., 50, ..., 200)`. Sharing one schema between the two would have forced the export
+ * default of 500 through a 200 ceiling -- which is exactly what a first draft of this fix did,
+ * and what the existing exportAuditLogs test caught.
+ */
+export const ExportAuditLogsInputSchema = QueryAuditLogsInputSchema.extend({
+  limit: z.number().int().positive().max(1000).default(500),
+});
+export type ExportAuditLogsInput = z.input<typeof ExportAuditLogsInputSchema>;
 
 /** Maps a raw app.audit_logs row (snake_case) to this contract's camelCase shape. */
 export function parseAuditLog(row: Record<string, unknown>): AuditLog {
