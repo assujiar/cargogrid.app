@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { Timeline, type ActivityItemData } from "../../../../../../components/ui/timeline.tsx";
@@ -132,7 +133,7 @@ function LifecycleActions({
 }
 
 export function VendorDetailPanel({
-  tenantSlug: _tenantSlug,
+  tenantSlug,
   profile,
   contacts,
   addresses,
@@ -221,7 +222,12 @@ export function VendorDetailPanel({
       </div>
 
       <section className="rounded-md border border-neutral-200 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-900">Identity</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-neutral-900">Identity</h2>
+          <Link href={`/${tenantSlug}/procurement/vendors/${profile.masterRecordId}/financial`} className="text-xs text-primary underline">
+            Banking &amp; tax security →
+          </Link>
+        </div>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
           <dt className="text-neutral-500">Legal entity type</dt>
           <dd className="col-span-2 sm:col-span-1">{profile.legalEntityType ?? "—"}</dd>

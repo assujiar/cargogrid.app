@@ -176,3 +176,35 @@ export const FINANCE_REGISTRY: readonly ClassificationEntry[] = [
     description: "Posted subledger/journal line amounts on app.finance_subledger_lines/app.finance_journal_lines and every posting/reversal/adjustment RPC — FIN:View-gated reads, FIN:Edit/Approve-gated posting, period-lock and idempotent-posting invariants apply (FIN-201/203/206/208).",
   },
 ];
+
+/**
+ * Procurement domain (PRC-254, Vendor Banking and Tax Security, CG-S11-PRC-005)
+ * sensitive `server/contracts/vendor-financial/` field group, classified. This
+ * repository's FIRST at-rest-ENCRYPTED field group (`level: "credential"`, not just
+ * `"restricted"` masking) — unlike `fin:cash_bank.account_identifier` above (FIN-211,
+ * which never stores the full account number at all), this capability's own
+ * `app.vendor_bank_accounts`/`app.vendor_tax_identities` genuinely store the full
+ * value, `pgp_sym_encrypt`-encrypted, and decrypt it only through one narrow, MFA-
+ * gated, audited reveal RPC per table (see the migration's own header for the full
+ * encryption design and its disclosed key-custody boundary).
+ */
+export const PROCUREMENT_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "prc:vendor_bank_accounts.account_number",
+    category: "finance",
+    level: "credential",
+    owner: "Procurement",
+    protectedAction: "PRC:View personal data",
+    description:
+      "account_number_encrypted (pgp_sym_encrypt bytea, app.vendor_financial_encryption_key()) + account_number_hash (sha256, duplicate detection only, never decrypted for comparison) on app.vendor_bank_accounts — decrypted only via the PRC:View personal data-gated, MFA-reauth-gated, unconditionally-audited app.reveal_vendor_bank_account_number RPC. account_number_last4 (plain, unencrypted) is the masked-display value every ordinary PRC:View caller sees by default; the encrypted/hash columns are additionally withheld from the authenticated role's own table GRANT (column-restricted, mirrors COM-149).",
+  },
+  {
+    id: "prc:vendor_tax_identities.tax_id",
+    category: "finance",
+    level: "credential",
+    owner: "Procurement",
+    protectedAction: "PRC:View personal data",
+    description:
+      "tax_id_encrypted (pgp_sym_encrypt bytea) + tax_id_hash (sha256, duplicate detection only) on app.vendor_tax_identities — decrypted only via the PRC:View personal data-gated, MFA-reauth-gated, unconditionally-audited app.reveal_vendor_tax_identity_number RPC. tax_id_last4 is the plain masked-display value every ordinary PRC:View caller sees by default. tax_id_type is deliberately free text (RPD-016) — no NPWP-specific statutory format validation is hardcoded here.",
+  },
+];
