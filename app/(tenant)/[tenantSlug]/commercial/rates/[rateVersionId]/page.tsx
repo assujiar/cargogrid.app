@@ -77,6 +77,16 @@ export default async function RateVersionDetailPage({ params }: { params: Promis
             </dd>
           </>
         ) : null}
+        {/* PRC-255 (post-review fix): this page approves/rejects/withdraws but shows
+            none of PRC-255's own additions (tiers, linked vendor identity,
+            lead-time/capacity terms) -- cross-link to the Procurement detail page
+            that does, so an approver isn't blind to what they're about to publish. */}
+        <dt className="font-medium text-neutral-600">Vendor rate detail</dt>
+        <dd className="text-neutral-900">
+          <a href={`/${tenantSlug}/procurement/rates/${rate.rateVersionId}`} className="font-medium text-primary underline">
+            View tiers, linked vendor and lead time/capacity terms
+          </a>
+        </dd>
       </dl>
 
       <RateActionsPanel tenantSlug={tenantSlug} rateVersionId={rate.rateVersionId} recordVersion={rate.recordVersion} approvalStatus={rate.approvalStatus} />

@@ -841,13 +841,21 @@ begin
     raise exception 'assertion failed: expected both vendor and vendor_rate master types to remain exactly as PLT-120/OPS-172 seeded them, found %', v_count;
   end if;
 
-  -- vendor_master_id is explicitly Prompt 255's own future addition to
-  -- app.vendor_rate_versions, never this migration's -- confirms the boundary held.
+  -- vendor_master_id was explicitly Prompt 255's own future addition to
+  -- app.vendor_rate_versions, never PRC-251's -- this file's own PRC-251 migration
+  -- (20260730580000) never added it, confirmed unchanged. Prompt 255 has since
+  -- landed (supabase/migrations/20260730620000_extend_commercial_vendor_rate_for_
+  -- procurement.sql) and added it exactly as this comment anticipated -- the
+  -- assertion below was updated from "must not exist yet" to "now exists" the
+  -- moment that additive migration shipped (never a silent flip -- PRC-255's own
+  -- build log records this update). The boundary this test protects (PRC-251's OWN
+  -- migration never touching app.vendor_rate_versions) remains fully intact and
+  -- unweakened; only the now-arrived "future" this comment named required an update.
   select exists (
     select 1 from information_schema.columns
     where table_schema = 'app' and table_name = 'vendor_rate_versions' and column_name = 'vendor_master_id'
   ) into v_has_link_column;
-  if v_has_link_column then
-    raise exception 'assertion failed: app.vendor_rate_versions.vendor_master_id must not exist yet -- it is Prompt 255''s own additive scope, not PRC-251''s';
+  if not v_has_link_column then
+    raise exception 'assertion failed: app.vendor_rate_versions.vendor_master_id is expected to exist (PRC-255, ADR-0020) -- if this fires, either PRC-255''s migration was reverted or this repository''s migration order regressed';
   end if;
 end $$;

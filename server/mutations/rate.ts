@@ -38,6 +38,14 @@ export const RATE_KNOWN_MUTATION_ERROR_CODES = [
   "reason_required",
   "invalid_adhoc_rate",
   "costing_request_not_found",
+  // PRC-255 (supabase/migrations/20260730620000_extend_commercial_vendor_rate_for_procurement.sql)
+  // widens app.approve_rate_version (called by approveRateVersion below) to also
+  // raise these two named error classes -- added here (post-review fix) so
+  // classifyError does not misclassify them as generic "mutation_failed",
+  // matching PROCUREMENT_RATE_KNOWN_MUTATION_ERROR_CODES in
+  // server/mutations/procurement-rate.ts, which already includes both.
+  "vendor_not_active",
+  "ambiguous_overlap",
 ] as const;
 type KnownRateMutationErrorCode = (typeof RATE_KNOWN_MUTATION_ERROR_CODES)[number];
 export type RateMutationErrorCode = KnownRateMutationErrorCode | "mutation_failed" | "invalid_response";
