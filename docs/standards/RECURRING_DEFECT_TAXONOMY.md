@@ -3,14 +3,15 @@
 **Owner:** Runtime build agent
 **Established by:** `ADR-0021` (batched review-and-fix execution cadence)
 **Status:** Active — mandatory per-prompt self-check (Tier B, `docs/standards/BUILD_EXECUTION_PROTOCOL.md` §4)
-**Version:** `1.0.0` (2026-08-07)
+**Version:** `1.1.0` (2026-08-07)
 
 ## 1. Why this document exists
 
 Between Prompt 220 and Prompt 256 this repository's adversarial reviews found and closed
 **more than 90 independently-verified real defects**. They are not 90 different mistakes.
-Read against each other, they collapse into **20 recurring classes**, and a small number of
-those classes account for every Critical and High finding Phase 6 has produced so far.
+Read against each other, they collapse into **20 recurring classes** (as of Prompt 256; batch
+`CG-S11-PRC-008..010`'s own Tier C review added two more, C-21 and C-22 — see §4), and a small
+number of those classes account for every Critical and High finding Phase 6 has produced so far.
 
 Two facts make this actionable:
 
@@ -53,8 +54,8 @@ lens still re-checks it — Tier B reduces the load, it does not replace the len
 |---|---|
 | Spec-compliance | 15, 18, 20 |
 | Security / RLS / tenant isolation | 5, 6, 7, 8, 10, 11, 12, 13, 17 |
-| Correctness / concurrency | 1, 2, 3, 4, 9, 14, 19 |
-| Cross-prompt integration and data dependency (new at `ADR-0021`) | 7, 8, 16, 19, 20 |
+| Correctness / concurrency | 1, 2, 3, 4, 9, 14, 19, 21 |
+| Cross-prompt integration and data dependency (new at `ADR-0021`) | 7, 8, 16, 19, 20, 22 |
 
 ## 4. The classes
 
@@ -140,6 +141,28 @@ privileged, non-colluding actors silently deactivated an unrelated active differ
 account as a side effect of an unrelated approval.
 **Check:** write out the tuple that actually defines "one active record of this kind" and
 compare it against what the code matches on.
+
+**C-21 — Sibling functions take locks on the same two tables in inconsistent order.**
+Function A locks parent-then-child; function B (often documented as the reason A should lock
+child-then-parent, or vice versa) locks child-then-parent. Each function is individually
+correct — every lock it takes is the lock it needs — but the two together are a live deadlock
+the moment they run concurrently against overlapping rows. This is distinct from C-04 (a
+decision made on an unlocked row): every function here DOES lock what it reads: the defect is
+the *order*, not the absence, of the lock.
+*Evidence:* Batch `CG-S11-PRC-008..010` (Prompts 257-259) Tier C, **HIGH**, live-reproduced —
+`app.close_rfq_for_comparison` locked `app.rfqs` first, then implicitly locked
+`app.rfq_invitations` rows second via an unlocked bulk `UPDATE`; `app.submit_rfq_response` and
+`app.decline_rfq_invitation` (the same migration's own "design note 8: child locked before
+parent") lock invitation-then-rfq — the exact inverse order. Two real, concurrent `psql`
+sessions taking each function's own documented lock sequence against the same RFQ's two
+different rows produced a genuine Postgres `deadlock detected` (SQLSTATE `40P01`). Fixed in
+`supabase/migrations/20260730670000_harden_procurement_batch_257_259_review_fixes.sql` by
+making `close_rfq_for_comparison` lock every still-`invited` invitation row before locking the
+parent `rfqs` row, matching the order its own sibling functions already used.
+**Check:** for every pair of functions in one migration (or one capability) that both lock two
+of the same tables, write out each function's own lock order. If a fix adds a second lock (the
+C-04 checklist item), does its order match every *other* function in this migration that
+already locks the same two tables — not just avoid deadlocking against itself?
 
 ### Authorization, isolation, and disclosure
 
@@ -269,6 +292,34 @@ caller anywhere (disclosed, not fixed).
 **Check:** trace at least one real path from a route to every capability this prompt adds. If
 there is none, either build it or disclose it explicitly in the build log — never leave it
 silently unreachable.
+
+**C-22 — A numeric threshold or limit compared without normalizing the value's own unit.**
+A `min_value_amount`/threshold/limit column has no currency (or other unit) dimension, and the
+comparison function that evaluates it takes a bare `p_value_amount numeric` with no accompanying
+unit parameter — so two amounts that differ by orders of magnitude in real-world value, because
+they are denominated in different currencies, produce the identical threshold-crossing decision.
+Distinct from C-15 (a missing range constraint on one column): the column itself is perfectly
+well-formed, and distinct from C-19 (a narrower *scope* tuple): the value being compared is
+correct, but the comparison silently assumes every caller's amount is already in the same unit
+as the policy's own amount, with nothing in the schema or the function signature enforcing or
+even recording that assumption.
+*Evidence:* Batch `CG-S11-PRC-008..010` (Prompt 259) Tier C, **HIGH**, live-confirmed —
+`app.procurement_approval_policies.min_value_amount` carries no `currency` column, and
+`app.evaluate_procurement_approval_requirement(p_entity_type, p_tenant_id, p_value_amount,
+p_actor_auth_user_id)` compares `p_value_amount >= v_policy.min_value_amount` directly, with no
+currency parameter at all. A published `rate_version` policy with `min_value_amount=5000`
+returned identical `required=true` for both a 6000 **USD** rate and a 6000 **IDR** rate —
+roughly a 15,000x real-value difference in this repository's own supported currency pair. This
+governs two genuinely multi-currency entity types the same batch produces (`rate_version` via
+`app.vendor_rate_versions.base_amount`, `vendor_selection` via
+`app.vendor_comparison_offers.normalized_amount`). Disclosed as `ISS-2026-045` rather than fixed
+— the correct model (per-currency policy rows vs. a single reference currency with
+FIN-194-composed conversion) is a genuine architectural decision the fix pass had no mandate to
+make unilaterally.
+**Check:** for every column that stores a monetary/quantity threshold, does its own table (or
+the function that evaluates it) carry the unit the threshold is denominated in? If the value
+being compared against it can arrive in more than one unit, is that unit thread through the
+comparison, or silently assumed?
 
 ## 5. Two process lessons that are not code classes
 

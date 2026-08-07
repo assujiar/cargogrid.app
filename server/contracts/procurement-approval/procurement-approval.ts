@@ -256,12 +256,13 @@ export const GetProcurementApprovalContextSnapshotInputSchema = z.object({
 });
 export type GetProcurementApprovalContextSnapshotInput = z.input<typeof GetProcurementApprovalContextSnapshotInputSchema>;
 
-/** Shared input shape for all four domain sync wrapper mutations -- the same approved/rejected verb the Approval Engine itself supports (mirrors DecideQuotationApprovalStepInputSchema, COM-153: "request revision" is not a fourth decision value). */
+/** Shared input shape for all four domain sync wrapper mutations -- the same approved/rejected verb the Approval Engine itself supports (mirrors DecideQuotationApprovalStepInputSchema, COM-153: "request revision" is not a fourth decision value). Batch 257-259 review (C-18, HIGH): reauthConfirmedAt is now required -- must be within the last 5 minutes (each app.decide_*_approval_step wrapper's own server-side freshness check, reusing the exact PRC-254/COM-157 p_reauth_confirmed_at pattern) -- Prompt 259 §16's MFA-for-privileged-approvers gate. No live MFA challenge UI exists yet anywhere in this repository (the same disclosed boundary COM-157 already carries) -- the UI captures the current timestamp as the caller's own attestation, which the server independently re-validates for freshness on every call, never trusted blindly. */
 export const DecideProcurementApprovalStepInputSchema = z.object({
   requestStepId: z.string().uuid(),
   decision: z.enum(["approved", "rejected"]),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string().min(1),
+  reauthConfirmedAt: z.string(),
   reason: z.string().nullable().default(null),
 });
 export type DecideProcurementApprovalStepInput = z.input<typeof DecideProcurementApprovalStepInputSchema>;

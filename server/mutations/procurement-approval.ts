@@ -68,6 +68,17 @@ export const PROCUREMENT_APPROVAL_KNOWN_MUTATION_ERROR_CODES = [
   "exception_type_required",
   "idempotency_key_conflict",
   "procurement_exception_request_not_found",
+  "idempotency_key_required",
+  // Batch 257-259 review (C-18, HIGH): MFA reauth-freshness gate on all four
+  // decide_*_approval_step wrappers (mirrors CREDIT_MUTATION_KNOWN_ERROR_CODES'
+  // own "reauth_required").
+  "reauth_required",
+  // Batch 257-259 review (F8 defense-in-depth, HIGH): a bound entity that no
+  // longer resolves now raises a typed error instead of an all-NULL composite.
+  "vendor_activation_target_not_found",
+  "rate_version_target_not_found",
+  "vendor_selection_target_not_found",
+  "procurement_exception_target_not_found",
 ] as const;
 type KnownProcurementApprovalMutationErrorCode = (typeof PROCUREMENT_APPROVAL_KNOWN_MUTATION_ERROR_CODES)[number];
 export type ProcurementApprovalMutationErrorCode = KnownProcurementApprovalMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -137,6 +148,7 @@ function decideStepArgs(input: DecideProcurementApprovalStepInput) {
     p_decision: parsedInput.decision,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    p_reauth_confirmed_at: parsedInput.reauthConfirmedAt,
     p_reason: parsedInput.reason,
   };
 }

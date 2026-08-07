@@ -12,6 +12,7 @@ import type {
   VendorComparisonEvent,
   VendorComparisonStatus,
 } from "../../../../../../server/contracts/vendor-comparison/vendor-comparison.ts";
+import type { ProcurementApprovalRequirement } from "../../../../../../server/contracts/procurement-approval/procurement-approval.ts";
 import type { VendorComparisonActionState } from "../actions.ts";
 
 const INITIAL_STATE: VendorComparisonActionState = { error: null };
@@ -76,6 +77,7 @@ export function VendorComparisonDetailPanel({
   offers,
   scoresByOfferId,
   history,
+  approvalPreview,
   reviseAction,
   linkRateActionFor,
   setInclusionActionFor,
@@ -88,6 +90,8 @@ export function VendorComparisonDetailPanel({
   offers: readonly VendorComparisonOffer[];
   scoresByOfferId: ReadonlyMap<string, VendorComparisonOfferScore[]>;
   history: readonly VendorComparisonEvent[];
+  /** Batch 257-259 review (C-20, MEDIUM): app.evaluate_procurement_approval_requirement's real UI caller -- a best-effort "will this need governance approval?" preview against the currently-recommended offer, null when unavailable/not applicable (see page.tsx). */
+  approvalPreview: ProcurementApprovalRequirement | null;
   reviseAction: SimpleFormAction;
   linkRateActionFor: (offerId: string, expectedVersion: number) => SimpleFormAction;
   setInclusionActionFor: (offerId: string, included: boolean, expectedVersion: number) => SimpleFormAction;
@@ -331,6 +335,13 @@ export function VendorComparisonDetailPanel({
           <p className="text-xs text-neutral-500">
             Final human selection -- terminal once submitted. Selecting an offer other than the recommended one (override) requires a reason.
           </p>
+          {approvalPreview ? (
+            <p className="rounded-md bg-neutral-50 px-2 py-1.5 text-xs text-neutral-700">
+              {approvalPreview.required
+                ? `This selection is expected to require additional governance approval (${approvalPreview.reasons.join(", ") || "policy threshold"}) based on the currently recommended offer. The real routing decision is made by the server when you submit, and applies to whichever offer you actually select below.`
+                : "Based on the currently recommended offer, this selection is not expected to require additional governance approval. The real routing decision is made by the server when you submit."}
+            </p>
+          ) : null}
           <ActionForm action={submitAction} submitLabel="Submit for approval" loadingLabel="Submitting…" variant="primary" className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="flex flex-1 flex-col gap-1">
               <label htmlFor="selectedOfferId" className="text-xs font-medium text-neutral-700">

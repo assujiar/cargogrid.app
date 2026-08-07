@@ -242,20 +242,20 @@ begin
   select id into v_step2_id from app.approval_request_steps where request_id = v_profile.approval_request_id and step_order = 2;
 
   begin
-    perform app.decide_vendor_activation_approval_step(v_step1_id, 'approved', v_outsider1, 'outsider', null);
+    perform app.decide_vendor_activation_approval_step(v_step1_id, 'approved', v_outsider1, 'outsider', now(), null);
     raise exception 'assertion failed: expected insufficient_privilege -- outsider holds no manager/finance role assignment';
   exception
     when insufficient_privilege then
       null; -- expected
   end;
 
-  perform app.decide_vendor_activation_approval_step(v_step1_id, 'approved', v_manager1, 'manager', 'Looks good');
+  perform app.decide_vendor_activation_approval_step(v_step1_id, 'approved', v_manager1, 'manager', now(), 'Looks good');
   select * into v_profile from app.vendor_profiles where master_record_id = v_profile.master_record_id;
   if v_profile.approval_status <> 'pending' then
     raise exception 'assertion failed: expected the vendor to remain pending after only step 1 of 2 approved, got %', v_profile.approval_status;
   end if;
 
-  perform app.decide_vendor_activation_approval_step(v_step2_id, 'approved', v_finance1, 'finance', 'Approved');
+  perform app.decide_vendor_activation_approval_step(v_step2_id, 'approved', v_finance1, 'finance', now(), 'Approved');
   select * into v_profile from app.vendor_profiles where master_record_id = v_profile.master_record_id;
   if v_profile.approval_status <> 'approved' then
     raise exception 'assertion failed: expected approval_status=approved once every required step passed, got %', v_profile.approval_status;
@@ -270,7 +270,7 @@ begin
   end if;
 
   begin
-    perform app.decide_vendor_activation_approval_step(v_step1_id, 'approved', v_manager1, 'manager', null);
+    perform app.decide_vendor_activation_approval_step(v_step1_id, 'approved', v_manager1, 'manager', now(), null);
     raise exception 'assertion failed: expected this to have thrown (request already resolved)';
   exception
     when others then
@@ -299,7 +299,7 @@ begin
   select id into v_generic_step_id from app.approval_request_steps where request_id = v_generic_request.id and step_order = 1;
 
   begin
-    perform app.decide_vendor_activation_approval_step(v_generic_step_id, 'approved', v_manager1, 'manager', null);
+    perform app.decide_vendor_activation_approval_step(v_generic_step_id, 'approved', v_manager1, 'manager', now(), null);
     raise exception 'assertion failed: expected check_violation -- entity_type=generic is not a vendor activation approval';
   exception
     when sqlstate '23514' then
@@ -377,8 +377,8 @@ begin
 
   select id into v_step1_id from app.approval_request_steps where request_id = v_rate.governance_approval_request_id and step_order = 1;
   select id into v_step2_id from app.approval_request_steps where request_id = v_rate.governance_approval_request_id and step_order = 2;
-  perform app.decide_rate_version_approval_step(v_step1_id, 'approved', v_manager1, 'manager', null);
-  perform app.decide_rate_version_approval_step(v_step2_id, 'approved', v_finance1, 'finance', null);
+  perform app.decide_rate_version_approval_step(v_step1_id, 'approved', v_manager1, 'manager', now(), null);
+  perform app.decide_rate_version_approval_step(v_step2_id, 'approved', v_finance1, 'finance', now(), null);
 
   select * into v_rate from app.vendor_rate_versions where id = v_rate.id;
   if v_rate.governance_approval_status <> 'approved' then
@@ -527,8 +527,8 @@ begin
 
   select id into v_step1_id from app.approval_request_steps where request_id = v_comparison.approval_request_id and step_order = 1;
   select id into v_step2_id from app.approval_request_steps where request_id = v_comparison.approval_request_id and step_order = 2;
-  perform app.decide_vendor_selection_approval_step(v_step1_id, 'approved', v_manager1, 'manager', null);
-  perform app.decide_vendor_selection_approval_step(v_step2_id, 'approved', v_finance1, 'finance', null);
+  perform app.decide_vendor_selection_approval_step(v_step1_id, 'approved', v_manager1, 'manager', now(), null);
+  perform app.decide_vendor_selection_approval_step(v_step2_id, 'approved', v_finance1, 'finance', now(), null);
 
   select * into v_comparison from app.vendor_comparisons where id = v_comparison.id;
   if v_comparison.approval_status <> 'approved' then
@@ -579,7 +579,7 @@ begin
   v_comparison := app.submit_vendor_comparison_for_approval(v_comparison.id, v_offer.id, null, v_comparison.record_version, v_approver1, 'approver');
 
   select id into v_step1_id from app.approval_request_steps where request_id = v_comparison.approval_request_id and step_order = 1;
-  perform app.decide_vendor_selection_approval_step(v_step1_id, 'rejected', v_manager1, 'manager', 'Price too high vs. budget');
+  perform app.decide_vendor_selection_approval_step(v_step1_id, 'rejected', v_manager1, 'manager', now(), 'Price too high vs. budget');
 
   select * into v_comparison from app.vendor_comparisons where id = v_comparison.id;
   if v_comparison.approval_status <> 'rejected' then
@@ -694,14 +694,14 @@ begin
 
   select id into v_step1_id from app.approval_request_steps where request_id = v_req.approval_request_id and step_order = 1;
   select id into v_step2_id from app.approval_request_steps where request_id = v_req.approval_request_id and step_order = 2;
-  perform app.decide_procurement_exception_approval_step(v_step1_id, 'approved', v_manager1, 'manager', null);
+  perform app.decide_procurement_exception_approval_step(v_step1_id, 'approved', v_manager1, 'manager', now(), null);
 
   -- Still mid-routing (1 of 2 steps approved) -- status stays submitted until the
   -- request reaches a final state, so a withdrawal here is still legitimate business
   -- behavior (mirrors "requesters submit/withdraw eligible records," access rule §26)
   -- and is not itself under test in this block.
 
-  perform app.decide_procurement_exception_approval_step(v_step2_id, 'approved', v_finance1, 'finance', null);
+  perform app.decide_procurement_exception_approval_step(v_step2_id, 'approved', v_finance1, 'finance', now(), null);
 
   select * into v_req from app.procurement_exception_requests where id = v_req.id;
   if v_req.approval_status <> 'approved' or v_req.status <> 'approved' then

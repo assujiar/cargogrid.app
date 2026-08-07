@@ -199,8 +199,17 @@ export async function decideProcurementApprovalStepAction(
   if (decisionRaw === "rejected" && !reason) {
     return { error: "A non-empty reason is required to reject." };
   }
+  // Prompt 259 §16's MFA-for-privileged-approvers gate (batch 257-259 review, C-18,
+  // HIGH) -- the client captures the current timestamp only once the reauth-attestation
+  // checkbox is checked (approval-decision-panel.tsx); the RPC layer independently
+  // re-validates freshness (<=5 minutes) on every call, so this client-supplied value is
+  // never trusted blindly.
+  const reauthConfirmedAt = String(formData.get("reauthConfirmedAt") ?? "").trim();
+  if (!reauthConfirmedAt) {
+    return { error: "Re-authentication confirmation is required for this decision." };
+  }
 
-  const input = { requestStepId: stepId, decision: decisionRaw, actorAuthUserId: access.authUserId, actorLabel: access.authUserId, reason } as const;
+  const input = { requestStepId: stepId, decision: decisionRaw, actorAuthUserId: access.authUserId, actorLabel: access.authUserId, reauthConfirmedAt, reason } as const;
   const supabase = await createSupabaseServerClient();
   try {
     switch (entityType) {

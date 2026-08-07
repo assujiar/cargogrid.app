@@ -206,6 +206,7 @@ describe("DecideProcurementApprovalStepInputSchema", () => {
       decision: "approved",
       actorAuthUserId: ACTOR_ID,
       actorLabel: "manager",
+      reauthConfirmedAt: new Date().toISOString(),
     });
     assert.equal(parsed.decision, "approved");
     assert.equal(parsed.reason, null);
@@ -216,6 +217,20 @@ describe("DecideProcurementApprovalStepInputSchema", () => {
       DecideProcurementApprovalStepInputSchema.parse({
         requestStepId: STEP_ID,
         decision: "revise",
+        actorAuthUserId: ACTOR_ID,
+        actorLabel: "manager",
+        reauthConfirmedAt: new Date().toISOString(),
+      }),
+    );
+  });
+
+  // Batch 257-259 review (C-18, HIGH): reauthConfirmedAt is now a required MFA
+  // freshness attestation (Prompt 259 §16), mirroring DecideCreditProfileApprovalStepInputSchema (COM-157).
+  test("requires reauthConfirmedAt", () => {
+    assert.throws(() =>
+      DecideProcurementApprovalStepInputSchema.parse({
+        requestStepId: STEP_ID,
+        decision: "approved",
         actorAuthUserId: ACTOR_ID,
         actorLabel: "manager",
       }),

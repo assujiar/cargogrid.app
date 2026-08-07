@@ -852,8 +852,13 @@ begin
     perform app.get_vendor_comparison(v_comparison.id, v_staff2);
   exception when others then
     v_failed := true;
-    if sqlerrm not like 'insufficient_authority:%' then
-      raise exception 'assertion failed: expected insufficient_authority for the cross-tenant read, got %', sqlerrm;
+    -- Batch 257-259 review (C-05, MEDIUM): a cross-tenant, zero-membership caller
+    -- now gets the SAME vendor_comparison_not_found a genuinely missing id would
+    -- produce, never insufficient_authority (which would have echoed the real
+    -- tenant_id in its own error text -- the live-reproduced disclosure this fix
+    -- closed).
+    if sqlerrm not like 'vendor_comparison_not_found:%' then
+      raise exception 'assertion failed: expected vendor_comparison_not_found for the cross-tenant, zero-membership read (never insufficient_authority, which would disclose the real tenant_id), got %', sqlerrm;
     end if;
   end;
   if not v_failed then raise exception 'assertion failed: expected the cross-tenant get_vendor_comparison to be denied'; end if;

@@ -20,6 +20,7 @@ const STEP_ID = "823e4567-e89b-12d3-a456-426614174000";
 const ENTITY_ID = "923e4567-e89b-12d3-a456-426614174000";
 const REQUEST_ID = "a23e4567-e89b-12d3-a456-426614174000";
 const EXCEPTION_ID = "b23e4567-e89b-12d3-a456-426614174000";
+const NOW_ISO = new Date().toISOString();
 
 const VALID_POLICY_ROW = {
   id: POLICY_ID,
@@ -120,8 +121,9 @@ describe("decide*ApprovalStep wrappers", () => {
   test("decideVendorActivationApprovalStep calls decide_vendor_activation_approval_step and parses the sync result", async () => {
     const calls: { fn: string; args: Record<string, unknown> }[] = [];
     const client = fakeRpcClient({ data: { master_record_id: ENTITY_ID, approval_status: "approved" }, error: null }, calls);
-    const result = await decideVendorActivationApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "manager" });
+    const result = await decideVendorActivationApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "manager", reauthConfirmedAt: NOW_ISO });
     assert.equal(calls[0]?.fn, "decide_vendor_activation_approval_step");
+    assert.equal(calls[0]?.args.p_reauth_confirmed_at, NOW_ISO);
     assert.equal(result.masterRecordId, ENTITY_ID);
     assert.equal(result.approvalStatus, "approved");
   });
@@ -129,7 +131,7 @@ describe("decide*ApprovalStep wrappers", () => {
   test("decideRateVersionApprovalStep calls decide_rate_version_approval_step and parses governanceApprovalStatus", async () => {
     const calls: { fn: string; args: Record<string, unknown> }[] = [];
     const client = fakeRpcClient({ data: { id: ENTITY_ID, governance_approval_status: "rejected" }, error: null }, calls);
-    const result = await decideRateVersionApprovalStep(client, { requestStepId: STEP_ID, decision: "rejected", actorAuthUserId: ACTOR_ID, actorLabel: "finance", reason: "budget exceeded" });
+    const result = await decideRateVersionApprovalStep(client, { requestStepId: STEP_ID, decision: "rejected", actorAuthUserId: ACTOR_ID, actorLabel: "finance", reauthConfirmedAt: NOW_ISO, reason: "budget exceeded" });
     assert.equal(calls[0]?.fn, "decide_rate_version_approval_step");
     assert.equal(calls[0]?.args.p_reason, "budget exceeded");
     assert.equal(result.governanceApprovalStatus, "rejected");
@@ -138,7 +140,7 @@ describe("decide*ApprovalStep wrappers", () => {
   test("decideVendorSelectionApprovalStep calls decide_vendor_selection_approval_step", async () => {
     const calls: { fn: string; args: Record<string, unknown> }[] = [];
     const client = fakeRpcClient({ data: { id: ENTITY_ID, approval_status: "pending" }, error: null }, calls);
-    const result = await decideVendorSelectionApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "manager" });
+    const result = await decideVendorSelectionApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "manager", reauthConfirmedAt: NOW_ISO });
     assert.equal(calls[0]?.fn, "decide_vendor_selection_approval_step");
     assert.equal(result.approvalStatus, "pending");
   });
@@ -146,7 +148,7 @@ describe("decide*ApprovalStep wrappers", () => {
   test("decideProcurementExceptionApprovalStep calls decide_procurement_exception_approval_step and parses the full exception request", async () => {
     const calls: { fn: string; args: Record<string, unknown> }[] = [];
     const client = fakeRpcClient({ data: { ...EXCEPTION_ROW, status: "approved", approval_status: "approved" }, error: null }, calls);
-    const result = await decideProcurementExceptionApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "finance" });
+    const result = await decideProcurementExceptionApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "finance", reauthConfirmedAt: NOW_ISO });
     assert.equal(calls[0]?.fn, "decide_procurement_exception_approval_step");
     assert.equal(result.status, "approved");
     assert.equal(result.approvalStatus, "approved");
@@ -155,12 +157,21 @@ describe("decide*ApprovalStep wrappers", () => {
   test("classifies not_a_rate_version_approval", async () => {
     const client = fakeRpcClient({ data: null, error: { message: "not_a_rate_version_approval: approval request x is not a rate version approval" } }, []);
     await assert.rejects(
-      () => decideRateVersionApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "manager" }),
+      () => decideRateVersionApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "manager", reauthConfirmedAt: NOW_ISO }),
       (err: unknown) => {
         assert.ok(err instanceof ProcurementApprovalMutationError);
         assert.equal(err.code, "not_a_rate_version_approval");
         return true;
       },
+    );
+  });
+
+  // Batch 257-259 review (C-18, HIGH): reauthConfirmedAt is now required at the
+  // contract layer (Prompt 259 §16's MFA-for-privileged-approvers gate).
+  test("rejects a decide-step call missing reauthConfirmedAt", async () => {
+    const client = fakeRpcClient({ data: { master_record_id: ENTITY_ID, approval_status: "approved" }, error: null }, []);
+    await assert.rejects(() =>
+      decideVendorActivationApprovalStep(client, { requestStepId: STEP_ID, decision: "approved", actorAuthUserId: ACTOR_ID, actorLabel: "manager" } as never),
     );
   });
 });

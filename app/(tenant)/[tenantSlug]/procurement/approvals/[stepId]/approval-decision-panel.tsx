@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
@@ -49,6 +49,14 @@ export function ProcurementApprovalDecisionPanel({
   decideAction: DecideFormAction;
 }) {
   const [decideState, decideFormAction, decidePending] = useActionState(decideAction, INITIAL_STATE);
+  // Prompt 259 §16's MFA-for-privileged-approvers gate (batch 257-259 review, C-18,
+  // HIGH) -- mirrors CreditApprovalDecisionForm's (COM-157) own reauth-freshness
+  // checkbox exactly. No live MFA challenge UI exists yet anywhere in this repository
+  // (the migration's own disclosed boundary) -- checking the box captures the current
+  // timestamp as the caller's own attestation, which the server independently
+  // re-validates for freshness (<=5 minutes) on every call, never trusted blindly.
+  const [reauthConfirmed, setReauthConfirmed] = useState(false);
+  const [reauthConfirmedAt, setReauthConfirmedAt] = useState("");
 
   const historyColumns: readonly DataTableColumn<ApprovalRequestHistoryEntry>[] = [
     { key: "step", header: "Step", render: (row) => `${row.stepOrder}` },
@@ -124,11 +132,23 @@ export function ProcurementApprovalDecisionPanel({
               </label>
               <Input id="reason" name="reason" type="text" />
             </div>
+            <input type="hidden" name="reauthConfirmedAt" value={reauthConfirmedAt} />
+            <label className="flex items-center gap-2 text-xs text-neutral-600">
+              <input
+                type="checkbox"
+                checked={reauthConfirmed}
+                onChange={(e) => {
+                  setReauthConfirmed(e.target.checked);
+                  setReauthConfirmedAt(e.target.checked ? new Date().toISOString() : "");
+                }}
+              />
+              I have recently re-authenticated (required for this decision)
+            </label>
             <div className="flex gap-2">
-              <Button type="submit" name="decision" value="approved" disabled={decidePending}>
+              <Button type="submit" name="decision" value="approved" disabled={decidePending || !reauthConfirmed}>
                 {decidePending ? "Recording…" : "Approve"}
               </Button>
-              <Button type="submit" name="decision" value="rejected" variant="destructive" disabled={decidePending}>
+              <Button type="submit" name="decision" value="rejected" variant="destructive" disabled={decidePending || !reauthConfirmed}>
                 {decidePending ? "Recording…" : "Reject"}
               </Button>
             </div>
