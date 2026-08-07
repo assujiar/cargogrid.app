@@ -1,0 +1,296 @@
+# CargoGrid Recurring Defect Taxonomy
+
+**Owner:** Runtime build agent
+**Established by:** `ADR-0021` (batched review-and-fix execution cadence)
+**Status:** Active — mandatory per-prompt self-check (Tier B, `docs/standards/BUILD_EXECUTION_PROTOCOL.md` §4)
+**Version:** `1.0.0` (2026-08-07)
+
+## 1. Why this document exists
+
+Between Prompt 220 and Prompt 256 this repository's adversarial reviews found and closed
+**more than 90 independently-verified real defects**. They are not 90 different mistakes.
+Read against each other, they collapse into **20 recurring classes**, and a small number of
+those classes account for every Critical and High finding Phase 6 has produced so far.
+
+Two facts make this actionable:
+
+1. **The classes repeat across capabilities that share no code.** Prompt 256 reintroduced the
+   exact `auth.uid()`-versus-actor-parameter defect Prompt 255 had already found and fixed
+   (`docs/build-log/phase-06/PRC-256.md`, `docs/build-log/phase-06/PRC-255.md`). Prompts 252,
+   253 and 254 each independently reintroduced the same idempotency-comparison defect class
+   that `CG-S10-ATW-030` had already swept across 20 functions.
+2. **The classes are cheap to check for and expensive to find by review.** Every one below has
+   a mechanical question attached. Answering the question against a diff takes minutes. Finding
+   the same defect by adversarial review takes a live database, forged sessions, and concurrent
+   `psql` processes — which is exactly why full review is now batched (`ADR-0021`).
+
+**This checklist is the compensating control that makes batching review safe.** It is not
+advice. Running it against your own diff before declaring a prompt `COMPLETED` is a mandatory
+Tier B gate. A prompt that skips it is not complete regardless of what the automated gates say.
+
+## 2. How to use it
+
+At the end of every prompt, before writing the build log:
+
+1. Take your own diff (`git diff`, plus every new file).
+2. Walk §4 in order. For each class, answer its **Check** question against the diff, not
+   against memory of what you intended.
+3. Any class you cannot answer `N/A — this diff contains no such construct` or
+   `verified clean, here is where` is a finding. Fix it now, inside the prompt.
+4. Record in the prompt's build log which classes applied and how each was cleared. A build log
+   that does not name this document has not run the gate.
+
+Do not treat a clean walk as proof of correctness. It proves you did not repeat this
+repository's own known mistakes. Novel defects are what the batch review in
+`docs/standards/BUILD_EXECUTION_PROTOCOL.md` §5 exists to find.
+
+## 3. Class-to-lens map
+
+The batch review's four lenses each own a subset. If a class is cleared at Tier B, the owning
+lens still re-checks it — Tier B reduces the load, it does not replace the lens.
+
+| Lens | Owns classes |
+|---|---|
+| Spec-compliance | 15, 18, 20 |
+| Security / RLS / tenant isolation | 5, 6, 7, 8, 10, 11, 12, 13, 17 |
+| Correctness / concurrency | 1, 2, 3, 4, 9, 14, 19 |
+| Cross-prompt integration and data dependency (new at `ADR-0021`) | 7, 8, 16, 19, 20 |
+
+## 4. The classes
+
+### Concurrency and idempotency
+
+**C-01 — Idempotency replay matched the key but never verified the target.**
+The short-circuit found a row by `(tenant_id, idempotency_key)` and returned it without
+checking it describes the operation actually requested. Damage comes in two shapes: silent
+misattribution (you get someone else's row) and silent no-op (your operation is skipped while
+the call reports success). `p_idempotency_key` is user-supplied free text in this product, so
+key reuse is an ordinary operator typo, not an attack.
+*Evidence:* `CG-S10-ATW-030` F-1 (High) — 29 short-circuits across 20 WMS functions;
+`app.generate_wms_pick_task` deterministically returned a **different** outbound order line's
+task, with zero concurrency required. Fixed in
+`supabase/migrations/20260730380000_harden_advanced_tms_wms_idempotency_target_mismatch.sql`.
+`ISS-2026-029` carried the same class into ~27 Finance/Operations/Platform functions — sharpest
+case: `apply_finance_ar_allocation` and `reverse_finance_ar_allocation` write the same table
+under the same unique key, so reusing a key to **reverse** an allocation silently did nothing
+and returned success. Reintroduced independently at Prompts 252, 253 (`issue_date`/`expiry_date`
+omitted from an expiry-tracking capability's own comparison) and 254.
+**Check:** does every replay short-circuit compare the *complete* target tuple — every field
+that identifies what the caller asked for, including dates and amounts — or only the key?
+
+**C-02 — Idempotency guard raised inside a block that traps its own exception.**
+`raise exception ... using errcode = 'unique_violation'` placed inside a block whose own
+`exception when unique_violation` handler catches it is inert. It reads as a guard and does
+nothing.
+*Evidence:* `CG-S10-ATW-032` swept all 55 guards added by `ATW-030`/`ATW-031`; parsing block
+nesting rather than grepping, because a `raise exception` line contains the word `exception` and
+a naive scan mistakes it for a handler section — which is precisely what hid it.
+`ingest_milestone_event`'s guard was genuinely dead, so a `DELIVERED` submission reusing an
+earlier key returned that earlier event with no error and the delivery was silently discarded.
+**Check:** for each guard, trace the enclosing block structure. Would its own handler swallow it?
+
+**C-03 — Optimistic-version predicate written on the UPDATE but never checked.**
+`where record_version = p_expected_version` on the UPDATE, with no check that a row was
+actually updated. The concurrent loser falls through with an unset composite, writes a
+fabricated `success` audit row with a NULL `tenant_id`, and returns an all-NULL record the
+TypeScript guard does not catch. Any transition-history row written earlier in the same
+transaction commits describing a change that never took effect.
+*Evidence:* `CG-S10-ATW-032` — **74 functions**. Named as a residual in
+`supabase/migrations/20260730480000_harden_optimistic_concurrency_row_lock.sql`'s own header
+and closed by `supabase/migrations/20260730520000_harden_stale_version_no_op_and_swallowed_idempotency_guard.sql`.
+Reintroduced at Prompt 251 (`revoke_vendor_intake_token`, the one function in that migration
+missing the check) and Prompt 252 (a blind, version-unguarded archive on template publish).
+**Check:** is every versioned UPDATE immediately followed by an explicit applied-check that
+raises on a lost race?
+
+**C-04 — A decision was made on a parent/state row that was read without a lock.**
+The single most frequent Critical/High class in Phase 6. Read the parent's status, decide,
+then act — while a concurrent session changes that status in between.
+*Evidence, all live-reproduced:* Prompt 251 **CRITICAL** —
+`redeem_vendor_intake_token_and_submit` had no lock, so two concurrent redemptions of one
+single-use invitation (double-click, slow-network retry, two tabs) created **two vendor
+profiles**. Prompt 251 HIGH — child records still addable after the profile left `draft`.
+Prompt 252 HIGH — a corrective action attachable to an already-`closed` assessment. Prompt 253
+HIGH — a stale-overwrite race in compliance-status recalculation, reproduced with three
+concurrent `psql` sessions, permanently stranding a verified document at `pending_verification`
+with nothing to self-heal it. Prompt 254 — the advisory lock meant to serialize a supersede
+race computed its key from the wrong row, dead code for the exact race it existed to close.
+Prompt 255 HIGH — `create_rate_version`'s supersede path had no lock or version guard.
+Prompt 256 HIGH — `shortlist_sourcing_candidate` and `evaluate_sourcing_candidate_eligibility`
+both read the parent request status unlocked.
+**Check:** every row whose value gates a decision is either locked `for update` before the read,
+or the decision is re-validated under lock before the write. **And:** when a fix adds a second
+lock, state the lock order explicitly in the function comment — Prompt 256 fixed two functions
+in one pass and had to pin candidate-row-before-parent-row so the two fixes could not deadlock
+against each other.
+
+**C-09 — Exception handler catches an SQLSTATE class instead of its intended constraint.**
+`exception when unique_violation` catches *every* unique violation in the block, including ones
+the handler's recovery logic is wrong for.
+*Evidence:* Prompt 255 **CRITICAL** — the import commit's handler caught any `unique_violation`,
+silently dropping a rate on a genuine `vendor_code` race while reporting the import job fully
+successful, with no recoverable retry path.
+**Check:** does the handler discriminate on the constraint name before recovering, or does it
+assume there is only one way to violate uniqueness here?
+
+**C-19 — Supersede or uniqueness validated on a narrower scope tuple than the real one.**
+*Evidence:* Prompt 254 — a bank-account supersede validated vendor + purpose but not
+vendor + purpose + **currency**, the real active-scope tuple. Live-reproduced: two legitimately
+privileged, non-colluding actors silently deactivated an unrelated active different-currency
+account as a side effect of an unrelated approval.
+**Check:** write out the tuple that actually defines "one active record of this kind" and
+compare it against what the code matches on.
+
+### Authorization, isolation, and disclosure
+
+**C-05 — Permission check ordered after a read that already discloses data.**
+The check is present and correct, but a row was read, or an error message shaped, before it ran.
+That is an information-leak oracle available to unauthorized and cross-tenant callers, and the
+probe typically leaves no audit trail.
+*Evidence:* Prompt 254 — the evidence-access RPCs let any authenticated user of **any** tenant
+learn whether a specific record has attached evidence. Prompt 256 HIGH —
+`shortlist_sourcing_candidate` disclosed the parent request's real status and the candidate's
+eligibility bit to a zero-permission, fully cross-tenant caller before the permission check ran.
+**Check:** is `evaluate_permission` (or its equivalent) the first statement in the function that
+can observe or leak row data? Do failure paths differ observably by whether the row exists?
+
+**C-06 — Session-implicit `auth.uid()` reached from an RPC that takes an explicit actor.**
+The RPC validates `p_actor_auth_user_id` correctly, then reads through a view or policy whose
+own row filter and column masks resolve the actor from `auth.uid()`. For any caller without a
+real browser JWT session — a service-role call, a job context, a db-test — the RPC returns
+all-null or empty rows for a legitimately authorized actor.
+*Evidence:* Prompt 255 established the fix pattern at `search_vendor_rates`. Prompt 256 hit it
+again anyway, in three read RPCs, caught by the implement agent's own live `db:test` iteration.
+**Check:** does any read path in this diff reach a view, policy, or helper that resolves the
+actor implicitly? If yes, reconstruct the masked projection against the base table with the
+validated actor parameter passed through explicitly.
+
+**C-07 — A `jsonb` snapshot column carries the unmasked source row.**
+The typed columns are masked correctly and the `jsonb` sibling beside them carries the same
+values verbatim, with zero field-level protection — and, because snapshots are usually built
+with `to_jsonb(source_row)`, it carries fields the capability's own RLS never replicates.
+*Evidence:* Prompt 256 **CRITICAL** — `demand_snapshot` leaked `budget_amount` around the typed
+column's own `PRC:View cost` mask (readable as `demand_snapshot->>'budget_amount'` by an actor
+who simultaneously saw `cost_masked=true`), and leaked real `consignee_snapshot` /
+`notify_party_snapshot` customer PII governed on the source row by record-scoped access — traced
+all the way to the browser's RSC/flight payload through server-to-client prop passing.
+**Check:** every `jsonb` snapshot has an explicit key allowlist at write time and the *same*
+mask as its typed sibling at read time. Never `to_jsonb(whole_row)`.
+
+**C-08 — Widening an existing function exposes new data to its existing callers.**
+A function that already had permission holders gains a field, and every existing holder can now
+see it — including holders with none of the new field's own gating permission.
+*Evidence:* Prompt 255 HIGH — `select_vendor_rate` (a pre-existing, already-`VERIFIED` COM-149
+function) leaked PRC-gated tier cost data to any plain `COM:View cost` holder with zero PRC
+permissions. No forged credentials required; reproduced with an ordinary own-identity session.
+**Check:** for each field added to an existing function or view, enumerate every permission that
+can already reach that function and confirm each is entitled to the new field.
+
+**C-10 — File or evidence linked without re-validating tenant, record scope, and scan status.**
+*Evidence:* Prompt 252 HIGH — a different tenant's file, and a file with
+`malware_scan_status='infected'`, both attachable as assessment evidence, live-reproduced both
+ways. Fixed by mirroring `app.record_gps_device_installation`'s established re-validation.
+**Check:** every RPC that accepts a file id re-validates it against `app.files` for tenant,
+record scope, and scan status — at the accepting RPC, not upstream.
+
+**C-11 — Grants: absent where RLS exists, or blanket where they should be deliberate.**
+Two opposite failures with the same root cause — grants treated as boilerplate.
+*Evidence:* Prompt 253 — RLS policies present on all four new tables, no `grant select` on any
+of them, so `authenticated` got `permission denied` on every read. `CG-S10-ATW-032` — a blanket
+`grant ... to authenticated, service_role` inside a 74-function mechanical sweep would have
+turned `app.transition_gps_device_status`, deliberately un-granted, into a public API; a
+standing db-test assertion caught it. `CREATE OR REPLACE` preserves an existing ACL, so the
+grant block was removed entirely rather than "restored."
+**Check:** is every new table's grant explicit and every function's grant deliberate? Does any
+sweep in this diff contain a blanket grant?
+
+**C-12 — `SECURITY DEFINER` granted to `authenticated` with no authority check.**
+*Evidence:* `ISS-2026-033` — 91 such functions, 30 of them writes. Four spot-verified against the
+live schema as real cross-tenant read **and** write paths, including
+`app.recalculate_quotation_totals` (rewrites any tenant's quotation money columns).
+**Check:** every new `SECURITY DEFINER` function granted to `authenticated` either gates on
+`app.evaluate_permission`, or authenticates by token/signature, or delegates to a checked
+callee — and the build log says which.
+
+**C-13 — Asking "is the claimed actor allowed?" instead of "is the caller that actor?"**
+*Evidence:* `ISS-2026-032` — 33 actionable functions. Each already validated authority; none
+validated identity. `app.approve_rate_version` gated on
+`is_support_grant_authority(p_actor_auth_user_id, ...)`, so any session that knew a
+tenant_admin's UUID could approve a vendor rate **as them**. Closed by wiring
+`app.assert_actor_is_session_identity` into the single `evaluate_permission` choke point.
+**Check:** does the authority path assert caller-is-actor, or does it trust the parameter?
+
+**C-17 — `select("*")` against a column-restricted table.**
+*Evidence:* `CG-S10-ATW-030` F-4; `listTenantUsers` corrected to read the granted 17 columns of
+`app.users` merged with `app.users_directory`'s masked address.
+**Check:** no `select("*")` and no `select *` anywhere a column-level `GRANT` or mask applies.
+
+### Correctness, constraints, and completeness
+
+**C-14 — Postgres identifier over 63 characters, silently truncated.**
+*Evidence:* Prompt 253 — a 66-character index name was silently truncated past the limit,
+breaking an exception-recovery branch that referenced the intended name.
+**Check:** every new index, constraint, and trigger name is ≤ 63 characters.
+
+**C-15 — Missing domain constraints: non-negativity, closed enums, totals.**
+*Evidence:* Prompt 256 — no non-negativity `CHECK` on cargo weight/volume; a negative value was
+accepted through both direct creation and the override RPC's "null-to-value always widens"
+carve-out. Prompt 252 HIGH — the scorer hardcoded a 100-point denominator while
+`weight_total_required` was accepted at any value: a 150/150 template crashed the scorer
+outright, and a 60-point template made its own `pass_threshold` mathematically unreachable.
+**Check:** for every numeric column, what is its legal range, and is that range a `CHECK`? For
+every formula, what does it assume about its inputs, and is that assumption constrained?
+
+**C-16 — A `"use server"` module exports something that is not a function.**
+A Next.js hard constraint. Breaks `next build` outright, and nothing earlier in the gate chain
+catches it.
+*Evidence:* Prompt 253 — a new server-actions file re-exported a plain object constant. The
+export had zero consumers; it broke the build on the very route the fix was meant to add, and
+was found only by the orchestrating session's own independent `next build`.
+**Check:** every export from a `"use server"` file is an async function. Run `next build` — this
+class is invisible to `typecheck` and `lint`.
+
+**C-18 — Maker-checker or MFA enforced on the happy path only.**
+The approve path is guarded; `hold`, `reactivate`, `deactivate`, `reject`, `cancel` are not.
+*Evidence:* Prompt 254 HIGH — `hold`/`reactivate`/`deactivate` bypassed maker-checker **and**
+MFA entirely: a single actor could place a fraud-investigation hold and immediately lift it
+alone. `ISS-2026-038` — self-approval not blocked on rate creation/approval.
+**Check:** enumerate every state transition the capability defines, not just the primary one,
+and confirm each carries the control its risk warrants. Is self-approval blocked on all of them?
+
+**C-20 — A capability with no caller: built, tested, and unreachable.**
+The flag exists, the RPC exists, the unit tests pass, and no route in the application ever calls
+it — or the reviewers a workflow depends on have no surface to review from.
+*Evidence:* Prompt 251 HIGH — a self-registration feature was flagged, implemented and
+unit-tested, with no public page ever calling it; closed with a real registration page, not a
+disclosure. Prompt 253 HIGH — no document or version viewer existed anywhere, leaving compliance
+reviewers to verify pending evidence completely blind. Prompt 255 — the import adapter has no UI
+caller anywhere (disclosed, not fixed).
+**Check:** trace at least one real path from a route to every capability this prompt adds. If
+there is none, either build it or disclose it explicitly in the build log — never leave it
+silently unreachable.
+
+## 5. Two process lessons that are not code classes
+
+Recorded here because both cost real rework and both recur.
+
+- **A finding fixed only where it was found is an incomplete fix.** Every class above was first
+  seen once and later found to span 20, 33, 55, 74, or 91 sites. When the batch review confirms
+  a finding, the sweep across the rest of the batch and the rest of the repository is part of
+  the fix, not a follow-up. `docs/standards/BUILD_EXECUTION_PROTOCOL.md` §5.4 makes this
+  mandatory.
+- **An unverified finding is not a defect.** `CG-S10-ATW-032` verified 32 claims inherited from
+  an audit fan-out: 20 confirmed, 7 already fixed by a later migration, 5 correct by design. A
+  clear majority of plausible claims do not survive contact with the live schema. Never fix
+  from a register directly — re-derive first.
+
+## 6. Maintenance
+
+Every batch review that confirms a defect not covered by an existing class **adds a class here,
+in the same checkpoint**, with its own live evidence citation. This document is the accumulating
+memory that lets the cadence in `ADR-0021` stay safe as the build accelerates; a review that
+finds a novel class and does not record it has spent the finding.
+
+Classes are append-only and never renumbered. A class fully closed by a structural control
+(a database constraint, a lint rule, a CI gate) is marked closed with the control named, not
+deleted — the check still runs against diffs that predate the control.

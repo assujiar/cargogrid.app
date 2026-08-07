@@ -6760,3 +6760,21 @@ have made `app.transition_gps_device_status` — deliberately un-granted — a p
 standing assertion in `advanced-tms-device-installation-evidence.sql` caught it, and the grant
 block was removed entirely: `CREATE OR REPLACE` preserves an existing ACL, so there was
 nothing to restore.
+
+### CHG-2026-177 — Batched review-and-fix execution cadence ratified (out-of-band process change, post-Prompt-256, `ADR-0021`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | None — out-of-band governance change on explicit operator instruction, sitting between the `VERIFIED` Prompt 256 (`CG-S11-PRC-007`) and the not-yet-authorized Prompt 257 (`CG-S11-PRC-008`) |
+| Change type | **DOCS/GOVERNANCE only.** Zero schema, service, UI, test, script, or dependency file touched. 3 new documents, 3 edited documents, 3 runtime records updated |
+| Authorization | Explicit operator instruction, 2026-08-07: revise the AI agent execution rules so review and fix run every 5 prompts rather than every prompt, while still preserving clean code, inter-data dependency correctness, security, absence of errors and potential errors, and freedom from regression — motivated by a hard project deadline of 2026-08-24 against 174 remaining prompts (257–430) |
+| Files added | `docs/adr/ADR-0021-batched-review-and-fix-execution-cadence.md` (the ratified decision), `docs/standards/BUILD_EXECUTION_PROTOCOL.md` (the operational protocol), `docs/standards/RECURRING_DEFECT_TAXONOMY.md` (20 defect classes derived from ~90 real, independently-verified defects across Prompts 220–256, with live-evidence citations — the compensating control that makes batching safe) |
+| Files edited | `AGENTS.md` (new "Execution cadence" section; instance version `0.2.0` → `0.3.0`; commit/checkpoint rules gain per-prompt-commit/per-batch-push/per-batch-collision-check; gate policy cross-reference), `docs/adr/README.md` (§5.2 candidate `ADR-CAND-ARCH-033`, §6 index row, count reconciliation), plus this manifest, `CARGOGRID_BUILD_STATUS.md`, `HANDOFF.md` |
+| What changed substantively | The single per-prompt adversarial round is split into three tiers: **A** automated gates (per prompt, blocking), **B** a mandatory self-check against the documented defect taxonomy (per prompt, blocking), **C** the four-lens adversarial review + fix + propagation sweep + independent full-suite re-verification (per batch of at most 5 prompts). A fourth review lens — cross-prompt integration and data dependency — is added specifically to catch the risk batching magnifies: this build's capabilities are written by mirroring the previous capability's shape, so an uncaught defect propagates. Batch size is adaptive (5 / 4 / 3) based on the prior batch's Critical/High yield, and six triggers cut a batch short immediately |
+| What did **not** change | No gate removed, weakened, or relabelled. No applied migration may be edited (unchanged). No Critical/High finding may be left open uncontained (unchanged). Independent re-verification by the orchestrating session remains mandatory and may not be replaced by a fix agent's self-report (unchanged). Verification/hardening/release/final-validation prompts are explicitly never batched. Prompts 220–256 remain `VERIFIED` under the prior per-prompt cadence and are not revisited. No CPD or RPD touched — this is a build-process decision, not a product decision |
+| Migration | NONE |
+| Risk | LOW as a change (documentation only, reversible by `git revert`). MEDIUM as a policy: the accepted trade-off is that a defect introduced early in a batch may be pattern-copied into up to four later prompts before review sees it. Mitigated by Tier B at write time, by the new cross-prompt lens, and by the mandatory propagation sweep; bounded by the ceiling of five. `ADR-0021` records an explicit reversal condition |
+| Gates | `pnpm run docs:check`, `standards:check`, `security:check`, `git:check-paths` — run and recorded in the `CARGOGRID_BUILD_STATUS.md` checkpoint note for this change. Code gates (`typecheck`/`lint`/`test`/`db:test`/`next build`) are carried forward unchanged from `CG-S11-PRC-007`'s own fresh run: this change touches zero file those gates read |
+| Rollback | `git revert` this commit. The prior per-prompt cadence is convention, not code, so reverting the documents restores it completely |
+| Status | `COMPLETED` |
+| Date | 2026-08-07 |
