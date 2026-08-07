@@ -22,6 +22,8 @@
 >
 > **Never batch** the phase Integrated Verification / Hardening / Documentation / Closure prompts, Step 15 (368–389), Step 16 (390–412), or Step 17 (413–430). Those *are* review.
 >
+> **The prompt files are unchanged and you do not need to edit any of them.** All 430 stay valid — they say what to build and which gates apply, never how often review runs. One clause is narrowed: 166 capability prompts carry a §36 release gate ("Only the execution index may release `<NEXT>` … after this task is `VERIFIED`"), resolved as `CON-015` in `docs/ai-agent-build-prompt-package/00-control/04_CONFLICT_REGISTER.md` — **released on `COMPLETED` within a batch, unchanged across a batch boundary.** That is the whole override. Do not stretch it to allowed/forbidden paths, access rules, acceptance criteria, or Definition of Done. If you find a second prompt clause that cannot hold under this cadence, register it in the conflict register in the checkpoint that finds it — never resolve it silently in code.
+>
 > **Nothing else changed.** No gate is weaker, no applied migration may be edited, no Critical/High may be left open uncontained, and independent re-verification by the orchestrating session is still mandatory — a fix agent's self-report is still not evidence. Say so plainly if a batch is worse than the cadence assumed: `ADR-0021` has an explicit reversal condition, and using it is not a failure.
 >
 > **The honest limit:** this buys build speed, not publish-readiness. The Step 15 hardening and Step 16 release sequences still have to run in full, and 174 prompts before 2026-08-24 needs parallel implementation across independent dependency-graph branches as well as batching. Do not let a batch close imply more than it proves.

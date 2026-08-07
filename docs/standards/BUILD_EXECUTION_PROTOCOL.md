@@ -140,6 +140,46 @@ The batch size is a feedback loop, not a constant:
 Record the size decision and its reason at the top of the next batch's plan. This is how the
 cadence self-corrects if a phase turns out to be riskier than Phase 6 was.
 
+### 3.5 The prompt files are not edited — and one clause is narrowed
+
+All 430 prompt files in `docs/ai-agent-build-prompt-package/` remain valid exactly as written and
+**none is modified by this protocol**. A capability prompt specifies *what* to build, *which*
+files are allowed and forbidden, *which* gates apply, and *what* Done means. It does not specify
+how often the adversarial review round runs — that was always convention, which is why changing
+it needed `ADR-0021` rather than 174 file edits.
+
+Verified across the package before adopting this protocol: §30 ("Commands to run") names the
+gate set, not its cadence; §33's "mandatory automated/manual gates pass at one recorded
+checkpoint" is satisfied by the batch close, which *is* one recorded checkpoint; §34 and §35 are
+content and evidence requirements with no timing claim. Only one phase-6 prompt mentions
+adversarial review at all — Prompt 269, the hardening prompt, which §3.3 already exempts from
+batching.
+
+**The single genuine conflict, and its resolution.** 166 capability prompts carry an identical
+§36 clause:
+
+> Only the execution index may release `<NEXT-TASK>` or another dependency-clean atomic task
+> after this task is `VERIFIED`.
+
+Written when `COMPLETED` and `VERIFIED` were reached in the same sitting. Under batching a prompt
+holds `COMPLETED` until its batch's Tier C closes, so read literally no second prompt in a batch
+could ever start. Resolved as `CON-015` in
+`docs/ai-agent-build-prompt-package/00-control/04_CONFLICT_REGISTER.md`, which ranks above the
+task prompt under `AGENTS.md` "Instruction precedence":
+
+- **Within one batch** — a downstream prompt may be released on its upstream being `COMPLETED`.
+- **Across a batch boundary** — §36 is unchanged. No prompt in batch N+1 begins until every
+  prompt in batch N is `VERIFIED`.
+
+The relaxation is exactly co-extensive with the batch — the same envelope `ADR-0021` accepted and
+capped at five — and is further bounded by all-or-nothing batch verification and by the §3.2
+trigger that cuts a batch wherever a dependency edge would separate a producer from its consumer.
+
+**Do not extend this override to anything else in a prompt.** Allowed/forbidden paths, database
+and API impact, access rules, acceptance criteria and Definition of Done are untouched. If a
+future prompt is found to carry a second clause incompatible with this cadence, register it in
+the conflict register in the checkpoint that finds it — never resolve it silently in the code.
+
 ## 4. Task states under batching
 
 The state vocabulary is unchanged (`10_MASTER_AGENT_SYSTEM_PROMPT.md` §17). What changes is when

@@ -164,9 +164,24 @@ the adaptive rule in the protocol §3.4 has failed to contain the risk and this 
 revisited — reverting to per-prompt review for the affected phase, recorded as a superseding ADR
 rather than an undocumented practice change.
 
+**Effect on the 430 prompt files: none, with one narrowed clause.** No prompt file is edited. A
+capability prompt specifies what to build and which gates apply, never how often review runs.
+Checked before adopting this decision: §30 names the gate set without a cadence, §33's "one
+recorded checkpoint" is satisfied by the batch close, §34/§35 carry no timing claim, and the only
+phase-6 prompt that mentions adversarial review is the hardening prompt, already exempt from
+batching. The one real conflict — the §36 release clause carried by **166** prompts, "Only the
+execution index may release `<NEXT>` … after this task is `VERIFIED`" — is resolved as `CON-015`
+in `docs/ai-agent-build-prompt-package/00-control/04_CONFLICT_REGISTER.md`: released on
+`COMPLETED` **within** a batch, unchanged **across** a batch boundary. That places the override at
+precedence rank 3, above the task prompt, so it is explicit rather than an implementation
+artifact silently contradicting a prompt — the failure mode `AGENTS.md` "Instruction precedence"
+exists to prevent. Its residual risk (an upstream contract consumed for up to four prompts before
+review confirms it) is the same trade-off recorded above, not an additional one.
+
 **Records updated in this checkpoint.** `AGENTS.md`, `docs/adr/README.md` (§5.2 candidate
-register and §6 index), `docs/runtime/CHANGE_MANIFEST.md`, `docs/runtime/CARGOGRID_BUILD_STATUS.md`,
-`docs/runtime/HANDOFF.md`.
+register and §6 index), `docs/ai-agent-build-prompt-package/00-control/04_CONFLICT_REGISTER.md`
+(`CON-015`, version `0.1.1` → `0.1.2`), `docs/runtime/CHANGE_MANIFEST.md`,
+`docs/runtime/CARGOGRID_BUILD_STATUS.md`, `docs/runtime/HANDOFF.md`.
 
 **Not changed.** No CPD or RPD is touched — this is a build-process decision, not a product
 decision, and an ADR may never weaken a ratified product decision
