@@ -256,8 +256,11 @@ begin
     perform app.draft_rfq_from_sourcing(v_tenant2, v_sourcing_id, v_staff1, 'idem-rfq-draft-xt', '00000000-0000-0000-0000-000000037202', 'staff2');
   exception when others then
     v_failed := true;
-    if sqlerrm not like 'tenant_mismatch:%' then
-      raise exception 'assertion failed: expected tenant_mismatch, got %', sqlerrm;
+    -- Batch 260 review (C-05, LOW, propagation sweep): "found but wrong tenant" now
+    -- raises the same sourcing_request_not_found a nonexistent id raises, closing the
+    -- cross-tenant existence oracle a distinct tenant_mismatch error used to leak.
+    if sqlerrm not like 'sourcing_request_not_found:%' then
+      raise exception 'assertion failed: expected sourcing_request_not_found, got %', sqlerrm;
     end if;
   end;
   if not v_failed then

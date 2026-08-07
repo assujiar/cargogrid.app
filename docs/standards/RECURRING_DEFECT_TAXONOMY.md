@@ -3,14 +3,15 @@
 **Owner:** Runtime build agent
 **Established by:** `ADR-0021` (batched review-and-fix execution cadence)
 **Status:** Active — mandatory per-prompt self-check (Tier B, `docs/standards/BUILD_EXECUTION_PROTOCOL.md` §4)
-**Version:** `1.1.0` (2026-08-07)
+**Version:** `1.2.0` (2026-08-07)
 
 ## 1. Why this document exists
 
 Between Prompt 220 and Prompt 256 this repository's adversarial reviews found and closed
 **more than 90 independently-verified real defects**. They are not 90 different mistakes.
 Read against each other, they collapse into **20 recurring classes** (as of Prompt 256; batch
-`CG-S11-PRC-008..010`'s own Tier C review added two more, C-21 and C-22 — see §4), and a small
+`CG-S11-PRC-008..010`'s own Tier C review added two more, C-21 and C-22; batch `CG-S11-PRC-011`
+(Prompt 260)'s own Tier C review added one further class, C-23 — see §4), and a small
 number of those classes account for every Critical and High finding Phase 6 has produced so far.
 
 Two facts make this actionable:
@@ -52,7 +53,7 @@ lens still re-checks it — Tier B reduces the load, it does not replace the len
 
 | Lens | Owns classes |
 |---|---|
-| Spec-compliance | 15, 18, 20 |
+| Spec-compliance | 15, 18, 20, 23 |
 | Security / RLS / tenant isolation | 5, 6, 7, 8, 10, 11, 12, 13, 17 |
 | Correctness / concurrency | 1, 2, 3, 4, 9, 14, 19, 21 |
 | Cross-prompt integration and data dependency (new at `ADR-0021`) | 7, 8, 16, 19, 20, 22 |
@@ -320,6 +321,36 @@ make unilaterally.
 the function that evaluates it) carry the unit the threshold is denominated in? If the value
 being compared against it can arrive in more than one unit, is that unit thread through the
 comparison, or silently assumed?
+
+**C-23 — A named spec requirement is silently dropped instead of joining the checkpoint's own
+disclosed-scope-boundary list.**
+Distinct from C-20 (a capability that IS built but has no caller): here the capability is never
+built at all. The tell is not that something is missing — plenty of real, legitimate scope
+decisions are — it is that the SAME checkpoint's own build log or migration header discloses
+several other omissions in meticulous, itemized detail (naming the exact spec section, the
+exact reason, and the exact precedent it does or doesn't follow) while this specific one is
+simply absent, with no reasoning trail at all. A reviewer (or a future capability) cannot tell
+the difference between "considered and deliberately deferred" and "never noticed," which is
+exactly the ambiguity the rest of this repository's disclosure discipline exists to remove.
+*Evidence:* Batch `CG-S11-PRC-011` (Prompt 260) Tier C, **MEDIUM** (two instances) — Prompt 260
+§14 (API impact) names `close` as a required domain operation, distinct from `cancel-eligible`;
+zero trace of it exists anywhere in the migration, and `purchase_orders_status_check` has no
+`closed` value. §22 (Alternative flow) names four items; only two are implemented, and neither
+of the missing two ("schedule line", "vendor-requested revision before approval") appears
+anywhere. Meanwhile the SAME checkpoint's own `docs/build-log/phase-06/PRC-260.md` §9
+("Residual, disclosed limitations") itemizes eight OTHER scope boundaries in exactly this
+itemized, precedent-citing style (no per-line pricing, no external vendor-facing acknowledgement
+surface, no REST/GraphQL, fulfillment-tracking-is-descriptive-not-a-match-engine, and four more)
+— proving the checkpoint's own author both knew how to disclose an omission and did so
+repeatedly, just not for these three. A repository-internal precedent for the missing `close`
+operation already existed one capability earlier (`app.close_rfq_for_comparison`, PRC-257),
+making the omission easier to miss precisely because the shape looked so familiar.
+**Check:** for every named operation, entity, or alternative-flow item in this prompt's own
+source spec sections (API impact, alternative flow, business rules), can you point to either (a)
+the code that implements it, or (b) the exact sentence in this checkpoint's own build log that
+discloses it as deliberately out of scope, with a reason? If neither exists, this is a finding —
+not "the spec is aspirational," and not something a future checkpoint can be trusted to notice
+on its own, since the checkpoint's own document is the one place a reader would look first.
 
 ## 5. Two process lessons that are not code classes
 

@@ -444,7 +444,7 @@ begin
   if not v_failed then raise exception 'assertion failed: expected a second draft from the same comparison to be rejected as duplicate_issue'; end if;
 end $$;
 
-\echo '>> cross-tenant: po2 staff cannot draft from po1s comparison (tenant_mismatch), and cannot read po1s PO by id (C-05: not_found, never a real-tenant-disclosing insufficient_authority)'
+\echo '>> cross-tenant: po2 staff cannot draft from po1s comparison (vendor_comparison_not_found, batch 260 review C-05), and cannot read po1s PO by id (C-05: not_found, never a real-tenant-disclosing insufficient_authority)'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'po1');
@@ -462,8 +462,11 @@ begin
     perform app.draft_purchase_order_from_selection(v_tenant2, v_comparison1_id, 'idem-po-xtenant', v_staff2, 'staff2', null, null, null, null, null, null, null);
   exception when others then
     v_failed := true;
-    if sqlerrm not like 'tenant_mismatch:%' then
-      raise exception 'assertion failed: expected tenant_mismatch, got %', sqlerrm;
+    -- Batch 260 review (C-05, LOW): "found but wrong tenant" now raises the same
+    -- vendor_comparison_not_found a nonexistent id raises, closing the cross-tenant
+    -- existence oracle a distinct tenant_mismatch error used to leak.
+    if sqlerrm not like 'vendor_comparison_not_found:%' then
+      raise exception 'assertion failed: expected vendor_comparison_not_found, got %', sqlerrm;
     end if;
   end;
   if not v_failed then raise exception 'assertion failed: expected a cross-tenant draft attempt to be rejected'; end if;
@@ -889,4 +892,99 @@ begin
       raise exception 'assertion failed: expected invalid_status_filter, got %', sqlerrm;
     end if;
   end;
+end $$;
+
+-- ===========================================================================
+-- Batch 260 review (C-21, HIGH, live-reproduced): app.cancel_purchase_order and
+-- app.decide_purchase_order_approval_step used to lock (app.purchase_orders,
+-- app.approval_requests/app.approval_request_steps) in opposite order -- a genuine
+-- Postgres deadlock (SQLSTATE 40P01) the moment both raced on the same PO's own bound,
+-- still-pending approval request. Fixed in
+-- 20260730690000_harden_procurement_purchase_order_batch_260_review_fixes.sql by
+-- deferring app.cancel_purchase_order's own app.purchase_orders lock until AFTER the
+-- bound approval request is locked/cancelled, matching app.decide_purchase_order_
+-- approval_step's own order. This is a REAL two-process race (reusing the same
+-- scripts/db-tests/wms-picking-concurrency-helper.sh the amend race above uses): one
+-- session cancels a submitted-and-pending-approval PO, the other simultaneously rejects
+-- (a decision that finalizes the bound request even at step 1 of 2 -- see
+-- app.decide_approval_step's own reject branch, PLT-123) its sole pending approval step
+-- -- an entirely ordinary concurrent scenario for a governed multi-actor workflow with
+-- no client-side serialization. Proof of the fix is BOTH processes always resolving to
+-- a real, self-consistent outcome (exactly one of the two mutually exclusive terminal
+-- states below) -- never a raw, unhandled deadlock aborting an otherwise-legitimate
+-- transaction.
+-- ===========================================================================
+
+\echo '>> comparison-4 (select vendor B again) -> PO-4, submitted for governance approval (2-step manager/finance, still pending) -- the fixture for the REAL two-process cancel-vs-decide deadlock regression below'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'po1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000260102';
+  v_approver1 uuid := '00000000-0000-0000-0000-000000260103';
+  v_rfq_id uuid;
+  v_vendor_b_master uuid;
+  v_comparison app.vendor_comparisons;
+  v_b_offer app.vendor_comparison_offers;
+  v_po app.purchase_orders;
+begin
+  select id into v_rfq_id from app.rfqs where tenant_id = v_tenant1 and idempotency_key = 'idem-po-rfq-1';
+  select master_record_id into v_vendor_b_master from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Po Vendor B';
+
+  v_comparison := app.create_vendor_comparison(v_tenant1, v_rfq_id, 'IDR', null, null, null, null, 'idem-po-cmp-4', v_staff1, 'staff');
+  select * into v_b_offer from app.vendor_comparison_offers where comparison_id = v_comparison.id and vendor_master_id = v_vendor_b_master;
+  v_comparison := app.recommend_vendor_comparison_offer(v_comparison.id, v_b_offer.id, 'vendor B again, for the cancel/decide race fixture', v_comparison.record_version, v_staff1, 'staff');
+  v_comparison := app.submit_vendor_comparison_for_approval(v_comparison.id, v_b_offer.id, null, v_comparison.record_version, v_approver1, 'approver');
+
+  v_po := app.draft_purchase_order_from_selection(v_tenant1, v_comparison.id, 'idem-po-draft-4', v_staff1, 'staff', null, null, null, null, null, null, null);
+  v_po := app.submit_purchase_order_for_approval(v_po.id, v_po.record_version, v_staff1, 'staff');
+  if v_po.status <> 'submitted' or v_po.approval_status <> 'pending' or v_po.approval_request_id is null then
+    raise exception 'assertion failed: expected the race fixture PO to be submitted/pending with a bound approval request, got %/%/%', v_po.status, v_po.approval_status, v_po.approval_request_id;
+  end if;
+end $$;
+
+\echo '>> REAL two-process cancel-vs-decide race: one session calls app.cancel_purchase_order, the other concurrently rejects the sole pending approval step (which finalizes the request even at step 1 of 2) -- must never deadlock, must always resolve to one of two self-consistent outcomes'
+select id as race4_po_id, record_version as race4_po_version from app.purchase_orders where idempotency_key = 'idem-po-draft-4' \gset
+select ars.id as race4_step1_id
+  from app.approval_request_steps ars
+  join app.purchase_orders po on po.approval_request_id = ars.request_id
+  where po.idempotency_key = 'idem-po-draft-4' and ars.step_order = 1 \gset
+select current_database() as pg_test_db \gset
+
+\set race4_sql_a 'select app.cancel_purchase_order(''' :race4_po_id ''', ' :race4_po_version ', ''race: cancel leg'', ''00000000-0000-0000-0000-000000260102'', ''staff'');'
+\set race4_sql_b 'select app.decide_purchase_order_approval_step(''' :race4_step1_id ''', ''rejected'', ''00000000-0000-0000-0000-000000260108'', ''manager'', now(), ''race: decide leg'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race4_sql_a
+\setenv RACE_SQL_B :race4_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-purchase-order-cancel-decide-race-a.out
+\setenv RACE_OUT_B /tmp/cargogrid-purchase-order-cancel-decide-race-b.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_race4_po_id uuid := (select id from app.purchase_orders where idempotency_key = 'idem-po-draft-4');
+  v_po app.purchase_orders;
+  v_request_status text;
+  v_cancel_won boolean;
+  v_decide_won boolean;
+begin
+  select * into v_po from app.purchase_orders where id = v_race4_po_id;
+  select status into v_request_status from app.approval_requests where id = v_po.approval_request_id;
+
+  -- Exactly one of the two legitimate, independently-authorized actions may have taken
+  -- effect -- never both (that would mean the loser's typed-error abort did not
+  -- actually roll back), and never neither (that would mean both raised something
+  -- other than the expected typed error, e.g. a raw unhandled deadlock).
+  v_cancel_won := (v_po.status = 'cancelled' and v_request_status = 'cancelled');
+  v_decide_won := (v_po.status = 'submitted' and v_po.approval_status = 'rejected' and v_request_status = 'rejected');
+
+  if v_cancel_won and v_decide_won then
+    raise exception 'assertion failed: impossible combined state (both legs appear to have won) -- status=%, approval_status=%, request_status=%', v_po.status, v_po.approval_status, v_request_status;
+  end if;
+  if not v_cancel_won and not v_decide_won then
+    raise exception 'assertion failed: neither leg reached its expected terminal state (likely an unhandled raw error on both, e.g. a reintroduced deadlock) -- status=%, approval_status=%, request_status=%; see /tmp/cargogrid-purchase-order-cancel-decide-race-a.out and -b.out', v_po.status, v_po.approval_status, v_request_status;
+  end if;
+
+  raise notice 'cancel-vs-decide deadlock regression proof: exactly 1 of 2 racing real psql processes (app.cancel_purchase_order vs app.decide_purchase_order_approval_step, same PO, same bound pending approval request) won -- % -- neither process hit a raw, unhandled deadlock', case when v_cancel_won then 'cancel' else 'decide (reject)' end;
 end $$;

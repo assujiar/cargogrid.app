@@ -52,6 +52,13 @@ export const PURCHASE_ORDER_KNOWN_MUTATION_ERROR_CODES = [
   "reason_required",
   "stale_version",
   "invalid_transition",
+  // Batch 260 review (C-21 fix, defense in depth): app.cancel_purchase_order's own
+  // nested app.cancel_approval_request (PLT-123) call can now surface this typed code
+  // to a caller who raced a concurrent decide_purchase_order_approval_step that
+  // finalized the bound approval request between this function's own unlocked initial
+  // read and the nested call -- a narrow, self-consistent outcome of the C-21 lock-order
+  // fix, never a raw/opaque error.
+  "approval_request_not_pending",
 ] as const;
 type KnownPurchaseOrderMutationErrorCode = (typeof PURCHASE_ORDER_KNOWN_MUTATION_ERROR_CODES)[number];
 export type PurchaseOrderMutationErrorCode = KnownPurchaseOrderMutationErrorCode | "mutation_failed" | "invalid_response";
