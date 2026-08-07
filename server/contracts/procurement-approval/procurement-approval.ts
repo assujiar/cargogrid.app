@@ -217,6 +217,19 @@ export function parseVendorSelectionApprovalSyncResult(row: Record<string, unkno
   });
 }
 
+export const PurchaseOrderApprovalSyncResultSchema = z.object({
+  id: z.string().uuid(),
+  approvalStatus: ProcurementApprovalStatusSchema,
+});
+export type PurchaseOrderApprovalSyncResult = z.infer<typeof PurchaseOrderApprovalSyncResultSchema>;
+
+export function parsePurchaseOrderApprovalSyncResult(row: Record<string, unknown>): PurchaseOrderApprovalSyncResult {
+  return PurchaseOrderApprovalSyncResultSchema.parse({
+    id: row.id,
+    approvalStatus: row.approval_status,
+  });
+}
+
 // --- Mutation input schemas ---
 
 export const CreateProcurementApprovalPolicyVersionInputSchema = z

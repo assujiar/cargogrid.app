@@ -29,6 +29,7 @@ import {
   parseVendorActivationApprovalSyncResult,
   parseRateVersionApprovalSyncResult,
   parseVendorSelectionApprovalSyncResult,
+  parsePurchaseOrderApprovalSyncResult,
   parseProcurementExceptionRequest,
   type CreateProcurementApprovalPolicyVersionInput,
   type PublishProcurementApprovalPolicyVersionInput,
@@ -39,6 +40,7 @@ import {
   type VendorActivationApprovalSyncResult,
   type RateVersionApprovalSyncResult,
   type VendorSelectionApprovalSyncResult,
+  type PurchaseOrderApprovalSyncResult,
   type ProcurementExceptionRequest,
 } from "../contracts/procurement-approval/procurement-approval.ts";
 
@@ -59,6 +61,10 @@ export const PROCUREMENT_APPROVAL_KNOWN_MUTATION_ERROR_CODES = [
   "not_a_rate_version_approval",
   "not_a_vendor_selection_approval",
   "not_a_procurement_exception_approval",
+  // PRC-260: the purchase_order entity_type's own domain sync wrapper, following the
+  // exact pattern PRC-259's own migration header documented as this prompt's own future
+  // work.
+  "not_a_purchase_order_approval",
   "approval_request_not_pending",
   "approval_step_not_active",
   "approval_self_approval_denied",
@@ -79,6 +85,8 @@ export const PROCUREMENT_APPROVAL_KNOWN_MUTATION_ERROR_CODES = [
   "rate_version_target_not_found",
   "vendor_selection_target_not_found",
   "procurement_exception_target_not_found",
+  // PRC-260
+  "purchase_order_target_not_found",
 ] as const;
 type KnownProcurementApprovalMutationErrorCode = (typeof PROCUREMENT_APPROVAL_KNOWN_MUTATION_ERROR_CODES)[number];
 export type ProcurementApprovalMutationErrorCode = KnownProcurementApprovalMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -178,6 +186,15 @@ export async function decideVendorSelectionApprovalStep(client: ProcurementAppro
     throw new ProcurementApprovalMutationError("invalid_response", "decide_vendor_selection_approval_step returned no row");
   }
   return parseVendorSelectionApprovalSyncResult(data as Record<string, unknown>);
+}
+
+/** Records one approver's decision on one step of a purchase order's bound approval request, then syncs app.purchase_orders.approvalStatus once the request reaches a final state -- never itself calls app.issue_purchase_order (that stays a separate, explicit Procurement action once approvalStatus clears). PRC-260. */
+export async function decidePurchaseOrderApprovalStep(client: ProcurementApprovalMutationRpcClient, input: DecideProcurementApprovalStepInput): Promise<PurchaseOrderApprovalSyncResult> {
+  const data = await callRpc(client, "decide_purchase_order_approval_step", decideStepArgs(input));
+  if (!data || typeof data !== "object") {
+    throw new ProcurementApprovalMutationError("invalid_response", "decide_purchase_order_approval_step returned no row");
+  }
+  return parsePurchaseOrderApprovalSyncResult(data as Record<string, unknown>);
 }
 
 /** Records one approver's decision on one step of an exception/override request's bound approval request. Unlike the other three, this ALSO syncs status (not just approvalStatus) -- the governance outcome IS the terminal domain status for this entity. */

@@ -28,6 +28,7 @@ import {
   decideVendorActivationApprovalStep,
   decideRateVersionApprovalStep,
   decideVendorSelectionApprovalStep,
+  decidePurchaseOrderApprovalStep,
   decideProcurementExceptionApprovalStep,
   createProcurementExceptionRequest,
   cancelProcurementExceptionRequest,
@@ -226,14 +227,17 @@ export async function decideProcurementApprovalStepAction(
         await decideProcurementExceptionApprovalStep(supabase, input);
         break;
       case "purchase_order":
+        // PRC-260 (Prompt 260, Purchase Order): the domain sync wrapper this capability's
+        // own migration header documented as future work -- now wired.
+        await decidePurchaseOrderApprovalStep(supabase, input);
+        break;
       case "vendor_contract":
-        // Registered as a valid policy/context entity_type dimension (see this
-        // capability's own migration header) but no governed entity table exists yet
-        // for either -- no decide wrapper exists to dispatch to until that future
-        // capability ships (Prompt 260 for purchase_order; a later Phase 6 prompt for
-        // vendor_contract). A step of this entity_type can never actually be created
-        // today (nothing calls app.request_approval with it), so this branch is
-        // unreachable in practice, not a silently swallowed real case.
+        // Registered as a valid policy/context entity_type dimension (see PRC-259's own
+        // migration header) but no governed entity table exists yet -- no decide wrapper
+        // exists to dispatch to until a future vendor-contract capability ships. A step
+        // of this entity_type can never actually be created today (nothing calls
+        // app.request_approval with it), so this branch is unreachable in practice, not
+        // a silently swallowed real case.
         return { error: `No governed entity capability exists yet for ${entityType} -- this step should be unreachable.` };
     }
   } catch (error) {
