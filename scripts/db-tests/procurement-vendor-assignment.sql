@@ -246,6 +246,25 @@ begin
     raise exception 'assertion failed: expected the identical idempotency-key replay to return the SAME row';
   end if;
 
+  -- Tier C batch-3 fix regression: the ORIGINAL in-prompt comparison only covered
+  -- shipment_order_id/vendor_master_id -- live-reproduced by an independent Tier C
+  -- lens as silently discarding a caller's real response_deadline (and every other
+  -- linked-evidence field) on replay. Same shipment/vendor as idem-vasm-inv-1's own
+  -- original call, but a genuinely different response_deadline -- must now ALSO be a
+  -- conflict.
+  begin
+    perform app.propose_vendor_assignment_invitation(
+      v_tenant1, v_shipment_id, v_vendor_a, v_contract_id, null, null, v_reservation_id, now() + interval '30 days', 'idem-vasm-inv-1', v_rep1, 'rep'
+    );
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'idempotency_key_conflict%' then
+      raise exception 'assertion failed: expected idempotency_key_conflict for a response_deadline-mismatched replay, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected reusing idem-vasm-inv-1 with a mismatched response_deadline to be rejected as a conflict, not silently returned with the ORIGINAL response_deadline'; end if;
+
   -- a second, live (invited) invitation for the SAME shipment order is blocked by the partial unique index
   begin
     perform app.propose_vendor_assignment_invitation(v_tenant1, v_shipment_id, v_vendor_a, null, null, null, null, now() + interval '2 days', 'idem-vasm-inv-conflict', v_rep1, 'rep');
@@ -257,6 +276,122 @@ begin
     end if;
   end;
   if not v_failed then raise exception 'assertion failed: expected a second live invitation for the same shipment order to be rejected'; end if;
+end $$;
+
+\echo '>> Tier C batch-3 fix regression (C-15, live-reproduced): rate_version_id now carries the SAME vendor/tenant scope validation contract_id/po_id/capacity_reservation_id already had'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vasgn1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000263101';
+  v_rep1 uuid := '00000000-0000-0000-0000-000000263102';
+  v_vendor_a uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Assignment A');
+  v_vendor_b uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Assignment B');
+  v_shipment_id uuid := (select id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-shipment');
+  v_rate app.vendor_rate_versions;
+  v_failed boolean;
+begin
+  -- a rate version explicitly scoped to vendor B (not vendor A)
+  select * into v_rate from app.create_rate_version(
+    v_tenant1, 'VENDOR-VASM-B', 'Vendor B Line', 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', '20ft',
+    null, null, null, null, 'IDR', 5000000, null, '[]'::jsonb, now(), null, null, v_admin1, 'tester', v_vendor_b
+  );
+  begin
+    perform app.propose_vendor_assignment_invitation(v_tenant1, v_shipment_id, v_vendor_a, null, null, v_rate.id, null, now() + interval '2 days', 'idem-vasm-inv-rate-mismatch', v_rep1, 'rep');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'rate_version_scope_mismatch%' then
+      raise exception 'assertion failed: expected rate_version_scope_mismatch, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected proposing an invitation for vendor A citing a rate version scoped to vendor B to be rejected'; end if;
+end $$;
+
+\echo '>> Tier C batch-3 fix regression (C-20/spec-compliance, live-reproduced independently by two Tier C lenses): app.resolve_effective_vendor_contract (built by PRC-261 explicitly for PRC-263 to consume) is now actually auto-resolved when contract_id is left null, and a supplied contract''s effective-date window is now enforced, not just its status'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vasgn1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000263101';
+  v_rep1 uuid := '00000000-0000-0000-0000-000000263102';
+  v_vendor_a uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Assignment A');
+  v_active_contract_id uuid := (select id from app.vendor_contracts where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-contract-a');
+  v_shipment5 app.shipment_orders;
+  v_shipment6 app.shipment_orders;
+  v_invitation app.vendor_assignment_invitations;
+  v_future_contract app.vendor_contracts;
+  v_failed boolean;
+begin
+  -- auto-resolve: contract_id left null, vendor A has exactly one active+effective
+  -- governing contract (idem-vasm-contract-a) -- must be resolved and STORED onto the
+  -- new invitation row, not left null.
+  v_shipment5 := app.create_shipment_order_from_job(
+    (select job_order_id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-shipment'),
+    'idem-vasm-shipment-5', null, null, 'ocean_freight', 'land', 'Jakarta', 'Bekasi', null, null, null, null, null, null, null, null, 'split: contract auto-resolve fixture', v_rep1, 'rep'
+  );
+  v_invitation := app.propose_vendor_assignment_invitation(v_tenant1, v_shipment5.id, v_vendor_a, null, null, null, null, now() + interval '2 days', 'idem-vasm-inv-autoresolve', v_rep1, 'rep');
+  if v_invitation.contract_id is distinct from v_active_contract_id then
+    raise exception 'assertion failed: expected propose (contract_id left null) to auto-resolve and store vendor A''s own active+effective governing contract %, got %', v_active_contract_id, v_invitation.contract_id;
+  end if;
+
+  -- effective-window check: a contract with a future effective_start is now rejected
+  -- even though its status is 'active' (the ORIGINAL bug: only status was checked)
+  v_future_contract := app.create_vendor_contract_draft(
+    v_tenant1, v_vendor_a, 'framework', (current_date + interval '30 days')::date, null, null, 30,
+    '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, false, 'idem-vasm-future-contract', v_admin1, 'admin'
+  );
+  v_future_contract := app.submit_vendor_contract_for_approval(v_future_contract.id, v_future_contract.record_version, 'idem-vasm-future-contract-submit', v_admin1, 'admin');
+  v_future_contract := app.activate_vendor_contract(v_future_contract.id, v_future_contract.record_version, v_admin1, 'admin');
+  if v_future_contract.status <> 'active' then
+    raise exception 'assertion failed: expected the future-dated contract to reach status=active (its effective_start being in the future is a SEPARATE concern from its lifecycle status), got %', v_future_contract.status;
+  end if;
+
+  v_shipment6 := app.create_shipment_order_from_job(
+    (select job_order_id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-shipment'),
+    'idem-vasm-shipment-6', null, null, 'ocean_freight', 'land', 'Jakarta', 'Bogor', null, null, null, null, null, null, null, null, 'split: contract effective-window fixture', v_rep1, 'rep'
+  );
+  begin
+    perform app.propose_vendor_assignment_invitation(v_tenant1, v_shipment6.id, v_vendor_a, v_future_contract.id, null, null, null, now() + interval '2 days', 'idem-vasm-inv-futurecontract', v_rep1, 'rep');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_not_eligible%' or sqlerrm not like '%contract_not_yet_effective%' then
+      raise exception 'assertion failed: expected vendor_not_eligible naming contract_not_yet_effective, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected proposing an invitation citing an active-but-not-yet-effective contract to be rejected'; end if;
+end $$;
+
+\echo '>> Tier C batch-3 fix regression (C-19-adjacent, live-reproduced): a capacity reservation still in ''held'' (never accepted) is no longer treated as eligible -- confirm_vendor_assignment''s own consumption only ever matches status=accepted'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vasgn1');
+  v_rep1 uuid := '00000000-0000-0000-0000-000000263102';
+  v_vendor_a uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Assignment A');
+  v_contract_id uuid := (select id from app.vendor_contracts where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-contract-a');
+  v_offer_id uuid := (select id from app.vendor_capacity_offers where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-offer-a');
+  v_held_reservation app.vendor_capacity_reservations;
+  v_shipment7 app.shipment_orders;
+  v_failed boolean;
+begin
+  v_held_reservation := app.reserve_vendor_capacity(v_offer_id, 5, '2026-07-01'::timestamptz, '2026-07-05'::timestamptz, 'manual', null, 'idem-vasm-res-held', v_rep1, 'rep');
+  if v_held_reservation.status <> 'held' then
+    raise exception 'assertion failed: expected a fresh reservation to be status=held (never accepted), got %', v_held_reservation.status;
+  end if;
+
+  v_shipment7 := app.create_shipment_order_from_job(
+    (select job_order_id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-shipment'),
+    'idem-vasm-shipment-7', null, null, 'ocean_freight', 'land', 'Jakarta', 'Depok', null, null, null, null, null, null, null, null, 'split: held-reservation-ineligible fixture', v_rep1, 'rep'
+  );
+  begin
+    perform app.propose_vendor_assignment_invitation(v_tenant1, v_shipment7.id, v_vendor_a, v_contract_id, null, null, v_held_reservation.id, now() + interval '2 days', 'idem-vasm-inv-heldres', v_rep1, 'rep');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_not_eligible%' or sqlerrm not like '%capacity_not_available%' then
+      raise exception 'assertion failed: expected vendor_not_eligible naming capacity_not_available for a still-held reservation, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected proposing an invitation citing a still-held (never accepted) capacity reservation to be rejected -- confirm''s own consumption UPDATE only ever matches status=accepted, so treating held as eligible would silently leak capacity'; end if;
 end $$;
 
 \echo '>> accept -> confirm: dual-authority gate (PRC:Edit-only actor denied at confirm; OPS:Assign required), real app.assign_resource commitment, capacity reservation consumed'
@@ -468,6 +603,43 @@ begin
   if exists (select 1 from app.resource_assignments where shipment_order_id = (select shipment_order_id from app.vendor_assignment_invitations where id = v_invitation.id) and resource_id = v_vendor_a and role = 'vendor' and is_current) then
     raise exception 'assertion failed: expected vendor A''s own prior assignment row to no longer be current after reassignment';
   end if;
+
+  -- Tier C batch-3 fix regression: this function previously had NO idempotency
+  -- pre-check or race-recovery handler at all -- live-reproduced by an independent
+  -- Tier C lens as a raw, unclassified unique_violation (23505) instead of a clean
+  -- idempotency_key_conflict when the same key was reused for a genuinely different
+  -- reassignment target.
+  declare
+    v_replay app.vendor_assignment_invitations;
+    v_vendor_b uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Assignment B');
+    v_failed boolean;
+  begin
+    -- identical replay (same target vendor C) returns the SAME new invitation, never
+    -- re-attempts app.reassign_resource against an already-superseded prior row
+    v_replay := app.reassign_vendor_assignment(
+      v_invitation.id, v_invitation.record_version, v_vendor_c.master_record_id, null, null, null, null,
+      'vendor A withdrew capacity last minute', 'idem-vasm-reassign-1', v_rep1, 'rep'
+    );
+    if v_replay.id <> v_new_invitation.id then
+      raise exception 'assertion failed: expected the identical idempotency-key replay to return the SAME new invitation, got a different row';
+    end if;
+
+    -- reusing the SAME key for a genuinely DIFFERENT target vendor is a clean
+    -- idempotency_key_conflict, never a raw unique_violation
+    begin
+      perform app.reassign_vendor_assignment(
+        v_invitation.id, v_invitation.record_version, v_vendor_b, null, null, null, null,
+        'a different reassignment reusing the same key', 'idem-vasm-reassign-1', v_rep1, 'rep'
+      );
+      v_failed := false;
+    exception when others then
+      v_failed := true;
+      if sqlerrm not like 'idempotency_key_conflict%' then
+        raise exception 'assertion failed: expected idempotency_key_conflict (never a raw unique_violation) for a target-mismatched reassign replay, got %', sqlerrm;
+      end if;
+    end;
+    if not v_failed then raise exception 'assertion failed: expected reusing idem-vasm-reassign-1 for a different target vendor to be rejected as a conflict'; end if;
+  end;
 end $$;
 
 \echo '>> app.terminate_vendor_contract (PRC-261) active-dependency guard added by this migration (design note 5): blocked while a live invitation cites the contract, succeeds once cleared'
@@ -555,6 +727,29 @@ begin
   if v_count <> 1 then
     raise exception 'assertion failed: expected app.evaluate_vendor_assignment_eligibility to carry exactly one service_role grant, found %', v_count;
   end if;
+end $$;
+
+\echo '>> Tier C batch-3 fix regression (C-05, live-reproduced by an independent Tier C lens): the SAME not-found fold now also applies to every WRITE RPC, not just reads'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vasgn1');
+  v_admin2 uuid := '00000000-0000-0000-0000-000000263201';
+  v_invitation_id uuid := (select id from app.vendor_assignment_invitations where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-inv-1');
+  v_invitation app.vendor_assignment_invitations;
+  v_failed boolean;
+begin
+  select * into v_invitation from app.vendor_assignment_invitations where id = v_invitation_id;
+
+  begin
+    perform app.decline_vendor_assignment_invitation(v_invitation_id, v_invitation.record_version, 'cross-tenant probe', v_admin2, 'admin2');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_assignment_invitation_not_found%' then
+      raise exception 'assertion failed: expected vendor_assignment_invitation_not_found (never insufficient_authority, which would disclose a real row exists in another tenant) for a cross-tenant WRITE, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a cross-tenant decline_vendor_assignment_invitation to be denied'; end if;
 end $$;
 
 \echo '>> audit trail: every vendor-assignment mutation recorded a real app.audit_logs event'

@@ -147,6 +147,25 @@ begin
   end;
   if not v_failed then raise exception 'assertion failed: expected reusing idem-vcap-offer-1 for a different quantity to be rejected as a conflict'; end if;
 
+  -- Tier C batch-3 fix regression: the ORIGINAL in-prompt comparison only covered
+  -- vendor/service_type/quantity/window_start -- live-reproduced by an independent
+  -- Tier C lens as silently discarding a caller's real window_end on replay. Same
+  -- vendor/service/quantity/window_start as idem-vcap-offer-1's own original call,
+  -- but a genuinely different window_end -- must now ALSO be a conflict.
+  begin
+    perform app.create_vendor_capacity_offer_draft(
+      v_tenant1, v_vendor_master, null, 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', 'vehicle', null,
+      100, 'teu', '2026-01-01'::timestamptz, '2027-06-30'::timestamptz, 'idem-vcap-offer-1', v_staff1, 'staff'
+    );
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'idempotency_key_conflict%' then
+      raise exception 'assertion failed: expected idempotency_key_conflict for a window_end-mismatched replay, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected reusing idem-vcap-offer-1 with a mismatched window_end (2027-06-30 vs the original 2026-12-31) to be rejected as a conflict, not silently returned with the ORIGINAL window_end'; end if;
+
   -- invalid window rejected
   begin
     perform app.create_vendor_capacity_offer_draft(v_tenant1, v_vendor_master, null, 'ocean_freight', null, null, null, 'general', null, 10, 'teu', '2026-06-01'::timestamptz, '2026-01-01'::timestamptz, 'idem-vcap-bad-1', v_staff1, 'staff');
@@ -403,6 +422,165 @@ begin
   if v_offer.id <> v_offer_id then
     raise exception 'assertion failed: expected the View-only viewer to successfully read the offer';
   end if;
+end $$;
+
+\echo '>> Tier C batch-3 fix regression (C-05, live-reproduced by an independent Tier C lens): the SAME not-found fold now also applies to every WRITE RPC, not just reads'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vcap1');
+  v_staff2 uuid := '00000000-0000-0000-0000-000000262202';
+  v_offer_id uuid;
+  v_offer app.vendor_capacity_offers;
+  v_failed boolean;
+begin
+  select id into v_offer_id from app.vendor_capacity_offers where tenant_id = v_tenant1 and idempotency_key = 'idem-vcap-offer-1';
+  select * into v_offer from app.vendor_capacity_offers where id = v_offer_id;
+
+  begin
+    perform app.update_vendor_capacity_offer_draft(v_offer_id, v_offer.record_version, v_offer.contract_id, v_offer.mode, v_offer.origin_lane, v_offer.destination_lane, v_offer.resource_master_id, v_offer.quantity, v_offer.uom, v_offer.window_start, v_offer.window_end, v_staff2, 'staff2');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_capacity_offer_not_found%' then
+      raise exception 'assertion failed: expected vendor_capacity_offer_not_found (never insufficient_authority, which would disclose a real row exists in another tenant) for a cross-tenant WRITE, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a cross-tenant update_vendor_capacity_offer_draft to be denied'; end if;
+
+  begin
+    perform app.reserve_vendor_capacity(v_offer_id, 1, v_offer.window_start, v_offer.window_end, 'manual', null, 'idem-vcap-crosstenant-probe', v_staff2, 'staff2');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_capacity_offer_not_found%' then
+      raise exception 'assertion failed: expected vendor_capacity_offer_not_found for a cross-tenant reserve_vendor_capacity, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a cross-tenant reserve_vendor_capacity to be denied'; end if;
+end $$;
+
+\echo '>> Tier C batch-3 fix regression (C-15, live-reproduced by an independent Tier C lens): a compliance-holded vendor, or an inactive/lapsed/not-yet-effective governing contract, must now be blocked at publish and at reserve'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vcap1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000262101';
+  v_supreme uuid := '00000000-0000-0000-0000-000000262999';
+  v_vendor app.vendor_profiles;
+  v_req app.vendor_compliance_requirements;
+  v_contract app.vendor_contracts;
+  v_offer app.vendor_capacity_offers;
+  v_offer2 app.vendor_capacity_offers;
+  v_failed boolean;
+begin
+  -- a fresh, otherwise-active vendor, placed on a REAL compliance hold via the actual
+  -- requirement/document pipeline (never a raw INSERT into app.vendor_compliance_
+  -- status, which is written only by app._recalculate_vendor_compliance_status_family
+  -- -- mirrors scripts/db-tests/procurement-sourcing.sql's own established "vendor D"
+  -- pattern exactly): a published BLOCKING requirement scoped to this vendor's own
+  -- category, with no document ever submitted.
+  v_vendor := app.create_vendor_profile_draft(v_tenant1, 'PT Vendor Capacity Compliance Hold', 'VCAPHOLD', 'PT', 'REG-VCAP-HOLD', 'vcap_restricted_category', 30, 'staff_created', 'idem-vcap-hold-vendor', v_admin1, 'admin');
+  perform app.add_vendor_contact(v_vendor.master_record_id, 'Hana H', 'Ops', 'hana@vcaphold.test', '0811', true, v_admin1, 'admin');
+  perform app.add_vendor_address(v_vendor.master_record_id, 'legal', 'Jl. Hold 1', 'Jakarta', 'DKI Jakarta', '10110', 'Indonesia', v_admin1, 'admin');
+  perform app.add_vendor_service(v_vendor.master_record_id, 'ocean_freight', v_admin1, 'admin');
+  perform app.add_vendor_coverage(v_vendor.master_record_id, 'Jakarta', 'Surabaya', v_admin1, 'admin');
+  select * into v_vendor from app.vendor_profiles where master_record_id = v_vendor.master_record_id;
+  v_vendor := app.submit_vendor_profile_for_review(v_vendor.master_record_id, v_vendor.record_version, v_admin1, 'admin');
+  v_vendor := app.decide_vendor_profile_review(v_vendor.master_record_id, v_vendor.record_version, 'approve', null, v_admin1, 'admin');
+  v_vendor := app.activate_vendor_profile(v_vendor.master_record_id, v_vendor.record_version, v_admin1, 'admin');
+
+  perform app.register_document_type('vcap_hold_compliance_doc', 'Vendor Capacity Hold Compliance Doc', 'PRC', v_supreme, 'supreme');
+  v_req := app.create_vendor_compliance_requirement_draft(v_tenant1, 'vcap_restricted_category', null, 'vcap_hold_compliance_doc', 'Vendor Capacity Hold Requirement', null, 'blocking', false, null, null, 'idem-vcap-hold-req', v_admin1, 'admin');
+  v_req := app.publish_vendor_compliance_requirement(v_req.id, v_req.record_version, null, v_admin1, 'admin');
+  perform app.recalculate_vendor_compliance_status(v_vendor.master_record_id, v_admin1, 'admin');
+
+  if not exists (select 1 from app.vendor_compliance_status where vendor_master_record_id = v_vendor.master_record_id and eligibility_hold = true) then
+    raise exception 'assertion failed: expected the fresh vendor to carry a real eligibility_hold=true compliance status after recalculation (test setup precondition, not the fix under test)';
+  end if;
+
+  v_offer := app.create_vendor_capacity_offer_draft(
+    v_tenant1, v_vendor.master_record_id, null, 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', 'general', null,
+    50, 'teu', '2026-01-01'::timestamptz, '2026-12-31'::timestamptz, 'idem-vcap-hold-offer', v_admin1, 'admin'
+  );
+  begin
+    perform app.publish_vendor_capacity_offer(v_offer.id, v_offer.record_version, v_admin1, 'admin');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_compliance_hold%' then
+      raise exception 'assertion failed: expected vendor_compliance_hold, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected publishing an offer for a compliance-holded vendor to be rejected'; end if;
+
+  -- a SEPARATE, already-active, non-held vendor (PT Vendor Capacity A) linked to a
+  -- NOT-YET-EFFECTIVE contract -- isolates the contract-effective-window check from
+  -- the compliance-hold check above (the compliance check runs first inside the RPC,
+  -- so reusing the held vendor here would hit vendor_compliance_hold again, never
+  -- reaching this second, independent check).
+  v_contract := app.create_vendor_contract_draft(
+    v_tenant1, (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Capacity A'), 'framework', (current_date + interval '30 days')::date, null, null, 30,
+    '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, false, 'idem-vcap-hold-contract', v_admin1, 'admin'
+  );
+  v_contract := app.submit_vendor_contract_for_approval(v_contract.id, v_contract.record_version, 'idem-vcap-hold-contract-submit', v_admin1, 'admin');
+  v_contract := app.activate_vendor_contract(v_contract.id, v_contract.record_version, v_admin1, 'admin');
+
+  v_offer2 := app.create_vendor_capacity_offer_draft(
+    v_tenant1, v_contract.vendor_master_id, v_contract.id, 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', 'general', null,
+    50, 'teu', '2026-01-01'::timestamptz, '2026-12-31'::timestamptz, 'idem-vcap-notyeteffective-offer', v_admin1, 'admin'
+  );
+  begin
+    perform app.publish_vendor_capacity_offer(v_offer2.id, v_offer2.record_version, v_admin1, 'admin');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'governing_contract_not_yet_effective%' then
+      raise exception 'assertion failed: expected governing_contract_not_yet_effective, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected publishing an offer governed by a not-yet-effective contract to be rejected'; end if;
+
+  -- reserve's OWN independent re-check (not merely trusted from publish time): a
+  -- THIRD vendor, active and eligible when its offer was published, then placed on
+  -- the SAME real compliance hold afterward -- reserve must reject it even though
+  -- publish already succeeded earlier.
+  declare
+    v_vendor3 app.vendor_profiles;
+    v_offer3 app.vendor_capacity_offers;
+  begin
+    v_vendor3 := app.create_vendor_profile_draft(v_tenant1, 'PT Vendor Capacity Hold At Reserve', 'VCAPHOLD2', 'PT', 'REG-VCAP-HOLD2', 'vcap_restricted_category', 30, 'staff_created', 'idem-vcap-hold2-vendor', v_admin1, 'admin');
+    perform app.add_vendor_contact(v_vendor3.master_record_id, 'Rian R', 'Ops', 'rian@vcaphold2.test', '0812', true, v_admin1, 'admin');
+    perform app.add_vendor_address(v_vendor3.master_record_id, 'legal', 'Jl. Hold 2', 'Jakarta', 'DKI Jakarta', '10111', 'Indonesia', v_admin1, 'admin');
+    perform app.add_vendor_service(v_vendor3.master_record_id, 'ocean_freight', v_admin1, 'admin');
+    perform app.add_vendor_coverage(v_vendor3.master_record_id, 'Jakarta', 'Surabaya', v_admin1, 'admin');
+    select * into v_vendor3 from app.vendor_profiles where master_record_id = v_vendor3.master_record_id;
+    v_vendor3 := app.submit_vendor_profile_for_review(v_vendor3.master_record_id, v_vendor3.record_version, v_admin1, 'admin');
+    v_vendor3 := app.decide_vendor_profile_review(v_vendor3.master_record_id, v_vendor3.record_version, 'approve', null, v_admin1, 'admin');
+    v_vendor3 := app.activate_vendor_profile(v_vendor3.master_record_id, v_vendor3.record_version, v_admin1, 'admin');
+    -- eligible now (no requirement recalculation has run for this vendor yet)
+
+    v_offer3 := app.create_vendor_capacity_offer_draft(
+      v_tenant1, v_vendor3.master_record_id, null, 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', 'general', null,
+      50, 'teu', '2026-01-01'::timestamptz, '2026-12-31'::timestamptz, 'idem-vcap-hold2-offer', v_admin1, 'admin'
+    );
+    v_offer3 := app.publish_vendor_capacity_offer(v_offer3.id, v_offer3.record_version, v_admin1, 'admin');
+
+    -- the same published requirement (vcap_restricted_category) now applies retroactively
+    perform app.recalculate_vendor_compliance_status(v_vendor3.master_record_id, v_admin1, 'admin');
+    if not exists (select 1 from app.vendor_compliance_status where vendor_master_record_id = v_vendor3.master_record_id and eligibility_hold = true) then
+      raise exception 'assertion failed: expected the third vendor to carry a real eligibility_hold=true compliance status after recalculation (test setup precondition, not the fix under test)';
+    end if;
+
+    begin
+      perform app.reserve_vendor_capacity(v_offer3.id, 10, '2026-02-01'::timestamptz, '2026-02-10'::timestamptz, 'manual', null, 'idem-vcap-hold2-reserve', v_admin1, 'admin');
+      v_failed := false;
+    exception when others then
+      v_failed := true;
+      if sqlerrm not like 'vendor_compliance_hold%' then
+        raise exception 'assertion failed: expected vendor_compliance_hold at reserve time, got %', sqlerrm;
+      end if;
+    end;
+    if not v_failed then raise exception 'assertion failed: expected reserving against an already-published offer to be rejected once its vendor is compliance-held, never trusted from publish time alone'; end if;
+  end;
 end $$;
 
 \echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on any new vendor-capacity function (ERR-2026-004 regression guard)'

@@ -211,6 +211,28 @@ begin
   end;
   if not v_failed then raise exception 'assertion failed: expected reusing idem-vc-contract-1 for a different contract_type/effective_start to be rejected as a conflict, not silently returned as a match'; end if;
 
+  -- Tier C batch-3 fix regression: the ORIGINAL in-prompt idempotency comparison only
+  -- covered vendor/contract_type/effective_start -- live-reproduced by an independent
+  -- Tier C lens as silently discarding a caller's real effective_end (and every other
+  -- field) on replay. Same vendor/type/effective_start as idem-vc-contract-1's own
+  -- original call, but a genuinely different effective_end -- must now ALSO be a
+  -- conflict, not a silent return of the original row's effective_end=2026-12-31.
+  begin
+    perform app.create_vendor_contract_draft(
+      v_tenant1, v_vendor_master, 'fixed_term', '2026-01-01'::date, '2033-01-01'::date, null, 30,
+      jsonb_build_object('vat_rate', 11), jsonb_build_object('on_time_target_pct', 95),
+      jsonb_build_object('committed_teus_per_month', 50), jsonb_build_object('lanes', jsonb_build_array('Jakarta-Surabaya')),
+      jsonb_build_array('ISO9001'), true, 'idem-vc-contract-1', v_staff1, 'staff'
+    );
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'idempotency_key_conflict%' then
+      raise exception 'assertion failed: expected idempotency_key_conflict for an effective_end-mismatched replay, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected reusing idem-vc-contract-1 with a mismatched effective_end (2033-01-01 vs the original 2026-12-31) to be rejected as a conflict, not silently returned with the ORIGINAL effective_end'; end if;
+
   -- an outsider with no PRC:Create is denied
   begin
     perform app.create_vendor_contract_draft(v_tenant1, v_vendor_master, 'framework', '2026-01-01'::date, null, null, null, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, false, 'idem-vc-outsider-1', v_outsider1, 'outsider');
@@ -454,6 +476,58 @@ begin
   end if;
 end $$;
 
+\echo '>> Tier C batch-3 fix regression (C-04/C-21, live-reproduced by an independent Tier C lens as a REAL deadlock in ~50% of a concurrent-race trial): app.decide_vendor_contract_approval_step now locks the target contract row FIRST, before calling into the approval engine, matching app.cancel_vendor_contract_draft''s own lock order -- racing the two must never deadlock again'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vc1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000261102';
+  v_vendor_master uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Contract A');
+  v_contract app.vendor_contracts;
+begin
+  v_contract := app.create_vendor_contract_draft(v_tenant1, v_vendor_master, 'framework', '2028-01-01'::date, null, null, null, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, false, 'idem-vc-race-contract', v_staff1, 'staff');
+  v_contract := app.submit_vendor_contract_for_approval(v_contract.id, v_contract.record_version, 'idem-vc-race-submit', v_staff1, 'staff');
+end $$;
+
+select c.id as race_contract_id, c.record_version as race_contract_version, s.id as race_step_id
+from app.vendor_contracts c
+join app.approval_request_steps s on s.request_id = c.approval_request_id
+where c.tenant_id = (select id from app.tenants where slug = 'vc1') and c.idempotency_key = 'idem-vc-race-contract'
+order by s.step_order limit 1 \gset
+
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as race_bpid \gset
+
+\set race_sql_a 'select app.decide_vendor_contract_approval_step(''' :race_step_id ''', ''approved'', ''00000000-0000-0000-0000-000000261105'', ''manager'', now());'
+\set race_sql_b 'select app.cancel_vendor_contract_draft(''' :race_contract_id ''', ' :race_contract_version ', ''deadlock race probe'', ''00000000-0000-0000-0000-000000261102'', ''staff'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-vc-race-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-vc-race-b-:race_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+-- pg_read_file requires superuser/pg_read_server_files, which the postgres role this
+-- whole db-test suite connects as already has. A plain top-level SELECT (not inside a
+-- do $$ ... $$ body -- psql does not interpolate :variables there, the same gotcha
+-- procurement-vendor-capacity.sql's own race test discloses) that raises a genuine
+-- SQL error aborts the script under ON_ERROR_STOP exactly like an uncaught
+-- `raise exception` inside a do block does. The divisor is deliberately NOT a bare
+-- integer literal (`1 / 0`) -- Postgres's planner constant-folds a literal-only
+-- division at PLAN time, raising division-by-zero regardless of which CASE branch
+-- would actually be chosen at runtime (empirically confirmed against this session's
+-- own psql: `case when false then 1/0 else 1 end` still errors). `generate_series`
+-- forces genuine per-row runtime evaluation, so the THEN branch only executes when
+-- the WHEN condition is actually true.
+select case
+  when (pg_read_file('/tmp/cargogrid-vc-race-a-' || :'race_bpid' || '.out') || pg_read_file('/tmp/cargogrid-vc-race-b-' || :'race_bpid' || '.out')) ~* 'deadlock detected|could not serialize access'
+  then 1 / (select count(*) from generate_series(1, 0))
+  else 1
+end;
+
+\echo 'concurrent decide-vs-cancel race proof: neither racing process hit a deadlock -- see the process output captured above for the actual outcome each leg reached'
+
 \echo '>> cross-tenant authority denial: tenant2 staff cannot read or act on tenant1 contracts'
 do $$
 declare
@@ -475,6 +549,42 @@ begin
     end if;
   end;
   if not v_failed then raise exception 'assertion failed: expected a cross-tenant get_vendor_contract to be denied'; end if;
+end $$;
+
+\echo '>> Tier C batch-3 fix regression (C-05, live-reproduced by an independent Tier C lens): the SAME not-found fold now also applies to every WRITE RPC, not just reads -- a zero-membership cross-tenant caller must never be able to distinguish a real row in another tenant from a genuinely nonexistent id via the error shape on a denied WRITE attempt'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vc1');
+  v_staff2 uuid := '00000000-0000-0000-0000-000000261202';
+  v_contract_id uuid := (select id from app.vendor_contracts where tenant_id = v_tenant1 and version_no = 1 and idempotency_key = 'idem-vc-contract-1');
+  v_contract app.vendor_contracts;
+  v_failed boolean;
+begin
+  select * into v_contract from app.vendor_contracts where id = v_contract_id;
+
+  begin
+    perform app.update_vendor_contract_draft(v_contract_id, v_contract.record_version, v_contract.effective_start, v_contract.effective_end, null, null, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, v_staff2, 'staff2');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_contract_not_found%' then
+      raise exception 'assertion failed: expected vendor_contract_not_found (never insufficient_authority, which would disclose a real row exists in another tenant) for a cross-tenant WRITE, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a cross-tenant update_vendor_contract_draft to be denied'; end if;
+
+  -- same regression against a PRC:Override-gated write (suspend_vendor_contract) --
+  -- proves the fold applies regardless of which authority level the write requires.
+  begin
+    perform app.suspend_vendor_contract(v_contract_id, v_contract.record_version, 'cross-tenant probe', v_staff2, 'staff2');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'vendor_contract_not_found%' then
+      raise exception 'assertion failed: expected vendor_contract_not_found for a cross-tenant suspend_vendor_contract, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a cross-tenant suspend_vendor_contract to be denied'; end if;
 end $$;
 
 \echo '>> schema-privilege defense in depth: authenticated has NO column-level SELECT on the four masked commercial-term columns; anon holds zero EXECUTE on any new function (ERR-2026-004 regression guard)'
