@@ -230,6 +230,23 @@ export function parsePurchaseOrderApprovalSyncResult(row: Record<string, unknown
   });
 }
 
+// PRC-261 (Vendor Contract): wires the vendor_contract branch this entity_type
+// dimension has carried since PRC-259's own migration but that had no governed entity
+// table to dispatch to until now (app/(tenant)/[tenantSlug]/procurement/approvals/
+// actions.ts's own "unreachable in practice" disclosure is retired by this change).
+export const VendorContractApprovalSyncResultSchema = z.object({
+  id: z.string().uuid(),
+  approvalStatus: ProcurementApprovalStatusSchema,
+});
+export type VendorContractApprovalSyncResult = z.infer<typeof VendorContractApprovalSyncResultSchema>;
+
+export function parseVendorContractApprovalSyncResult(row: Record<string, unknown>): VendorContractApprovalSyncResult {
+  return VendorContractApprovalSyncResultSchema.parse({
+    id: row.id,
+    approvalStatus: row.approval_status,
+  });
+}
+
 // --- Mutation input schemas ---
 
 export const CreateProcurementApprovalPolicyVersionInputSchema = z
