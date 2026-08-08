@@ -3,7 +3,8 @@
  * wrappers around app.create_procurement_approval_policy_version /
  * app.publish_procurement_approval_policy_version /
  * app.decide_vendor_activation_approval_step / app.decide_rate_version_approval_step /
- * app.decide_vendor_selection_approval_step /
+ * app.decide_vendor_selection_approval_step / app.decide_purchase_order_approval_step /
+ * app.decide_vendor_contract_approval_step /
  * app.decide_procurement_exception_approval_step /
  * app.create_procurement_exception_request / app.cancel_procurement_exception_request
  * (supabase/migrations/20260730660000_create_procurement_approval.sql). Delegation/
@@ -30,6 +31,7 @@ import {
   parseRateVersionApprovalSyncResult,
   parseVendorSelectionApprovalSyncResult,
   parsePurchaseOrderApprovalSyncResult,
+  parseVendorContractApprovalSyncResult,
   parseProcurementExceptionRequest,
   type CreateProcurementApprovalPolicyVersionInput,
   type PublishProcurementApprovalPolicyVersionInput,
@@ -41,6 +43,7 @@ import {
   type RateVersionApprovalSyncResult,
   type VendorSelectionApprovalSyncResult,
   type PurchaseOrderApprovalSyncResult,
+  type VendorContractApprovalSyncResult,
   type ProcurementExceptionRequest,
 } from "../contracts/procurement-approval/procurement-approval.ts";
 
@@ -195,6 +198,15 @@ export async function decidePurchaseOrderApprovalStep(client: ProcurementApprova
     throw new ProcurementApprovalMutationError("invalid_response", "decide_purchase_order_approval_step returned no row");
   }
   return parsePurchaseOrderApprovalSyncResult(data as Record<string, unknown>);
+}
+
+/** Records one approver's decision on one step of a vendor contract's bound approval request, then syncs app.vendor_contracts.approvalStatus once the request reaches a final state -- never itself calls app.activate_vendor_contract (that stays a separate, explicit action once approvalStatus AND signature both clear). PRC-261. */
+export async function decideVendorContractApprovalStep(client: ProcurementApprovalMutationRpcClient, input: DecideProcurementApprovalStepInput): Promise<VendorContractApprovalSyncResult> {
+  const data = await callRpc(client, "decide_vendor_contract_approval_step", decideStepArgs(input));
+  if (!data || typeof data !== "object") {
+    throw new ProcurementApprovalMutationError("invalid_response", "decide_vendor_contract_approval_step returned no row");
+  }
+  return parseVendorContractApprovalSyncResult(data as Record<string, unknown>);
 }
 
 /** Records one approver's decision on one step of an exception/override request's bound approval request. Unlike the other three, this ALSO syncs status (not just approvalStatus) -- the governance outcome IS the terminal domain status for this entity. */

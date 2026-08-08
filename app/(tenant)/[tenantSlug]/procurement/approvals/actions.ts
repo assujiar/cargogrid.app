@@ -29,6 +29,7 @@ import {
   decideRateVersionApprovalStep,
   decideVendorSelectionApprovalStep,
   decidePurchaseOrderApprovalStep,
+  decideVendorContractApprovalStep,
   decideProcurementExceptionApprovalStep,
   createProcurementExceptionRequest,
   cancelProcurementExceptionRequest,
@@ -232,13 +233,11 @@ export async function decideProcurementApprovalStepAction(
         await decidePurchaseOrderApprovalStep(supabase, input);
         break;
       case "vendor_contract":
-        // Registered as a valid policy/context entity_type dimension (see PRC-259's own
-        // migration header) but no governed entity table exists yet -- no decide wrapper
-        // exists to dispatch to until a future vendor-contract capability ships. A step
-        // of this entity_type can never actually be created today (nothing calls
-        // app.request_approval with it), so this branch is unreachable in practice, not
-        // a silently swallowed real case.
-        return { error: `No governed entity capability exists yet for ${entityType} -- this step should be unreachable.` };
+        // PRC-261 (Vendor Contract): the domain sync wrapper PRC-259's own migration
+        // header documented as future work -- now wired, retiring the "unreachable in
+        // practice" disclosure that stood here before this capability shipped.
+        await decideVendorContractApprovalStep(supabase, input);
+        break;
     }
   } catch (error) {
     if (error instanceof ProcurementApprovalMutationError) return { error: `Could not record the decision: ${error.message}` };
