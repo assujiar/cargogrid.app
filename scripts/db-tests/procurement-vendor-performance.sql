@@ -977,6 +977,48 @@ begin
   );
 end $$;
 
+\echo '>> Tier C batch-4 fix regression (C-04, HIGH, live-reproduced): decide_vendor_kpi_manual_adjustment now rejects (stale_scorecard) an approval whose target scorecard was superseded by a later recalculation while the adjustment was still pending, instead of silently rewriting a dead scorecard nobody reads anymore'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vperf1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000264101';
+  v_staff1 uuid := '00000000-0000-0000-0000-000000264102';
+  v_good_vendor uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Good Vendor');
+  v_card app.vendor_kpi_scorecards;
+  v_adjustment app.vendor_kpi_manual_adjustments;
+  v_failed boolean;
+begin
+  select * into v_card from app.vendor_kpi_scorecards where tenant_id = v_tenant1 and vendor_master_id = v_good_vendor and is_current;
+
+  v_adjustment := app.request_vendor_kpi_manual_adjustment(v_card.id, 'on_time_pickup', 42, 'Tier C batch-4 stale-scorecard regression fixture', 'idem-vperf-stale-adj-1', v_admin1, 'admin');
+
+  -- An ordinary recalculation cycle in between (a completely realistic scenario, not a
+  -- deliberate attack): recompute + republish for the SAME vendor/window supersedes
+  -- v_card (is_current=false, status=superseded), minting a NEW current scorecard the
+  -- still-pending adjustment does NOT point at.
+  perform app.calculate_vendor_kpi_metrics(v_tenant1, v_good_vendor, v_card.window_start, v_card.window_end, 'manual', 'idem-vperf-stale-recalc-1', v_admin1, 'admin');
+  perform app.publish_vendor_kpi_scorecard(v_tenant1, v_good_vendor, v_card.window_start, v_card.window_end, 'idem-vperf-stale-republish-1', v_staff1, 'staff');
+
+  if (select is_current from app.vendor_kpi_scorecards where id = v_card.id) then
+    raise exception 'assertion failed: fixture precondition failed -- expected v_card to have been superseded by the republish above';
+  end if;
+
+  begin
+    perform app.decide_vendor_kpi_manual_adjustment(v_adjustment.id, v_adjustment.record_version, 'approved', 'approving against a now-superseded scorecard', v_staff1, 'staff');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'stale_scorecard%' then
+      raise exception 'assertion failed: expected stale_scorecard, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected approving an adjustment against a superseded scorecard to be rejected with stale_scorecard'; end if;
+
+  if (select adjusted from app.vendor_kpi_scorecard_lines where id = v_adjustment.scorecard_line_id) then
+    raise exception 'assertion failed: expected the superseded scorecard''s own line to remain untouched (adjusted=false) after the rejected approval -- the fix must fail loudly, never silently rewrite dead history';
+  end if;
+end $$;
+
 \echo '>> cross-tenant isolation: a tenant2 actor is denied on every write RPC and gets not-found (never a real row disclosure) on every read RPC; raw RLS denies direct row selection'
 do $$
 declare
@@ -1017,6 +1059,41 @@ begin
   if exists (select 1 from app.vendor_kpi_scorecards where id = v_card_id) then
     raise exception 'assertion failed: raw RLS leak -- a tenant2 session directly selected a tenant1 scorecard row';
   end if;
+  reset role;
+end $$;
+
+\echo '>> Tier C batch-4 fix regression (C-11, MEDIUM, live-reproduced): authenticated no longer has a raw column-level SELECT grant on vendor_kpi_metric_values.source_evidence (contributing_source_ids), which used to bypass both the PRC:View gate and the PRC:View-cost mask app.get_vendor_kpi_scorecard_drilldown enforces; every other, non-sensitive column stays directly selectable'
+do $$
+declare
+  v_count integer;
+  v_outsider1 uuid := '00000000-0000-0000-0000-000000264105';
+begin
+  select count(*) into v_count
+  from information_schema.column_privileges
+  where table_schema = 'app' and table_name = 'vendor_kpi_metric_values' and grantee = 'authenticated' and column_name = 'source_evidence';
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero authenticated column grant on vendor_kpi_metric_values.source_evidence, found %', v_count;
+  end if;
+
+  select count(*) into v_count
+  from information_schema.column_privileges
+  where table_schema = 'app' and table_name = 'vendor_kpi_metric_values' and grantee = 'authenticated' and column_name = 'computed_value';
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected authenticated to retain a direct SELECT grant on the non-sensitive computed_value column, found %', v_count;
+  end if;
+
+  -- Live end-to-end proof, not just a catalogue check: an actual zero-permission
+  -- tenant member (v_outsider1, real membership, no role granting anything) can no
+  -- longer read source_evidence via a raw table select under RLS, even though RLS
+  -- itself only scopes by tenant membership.
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_outsider1::text, 'role', 'authenticated')::text, true);
+  begin
+    perform source_evidence from app.vendor_kpi_metric_values limit 1;
+    raise exception 'assertion failed: expected a raw select of source_evidence to fail for authenticated (column-level privilege denial), not succeed';
+  exception
+    when insufficient_privilege then null;
+  end;
   reset role;
 end $$;
 

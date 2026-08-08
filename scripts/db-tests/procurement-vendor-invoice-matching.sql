@@ -807,6 +807,50 @@ begin
   end if;
 end $$;
 
+\echo '>> Tier C batch-4 fix regression (C-08, HIGH, live-reproduced): get_vendor_bill_match_readiness no longer leaks total_variance_pct to a FIN:View-only caller with ZERO PRC permission of any kind (the exact caller the OR-gate is meant to admit for readiness/status, never for cost)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vim1');
+  v_fin_viewer_role uuid;
+  v_fin_viewer1 uuid := '00000000-0000-0000-0000-000000265106';
+  v_bill1_id uuid;
+  v_readiness record;
+begin
+  insert into auth.users (id, email) values (v_fin_viewer1, 'finviewer@vim1.test');
+  perform app.invite_user(v_tenant1, v_fin_viewer1, 'finviewer@vim1.test', 'Vim1 Fin Viewer', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'finviewer@vim1.test'), 'active', 'onboarded', 'tester');
+
+  v_fin_viewer_role := (app.create_role(v_tenant1, 'Vim1 Fin Viewer', 'FIN:View only -- zero PRC permission of any kind', 'tester')).id;
+  perform app.set_role_version_permissions((app.create_role_version(v_fin_viewer_role, 'tester')).id, array(
+    select id from app.permissions where resource_module_code = 'FIN' and action = 'View'
+  ), 'tester');
+  perform app.publish_role_version((select id from app.role_versions where role_id = v_fin_viewer_role and status = 'draft'), now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_fin_viewer_role and status = 'published'), v_fin_viewer1, '00000000-0000-0000-0000-000000265101', 'admin');
+
+  if (app.evaluate_permission(v_fin_viewer1, v_tenant1, 'PRC', 'View')).allowed then
+    raise exception 'assertion failed: fixture actor must hold ZERO PRC permission for this regression to be meaningful';
+  end if;
+  if not (app.evaluate_permission(v_fin_viewer1, v_tenant1, 'FIN', 'View')).allowed then
+    raise exception 'assertion failed: fixture actor must hold real FIN:View';
+  end if;
+
+  select id into v_bill1_id from app.finance_vendor_bills where tenant_id = v_tenant1 and vendor_reference = 'VIM-BILL-001';
+
+  -- The OR-gate correctly ADMITS this caller (FIN:View alone is enough to read
+  -- readiness/status) -- but total_variance_pct, a cost-shaped field, must stay masked
+  -- exactly as it already is for a PRC:View-only-no-cost caller everywhere else.
+  select * into v_readiness from app.get_vendor_bill_match_readiness(v_bill1_id, v_tenant1, v_fin_viewer1);
+  if v_readiness.match_case_id is null then
+    raise exception 'assertion failed: expected the FIN:View-only caller to be admitted (readiness row returned)';
+  end if;
+  if v_readiness.total_variance_pct is not null then
+    raise exception 'assertion failed: expected total_variance_pct masked (null) for a caller with zero PRC permission of any kind, got %', v_readiness.total_variance_pct;
+  end if;
+  if v_readiness.readiness_status is null then
+    raise exception 'assertion failed: expected readiness_status to remain visible even when total_variance_pct is masked';
+  end if;
+end $$;
+
 \echo '>> get_vendor_bill_match_reconciliation_status: real aggregate counts by (overall_status, readiness_status), cost-masked total_variance_amount for a View-only-no-cost caller'
 do $$
 declare
@@ -966,14 +1010,23 @@ begin
       if not v_metric.is_computable then
         raise exception 'assertion failed: expected invoice_accuracy to be genuinely computable against real match-case evidence (vendor1 has 2 decided cases: bill1 matched, bill2 blocked), got is_computable=false';
       end if;
-      -- vendor1''s own decided cases: bill1 (matched, clean) + bill2 (blocked, was a
-      -- confirmed duplicate) -- exactly one of two reached a clean match, so the real
-      -- computed value must be 50, never the permanently-null PRC-264 stub value.
-      if v_metric.computed_value <> 50 then
-        raise exception 'assertion failed: expected computed_value=50 (1 of 2 decided vendor1 cases matched cleanly), got %', v_metric.computed_value;
+      -- Tier C batch-4 fix regression (NEW, integration lens, HIGH, live-reproduced):
+      -- vendor1's own decided cases are bill1 (matched, but ONLY via an APPROVED
+      -- exception-approval clearing a false-positive duplicate flag during its own
+      -- re-evaluation above -- genuinely inaccurate at submission, never a clean match)
+      -- and bill2 (blocked, a confirmed genuine duplicate, exception REJECTED). Zero of
+      -- two reached 'matched' WITHOUT ever needing an approved exception, so the real
+      -- computed value must be 0 -- never 50 (the pre-fix bug, which wrongly counted
+      -- bill1's exception-cleared case as clean) and never the permanently-null PRC-264
+      -- stub value either.
+      if v_metric.computed_value <> 0 then
+        raise exception 'assertion failed: expected computed_value=0 (0 of 2 decided vendor1 cases reached matched WITHOUT an approved exception -- bill1 needed one to clear its duplicate flag, bill2''s was rejected), got %', v_metric.computed_value;
       end if;
       if v_metric.sample_size <> 2 then
         raise exception 'assertion failed: expected sample_size=2, got %', v_metric.sample_size;
+      end if;
+      if (v_metric.source_evidence ->> 'matched_clean')::integer <> 0 then
+        raise exception 'assertion failed: expected source_evidence.matched_clean=0, got %', v_metric.source_evidence ->> 'matched_clean';
       end if;
     end if;
   end loop;
@@ -997,6 +1050,212 @@ begin
   if v_count < 15 then
     raise exception 'assertion failed: expected at least 15 captured vendor-bill-match audit events, found %', v_count;
   end if;
+end $$;
+
+\echo '>> Tier C batch-4 fix regression (C-20, MEDIUM, live-reproduced): a PO-line UOM cross-check (kg vs pcs) computed by map_vendor_bill_match_line, with zero quantity variance and zero header-total variance so it is the ONLY signal in play, now genuinely flips a clean case to exception -- previously computed but never consulted by _reroll_vendor_bill_match_case'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vim1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000265102';
+  v_job_order_id uuid;
+  v_vendor2 uuid;
+  v_shipment app.shipment_orders;
+  v_assignment app.resource_assignments;
+  v_cost app.shipment_actual_costs;
+  v_bill6_id uuid;
+  v_line6 app.finance_vendor_bill_lines;
+  v_po_id uuid;
+  v_po_line_id uuid;
+  v_case app.vendor_bill_match_cases;
+  v_match_line app.vendor_bill_match_lines;
+  v_policy app.vendor_bill_match_tolerance_policies;
+begin
+  select master_record_id into v_vendor2 from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vim Vendor Two';
+  select job_order_id into v_job_order_id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vim-a';
+  select id into v_po_id from app.purchase_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vim-po-1';
+  select id into v_po_line_id from app.purchase_order_lines where purchase_order_id = v_po_id order by line_no asc limit 1;
+
+  -- app.map_vendor_bill_match_line is only reachable while overall_status is pending/
+  -- exception (never matched -- a cleared case's lines can no longer be mapped). The
+  -- currently-active "Standard policy" has auto_clear_enabled=true, so a genuinely
+  -- clean case would jump straight to matched at create time and become unmappable
+  -- before this regression could ever isolate the PO-line UOM signal. Swap in a fresh
+  -- active policy with auto_clear_enabled=false (same generous 5/5/5/1000/30
+  -- tolerances otherwise) for this one fixture -- a clean case now correctly stays
+  -- pending/mappable until a human explicitly accepts it, letting the PO-line mapping
+  -- below be the ONLY thing that ever changes overall_status.
+  v_policy := app.create_vendor_bill_match_tolerance_policy_draft(v_tenant1, 'C-20 regression policy (auto-clear off)', 5, 5, 5, 1000, false, 30, 'Tier C batch-4 C-20 regression fixture', 'idem-vim-policy-c20', v_staff1, 'staff');
+  v_policy := app.activate_vendor_bill_match_tolerance_policy(v_policy.id, v_policy.record_version, v_staff1, 'staff');
+
+  -- Real quantity=5000/uom='pcs' component, EXACTLY matching the PO line's own raw
+  -- quantity number (5000) so po_line_quantity_variance_pct is 0 -- deliberately
+  -- ISOLATING the UOM cross-check as the only signal. Amount (9,700,000) is
+  -- deliberately NOT the PO's own exact total_amount (10,000,000 -- already used by
+  -- bill3's own fingerprint above, 100kg*100000/kg fixture) to avoid colliding with
+  -- bill3's own duplicate_fingerprint; 3% under the PO total instead, safely inside
+  -- the active policy's own 5% rate_tolerance_pct so the PO HEADER total check also
+  -- stays clean. vendor-stated figures below match this component exactly, so the case
+  -- is genuinely clean (pending/not_ready, auto-clear off) before the PO line is ever
+  -- mapped.
+  select * into v_shipment from app.create_shipment_order_from_job(
+    v_job_order_id, 'idem-vim-c20', null, null, 'ocean_freight', 'sea', 'Jakarta', 'Surabaya',
+    now() + interval '1 day', now() + interval '10 days', null, null, null, null, null, null, 'PRC-265 db-test: Tier C batch-4 C-20 regression -- isolated PO-line UOM mismatch fixture', v_staff1, 'rep'
+  );
+  select * into v_shipment from app.confirm_shipment_order(v_shipment.id, v_shipment.record_version, v_staff1, 'rep');
+  select * into v_shipment from app.transition_shipment_order(v_shipment.id, 'planned', v_shipment.record_version, null, null, 'idem-vim-c20-planned', v_staff1, 'rep');
+  select * into v_shipment from app.transition_shipment_order(v_shipment.id, 'assigned', v_shipment.record_version, null, null, 'idem-vim-c20-assigned', v_staff1, 'rep');
+  select * into v_assignment from app.assign_resource(v_shipment.id, 'vendor', v_vendor2, v_staff1, 'rep');
+  v_cost := app.create_actual_cost_draft(v_tenant1, v_shipment.id, 'IDR', null, v_staff1, 'rep');
+  perform app.add_actual_cost_component(v_cost.id, 'freight', 'vendor', v_vendor2, v_assignment.id, null, 'Ocean freight C-20 fixture', 5000, 'pcs', 1940, null, 0, 'idem-vim-comp-c20', v_staff1, 'rep');
+  select * into v_cost from app.shipment_actual_costs where id = v_cost.id;
+  v_cost := app.submit_actual_cost(v_cost.id, v_cost.record_version, v_staff1, 'rep');
+  v_cost := app.decide_actual_cost(v_cost.id, 'approved', null, v_cost.record_version, v_staff1, 'rep');
+  perform app.prepare_finance_vendor_bill_from_actual_cost(v_tenant1, v_cost.id, v_vendor2, 'VIM-BILL-006', '2026-06-15'::date, 30, null, null, v_staff1, 'staff');
+  perform app.unassign_resource(v_shipment.id, 'vendor', 'C-20 fixture complete', v_staff1, 'rep');
+
+  select id into v_bill6_id from app.finance_vendor_bills where tenant_id = v_tenant1 and vendor_reference = 'VIM-BILL-006';
+  select * into v_line6 from app.finance_vendor_bill_lines where bill_id = v_bill6_id order by line_number asc limit 1;
+
+  v_case := app.create_vendor_bill_match_case(
+    v_tenant1, v_bill6_id, v_po_id, false, false,
+    jsonb_build_array(jsonb_build_object('billLineId', v_line6.id, 'vendorStatedQuantity', 5000, 'vendorStatedUom', 'pcs', 'vendorStatedRate', 1940, 'vendorStatedAmount', v_line6.amount)),
+    'idem-vim-mc-6', v_staff1, 'staff'
+  );
+  if v_case.overall_status <> 'pending' or v_case.readiness_status <> 'not_ready' then
+    raise exception 'assertion failed: fixture precondition failed -- expected a genuinely clean pending/not_ready case BEFORE PO-line mapping (zero line variance, zero header-total variance, auto-clear off), got %/%', v_case.overall_status, v_case.readiness_status;
+  end if;
+
+  v_match_line := app.map_vendor_bill_match_line(
+    (select id from app.vendor_bill_match_lines where match_case_id = v_case.id and bill_line_id = v_line6.id),
+    v_case.record_version, v_po_line_id, null, v_staff1, 'staff'
+  );
+  if not v_match_line.po_line_uom_mismatch then
+    raise exception 'assertion failed: expected po_line_uom_mismatch=true (pcs vs the PO line''s own kg)';
+  end if;
+  if v_match_line.po_line_quantity_variance_pct <> 0 then
+    raise exception 'assertion failed: fixture precondition failed -- expected po_line_quantity_variance_pct=0 (5000 vs 5000), got % -- the UOM mismatch must be the ONLY signal in play', v_match_line.po_line_quantity_variance_pct;
+  end if;
+
+  select * into v_case from app.vendor_bill_match_cases where id = v_case.id;
+  if v_case.overall_status <> 'exception' or v_case.readiness_status <> 'not_ready' then
+    raise exception 'assertion failed: expected the PO-line UOM mismatch ALONE to flip this previously-clean case to exception/not_ready (Tier C batch-4 C-20 fix), got %/%', v_case.overall_status, v_case.readiness_status;
+  end if;
+  if v_case.readiness_note not like '%PO-line quantity/UOM mismatch%' then
+    raise exception 'assertion failed: expected a readiness_note naming the PO-line quantity/UOM mismatch specifically, got %', v_case.readiness_note;
+  end if;
+end $$;
+
+\echo '>> Tier C batch-4 fix regression (C-04, CRITICAL, live-reproduced): a REAL two-process concurrent race -- two near-duplicate bills (same vendor/currency/amount, close bill_date) submitted via create_vendor_bill_match_case at genuinely the same time -- must never both slip through unflagged. Launched via scripts/db-tests/wms-picking-concurrency-helper.sh, the same helper procurement-vendor-capacity.sql''s/procurement-vendor-contract.sql''s own race tests use.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vim1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000265102';
+  v_job_order_id uuid;
+  v_vendor1 uuid;
+  v_shipment app.shipment_orders;
+  v_assignment app.resource_assignments;
+  v_cost app.shipment_actual_costs;
+begin
+  select master_record_id into v_vendor1 from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vim Vendor One';
+  select job_order_id into v_job_order_id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vim-a';
+
+  -- Two more vendor1 IDR bills, IDENTICAL amount (4,444,000), bill_date 1 day apart --
+  -- same fingerprint shape as the bill1/bill2 sequential fixture above, but these two
+  -- are raced concurrently instead of created one after another.
+  select * into v_shipment from app.create_shipment_order_from_job(
+    v_job_order_id, 'idem-vim-race-a', null, null, 'ocean_freight', 'sea', 'Jakarta', 'Surabaya',
+    now() + interval '1 day', now() + interval '10 days', null, null, null, null, null, null, 'PRC-265 db-test: Tier C batch-4 C-04 duplicate-fingerprint race fixture, leg A', v_staff1, 'rep'
+  );
+  select * into v_shipment from app.confirm_shipment_order(v_shipment.id, v_shipment.record_version, v_staff1, 'rep');
+  select * into v_shipment from app.transition_shipment_order(v_shipment.id, 'planned', v_shipment.record_version, null, null, 'idem-vim-race-a-planned', v_staff1, 'rep');
+  select * into v_shipment from app.transition_shipment_order(v_shipment.id, 'assigned', v_shipment.record_version, null, null, 'idem-vim-race-a-assigned', v_staff1, 'rep');
+  select * into v_assignment from app.assign_resource(v_shipment.id, 'vendor', v_vendor1, v_staff1, 'rep');
+  v_cost := app.create_actual_cost_draft(v_tenant1, v_shipment.id, 'IDR', null, v_staff1, 'rep');
+  perform app.add_actual_cost_component(v_cost.id, 'freight', 'vendor', v_vendor1, v_assignment.id, null, 'Ocean freight race A', 1, 'shipment', 4444000, null, 0, 'idem-vim-comp-race-a', v_staff1, 'rep');
+  select * into v_cost from app.shipment_actual_costs where id = v_cost.id;
+  v_cost := app.submit_actual_cost(v_cost.id, v_cost.record_version, v_staff1, 'rep');
+  v_cost := app.decide_actual_cost(v_cost.id, 'approved', null, v_cost.record_version, v_staff1, 'rep');
+  perform app.prepare_finance_vendor_bill_from_actual_cost(v_tenant1, v_cost.id, v_vendor1, 'VIM-BILL-RACE-A', '2026-07-01'::date, 30, null, null, v_staff1, 'staff');
+  perform app.unassign_resource(v_shipment.id, 'vendor', 'race fixture A complete', v_staff1, 'rep');
+
+  select * into v_shipment from app.create_shipment_order_from_job(
+    v_job_order_id, 'idem-vim-race-b', null, null, 'ocean_freight', 'sea', 'Jakarta', 'Surabaya',
+    now() + interval '1 day', now() + interval '10 days', null, null, null, null, null, null, 'PRC-265 db-test: Tier C batch-4 C-04 duplicate-fingerprint race fixture, leg B', v_staff1, 'rep'
+  );
+  select * into v_shipment from app.confirm_shipment_order(v_shipment.id, v_shipment.record_version, v_staff1, 'rep');
+  select * into v_shipment from app.transition_shipment_order(v_shipment.id, 'planned', v_shipment.record_version, null, null, 'idem-vim-race-b-planned', v_staff1, 'rep');
+  select * into v_shipment from app.transition_shipment_order(v_shipment.id, 'assigned', v_shipment.record_version, null, null, 'idem-vim-race-b-assigned', v_staff1, 'rep');
+  select * into v_assignment from app.assign_resource(v_shipment.id, 'vendor', v_vendor1, v_staff1, 'rep');
+  v_cost := app.create_actual_cost_draft(v_tenant1, v_shipment.id, 'IDR', null, v_staff1, 'rep');
+  perform app.add_actual_cost_component(v_cost.id, 'freight', 'vendor', v_vendor1, v_assignment.id, null, 'Ocean freight race B', 1, 'shipment', 4444000, null, 0, 'idem-vim-comp-race-b', v_staff1, 'rep');
+  select * into v_cost from app.shipment_actual_costs where id = v_cost.id;
+  v_cost := app.submit_actual_cost(v_cost.id, v_cost.record_version, v_staff1, 'rep');
+  v_cost := app.decide_actual_cost(v_cost.id, 'approved', null, v_cost.record_version, v_staff1, 'rep');
+  perform app.prepare_finance_vendor_bill_from_actual_cost(v_tenant1, v_cost.id, v_vendor1, 'VIM-BILL-RACE-B', '2026-07-02'::date, 30, null, null, v_staff1, 'staff');
+  perform app.unassign_resource(v_shipment.id, 'vendor', 'race fixture B complete', v_staff1, 'rep');
+end $$;
+
+select id as race_tenant_id from app.tenants where slug = 'vim1' \gset
+
+select b.id as race_bill_a_id
+from app.finance_vendor_bills b
+where b.tenant_id = :'race_tenant_id' and b.vendor_reference = 'VIM-BILL-RACE-A' \gset
+
+select b.id as race_bill_b_id
+from app.finance_vendor_bills b
+where b.tenant_id = :'race_tenant_id' and b.vendor_reference = 'VIM-BILL-RACE-B' \gset
+
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as race_bpid \gset
+
+-- psql does not interpolate :variables inside a do $$ ... $$ body (confirmed
+-- empirically, matches procurement-vendor-capacity.sql''s own identical disclosure) --
+-- each race leg resolves its own bill line by a plain subquery on the already-:gset
+-- bill id instead. jsonb_build_object/jsonb_build_array literal args are doubled ('')
+-- the same way procurement-vendor-capacity.sql''s own race_sql_a/b are built.
+\set race_sql_a 'select app.create_vendor_bill_match_case(''' :race_tenant_id ''', ''' :race_bill_a_id ''', null, false, false, jsonb_build_array(jsonb_build_object(''billLineId'', (select id from app.finance_vendor_bill_lines where bill_id = ''' :race_bill_a_id ''' limit 1), ''vendorStatedQuantity'', 1, ''vendorStatedUom'', ''shipment'', ''vendorStatedRate'', 4444000, ''vendorStatedAmount'', 4444000)), ''idem-vim-race-mc-a'', ''00000000-0000-0000-0000-000000265102'', ''staff'');'
+\set race_sql_b 'select app.create_vendor_bill_match_case(''' :race_tenant_id ''', ''' :race_bill_b_id ''', null, false, false, jsonb_build_array(jsonb_build_object(''billLineId'', (select id from app.finance_vendor_bill_lines where bill_id = ''' :race_bill_b_id ''' limit 1), ''vendorStatedQuantity'', 1, ''vendorStatedUom'', ''shipment'', ''vendorStatedRate'', 4444000, ''vendorStatedAmount'', 4444000)), ''idem-vim-race-mc-b'', ''00000000-0000-0000-0000-000000265102'', ''staff'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-vim-race-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-vim-race-b-:race_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_tenant1 uuid;
+  v_a_case app.vendor_bill_match_cases;
+  v_b_case app.vendor_bill_match_cases;
+  v_flagged_count integer;
+begin
+  select id into v_tenant1 from app.tenants where slug = 'vim1';
+  select * into v_a_case from app.vendor_bill_match_cases mc join app.finance_vendor_bills b on b.id = mc.bill_id where b.vendor_reference = 'VIM-BILL-RACE-A' and mc.is_current;
+  select * into v_b_case from app.vendor_bill_match_cases mc join app.finance_vendor_bills b on b.id = mc.bill_id where b.vendor_reference = 'VIM-BILL-RACE-B' and mc.is_current;
+
+  if v_a_case.id is null or v_b_case.id is null then
+    raise exception 'assertion failed: expected BOTH racing create_vendor_bill_match_case calls to have succeeded (each on its own distinct bill/idempotency_key -- neither should ever fail the other) -- see the RACE_OUT_A/RACE_OUT_B process output captured above';
+  end if;
+  if v_a_case.duplicate_fingerprint <> v_b_case.duplicate_fingerprint then
+    raise exception 'assertion failed: fixture precondition failed -- expected both racing cases to share the identical duplicate_fingerprint (same vendor/currency/amount)';
+  end if;
+
+  -- The pre-fix bug: both cases came back is_duplicate_flagged=false, duplicate_of_
+  -- case_id=null -- NEITHER caught the other, because the unlocked check-then-act let
+  -- both transactions race past each other's still-uncommitted insert. The fix
+  -- serializes the whole sequence with a pg_advisory_xact_lock, so exactly one of the
+  -- two must now be flagged as the other''s duplicate.
+  select count(*) into v_flagged_count
+  from app.vendor_bill_match_cases
+  where id in (v_a_case.id, v_b_case.id) and is_duplicate_flagged
+    and duplicate_of_case_id in (v_a_case.id, v_b_case.id);
+  if v_flagged_count <> 1 then
+    raise exception 'assertion failed: expected EXACTLY ONE of the two racing near-duplicate cases to be flagged as the other''s duplicate (Tier C batch-4 C-04 fix), got % -- a live-reproduced pre-fix run got ZERO (both slipped through unflagged); see the RACE_OUT_A/RACE_OUT_B process output captured above', v_flagged_count;
+  end if;
+
+  raise notice 'duplicate-fingerprint concurrent race proof: exactly one of the two racing near-duplicate cases was correctly flagged as the other''s duplicate -- see RACE_OUT_A/RACE_OUT_B captured above';
 end $$;
 
 \echo 'ALL PRC-265 db-test assertions passed.'
