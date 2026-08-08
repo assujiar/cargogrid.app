@@ -205,7 +205,11 @@ export function parseProcurementVendorRiskDashboardRow(row: Record<string, unkno
 // -- Group 2: rate validity / competitiveness -----------------------------------------
 
 export const ProcurementDashboardRateValiditySummaryRowSchema = z.object({
-  currency: z.string(),
+  // Tier C batch-5 fix: currency is masked to null behind PRC:View cost, matching
+  // app.vendor_rate_versions_directory/app.search_vendor_rates' own already-VERIFIED
+  // masking of this exact column -- currency is NOT NULL at the source, so null here is
+  // unambiguously "masked," never a real absence.
+  currency: z.string().nullable(),
   validityBucket: z.string(),
   rateCount: z.number().int(),
 });
@@ -291,7 +295,10 @@ export function parseProcurementDashboardAssignmentAcceptanceSummaryRow(row: Rec
 
 export const ProcurementDashboardPoSummaryRowSchema = z.object({
   status: z.string(),
-  currency: z.string(),
+  // Tier C batch-5 fix: currency is now masked to null behind PRC:View cost, matching
+  // app.get_purchase_order/app.list_purchase_orders/app.purchase_orders_directory's own
+  // already-VERIFIED masking of this exact column (PRC-260) -- null when costMasked.
+  currency: z.string().nullable(),
   poCount: z.number().int(),
   committedAmount: z.number().nullable(),
   costMasked: z.boolean(),

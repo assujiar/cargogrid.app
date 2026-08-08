@@ -58,6 +58,27 @@ export async function createProcurementDashboardSavedViewAction(tenantSlug: stri
   }
   const description = String(formData.get("description") ?? "").trim() || null;
 
+  // Tier C batch-5 fix (spec-compliance, HIGH): filters previously hardcoded {} on
+  // every create call, because no filter UI existed anywhere on the page to derive
+  // real values from -- SavedViewsPanel now serializes the dashboard's own
+  // currently-applied vendor-risk filter state (when that section is the one being
+  // saved) into a hidden "filters" field; parse it defensively -- a malformed/tampered
+  // value falls back to {} rather than failing the whole submission, matching
+  // app.validate_config_value's own structural-validation gate at the RPC layer, which
+  // still has final say either way.
+  let filters: Record<string, unknown> = {};
+  const filtersRaw = formData.get("filters");
+  if (typeof filtersRaw === "string" && filtersRaw.length > 0) {
+    try {
+      const parsed: unknown = JSON.parse(filtersRaw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        filters = parsed as Record<string, unknown>;
+      }
+    } catch {
+      filters = {};
+    }
+  }
+
   const supabase = await createSupabaseServerClient();
   try {
     await createProcurementDashboardSavedView(supabase, {
@@ -65,7 +86,7 @@ export async function createProcurementDashboardSavedViewAction(tenantSlug: stri
       metricGroup: metricGroupRaw as ProcurementDashboardMetricGroup,
       name,
       description,
-      filters: {},
+      filters,
       sort: {},
       idempotencyKey: crypto.randomUUID(),
       actorAuthUserId: access.authUserId,

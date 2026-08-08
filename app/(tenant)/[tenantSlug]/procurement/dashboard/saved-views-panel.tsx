@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
-import { PROCUREMENT_DASHBOARD_METRIC_GROUPS, type ProcurementDashboardSavedView } from "../../../../../server/contracts/procurement-dashboard/procurement-dashboard.ts";
+import { PROCUREMENT_DASHBOARD_METRIC_GROUPS, type ProcurementDashboardMetricGroup, type ProcurementDashboardSavedView } from "../../../../../server/contracts/procurement-dashboard/procurement-dashboard.ts";
+import type { VendorRiskQueueFilters } from "./vendor-risk-queue-panel.tsx";
 import type { ProcurementDashboardActionState } from "./actions.ts";
 
 const INITIAL_STATE: ProcurementDashboardActionState = { error: null };
@@ -42,15 +43,42 @@ function DeleteSavedViewForm({ view, deleteAction }: { view: ProcurementDashboar
 export function SavedViewsPanel({
   tenantSlug,
   views,
+  vendorRiskFilters,
   createAction,
   deleteAction,
 }: {
   tenantSlug: string;
   views: readonly ProcurementDashboardSavedView[];
+  /**
+   * The dashboard page's own CURRENTLY-APPLIED vendor risk/compliance-expiry filter
+   * state (URL-driven, see vendor-risk-queue-panel.tsx). Tier C batch-5 fix
+   * (spec-compliance, HIGH): before this fix, every saved view hardcoded
+   * `filters: {}` regardless of section, because no filter UI existed anywhere on this
+   * page to derive real values from -- a saved view could never actually capture a
+   * filter/sort configuration, defeating its own stated purpose (migration design note
+   * 5: "a user's own named filter/sort configuration"). Only the vendor risk/
+   * compliance-expiry group has real filter UI today (the RPC-level filters for the
+   * other six groups -- window_start/window_end, p_as_of -- have no UI control yet
+   * either, a smaller, disclosed residual gap); saving a view for any OTHER
+   * metric_group still saves an empty `filters: {}`, which is honest (there is
+   * genuinely nothing to capture there yet), not silently wrong.
+   */
+  vendorRiskFilters: VendorRiskQueueFilters;
   createAction: BoundFormAction;
   deleteAction: BoundFormAction;
 }) {
   const [createState, createFormAction, createPending] = useActionState(createAction, INITIAL_STATE);
+  const [metricGroup, setMetricGroup] = useState<ProcurementDashboardMetricGroup>("vendor_risk_compliance");
+
+  const filtersToSave = useMemo(() => {
+    if (metricGroup !== "vendor_risk_compliance") return {};
+    const captured: Record<string, string | boolean> = {};
+    if (vendorRiskFilters.status) captured.lifecycleStatus = vendorRiskFilters.status;
+    if (vendorRiskFilters.band) captured.band = vendorRiskFilters.band;
+    if (vendorRiskFilters.hold) captured.complianceHoldOnly = true;
+    if (vendorRiskFilters.search) captured.search = vendorRiskFilters.search;
+    return captured;
+  }, [metricGroup, vendorRiskFilters]);
 
   return (
     <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
@@ -67,6 +95,14 @@ export function SavedViewsPanel({
                 <p className="text-sm font-medium text-neutral-900">{view.name}</p>
                 <p className="text-xs text-neutral-500">{GROUP_LABEL[view.metricGroup]}</p>
                 {view.description ? <p className="text-xs text-neutral-500">{view.description}</p> : null}
+                {Object.keys(view.filters).length > 0 ? (
+                  <p className="text-xs text-neutral-400">
+                    Filters:{" "}
+                    {Object.entries(view.filters)
+                      .map(([key, value]) => `${key}=${String(value)}`)
+                      .join(", ")}
+                  </p>
+                ) : null}
               </div>
               <DeleteSavedViewForm view={view} deleteAction={deleteAction} />
             </li>
@@ -85,7 +121,14 @@ export function SavedViewsPanel({
           <label htmlFor={`sv-group-${tenantSlug}`} className="text-xs font-medium text-neutral-700">
             Section
           </label>
-          <select id={`sv-group-${tenantSlug}`} name="metricGroup" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+          <select
+            id={`sv-group-${tenantSlug}`}
+            name="metricGroup"
+            required
+            value={metricGroup}
+            onChange={(event) => setMetricGroup(event.currentTarget.value as ProcurementDashboardMetricGroup)}
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          >
             {PROCUREMENT_DASHBOARD_METRIC_GROUPS.map((g) => (
               <option key={g} value={g}>
                 {GROUP_LABEL[g]}
@@ -93,6 +136,18 @@ export function SavedViewsPanel({
             ))}
           </select>
         </div>
+        {/* Tier C batch-5 fix: the filters actually applied to the vendor risk/
+            compliance-expiry queue right now, captured only when that section is the
+            one being saved -- see this component's own vendorRiskFilters prop doc. */}
+        <input type="hidden" name="filters" value={JSON.stringify(filtersToSave)} />
+        {metricGroup === "vendor_risk_compliance" && Object.keys(filtersToSave).length > 0 ? (
+          <p className="basis-full text-xs text-neutral-500">
+            Will save with the filters currently applied above:{" "}
+            {Object.entries(filtersToSave)
+              .map(([key, value]) => `${key}=${String(value)}`)
+              .join(", ")}
+          </p>
+        ) : null}
         <Button type="submit" loading={createPending} loadingLabel="Saving…" className="shrink-0">
           Save view
         </Button>

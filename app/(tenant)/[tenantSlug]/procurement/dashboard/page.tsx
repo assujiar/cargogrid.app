@@ -26,6 +26,7 @@ import { getVendorBillMatchReconciliationStatus } from "../../../../../server/qu
 import { listReportRuns, ReportQueryError } from "../../../../../server/queries/report.ts";
 import { SavedViewsPanel } from "./saved-views-panel.tsx";
 import { ExportProcurementReportForm } from "./export-report-form.tsx";
+import { VendorRiskQueuePanel } from "./vendor-risk-queue-panel.tsx";
 import { createProcurementDashboardSavedViewAction, deleteProcurementDashboardSavedViewAction, requestProcurementReportExportAction } from "./actions.ts";
 
 /**
@@ -83,8 +84,15 @@ function WidgetStatus({ denied, failed, timedOut }: { denied: boolean; failed: b
   return null;
 }
 
-export default async function ProcurementDashboardPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
+export default async function ProcurementDashboardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+  searchParams: Promise<{ status?: string; band?: string; hold?: string; q?: string; after?: string; afterId?: string }>;
+}) {
   const { tenantSlug } = await params;
+  const sp = await searchParams;
   const access = await resolveProcurementAccessForRequest(tenantSlug);
   if (access.status !== "allowed") {
     notFound();
@@ -93,6 +101,20 @@ export default async function ProcurementDashboardPage({ params }: { params: Pro
   const supabase = await createSupabaseServerClient();
   const filter = { tenantId: access.tenant.id, actorAuthUserId: access.authUserId };
   const asOf = new Date().toISOString();
+
+  // Tier C batch-5 fix (HIGH, spec-compliance): the vendor risk/compliance-expiry
+  // drilldown queue's own filter/search/band/hold and cursor-pagination parameters were
+  // previously never populated by any caller -- URL query params are this repository's
+  // own established convention for a server-filtered/searched list (matches
+  // app/(tenant)/[tenantSlug]/procurement/vendors/page.tsx's identical `status`/`q`
+  // shape), threaded through to the RPC below and back out to VendorRiskQueuePanel/
+  // SavedViewsPanel so a saved view can capture the actually-applied filter state.
+  const vendorRiskFilters = {
+    status: sp.status ?? "",
+    band: sp.band ?? "",
+    hold: sp.hold === "true",
+    search: sp.q ?? "",
+  };
 
   const [
     vendorRiskSummaryR,
@@ -111,7 +133,16 @@ export default async function ProcurementDashboardPage({ params }: { params: Pro
     reportRunsR,
   ] = await Promise.allSettled([
     getProcurementDashboardVendorRiskSummary(supabase, filter),
-    listProcurementVendorRiskDashboardRows(supabase, { ...filter, limit: 25 }),
+    listProcurementVendorRiskDashboardRows(supabase, {
+      ...filter,
+      lifecycleStatus: vendorRiskFilters.status || null,
+      band: vendorRiskFilters.band || null,
+      complianceHoldOnly: vendorRiskFilters.hold || null,
+      search: vendorRiskFilters.search || null,
+      cursor: sp.after ?? null,
+      cursorId: sp.afterId ?? null,
+      limit: 25,
+    }),
     getProcurementDashboardRateValiditySummary(supabase, filter),
     getProcurementDashboardRateCompetitivenessSummary(supabase, filter),
     getProcurementDashboardRfqCycleSummary(supabase, filter),
@@ -196,42 +227,7 @@ export default async function ProcurementDashboardPage({ params }: { params: Pro
         ) : null}
 
         <WidgetStatus {...vendorRiskRows} />
-        {vendorRiskRows.value ? (
-          vendorRiskRows.value.length === 0 ? (
-            <EmptyState title="No vendors to show" description="No vendor rows matched." />
-          ) : (
-            <div className="overflow-x-auto rounded-md border border-neutral-200">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-50 text-left text-xs font-medium uppercase text-neutral-500">
-                  <tr>
-                    <th className="px-3 py-2">Vendor</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Compliance</th>
-                    <th className="px-3 py-2">Band</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vendorRiskRows.value.map((row) => (
-                    <tr key={row.vendorMasterId} className="border-t border-neutral-200">
-                      <td className="px-3 py-2">
-                        <Link href={`/${tenantSlug}/procurement/vendor-performance/${row.vendorMasterId}`} className="font-medium text-primary hover:underline">
-                          {row.legalName}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-neutral-700">{row.lifecycleStatus.replace(/_/g, " ")}</td>
-                      <td className="px-3 py-2 text-xs text-neutral-500">
-                        {row.complianceHold ? <StatusBadge tone="danger" label="On hold" /> : "OK"}
-                        {row.complianceExpiringSoonCount > 0 ? ` · ${row.complianceExpiringSoonCount} expiring` : ""}
-                        {row.complianceExpiredCount > 0 ? ` · ${row.complianceExpiredCount} expired` : ""}
-                      </td>
-                      <td className="px-3 py-2 text-neutral-700">{row.scorecardBand ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        ) : null}
+        {vendorRiskRows.value ? <VendorRiskQueuePanel tenantSlug={tenantSlug} rows={vendorRiskRows.value} filters={vendorRiskFilters} /> : null}
       </section>
 
       {/* Group 2 -- rate validity/competitiveness */}
@@ -246,9 +242,9 @@ export default async function ProcurementDashboardPage({ params }: { params: Pro
         {rateValidity.value && rateValidity.value.length > 0 ? (
           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {rateValidity.value.map((row) => (
-              <li key={`${row.currency}-${row.validityBucket}`} className="rounded-md border border-neutral-200 p-3">
+              <li key={`${row.currency ?? "masked"}-${row.validityBucket}`} className="rounded-md border border-neutral-200 p-3">
                 <p className="text-xs font-medium text-neutral-500">
-                  {row.validityBucket.replace(/_/g, " ")} ({row.currency})
+                  {row.validityBucket.replace(/_/g, " ")} ({row.currency ?? "requires View cost"})
                 </p>
                 <p className="text-lg font-semibold text-neutral-900">{row.rateCount}</p>
               </li>
@@ -387,9 +383,9 @@ export default async function ProcurementDashboardPage({ params }: { params: Pro
             </thead>
             <tbody>
               {poSummary.value.map((row) => (
-                <tr key={`${row.status}-${row.currency}`} className="border-b border-neutral-100">
+                <tr key={`${row.status}-${row.currency ?? "masked"}`} className="border-b border-neutral-100">
                   <td className="py-2 pr-4 text-neutral-900">{row.status}</td>
-                  <td className="py-2 pr-4 text-neutral-700">{row.currency}</td>
+                  <td className="py-2 pr-4 text-neutral-700">{row.currency ?? <span className="text-neutral-400">masked</span>}</td>
                   <td className="py-2 pr-4 text-neutral-700">{row.poCount}</td>
                   <td className="py-2 text-neutral-700">{row.costMasked ? <span className="text-neutral-400">masked (requires View cost)</span> : row.committedAmount}</td>
                 </tr>
@@ -479,6 +475,7 @@ export default async function ProcurementDashboardPage({ params }: { params: Pro
       <SavedViewsPanel
         tenantSlug={tenantSlug}
         views={savedViews}
+        vendorRiskFilters={vendorRiskFilters}
         createAction={createProcurementDashboardSavedViewAction.bind(null, tenantSlug)}
         deleteAction={deleteProcurementDashboardSavedViewAction.bind(null, tenantSlug)}
       />

@@ -32,6 +32,27 @@
 --     lock is not reproduced here -- deferred to this batch's own Tier C
 --     correctness/concurrency lens, mirroring every prior PRC-25x/26x db-test's own
 --     identical disclosure for its own versioned-update races.
+--   * Tier C batch-5 fix (HIGH): app.enqueue_procurement_report_export's own race on a
+--     concurrently-reused idempotency_key (two genuinely concurrent callers both racing
+--     app.enqueue_job's own unguarded insert) is NOT reproduced in this single-session
+--     file either, for the identical reason -- true concurrency needs two real processes.
+--     It was live-reproduced with two real concurrent psql sessions and a BEFORE INSERT
+--     trigger forcing overlap (captured verbatim in this batch's own fix commit
+--     message and in 20260730790000's own header comment for this fix), confirming both
+--     the original raw, uncaught unique_violation and, after the fix, that the losing
+--     session now receives the winner's own already-committed report_runs row instead.
+--   * Tier C batch-5 fix (HIGH): the missing-tenant_id LATERAL join performance defect
+--     (app.get_procurement_dashboard_vendor_risk_summary,
+--     app.list_procurement_vendor_risk_dashboard_rows,
+--     app.get_procurement_dashboard_rate_competitiveness_summary) was live-verified via
+--     EXPLAIN (ANALYZE, BUFFERS) against a synthetic 25-tenant x 150-vendor fixture, not
+--     added to this file's own small fixture -- seeding thousands of rows on every
+--     `pnpm run db:test` run would slow the whole suite for a performance-only check.
+--     Correctness (the join's own OUTPUT) is unaffected by tenant_id scoping --
+--     vendor_master_id is already a globally unique key (a fresh uuid per master
+--     record, never reused across tenants) -- so the EXISTING reconciliation assertions
+--     for groups 1 and 2 below already cover a correctness regression; only the
+--     resulting query plan changed.
 
 \set ON_ERROR_STOP on
 
@@ -495,10 +516,11 @@ begin
   -- rows were created inside the SAME setup transaction, so app.vendor_profiles.
   -- created_at (default now()) is otherwise IDENTICAL across all of them (now() is
   -- frozen for the duration of one transaction in Postgres) -- spread them out here,
-  -- test-only, so the single-column created_at cursor this function shares with every
-  -- sibling PRC-25x/26x list RPC (e.g. app.list_vendor_contracts) has genuinely
-  -- distinct values to walk. This is a real, disclosed, already-repository-wide
-  -- simplification (no tie-breaker column) this checkpoint inherits, not introduces.
+  -- test-only, so this walk exercises genuinely distinct timestamps. The dedicated tie
+  -- block immediately below this one exercises the OPPOSITE case (many rows sharing one
+  -- exact created_at) -- Tier C batch-5 fix (HIGH): the cursor is now a composite
+  -- (created_at, vendor_master_id) keyset, so this walk passes both p_cursor and the new
+  -- p_cursor_id on every page.
   update app.vendor_profiles set created_at = app.vendor_profiles.created_at - (ranked.rn * interval '1 minute')
   from (select master_record_id, row_number() over (order by master_record_id) as rn from app.vendor_profiles where tenant_id = v_tenant1) ranked
   where app.vendor_profiles.master_record_id = ranked.master_record_id;
@@ -506,15 +528,17 @@ begin
   select count(*) into v_total_direct from app.vendor_profiles where tenant_id = v_tenant1;
 
   v_cursor := null;
+  v_last_id := null;
   loop
     v_page1_count := 0;
-    for v_row in select * from app.list_procurement_vendor_risk_dashboard_rows(v_tenant1, v_staff1, null, null, null, null, 1, v_cursor) loop
+    for v_row in select * from app.list_procurement_vendor_risk_dashboard_rows(v_tenant1, v_staff1, null, null, null, null, 1, v_cursor, v_last_id) loop
       v_page1_count := v_page1_count + 1;
       if v_row.vendor_master_id = any (v_seen) then
         raise exception 'assertion failed: cursor pagination returned duplicate vendor %', v_row.vendor_master_id;
       end if;
       v_seen := v_seen || v_row.vendor_master_id;
       v_cursor := v_row.created_at;
+      v_last_id := v_row.vendor_master_id;
       v_total_paginated := v_total_paginated + 1;
     end loop;
     exit when v_page1_count = 0;
@@ -527,6 +551,91 @@ begin
   -- limit is clamped to 100 (least(coalesce(p_limit,25),100)).
   if (select count(*) from app.list_procurement_vendor_risk_dashboard_rows(v_tenant1, v_staff1, null, null, null, null, 999, null)) > 100 then
     raise exception 'assertion failed: p_limit=999 was not clamped to 100';
+  end if;
+end $$;
+
+\echo '>> list_procurement_vendor_risk_dashboard_rows / list_procurement_dashboard_saved_views: Tier C batch-5 fix (HIGH, live-reproduced) -- a composite (created_at, id) cursor no longer silently drops rows that share an exact created_at at a page boundary; a legacy caller that omits the new p_cursor_id keeps the OLD, already-documented tie-EXCLUSION behavior (never a silent duplicate/infinite-repeat)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pdash1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000266102';
+  v_tie_ts timestamptz := '2026-01-01T00:00:00Z'::timestamptz;
+  v_row record;
+  v_cursor timestamptz;
+  v_last_id uuid;
+  v_seen uuid[];
+  v_total_paginated integer;
+  v_page_count integer;
+  v_tied_masters uuid[];
+  v_legacy_count integer;
+  v_tie_tenant uuid;
+  v_tie_role uuid;
+begin
+  -- Force five vendors in a fresh, dedicated tenant to share one identical created_at
+  -- (the exact live-reproduced shape: a bulk-import batch, or several rows created
+  -- inside one transaction).
+  perform app.provision_tenant('pdash1-cursor-tie', 'Pdash1 Cursor Tie Co', 'idem-pdash1-cursor-tie', 'tester');
+  v_tie_tenant := (select id from app.tenants where slug = 'pdash1-cursor-tie');
+  perform app.transition_tenant_status(v_tie_tenant, 'active', 'setup', 'tester');
+
+  -- v_staff1 (an existing identity from the pdash1 setup above) needs its own active
+  -- user profile and its own PRC:View grant in this fresh tenant -- neither carries
+  -- across tenants.
+  perform app.invite_user(v_tie_tenant, v_staff1, 'staff@pdash1.test', 'Pdash1 Staff', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'staff@pdash1.test' and tenant_id = v_tie_tenant), 'active', 'onboarded', 'tester');
+  v_tie_role := (app.create_role(v_tie_tenant, 'Cursor Tie Viewer', 'PRC View, cursor-tie check', 'tester')).id;
+  perform app.set_role_version_permissions((app.create_role_version(v_tie_role, 'tester')).id, array(select id from app.permissions where resource_module_code = 'PRC' and action = 'View'), 'tester');
+  perform app.publish_role_version((select id from app.role_versions where role_id = v_tie_role and status = 'draft'), now(), 'tester');
+  perform app.assign_role(v_tie_tenant, (select id from app.role_versions where role_id = v_tie_role and status = 'published'), v_staff1, v_staff1, 'tester');
+
+  select array_agg(mr.id) into v_tied_masters
+  from (
+    select gen_random_uuid() as id, g
+    from generate_series(1, 5) g
+  ) mr;
+
+  insert into app.master_records (id, master_type_code, tenant_id, code, name, created_by)
+  select m.id, 'vendor', v_tie_tenant, 'TIE-' || m.g, 'Tie Vendor ' || m.g, 'tester'
+  from (select unnest(v_tied_masters) as id, generate_series(1, 5) as g) m;
+
+  insert into app.vendor_profiles (master_record_id, tenant_id, legal_name, intake_source, lifecycle_status, created_by, created_at, updated_at)
+  select m.id, v_tie_tenant, 'Tie Vendor ' || m.g, 'staff_created', 'active', 'tester', v_tie_ts, v_tie_ts
+  from (select unnest(v_tied_masters) as id, generate_series(1, 5) as g) m;
+
+  -- Composite-cursor walk (page size 2): must reach every one of the 5 tied rows, no
+  -- duplicates, no omissions -- the exact scenario that silently returned zero rows on
+  -- page 2 before this fix.
+  v_cursor := null;
+  v_last_id := null;
+  v_seen := array[]::uuid[];
+  v_total_paginated := 0;
+  loop
+    v_page_count := 0;
+    for v_row in select * from app.list_procurement_vendor_risk_dashboard_rows(v_tie_tenant, v_staff1, null, null, null, null, 2, v_cursor, v_last_id) loop
+      v_page_count := v_page_count + 1;
+      if v_row.vendor_master_id = any (v_seen) then
+        raise exception 'assertion failed: composite-cursor tie walk returned duplicate vendor %', v_row.vendor_master_id;
+      end if;
+      v_seen := v_seen || v_row.vendor_master_id;
+      v_cursor := v_row.created_at;
+      v_last_id := v_row.vendor_master_id;
+      v_total_paginated := v_total_paginated + 1;
+    end loop;
+    exit when v_page_count = 0;
+  end loop;
+  if v_total_paginated <> 5 then
+    raise exception 'assertion failed: composite-cursor tie walk returned %, expected all 5 tied vendor rows (pre-fix this silently returned 2, dropping 3)', v_total_paginated;
+  end if;
+
+  -- Legacy call (p_cursor supplied, p_cursor_id omitted): reproduces the OLD, already-
+  -- documented single-column semantics -- ties AT the exact cursor boundary are
+  -- excluded (a real, bounded, non-regressive limitation for a caller that has not yet
+  -- been updated to pass both fields), but this must NEVER come back as a duplicate of
+  -- the boundary row or loop -- confirms the min-uuid fallback, not a max-uuid one.
+  select count(*) into v_legacy_count
+  from app.list_procurement_vendor_risk_dashboard_rows(v_tie_tenant, v_staff1, null, null, null, null, 100, v_tie_ts);
+  if v_legacy_count <> 0 then
+    raise exception 'assertion failed: legacy single-timestamp cursor call expected 0 rows (all 5 share the exact cursor value), got %', v_legacy_count;
   end if;
 end $$;
 
@@ -562,6 +671,35 @@ begin
       and (rv.effective_to is null or rv.effective_to > now() + interval '30 days')
   ) then
     raise exception 'assertion failed: active bucket does not reconcile against an independent query';
+  end if;
+end $$;
+
+\echo '>> get_procurement_dashboard_rate_validity_summary: Tier C batch-5 fix (MEDIUM, live-reproduced) -- currency is now masked to null behind PRC:View cost, matching app.vendor_rate_versions_directory/app.search_vendor_rates'' own already-VERIFIED masking of this exact column; a caller lacking PRC:View cost sees the SAME rate_count reconciliation, just with currency collapsed to null'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pdash1');
+  v_viewer1 uuid := '00000000-0000-0000-0000-000000266104';
+  v_masked_active_count integer;
+  v_masked_expired_count integer;
+  v_expected_active_count integer;
+  v_expected_expired_count integer;
+begin
+  select count(*) into v_expected_active_count from app.vendor_rate_versions rv
+    where rv.tenant_id = v_tenant1 and rv.approval_status = 'approved' and (rv.effective_to is null or rv.effective_to > now() + interval '30 days');
+  select count(*) into v_expected_expired_count from app.vendor_rate_versions rv
+    where rv.tenant_id = v_tenant1 and rv.approval_status = 'approved' and rv.effective_to is not null and rv.effective_to <= now();
+
+  select rate_count into v_masked_active_count from app.get_procurement_dashboard_rate_validity_summary(v_tenant1, v_viewer1) where currency is null and validity_bucket = 'active';
+  select rate_count into v_masked_expired_count from app.get_procurement_dashboard_rate_validity_summary(v_tenant1, v_viewer1) where currency is null and validity_bucket = 'expired';
+
+  if v_masked_active_count is distinct from v_expected_active_count then
+    raise exception 'assertion failed: rate_validity (viewer, lacks PRC:View cost) masked active rate_count expected % got %', v_expected_active_count, v_masked_active_count;
+  end if;
+  if v_masked_expired_count is distinct from v_expected_expired_count then
+    raise exception 'assertion failed: rate_validity (viewer, lacks PRC:View cost) masked expired rate_count expected % got %', v_expected_expired_count, v_masked_expired_count;
+  end if;
+  if exists (select 1 from app.get_procurement_dashboard_rate_validity_summary(v_tenant1, v_viewer1) where currency is not null) then
+    raise exception 'assertion failed: rate_validity (viewer, lacks PRC:View cost) leaked a real currency value on at least one row';
   end if;
 end $$;
 
@@ -667,7 +805,7 @@ end $$;
 -- Group 5 -- PO / contract. committed_amount is cost-masked (PRC:View cost).
 -- ===========================================================================
 
-\echo '>> get_procurement_dashboard_po_summary: reconciles po_count/committed_amount against an independent query; a caller WITHOUT PRC:View cost sees committed_amount=null/cost_masked=true (never zero, never the real figure); a caller WITH it sees the real sum; both see the identical po_count'
+\echo '>> get_procurement_dashboard_po_summary: reconciles po_count/committed_amount against an independent query; a caller WITHOUT PRC:View cost sees committed_amount=null/cost_masked=true (never zero, never the real figure); a caller WITH it sees the real sum; both see the identical po_count. Tier C batch-5 fix (HIGH): currency is now masked to null behind the SAME PRC:View cost gate, matching app.get_purchase_order/app.list_purchase_orders/app.purchase_orders_directory (PRC-260) -- verified live below.'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'pdash1');
@@ -689,12 +827,20 @@ begin
     raise exception 'assertion failed: po_summary (staff, holds PRC:View cost) expected real committed_amount=%/cost_masked=false, got amount=% masked=%', v_expected_issued_amount, v_staff_row.committed_amount, v_staff_row.cost_masked;
   end if;
 
-  select * into v_viewer_row from app.get_procurement_dashboard_po_summary(v_tenant1, v_viewer1) where status = 'issued' and currency = 'IDR';
+  -- Tier C batch-5 fix (HIGH, live-reproduced): a caller lacking PRC:View cost now sees
+  -- currency masked to null too (previously leaked unconditionally) -- the fixture has
+  -- exactly one currency (IDR) per status, so the masked row's own po_count still
+  -- reconciles against the SAME expected count (nothing is double-counted or dropped by
+  -- the GROUP BY-on-masked-expression collapse).
+  select * into v_viewer_row from app.get_procurement_dashboard_po_summary(v_tenant1, v_viewer1) where status = 'issued' and currency is null;
   if v_viewer_row.po_count is distinct from v_expected_issued_count then
     raise exception 'assertion failed: po_summary (viewer) po_count must be identical/never masked, expected % got %', v_expected_issued_count, v_viewer_row.po_count;
   end if;
   if v_viewer_row.committed_amount is not null or v_viewer_row.cost_masked is distinct from true then
     raise exception 'assertion failed: po_summary (viewer, lacks PRC:View cost) expected committed_amount=null/cost_masked=true, got amount=% masked=%', v_viewer_row.committed_amount, v_viewer_row.cost_masked;
+  end if;
+  if exists (select 1 from app.get_procurement_dashboard_po_summary(v_tenant1, v_viewer1) where currency is not null) then
+    raise exception 'assertion failed: po_summary (viewer, lacks PRC:View cost) leaked a real currency value on at least one row';
   end if;
 
   -- Never a fabricated zero -- the masked amount is genuinely NULL, distinguishable
@@ -1096,20 +1242,82 @@ begin
   end if;
 end $$;
 
-\echo '>> raw RLS on app.procurement_dashboard_saved_views: a direct select under a real authenticated session sees only rows owned by that session''s own auth.uid(), never another user''s or another tenant''s'
+\echo '>> app.procurement_dashboard_saved_views: Tier C batch-5 fix (HIGH, live-reproduced) -- the RLS SELECT policy alone had no tenant predicate (only owner_auth_user_id = auth.uid()), so a single auth identity linked to TWO tenants could read BOTH tenants'' saved views through one raw PostgREST/supabase-js select; fixed by revoking the direct select grant from authenticated entirely (every real read goes through the owner-scoped RPCs) -- verified two ways below: (1) an ordinary same-tenant raw select is now flatly rejected with permission_denied, not merely filtered; (2) a genuinely dual-tenant-linked identity, which the OLD RLS predicate alone could not have stopped, still cannot read either tenant''s rows via raw select'
 do $$
 declare
   v_staff1 uuid := '00000000-0000-0000-0000-000000266102';
-  v_staff1b uuid := '00000000-0000-0000-0000-000000266103';
   v_count integer;
+  v_failed boolean;
 begin
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_staff1::text, 'role', 'authenticated')::text, true);
-  select count(*) into v_count from app.procurement_dashboard_saved_views where owner_auth_user_id = v_staff1b;
-  if v_count <> 0 then
-    raise exception 'assertion failed: raw RLS leak -- staff1''s own session directly selected staffb''s saved view row(s)';
-  end if;
+  -- (1) An ordinary same-tenant raw select is now flatly rejected -- the grant itself
+  -- is gone, so this must fail with permission_denied regardless of RLS, proving the
+  -- direct-table-read path (a real supabase-js `.from(...)` call) is closed.
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', v_staff1::text, 'role', 'authenticated')::text, true);
+    select count(*) into v_count from app.procurement_dashboard_saved_views;
+    v_failed := false;
+  exception when insufficient_privilege then
+    v_failed := true;
+  end;
   reset role;
+  if not v_failed then
+    raise exception 'assertion failed: raw select on app.procurement_dashboard_saved_views must be rejected with permission_denied now that the direct authenticated grant is revoked -- got % row(s) instead', v_count;
+  end if;
+end $$;
+
+\echo '>> app.procurement_dashboard_saved_views: Tier C batch-5 fix (HIGH, live-reproduced dual-tenant case) -- a single auth identity linked to TWO tenants, each with its own real PRC:View-gated saved view created via the real RPC, can no longer read either tenant''s row through a raw select (pre-fix, this exact scenario returned BOTH tenants'' rows in one query)'
+do $$
+declare
+  v_dual uuid := '00000000-0000-0000-0000-000000266302';
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pdash1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'pdash2');
+  v_role1 uuid;
+  v_role2 uuid;
+  v_count integer;
+  v_failed boolean;
+begin
+  insert into auth.users (id, email) values (v_dual, 'dual@pdash.test');
+
+  perform app.invite_user(v_tenant1, v_dual, 'dual@pdash.test', 'Dual Identity', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'dual@pdash.test' and tenant_id = v_tenant1), 'active', 'onboarded', 'tester');
+  v_role1 := (app.create_role(v_tenant1, 'Dual T1 Viewer', 'PRC View, dual-tenant leak check', 'tester')).id;
+  perform app.set_role_version_permissions((app.create_role_version(v_role1, 'tester')).id, array(select id from app.permissions where resource_module_code = 'PRC' and action = 'View'), 'tester');
+  perform app.publish_role_version((select id from app.role_versions where role_id = v_role1 and status = 'draft'), now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_role1 and status = 'published'), v_dual, v_dual, 'tester');
+
+  perform app.invite_user(v_tenant2, v_dual, 'dual@pdash.test', 'Dual Identity', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'dual@pdash.test' and tenant_id = v_tenant2), 'active', 'onboarded', 'tester');
+  v_role2 := (app.create_role(v_tenant2, 'Dual T2 Viewer', 'PRC View, dual-tenant leak check', 'tester')).id;
+  perform app.set_role_version_permissions((app.create_role_version(v_role2, 'tester')).id, array(select id from app.permissions where resource_module_code = 'PRC' and action = 'View'), 'tester');
+  perform app.publish_role_version((select id from app.role_versions where role_id = v_role2 and status = 'draft'), now(), 'tester');
+  perform app.assign_role(v_tenant2, (select id from app.role_versions where role_id = v_role2 and status = 'published'), v_dual, v_dual, 'tester');
+
+  perform app.create_procurement_dashboard_saved_view(v_tenant1, 'po_contract', 'Dual T1 secret view', null, jsonb_build_object('onlyTenant1', true), '{}'::jsonb, null, v_dual, 'dual');
+  perform app.create_procurement_dashboard_saved_view(v_tenant2, 'po_contract', 'Dual T2 secret view', null, jsonb_build_object('onlyTenant2', true), '{}'::jsonb, null, v_dual, 'dual');
+
+  -- The real, safe RPC path still works correctly per tenant.
+  if (select count(*) from app.list_procurement_dashboard_saved_views(v_tenant1, 'po_contract', v_dual, 25, null)) <> 1 then
+    raise exception 'assertion failed: dual-tenant identity should see exactly 1 saved view via the safe RPC scoped to tenant1';
+  end if;
+
+  -- The unsafe raw-select path (what a browser supabase-js client with this identity's
+  -- own valid JWT would hit) must be rejected outright -- not merely tenant-filtered,
+  -- since the whole point of this fix is that RLS alone cannot safely express "only
+  -- this ONE tenant of the several this identity is a member of" without a per-request
+  -- tenant claim that does not exist yet.
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', v_dual::text, 'role', 'authenticated')::text, true);
+    select count(*) into v_count from app.procurement_dashboard_saved_views where tenant_id in (v_tenant1, v_tenant2);
+    v_failed := false;
+  exception when insufficient_privilege then
+    v_failed := true;
+  end;
+  reset role;
+  if not v_failed then
+    raise exception 'assertion failed: dual-tenant raw select must be rejected with permission_denied -- got % row(s), which pre-fix included BOTH tenants'' saved views in one query', v_count;
+  end if;
 end $$;
 
 -- ===========================================================================
@@ -1219,7 +1427,7 @@ begin
   end if;
 end $$;
 
-\echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new PRC-266 function and zero direct table access; authenticated has RLS-scoped SELECT only on the two new tables, never direct INSERT/UPDATE/DELETE; service_role has full direct access'
+\echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new PRC-266 function and zero direct table access; authenticated has RLS-scoped SELECT on procurement_metric_definitions only (never INSERT/UPDATE/DELETE on either table, and -- Tier C batch-5 fix -- zero direct access of any kind to procurement_dashboard_saved_views, which is now RPC-only); service_role has full direct access'
 do $$
 declare
   v_leaked_to_anon text[];
@@ -1255,6 +1463,18 @@ begin
     and grantee = 'authenticated' and privilege_type in ('INSERT', 'UPDATE', 'DELETE');
   if v_authenticated_write_count <> 0 then
     raise exception 'assertion failed: authenticated must hold zero direct INSERT/UPDATE/DELETE on either new table, found %', v_authenticated_write_count;
+  end if;
+
+  -- Tier C batch-5 fix (HIGH): authenticated must hold NO direct grant at all (not even
+  -- SELECT) on app.procurement_dashboard_saved_views -- every real read goes through
+  -- the owner-scoped RPCs; direct access, guarded only by an owner-only RLS predicate
+  -- with no tenant conjunct, is exactly the live-reproduced dual-tenant leak this fix
+  -- closes (see the two dedicated tests above).
+  if exists (
+    select 1 from information_schema.role_table_grants
+    where table_schema = 'app' and table_name = 'procurement_dashboard_saved_views' and grantee = 'authenticated'
+  ) then
+    raise exception 'assertion failed: authenticated must hold zero direct grants of any kind on app.procurement_dashboard_saved_views';
   end if;
 
   if not has_table_privilege('service_role', 'app.procurement_metric_definitions', 'INSERT')

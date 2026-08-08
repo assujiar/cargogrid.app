@@ -123,8 +123,12 @@ export async function listProcurementDashboardSavedViews(
   metricGroup: ProcurementDashboardMetricGroup | null = null,
   limit = 25,
   cursor: string | null = null,
+  cursorId: string | null = null,
 ): Promise<ProcurementDashboardSavedView[]> {
-  const { data, error } = await client.rpc("list_procurement_dashboard_saved_views", { p_tenant_id: tenantId, p_metric_group: metricGroup, p_actor_auth_user_id: actorAuthUserId, p_limit: limit, p_cursor: cursor });
+  // Tier C batch-5 fix: p_cursor_id (composite created_at+id keyset) closes a
+  // live-reproduced tie-drop defect on the single-column created_at cursor -- always
+  // pass both together when paginating past page 1.
+  const { data, error } = await client.rpc("list_procurement_dashboard_saved_views", { p_tenant_id: tenantId, p_metric_group: metricGroup, p_actor_auth_user_id: actorAuthUserId, p_limit: limit, p_cursor: cursor, p_cursor_id: cursorId });
   if (error) throw new ProcurementDashboardQueryError(error.message);
   return (data ?? []).map((row: Record<string, unknown>) => parseProcurementDashboardSavedView(row));
 }
@@ -150,9 +154,13 @@ export type ListProcurementVendorRiskDashboardRowsFilter = ProcurementDashboardS
   search?: string | null;
   limit?: number;
   cursor?: string | null;
+  cursorId?: string | null;
 };
 
 export async function listProcurementVendorRiskDashboardRows(client: ProcurementDashboardQueryClient, filter: ListProcurementVendorRiskDashboardRowsFilter, options?: ProcurementDashboardQueryOptions): Promise<ProcurementVendorRiskDashboardRow[]> {
+  // Tier C batch-5 fix: p_cursor_id (composite created_at+vendor_master_id keyset)
+  // closes a live-reproduced tie-drop defect on the single-column created_at cursor --
+  // always pass both together when paginating past page 1.
   return callRpcRows(
     client,
     "list_procurement_vendor_risk_dashboard_rows",
@@ -165,6 +173,7 @@ export async function listProcurementVendorRiskDashboardRows(client: Procurement
       p_search: filter.search ?? null,
       p_limit: filter.limit ?? 25,
       p_cursor: filter.cursor ?? null,
+      p_cursor_id: filter.cursorId ?? null,
     },
     parseProcurementVendorRiskDashboardRow,
     options,
