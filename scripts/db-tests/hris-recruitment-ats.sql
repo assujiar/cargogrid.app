@@ -867,4 +867,271 @@ begin
 end;
 $$;
 
+-- ===========================================================================
+-- Tier C batch review-round fix pass (20260730870000). Regression evidence for
+-- every CONFIRMED, fixed finding -- docs/build-log/phase-07/HRT-276.md section 11.
+-- ===========================================================================
+
+\echo '>> review-round fix (HIGH/CRITICAL, live-reproduced): a real tenant member holding ZERO app.role_assignments rows (hiringmgr@hrrec1.test) can no longer raw-SELECT interview_feedback.rating/recommendation/notes, job_offer_versions.compensation_amount/compensation_currency/benefits_note, or candidate_assessments.score/notes -- column-restricted grant, mirrors the already-proven PLT-114/HRT-274/app.candidates pattern. Non-sensitive columns on the same tables remain readable (they were never the leak).'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrrec1');
+  v_no_perm uuid := '00000000-0000-0000-0000-000000027608';
+begin
+  if app.evaluate_permission(v_no_perm, v_tenant1, 'HRS', 'View')::text like '(t,%' then
+    raise exception 'assertion failed: test fixture assumption broken -- hiringmgr@hrrec1.test must hold zero HRS permission for this test to be meaningful';
+  end if;
+
+  if has_column_privilege('authenticated', 'app.interview_feedback', 'rating', 'SELECT')
+     or has_column_privilege('authenticated', 'app.interview_feedback', 'recommendation', 'SELECT')
+     or has_column_privilege('authenticated', 'app.interview_feedback', 'notes', 'SELECT')
+  then
+    raise exception 'assertion failed: authenticated must not have column-level SELECT on app.interview_feedback.rating/recommendation/notes';
+  end if;
+  if not has_column_privilege('authenticated', 'app.interview_feedback', 'interview_id', 'SELECT') then
+    raise exception 'assertion failed: authenticated should still retain column-level SELECT on app.interview_feedback.interview_id (non-sensitive)';
+  end if;
+
+  if has_column_privilege('authenticated', 'app.job_offer_versions', 'compensation_amount', 'SELECT')
+     or has_column_privilege('authenticated', 'app.job_offer_versions', 'compensation_currency', 'SELECT')
+     or has_column_privilege('authenticated', 'app.job_offer_versions', 'benefits_note', 'SELECT')
+  then
+    raise exception 'assertion failed: authenticated must not have column-level SELECT on app.job_offer_versions.compensation_amount/compensation_currency/benefits_note';
+  end if;
+  if not has_column_privilege('authenticated', 'app.job_offer_versions', 'status', 'SELECT') then
+    raise exception 'assertion failed: authenticated should still retain column-level SELECT on app.job_offer_versions.status (non-sensitive)';
+  end if;
+
+  if has_column_privilege('authenticated', 'app.candidate_assessments', 'score', 'SELECT')
+     or has_column_privilege('authenticated', 'app.candidate_assessments', 'notes', 'SELECT')
+  then
+    raise exception 'assertion failed: authenticated must not have column-level SELECT on app.candidate_assessments.score/notes';
+  end if;
+  if not has_column_privilege('authenticated', 'app.candidate_assessments', 'status', 'SELECT') then
+    raise exception 'assertion failed: authenticated should still retain column-level SELECT on app.candidate_assessments.status (non-sensitive)';
+  end if;
+
+  -- A live, PostgREST-shaped session (real authenticated role + forged JWT claims for
+  -- a zero-HRS-permission, non-assigned-interviewer tenant member) must be denied at
+  -- the raw column level, matching the RPC layer's own already-correct authority gate.
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_no_perm, 'role', 'authenticated')::text, true);
+
+  begin
+    perform (select rating from app.interview_feedback limit 1);
+    raise exception 'assertion failed: expected raw SELECT of app.interview_feedback.rating to be denied for a zero-HRS-permission actor';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    perform (select compensation_amount from app.job_offer_versions limit 1);
+    raise exception 'assertion failed: expected raw SELECT of app.job_offer_versions.compensation_amount to be denied for a zero-HRS-permission actor';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    perform (select score from app.candidate_assessments limit 1);
+    raise exception 'assertion failed: expected raw SELECT of app.candidate_assessments.score to be denied for a zero-HRS-permission actor';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  reset role;
+end;
+$$;
+
+-- A separate top-level statement (own transaction) so the previous block's
+-- transaction-local `set_config('request.jwt.claims', ..., true)` (is_local = true)
+-- has already gone out of scope -- otherwise app.assert_actor_is_session_identity
+-- (reached via app.list_candidate_assessments -> app.evaluate_permission) would see
+-- the PRIOR block's forged zero-permission session identity still set and reject
+-- this call as an identity mismatch.
+\echo '>> review-round fix, continued: the RPC layer''s own real authority gate is unaffected by the column-restricted grant above -- a real HRS:View-holding staff actor still sees the full candidate_assessments row via app.list_candidate_assessments (SECURITY DEFINER, executes as the function owner)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrrec1');
+begin
+  if (select score from app.candidate_assessments a join app.job_applications ja on ja.id = a.application_id join app.candidates c on c.id = ja.candidate_id where c.full_name = 'Ada Lovelace' limit 1) is distinct from (
+    select score from app.list_candidate_assessments(
+      (select ja.id from app.job_applications ja join app.candidates c on c.id = ja.candidate_id where c.full_name = 'Ada Lovelace' and ja.tenant_id = v_tenant1),
+      '00000000-0000-0000-0000-000000027602'
+    ) limit 1
+  ) then
+    raise exception 'assertion failed: expected app.list_candidate_assessments (SECURITY DEFINER, HRS:View-gated) to still return the real score for an authorized actor';
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix (MEDIUM, C-01, live-reproduced): app.apply_to_vacancy''s idempotency-key replay now compares the FULL request tuple including `source` -- a same-key resubmission with a materially different source is rejected as idempotency_key_conflict, never silently accepted as an identical replay'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrrec1');
+  v_vacancy_id uuid;
+  v_candidate app.candidates;
+  v_app1 app.job_applications;
+begin
+  select id into v_vacancy_id from app.job_vacancies where tenant_id = v_tenant1 and title = 'Software Engineer' and status = 'open';
+  v_candidate := app.create_candidate(v_tenant1, 'Idem Fix Candidate', 'idem.fix.candidate@example.test', '+62811000111', 'staff_created', null, 'idem-hr1-idemfix-cand', '00000000-0000-0000-0000-000000027602', 'tester');
+
+  v_app1 := app.apply_to_vacancy(v_vacancy_id, v_candidate.id, 'staff_created', 'idem-hr1-idemfix-key', '00000000-0000-0000-0000-000000027602', 'tester');
+  if v_app1.source <> 'staff_created' then
+    raise exception 'assertion failed: expected the first application to record source=staff_created';
+  end if;
+
+  begin
+    perform app.apply_to_vacancy(v_vacancy_id, v_candidate.id, 'referral', 'idem-hr1-idemfix-key', '00000000-0000-0000-0000-000000027602', 'tester');
+    raise exception 'assertion failed: expected a same-key resubmission with a different source (referral) to raise idempotency_key_conflict';
+  exception
+    when unique_violation then
+      if sqlerrm not like 'idempotency_key_conflict:%' then
+        raise;
+      end if;
+  end;
+
+  -- An identical replay (same tuple, including source) is still accepted as a true
+  -- replay, returning the original row unchanged.
+  if (select id from app.apply_to_vacancy(v_vacancy_id, v_candidate.id, 'staff_created', 'idem-hr1-idemfix-key', '00000000-0000-0000-0000-000000027602', 'tester')) <> v_app1.id then
+    raise exception 'assertion failed: expected an identical-tuple replay to return the original application unchanged';
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix propagation sweep (MEDIUM, C-01): the identical narrow-tuple idempotency-comparison shape, fixed in app.create_job_vacancy_draft (full tuple: title/position_id/employment_type/headcount/description/requirements/hiring_manager_employee_id) and app.submit_public_job_application (full_name/phone added to the email comparison)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrrec1');
+  v_position_id uuid := (select id from app.positions where tenant_id = v_tenant1 and code = 'POS-REC');
+  v_vacancy1 app.job_vacancies;
+  v_posting record;
+  v_result record;
+  v_result2 record;
+begin
+  v_vacancy1 := app.create_job_vacancy_draft(
+    v_tenant1, v_position_id, 'Idem Fix Vacancy', 'full_time', 1, 'orig description', 'orig requirements', null,
+    'idem-hr1-vacfix-key', '00000000-0000-0000-0000-000000027602', 'tester'
+  );
+
+  begin
+    perform app.create_job_vacancy_draft(
+      v_tenant1, v_position_id, 'Idem Fix Vacancy', 'full_time', 1, 'DIFFERENT description', 'orig requirements', null,
+      'idem-hr1-vacfix-key', '00000000-0000-0000-0000-000000027602', 'tester'
+    );
+    raise exception 'assertion failed: expected a same-key resubmission with a different description to raise idempotency_key_conflict';
+  exception
+    when unique_violation then
+      if sqlerrm not like 'idempotency_key_conflict:%' then
+        raise;
+      end if;
+  end;
+
+  -- Public intake: submit once, then replay the same idempotency_key with a
+  -- different full_name -- must be rejected as a conflict, not silently accepted.
+  select id into v_position_id from app.positions where tenant_id = v_tenant1 and code = 'POS-REC';
+  perform app.publish_job_vacancy(v_vacancy1.id, v_vacancy1.record_version, 30, '00000000-0000-0000-0000-000000027603', 'tester');
+  select posting_token into v_posting from app.job_vacancy_postings where vacancy_id = v_vacancy1.id;
+
+  select * into v_result from app.submit_public_job_application(
+    (select posting_token from app.job_vacancy_postings where vacancy_id = v_vacancy1.id),
+    'idemfix-client-key-1', 'Public Idem Fix Applicant', 'public.idemfix@example.test', '+62811222333',
+    true, 'v1', 'idem-hr1-pubidemfix-key'
+  );
+  if v_result.submit_status <> 'ok' then
+    raise exception 'assertion failed: expected the first public application to succeed, got %', v_result.submit_status;
+  end if;
+
+  select * into v_result2 from app.submit_public_job_application(
+    (select posting_token from app.job_vacancy_postings where vacancy_id = v_vacancy1.id),
+    'idemfix-client-key-1', 'DIFFERENT Applicant Name', 'public.idemfix@example.test', '+62811222333',
+    true, 'v1', 'idem-hr1-pubidemfix-key'
+  );
+  if v_result2.submit_status <> 'conflict' then
+    raise exception 'assertion failed: expected a same-key resubmission with a different full_name to be a conflict, got %', v_result2.submit_status;
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix (CRITICAL, live-reproduced with two real concurrent psql processes -- see docs/build-log/phase-07/HRT-276.md section 11 for the standalone concurrency evidence): app.reject_application/app.withdraw_application now actually run (never invoked anywhere in this file before this fix pass) and cancel a still-pending PLT-123 approval request before cascading the offer to withdrawn; app.decide_job_offer_approval on the now-cancelled step raises approval_step_not_active instead of silently resurrecting the offer'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrrec1');
+  v_vacancy_id uuid;
+  v_candidate_a app.candidates;
+  v_candidate_b app.candidates;
+  v_application_a app.job_applications;
+  v_application_b app.job_applications;
+  v_offer_a app.job_offers;
+  v_offer_b app.job_offers;
+  v_step_a app.approval_request_steps;
+  v_step_b app.approval_request_steps;
+  v_request_a app.approval_requests;
+  v_request_b app.approval_requests;
+begin
+  select id into v_vacancy_id from app.job_vacancies where tenant_id = v_tenant1 and title = 'Software Engineer' and status = 'open';
+
+  -- reject_application, with a real in-flight approval request bound to the offer.
+  v_candidate_a := app.create_candidate(v_tenant1, 'Reject Cascade Candidate', 'reject.cascade@example.test', '+62811333444', 'staff_created', null, 'idem-hr1-rejcasc-cand', '00000000-0000-0000-0000-000000027602', 'tester');
+  perform app.record_candidate_consent(v_candidate_a.id, v_candidate_a.record_version, 'v1', '00000000-0000-0000-0000-000000027602', 'tester');
+  v_application_a := app.apply_to_vacancy(v_vacancy_id, v_candidate_a.id, 'staff_created', 'idem-hr1-rejcasc-app', '00000000-0000-0000-0000-000000027602', 'tester');
+  update app.job_applications set stage = 'offer', record_version = record_version + 1 where id = v_application_a.id;
+  perform app.create_job_offer_version(v_application_a.id, 15000000, 'IDR', current_date + 14, null, 'Software Engineer', 'full_time', 'standard benefits', '00000000-0000-0000-0000-000000027602', 'tester');
+  select * into v_offer_a from app.job_offers where application_id = v_application_a.id;
+  v_offer_a := app.submit_job_offer_for_approval(v_offer_a.id, v_offer_a.record_version, '00000000-0000-0000-0000-000000027602', 'tester');
+  select s.* into v_step_a from app.approval_request_steps s where s.request_id = v_offer_a.approval_request_id and s.status = 'active';
+
+  perform app.reject_application(v_application_a.id, (select record_version from app.job_applications where id = v_application_a.id), 'duplicate application, closing this one', '00000000-0000-0000-0000-000000027602', 'tester');
+
+  if (select stage from app.job_applications where id = v_application_a.id) <> 'rejected' then
+    raise exception 'assertion failed: expected application to be rejected';
+  end if;
+  if (select status from app.job_offers where id = v_offer_a.id) <> 'withdrawn' then
+    raise exception 'assertion failed: expected the offer to be withdrawn after its application was rejected';
+  end if;
+  select * into v_request_a from app.approval_requests where id = v_offer_a.approval_request_id;
+  if v_request_a.status <> 'cancelled' then
+    raise exception 'assertion failed: expected app.reject_application to cancel the in-flight approval request, found status=%', v_request_a.status;
+  end if;
+
+  -- The approver, unaware of the rejection, tries to decide the now-cancelled step --
+  -- must be rejected, never silently resurrecting the withdrawn offer.
+  begin
+    perform app.decide_job_offer_approval(v_step_a.id, 'approved', 'approving late', '00000000-0000-0000-0000-000000027603', 'tester');
+    raise exception 'assertion failed: expected deciding a cancelled approval step to fail';
+  exception
+    when check_violation then null;
+  end;
+  if (select status from app.job_offers where id = v_offer_a.id) <> 'withdrawn' then
+    raise exception 'assertion failed: expected the offer to remain withdrawn after the late, rejected decide attempt';
+  end if;
+
+  -- withdraw_application, same cascade, proven independently (this RPC was ALSO
+  -- never invoked anywhere in this file before this fix pass).
+  v_candidate_b := app.create_candidate(v_tenant1, 'Withdraw Cascade Candidate', 'withdraw.cascade@example.test', '+62811444555', 'staff_created', null, 'idem-hr1-witcasc-cand', '00000000-0000-0000-0000-000000027602', 'tester');
+  perform app.record_candidate_consent(v_candidate_b.id, v_candidate_b.record_version, 'v1', '00000000-0000-0000-0000-000000027602', 'tester');
+  v_application_b := app.apply_to_vacancy(v_vacancy_id, v_candidate_b.id, 'staff_created', 'idem-hr1-witcasc-app', '00000000-0000-0000-0000-000000027602', 'tester');
+  update app.job_applications set stage = 'offer', record_version = record_version + 1 where id = v_application_b.id;
+  perform app.create_job_offer_version(v_application_b.id, 15000000, 'IDR', current_date + 14, null, 'Software Engineer', 'full_time', 'standard benefits', '00000000-0000-0000-0000-000000027602', 'tester');
+  select * into v_offer_b from app.job_offers where application_id = v_application_b.id;
+  v_offer_b := app.submit_job_offer_for_approval(v_offer_b.id, v_offer_b.record_version, '00000000-0000-0000-0000-000000027602', 'tester');
+  select s.* into v_step_b from app.approval_request_steps s where s.request_id = v_offer_b.approval_request_id and s.status = 'active';
+
+  perform app.withdraw_application(v_application_b.id, (select record_version from app.job_applications where id = v_application_b.id), 'candidate withdrew by phone', '00000000-0000-0000-0000-000000027602', 'tester');
+
+  if (select status from app.job_offers where id = v_offer_b.id) <> 'withdrawn' then
+    raise exception 'assertion failed: expected the offer to be withdrawn after its application was withdrawn';
+  end if;
+  select * into v_request_b from app.approval_requests where id = v_offer_b.approval_request_id;
+  if v_request_b.status <> 'cancelled' then
+    raise exception 'assertion failed: expected app.withdraw_application to cancel the in-flight approval request, found status=%', v_request_b.status;
+  end if;
+  begin
+    perform app.decide_job_offer_approval(v_step_b.id, 'approved', 'approving late', '00000000-0000-0000-0000-000000027603', 'tester');
+    raise exception 'assertion failed: expected deciding a cancelled approval step to fail';
+  exception
+    when check_violation then null;
+  end;
+end;
+$$;
+
 \echo 'ALL HRT-276 db-test assertions passed.'
