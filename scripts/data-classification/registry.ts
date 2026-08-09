@@ -264,4 +264,38 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
     description:
       "phone/email on app.employee_emergency_contacts — personal data of a named third party (not the employee themself), masked by app.list_employee_emergency_contacts identically to app.vendor_contacts' own email/phone masking (PRC-251) — name/relationship remain visible unmasked, mirroring the vendor-contact precedent exactly.",
   },
+  {
+    id: "hrs:candidates.national_id_number",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "national_id_number on app.candidates (HRT-276, Recruitment/ATS) — a government-issued identity number, masked to null for any reader lacking HRS:View personal data via app.get_candidate_profile's own server-computed personal_data_masked flag. Never in app.list_candidates/app.export_candidates' own zero-pii projections, and never copied into app.audit_logs (app.candidate_audit_projection is an explicit non-pii jsonb_build_object, never to_jsonb(row)).",
+  },
+  {
+    id: "hrs:candidates.date_of_birth",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "date_of_birth on app.candidates — masked identically to national_id_number.",
+  },
+  {
+    id: "hrs:candidates.personal_contact",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "email/phone on app.candidates — a candidate's own contact channel, the entire point of contact with a real person before they are anything else in this system. Column-restricted at the grant layer from day one (authenticated has no column-level SELECT on this column at all, PLT-114 pattern) and masked at the RPC layer by app.get_candidate_profile.",
+  },
+  {
+    id: "hrs:candidates.address",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "address on app.candidates — masked identically to email/phone.",
+  },
 ];
