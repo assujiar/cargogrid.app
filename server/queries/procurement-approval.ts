@@ -60,6 +60,7 @@ export async function evaluateProcurementApprovalRequirement(client: Procurement
     p_tenant_id: parsedInput.tenantId,
     p_value_amount: parsedInput.valueAmount,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_value_currency: parsedInput.valueCurrency,
   });
   if (error) {
     throw new ProcurementApprovalQueryError(error.message);

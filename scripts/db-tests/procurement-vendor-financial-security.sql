@@ -1041,6 +1041,22 @@ begin
   perform app.reactivate_vendor_bank_account(v_account.id, v_account.record_version, now(), v_manager2, 'manager2');
 end $$;
 
+\echo '>> Prompt 269 (ISS-2026-054, C-05): app.get_vendor_payment_term_proposal -- a pfin2 actor with zero membership in pfin1 gets the SAME vendor_payment_term_proposal_not_found a genuinely missing id would produce, never insufficient_authority (which would disclose the real tenant_id)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pfin1');
+  v_t2_staff uuid := '00000000-0000-0000-0000-000000092202';
+  v_target_proposal_id uuid := (select id from app.vendor_payment_term_proposals where tenant_id = v_tenant1 and idempotency_key = 'idem-pfin-pterm-1');
+begin
+  begin
+    perform app.get_vendor_payment_term_proposal(v_target_proposal_id, v_t2_staff);
+    raise exception 'assertion failed: expected vendor_payment_term_proposal_not_found for a pfin2 actor reading a pfin1 payment term proposal (never insufficient_authority, which would disclose the real tenant_id)';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_payment_term_proposal_not_found%' then raise; end if;
+  end;
+end $$;
+
 \echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new client-facing function; the private helpers carry no authenticated/service_role/anon grant beyond Postgres'' own implicit owner privilege'
 do $$
 declare

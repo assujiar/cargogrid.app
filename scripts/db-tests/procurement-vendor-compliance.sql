@@ -744,6 +744,42 @@ begin
       if sqlerrm not like 'insufficient_authority%' then raise; end if;
   end;
 
+  -- Security-regression review fix (this same checkpoint, spot-checking the build
+  -- log's own now-superseded "checked and found NOT affected" claim): a viewer who
+  -- ALSO supplies a deliberately stale p_expected_version must still be denied on
+  -- insufficient_authority grounds, NEVER stale_version -- the real record_version
+  -- must not be disclosed to a caller not yet shown to hold PRC:Approve/PRC:Reject.
+  begin
+    perform app.decide_vendor_compliance_waiver(v_waiver.id, 999999, 'approved', null, v_viewer, 'viewer');
+    raise exception 'assertion failed: expected insufficient_authority (never stale_version) for a viewer supplying a stale expected_version';
+  exception
+    when others then
+      if sqlerrm like 'stale_version%' then
+        raise exception 'assertion failed: record_version was disclosed to an unauthorized caller before the authority check -- %', sqlerrm;
+      end if;
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- Same regression, for the waiver's own requester (self-approval identity check):
+  -- must still be self_approval_not_allowed, never stale_version, with a stale version.
+  begin
+    perform app.decide_vendor_compliance_waiver(v_waiver.id, 999999, 'approved', null, v_staff, 'staff');
+    raise exception 'assertion failed: expected self_approval_not_allowed (never stale_version) for the requester supplying a stale expected_version';
+  exception
+    when others then
+      if sqlerrm like 'stale_version%' then
+        raise exception 'assertion failed: record_version was disclosed to the requester before the self-approval check -- %', sqlerrm;
+      end if;
+      if sqlerrm not like 'self_approval_not_allowed%' then raise; end if;
+  end;
+
+  -- the fixture waiver's real record_version/status are untouched by any of the
+  -- three rejected calls above (mirrors the vendor_profiles block's own sanity check).
+  if (select record_version from app.vendor_compliance_waivers where id = v_waiver.id) <> v_waiver.record_version
+     or (select status from app.vendor_compliance_waivers where id = v_waiver.id) <> 'pending' then
+    raise exception 'assertion failed: expected the waiver to be untouched by the rejected decide_vendor_compliance_waiver calls above';
+  end if;
+
   -- rejecting requires a reason.
   begin
     perform app.decide_vendor_compliance_waiver(v_waiver.id, v_waiver.record_version, 'rejected', null, v_manager, 'manager');
@@ -976,12 +1012,16 @@ declare
   v_target_req_id uuid := (select r.id from app.vendor_compliance_requirements r join app.tenants t on t.id = r.tenant_id where t.slug = 'pcmp1' and r.idempotency_key = 'idem-pcmp-req-1');
   v_target_vendor_id uuid := (select master_record_id from app.vendor_profiles where idempotency_key = 'idem-pcmp-vendor-1');
 begin
+  -- Prompt 269 (ISS-2026-054, C-05): a cross-tenant, zero-membership caller now gets
+  -- the SAME vendor_compliance_requirement_not_found a genuinely missing id would
+  -- produce, never insufficient_authority (which would have echoed the real tenant_id
+  -- in its own error text -- the exact oracle this fix closed).
   begin
     perform app.get_vendor_compliance_requirement(v_target_req_id, v_t2_staff);
-    raise exception 'assertion failed: expected insufficient_authority for a pcmp2 actor reading a pcmp1 requirement';
+    raise exception 'assertion failed: expected vendor_compliance_requirement_not_found for a pcmp2 actor reading a pcmp1 requirement (never insufficient_authority, which would disclose the real tenant_id)';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_compliance_requirement_not_found%' then raise; end if;
   end;
 
   begin
@@ -1003,6 +1043,45 @@ begin
   end if;
 
   reset role;
+end $$;
+
+\echo '>> Prompt 269 (ISS-2026-054, C-05): app.get_vendor_compliance_waiver/get_vendor_compliance_document/decide_vendor_compliance_waiver -- a pcmp2 actor with zero membership in pcmp1 gets the SAME not-found shape a genuinely missing id would produce, never insufficient_authority (which would disclose the real tenant_id); the write correctly still blocks the actual decision, only the disclosure is fixed'
+do $$
+declare
+  v_t2_staff uuid := '00000000-0000-0000-0000-000000091202';
+  v_target_waiver_id uuid := (select w.id from app.vendor_compliance_waivers w join app.tenants t on t.id = w.tenant_id where t.slug = 'pcmp1' and w.idempotency_key = 'idem-pcmp-waiver-1');
+  v_target_doc_id uuid := (select d.id from app.vendor_compliance_documents d join app.tenants t on t.id = d.tenant_id where t.slug = 'pcmp1' and d.idempotency_key = 'idem-pcmp-doc-1');
+begin
+  begin
+    perform app.get_vendor_compliance_waiver(v_target_waiver_id, v_t2_staff);
+    raise exception 'assertion failed: expected vendor_compliance_waiver_not_found for a pcmp2 actor reading a pcmp1 waiver (never insufficient_authority, which would disclose the real tenant_id)';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_compliance_waiver_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.get_vendor_compliance_document(v_target_doc_id, v_t2_staff);
+    raise exception 'assertion failed: expected vendor_compliance_document_not_found for a pcmp2 actor reading a pcmp1 document (never insufficient_authority, which would disclose the real tenant_id)';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_compliance_document_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.decide_vendor_compliance_waiver(v_target_waiver_id, 1, 'approved', null, v_t2_staff, 'attacker');
+    raise exception 'assertion failed: expected vendor_compliance_waiver_not_found for a pcmp2 actor deciding a pcmp1 waiver (never insufficient_authority, which would disclose the real tenant_id) -- the write must still be blocked, only the disclosure shape changes';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_compliance_waiver_not_found%' then raise; end if;
+  end;
+
+  -- This waiver was already legitimately approved by v_approver earlier in this file
+  -- (the maker-checker test above) -- confirm the cross-tenant attempt never touched
+  -- it (approved_by_auth_user_id is still the real approver, never the attacker).
+  if (select approved_by_auth_user_id from app.vendor_compliance_waivers where id = v_target_waiver_id) = v_t2_staff then
+    raise exception 'assertion failed: the cross-tenant decide_vendor_compliance_waiver attempt must never actually have decided the real pcmp1 waiver';
+  end if;
 end $$;
 
 \echo '>> RLS default-deny for a customer_user-layer principal: tenant membership alone is not enough -- a customer_user-layer actor in the SAME tenant reads zero rows at the raw-RLS level'

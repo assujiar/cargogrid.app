@@ -76,6 +76,13 @@ export default async function VendorComparisonDetailPage({ params }: { params: P
             tenantId: comparison.tenantId,
             valueAmount: recommendedOffer.normalizedAmount,
             actorAuthUserId: access.authUserId,
+            // Full-regression review (Prompt 269 follow-up): normalizedAmount is
+            // denominated in the comparison's own comparisonCurrency (PRC-258) --
+            // threading it through lets a genuine mismatch against the policy's own
+            // policy_currency normalize via FX (ISS-2026-045, Fix 3) instead of
+            // comparing raw numerics, matching what
+            // app.submit_vendor_comparison_for_approval itself passes.
+            valueCurrency: comparison.comparisonCurrency,
           });
         } catch (previewError) {
           // Never block the page on a preview failure (e.g. a PRC:View-cost-less

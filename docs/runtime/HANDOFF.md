@@ -7,7 +7,99 @@
 **Trust status:** `TRUSTED` (process and content — `docs/architecture/14..16_*.md` reconciled to single coherent Lineage A documents; Phase 0 independently closure-verified `2026-07-16`; Phase 1 (Platform Core) independently closure-verified `2026-07-22`; Phase 2 (Commercial) independently closure-verified `2026-07-27`; **Phase 3 (Operations) independently closure-verified `2026-07-28`, this checkpoint**; `ERR-2026-004` (Sev-1/Critical repository-wide function-privilege gap) `RECOVERED` at `PLT-118`, its new per-migration convention independently re-confirmed intact across all 71 migrations at this checkpoint's own fresh re-verification)
 **Run status:** `PHASE_0_VERIFIED` (Phase 0 closed) → `PHASE_1_VERIFIED` (Phase 1 closed) → `PHASE_2_VERIFIED` (Phase 2 closed) → `PHASE_3_VERIFIED` (Phase 3 closed) → **`PHASE_4_VERIFIED` (Phase 4 closed, this checkpoint)** — Finance WBS/runtime kickoff plus `FIN-190` through `FIN-218` (Finance Configuration, Chart of Accounts, Fiscal Period, Currency/Exchange Rate, Tax Baseline, Accounts Receivable, Invoice, Receipt/Allocation, Accounts Payable, Vendor Bill, Settlement, Subledger, Double-Entry Journal, Posted-Journal Integrity, Draft/Posted State, Reversal/Adjustment, Period Lock, Idempotent Posting, Reconciliation, AR/AP Aging, Cash/Bank, Job/Customer/Service Profitability, Finance Dashboard/Reports, Field-Level Security, Integrated Verification, Hardening, Documentation, Closure) all `VERIFIED` — a fresh explicit "lanjut prompt 213 sd 219" authorization's own substantive Finance range (213-218) is now fully complete.
 
-> **Latest checkpoint (2026-08-09, branch `claude/prompt-266-270-jtm3sy`) — `CG-S11-PRC-019` (Prompt 268, Integrated Verification) `VERIFIED` (with findings triaged and assigned), within the same "lanjut prompt 266 sd 270" authorization. Read this before starting Prompt 269.**
+> **Latest checkpoint (2026-08-09, branch `claude/prompt-266-270-jtm3sy`) — `CG-S11-PRC-020` (Prompt 269, Procurement/Vendor Integrity, Security and Financial Hardening) `VERIFIED`, within the same "lanjut prompt 266 sd 270" authorization. Read this before starting Prompt 270.**
+>
+> **Prompt 269 is the dedicated repair task for `PRC-268`'s own disposition table.** Built via
+> `Workflow`: Implement (one comprehensive fix agent against a fully-specified design) → 3 parallel
+> adversarial review lenses (financial-currency-correctness, security-regression,
+> full-regression-and-integration) → one fix pass closing every CONFIRMED finding. Fixes exactly 6
+> of `PRC-268`'s 8 registered findings, per this prompt's own explicit instruction — the 3
+> Critical/High plus 3 of 5 new Medium/Low that are cheap and mechanical — leaving `ISS-2026-057`/
+> `058` deliberately open (each needs a genuinely new capability — a batch-import pipeline, an
+> evidence/file-linking mechanism — forbidden by this prompt's own §12 "no new unplanned
+> capability") and the 18 other pre-existing OPEN Medium/Low issues untouched (outside `PRC-268`'s
+> own disposition obligation for this checkpoint).
+>
+> **`ISS-2026-042`/`051` (both CVEs, HIGH)**: fixed via 2 new `pnpm.overrides` entries
+> (`js-yaml@<4.3.1`→`>=4.3.1`, `nanoid@<3.3.17`→`>=3.3.17`), the exact established technique
+> `ISS-2026-007` already used — `security:audit` now clean (was 2 blocking advisories).
+>
+> **`ISS-2026-045` (currency-blind procurement approval threshold, HIGH, the highest-risk change in
+> this task)**: a 6,000 IDR `rate_version` (~USD 0.40) and a 6,000 USD `rate_version` (genuinely
+> large) previously received the identical governance verdict. Fixed with a new
+> `app.procurement_approval_policies.policy_currency` column, a currency-aware
+> `app.evaluate_procurement_approval_requirement`, and a new private helper
+> `app._evaluate_procurement_currency_threshold` (a **deliberate, disclosed variant** of PRC-258's
+> own `_normalize_vendor_comparison_currency` precedent, composing the existing
+> `app.convert_finance_amount`/FIN-194) that additionally catches `insufficient_privilege` (missing
+> `FIN:View`) and **fails closed** — `required=true`, new reason
+> `value_currency_unverifiable_defaulted_to_required` — on ANY conversion-unavailable outcome,
+> since under-routing is the more dangerous direction. `app._request_procurement_entity_approval`
+> already received `p_currency` from all 5 call sites (previously used only for the audit
+> snapshot) — no entity-type submit RPC needed to change. **A real implementation defect found and
+> fixed via mandated direct verification, not assumed**: a bare `CREATE OR REPLACE FUNCTION`
+> appending a defaulted trailing parameter creates an ambiguous second overload rather than
+> replacing in place — fixed with this repository's own established `DROP FUNCTION` + `CREATE
+> FUNCTION` + explicit re-`GRANT` precedent, re-verified live via `has_function_privilege`.
+> ISS-2026-045's own exact worked example (6,000 IDR vs 6,000 USD against a 5,000 threshold)
+> reproduced and confirmed resolved.
+>
+> **`ISS-2026-054` (C-05 tenant-id-disclosure oracle, MEDIUM)**: 15 functions across 5
+> already-`VERIFIED` capabilities (PRC-251/252/253/254/256) fixed with the exact already-established
+> pattern (`app.get_rfq`'s own template) — tenant-membership folded into the not-found branch, no
+> permission check weakened. **`ISS-2026-055` (record_version disclosed pre-authority, LOW)**: all
+> four `vendor_profiles` lifecycle-transition functions reordered. **`ISS-2026-056` (missing
+> covering index, MEDIUM)**: `vendor_contracts_tenant_created_idx` added, live `EXPLAIN` confirms a
+> ~35× execution-time improvement on a skewed dataset mirroring `PRC-268`'s own reproduction.
+>
+> **The adversarial review round itself found and the fix pass closed 4 further CONFIRMED
+> findings**: the security-regression lens found `app.decide_vendor_compliance_waiver` still
+> disclosed the real `record_version` before its own authority check — **directly contradicting
+> this same checkpoint's own build-log claim that this exact function had already been checked and
+> found unaffected** — fixed in place, the false claim corrected via an appended (never rewritten)
+> `KNOWN_ISSUES.md` paragraph, per this ledger's own append-only evidence discipline. The
+> full-regression lens found `db:test` is not unconditionally "ALL PASSED"
+> (`procurement-vendor-performance.sql` fails deterministically in a ~00:00–03:59 UTC window,
+> confirmed pre-existing via `git stash`, root-caused this round to a real time-of-day-dependent
+> off-by-one in `PRC-264`'s own `app._calc_vendor_kpi_rate_validity` day-window arithmetic — a
+> different capability, out of this task's own scope to fix — registered as new `ISS-2026-059`,
+> `OPEN`, Low, with full root cause and a sketched fix); the currency fix's own two UI preview call
+> sites were never propagated (fixed); no `KNOWN_ISSUES.md` entry existed for the performance-test
+> failure (closed by `ISS-2026-059`). The financial-currency-correctness lens found **zero confirmed
+> defects** — every one of Fix 3's own claims held up under live adversarial execution, including
+> two scenarios the packaged regression suite itself did not exercise end-to-end.
+>
+> **Gate suite independently re-run fresh by the orchestrating session, every number matching**:
+> `typecheck` 0 errors; `lint` 0 errors/175 pre-existing warnings; `pnpm run test` **3428/3428**
+> (3426 baseline + 2 new); `next build` clean; `git:check-paths` 17 files (full real changeset), 0
+> forbidden, 1 expected caution; `security:audit` **PASS, no advisories**; `security:check`/
+> `standards:check`/`data-classification:check`/`docs:check` all clean. **`db:test` independently
+> re-run twice**: once via the packaged fail-fast script (stopped at the disclosed
+> `procurement-vendor-performance.sql` failure, reproduced at `02:56 UTC`, squarely inside the
+> disclosed band); once via a from-scratch per-file harness giving the true full-suite count —
+> **148/149 passed**, sole failure the newly-registered, root-caused, self-healing `ISS-2026-059`,
+> every other file (including all 16 procurement-family files) clean. Treated as `VERIFIED`, not
+> blocked — `ISS-2026-059` is pre-existing, fully root-caused, self-heals outside a ~4-hour daily
+> UTC band, and has zero data-integrity impact, matching this prompt's own §33 acceptance criteria
+> ("residual risks are explicit, owned and non-blocking"). **Environment note for the next agent**:
+> this sandbox has no Docker daemon — a local apt-installed PostgreSQL 16 cluster
+> (postgres/postgres@127.0.0.1:5432) substitutes for `db:test`'s disposable-Postgres requirement;
+> `service postgresql start` if it is ever down; `pnpm run db:test` is time-of-day-sensitive until
+> `ISS-2026-059` is fixed (fails when run inside ~00:00–03:59 UTC) — this is expected, not a new
+> regression.
+>
+> Migrations added: `20260730810000_harden_procurement_approval_currency_normalization.sql`,
+> `20260730820000_harden_procurement_c05_tenant_disclosure_sweep_batch5.sql`. Full detail:
+> `docs/build-log/phase-06/PRC-269.md`; batch record: `docs/runtime/TASK_LEDGER.md`'s
+> `CG-S11-PRC-020` row and `docs/build-log/phase-06/PROCUREMENT_VENDOR_EXECUTION_INDEX.md`.
+>
+> **`CG-S11-PRC-021` (Prompt 270, Documentation and Handoff) is dependency-clean and within this
+> same already-granted "lanjut prompt 266 sd 270" authorization (270 is named in that range) — no
+> fresh authorization needed.** `CG-S11-PRC-022` (Prompt 271, Independent Closure) remains outside
+> every authorization granted so far and requires fresh, separate, explicit operator authorization
+> before it may begin.
+
+> **Prior checkpoint (2026-08-09, branch `claude/prompt-266-270-jtm3sy`) — `CG-S11-PRC-019` (Prompt 268, Integrated Verification) `VERIFIED` (with findings triaged and assigned), within the same "lanjut prompt 266 sd 270" authorization.**
 >
 > **Prompt 268 is a standalone, never-batched verification checkpoint by design** (per its own §11/§12/§13/§20): it finds and registers defects, fixing none except one trivial, zero-risk documentation correction (§8 of its own build log — no code/migration/application file changed). Built via `Workflow`: a read-only 17-capability × 5-anchor-family (`PRC-VND-US-001` vendor-onboarding flow, `FINTEST-016` invoice-match flow, RLS/tenant-isolation, performance/migration, cross-prompt data-dependency) evidence-matrix synthesis over the 16 internally-scoped `VERIFIED` Phase 6 capabilities plus `CG-S11-PRC-018`'s disclosed `BLOCKED` row (governed by `ADR-0022`, never silently treated as satisfied), then 5 parallel live-verification lenses (critical-e2e-uat-flow, security-isolation-sweep, finance-operations-regression, performance-and-migration, spec-anchor-completeness) against a fully-migrated disposable Postgres 16 database, then a synthesis stage that independently re-derives every finding against the live schema/database before accepting it.
 >

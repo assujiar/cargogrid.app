@@ -1265,6 +1265,47 @@ begin
   reset role;
 end $$;
 
+\echo '>> Prompt 269 (ISS-2026-054, C-05): app.get_vendor_assessment_score_breakdown/list_vendor_assessment_findings/list_vendor_assessment_corrective_actions/list_vendor_assessment_template_criteria -- a vasm2 actor with zero membership in vasm1 gets the SAME not-found shape a genuinely missing id would produce, never insufficient_authority (which would disclose the real tenant_id)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vasm1');
+  v_t2_staff uuid := '00000000-0000-0000-0000-000000026202';
+  v_target_assessment_id uuid := (select id from app.vendor_assessments where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-assessment-1');
+  v_target_template_id uuid := (select id from app.vendor_assessment_templates where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-template-1');
+begin
+  begin
+    perform app.get_vendor_assessment_score_breakdown(v_target_assessment_id, v_t2_staff);
+    raise exception 'assertion failed: expected vendor_assessment_not_found for a vasm2 actor reading a vasm1 assessment score breakdown (never insufficient_authority, which would disclose the real tenant_id)';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_assessment_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_vendor_assessment_findings(v_target_assessment_id, v_t2_staff);
+    raise exception 'assertion failed: expected vendor_assessment_not_found for a vasm2 actor listing vasm1 assessment findings';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_assessment_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_vendor_assessment_corrective_actions(v_target_assessment_id, v_t2_staff);
+    raise exception 'assertion failed: expected vendor_assessment_not_found for a vasm2 actor listing vasm1 assessment corrective actions';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_assessment_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_vendor_assessment_template_criteria(v_target_template_id, v_t2_staff);
+    raise exception 'assertion failed: expected vendor_assessment_template_not_found for a vasm2 actor listing a vasm1 template''s criteria';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_assessment_template_not_found%' then raise; end if;
+  end;
+end $$;
+
 \echo '>> RLS default-deny for a customer_user-layer principal: tenant membership alone is not enough -- a customer_user-layer actor in the SAME tenant reads zero rows at the raw-RLS level'
 do $$
 declare

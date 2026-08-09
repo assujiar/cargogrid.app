@@ -337,7 +337,7 @@ begin
 end;
 $$;
 
-\echo '>> published rate_version policy min_value_amount=5,000,000 IDR: a rate at 10,000,000 crosses it -- create_rate_version routes for real (governance_approval_status=pending); approve_rate_version is blocked (rate_governance_approval_pending) until resolved; after both steps approve, approve_rate_version succeeds'
+\echo '>> published rate_version policy min_value_amount=5,000,000 IDR (policy_currency explicitly IDR, ISS-2026-045 Prompt 269 -- matches every rate fixture in this block, proving a same-currency policy is unaffected by the currency-normalization fix): a rate at 10,000,000 crosses it -- create_rate_version routes for real (governance_approval_status=pending); approve_rate_version is blocked (rate_governance_approval_pending) until resolved; after both steps approve, approve_rate_version succeeds'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'apr1');
@@ -349,7 +349,10 @@ declare
   v_step1_id uuid;
   v_step2_id uuid;
 begin
-  select * into v_policy from app.create_procurement_approval_policy_version(v_tenant1, 'rate_version', 5000000, false, v_admin1, 'admin');
+  select * into v_policy from app.create_procurement_approval_policy_version(v_tenant1, 'rate_version', 5000000, false, v_admin1, 'admin', 'IDR');
+  if v_policy.policy_currency <> 'IDR' then
+    raise exception 'assertion failed: expected policy_currency=IDR (explicit p_policy_currency honored), got %', v_policy.policy_currency;
+  end if;
   select * into v_policy from app.publish_procurement_approval_policy_version(v_policy.id, v_policy.record_version, null, v_admin1, 'admin');
 
   v_rate := app.create_rate_version(
@@ -410,6 +413,316 @@ begin
   v_rate := app.approve_rate_version(v_rate.id, v_rate.record_version, v_admin1, 'admin');
   if v_rate.approval_status <> 'approved' then
     raise exception 'assertion failed: expected approval_status=approved, got %', v_rate.approval_status;
+  end if;
+end;
+$$;
+
+-- ===========================================================================
+-- ISS-2026-045 (Prompt 269, CG-S11-PRC-020): currency-aware procurement approval
+-- threshold. A dedicated, self-contained third tenant (apr3) -- isolated from every
+-- fixture/assertion above, avoiding any entanglement with the already-published
+-- vendor_activation/rate_version/vendor_selection/exception_override policies on
+-- tenant1 or the cross-tenant checks on tenant2.
+-- ===========================================================================
+
+\echo '>> setup (ISS-2026-045): tenant3 (apr3) -- admin3 (tenant_admin membership + PRC Create/Edit/View/View cost/Override/Approve/Reject + FIN Edit/Approve/View, so it can both configure the FX rate and observe the successful-conversion path), admin3b (tenant_admin membership ONLY -- zero role-based permissions at all, so it can call app.create_rate_version via app.is_support_grant_authority exactly like the design note describes, but holds no FIN:View whatsoever), noFin3 (an ordinary active member with PRC-only permissions, no FIN at all), a 1-step routing definition, and one real approved IDR->USD FX rate (1 USD = 10,000 IDR, a round number chosen for unambiguous arithmetic)'
+do $$
+declare
+  v_tenant3 uuid;
+  v_full_role uuid;
+  v_full_draft app.role_versions;
+  v_prconly_role uuid;
+  v_prconly_draft app.role_versions;
+  v_approver_role uuid;
+  v_approval_draft app.config_versions;
+  v_rate app.finance_exchange_rates;
+begin
+  insert into auth.users (id, email) values
+    ('00000000-0000-0000-0000-000000394301', 'admin3@apr3.test'),
+    ('00000000-0000-0000-0000-000000394302', 'admin3b@apr3.test'),
+    ('00000000-0000-0000-0000-000000394303', 'nofin3@apr3.test');
+
+  perform app.provision_tenant('apr3', 'Approval Currency Co 3', 'idem-apr3', 'tester');
+  v_tenant3 := (select id from app.tenants where slug = 'apr3');
+  perform app.transition_tenant_status(v_tenant3, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant3, '00000000-0000-0000-0000-000000394301', 'admin3@apr3.test', 'Apr3 Admin', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin3@apr3.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000394301', 'tenant_admin', v_tenant3, null, 'tester');
+
+  perform app.invite_user(v_tenant3, '00000000-0000-0000-0000-000000394302', 'admin3b@apr3.test', 'Apr3 Admin B (tenant_admin only, zero role permissions)', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin3b@apr3.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000394302', 'tenant_admin', v_tenant3, null, 'tester');
+
+  perform app.invite_user(v_tenant3, '00000000-0000-0000-0000-000000394303', 'nofin3@apr3.test', 'Apr3 No-FIN Staff', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'nofin3@apr3.test'), 'active', 'onboarded', 'tester');
+
+  v_full_role := (app.create_role(v_tenant3, 'Apr3 Full', 'PRC full + FIN Edit/Approve/View', 'tester')).id;
+  v_full_draft := app.create_role_version(v_full_role, 'tester');
+  perform app.set_role_version_permissions(v_full_draft.id, array(
+    select id from app.permissions where (resource_module_code = 'PRC' and action in ('Create', 'Edit', 'View', 'View cost', 'Override', 'Approve', 'Reject'))
+      or (resource_module_code = 'FIN' and action in ('Edit', 'Approve', 'View'))
+  ), 'tester');
+  perform app.publish_role_version(v_full_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant3, (select id from app.role_versions where role_id = v_full_role and status = 'published'), '00000000-0000-0000-0000-000000394301', '00000000-0000-0000-0000-000000394999', 'supreme');
+
+  -- admin3b deliberately gets NO role assignment at all -- only the tenant_admin
+  -- principal_membership above (app.is_support_grant_authority), zero PRC/FIN
+  -- role-based permissions, mirroring the design note's own "a legitimately
+  -- authorized caller whose own authority model is not the PRC permission
+  -- catalogue at all" scenario exactly.
+
+  v_prconly_role := (app.create_role(v_tenant3, 'Apr3 PRC Only', 'PRC full, zero FIN', 'tester')).id;
+  v_prconly_draft := app.create_role_version(v_prconly_role, 'tester');
+  perform app.set_role_version_permissions(v_prconly_draft.id, array(
+    select id from app.permissions where resource_module_code = 'PRC' and action in ('Create', 'Edit', 'View', 'View cost', 'Override')
+  ), 'tester');
+  perform app.publish_role_version(v_prconly_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant3, (select id from app.role_versions where role_id = v_prconly_role and status = 'published'), '00000000-0000-0000-0000-000000394303', '00000000-0000-0000-0000-000000394301', 'admin3');
+
+  v_approver_role := (app.create_role(v_tenant3, 'Apr3 Approver', 'routing step marker role, zero PRC/FIN permissions of its own', 'tester')).id;
+  perform app.publish_role_version((app.create_role_version(v_approver_role, 'tester')).id, now(), 'tester');
+  -- app.request_approval requires at least one currently-eligible approver per step --
+  -- assigned to admin3b (already exists below in this same block; carries zero
+  -- PRC/FIN permissions of its own either way, since v_approver_role itself has none
+  -- bound, so this does NOT change admin3b's "zero role-based permissions" profile
+  -- the (d) fail-closed test below relies on).
+  perform app.assign_role(v_tenant3, (select id from app.role_versions where role_id = v_approver_role and status = 'published'), '00000000-0000-0000-0000-000000394302', '00000000-0000-0000-0000-000000394301', 'admin3');
+
+  select * into v_approval_draft from app.create_config_draft('approval', v_tenant3, 'tenant', null, '00000000-0000-0000-0000-000000394301', 'admin3');
+  perform app.set_config_items(v_approval_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'pattern', 'value', 'sequential'),
+    jsonb_build_object('key', 'steps', 'value', jsonb_build_array(
+      jsonb_build_object('step_order', 1, 'approver_type', 'role', 'role_id', v_approver_role::text, 'required_approvals', 1)
+    )),
+    jsonb_build_object('key', 'allow_self_approval', 'value', false)
+  ), '00000000-0000-0000-0000-000000394301', 'admin3');
+  perform app.publish_approval_definition(v_approval_draft.id, '00000000-0000-0000-0000-000000394301', null, 'admin3');
+
+  select * into v_rate from app.create_finance_exchange_rate_draft(
+    v_tenant3, 'spot', 'IDR', 'USD', 0.0001, 'manual', '2020-01-01T00:00:00Z'::timestamptz, null,
+    '00000000-0000-0000-0000-000000394301', 'admin3'
+  );
+  perform app.approve_finance_exchange_rate(v_rate.id, v_rate.record_version, '00000000-0000-0000-0000-000000394301', 'admin3');
+end;
+$$;
+
+\echo '>> (a) same-currency policy is unaffected -- no behavior change, and no FIN:View is ever required when the supplied currency already matches policy_currency: policy_currency=USD explicit, min_value_amount=1,000 USD; a 2,000 USD value crosses it and a 500 USD value does not, evaluated by noFin3 (zero FIN permissions at all) proving the currency-normalization helper is never invoked on the direct-match path'
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'apr3');
+  v_admin3 uuid := '00000000-0000-0000-0000-000000394301';
+  v_nofin3 uuid := '00000000-0000-0000-0000-000000394303';
+  v_policy app.procurement_approval_policies;
+  v_required boolean;
+  v_reasons text[];
+begin
+  -- Created/published by admin3 (holds PRC:Create/Approve) -- noFin3 (below) is used
+  -- only as the EVALUATING actor, proving the currency-normalization helper is never
+  -- invoked (and so FIN:View is never required) on the direct same-currency path.
+  select * into v_policy from app.create_procurement_approval_policy_version(v_tenant3, 'rate_version', 1000, false, v_admin3, 'admin3', 'USD');
+  if v_policy.policy_currency <> 'USD' then
+    raise exception 'assertion failed: expected policy_currency=USD, got %', v_policy.policy_currency;
+  end if;
+  select * into v_policy from app.publish_procurement_approval_policy_version(v_policy.id, v_policy.record_version, null, v_admin3, 'admin3');
+
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('rate_version', v_tenant3, 2000, v_nofin3, 'USD');
+  if not v_required or not (v_reasons @> array['value_meets_threshold']) or v_reasons @> array['value_currency_unverifiable_defaulted_to_required'] then
+    raise exception 'assertion failed: expected required=true reasons=[value_meets_threshold] only (same currency, no FIN:View needed), got required=% reasons=%', v_required, v_reasons;
+  end if;
+
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('rate_version', v_tenant3, 500, v_nofin3, 'USD');
+  if v_required then
+    raise exception 'assertion failed: expected required=false (500 USD below the 1,000 USD threshold, same currency), got required=% reasons=%', v_required, v_reasons;
+  end if;
+end;
+$$;
+
+\echo '>> (b) rate_version cross-currency normalization, BOTH directions: 20,000,000 IDR (-> 2,000 USD at the configured 0.0001 rate) crosses the 1,000 USD threshold; 3,000,000 IDR (-> 300 USD) does not. Evaluated directly, then proven end-to-end through the real app.create_rate_version -> app._request_procurement_entity_approval -> app.evaluate_procurement_approval_requirement chain (governance_approval_status=pending, entity_type=rate_version bound)'
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'apr3');
+  v_admin3 uuid := '00000000-0000-0000-0000-000000394301';
+  v_required boolean;
+  v_reasons text[];
+  v_rate app.vendor_rate_versions;
+begin
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('rate_version', v_tenant3, 20000000, v_admin3, 'IDR');
+  if not v_required or not (v_reasons @> array['value_meets_threshold']) then
+    raise exception 'assertion failed: expected required=true reasons includes value_meets_threshold (20,000,000 IDR ~ 2,000 USD crosses 1,000 USD), got required=% reasons=%', v_required, v_reasons;
+  end if;
+
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('rate_version', v_tenant3, 3000000, v_admin3, 'IDR');
+  if v_required then
+    raise exception 'assertion failed: expected required=false (3,000,000 IDR ~ 300 USD below 1,000 USD), got required=% reasons=%', v_required, v_reasons;
+  end if;
+
+  v_rate := app.create_rate_version(
+    v_tenant3, 'VENDOR-APR3-1', 'Apr3 Ocean Line', 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', '20ft',
+    null, null, null, null, 'IDR', 20000000, null, '[]'::jsonb, now(), null, null,
+    v_admin3, 'admin3'
+  );
+  if v_rate.governance_approval_status <> 'pending' or v_rate.governance_approval_request_id is null then
+    raise exception 'assertion failed: expected governance_approval_status=pending (currency-normalized 20,000,000 IDR crosses the 1,000 USD threshold), got %/%', v_rate.governance_approval_status, v_rate.governance_approval_request_id;
+  end if;
+  if (select entity_type from app.approval_requests where id = v_rate.governance_approval_request_id) <> 'rate_version' then
+    raise exception 'assertion failed: expected the bound request to carry entity_type=rate_version';
+  end if;
+end;
+$$;
+
+\echo '>> (c) purchase_order and vendor_selection entity types also correctly normalize -- purchase_order via app._request_procurement_entity_approval directly (proving the private glue function threads p_currency all the way through), vendor_selection via the evaluator directly, including one case where comparison_currency deliberately differs from policy_currency'
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'apr3');
+  v_admin3 uuid := '00000000-0000-0000-0000-000000394301';
+  v_policy app.procurement_approval_policies;
+  v_required boolean;
+  v_approval_status text;
+  v_approval_request_id uuid;
+  v_policy_version_id uuid;
+  v_reasons text[];
+begin
+  -- purchase_order: min_value_amount=1,000 USD, policy_currency explicit USD.
+  select * into v_policy from app.create_procurement_approval_policy_version(v_tenant3, 'purchase_order', 1000, false, v_admin3, 'admin3', 'USD');
+  select * into v_policy from app.publish_procurement_approval_policy_version(v_policy.id, v_policy.record_version, null, v_admin3, 'admin3');
+
+  -- Direct evaluator call, cross-currency (IDR value against a USD policy) -- large crosses.
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('purchase_order', v_tenant3, 20000000, v_admin3, 'IDR');
+  if not v_required or not (v_reasons @> array['value_meets_threshold']) then
+    raise exception 'assertion failed: expected purchase_order required=true value_meets_threshold, got required=% reasons=%', v_required, v_reasons;
+  end if;
+  -- ... and small does not.
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('purchase_order', v_tenant3, 3000000, v_admin3, 'IDR');
+  if v_required then
+    raise exception 'assertion failed: expected purchase_order required=false for the small IDR value, got required=% reasons=%', v_required, v_reasons;
+  end if;
+
+  -- Same proof at the private glue-function layer (app._request_procurement_entity_approval,
+  -- called directly here as the test runner's own superuser role, exactly mirroring how
+  -- app.submit_purchase_order_for_approval calls it internally -- proving Fix 3's own
+  -- "thread p_currency as the 5th positional argument" change end to end, without needing
+  -- to build a full app.purchase_orders fixture chain).
+  select r.required, r.approval_status, r.approval_request_id, r.policy_version_id
+  into v_required, v_approval_status, v_approval_request_id, v_policy_version_id
+  from app._request_procurement_entity_approval(
+    'purchase_order', v_tenant3, gen_random_uuid(), 20000000, 'IDR', '{}'::jsonb, 1,
+    'idem-apr3-po-thread-1', v_admin3, 'admin3'
+  ) r;
+  if not v_required or v_approval_status <> 'pending' or v_approval_request_id is null or v_policy_version_id <> v_policy.id then
+    raise exception 'assertion failed: expected app._request_procurement_entity_approval to thread p_currency through to a real, currency-normalized routing decision (required=true, approval_status=pending), got required=%/status=%/request=%', v_required, v_approval_status, v_approval_request_id;
+  end if;
+  if (select currency from app.procurement_approval_context_snapshots where approval_request_id = v_approval_request_id) <> 'IDR' then
+    raise exception 'assertion failed: expected the context snapshot to still record the ORIGINAL source currency (IDR), never the policy''s normalization target';
+  end if;
+
+  -- vendor_selection: min_value_amount=1,000 USD, policy_currency explicit USD.
+  select * into v_policy from app.create_procurement_approval_policy_version(v_tenant3, 'vendor_selection', 1000, false, v_admin3, 'admin3', 'USD');
+  select * into v_policy from app.publish_procurement_approval_policy_version(v_policy.id, v_policy.record_version, null, v_admin3, 'admin3');
+
+  -- Common case: comparison_currency already matches policy_currency (both USD) -- direct
+  -- comparison, unchanged behavior.
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('vendor_selection', v_tenant3, 2000, v_admin3, 'USD');
+  if not v_required or not (v_reasons @> array['value_meets_threshold']) then
+    raise exception 'assertion failed: expected vendor_selection (same-currency) required=true value_meets_threshold, got required=% reasons=%', v_required, v_reasons;
+  end if;
+
+  -- Deliberately-differing case: comparison_currency (IDR) differs from policy_currency (USD).
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('vendor_selection', v_tenant3, 20000000, v_admin3, 'IDR');
+  if not v_required or not (v_reasons @> array['value_meets_threshold']) then
+    raise exception 'assertion failed: expected vendor_selection (cross-currency) required=true value_meets_threshold, got required=% reasons=%', v_required, v_reasons;
+  end if;
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('vendor_selection', v_tenant3, 3000000, v_admin3, 'IDR');
+  if v_required then
+    raise exception 'assertion failed: expected vendor_selection (cross-currency, small) required=false, got required=% reasons=%', v_required, v_reasons;
+  end if;
+end;
+$$;
+
+\echo '>> (d) FAIL CLOSED, actor lacks FIN:View: admin3b (tenant_admin/is_support_grant_authority ONLY, zero role-based FIN:View) creates a foreign-currency (IDR) rate against the USD-denominated rate_version policy -- the ENTIRE create_rate_version transaction commits (never a raised exception), governance_approval_status=pending with the new reason code, not silently not_required'
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'apr3');
+  v_admin3b uuid := '00000000-0000-0000-0000-000000394302';
+  v_required boolean;
+  v_reasons text[];
+  v_rate app.vendor_rate_versions;
+begin
+  -- Direct evaluator proof first, isolating the exact mechanism: a large foreign-currency
+  -- value that WOULD cross the threshold if verified, but the actor cannot verify it.
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('rate_version', v_tenant3, 20000000, v_admin3b, 'IDR');
+  if not v_required or not (v_reasons @> array['value_currency_unverifiable_defaulted_to_required']) or v_reasons @> array['value_meets_threshold'] then
+    raise exception 'assertion failed: expected FAIL CLOSED required=true reasons=[value_currency_unverifiable_defaulted_to_required] (actor lacks FIN:View), got required=% reasons=%', v_required, v_reasons;
+  end if;
+
+  -- Full end-to-end proof: the entire app.create_rate_version transaction commits --
+  -- a raw insufficient_privilege from app.convert_finance_amount would otherwise abort
+  -- the whole rate-version creation, which this fix exists specifically to prevent.
+  v_rate := app.create_rate_version(
+    v_tenant3, 'VENDOR-APR3-2', 'Apr3 Ocean Line 2', 'ocean_freight', 'FCL', 'Jakarta', 'Medan', '20ft',
+    null, null, null, null, 'IDR', 20000000, null, '[]'::jsonb, now(), null, null,
+    v_admin3b, 'admin3b'
+  );
+  if v_rate.governance_approval_status <> 'pending' or v_rate.governance_approval_request_id is null then
+    raise exception 'assertion failed: expected the transaction to COMMIT with governance_approval_status=pending (fail-closed), not abort or silently skip, got %/%', v_rate.governance_approval_status, v_rate.governance_approval_request_id;
+  end if;
+  if not exists (select 1 from app.vendor_rate_versions where id = v_rate.id) then
+    raise exception 'assertion failed: expected the rate version row to actually exist (transaction committed)';
+  end if;
+end;
+$$;
+
+\echo '>> (e) FAIL CLOSED, missing FX rate for the specific currency pair: admin3 (DOES hold FIN:View, isolating this from the (d) case above) submits an SGD-denominated value against the USD policy -- no SGD->USD rate is configured at all -- required=true with the same fail-closed reason code, not an exception'
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'apr3');
+  v_admin3 uuid := '00000000-0000-0000-0000-000000394301';
+  v_required boolean;
+  v_reasons text[];
+begin
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('rate_version', v_tenant3, 5000, v_admin3, 'SGD');
+  if not v_required or not (v_reasons @> array['value_currency_unverifiable_defaulted_to_required']) then
+    raise exception 'assertion failed: expected FAIL CLOSED required=true reasons=[value_currency_unverifiable_defaulted_to_required] (no SGD->USD rate configured), got required=% reasons=%', v_required, v_reasons;
+  end if;
+end;
+$$;
+
+\echo '>> (f) vendor_contract/vendor_activation/exception_override are provably unreachable through the new currency-normalization code path: min_value_amount can never be set for them (procurement_approval_policies_value_dimension_check, untouched by this fix) -- and, at runtime, an always_required-only policy for these types never enters the currency branch at all, even when handed a nonsense currency and a huge amount'
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'apr3');
+  v_admin3 uuid := '00000000-0000-0000-0000-000000394301';
+  v_policy app.procurement_approval_policies;
+  v_required boolean;
+  v_reasons text[];
+begin
+  begin
+    perform app.create_procurement_approval_policy_version(v_tenant3, 'vendor_contract', 500, false, v_admin3, 'admin3', 'USD');
+    raise exception 'assertion failed: expected check_violation -- min_value_amount is not a valid dimension for vendor_contract';
+  exception
+    when sqlstate '23514' then
+      null; -- expected (procurement_approval_policies_value_dimension_check)
+  end;
+
+  begin
+    perform app.create_procurement_approval_policy_version(v_tenant3, 'exception_override', 500, false, v_admin3, 'admin3', 'USD');
+    raise exception 'assertion failed: expected check_violation -- min_value_amount is not a valid dimension for exception_override';
+  exception
+    when sqlstate '23514' then
+      null; -- expected (procurement_approval_policies_value_dimension_check)
+  end;
+
+  -- Runtime proof: an always_required-only vendor_activation policy, handed a garbage
+  -- currency code and a huge amount, never touches the currency-normalization branch at
+  -- all (min_value_amount is null, so the `if v_policy.min_value_amount is not null`
+  -- guard is never entered) -- no exception, no value_meets_threshold/unverifiable
+  -- reason, only always_required.
+  select * into v_policy from app.create_procurement_approval_policy_version(v_tenant3, 'vendor_activation', null, true, v_admin3, 'admin3', 'USD');
+  select * into v_policy from app.publish_procurement_approval_policy_version(v_policy.id, v_policy.record_version, null, v_admin3, 'admin3');
+
+  select required, reasons into v_required, v_reasons from app.evaluate_procurement_approval_requirement('vendor_activation', v_tenant3, 999999999999, v_admin3, 'NOTACURRENCY');
+  if not v_required or v_reasons <> array['always_required'] then
+    raise exception 'assertion failed: expected required=true reasons=[always_required] ONLY (currency branch structurally unreachable for vendor_activation), got required=% reasons=%', v_required, v_reasons;
   end if;
 end;
 $$;
