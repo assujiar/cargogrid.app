@@ -728,6 +728,112 @@ begin
   reset role;
 end $$;
 
+\echo '>> Prompt 269 (ISS-2026-054 C-05 + ISS-2026-055): app.suspend_vendor_profile/reactivate_vendor_profile/archive_vendor_profile/blacklist_vendor_profile. (1) a vndreg2 actor with zero membership in vndreg1 gets the SAME vendor_profile_not_found a genuinely missing id would produce on all four, never insufficient_authority (which would disclose the real tenant_id). (2) a real vndreg1 member who both lacks the required authority AND supplies a stale expected_version now gets insufficient_authority, never stale_version (which would disclose the real record_version) -- the authority check now runs first.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
+  v_staff uuid := '00000000-0000-0000-0000-000000025102';
+  v_reviewer uuid := '00000000-0000-0000-0000-000000025103';
+  v_viewer uuid := '00000000-0000-0000-0000-000000025105';
+  v_t2_staff uuid := '00000000-0000-0000-0000-000000025202';
+  v_profile app.vendor_profiles;
+  v_wrong_version integer;
+  v_expected_untouched_version integer;
+begin
+  v_profile := app.create_vendor_profile_draft(v_tenant1, 'PT C05 Fix Co', 'C05FX', 'PT', null, 'trucking', null, 'staff_created', 'idem-c05fix-1', v_staff, 'staff');
+  perform app.add_vendor_contact(v_profile.master_record_id, 'C05 Contact', null, null, null, true, v_staff, 'staff');
+  perform app.add_vendor_address(v_profile.master_record_id, 'legal', 'Jl. C05 1', 'Jakarta', null, null, 'Indonesia', v_staff, 'staff');
+  perform app.add_vendor_service(v_profile.master_record_id, 'trucking', v_staff, 'staff');
+  v_profile := app.submit_vendor_profile_for_review(v_profile.master_record_id, v_profile.record_version, v_staff, 'staff');
+  v_profile := app.begin_vendor_profile_review(v_profile.master_record_id, v_profile.record_version, v_reviewer, 'reviewer');
+  v_profile := app.decide_vendor_profile_review(v_profile.master_record_id, v_profile.record_version, 'approve', null, v_reviewer, 'reviewer');
+  v_profile := app.activate_vendor_profile(v_profile.master_record_id, v_profile.record_version, v_reviewer, 'reviewer');
+  if v_profile.lifecycle_status <> 'active' then
+    raise exception 'assertion failed: expected the C-05 fix-pass fixture vendor to be active before these tests, got %', v_profile.lifecycle_status;
+  end if;
+  v_wrong_version := v_profile.record_version + 99;
+  v_expected_untouched_version := v_profile.record_version;
+
+  -- (1) C-05: cross-tenant, zero-membership caller -- the not-found short-circuit fires
+  -- before the (real) lifecycle-status check is ever reached, so the same not-found
+  -- shape is correct regardless of the vendor's actual status.
+  begin
+    perform app.suspend_vendor_profile(v_profile.master_record_id, v_profile.record_version, 'quality issue', v_t2_staff, 'attacker');
+    raise exception 'assertion failed: expected vendor_profile_not_found for a vndreg2 actor suspending a vndreg1 vendor (never insufficient_authority, which would disclose the real tenant_id)';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.reactivate_vendor_profile(v_profile.master_record_id, v_profile.record_version, v_t2_staff, 'attacker');
+    raise exception 'assertion failed: expected vendor_profile_not_found for a vndreg2 actor reactivating a vndreg1 vendor';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.archive_vendor_profile(v_profile.master_record_id, v_profile.record_version, 'closing', v_t2_staff, 'attacker');
+    raise exception 'assertion failed: expected vendor_profile_not_found for a vndreg2 actor archiving a vndreg1 vendor';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
+  end;
+
+  begin
+    perform app.blacklist_vendor_profile(v_profile.master_record_id, v_profile.record_version, 'fraud', 'app.files:11111111-1111-1111-1111-111111111111', v_t2_staff, 'attacker');
+    raise exception 'assertion failed: expected vendor_profile_not_found for a vndreg2 actor blacklisting a vndreg1 vendor';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
+  end;
+
+  -- (2) ISS-2026-055: a REAL vndreg1 member (v_viewer, View only -- lacks Override
+  -- AND Edit) supplies a deliberately WRONG expected_version. Authority is now checked
+  -- BEFORE stale_version -- must fail insufficient_authority, never stale_version
+  -- (which would echo the row's real current record_version to an actor not yet shown
+  -- to hold the required permission).
+  begin
+    perform app.suspend_vendor_profile(v_profile.master_record_id, v_wrong_version, 'quality issue', v_viewer, 'viewer');
+    raise exception 'assertion failed: expected insufficient_authority (never stale_version) for a View-only actor supplying a stale version to suspend';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.reactivate_vendor_profile(v_profile.master_record_id, v_wrong_version, v_viewer, 'viewer');
+    raise exception 'assertion failed: expected insufficient_authority (never stale_version) for a View-only actor supplying a stale version to reactivate';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.archive_vendor_profile(v_profile.master_record_id, v_wrong_version, 'closing', v_viewer, 'viewer');
+    raise exception 'assertion failed: expected insufficient_authority (never stale_version) for a View-only actor supplying a stale version to archive';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.blacklist_vendor_profile(v_profile.master_record_id, v_wrong_version, 'fraud', 'app.files:11111111-1111-1111-1111-111111111111', v_viewer, 'viewer');
+    raise exception 'assertion failed: expected insufficient_authority (never stale_version) for a View-only actor supplying a stale version to blacklist';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- Sanity: the fixture vendor is genuinely untouched by any of the above (every call
+  -- above was correctly rejected before reaching its own UPDATE).
+  select * into v_profile from app.vendor_profiles where master_record_id = v_profile.master_record_id;
+  if v_profile.lifecycle_status <> 'active' or v_profile.record_version <> v_expected_untouched_version then
+    raise exception 'assertion failed: expected the fixture vendor to remain active at record_version=% (untouched by every rejected call above), got %/%', v_expected_untouched_version, v_profile.lifecycle_status, v_profile.record_version;
+  end if;
+end $$;
+
 \echo '>> RLS default-deny for a customer_user-layer principal: tenant membership alone is not enough -- a customer_user-layer actor in the SAME tenant reads zero vendor rows at the raw-RLS level'
 do $$
 declare

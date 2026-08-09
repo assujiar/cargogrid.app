@@ -277,6 +277,16 @@ export const EvaluateProcurementApprovalRequirementInputSchema = z.object({
   tenantId: z.string().uuid(),
   valueAmount: z.coerce.number().nullable().default(null),
   actorAuthUserId: z.string().uuid(),
+  // Full-regression review (Prompt 269 follow-up, this checkpoint): app.evaluate_
+  // procurement_approval_requirement gained a trailing p_value_currency parameter
+  // (ISS-2026-045, Fix 3) so a genuine currency mismatch against the policy's own
+  // policy_currency normalizes via FX rather than comparing raw numerics across
+  // currencies -- but neither pre-existing UI preview call site threaded a currency
+  // through at all, leaving the client-facing "will this need approval?" preview
+  // currency-blind even though real submit-time enforcement was already fixed. Optional
+  // and defaulting to null (the legacy, same-currency-assumed shape) so every existing
+  // caller that has no currency to offer keeps working unchanged.
+  valueCurrency: z.string().nullable().default(null),
 });
 export type EvaluateProcurementApprovalRequirementInput = z.input<typeof EvaluateProcurementApprovalRequirementInputSchema>;
 

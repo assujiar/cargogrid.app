@@ -869,20 +869,29 @@ begin
       null;
   end;
 
+  -- Prompt 269 (ISS-2026-054, C-05): a cross-tenant, zero-membership caller now gets
+  -- the SAME sourcing_request_not_found a genuinely missing id would produce, never
+  -- insufficient_authority (which would have echoed the real tenant_id in its own
+  -- error text -- the exact oracle this fix closed, mirroring app.get_rfq's own
+  -- already-established fix from 20260730670000).
   begin
     perform app.list_sourcing_candidates(v_request_id, v_staff2);
-    raise exception 'assertion failed: expected insufficient_privilege';
+    raise exception 'assertion failed: expected sourcing_request_not_found (never insufficient_authority, which would disclose the real tenant_id)';
   exception
-    when insufficient_privilege then
-      null;
+    when no_data_found then
+      if sqlerrm not like 'sourcing_request_not_found:%' then
+        raise exception 'assertion failed: expected sourcing_request_not_found, got %', sqlerrm;
+      end if;
   end;
 
   begin
     perform app.get_sourcing_request_history(v_request_id, v_staff2);
-    raise exception 'assertion failed: expected insufficient_privilege';
+    raise exception 'assertion failed: expected sourcing_request_not_found (never insufficient_authority, which would disclose the real tenant_id)';
   exception
-    when insufficient_privilege then
-      null;
+    when no_data_found then
+      if sqlerrm not like 'sourcing_request_not_found:%' then
+        raise exception 'assertion failed: expected sourcing_request_not_found, got %', sqlerrm;
+      end if;
   end;
 
   begin

@@ -74,6 +74,33 @@ describe("evaluateProcurementApprovalRequirement", () => {
     assert.equal(requirement.required, true);
     assert.equal(client.calls.rpc[0]?.args.p_actor_auth_user_id, ACTOR_ID);
   });
+
+  // Full-regression review (Prompt 269 follow-up, this checkpoint): ISS-2026-045
+  // (Fix 3) added p_value_currency to app.evaluate_procurement_approval_requirement,
+  // but neither this wrapper nor its two UI call sites originally threaded a currency
+  // through at all -- the client-facing preview stayed currency-blind even though
+  // real submit-time enforcement was already fixed. These two cases guard the fix.
+  test("threads a supplied valueCurrency through as p_value_currency", async () => {
+    const client = fakeClient({
+      rpcResponses: { evaluate_procurement_approval_requirement: { data: [{ required: false, reasons: [], policy_version_id: null }], error: null } },
+    });
+    await evaluateProcurementApprovalRequirement(client, {
+      entityType: "purchase_order",
+      tenantId: TENANT_ID,
+      valueAmount: 20_000_000,
+      actorAuthUserId: ACTOR_ID,
+      valueCurrency: "IDR",
+    });
+    assert.equal(client.calls.rpc[0]?.args.p_value_currency, "IDR");
+  });
+
+  test("defaults p_value_currency to null when the caller omits it (legacy, same-currency-assumed shape)", async () => {
+    const client = fakeClient({
+      rpcResponses: { evaluate_procurement_approval_requirement: { data: [{ required: true, reasons: ["always_required"], policy_version_id: POLICY_ID }], error: null } },
+    });
+    await evaluateProcurementApprovalRequirement(client, { entityType: "vendor_activation", tenantId: TENANT_ID, valueAmount: null, actorAuthUserId: ACTOR_ID });
+    assert.equal(client.calls.rpc[0]?.args.p_value_currency, null);
+  });
 });
 
 describe("getProcurementApprovalContextSnapshot", () => {

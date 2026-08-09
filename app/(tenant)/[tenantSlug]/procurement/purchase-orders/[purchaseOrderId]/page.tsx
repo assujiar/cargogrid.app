@@ -55,6 +55,11 @@ export default async function PurchaseOrderDetailPage({ params }: { params: Prom
           tenantId: purchaseOrder.tenantId,
           valueAmount: purchaseOrder.totalAmount,
           actorAuthUserId: access.authUserId,
+          // Full-regression review (Prompt 269 follow-up): threads the PO's own
+          // currency through so a genuine cross-currency preview normalizes via FX
+          // (ISS-2026-045, Fix 3) instead of comparing raw numerics -- matches
+          // exactly what app.submit_purchase_order_for_approval itself passes.
+          valueCurrency: purchaseOrder.currency,
         });
       } catch (previewError) {
         if (!(previewError instanceof ProcurementApprovalQueryError)) throw previewError;
