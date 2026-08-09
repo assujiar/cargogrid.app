@@ -208,3 +208,60 @@ export const PROCUREMENT_REGISTRY: readonly ClassificationEntry[] = [
       "tax_id_encrypted (pgp_sym_encrypt bytea) + tax_id_hash (sha256, duplicate detection only) on app.vendor_tax_identities — decrypted only via the PRC:View personal data-gated, MFA-reauth-gated, unconditionally-audited app.reveal_vendor_tax_identity_number RPC. tax_id_last4 is the plain masked-display value every ordinary PRC:View caller sees by default. tax_id_type is deliberately free text (RPD-016) — no NPWP-specific statutory format validation is hardcoded here.",
   },
 ];
+
+/**
+ * HRT-274 (Employee Master, CG-S12-HRT-002) — Phase 7's first HRIS registry entries.
+ * Every sensitive personal field on app.employees/app.employee_emergency_contacts is
+ * masked by app.has_view_personal_data (PLT-114, reused unchanged — HRS:View personal
+ * data was already seeded at PLT-111) unless the caller is reading their own linked
+ * profile. category 'pii' (not 'payroll' — that category is reserved for the future
+ * Payroll capability, Prompt 282; Employee Master carries zero bank/tax/payroll-shaped
+ * column). national_id_number is classified one level above the category default
+ * (`restricted`, not the 'pii' floor of `confidential`) — a government identity
+ * number is more sensitive than an ordinary contact field.
+ */
+export const HRS_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "hrs:employees.national_id_number",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "national_id_number on app.employees — a government-issued identity number, masked to null for any reader lacking HRS:View personal data and for anyone other than the employee themself (app.get_employee_profile's own v_is_self branch). Never copied into app.employee_lifecycle_events.metadata, app.audit_logs, or app.list_employees' list projection (list rows carry zero PII columns at all).",
+  },
+  {
+    id: "hrs:employees.date_of_birth_gender",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "date_of_birth/gender on app.employees — masked identically to national_id_number, own-profile-or-permission-gated.",
+  },
+  {
+    id: "hrs:employees.personal_contact",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "personal_email/personal_phone on app.employees — an employee's own non-work contact channel, distinct from work_email/work_phone (unmasked — a corporate identity field, not personal data). Self-editable via app.request_employee_change/app.decide_employee_change_request (a governed correction-request flow, never a direct self-write).",
+  },
+  {
+    id: "hrs:employees.personal_address",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "personal_address_street/city/province/postal_code/country on app.employees — masked identically to personal_email/personal_phone, and the same five fields app.request_employee_change's own field_key allow-list covers.",
+  },
+  {
+    id: "hrs:employee_emergency_contacts.phone_email",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "phone/email on app.employee_emergency_contacts — personal data of a named third party (not the employee themself), masked by app.list_employee_emergency_contacts identically to app.vendor_contacts' own email/phone masking (PRC-251) — name/relationship remain visible unmasked, mirroring the vendor-contact precedent exactly.",
+  },
+];
