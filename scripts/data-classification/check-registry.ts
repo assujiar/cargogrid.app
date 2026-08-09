@@ -20,9 +20,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ENV_REGISTRY } from "../env/schema.ts";
-import { validateRegistry, PHASE_0_REGISTRY, FINANCE_REGISTRY, PROCUREMENT_REGISTRY, type ClassificationEntry, type RegistryViolation } from "./registry.ts";
+import { validateRegistry, PHASE_0_REGISTRY, FINANCE_REGISTRY, PROCUREMENT_REGISTRY, HRS_REGISTRY, type ClassificationEntry, type RegistryViolation } from "./registry.ts";
 
-export const REGISTRY: readonly ClassificationEntry[] = [...PHASE_0_REGISTRY, ...FINANCE_REGISTRY, ...PROCUREMENT_REGISTRY];
+export const REGISTRY: readonly ClassificationEntry[] = [...PHASE_0_REGISTRY, ...FINANCE_REGISTRY, ...PROCUREMENT_REGISTRY, ...HRS_REGISTRY];
 
 export type AdoptionGapKind = "UNCLASSIFIED_SECRET_ENV_VAR";
 
