@@ -647,10 +647,21 @@ export function EmployeeDetailPanel({
             </div>
           </dl>
 
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+            <p className="text-sm font-medium text-neutral-900">Governed position, grade and reporting assignment</p>
+            <p className="mt-1 text-xs text-neutral-600">
+              The free-text transfer below (position title, manager id) is HRT-274&apos;s original, ungoverned quick edit. For a governed position/grade linked to the canonical organization tree, with effective-dated history, capacity
+              enforcement and reorganization impact preview, use the assignment timeline page.
+            </p>
+            <a href={`/${tenantSlug}/hris/employees/${profile.masterRecordId}/positions`} className="mt-2 inline-block text-sm font-medium text-primary underline">
+              Open position &amp; assignment timeline
+            </a>
+          </div>
+
           {profile.lifecycleStatus !== "terminated" && profile.lifecycleStatus !== "archived" ? (
             <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-              <h2 className="text-sm font-semibold text-neutral-900">Transfer</h2>
-              <p className="text-xs text-neutral-500">Full before/after history is preserved (see the History tab). Cyclic reporting lines are rejected.</p>
+              <h2 className="text-sm font-semibold text-neutral-900">Transfer (free-text, ungoverned)</h2>
+              <p className="text-xs text-neutral-500">Full before/after history is preserved (see the History tab). Cyclic reporting lines are rejected. Prefer the governed assignment timeline above when a position/grade catalogue exists for this role.</p>
               <FormWithState action={transferAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {(pending, error) => (
                   <>
