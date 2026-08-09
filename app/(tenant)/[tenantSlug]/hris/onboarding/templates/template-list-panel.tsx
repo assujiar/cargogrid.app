@@ -1,0 +1,105 @@
+"use client";
+
+import { useActionState } from "react";
+import Link from "next/link";
+import { Button } from "../../../../../../components/ui/button.tsx";
+import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
+import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
+import type { TemplateActionState } from "./actions.ts";
+import { CASE_TYPES, type TemplateListRow } from "../../../../../../server/contracts/onboarding/onboarding.ts";
+
+const INITIAL_STATE: TemplateActionState = { error: null };
+type BoundAction = (prevState: TemplateActionState, formData: FormData) => Promise<TemplateActionState>;
+
+export function TemplateListPanel({
+  tenantSlug,
+  templates,
+  createAction,
+  openDraftAction,
+}: {
+  tenantSlug: string;
+  templates: readonly TemplateListRow[];
+  createAction: BoundAction;
+  openDraftAction: (templateId: string) => BoundAction;
+}) {
+  const [createState, createFormAction, createPending] = useActionState(createAction, INITIAL_STATE);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+        {templates.length === 0 ? (
+          <EmptyState title="No templates yet" description="Create a template below, then add tasks and publish a version." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-neutral-500">
+                  <th className="pb-1">Code</th>
+                  <th className="pb-1">Name</th>
+                  <th className="pb-1">Case type</th>
+                  <th className="pb-1">Published version</th>
+                  <th className="pb-1">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((t) => (
+                  <TemplateRow key={t.id} template={t} openDraftAction={openDraftAction(t.id)} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Create a new template</h2>
+        <form action={createFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+          <input name="code" placeholder="Code (e.g. ONB-STD)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input name="name" placeholder="Name" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <select name="caseType" required defaultValue="onboarding" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            {CASE_TYPES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          {createState.error ? (
+            <p role="alert" className="col-span-full text-xs text-danger">
+              {createState.error}
+            </p>
+          ) : null}
+          <div className="col-span-full">
+            <Button type="submit" variant="secondary" loading={createPending} loadingLabel="Creating…">
+              Create template
+            </Button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function TemplateRow({ template, openDraftAction }: { template: TemplateListRow; openDraftAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(openDraftAction, INITIAL_STATE);
+
+  return (
+    <tr className="border-t border-neutral-100 align-top">
+      <td className="py-1">{template.code}</td>
+      <td className="py-1">{template.name}</td>
+      <td className="py-1 text-xs">{template.caseType}</td>
+      <td className="py-1 text-xs">{template.publishedVersionNumber != null ? `v${template.publishedVersionNumber}` : <StatusBadge tone="warning" label="none published" />}</td>
+      <td className="py-1">
+        <form action={formAction} className="flex flex-col gap-1">
+          <Button type="submit" variant="secondary" loading={pending} loadingLabel="Opening…">
+            Manage draft version
+          </Button>
+          {state.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {state.error}
+            </p>
+          ) : null}
+        </form>
+      </td>
+    </tr>
+  );
+}
