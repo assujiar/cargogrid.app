@@ -108,10 +108,10 @@ export async function exportPositions(
   return rows(data).map(parsePositionExportRow);
 }
 
-/** Callable standalone, before any proposal exists (decision 6) -- computes real impact signals and discloses not-yet-integrated downstream systems rather than fabricating them. */
+/** Callable standalone, before any proposal exists (decision 6) -- computes real impact signals and discloses not-yet-integrated downstream systems rather than fabricating them. actorLabel is required (review-round fix): the RPC now self-captures an audit_logs entry on every call (section 18/33 "previewed and auditable"), and app.audit_logs.actor_label is NOT NULL. */
 export async function previewEmployeePositionAssignmentImpact(
   client: PositionQueryClient,
-  input: { masterRecordId: string; positionId: string; managerEmployeeId: string | null; effectiveStartDate: string | null; actorAuthUserId: string },
+  input: { masterRecordId: string; positionId: string; managerEmployeeId: string | null; effectiveStartDate: string | null; actorAuthUserId: string; actorLabel: string },
 ): Promise<AssignmentImpactPreview> {
   const { data, error } = await client.rpc("preview_employee_position_assignment_impact", {
     p_master_record_id: input.masterRecordId,
@@ -119,6 +119,7 @@ export async function previewEmployeePositionAssignmentImpact(
     p_manager_employee_id: input.managerEmployeeId,
     p_effective_start_date: input.effectiveStartDate,
     p_actor_auth_user_id: input.actorAuthUserId,
+    p_actor_label: input.actorLabel,
   });
   if (error) throw new PositionQueryError(error.message);
   const row = firstRow(data);

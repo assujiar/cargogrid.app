@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../components/ui/empty-state.tsx";
@@ -9,6 +9,42 @@ import type { EmployeeProfile } from "../../../../../../../server/contracts/empl
 import { ASSIGNMENT_TYPES, CHANGE_REASONS, type EmployeePositionAssignment, type AssignmentStatus, type PositionListRow, type PositionGrade } from "../../../../../../../server/contracts/position/position.ts";
 
 const INITIAL_STATE: PositionWizardActionState = { error: null, preview: null };
+
+/** Unsaved-change protection (review-round fix, section 15): the exact real
+ * `beforeunload` pattern app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/
+ * employee-detail-panel.tsx's `EmployeeEditForm` and
+ * app/(tenant)/[tenantSlug]/hris/positions/[positionId]/position-detail-panel.tsx's
+ * edit form already established -- a browser-native "leave site?" prompt while any
+ * wizard field has diverged from its blank baseline, cleared once a proposal is
+ * submitted without error. */
+function useUnsavedChangeGuard<T>(values: T, pending: boolean, error: string | null, initial: T) {
+  const [savedValues, setSavedValues] = useState(initial);
+  const dirty = JSON.stringify(values) !== JSON.stringify(savedValues);
+  const valuesRef = useRef(values);
+  const wasPendingRef = useRef(false);
+
+  useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  useEffect(() => {
+    if (wasPendingRef.current && !pending && error === null) {
+      setSavedValues(valuesRef.current);
+    }
+    wasPendingRef.current = pending;
+  }, [pending, error]);
+
+  return dirty;
+}
 
 const STATUS_TONE: Record<AssignmentStatus, StatusTone> = {
   pending_approval: "warning",
@@ -178,9 +214,26 @@ function AssignmentWizard({
 }) {
   const [previewState, previewFormAction, previewPending] = useActionState(previewAction, INITIAL_STATE);
   const [proposeState, proposeFormAction, proposePending] = useActionState(proposeAction, INITIAL_STATE);
-  const [selectedPositionId, setSelectedPositionId] = useState("");
-  const [selectedManagerId, setSelectedManagerId] = useState("");
-  const [selectedStartDate, setSelectedStartDate] = useState("");
+
+  const initialWizardValues = {
+    positionId: "",
+    gradeId: "",
+    managerEmployeeId: "",
+    assignmentType: "primary",
+    allocationPct: "",
+    effectiveStartDate: "",
+    effectiveEndDate: "",
+    changeReason: "transfer",
+    reasonNote: "",
+  };
+  const [wizardValues, setWizardValues] = useState(initialWizardValues);
+  const wizardDirty = useUnsavedChangeGuard(wizardValues, proposePending, proposeState.error, initialWizardValues);
+  function wizardField<K extends keyof typeof wizardValues>(key: K) {
+    return {
+      value: wizardValues[key],
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setWizardValues((v) => ({ ...v, [key]: e.target.value })),
+    };
+  }
 
   if (positions.length === 0) {
     return (
@@ -201,17 +254,12 @@ function AssignmentWizard({
       <h2 className="text-sm font-semibold text-neutral-900">Transfer, promote, or reorganize</h2>
       <p className="text-xs text-neutral-500">Preview the impact before proposing. Proposing creates a status=pending approval record; a separate HRS:Approve-holding reviewer must decide it (section 21).</p>
 
+      {wizardDirty ? <p className="text-xs text-warning">You have unsaved changes.</p> : null}
+
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
           Position
-          <select
-            name="positionId"
-            form="assignment-wizard-form"
-            required
-            value={selectedPositionId}
-            onChange={(event) => setSelectedPositionId(event.currentTarget.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
-          >
+          <select name="positionId" form="assignment-wizard-form" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("positionId")}>
             <option value="" disabled>
               Select…
             </option>
@@ -224,7 +272,7 @@ function AssignmentWizard({
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
           Grade (optional, defaults to the position&apos;s own grade)
-          <select name="gradeId" form="assignment-wizard-form" defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+          <select name="gradeId" form="assignment-wizard-form" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("gradeId")}>
             <option value="">Use position default</option>
             {grades.map((g) => (
               <option key={g.id} value={g.id}>
@@ -239,15 +287,14 @@ function AssignmentWizard({
             name="managerEmployeeId"
             form="assignment-wizard-form"
             type="text"
-            value={selectedManagerId}
-            onChange={(event) => setSelectedManagerId(event.currentTarget.value)}
             placeholder="uuid, leave blank for none"
             className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+            {...wizardField("managerEmployeeId")}
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
           Assignment type
-          <select name="assignmentType" form="assignment-wizard-form" defaultValue="primary" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+          <select name="assignmentType" form="assignment-wizard-form" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("assignmentType")}>
             {ASSIGNMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -257,27 +304,19 @@ function AssignmentWizard({
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
           Allocation % (optional, default 100)
-          <input name="allocationPct" form="assignment-wizard-form" type="number" min="1" max="100" placeholder="100" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input name="allocationPct" form="assignment-wizard-form" type="number" min="1" max="100" placeholder="100" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("allocationPct")} />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
           Effective start date
-          <input
-            name="effectiveStartDate"
-            form="assignment-wizard-form"
-            type="date"
-            required
-            value={selectedStartDate}
-            onChange={(event) => setSelectedStartDate(event.currentTarget.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
-          />
+          <input name="effectiveStartDate" form="assignment-wizard-form" type="date" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("effectiveStartDate")} />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
           Effective end date (optional, open-ended if blank)
-          <input name="effectiveEndDate" form="assignment-wizard-form" type="date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input name="effectiveEndDate" form="assignment-wizard-form" type="date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("effectiveEndDate")} />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
           Change reason
-          <select name="changeReason" form="assignment-wizard-form" defaultValue="transfer" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+          <select name="changeReason" form="assignment-wizard-form" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("changeReason")}>
             {CHANGE_REASONS.map((r) => (
               <option key={r} value={r}>
                 {r.replace(/_/g, " ")}
@@ -287,16 +326,16 @@ function AssignmentWizard({
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600 sm:col-span-3">
           Reason note (optional)
-          <input name="reasonNote" form="assignment-wizard-form" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <input name="reasonNote" form="assignment-wizard-form" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("reasonNote")} />
         </label>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <form action={previewFormAction}>
-          <input type="hidden" name="positionId" value={selectedPositionId} />
-          <input type="hidden" name="managerEmployeeId" value={selectedManagerId} />
-          <input type="hidden" name="effectiveStartDate" value={selectedStartDate} />
-          <Button type="submit" variant="secondary" loading={previewPending} loadingLabel="Computing…" disabled={!selectedPositionId}>
+          <input type="hidden" name="positionId" value={wizardValues.positionId} />
+          <input type="hidden" name="managerEmployeeId" value={wizardValues.managerEmployeeId} />
+          <input type="hidden" name="effectiveStartDate" value={wizardValues.effectiveStartDate} />
+          <Button type="submit" variant="secondary" loading={previewPending} loadingLabel="Computing…" disabled={!wizardValues.positionId}>
             Preview impact
           </Button>
         </form>

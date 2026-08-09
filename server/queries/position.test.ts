@@ -96,7 +96,7 @@ describe("previewEmployeePositionAssignmentImpact", () => {
       ],
       error: null,
     });
-    const result = await previewEmployeePositionAssignmentImpact(client, { masterRecordId: ID_1, positionId: ID_1, managerEmployeeId: null, effectiveStartDate: "2026-08-09", actorAuthUserId: ACTOR_ID });
+    const result = await previewEmployeePositionAssignmentImpact(client, { masterRecordId: ID_1, positionId: ID_1, managerEmployeeId: null, effectiveStartDate: "2026-08-09", actorAuthUserId: ACTOR_ID, actorLabel: ACTOR_ID });
     assert.equal(calls[0]?.fn, "preview_employee_position_assignment_impact");
     assert.equal(result.proposedPositionTitle, "Supervisor");
   });

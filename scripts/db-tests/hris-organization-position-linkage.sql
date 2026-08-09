@@ -275,6 +275,61 @@ begin
 end;
 $$;
 
+\echo '>> governed-position guard (HIGH review-round fix, cross-capability with HRT-274): once an employee has a governed position_id, the still-live free-text app.transfer_employee/app.update_employee_draft (20260730830000, amended by 20260730850000) must refuse to overwrite position_title/manager_employee_id (governed_position_exists) rather than silently desynchronizing from the governed truth'
+do $$
+declare
+  v_tenant_id uuid;
+  v_report_id uuid;
+  v_report_employee app.employees;
+begin
+  select id into v_tenant_id from app.tenants where slug = 'hrpos1';
+  select master_record_id into v_report_id from app.employees where tenant_id = v_tenant_id and full_name = 'Hrpos1 Report Person';
+  select * into v_report_employee from app.employees where master_record_id = v_report_id;
+
+  if v_report_employee.position_id is null then
+    raise exception 'assertion failed: unreachable, expected Hrpos1 Report Person to already carry a governed position_id from the propose/decide workflow test above';
+  end if;
+  if v_report_employee.lifecycle_status <> 'draft' then
+    raise exception 'assertion failed: unreachable, expected the fixture employee to still be in lifecycle_status=draft';
+  end if;
+
+  begin
+    perform app.transfer_employee(
+      v_report_id, v_report_employee.record_version, null, null, null, 'Hijacked free-text title', null,
+      'attempted free-text transfer over a governed position', '00000000-0000-0000-0000-000000027512', 'tester'
+    );
+    raise exception 'assertion failed: expected governed_position_exists, but the free-text transfer succeeded';
+  exception
+    when check_violation then
+      if sqlerrm not like 'governed_position_exists:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    perform app.update_employee_draft(
+      v_report_id, v_report_employee.record_version, v_report_employee.full_name, v_report_employee.employment_type,
+      v_report_employee.work_email, null, null, null, null, null, v_report_employee.hire_date, v_report_employee.probation_end_date,
+      v_report_employee.company_org_unit_id, v_report_employee.branch_org_unit_id, v_report_employee.department_org_unit_id,
+      'Hijacked free-text title', null, '00000000-0000-0000-0000-000000027512', 'tester'
+    );
+    raise exception 'assertion failed: expected governed_position_exists, but the free-text draft update succeeded';
+  exception
+    when check_violation then
+      if sqlerrm not like 'governed_position_exists:%' then
+        raise;
+      end if;
+  end;
+
+  -- Neither rejected attempt partially mutated the governed cache columns.
+  if (select position_id from app.employees where master_record_id = v_report_id) <> v_report_employee.position_id
+     or (select position_title from app.employees where master_record_id = v_report_id) <> v_report_employee.position_title
+     or (select manager_employee_id from app.employees where master_record_id = v_report_id) is distinct from v_report_employee.manager_employee_id then
+    raise exception 'assertion failed: a rejected free-text write must never partially mutate the governed cache columns';
+  end if;
+end;
+$$;
+
 \echo '>> capacity: a capacity=1 position cannot carry two concurrent overlapping primary incumbents (position_over_capacity), but a same-position correction for the SAME employee does not double-count its own predecessor'
 do $$
 declare
@@ -576,6 +631,108 @@ begin
 end;
 $$;
 
+\echo '>> manager-cycle prevention (CRITICAL review-round fix): two independently-valid, future-dated, mutually-referencing primary assignments must never BOTH be synced by the maintenance sweep into a live two-node manager cycle -- app.sync_employee_current_assignment_cache re-validates cycle-freedom immediately before it writes manager_employee_id (the actual commit point), and the sweep skips (never silently proceeds on, nor aborts the whole batch for) a cyclic row'
+do $$
+declare
+  v_tenant_id uuid;
+  v_approver_id uuid := '00000000-0000-0000-0000-000000027513';
+  v_staff_id uuid := '00000000-0000-0000-0000-000000027512';
+  v_department_id uuid;
+  v_position_cyclic app.positions;
+  v_emp_a app.employees;
+  v_emp_b app.employees;
+  v_proposal_a app.employee_position_assignments;
+  v_proposal_b app.employee_position_assignments;
+  v_swept integer;
+  v_after_a app.employees;
+  v_after_b app.employees;
+  v_audit_failure_count integer;
+begin
+  select id into v_tenant_id from app.tenants where slug = 'hrpos1';
+  select id into v_department_id from app.org_units where tenant_id = v_tenant_id and code = 'DEPT-HP1';
+
+  -- A dedicated position (not POS-SOLO/POS-DUO) so this block's own headcount is
+  -- entirely independent of every earlier test block's own capacity state.
+  select * into v_position_cyclic from app.create_position(
+    v_tenant_id, 'POS-CYCLIC', 'Cyclic Test Role', v_department_id,
+    (select id from app.position_grades where tenant_id = v_tenant_id and code = 'GR-1'), 2,
+    'Dedicated to the manager-cycle-prevention regression test', v_staff_id, 'tester'
+  );
+
+  select * into v_emp_a from app.create_employee_draft(
+    v_tenant_id, 'Hrpos1 Cyclic A Person', 'full_time', 'cyclic-a@hrpos1.test', null, null, null, null, null, '2023-01-01',
+    null, null, null, null, null, null, null, 'hr_created', 'idem-hp1-cyclic-a', v_staff_id, 'tester'
+  );
+  select * into v_emp_b from app.create_employee_draft(
+    v_tenant_id, 'Hrpos1 Cyclic B Person', 'full_time', 'cyclic-b@hrpos1.test', null, null, null, null, null, '2023-01-01',
+    null, null, null, null, null, null, null, 'hr_created', 'idem-hp1-cyclic-b', v_staff_id, 'tester'
+  );
+  if v_emp_a.manager_employee_id is not null or v_emp_b.manager_employee_id is not null then
+    raise exception 'assertion failed: unreachable, fresh employees must start with no manager';
+  end if;
+
+  -- Step 1 (live-reproduced exploit sequence, adversarial review): propose+approve
+  -- A -> manager B, future-dated (+5). Passes (B's cache manager is null); future-dated,
+  -- so decide's own immediate-sync guard correctly skips syncing it right away.
+  select * into v_proposal_a from app.propose_employee_position_assignment(
+    v_emp_a.master_record_id, v_emp_a.record_version, v_position_cyclic.id, null, v_emp_b.master_record_id,
+    'primary', 100.00, current_date + 5, null, 'reorganization', 'Cyclic exploit repro, leg A', v_staff_id, 'tester'
+  );
+  perform app.decide_employee_position_assignment(v_proposal_a.id, v_proposal_a.record_version, 'approve', 'approved, future-dated', v_approver_id, 'tester');
+
+  -- Step 2: propose+approve B -> manager A, future-dated (+5). Passes for the
+  -- identical reason -- A's cache manager is STILL null, since step 1 never synced it.
+  select * into v_proposal_b from app.propose_employee_position_assignment(
+    v_emp_b.master_record_id, v_emp_b.record_version, v_position_cyclic.id, null, v_emp_a.master_record_id,
+    'primary', 100.00, current_date + 5, null, 'reorganization', 'Cyclic exploit repro, leg B', v_staff_id, 'tester'
+  );
+  perform app.decide_employee_position_assignment(v_proposal_b.id, v_proposal_b.record_version, 'approve', 'approved, future-dated', v_approver_id, 'tester');
+
+  if (select manager_employee_id from app.employees where master_record_id = v_emp_a.master_record_id) is not null
+     or (select manager_employee_id from app.employees where master_record_id = v_emp_b.master_record_id) is not null then
+    raise exception 'assertion failed: unreachable, a future-dated approval must never sync the cache immediately';
+  end if;
+
+  -- Step 3: simulate the due date arriving -- the exact row-state a live scheduler
+  -- would itself produce (this repository's own disclosed, standing gap, ISS-2026-066
+  -- item 2), reproducing the review's own service_role-only time-travel technique.
+  update app.employee_position_assignments set effective_start_date = current_date where id in (v_proposal_a.id, v_proposal_b.id);
+
+  -- Step 4: the maintenance sweep must sync AT MOST ONE side of this mutually-cyclic
+  -- pair -- never both, which would leave a live, persistent, undetected two-node
+  -- manager cycle (the CONFIRMED CRITICAL finding, live-reproduced before this fix).
+  select app.activate_due_employee_position_assignments(v_tenant_id, v_approver_id, 'tester') into v_swept;
+  if v_swept <> 1 then
+    raise exception 'assertion failed: expected exactly 1 of the 2 mutually-cyclic due assignments to sync (the other skipped as cyclic), got %', v_swept;
+  end if;
+
+  select * into v_after_a from app.employees where master_record_id = v_emp_a.master_record_id;
+  select * into v_after_b from app.employees where master_record_id = v_emp_b.master_record_id;
+  if v_after_a.manager_employee_id = v_emp_b.master_record_id and v_after_b.manager_employee_id = v_emp_a.master_record_id then
+    raise exception 'assertion failed: CRITICAL REGRESSION -- both employees now show each other as manager simultaneously, a live persistent reporting-line cycle';
+  end if;
+  if v_after_a.manager_employee_id is null and v_after_b.manager_employee_id is null then
+    raise exception 'assertion failed: expected exactly one side to have synced its manager, both are still null';
+  end if;
+
+  -- The skip is disclosed via a dedicated failure-result audit event.
+  select count(*) into v_audit_failure_count
+  from app.audit_logs
+  where tenant_id = v_tenant_id and action = 'activate_due_employee_position_assignments' and result = 'failure'
+    and coalesce((after_value->>'skipped_count')::integer, 0) >= 1;
+  if v_audit_failure_count < 1 then
+    raise exception 'assertion failed: expected a failure-result audit_logs row disclosing the skipped cyclic assignment, found none';
+  end if;
+
+  -- Re-running the sweep must never flip the skipped row into a corrupting sync --
+  -- it stays bounded (0 newly activated), not silently synced on retry.
+  select app.activate_due_employee_position_assignments(v_tenant_id, v_approver_id, 'tester') into v_swept;
+  if v_swept <> 0 then
+    raise exception 'assertion failed: expected the second sweep to find nothing NEW to activate, got %', v_swept;
+  end if;
+end;
+$$;
+
 \echo '>> impact preview: computes real capacity/cycle/direct-report/pending-item signals and discloses the not-yet-integrated downstream systems, without fabricating a number for them'
 do $$
 declare
@@ -584,13 +741,17 @@ declare
   v_manager_id uuid;
   v_position_solo_id uuid;
   v_preview record;
+  v_audit_count_before integer;
+  v_audit_count_after integer;
 begin
   select id into v_tenant_id from app.tenants where slug = 'hrpos1';
   select master_record_id into v_report_id from app.employees where tenant_id = v_tenant_id and full_name = 'Hrpos1 Report Person';
   select master_record_id into v_manager_id from app.employees where tenant_id = v_tenant_id and full_name = 'Hrpos1 Manager Person';
   select id into v_position_solo_id from app.positions where tenant_id = v_tenant_id and code = 'POS-SOLO';
 
-  select * into v_preview from app.preview_employee_position_assignment_impact(v_manager_id, v_position_solo_id, v_report_id, current_date + 10, '00000000-0000-0000-0000-000000027512');
+  select count(*) into v_audit_count_before from app.audit_logs where tenant_id = v_tenant_id and action = 'preview_employee_position_assignment_impact';
+
+  select * into v_preview from app.preview_employee_position_assignment_impact(v_manager_id, v_position_solo_id, v_report_id, current_date + 10, '00000000-0000-0000-0000-000000027512', 'tester');
   if v_preview.would_create_manager_cycle is distinct from true then
     raise exception 'assertion failed: expected would_create_manager_cycle=true (making a subordinate the manager of their own manager), got %', v_preview.would_create_manager_cycle;
   end if;
@@ -599,6 +760,23 @@ begin
   end if;
   if v_preview.direct_report_count is null then
     raise exception 'assertion failed: expected a real, non-null direct_report_count';
+  end if;
+
+  -- MEDIUM review-round fix: section 18/33's own "previewed and auditable" requirement
+  -- -- every preview call now self-captures a canonical app.audit_logs entry (an
+  -- explicit projection, never a raw row/to_jsonb) recording exactly what was computed.
+  select count(*) into v_audit_count_after from app.audit_logs where tenant_id = v_tenant_id and action = 'preview_employee_position_assignment_impact';
+  if v_audit_count_after <> v_audit_count_before + 1 then
+    raise exception 'assertion failed: expected exactly one new audit_logs row for preview_employee_position_assignment_impact, before=% after=%', v_audit_count_before, v_audit_count_after;
+  end if;
+  if not exists (
+    select 1 from app.audit_logs
+    where tenant_id = v_tenant_id and action = 'preview_employee_position_assignment_impact' and result = 'success'
+      and (after_value->>'would_create_manager_cycle')::boolean = true
+      and resource_id = v_manager_id
+    order by occurred_at desc limit 1
+  ) then
+    raise exception 'assertion failed: expected the captured audit_logs row to carry the real computed would_create_manager_cycle signal, not a fabricated/omitted one';
   end if;
 end;
 $$;

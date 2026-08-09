@@ -94,6 +94,7 @@ export const EMPLOYEE_KNOWN_MUTATION_ERROR_CODES = [
   "change_request_not_found",
   "change_request_already_decided",
   "cyclic_reporting_line",
+  "governed_position_exists",
   "org_unit_not_found",
   "invalid_org_unit_type",
   "org_unit_ancestor_mismatch",

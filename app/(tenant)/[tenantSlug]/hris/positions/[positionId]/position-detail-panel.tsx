@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
@@ -12,6 +12,42 @@ const STATUS_TONE: Record<PositionStatus, StatusTone> = { active: "success", ina
 
 type BoundAction = (prevState: PositionActionState, formData: FormData) => Promise<PositionActionState>;
 type OrgUnit = { id: string; name: string; unitType: string };
+
+/** Unsaved-change protection (review-round fix, section 15): the exact real
+ * `beforeunload` pattern app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/
+ * employee-detail-panel.tsx's `EmployeeEditForm` already established -- a
+ * browser-native "leave site?" prompt while any field has diverged from its
+ * last-saved value, cleared once the save action completes without error. Generic
+ * over the field-value shape so both this panel's edit form and, separately, the
+ * assignment wizard can reuse the identical dirty-tracking/warning mechanics. */
+function useUnsavedChangeGuard<T>(values: T, pending: boolean, error: string | null, initial: T) {
+  const [savedValues, setSavedValues] = useState(initial);
+  const dirty = JSON.stringify(values) !== JSON.stringify(savedValues);
+  const valuesRef = useRef(values);
+  const wasPendingRef = useRef(false);
+
+  useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  useEffect(() => {
+    if (wasPendingRef.current && !pending && error === null) {
+      setSavedValues(valuesRef.current);
+    }
+    wasPendingRef.current = pending;
+  }, [pending, error]);
+
+  return dirty;
+}
 
 export function PositionDetailPanel({
   tenantSlug,
@@ -33,6 +69,19 @@ export function PositionDetailPanel({
   const [updateState, updateFormAction, updatePending] = useActionState(updateAction, INITIAL_STATE);
   const nextStatus: PositionStatus = position.status === "active" ? "inactive" : "active";
   const [statusState, statusFormAction, statusPending] = useActionState(setStatusAction(nextStatus), INITIAL_STATE);
+
+  const initialEditValues = {
+    title: position.title,
+    orgUnitId: position.orgUnitId,
+    gradeId: position.gradeId ?? "",
+    capacity: String(position.capacity),
+    description: position.description ?? "",
+  };
+  const [editValues, setEditValues] = useState(initialEditValues);
+  const editDirty = useUnsavedChangeGuard(editValues, updatePending, updateState.error, initialEditValues);
+  function editField<K extends keyof typeof editValues>(key: K) {
+    return { value: editValues[key], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setEditValues((v) => ({ ...v, [key]: e.target.value })) };
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -56,13 +105,14 @@ export function PositionDetailPanel({
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Details</h2>
         <form action={updateFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {editDirty ? <p className="col-span-full text-xs text-warning">You have unsaved changes.</p> : null}
           <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
             Title
-            <input name="title" defaultValue={position.title} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <input name="title" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("title")} />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
             Org unit
-            <select name="orgUnitId" defaultValue={position.orgUnitId} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            <select name="orgUnitId" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("orgUnitId")}>
               {orgUnits.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} ({u.unitType})
@@ -72,7 +122,7 @@ export function PositionDetailPanel({
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
             Grade
-            <select name="gradeId" defaultValue={position.gradeId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            <select name="gradeId" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("gradeId")}>
               <option value="">No grade</option>
               {grades.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -83,11 +133,11 @@ export function PositionDetailPanel({
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
             Capacity
-            <input name="capacity" type="number" min="1" defaultValue={position.capacity} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <input name="capacity" type="number" min="1" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("capacity")} />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600 sm:col-span-2">
             Description
-            <input name="description" defaultValue={position.description ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <input name="description" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("description")} />
           </label>
           {updateState.error ? (
             <p role="alert" className="col-span-full text-xs text-danger">

@@ -49,7 +49,7 @@ export async function previewAssignmentImpactAction(
 
   const supabase = await createSupabaseServerClient();
   try {
-    const preview = await previewEmployeePositionAssignmentImpact(supabase, { masterRecordId, positionId, managerEmployeeId, effectiveStartDate, actorAuthUserId: access.authUserId });
+    const preview = await previewEmployeePositionAssignmentImpact(supabase, { masterRecordId, positionId, managerEmployeeId, effectiveStartDate, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
     return { error: null, preview };
   } catch (error) {
     if (error instanceof PositionQueryError) return { error: `Could not compute impact preview: ${error.message}`, preview: null };

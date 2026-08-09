@@ -522,6 +522,18 @@ comment on function app.resolve_org_unit_lineage is
 
 -- Non-raising wrapper around app.assert_no_employee_manager_cycle (HRT-274, reused
 -- unchanged, decision 8) for use in a read-only preview context.
+--
+-- HRT-275 review-round fix (LOW, adversarial review): the original body caught
+-- `when others` -- a blanket catch that would silently relabel ANY internal error
+-- (lock_timeout, statement_timeout, out-of-shared-memory, or any other genuinely
+-- unrelated error raised by the chain-walk SELECT inside
+-- app.assert_no_employee_manager_cycle) as "this candidate manager assignment would
+-- create a cycle", which both app.propose_employee_position_assignment and
+-- app.decide_employee_position_assignment then surface to the caller as
+-- `cyclic_reporting_line` -- masking the true cause. Narrowed to the exact condition
+-- app.assert_no_employee_manager_cycle actually raises (`errcode = 'check_violation'`,
+-- every one of its three `raise exception` sites) so an unrelated error now propagates
+-- with its own real SQLSTATE/message instead of being relabeled.
 create function app.would_create_employee_manager_cycle(p_employee_id uuid, p_candidate_manager_id uuid)
 returns boolean
 language plpgsql
@@ -531,7 +543,7 @@ begin
   perform app.assert_no_employee_manager_cycle(p_employee_id, p_candidate_manager_id);
   return false;
 exception
-  when others then
+  when check_violation then
     return true;
 end;
 $$;
@@ -574,6 +586,30 @@ begin
     return;
   end if;
 
+  -- HRT-275 review-round fix (CRITICAL, adversarial review): this is the ONLY code
+  -- path that ever writes app.employees.manager_employee_id (see the function comment
+  -- below) -- but a future-dated app.decide_employee_position_assignment approval
+  -- deliberately does NOT call this function immediately (its own "if
+  -- effective_start_date <= current_date" guard), leaving app.employees'
+  -- manager_employee_id cache stale relative to the just-approved assignment. Both
+  -- app.propose_employee_position_assignment and app.decide_employee_position_assignment
+  -- re-check cycle-freedom via app.would_create_employee_manager_cycle, but that check
+  -- walks this SAME stale cache column -- so two independently-valid, future-dated,
+  -- mutually-referencing propose+decide pairs can each pass their own re-check against
+  -- a still-null/stale cache, and app.activate_due_employee_position_assignments' own
+  -- maintenance sweep (the only other caller of this function) previously called this
+  -- function with no cycle validation of its own at all -- live-reproduced as a
+  -- persistent, undetected two-employee manager cycle once both due rows synced.
+  -- Fix: re-validate cycle-freedom authoritatively at the one point that actually
+  -- commits a change to the live app.employees.manager_employee_id graph -- here,
+  -- immediately before the UPDATE -- regardless of whether the caller is the
+  -- immediate decide-time sync or the future-dated maintenance sweep. Raises (does not
+  -- silently swallow) on a detected cycle; app.activate_due_employee_position_assignments
+  -- below catches it per-row so one cyclic row can never abort the rest of the sweep.
+  if p_assignment.manager_employee_id is not null then
+    perform app.assert_no_employee_manager_cycle(p_assignment.master_record_id, p_assignment.manager_employee_id);
+  end if;
+
   select * into v_position from app.positions where id = p_assignment.position_id;
   select * into v_lineage from app.resolve_org_unit_lineage(v_position.org_unit_id);
 
@@ -589,7 +625,7 @@ end;
 $$;
 
 comment on function app.sync_employee_current_assignment_cache is
-  'HRT-275 (decision 3, decision 4): the ONLY code path that ever writes app.employees.position_id -- overwrites position_title too (from the position''s own current title), matching real HRIS behavior that org placement follows a governed position once one is assigned. Never invoked for a secondary assignment.';
+  'HRT-275 (decision 3, decision 4): the ONLY code path that ever writes app.employees.position_id -- overwrites position_title too (from the position''s own current title), matching real HRIS behavior that org placement follows a governed position once one is assigned. Never invoked for a secondary assignment. Review-round fix: re-validates manager-cycle-freedom (app.assert_no_employee_manager_cycle) immediately before writing manager_employee_id -- the authoritative gate, since this is the only point that actually commits a change to the live reporting-line graph (see the fix comment inline above).';
 
 -- ===========================================================================
 -- 7. Position grade CRUD (HRS:Create/Edit/View, decision 2).
@@ -1405,6 +1441,8 @@ declare
   v_decision app.rbac_decision;
   v_row app.employee_position_assignments;
   v_count integer := 0;
+  v_skipped integer := 0;
+  v_skipped_ids uuid[] := '{}';
 begin
   v_decision := app.evaluate_permission(p_actor_auth_user_id, p_tenant_id, 'HRS', 'Override');
   if not v_decision.allowed then
@@ -1422,8 +1460,22 @@ begin
       and e.position_id is distinct from a.position_id
     order by a.effective_start_date
   loop
-    perform app.sync_employee_current_assignment_cache(v_row);
-    v_count := v_count + 1;
+    -- HRT-275 review-round fix (CRITICAL, adversarial review): app.sync_employee_
+    -- current_assignment_cache now raises (check_violation) when the row it is about
+    -- to sync would create a manager cycle against the graph's current live state
+    -- (only reachable here when a second, independently-approved future-dated
+    -- assignment on the OTHER side of the same pair already activated earlier in this
+    -- same sweep). Caught per-row so one cyclic row can never abort the rest of the
+    -- sweep, nor silently proceed as if it had synced -- it is skipped and disclosed
+    -- via the audit event below.
+    begin
+      perform app.sync_employee_current_assignment_cache(v_row);
+      v_count := v_count + 1;
+    exception
+      when check_violation then
+        v_skipped := v_skipped + 1;
+        v_skipped_ids := array_append(v_skipped_ids, v_row.id);
+    end;
   end loop;
 
   if v_count > 0 then
@@ -1433,19 +1485,28 @@ begin
     );
   end if;
 
+  if v_skipped > 0 then
+    perform app.capture_audit_event(
+      p_tenant_id, p_actor_auth_user_id, p_actor_label, 'activate_due_employee_position_assignments',
+      'app.employee_position_assignments', p_tenant_id, 'failure',
+      'cyclic_reporting_line detected during maintenance sweep -- assignment(s) left unsynced; app.employees.manager_employee_id remains at its prior, cycle-free value for the affected employee(s) until the conflicting assignment is resolved and the sweep is retried',
+      null, jsonb_build_object('skipped_count', v_skipped, 'skipped_assignment_ids', to_jsonb(v_skipped_ids))
+    );
+  end if;
+
   return v_count;
 end;
 $$;
 
 comment on function app.activate_due_employee_position_assignments is
-  'HRT-275 (decision 4, decision 12): sweeps approved primary assignments whose effective_start_date has arrived but whose employees.position_id cache does not yet match, and syncs them. Idempotent -- a repeated call re-syncs nothing once every due row matches its own cache.';
+  'HRT-275 (decision 4, decision 12): sweeps approved primary assignments whose effective_start_date has arrived but whose employees.position_id cache does not yet match, and syncs them. Idempotent -- a repeated call re-syncs nothing once every due row matches its own cache. Review-round fix: a row whose sync would create a manager cycle is skipped (not synced) and disclosed via a dedicated failure-result audit event, rather than corrupting the reporting-line graph or aborting the whole sweep -- returns only the count of rows genuinely activated.';
 
 -- ===========================================================================
 -- 10. Impact preview (decision 6, section 24 binding rule).
 -- ===========================================================================
 
 create function app.preview_employee_position_assignment_impact(
-  p_master_record_id uuid, p_position_id uuid, p_manager_employee_id uuid, p_effective_start_date date, p_actor_auth_user_id uuid
+  p_master_record_id uuid, p_position_id uuid, p_manager_employee_id uuid, p_effective_start_date date, p_actor_auth_user_id uuid, p_actor_label text
 )
 returns table (
   current_position_id uuid, current_position_title text, current_manager_employee_id uuid,
@@ -1466,6 +1527,11 @@ declare
   v_unit app.org_units;
   v_lineage record;
   v_headcount integer;
+  v_would_cycle boolean;
+  v_direct_reports integer;
+  v_pending_change_requests integer;
+  v_pending_duplicates integer;
+  v_downstream_disclosure text;
 begin
   select * into v_employee from app.employees e where e.master_record_id = p_master_record_id;
   if not found or not app.has_active_tenant_membership(v_employee.tenant_id, p_actor_auth_user_id) then
@@ -1486,23 +1552,47 @@ begin
   select * into v_unit from app.org_units where id = v_position.org_unit_id;
   select * into v_lineage from app.resolve_org_unit_lineage(v_position.org_unit_id);
   v_headcount := app.count_position_active_primary_headcount(p_position_id, daterange(coalesce(p_effective_start_date, current_date), coalesce(p_effective_start_date, current_date), '[]'));
+  v_would_cycle := (p_manager_employee_id is not null and app.would_create_employee_manager_cycle(p_master_record_id, p_manager_employee_id));
+  v_direct_reports := (select count(*)::integer from app.employees where manager_employee_id = p_master_record_id);
+  v_pending_change_requests := (select count(*)::integer from app.employee_change_requests where master_record_id = p_master_record_id and status = 'pending');
+  v_pending_duplicates := (select count(*)::integer from app.employee_duplicate_candidates where source_master_record_id = p_master_record_id and decision = 'pending');
+  v_downstream_disclosure := 'Approval-queue org-scope, Payroll input recalculation, and Ticketing queue routing are not yet integrated capabilities in this repository (Payroll: Prompt 282; Ticketing: Prompt 285+) -- their impact is not computed here rather than fabricated.';
+
+  -- HRT-275 review-round fix (MEDIUM, adversarial review): section 18 names "impact
+  -- preview" among what audit must record, and section 33's acceptance criteria
+  -- requires "previewed and auditable" -- the original body computed every signal but
+  -- never called app.capture_audit_event at all, leaving no forensic record of what
+  -- was actually disclosed to a decision-maker before a reorganization/transfer.
+  -- Captured as its own explicit, non-sensitive projection (no raw row/to_jsonb),
+  -- result='success', after_value carries every computed signal -- so a later audit
+  -- can reconstruct exactly what this call showed and when.
+  perform app.capture_audit_event(
+    v_employee.tenant_id, p_actor_auth_user_id, p_actor_label, 'preview_employee_position_assignment_impact',
+    'app.employee_position_assignments', p_master_record_id, 'success', null, null,
+    jsonb_build_object(
+      'master_record_id', p_master_record_id, 'position_id', p_position_id, 'grade_id', v_position.grade_id,
+      'manager_employee_id', p_manager_employee_id, 'effective_start_date', p_effective_start_date,
+      'position_capacity', v_position.capacity, 'position_current_headcount', v_headcount,
+      'position_capacity_remaining', greatest(v_position.capacity - v_headcount, 0),
+      'would_create_manager_cycle', v_would_cycle, 'target_org_unit_active', (v_unit.status = 'active'),
+      'direct_report_count', v_direct_reports, 'pending_change_request_count', v_pending_change_requests,
+      'pending_duplicate_candidate_count', v_pending_duplicates
+    )
+  );
 
   return query
   select
     v_employee.position_id, v_employee.position_title, v_employee.manager_employee_id,
     v_position.title, v_position.grade_id, v_lineage.company_org_unit_id, v_lineage.branch_org_unit_id, v_lineage.department_org_unit_id,
     v_position.capacity, v_headcount, greatest(v_position.capacity - v_headcount, 0),
-    (p_manager_employee_id is not null and app.would_create_employee_manager_cycle(p_master_record_id, p_manager_employee_id)),
-    (v_unit.status = 'active'),
-    (select count(*)::integer from app.employees where manager_employee_id = p_master_record_id),
-    (select count(*)::integer from app.employee_change_requests where master_record_id = p_master_record_id and status = 'pending'),
-    (select count(*)::integer from app.employee_duplicate_candidates where source_master_record_id = p_master_record_id and decision = 'pending'),
-    'Approval-queue org-scope, Payroll input recalculation, and Ticketing queue routing are not yet integrated capabilities in this repository (Payroll: Prompt 282; Ticketing: Prompt 285+) -- their impact is not computed here rather than fabricated.';
+    v_would_cycle, (v_unit.status = 'active'),
+    v_direct_reports, v_pending_change_requests, v_pending_duplicates,
+    v_downstream_disclosure;
 end;
 $$;
 
 comment on function app.preview_employee_position_assignment_impact is
-  'HRT-275 (decision 6, section 24 "reorganization requires impact preview for approval queues, roles, payroll, time and open tickets"). Computes every REAL, currently-existing impact signal (target position/grade/org path, capacity remaining, manager-cycle check, this employee''s own real direct-report count, real pending change-request/duplicate-candidate counts) and returns an explicit downstream_disclosure for the capabilities that do not exist yet in this repository, rather than fabricating a number for them. Callable standalone, before any proposal exists (section 21''s own preview-before-propose ordering).';
+  'HRT-275 (decision 6, section 24 "reorganization requires impact preview for approval queues, roles, payroll, time and open tickets"). Computes every REAL, currently-existing impact signal (target position/grade/org path, capacity remaining, manager-cycle check, this employee''s own real direct-report count, real pending change-request/duplicate-candidate counts) and returns an explicit downstream_disclosure for the capabilities that do not exist yet in this repository, rather than fabricating a number for them. Callable standalone, before any proposal exists (section 21''s own preview-before-propose ordering). Review-round fix: now takes p_actor_label and self-captures a canonical app.audit_logs entry (an explicit projection, never a raw row) on every call, closing section 18/33''s "previewed and auditable" requirement.';
 
 -- ===========================================================================
 -- 11. Read RPCs (HRS:View unless noted).
@@ -1756,7 +1846,7 @@ grant execute on function app.propose_employee_position_assignment(uuid, integer
 grant execute on function app.decide_employee_position_assignment(uuid, integer, text, text, uuid, text) to authenticated, service_role;
 grant execute on function app.cancel_employee_position_assignment(uuid, integer, text, uuid, text) to authenticated, service_role;
 grant execute on function app.activate_due_employee_position_assignments(uuid, uuid, text) to authenticated, service_role;
-grant execute on function app.preview_employee_position_assignment_impact(uuid, uuid, uuid, date, uuid) to authenticated, service_role;
+grant execute on function app.preview_employee_position_assignment_impact(uuid, uuid, uuid, date, uuid, text) to authenticated, service_role;
 
 grant execute on function app.get_employee_position_assignment_history(uuid, uuid) to authenticated, service_role;
 grant execute on function app.get_my_employee_position_assignment_history(uuid, uuid) to authenticated, service_role;
