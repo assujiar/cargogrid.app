@@ -298,4 +298,30 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
     protectedAction: "HRS:View personal data",
     description: "address on app.candidates — masked identically to email/phone.",
   },
+  {
+    id: "hrs:attendance_events.location",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "location on app.attendance_events (HRT-278, Attendance) — a real-time GPS coordinate tied to one employee's clock-in/out moment. Structurally minimized at write time (app._ingest_attendance_event never persists a coordinate unless the resolved policy's own location_enforcement_mode requires evaluating it — decision 4); column-restricted from the plain authenticated grant (service_role only) from this migration's own first grant block, never retrofitted.",
+  },
+  {
+    id: "hrs:attendance_correction_requests.reason",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "reason/decided_reason on app.attendance_correction_requests (HRT-278) — an employee's own stated justification for a missed/incorrect punch, which can incidentally disclose sensitive personal circumstances (medical, family). Column-restricted from authenticated (service_role only); visible to the requester themselves and HRS:View-personal-data holders only, via the owning read RPC's own masking, mirroring app.employees' own personal-field pattern.",
+  },
+  {
+    id: "hrs:attendance_exceptions.waive_reason",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "waive_reason/resolution_note on app.attendance_exceptions (HRT-278) — masked identically to attendance_correction_requests.reason.",
+  },
 ];
