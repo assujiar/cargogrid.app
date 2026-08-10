@@ -644,10 +644,25 @@ declare
   v_tenant1 uuid := (select id from app.tenants where slug='shr1');
   v_emp1 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp1work@shr1.test');
   v_emp2 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp2work@shr1.test');
-  v_emp1_assignment_id uuid := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-10'::date and status = 'published');
-  v_emp2_assignment_id uuid := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp2 and work_date = '2026-09-11'::date and status = 'published');
+  v_emp1_assignment_id uuid;
+  v_emp2_assignment_id uuid;
   v_request app.schedule_swap_requests;
 begin
+  -- Batch 278-280 Tier C fix propagation: resolved under a momentarily
+  -- elevated LOCAL role (reverted before any RPC call below), because the
+  -- batch's own RLS hardening (20260730960000) now correctly scopes a raw
+  -- app.schedule_assignments SELECT to self/manager/HRS:View -- emp1
+  -- (self-service, no HRS:View, not emp2's manager) legitimately cannot see
+  -- emp2's own row via a raw SELECT any more, exactly the fix this same
+  -- batch's review round required. This is test-arrangement only
+  -- (constructing the RPC call's own arguments from already-known fixture
+  -- rows, never the actor identity the RPC calls below authenticate as,
+  -- which remains governed entirely by request.jwt.claims + the explicit
+  -- p_actor_auth_user_id argument), never the behavior under test.
+  set local role postgres;
+  v_emp1_assignment_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-10'::date and status = 'published');
+  v_emp2_assignment_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp2 and work_date = '2026-09-11'::date and status = 'published');
+  set local role authenticated;
   begin
     -- p_assignment_id belongs to emp2, not the caller (emp1) -- a
     -- well-formed target pair (emp1/v_emp1_assignment_id) so the function
@@ -730,8 +745,15 @@ declare
   v_dep_target_id uuid;
   v_dep_request app.schedule_swap_requests;
 begin
+  -- Batch 278-280 Tier C fix propagation: v_dep_target_id (emp2's own row)
+  -- resolved under a momentarily elevated LOCAL role (reverted before the
+  -- RPC call below), for the exact same reason as the earlier swap-request
+  -- block above -- emp1 cannot see emp2's raw schedule_assignments row
+  -- post-fix; test-arrangement only.
+  set local role postgres;
   v_dep_assignment_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-12'::date and status = 'published');
   v_dep_target_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp2 and work_date = '2026-09-13'::date and status = 'published');
+  set local role authenticated;
   v_dep_request := app.request_schedule_swap(v_dep_assignment_id, v_emp2, v_dep_target_id, 'testing cancel cascade', 'swap-cancel-cascade', '00000000-0000-0000-0000-000000027904', 'emp1');
 
   -- Cancelling an already-PUBLISHED assignment is HRS:Override (decision 5's
@@ -755,11 +777,18 @@ declare
   v_tenant1 uuid := (select id from app.tenants where slug='shr1');
   v_emp1 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp1work@shr1.test');
   v_emp2 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp2work@shr1.test');
-  v_a uuid := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-14'::date and status = 'published');
-  v_b uuid := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp2 and work_date = '2026-09-15'::date and status = 'published');
+  v_a uuid;
+  v_b uuid;
   v_req app.schedule_swap_requests;
   v_cancelled app.schedule_swap_requests;
 begin
+  -- Batch 278-280 Tier C fix propagation: v_b (emp2's own row) resolved
+  -- under a momentarily elevated LOCAL role (reverted before the RPC call
+  -- below) -- same reason as the earlier swap-request blocks above.
+  set local role postgres;
+  v_a := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-14'::date and status = 'published');
+  v_b := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp2 and work_date = '2026-09-15'::date and status = 'published');
+  set local role authenticated;
   v_req := app.request_schedule_swap(v_a, v_emp2, v_b, 'changed my mind test', 'swap-self-cancel', '00000000-0000-0000-0000-000000027904', 'emp1');
   v_cancelled := app.cancel_schedule_swap_request(v_req.id, 1, 'no longer needed', '00000000-0000-0000-0000-000000027904', 'emp1');
   if v_cancelled.status <> 'cancelled' then
