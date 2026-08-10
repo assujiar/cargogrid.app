@@ -1,0 +1,304 @@
+"use client";
+
+import { useActionState } from "react";
+import { Button } from "../../../../../components/ui/button.tsx";
+import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
+import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import type {
+  ScheduleAssignmentListRow,
+  ShiftTemplateRow,
+  SwapRequestRow,
+  RosterHolidayRow,
+  CoveragePreviewRow,
+} from "../../../../../server/contracts/shift-roster/shift-roster.ts";
+import type { RosterAdminActionState } from "./actions.ts";
+
+type BoundAction = (prevState: RosterAdminActionState, formData: FormData) => Promise<RosterAdminActionState>;
+
+const INITIAL_STATE: RosterAdminActionState = { error: null };
+const STATUS_TONE: Record<string, StatusTone> = { scheduled: "neutral", published: "success", cancelled: "danger", superseded: "neutral" };
+const COVERAGE_TONE: Record<string, StatusTone> = { met: "success", below_minimum: "warning" };
+
+function AssignForm({ shiftTemplates, assignEmployeeScheduleAction }: { shiftTemplates: ShiftTemplateRow[]; assignEmployeeScheduleAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(assignEmployeeScheduleAction, INITIAL_STATE);
+  const published = shiftTemplates.filter((t) => t.publishedVersionId);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
+      <label className="text-xs text-neutral-500">
+        Employee id
+        <input name="employeeId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="employee UUID" />
+      </label>
+      <label className="text-xs text-neutral-500">
+        Shift version
+        <select name="shiftTemplateVersionId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+          <option value="">— select —</option>
+          {published.map((t) => (
+            <option key={t.id} value={t.publishedVersionId ?? ""}>
+              {t.code} (v{t.publishedVersionNumber})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs text-neutral-500">
+        Work date
+        <input type="date" name="workDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <Button type="submit" variant="primary" loading={pending} loadingLabel="Assigning…">
+        Assign schedule
+      </Button>
+      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+    </form>
+  );
+}
+
+function PublishForm({ publishScheduleAssignmentsAction }: { publishScheduleAssignmentsAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(publishScheduleAssignmentsAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
+      <label className="text-xs text-neutral-500">
+        From
+        <input type="date" name="fromDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs text-neutral-500">
+        To
+        <input type="date" name="toDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <Button type="submit" variant="primary" loading={pending} loadingLabel="Publishing…">
+        Publish scheduled range
+      </Button>
+      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+    </form>
+  );
+}
+
+function SwapDecisionForm({ requestId, expectedVersion, decision, decideSwapAction }: { requestId: string; expectedVersion: number; decision: "approve" | "reject"; decideSwapAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(decideSwapAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="mt-1 flex flex-wrap items-end gap-2">
+      <label className="text-xs text-neutral-500">
+        Reason
+        <input name="decidedReason" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <input type="hidden" name="requestId" value={requestId} />
+      <input type="hidden" name="expectedVersion" value={expectedVersion} />
+      <Button type="submit" variant={decision === "approve" ? "primary" : "destructive"} loading={pending} loadingLabel="Saving…">
+        {decision === "approve" ? "Approve swap" : "Reject swap"}
+      </Button>
+      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+    </form>
+  );
+}
+
+function HolidayForm({ setRosterHolidayAction }: { setRosterHolidayAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(setRosterHolidayAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
+      <label className="text-xs text-neutral-500">
+        Date
+        <input type="date" name="holidayDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs text-neutral-500">
+        Name
+        <input name="name" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. Independence Day" />
+      </label>
+      <label className="text-xs text-neutral-500">
+        Org unit id (optional -- blank = tenant-wide)
+        <input name="orgUnitId" className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="inline-flex items-center gap-1 text-xs text-neutral-500">
+        <input type="checkbox" name="isWorkingDay" /> Treat as a working day (override)
+      </label>
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
+        Add holiday
+      </Button>
+      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+    </form>
+  );
+}
+
+function CoverageRequirementForm({ shiftTemplates, setCoverageRequirementAction }: { shiftTemplates: ShiftTemplateRow[]; setCoverageRequirementAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(setCoverageRequirementAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
+      <label className="text-xs text-neutral-500">
+        Org unit id
+        <input name="orgUnitId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs text-neutral-500">
+        Shift template
+        <select name="shiftTemplateId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+          <option value="">— select —</option>
+          {shiftTemplates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.code}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs text-neutral-500">
+        Day of week
+        <select name="dayOfWeek" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+          {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d, i) => (
+            <option key={d} value={i}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs text-neutral-500">
+        Min headcount
+        <input type="number" name="minHeadcount" min="0" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
+        Save requirement
+      </Button>
+      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+    </form>
+  );
+}
+
+export function RosterAdminPanel({
+  assignments,
+  shiftTemplates,
+  pendingSwaps,
+  holidays,
+  coveragePreview,
+  assignEmployeeScheduleAction,
+  publishScheduleAssignmentsAction,
+  decideSwapAction,
+  setRosterHolidayAction,
+  setCoverageRequirementAction,
+}: {
+  assignments: ScheduleAssignmentListRow[];
+  shiftTemplates: ShiftTemplateRow[];
+  pendingSwaps: SwapRequestRow[];
+  holidays: RosterHolidayRow[];
+  coveragePreview: CoveragePreviewRow[];
+  assignEmployeeScheduleAction: BoundAction;
+  publishScheduleAssignmentsAction: BoundAction;
+  decideSwapAction: (requestId: string, expectedVersion: number, decision: "approve" | "reject") => BoundAction;
+  setRosterHolidayAction: BoundAction;
+  setCoverageRequirementAction: BoundAction;
+}) {
+  return (
+    <div className="flex flex-col gap-8">
+      <h1 className="text-xl font-semibold text-neutral-900">Roster and scheduling</h1>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-neutral-700">Assign an employee to a shift</h2>
+        <AssignForm shiftTemplates={shiftTemplates} assignEmployeeScheduleAction={assignEmployeeScheduleAction} />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-neutral-700">Publish scheduled assignments</h2>
+        <PublishForm publishScheduleAssignmentsAction={publishScheduleAssignmentsAction} />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-neutral-700">Recent schedule assignments</h2>
+        {assignments.length === 0 ? (
+          <EmptyState title="No schedule assignments yet" description="Assign an employee to a published shift above." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-max text-left text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-xs text-neutral-500">
+                  <th className="py-2 pr-4">Employee</th>
+                  <th className="py-2 pr-4">Work date</th>
+                  <th className="py-2 pr-4">Shift</th>
+                  <th className="py-2 pr-4">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignments.map((a) => (
+                  <tr key={a.id} className="border-b border-neutral-100">
+                    <td className="py-2 pr-4">
+                      {a.employeeFullName} ({a.employeeNumber})
+                    </td>
+                    <td className="py-2 pr-4">{a.workDate}</td>
+                    <td className="py-2 pr-4">{a.shiftTemplateName}</td>
+                    <td className="py-2 pr-4">
+                      <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={a.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-neutral-700">Pending swap requests</h2>
+        {pendingSwaps.length === 0 ? (
+          <EmptyState title="No pending swap requests" />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {pendingSwaps.map((s) => (
+              <li key={s.id} className="rounded-md border border-neutral-200 p-3">
+                <p className="text-sm">
+                  {s.requestingEmployeeNumber} ⇄ {s.targetEmployeeNumber}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-4">
+                  <SwapDecisionForm requestId={s.id} expectedVersion={s.recordVersion} decision="approve" decideSwapAction={decideSwapAction(s.id, s.recordVersion, "approve")} />
+                  <SwapDecisionForm requestId={s.id} expectedVersion={s.recordVersion} decision="reject" decideSwapAction={decideSwapAction(s.id, s.recordVersion, "reject")} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-neutral-700">Coverage preview (next 14 days, per org unit/shift requirement)</h2>
+        {coveragePreview.length === 0 ? (
+          <EmptyState title="No coverage requirements configured yet" description="Add one below to see a real met / below-minimum preview." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-max text-left text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-xs text-neutral-500">
+                  <th className="py-2 pr-4">Date</th>
+                  <th className="py-2 pr-4">Shift</th>
+                  <th className="py-2 pr-4">Scheduled</th>
+                  <th className="py-2 pr-4">Required</th>
+                  <th className="py-2 pr-4">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coveragePreview.map((c, i) => (
+                  <tr key={`${c.workDate}-${c.shiftTemplateId}-${i}`} className="border-b border-neutral-100">
+                    <td className="py-2 pr-4">{c.workDate}</td>
+                    <td className="py-2 pr-4">{c.shiftTemplateName}</td>
+                    <td className="py-2 pr-4">{c.scheduledCount}</td>
+                    <td className="py-2 pr-4">{c.minHeadcount}</td>
+                    <td className="py-2 pr-4">
+                      <StatusBadge tone={COVERAGE_TONE[c.coverageStatus] ?? "neutral"} label={c.coverageStatus} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <CoverageRequirementForm shiftTemplates={shiftTemplates} setCoverageRequirementAction={setCoverageRequirementAction} />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-neutral-700">Holiday calendar</h2>
+        {holidays.length === 0 ? (
+          <EmptyState title="No holidays configured yet" />
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm">
+            {holidays.map((h) => (
+              <li key={h.id}>
+                {h.holidayDate} — {h.name} {h.isWorkingDay ? "(treated as a working day)" : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+        <HolidayForm setRosterHolidayAction={setRosterHolidayAction} />
+      </section>
+    </div>
+  );
+}
