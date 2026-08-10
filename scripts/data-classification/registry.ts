@@ -341,4 +341,31 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
     protectedAction: "HRS:View personal data",
     description: "reason/decided_reason on app.schedule_swap_requests (HRT-279) — an employee's own stated justification for requesting a shift swap. Column-restricted and masked identically to app.attendance_correction_requests.reason.",
   },
+  {
+    id: "hrs:leave_requests.reason",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "reason/destination/decided_reason/cancel_reason on app.leave_requests (HRT-280, Leave/Permit/Business Trip) — an employee's own stated justification for a leave/permit/business-trip request, which can incidentally disclose sensitive personal or medical circumstances. Column-restricted from authenticated (service_role only) from this migration's own first grant block, never retrofitted; masked at the RPC layer (app.get_leave_request_detail/app.list_leave_requests) to self-or-HRS:View-personal-data, mirroring app.attendance_correction_requests.reason exactly.",
+  },
+  {
+    id: "hrs:leave_types.evidence_classification",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "evidence_classification ('personal'/'medical') on app.leave_types (HRT-280) — a domain-owned classification of what KIND of justification a leave type demands, distinct from app.files.classification (PLT-128's own storage-classification scale, set by the uploader before this domain's RPCs ever see the file id). Registered here per this checkpoint's own task instructions to consider a data-classification-registry row for medical/personal leave reason text — the column itself is not masked (it describes policy, not a person), but every leave_requests.reason/evidence_file_id pairing for a 'medical'-classified type inherits the SAME confidential handling as the reason field above.",
+  },
+  {
+    id: "hrs:leave_balance_ledger.reason",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "reason on app.leave_balance_ledger (HRT-280) — an HR adjustment/opening-balance reason that can incidentally disclose sensitive personal circumstances. Column-restricted from authenticated (service_role only); masked identically to app.leave_requests.reason.",
+  },
 ];

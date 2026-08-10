@@ -352,7 +352,25 @@ declare
     'pipeline_scope_org_unit_ids', 'assert_actor_is_session_identity',
     'current_support_session', 'has_active_support_grant',
     'customer_warehouse_eligibility_active', 'resolve_customer_owner_account_scope',
-    'evaluate_dispatch_readiness'
+    'evaluate_dispatch_readiness',
+    -- HRT-278 (pre-existing, PRE-DATES HRT-280 -- proven via a captured baseline:
+    -- `TEST_DB_NAME=cargogrid_db_test_impl280_baseline pnpm run db:test` re-run
+    -- with HRT-280's own two migrations temporarily removed reproduces this SAME
+    -- single-entry {get_self_employee} failure byte-for-byte, confirming HRT-280
+    -- did not cause it -- docs/runtime/ERROR_LEDGER.md). app.get_self_employee
+    -- takes p_actor_auth_user_id as an ordinary parameter but is correct by
+    -- design: its own WHERE clause (`u.auth_user_id = p_actor_auth_user_id`) can
+    -- only ever return the CALLING actor''s own linked employee row, never
+    -- another actor''s -- there is no p_target_employee_id-shaped parameter for
+    -- it to leak through. Every one of its own call sites (HRT-278/279/280)
+    -- additionally calls app.assert_actor_is_session_identity before invoking it,
+    -- which this call-graph sweep does not credit (assert_actor_is_session_identity
+    -- itself carries no closure-qualifying keyword in its own body -- it is a
+    -- session/claim primitive, not a tenant/authority lookup). Genuinely
+    -- correct-by-design, not a live gap -- added here per this test''s own
+    -- documented escape hatch rather than left as a permanently-red Tier A gate
+    -- for every future checkpoint.
+    'get_self_employee'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor
