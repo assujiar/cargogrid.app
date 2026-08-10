@@ -334,7 +334,11 @@ function TaskRow({
               </Button>
             </form>
           ) : task.taskType === "access_revocation" ? (
-            <form action={revokeFormAction} className="rounded-md bg-neutral-50 p-2">
+            <form action={revokeFormAction} className="flex flex-wrap items-end gap-2 rounded-md bg-neutral-50 p-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-neutral-500">Reason (required)</label>
+                <input name="reason" type="text" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+              </div>
               <Button type="submit" variant="destructive" loading={revokePending} loadingLabel="Revoking…">
                 Request revocation
               </Button>
@@ -342,7 +346,9 @@ function TaskRow({
           ) : (
             <form action={completeFormAction} className="flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-neutral-500">Evidence note</label>
+                <label className="text-xs text-neutral-500">
+                  Evidence note{task.taskType === "handoff" ? " (a note or a file is required)" : ""}
+                </label>
                 <input name="evidenceNote" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
               </div>
               <div className="flex flex-col gap-1">

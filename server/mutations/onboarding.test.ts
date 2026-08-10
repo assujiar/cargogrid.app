@@ -125,8 +125,17 @@ describe("requestOnboardingAccessProvisioning / requestOnboardingAccessRevocatio
 
   test("revocation calls the real RPC and returns the completed task", async () => {
     const { client, calls } = fakeClient({ data: [{ ...TASK_ROW, task_type: "access_revocation" }], error: null });
-    await requestOnboardingAccessRevocation(client, { caseId: ID_2, taskId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "hr" });
+    await requestOnboardingAccessRevocation(client, { caseId: ID_2, taskId: ID_1, expectedVersion: 1, reason: "security offboarding", actorAuthUserId: ACTOR_ID, actorLabel: "hr" });
     assert.equal(calls[0]?.fn, "request_onboarding_access_revocation");
+    assert.equal(calls[0]?.args.p_reason, "security offboarding");
+  });
+
+  // Tier C review-round fix pass (20260730890000, business rule 5): a reason
+  // is now required to request access revocation, mirroring waive/reopen/
+  // cancel/rehire's own established schema-layer requirement.
+  test("revocation requires a non-empty reason at the schema layer", async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    await assert.rejects(() => requestOnboardingAccessRevocation(client, { caseId: ID_2, taskId: ID_1, expectedVersion: 1, reason: "", actorAuthUserId: ACTOR_ID, actorLabel: "hr" }));
   });
 });
 

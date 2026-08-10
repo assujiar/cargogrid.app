@@ -569,7 +569,7 @@ export const RequestOnboardingAccessProvisioningInputSchema = z
 export type RequestOnboardingAccessProvisioningInput = z.input<typeof RequestOnboardingAccessProvisioningInputSchema>;
 
 export const RequestOnboardingAccessRevocationInputSchema = z
-  .object({ caseId: z.string().uuid(), taskId: z.string().uuid(), expectedVersion: z.number().int().positive() })
+  .object({ caseId: z.string().uuid(), taskId: z.string().uuid(), expectedVersion: z.number().int().positive(), reason: z.string().min(1) })
   .merge(ActorFieldsSchema);
 export type RequestOnboardingAccessRevocationInput = z.input<typeof RequestOnboardingAccessRevocationInputSchema>;
 

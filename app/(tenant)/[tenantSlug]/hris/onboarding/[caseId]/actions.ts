@@ -163,14 +163,19 @@ export async function requestAccessRevocationAction(
   taskId: string,
   expectedVersion: number,
   _prevState: OnboardingCaseActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<OnboardingCaseActionState> {
   const access = await requireOnboardingAccess(tenantSlug);
   if (!access) return NO_ACCESS;
+  // Tier C review-round fix pass (business rule 5): emergency/immediate access
+  // revocation now requires a real, actor-supplied reason -- never a fixed
+  // string, matching waive/reopen/cancel/rehire's own established pattern.
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to request access revocation." };
 
   const supabase = await createSupabaseServerClient();
   try {
-    await requestOnboardingAccessRevocation(supabase, { caseId, taskId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    await requestOnboardingAccessRevocation(supabase, { caseId, taskId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof OnboardingMutationError) return { error: `Could not request access revocation: ${error.message}` };
     throw error;

@@ -105,6 +105,10 @@ export const ONBOARDING_KNOWN_MUTATION_ERROR_CODES = [
   "case_finalize_no_longer_applicable",
   "user_not_found",
   "invalid_response",
+  // Tier C review-round fix pass (20260730890000):
+  "evidence_required",
+  "target_identity_not_activatable",
+  "insufficient_authority_to_delegate",
 ] as const;
 type KnownOnboardingMutationErrorCode = (typeof ONBOARDING_KNOWN_MUTATION_ERROR_CODES)[number];
 export type OnboardingMutationErrorCode = KnownOnboardingMutationErrorCode | "mutation_failed";
@@ -340,6 +344,7 @@ export async function requestOnboardingAccessRevocation(client: OnboardingMutati
     p_case_id: parsed.caseId,
     p_task_id: parsed.taskId,
     p_expected_version: parsed.expectedVersion,
+    p_reason: parsed.reason,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
   });

@@ -684,7 +684,15 @@ begin
   exception when check_violation then null;
   end;
 
-  select * into v_revoke_task from app.request_onboarding_access_revocation(v_case.id, v_revoke_task.id, v_revoke_task.record_version, '00000000-0000-0000-0000-000000027703', 'tester');
+  -- Review-round fix (HIGH, spec-compliance, business rule 5): a non-empty
+  -- reason is now required -- checked explicitly before the real call below.
+  begin
+    perform app.request_onboarding_access_revocation(v_case.id, v_revoke_task.id, v_revoke_task.record_version, null, '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected reason_required for a null reason';
+  exception when check_violation then null;
+  end;
+
+  select * into v_revoke_task from app.request_onboarding_access_revocation(v_case.id, v_revoke_task.id, v_revoke_task.record_version, 'employee resigned, standard offboarding', '00000000-0000-0000-0000-000000027703', 'tester');
   if v_revoke_task.status <> 'completed' then raise exception 'assertion failed: expected revoke-access completed'; end if;
   if (select status from app.users where auth_user_id = '00000000-0000-0000-0000-000000027707' and tenant_id = v_tenant1) <> 'revoked' then
     raise exception 'assertion failed: expected the linked Platform user ACTUALLY revoked via app.transition_user_status (never a direct app.users write)';
@@ -702,7 +710,7 @@ begin
   -- HRS:Edit alone cannot request access revocation (needs Override -- same
   -- immediate-security-relevant bar as app.terminate_employee).
   begin
-    perform app.request_onboarding_access_revocation(v_case.id, v_revoke_task.id, v_revoke_task.record_version, '00000000-0000-0000-0000-000000027702', 'tester');
+    perform app.request_onboarding_access_revocation(v_case.id, v_revoke_task.id, v_revoke_task.record_version, 'attempted revocation', '00000000-0000-0000-0000-000000027702', 'tester');
     raise exception 'assertion failed: expected an HRS:Edit-only actor to be denied requesting access revocation, but it succeeded';
   exception
     when insufficient_privilege then null;
@@ -742,7 +750,7 @@ begin
 
   for v_task in select * from app.onboarding_case_tasks where case_id = v_case.id loop
     if v_task.task_type = 'access_revocation' then
-      perform app.request_onboarding_access_revocation(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027703', 'tester');
+      perform app.request_onboarding_access_revocation(v_case.id, v_task.id, v_task.record_version, 'standard offboarding checklist', '00000000-0000-0000-0000-000000027703', 'tester');
     else
       perform app.complete_onboarding_task(v_case.id, v_task.id, v_task.record_version, 'done', null, '00000000-0000-0000-0000-000000027702', 'tester');
     end if;
@@ -804,7 +812,7 @@ begin
   );
   for v_task in select * from app.onboarding_case_tasks where case_id = v_case.id loop
     if v_task.task_type = 'access_revocation' then
-      perform app.request_onboarding_access_revocation(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027703', 'tester');
+      perform app.request_onboarding_access_revocation(v_case.id, v_task.id, v_task.record_version, 'standard offboarding checklist', '00000000-0000-0000-0000-000000027703', 'tester');
     else
       perform app.complete_onboarding_task(v_case.id, v_task.id, v_task.record_version, 'done', null, '00000000-0000-0000-0000-000000027702', 'tester');
     end if;
@@ -1048,6 +1056,386 @@ begin
   end if;
   if has_column_privilege('authenticated', 'app.onboarding_case_tasks', 'waive_reason', 'SELECT') then
     raise exception 'assertion failed: authenticated must NOT have column-level SELECT on waive_reason';
+  end if;
+end;
+$$;
+
+-- ===========================================================================
+-- Tier C review-round fix pass (20260730890000) regression coverage. Every
+-- block below live-reproduces the ORIGINAL exploit/defect first, confirming
+-- it is now blocked/corrected, per BUILD_EXECUTION_PROTOCOL.md section 5.3 --
+-- "never accept a fix from the findings register alone."
+-- ===========================================================================
+
+\echo '>> review-round fix: a task_type=handoff completion with no evidence note/file is rejected (business rule 3); a real note or file still completes it; document/generic tasks remain unaffected'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'DEPT-HRT2771');
+  v_case app.onboarding_offboarding_cases;
+  v_asset app.onboarding_case_tasks;
+  v_welcome app.onboarding_case_tasks;
+begin
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Evidence Fix Hire', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-evidence-fix', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+  select * into v_welcome from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'welcome-doc';
+  select * into v_welcome from app.complete_onboarding_task(v_case.id, v_welcome.id, v_welcome.record_version, 'signed', null, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_asset from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'asset-issue';
+
+  -- Pre-fix, this succeeded with BOTH evidence fields NULL -- now rejected.
+  begin
+    perform app.complete_onboarding_task(v_case.id, v_asset.id, v_asset.record_version, null, null, '00000000-0000-0000-0000-000000027702', 'tester');
+    raise exception 'assertion failed: expected evidence_required for a handoff task with no evidence note or file';
+  exception when check_violation then null;
+  end;
+
+  select * into v_asset from app.complete_onboarding_task(v_case.id, v_asset.id, v_asset.record_version, 'laptop issued, serial FIX-001', null, '00000000-0000-0000-0000-000000027702', 'tester');
+  if v_asset.status <> 'completed' then
+    raise exception 'assertion failed: expected asset-issue completed once a real evidence note is supplied';
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix: a direct_hire idempotency_key replay now compares the FULL request tuple (full_name/employment_type/work_email/effective_date/org units/position/manager), not merely case_type/source_type -- a materially different hire on the same key is rejected, a genuinely identical replay still returns the same case'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'DEPT-HRT2771');
+  v_case app.onboarding_offboarding_cases;
+  v_case_replay app.onboarding_offboarding_cases;
+begin
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Direct Hire Tuple Fix', 'full_time', 'tuple-fix@hrt2771.test', null, null, null, null, null,
+    v_company, v_branch, v_department, 'Analyst', null,
+    'idem-hrt2771-direct-tuple-fix', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+
+  -- Same key, materially different hire (name/employment_type/work_email) --
+  -- pre-fix this silently returned the FIRST case with no error.
+  begin
+    perform app.start_onboarding_case(
+      v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+      'A Totally Different Hire', 'contract', 'different-tuple-fix@hrt2771.test', null, null, null, null, null,
+      v_company, v_branch, v_department, 'Analyst', null,
+      'idem-hrt2771-direct-tuple-fix', '00000000-0000-0000-0000-000000027702', 'tester'
+    );
+    raise exception 'assertion failed: expected idempotency_key_conflict for a same-key, materially-different direct_hire replay';
+  exception when unique_violation then null;
+  end;
+
+  -- Genuinely identical replay still returns the SAME case.
+  select * into v_case_replay from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Direct Hire Tuple Fix', 'full_time', 'tuple-fix@hrt2771.test', null, null, null, null, null,
+    v_company, v_branch, v_department, 'Analyst', null,
+    'idem-hrt2771-direct-tuple-fix', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+  if v_case_replay.id <> v_case.id then
+    raise exception 'assertion failed: expected a genuine identical direct_hire replay to return the SAME case';
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix: app.request_onboarding_access_provisioning no longer lets an HRS:Edit-only actor grant ANY published role -- an actual role grant now requires HRS:Override, AND the granting actor may never delegate a permission (e.g. FIN:Override) they do not themselves already hold; a third-party grant, a self-grant, and an Override-holding-but-under-permissioned actor are all blocked; a genuinely over-permissioned actor still succeeds'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'DEPT-HRT2771');
+  v_fin_role uuid;
+  v_fin_draft app.role_versions;
+  v_fin_role_version uuid;
+  v_full_role uuid;
+  v_full_draft app.role_versions;
+  v_case app.onboarding_offboarding_cases;
+  v_task app.onboarding_case_tasks;
+  v_result app.onboarding_case_tasks;
+begin
+  insert into auth.users (id, email) values
+    ('00000000-0000-0000-0000-000000027730', 'escalation-target@hrt2771.test'),
+    ('00000000-0000-0000-0000-000000027731', 'legit-grant-target@hrt2771.test');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000027730', 'escalation-target@hrt2771.test', 'Escalation Target', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'escalation-target@hrt2771.test'), 'active', 'onboarded', 'tester');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000027731', 'legit-grant-target@hrt2771.test', 'Legit Grant Target', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'legit-grant-target@hrt2771.test'), 'active', 'onboarded', 'tester');
+
+  -- A role carrying FIN:Override/Approve -- unrelated to HRS, never flagged
+  -- protected=true (protected only covers View-class field-masking).
+  v_fin_role := (app.create_role(v_tenant1, 'Finance Controller Fixture', 'FIN Approve/Override', 'tester')).id;
+  v_fin_draft := app.create_role_version(v_fin_role, 'tester');
+  perform app.set_role_version_permissions(v_fin_draft.id, array(select id from app.permissions where resource_module_code = 'FIN' and action in ('Approve', 'Override')), 'tester');
+  perform app.publish_role_version(v_fin_draft.id, now(), 'tester');
+  v_fin_role_version := (select id from app.role_versions where role_id = v_fin_role and status = 'published');
+
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Escalation Fixture Hire', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-escalation-fixture', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'welcome-doc';
+  perform app.complete_onboarding_task(v_case.id, v_task.id, v_task.record_version, 'signed', null, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'it-access';
+
+  -- (1) HRS:Edit-only actor (staff@hrt2771, this checkpoint's own db-test
+  -- fixture persona) attempts a THIRD-PARTY grant -- blocked at the
+  -- HRS:Override bar before the delegation check even runs.
+  begin
+    perform app.request_onboarding_access_provisioning(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027730', array[v_fin_role_version], null, '00000000-0000-0000-0000-000000027702', 'tester');
+    raise exception 'assertion failed: expected insufficient_authority (HRS:Override) for an HRS:Edit-only actor granting a real role';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- (2) approver@hrt2771 HOLDS HRS:Override but zero FIN permission --
+  -- blocked by the delegation check (cannot grant what it does not hold),
+  -- for BOTH a third-party target and a self-grant.
+  begin
+    perform app.request_onboarding_access_provisioning(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027730', array[v_fin_role_version], null, '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected insufficient_authority_to_delegate for an HRS:Override actor lacking the target role''s own FIN permissions (third-party)';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform app.request_onboarding_access_provisioning(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027703', array[v_fin_role_version], null, '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected insufficient_authority_to_delegate for a SELF-grant of a role the actor does not already hold';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- Task must still be untouched (still pending, version unchanged) after
+  -- every blocked attempt above -- never partially applied.
+  select * into v_task from app.onboarding_case_tasks where id = v_task.id;
+  if v_task.status <> 'pending' then
+    raise exception 'assertion failed: expected the access_provisioning task to remain pending after every blocked escalation attempt, got %', v_task.status;
+  end if;
+
+  -- (3) A genuinely over-permissioned actor (holds HRS:Override AND the
+  -- target role's own FIN:Approve/Override) succeeds -- the legitimate path
+  -- is not collaterally broken by the fix.
+  v_full_role := (app.create_role(v_tenant1, 'HR Director Equivalent Fixture', 'HRS Override + FIN Approve/Override', 'tester')).id;
+  v_full_draft := app.create_role_version(v_full_role, 'tester');
+  perform app.set_role_version_permissions(v_full_draft.id, array(
+    select id from app.permissions
+    where (resource_module_code = 'HRS' and action in ('Create', 'Edit', 'Override', 'View'))
+       or (resource_module_code = 'FIN' and action in ('Approve', 'Override'))
+  ), 'tester');
+  perform app.publish_role_version(v_full_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_full_role and status = 'published'), '00000000-0000-0000-0000-000000027701', '00000000-0000-0000-0000-000000027701', 'tester');
+
+  select * into v_result from app.request_onboarding_access_provisioning(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027731', array[v_fin_role_version], null, '00000000-0000-0000-0000-000000027701', 'tester');
+  if v_result.status <> 'completed' then
+    raise exception 'assertion failed: expected the legitimate, sufficiently-permissioned grant to succeed';
+  end if;
+  if not (app.evaluate_permission('00000000-0000-0000-0000-000000027731', v_tenant1, 'FIN', 'Override')).allowed then
+    raise exception 'assertion failed: expected the legitimate grant target to actually hold FIN:Override afterward';
+  end if;
+  if (app.evaluate_permission('00000000-0000-0000-0000-000000027730', v_tenant1, 'FIN', 'Override')).allowed then
+    raise exception 'assertion failed: the earlier BLOCKED escalation target must never have actually received FIN:Override';
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix: cancelling an onboarding case now revokes any Platform role_assignments already granted through that case''s own completed access-provisioning tasks (never the underlying identity link) -- the C-04 dependent-in-flight-process-not-cancelled gap'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'DEPT-HRT2771');
+  v_viewer_role_version uuid := (select id from app.role_versions where role_id = (select id from app.roles where tenant_id = v_tenant1 and name = 'HRS Viewer') and status = 'published');
+  v_edit_override_role uuid;
+  v_edit_override_draft app.role_versions;
+  v_case app.onboarding_offboarding_cases;
+  v_task app.onboarding_case_tasks;
+  v_assignment_status text;
+begin
+  insert into auth.users (id, email) values
+    ('00000000-0000-0000-0000-000000027732', 'cancel-cascade-target@hrt2771.test'),
+    ('00000000-0000-0000-0000-000000027735', 'cancel-cascade-granter@hrt2771.test');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000027732', 'cancel-cascade-target@hrt2771.test', 'Cancel Cascade Target', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'cancel-cascade-target@hrt2771.test'), 'active', 'onboarded', 'tester');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000027735', 'cancel-cascade-granter@hrt2771.test', 'Cancel Cascade Granter', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'cancel-cascade-granter@hrt2771.test'), 'active', 'onboarded', 'tester');
+
+  -- A real HR-director-equivalent actor: holds both HRS:Edit (the baseline
+  -- task-write bar) and HRS:Override (the real-grant bar, review-round fix),
+  -- plus HRS:View itself (so it may delegate the HRS-View-only fixture role
+  -- below without tripping the actor-holds-what-it-grants check).
+  v_edit_override_role := (app.create_role(v_tenant1, 'Cancel Cascade Granter Role Fixture', 'HRS Create/Edit/Override/View', 'tester')).id;
+  v_edit_override_draft := app.create_role_version(v_edit_override_role, 'tester');
+  perform app.set_role_version_permissions(v_edit_override_draft.id, array(select id from app.permissions where resource_module_code = 'HRS' and action in ('Create', 'Edit', 'Override', 'View')), 'tester');
+  perform app.publish_role_version(v_edit_override_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_edit_override_role and status = 'published'), '00000000-0000-0000-0000-000000027735', '00000000-0000-0000-0000-000000027701', 'tester');
+
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Cancel Cascade Hire', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-cancel-cascade', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'welcome-doc';
+  perform app.complete_onboarding_task(v_case.id, v_task.id, v_task.record_version, 'signed', null, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'it-access';
+
+  -- The fixture granter above holds HRS:Edit/Override AND HRS:View itself
+  -- (the viewer role carries only HRS:View) -- a real, legitimate grant.
+  perform app.request_onboarding_access_provisioning(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027732', array[v_viewer_role_version], null, '00000000-0000-0000-0000-000000027735', 'tester');
+
+  if not (select exists (select 1 from app.role_assignments where tenant_id = v_tenant1 and role_version_id = v_viewer_role_version and auth_user_id = '00000000-0000-0000-0000-000000027732' and status = 'active')) then
+    raise exception 'assertion failed: expected the role grant to be active before cancellation';
+  end if;
+
+  select * into v_case from app.cancel_onboarding_case(v_case.id, v_case.record_version, 'headcount rescinded before day one', '00000000-0000-0000-0000-000000027702', 'tester');
+  if v_case.status <> 'cancelled' then
+    raise exception 'assertion failed: expected the case cancelled';
+  end if;
+
+  select status into v_assignment_status from app.role_assignments where tenant_id = v_tenant1 and role_version_id = v_viewer_role_version and auth_user_id = '00000000-0000-0000-0000-000000027732';
+  if v_assignment_status <> 'revoked' then
+    raise exception 'assertion failed: expected the role grant REVOKED once its own case was cancelled, got %', v_assignment_status;
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix: a target identity that is genuinely non-activatable (already revoked, not merely a fresh invite) is rejected outright by access provisioning instead of silently completing the task with an unkeepable "re-run once active" promise'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'DEPT-HRT2771');
+  v_case app.onboarding_offboarding_cases;
+  v_task app.onboarding_case_tasks;
+begin
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000027733', 'already-revoked-target@hrt2771.test');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000027733', 'already-revoked-target@hrt2771.test', 'Already Revoked Target', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'already-revoked-target@hrt2771.test'), 'active', 'onboarded', 'tester');
+  perform app.transition_user_status((select id from app.users where email = 'already-revoked-target@hrt2771.test'), 'revoked', 'left the company before this new case existed', 'tester');
+
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Stranded State Hire', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-stranded-state', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'welcome-doc';
+  perform app.complete_onboarding_task(v_case.id, v_task.id, v_task.record_version, 'signed', null, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'it-access';
+
+  begin
+    perform app.request_onboarding_access_provisioning(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027733', '{}'::uuid[], null, '00000000-0000-0000-0000-000000027702', 'tester');
+    raise exception 'assertion failed: expected target_identity_not_activatable for an already-revoked target identity';
+  exception when check_violation then null;
+  end;
+
+  select * into v_task from app.onboarding_case_tasks where id = v_task.id;
+  if v_task.status <> 'pending' then
+    raise exception 'assertion failed: expected the task to remain pending (actionable), not falsely completed, got %', v_task.status;
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix: app.request_onboarding_access_revocation now also revokes every ACTIVE app.role_assignments row for the target identity in this tenant -- app.transition_user_status alone (PLT-110) never touched role_assignments, so a revoked identity previously retained full permission-gated authority'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'DEPT-HRT2771');
+  v_ghost_role uuid;
+  v_ghost_draft app.role_versions;
+  v_case app.onboarding_offboarding_cases;
+  v_task app.onboarding_case_tasks;
+  v_emp app.employees;
+  v_emp_id uuid;
+  v_ofb_case app.onboarding_offboarding_cases;
+  v_ofb_task app.onboarding_case_tasks;
+begin
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000027734', 'revoke-cascade-ghost@hrt2771.test');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000027734', 'revoke-cascade-ghost@hrt2771.test', 'Revoke Cascade Ghost', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'revoke-cascade-ghost@hrt2771.test'), 'active', 'onboarded', 'tester');
+
+  v_ghost_role := (app.create_role(v_tenant1, 'Revoke Cascade HRS Create Fixture', 'HRS Create', 'tester')).id;
+  v_ghost_draft := app.create_role_version(v_ghost_role, 'tester');
+  perform app.set_role_version_permissions(v_ghost_draft.id, array(select id from app.permissions where resource_module_code = 'HRS' and action in ('Create')), 'tester');
+  perform app.publish_role_version(v_ghost_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_ghost_role and status = 'published'), '00000000-0000-0000-0000-000000027734', '00000000-0000-0000-0000-000000027701', 'tester');
+
+  if not (app.evaluate_permission('00000000-0000-0000-0000-000000027734', v_tenant1, 'HRS', 'Create')).allowed then
+    raise exception 'assertion failed: expected the fixture identity to genuinely hold HRS:Create before revocation';
+  end if;
+
+  -- Link this identity to a real, active employee via a direct_hire case
+  -- (so app.request_onboarding_access_revocation has a real app.employees.
+  -- user_id to act on), then run it through the full employee lifecycle to
+  -- 'active' so an offboarding case can legally start against it.
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Revoke Cascade Employee', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-revoke-cascade', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'welcome-doc';
+  perform app.complete_onboarding_task(v_case.id, v_task.id, v_task.record_version, 'signed', null, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'it-access';
+  perform app.request_onboarding_access_provisioning(v_case.id, v_task.id, v_task.record_version, '00000000-0000-0000-0000-000000027734', '{}'::uuid[], null, '00000000-0000-0000-0000-000000027702', 'tester');
+
+  v_emp_id := (select master_record_id from app.employees where tenant_id = v_tenant1 and full_name = 'Revoke Cascade Employee');
+  select * into v_emp from app.employees where master_record_id = v_emp_id;
+  perform app.add_employee_emergency_contact(v_emp_id, 'Emergency Contact', 'sibling', '081200000099', null, true, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_emp from app.employees where master_record_id = v_emp_id;
+  select * into v_emp from app.submit_employee_for_approval(v_emp_id, v_emp.record_version, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_emp from app.decide_employee_approval(v_emp_id, v_emp.record_version, 'approve', null, '00000000-0000-0000-0000-000000027703', 'tester');
+  select * into v_emp from app.activate_employee(v_emp_id, v_emp.record_version, '00000000-0000-0000-0000-000000027703', 'tester');
+
+  select * into v_ofb_case from app.start_onboarding_case(
+    v_tenant1, 'offboarding', 'existing_employee', null, v_emp_id, null, current_date,
+    null, null, null, null, null, null, null, null, null, null, null, null, null,
+    'idem-hrt2771-revoke-cascade-offb', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+  select * into v_ofb_task from app.onboarding_case_tasks where case_id = v_ofb_case.id and template_task_key = 'revoke-access';
+  perform app.request_onboarding_access_revocation(v_ofb_case.id, v_ofb_task.id, v_ofb_task.record_version, 'security offboarding -- immediate exit', '00000000-0000-0000-0000-000000027703', 'tester');
+
+  if (app.evaluate_permission('00000000-0000-0000-0000-000000027734', v_tenant1, 'HRS', 'Create')).allowed then
+    raise exception 'assertion failed: expected the revoked identity to have LOST HRS:Create -- app.role_assignments must now be revoked, not merely app.users.status';
+  end if;
+  if (select count(*) from app.role_assignments where auth_user_id = '00000000-0000-0000-0000-000000027734' and status = 'active') <> 0 then
+    raise exception 'assertion failed: expected zero active role_assignments for the revoked identity';
+  end if;
+end;
+$$;
+
+\echo '>> review-round fix: onboarding_task_provisioning_requests/onboarding_case_events no longer grant authenticated a blanket, non-column-scoped SELECT -- identity-linkage/authority/free-text columns are excluded, matching the exit_reason/evidence_note/waive_reason discipline'
+do $$
+begin
+  if has_column_privilege('authenticated', 'app.onboarding_task_provisioning_requests', 'target_auth_user_id', 'SELECT') then
+    raise exception 'assertion failed: authenticated must NOT have column-level SELECT on target_auth_user_id';
+  end if;
+  if has_column_privilege('authenticated', 'app.onboarding_task_provisioning_requests', 'requested_role_version_ids', 'SELECT') then
+    raise exception 'assertion failed: authenticated must NOT have column-level SELECT on requested_role_version_ids';
+  end if;
+  if has_column_privilege('authenticated', 'app.onboarding_task_provisioning_requests', 'result_user_id', 'SELECT') then
+    raise exception 'assertion failed: authenticated must NOT have column-level SELECT on result_user_id';
+  end if;
+  if has_column_privilege('authenticated', 'app.onboarding_task_provisioning_requests', 'failure_reason', 'SELECT') then
+    raise exception 'assertion failed: authenticated must NOT have column-level SELECT on failure_reason';
+  end if;
+  if not has_column_privilege('authenticated', 'app.onboarding_task_provisioning_requests', 'status', 'SELECT') then
+    raise exception 'assertion failed: authenticated SHOULD still have column-level SELECT on status (never over-restricted)';
+  end if;
+  if has_column_privilege('authenticated', 'app.onboarding_case_events', 'notes', 'SELECT') then
+    raise exception 'assertion failed: authenticated must NOT have column-level SELECT on onboarding_case_events.notes';
+  end if;
+  if not has_column_privilege('authenticated', 'app.onboarding_case_events', 'event_type', 'SELECT') then
+    raise exception 'assertion failed: authenticated SHOULD still have column-level SELECT on event_type (never over-restricted)';
   end if;
 end;
 $$;
