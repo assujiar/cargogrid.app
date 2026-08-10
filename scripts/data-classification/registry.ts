@@ -324,4 +324,21 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
     protectedAction: "HRS:View personal data",
     description: "waive_reason/resolution_note on app.attendance_exceptions (HRT-278) — masked identically to attendance_correction_requests.reason.",
   },
+  {
+    id: "hrs:schedule_assignments.cancel_reason",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "cancel_reason on app.schedule_assignments (HRT-279) — the stated reason a shift assignment was cancelled, which can incidentally disclose sensitive personal circumstances (medical, family). Column-restricted from authenticated (service_role only) from this migration's own first grant block, never retrofitted; never projected by any read RPC (structural masking by omission, mirroring app.attendance_correction_requests' own established convention).",
+  },
+  {
+    id: "hrs:schedule_swap_requests.reason",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "reason/decided_reason on app.schedule_swap_requests (HRT-279) — an employee's own stated justification for requesting a shift swap. Column-restricted and masked identically to app.attendance_correction_requests.reason.",
+  },
 ];
