@@ -487,3 +487,80 @@ export const PERFORMANCE_REGISTRY: readonly ClassificationEntry[] = [
     description: "appeal_reason/decision_reason on app.performance_appeals (HRT-283) — an employee's own appeal narrative and HR's decision rationale.",
   },
 ];
+
+/**
+ * HRT-284 (Training and Talent, CG-S12-HRT-012) — training results/
+ * certificates/development-plan records registered under the existing
+ * 'pii' category (personal training/development evidence), gated on the
+ * same reused HRS:View personal data action every sibling person-scoped
+ * HRIS table uses (app.can_view_hris_training_talent_row: self/direct-
+ * manager/HRS:View personal data). Talent review/pool/succession records
+ * are registered separately below at a deliberately NARROWER protected
+ * action (HRS:Override) — the most restricted tier in this checkpoint
+ * (decision 6 of the migration's own header), never self- or manager-
+ * visible, matching app.can_view_talent_review_row / the talent_pools/
+ * talent_pool_members/talent_succession_candidates RLS policies exactly.
+ */
+export const TRAINING_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "hrs:training_enrollments.participation",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "employee_id/status/enrollment_source/completion_notes on app.training_enrollments (HRT-284) — an individual employee's own training participation and completion record. Visible to self, their direct manager, or an HRS:View personal data holder (app.can_view_hris_training_talent_row) — never plain tenant membership, even though the training CATALOGUE itself (course/session/provider) is broadly tenant-visible.",
+  },
+  {
+    id: "hrs:training_assessments.scores",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "score/max_score/passed/notes on app.training_assessments (HRT-284) — an employee's own assessment attempt history, including failed retries. Same visibility gate as training_enrollments.",
+  },
+  {
+    id: "hrs:training_certificates.evidence",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "certificate_number/issued_at/expiry_date/evidence_file_id on app.training_certificates (HRT-284) — an employee's own credential evidence, including externally-imported, unverified certificates (source=external_import). evidence_file_id points at a PLT-128 private, malware-scanned file — never itself a public/internal-classified asset.",
+  },
+  {
+    id: "hrs:training_development_plans.content",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "title/owner_note/linked_performance_outcome_id on app.training_development_plans and description/completed_note on app.training_development_plan_actions (HRT-284) — an employee's own development narrative, optionally cross-referencing a specific HRT-283 performance outcome.",
+  },
+  {
+    id: "hrs:talent_review.content",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:Override",
+    description:
+      "potential_rating/readiness_note/risk_of_loss on app.talent_reviews and the cycle/assignment rows around it (app.talent_review_cycles/_assignments, HRT-284, decision 6) — the most restricted tier in this checkpoint. Readable ONLY by an HRS:Override holder or the specific employee assigned as reviewer for that one case (app.can_view_talent_review_row) — never self (the review's own SUBJECT never sees it), never direct manager, never plain HRS:View personal data.",
+  },
+  {
+    id: "hrs:talent_pool.membership",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:Override",
+    description:
+      "employee_id/added_reason on app.talent_pool_members (HRT-284) — an employee's own high-potential/successor/critical-role pool membership and the human reason it was recorded. HRS:Override-only, zero self/manager/reviewer-assignment visibility of any kind (narrower than talent_reviews, which at least the assigned reviewer sees).",
+  },
+  {
+    id: "hrs:talent_succession_candidates.evidence",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:Override",
+    description: "readiness/decision_reason on app.talent_succession_candidates (HRT-284) — an employee's own succession-candidacy evidence for a specific position. HRS:Override-only, same tier as talent pool membership.",
+  },
+];
