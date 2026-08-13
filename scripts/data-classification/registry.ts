@@ -434,3 +434,56 @@ export const PAYROLL_REGISTRY: readonly ClassificationEntry[] = [
       "net_pay_amount/bank_reference_masked on app.payroll_finance_handoff_payment_instructions (HRT-282 migration 2) — employee-level payment data prepared for Finance. Readable by either side of the handoff boundary (HRS:View payroll or FIN:View), never by plain tenant membership. app.payroll_finance_handoff_gl_lines (the OTHER handoff table) is deliberately AGGREGATE ONLY with zero employee_id column, structurally excluded from this per-employee classification.",
   },
 ];
+
+/**
+ * HRT-283 (KPI and Performance, CG-S12-HRT-011) — performance ratings/scores/
+ * rationale/reasons registered under the existing 'pii' category (decision 9 of
+ * supabase/migrations/20260731030000_create_hris_kpi_performance.sql's own header):
+ * no 'performance' category is reserved anywhere in CATEGORIES above (unlike
+ * 'payroll', which HRT-274 explicitly reserved ahead of time), and adding one is a
+ * cross-cutting taxonomy change outside this single capability's own mandate — 'pii'
+ * (restricted-level personal data about a specific employee) is the closest existing
+ * fit. Every row here is gated on the PROTECTED HRS:View personal data permission
+ * specifically (the migration's own decision 0 — `permissions_action_check` is a
+ * fixed, repository-wide CHECK constraint no capability alters, confirmed live
+ * during this checkpoint's own testing — so this REUSES the action HRT-274 already
+ * seeded rather than adding a new one), self-or-direct-manager-or-assigned-reviewer-
+ * or-HRS:View-personal-data (never plain HRS:View).
+ */
+export const PERFORMANCE_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "hrs:performance_assessment_kpi_scores.scores",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "raw_score/manual_score/actual_value/score_rationale on app.performance_assessment_kpi_scores (HRT-283) — an individual employee's own per-goal performance rating and the assessor's free-text rationale. Visibility is additionally assessment-type- and stage-bound (app.can_view_performance_assessment_row) — self assessment always visible to self/manager; manager assessment visible to the employee only once submitted; reviewer (360) input never directly visible to the reviewed employee.",
+  },
+  {
+    id: "hrs:performance_outcomes.scores",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "baseline_score/calibrated_score/final_score/score_breakdown/acknowledgement_comment on app.performance_outcomes (HRT-283) — an employee's own computed and calibrated performance outcome for one cycle. Never visible to an assigned reviewer, only self/direct-manager/HRS:View personal data.",
+  },
+  {
+    id: "hrs:performance_calibration_adjustments.reasoning",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "adjustment_reason/previous_score/adjusted_score on app.performance_calibration_adjustments (HRT-283) — the governed calibration committee's own deliberation. Deliberately narrower than the outcome itself: HR-only, never visible to the outcome's own employee or their manager even though the outcome's resulting final_score is.",
+  },
+  {
+    id: "hrs:performance_appeals.reasoning",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "appeal_reason/decision_reason on app.performance_appeals (HRT-283) — an employee's own appeal narrative and HR's decision rationale.",
+  },
+];
