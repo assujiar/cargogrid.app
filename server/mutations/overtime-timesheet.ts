@@ -73,6 +73,7 @@ export const OVERTIME_TIMESHEET_KNOWN_MUTATION_ERROR_CODES = [
   "schedule_assignment_not_found",
   "job_order_not_found",
   "shipment_order_not_found",
+  "leave_overlap_conflict",
   "overtime_request_not_found",
   "self_approval_not_permitted",
   "invalid_decision",
