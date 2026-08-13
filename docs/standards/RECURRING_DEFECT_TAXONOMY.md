@@ -54,9 +54,9 @@ lens still re-checks it — Tier B reduces the load, it does not replace the len
 | Lens | Owns classes |
 |---|---|
 | Spec-compliance | 15, 18, 20, 23 |
-| Security / RLS / tenant isolation | 5, 6, 7, 8, 10, 11, 12, 13, 17 |
+| Security / RLS / tenant isolation | 5, 6, 7, 8, 10, 11, 12, 13, 17, 24 |
 | Correctness / concurrency | 1, 2, 3, 4, 9, 14, 19, 21 |
-| Cross-prompt integration and data dependency (new at `ADR-0021`) | 7, 8, 16, 19, 20, 22 |
+| Cross-prompt integration and data dependency (new at `ADR-0021`) | 7, 8, 16, 19, 20, 22, 24 |
 
 ## 4. The classes
 
@@ -351,6 +351,38 @@ the code that implements it, or (b) the exact sentence in this checkpoint's own 
 discloses it as deliberately out of scope, with a reason? If neither exists, this is a finding —
 not "the spec is aspirational," and not something a future checkpoint can be trusted to notice
 on its own, since the checkpoint's own document is the one place a reader would look first.
+
+**C-24 — A money or free-text-reason value reaches `app.audit_logs` unmasked via
+`capture_audit_event`'s `p_reason`/`after_value` parameters.**
+`app.redact_audit_payload()` only key-name-pattern-redacts `before_value`/`after_value` (and
+never touches `reason` at all) — so a caller that builds its own small `jsonb_build_object(...)`
+with a field named `amount`/`principal_amount`/`net_pay_total` (never matching the shared
+redactor's `secret|password|token|key|authorization|cookie|ssn|npwp|bank|account_number|
+salary|payroll` pattern), or that routes a `p_decided_reason`/`p_cancel_reason`/
+`p_resolution_note` parameter straight into `p_reason`, persists it in the clear. Distinct from
+C-07 (a persisted `jsonb` *snapshot column*, masked at the write site with an explicit
+allowlist) — this is the *audit-capture call site itself* carrying an unmasked value into a
+table gated far more broadly than the capability's own read surface: `app.query_audit_logs`
+grants any tenant's own **plain `tenant_admin`** (a routine, common administrative layer present
+in essentially every tenant), which is a materially broader bar than a compensation-shaped
+capability's own `HRS:View payroll`-class gate.
+*Evidence:* HRT-280 (Prompt 280) — `app.leave_request_audit_projection` built specifically to
+close this shape for leave. HRT-281 (Prompt 281) Tier C — recurred: `to_jsonb(v_summary)` (2
+sites) plus 8 further `capture_audit_event` call sites routed unmasked `decided_reason`/
+`cancel_reason`/`last_reopen_reason` into the audit trail; fixed with a new masked
+`app.timesheet_period_summary_audit_projection`. HRT-282 (Prompt 282) Tier C **CRITICAL** —
+recurred a third time, one checkpoint later on the same branch, and worse: live-reproduced a
+bare tenant_admin (zero `HRS` role, correctly denied on every raw table and read RPC) reading a
+real reimbursement `amount`+`employee_id`, a real loan `principal_amount`+`employee_id`, and
+real free-text decision/finalize/cancel reason text straight out of `app.query_audit_logs` —
+across 13 call sites in 12 functions.
+**Check:** for every `capture_audit_event(...)` call in the diff, is `p_reason` ever a raw
+`p_*_reason`/`p_*_note` parameter, and does the `after_value` `jsonb_build_object(...)` ever
+name a money-shaped or otherwise sensitive key? If either is true, either mask it explicitly (an
+allowlist projection, never `to_jsonb(whole_row)`) or pass `null` — and confirm who can actually
+read `app.query_audit_logs` for this tenant (usually broader than the capability's own read
+gate, since it is `is_support_grant_authority` = Supreme Admin OR any active `tenant_admin`, not
+the capability's own permission).
 
 ## 5. Two process lessons that are not code classes
 

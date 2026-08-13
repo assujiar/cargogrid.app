@@ -16,6 +16,7 @@ import {
   parsePayrollRunRow,
   parsePayrollExceptionRow,
   parsePayrollFinanceHandoffBatchRow,
+  parsePayrollCalculationCancellationRequestRow,
   type PayrollPeriodRow,
   type PayrollComponentRow,
   type PayrollComponentVersionRow,
@@ -25,6 +26,7 @@ import {
   type PayrollRunRow,
   type PayrollExceptionRow,
   type PayrollFinanceHandoffBatchRow,
+  type PayrollCalculationCancellationRequestRow,
 } from "../contracts/payroll/payroll.ts";
 
 export type PayrollMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -48,6 +50,11 @@ export const PAYROLL_KNOWN_MUTATION_ERROR_CODES = [
   "approval_definition_not_configured", "approval_step_not_found", "not_a_payroll_run_approval",
   "approval_invalid_decision", "approval_self_approval_denied", "approval_request_not_pending",
   "payroll_finance_handoff_batch_not_found", "payroll_run_not_finalized",
+  // HRT-282 Tier C batch review fix (correctness lens Findings 1, 2, 4, 5):
+  // clean, classifiable error codes for defects that previously leaked a raw,
+  // undiscriminated Postgres error (23505/23503) to the caller.
+  "payroll_period_code_conflict", "payroll_component_code_conflict", "payroll_component_version_conflict",
+  "payroll_run_adjust_period_mismatch", "payroll_run_not_calculating", "payroll_calculation_job_not_in_progress",
 ] as const;
 export type PayrollKnownMutationErrorCode = (typeof PAYROLL_KNOWN_MUTATION_ERROR_CODES)[number];
 
@@ -348,6 +355,22 @@ export async function cancelPayrollRun(
     p_actor_auth_user_id: input.actorAuthUserId, p_actor_label: input.actorLabel,
   });
   return parsePayrollRunRow(unwrap(data, error) as Record<string, unknown>);
+}
+
+// HRT-282 Tier C batch review fix (correctness lens Finding 4): the
+// correctly HRS:Edit-scoped caller that makes app.calculate_payroll_run's
+// own mid-loop cancellation check genuinely reachable -- was previously
+// dead code (nothing anywhere could ever set a payroll_calculation job to
+// 'cancelling'). Real, tested wrapper; no UI form yet -- disclosed as
+// ISS-2026-082, matching this checkpoint's own established "wrapper with no
+// UI caller" shape (archive_payroll_component_version and siblings).
+export async function requestPayrollRunCalculationCancellation(
+  client: PayrollMutationRpcClient, input: { runId: string; actorAuthUserId: string; actorLabel: string },
+): Promise<PayrollCalculationCancellationRequestRow> {
+  const { data, error } = await client.rpc("request_payroll_run_calculation_cancellation", {
+    p_run_id: input.runId, p_actor_auth_user_id: input.actorAuthUserId, p_actor_label: input.actorLabel,
+  });
+  return parsePayrollCalculationCancellationRequestRow(unwrap(data, error) as Record<string, unknown>);
 }
 
 // --- Finance handoff ---

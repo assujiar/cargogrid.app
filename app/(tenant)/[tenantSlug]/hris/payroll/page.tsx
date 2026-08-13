@@ -17,6 +17,7 @@ import { PayrollAdminPanel } from "./payroll-admin-panel.tsx";
 import {
   createPayrollPeriodAction,
   freezePayrollPeriodInputsAction,
+  reopenPayrollPeriodInputsAction,
   createPayrollComponentAction,
   assignPayrollComponentAction,
   decidePayrollReimbursementAction,
@@ -110,6 +111,7 @@ export default async function PayrollAdminPage({ params }: { params: Promise<{ t
       myStepIdByApprovalRequestId={Object.fromEntries(myStepIdByApprovalRequestId)}
       createPayrollPeriodAction={createPayrollPeriodAction.bind(null, tenantSlug)}
       freezePayrollPeriodInputsAction={(periodId: string, expectedVersion: number) => freezePayrollPeriodInputsAction.bind(null, tenantSlug, periodId, expectedVersion)}
+      reopenPayrollPeriodInputsAction={(periodId: string, expectedVersion: number) => reopenPayrollPeriodInputsAction.bind(null, tenantSlug, periodId, expectedVersion)}
       createPayrollComponentAction={createPayrollComponentAction.bind(null, tenantSlug)}
       assignPayrollComponentAction={assignPayrollComponentAction.bind(null, tenantSlug)}
       decidePayrollReimbursementAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") =>

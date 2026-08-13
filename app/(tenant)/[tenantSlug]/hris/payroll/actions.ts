@@ -13,6 +13,7 @@ import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-h
 import {
   createPayrollPeriod,
   freezePayrollPeriodInputs,
+  reopenPayrollPeriodInputs,
   createPayrollComponent,
   createPayrollComponentVersion,
   approvePayrollComponentVersion,
@@ -76,6 +77,33 @@ export async function freezePayrollPeriodInputsAction(
     await freezePayrollPeriodInputs(supabase, { periodId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof PayrollMutationError) return { error: `Could not freeze this period's inputs: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(path(tenantSlug));
+  return OK;
+}
+
+// HRT-282 Tier C batch review fix: this is, by the migration's own comment,
+// the ONLY path back from input_frozen to open -- without a UI caller an HR
+// admin who freezes a period and then finds a data error had no in-app way
+// to correct it (spec-compliance lens Finding 1). Also now the correctly
+// governed way to unwind a period after freeze's own Tier C-fixed
+// advanced-run guard blocks a re-freeze.
+export async function reopenPayrollPeriodInputsAction(
+  tenantSlug: string, periodId: string, expectedVersion: number, _prevState: PayrollAdminActionState, formData: FormData,
+): Promise<PayrollAdminActionState> {
+  const access = await resolveHrisAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to reopen a period's frozen inputs." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await reopenPayrollPeriodInputs(supabase, { periodId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof PayrollMutationError) return { error: `Could not reopen this period's inputs: ${error.message}` };
     throw error;
   }
 

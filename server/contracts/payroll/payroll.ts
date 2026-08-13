@@ -8,9 +8,16 @@
  * server/queries/payroll.ts, RPC-calling mutation wrappers with an
  * enumerated error-code type in server/mutations/payroll.ts.
  *
- * Every money field is a decimal string on the wire (Postgres numeric ->
- * JS), never coerced to a JS `number` -- this repository's own established
- * "exact decimals, never binary float" discipline (Prompt 282 section 24).
+ * Every money field is ALWAYS a decimal string once parsed by this contract
+ * (Postgres numeric -> JS) -- this repository's own established "exact
+ * decimals, never binary float" discipline (Prompt 282 section 24). The
+ * shared `money` schema below is deliberately defensive about its INPUT --
+ * it accepts either a string or a number on the wire and unconditionally
+ * `String()`-normalizes it on output -- so a caller can never observe a raw
+ * JS `number` from a parsed payroll row, even if some future RPC response
+ * shape were to emit one (HRT-282 Tier C batch review, corrected wording:
+ * the earlier phrasing read as an input-side guarantee, which this schema
+ * does not enforce -- it is an output-side one).
  */
 
 import { z } from "zod";
@@ -477,6 +484,28 @@ export function parsePayrollFinanceHandoffReconciliation(row: Record<string, unk
   });
 }
 
+// HRT-282 Tier C batch review fix: the result row of
+// app.request_payroll_run_calculation_cancellation (returns app.jobs) --
+// the correctly-scoped caller that makes app.calculate_payroll_run's own
+// mid-loop cancellation check genuinely reachable (correctness lens
+// Finding 4). Deliberately minimal -- only the fields a caller needs to
+// confirm the cancellation request was accepted, not a full app.jobs
+// projection.
+export const PayrollCalculationCancellationRequestRowSchema = z.object({
+  jobId: z.string().uuid(),
+  status: z.string(),
+  cancelReason: z.string().nullable(),
+});
+export type PayrollCalculationCancellationRequestRow = z.infer<typeof PayrollCalculationCancellationRequestRowSchema>;
+
+export function parsePayrollCalculationCancellationRequestRow(row: Record<string, unknown>): PayrollCalculationCancellationRequestRow {
+  return PayrollCalculationCancellationRequestRowSchema.parse({
+    jobId: row.job_id,
+    status: row.status,
+    cancelReason: row.cancel_reason ?? null,
+  });
+}
+
 // --- Mutation inputs ---
 
 export const CreatePayrollPeriodInputSchema = z.object({
@@ -628,6 +657,9 @@ export type FinalizePayrollRunInput = z.infer<typeof FinalizePayrollRunInputSche
 
 export const CancelPayrollRunInputSchema = z.object({ runId: z.string().uuid(), expectedVersion: z.number().int().positive(), reason: z.string().min(1) });
 export type CancelPayrollRunInput = z.infer<typeof CancelPayrollRunInputSchema>;
+
+export const RequestPayrollRunCalculationCancellationInputSchema = z.object({ runId: z.string().uuid() });
+export type RequestPayrollRunCalculationCancellationInput = z.infer<typeof RequestPayrollRunCalculationCancellationInputSchema>;
 
 export const PrepareFinancePayrollHandoffInputSchema = z.object({ tenantId: z.string().uuid(), runId: z.string().uuid() });
 export type PrepareFinancePayrollHandoffInput = z.infer<typeof PrepareFinancePayrollHandoffInputSchema>;

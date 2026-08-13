@@ -68,7 +68,27 @@ function CreatePeriodForm({ createPayrollPeriodAction }: { createPayrollPeriodAc
   );
 }
 
-function PeriodRowItem({ row, freezePayrollPeriodInputsAction }: { row: PayrollPeriodRow; freezePayrollPeriodInputsAction: (periodId: string, expectedVersion: number) => BoundAction }) {
+function ReopenPeriodInputsForm({ row, reopenPayrollPeriodInputsAction }: { row: PayrollPeriodRow; reopenPayrollPeriodInputsAction: (periodId: string, expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(reopenPayrollPeriodInputsAction(row.id, row.recordVersion), INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <label className="text-xs text-neutral-500">
+        Reason (required)
+        <input name="reason" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. correcting a frozen-input data error" />
+      </label>
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Reopening…">Reopen inputs</Button>
+      <ErrorLine error={state.error} />
+    </form>
+  );
+}
+
+function PeriodRowItem({
+  row, freezePayrollPeriodInputsAction, reopenPayrollPeriodInputsAction,
+}: {
+  row: PayrollPeriodRow;
+  freezePayrollPeriodInputsAction: (periodId: string, expectedVersion: number) => BoundAction;
+  reopenPayrollPeriodInputsAction: (periodId: string, expectedVersion: number) => BoundAction;
+}) {
   const [state, formAction, pending] = useActionState(freezePayrollPeriodInputsAction(row.id, row.recordVersion), INITIAL_STATE);
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
@@ -83,6 +103,12 @@ function PeriodRowItem({ row, freezePayrollPeriodInputsAction }: { row: PayrollP
         </form>
       ) : null}
       <ErrorLine error={state.error} />
+      {/* HRT-282 Tier C batch review fix: the only path back from
+         input_frozen to open -- without this, an HR admin who freezes a
+         period and finds a data error had no in-app way to correct it. */}
+      {row.status === "input_frozen" ? (
+        <ReopenPeriodInputsForm row={row} reopenPayrollPeriodInputsAction={reopenPayrollPeriodInputsAction} />
+      ) : null}
     </li>
   );
 }
@@ -356,7 +382,7 @@ function HandoffRowItem({ row, acknowledgeFinancePayrollHandoffAction }: { row: 
 
 export function PayrollAdminPanel({
   periods, components, runs, openExceptions, pendingReimbursements, pendingHandoffs, finalizedRunTotals, myStepIdByApprovalRequestId,
-  createPayrollPeriodAction, freezePayrollPeriodInputsAction, createPayrollComponentAction, assignPayrollComponentAction,
+  createPayrollPeriodAction, freezePayrollPeriodInputsAction, reopenPayrollPeriodInputsAction, createPayrollComponentAction, assignPayrollComponentAction,
   decidePayrollReimbursementAction, issuePayrollLoanAction, createPayrollRunAction, calculatePayrollRunAction,
   resolvePayrollExceptionAction, waivePayrollExceptionAction, submitPayrollRunForFinalizationAction, finalizePayrollRunAction,
   cancelPayrollRunAction, generateFinancePayrollHandoffAction, acknowledgeFinancePayrollHandoffAction,
@@ -371,6 +397,7 @@ export function PayrollAdminPanel({
   myStepIdByApprovalRequestId: Record<string, string>;
   createPayrollPeriodAction: BoundAction;
   freezePayrollPeriodInputsAction: (periodId: string, expectedVersion: number) => BoundAction;
+  reopenPayrollPeriodInputsAction: (periodId: string, expectedVersion: number) => BoundAction;
   createPayrollComponentAction: BoundAction;
   assignPayrollComponentAction: BoundAction;
   decidePayrollReimbursementAction: (requestId: string, expectedVersion: number, decision: "approve" | "reject") => BoundAction;
@@ -401,7 +428,16 @@ export function PayrollAdminPanel({
         {periods.length === 0 ? (
           <EmptyState title="No payroll periods yet" description="Create the first period above." />
         ) : (
-          <ul className="flex flex-col gap-2">{periods.map((p) => <PeriodRowItem key={p.id} row={p} freezePayrollPeriodInputsAction={freezePayrollPeriodInputsAction} />)}</ul>
+          <ul className="flex flex-col gap-2">
+            {periods.map((p) => (
+              <PeriodRowItem
+                key={p.id}
+                row={p}
+                freezePayrollPeriodInputsAction={freezePayrollPeriodInputsAction}
+                reopenPayrollPeriodInputsAction={reopenPayrollPeriodInputsAction}
+              />
+            ))}
+          </ul>
         )}
       </section>
 
