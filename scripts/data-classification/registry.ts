@@ -369,3 +369,68 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
       "reason on app.leave_balance_ledger (HRT-280) — an HR adjustment/opening-balance reason that can incidentally disclose sensitive personal circumstances. Column-restricted from authenticated (service_role only); masked identically to app.leave_requests.reason.",
   },
 ];
+
+/**
+ * HRT-282 (Payroll Foundation, Benefit and Reimbursement, CG-S12-HRT-010) — the
+ * first real adopter of the 'payroll' category (reserved for this checkpoint since
+ * HRT-274, see the HRS_REGISTRY header comment above). Every row here is gated on
+ * the PROTECTED HRS:View payroll permission specifically, self-or-HRS:View-payroll
+ * (never plain HRS:View, never a manager-of-employee predicate — decision 5 of
+ * supabase/migrations/20260731000000_create_hris_payroll_foundation.sql's own
+ * header, the deliberate divergence from every other HRT capability's "manager
+ * sees effective team" shape).
+ */
+export const PAYROLL_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "hrs:payroll_component_versions.amounts",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "fixed_amount/percentage_rate on app.payroll_component_versions (HRT-282) — tenant compensation POLICY figures (e.g. the standard base-salary rate or allowance amount), gated identically to per-employee amounts even though not employee-specific, since a policy figure alone can reveal real compensation bands.",
+  },
+  {
+    id: "hrs:payroll_employee_component_assignments.amounts",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "override_amount/override_percentage/manual_amount on app.payroll_employee_component_assignments (HRT-282) — an individual employee's own compensation figure. RLS-gated via app.can_view_hris_payroll_row (self OR HRS:View payroll specifically).",
+  },
+  {
+    id: "hrs:payroll_run_employee_results.totals",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "gross_earnings/total_deductions/total_tax/total_benefit_employer_cost/total_reimbursement/total_loan_repayment/net_pay on app.payroll_run_employee_results and the identically-shaped app.payroll_calculation_lines/app.payroll_payslips (HRT-282) — an individual employee's own computed pay figures for one run. Never visible via manager-of-employee alone.",
+  },
+  {
+    id: "hrs:payroll_reimbursement_requests.amount",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description: "amount/description on app.payroll_reimbursement_requests (HRT-282) — an employee's own expense reimbursement claim.",
+  },
+  {
+    id: "hrs:payroll_loans.amounts",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description: "principal_amount/installment_amount on app.payroll_loans/app.payroll_loan_installments (HRT-282) — an employee's own loan/advance obligation.",
+  },
+  {
+    id: "hrs:payroll_finance_handoff.payment_instructions",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "net_pay_amount/bank_reference_masked on app.payroll_finance_handoff_payment_instructions (HRT-282 migration 2) — employee-level payment data prepared for Finance. Readable by either side of the handoff boundary (HRS:View payroll or FIN:View), never by plain tenant membership. app.payroll_finance_handoff_gl_lines (the OTHER handoff table) is deliberately AGGREGATE ONLY with zero employee_id column, structurally excluded from this per-employee classification.",
+  },
+];
