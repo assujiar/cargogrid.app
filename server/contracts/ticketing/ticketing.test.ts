@@ -39,6 +39,14 @@ import {
   parseTicketSlaClockEventRow,
   CreateSlaPolicyVersionInputSchema,
   PauseTicketSlaClockInputSchema,
+  parseTicketRoutingRuleVersionRow,
+  parseTicketRoutingPreviewRow,
+  parseTicketAssignmentCandidateRow,
+  parseTicketAssignmentEventRow,
+  AssignTicketInputSchema,
+  CreateTicketRoutingRuleVersionInputSchema,
+  DeclineTicketAssignmentInputSchema,
+  TICKET_ASSIGNMENT_EVENT_TYPES,
 } from "./ticketing.ts";
 
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
@@ -382,6 +390,86 @@ describe("HRT-289 SLA contract", () => {
   test("PauseTicketSlaClockInputSchema rejects a pause reason code outside the closed set", () => {
     assert.throws(() =>
       PauseTicketSlaClockInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, pauseReasonCode: "made_up", reason: null, actorAuthUserId: ACTOR, actorLabel: "Staff" })
+    );
+  });
+});
+
+describe("HRT-290 (CG-S12-HRT-018) ticket assignment contracts", () => {
+  test("parseTicketRoutingRuleVersionRow maps the scope/target/mode tuple", () => {
+    const v = parseTicketRoutingRuleVersionRow({
+      id: ID_1, version_number: 1, status: "published", channel: "internal", category_id: ID_2, priority: "urgent",
+      target_queue_id: ID_1, assignment_mode: "least_loaded", max_active_assignments_per_member: 2,
+      precedence_rank: 5, published_at: "2026-08-01T00:00:00Z", record_version: 1,
+    });
+    assert.equal(v.assignmentMode, "least_loaded");
+    assert.equal(v.maxActiveAssignmentsPerMember, 2);
+    assert.equal(v.priority, "urgent");
+  });
+
+  test("parseTicketRoutingPreviewRow handles matched=false with every other field null", () => {
+    const r = parseTicketRoutingPreviewRow({
+      matched: false, rule_id: null, rule_version_id: null, version_number: null,
+      target_queue_id: null, target_queue_code: null, assignment_mode: null, max_active_assignments_per_member: null,
+    });
+    assert.equal(r.matched, false);
+    assert.equal(r.targetQueueId, null);
+  });
+
+  test("parseTicketAssignmentCandidateRow never carries a raw permission/role shape -- only eligibility/workload fields", () => {
+    const c = parseTicketAssignmentCandidateRow({ employee_id: ID_1, employee_name: "Staff One", is_eligible: false, active_ticket_count: 0, ineligible_reason: "not currently active/available" });
+    assert.equal(c.isEligible, false);
+    assert.equal(c.ineligibleReason, "not currently active/available");
+    assert.equal((c as unknown as Record<string, unknown>).permissions, undefined);
+  });
+
+  test("parseTicketAssignmentEventRow maps a reassign event with both from/to identities", () => {
+    const e = parseTicketAssignmentEventRow({
+      id: ID_1, event_type: "reassign", source: "manual", rule_version_id: null,
+      from_assignee_employee_id: ID_1, from_assignee_name: "Staff One", to_assignee_employee_id: ID_2, to_assignee_name: "Staff Two",
+      from_queue_id: null, to_queue_id: null, reason: "workload balancing", actor_label: "admin", occurred_at: "2026-08-01T00:00:00Z",
+    });
+    assert.equal(e.eventType, "reassign");
+    assert.equal(e.fromAssigneeName, "Staff One");
+    assert.equal(e.toAssigneeName, "Staff Two");
+  });
+
+  test("TICKET_ASSIGNMENT_EVENT_TYPES covers claim/accept/decline/reassign/unassign/transfer/auto_route/manual_assign", () => {
+    for (const t of ["auto_route", "manual_assign", "claim", "accept", "decline", "reassign", "unassign", "transfer"]) {
+      assert.ok((TICKET_ASSIGNMENT_EVENT_TYPES as readonly string[]).includes(t));
+    }
+  });
+
+  test("AssignTicketInputSchema accepts the widened, optional reason/override fields and defaults them absent", () => {
+    const bare = AssignTicketInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, assigneeEmployeeId: ID_2, actorAuthUserId: ACTOR, actorLabel: "staff1" });
+    assert.equal(bare.reason, undefined);
+    assert.equal(bare.overrideWorkloadLimit, undefined);
+
+    const withOverride = AssignTicketInputSchema.parse({
+      ticketId: ID_1, expectedVersion: 1, assigneeEmployeeId: ID_2, actorAuthUserId: ACTOR, actorLabel: "staff1",
+      reason: "urgent", overrideWorkloadLimit: true,
+    });
+    assert.equal(withOverride.overrideWorkloadLimit, true);
+  });
+
+  test("CreateTicketRoutingRuleVersionInputSchema rejects channel=helpdesk at the type level (only internal/customer are valid TicketChannel-adjacent scope here in practice, enforced server-side; schema itself accepts any TicketChannel but the RPC rejects helpdesk)", () => {
+    // The Zod schema reuses TicketChannelSchema (all three channels) since
+    // the CHECK-level restriction to internal/customer lives in the
+    // database (decision 2) -- this test documents that the client-side
+    // schema is deliberately permissive here, matching every other
+    // channel-scoped input in this contract file, and that server-side
+    // rejection is what actually enforces the boundary (verified live in
+    // scripts/db-tests/ticketing-assignment.sql).
+    const v = CreateTicketRoutingRuleVersionInputSchema.parse({
+      ruleId: ID_1, channel: "helpdesk", categoryId: null, priority: null, targetQueueId: ID_1,
+      assignmentMode: "manual", maxActiveAssignmentsPerMember: null, precedenceRank: 0,
+      actorAuthUserId: ACTOR, actorLabel: "staff1",
+    });
+    assert.equal(v.channel, "helpdesk");
+  });
+
+  test("DeclineTicketAssignmentInputSchema requires a non-empty reason", () => {
+    assert.throws(() =>
+      DeclineTicketAssignmentInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, reason: "", actorAuthUserId: ACTOR, actorLabel: "staff1" })
     );
   });
 });

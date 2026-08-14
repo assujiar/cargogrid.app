@@ -37,6 +37,13 @@ import {
   resumeTicketSlaClock,
   recalculateTicketSlaClock,
   runTicketSlaEvaluationBatch,
+  createTicketRoutingRule,
+  createTicketRoutingRuleVersion,
+  publishTicketRoutingRuleVersion,
+  claimTicket,
+  acceptTicketAssignment,
+  declineTicketAssignment,
+  autoRouteTicket,
   TicketMutationError,
   type TicketMutationRpcClient,
 } from "./ticketing.ts";
@@ -400,5 +407,96 @@ describe("HRT-289 SLA mutations", () => {
     const { client, calls } = fakeClient({ data: { evaluated_count: 3, job_id: ID_1 }, error: null });
     await runTicketSlaEvaluationBatch(client, { tenantId: TENANT_ID, asOf: null, periodLabel: "period-2026-08-14", actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
     assert.equal(calls[0]?.args.p_period_label, "period-2026-08-14");
+  });
+});
+
+describe("HRT-290 (CG-S12-HRT-018) ticket assignment mutations", () => {
+  test("createTicketRoutingRule / createTicketRoutingRuleVersion / publishTicketRoutingRuleVersion forward the full scope tuple", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await createTicketRoutingRule(client, { tenantId: TENANT_ID, code: "GEN-ROUTE", name: "General routing", actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    await createTicketRoutingRuleVersion(client, {
+      ruleId: ID_1, channel: "internal", categoryId: ID_2, priority: null, targetQueueId: ID_1,
+      assignmentMode: "least_loaded", maxActiveAssignmentsPerMember: 3, precedenceRank: 0,
+      actorAuthUserId: ACTOR_ID, actorLabel: "staff1",
+    });
+    await publishTicketRoutingRuleVersion(client, { versionId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.fn, "create_ticket_routing_rule");
+    assert.equal(calls[1]?.fn, "create_ticket_routing_rule_version");
+    assert.equal(calls[1]?.args.p_assignment_mode, "least_loaded");
+    assert.equal(calls[1]?.args.p_max_active_assignments_per_member, 3);
+    assert.equal(calls[2]?.fn, "publish_ticket_routing_rule_version");
+  });
+
+  test("claimTicket calls claim_ticket with no assignee parameter -- self-service only, never a caller-chosen target", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await claimTicket(client, { ticketId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.fn, "claim_ticket");
+    assert.deepEqual(Object.keys(calls[0]!.args).sort(), ["p_actor_auth_user_id", "p_actor_label", "p_expected_version", "p_ticket_id"]);
+  });
+
+  test("claimTicket classifies ticket_already_assigned and workload_limit_exceeded distinctly", async () => {
+    const { client: already } = fakeClient({ data: null, error: { message: "ticket_already_assigned: ticket X is already assigned to another employee" } });
+    await assert.rejects(
+      () => claimTicket(already, { ticketId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "ticket_already_assigned");
+        return true;
+      },
+    );
+
+    const { client: capped } = fakeClient({ data: null, error: { message: "workload_limit_exceeded: employee already holds 3 active tickets" } });
+    await assert.rejects(
+      () => claimTicket(capped, { ticketId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "workload_limit_exceeded");
+        return true;
+      },
+    );
+  });
+
+  test("acceptTicketAssignment / declineTicketAssignment call the right RPCs, decline forwards the mandatory reason", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await acceptTicketAssignment(client, { ticketId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    await declineTicketAssignment(client, { ticketId: ID_1, expectedVersion: 2, reason: "too busy", actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.fn, "accept_ticket_assignment");
+    assert.equal(calls[1]?.fn, "decline_ticket_assignment");
+    assert.equal(calls[1]?.args.p_reason, "too busy");
+  });
+
+  test("autoRouteTicket classifies ticket_routing_rule_not_matched distinctly from channel_not_supported", async () => {
+    const { client: noMatch } = fakeClient({ data: null, error: { message: "ticket_routing_rule_not_matched: no published routing rule matches ticket X" } });
+    await assert.rejects(
+      () => autoRouteTicket(noMatch, { ticketId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "ticket_routing_rule_not_matched");
+        return true;
+      },
+    );
+
+    const { client: helpdesk } = fakeClient({ data: null, error: { message: "channel_not_supported: ticket X is a helpdesk case" } });
+    await assert.rejects(
+      () => autoRouteTicket(helpdesk, { ticketId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "channel_not_supported");
+        return true;
+      },
+    );
+  });
+
+  test("assignTicket forwards p_reason and p_override_workload_limit, defaulting override to false when omitted", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await assignTicket(client, { ticketId: ID_1, expectedVersion: 1, assigneeEmployeeId: ID_2, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    await assignTicket(client, {
+      ticketId: ID_1, expectedVersion: 2, assigneeEmployeeId: ID_2, actorAuthUserId: ACTOR_ID, actorLabel: "staff1",
+      reason: "urgent override", overrideWorkloadLimit: true,
+    });
+    assert.equal(calls[0]?.args.p_override_workload_limit, false);
+    assert.equal(calls[0]?.args.p_reason, null);
+    assert.equal(calls[1]?.args.p_override_workload_limit, true);
+    assert.equal(calls[1]?.args.p_reason, "urgent override");
   });
 });

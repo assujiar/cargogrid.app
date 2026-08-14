@@ -39,6 +39,12 @@ import {
   parseTicketSlaClockRow,
   parseTicketSlaStatusForRequesterRow,
   parseTicketSlaClockEventRow,
+  parseTicketRoutingRuleRow,
+  parseTicketRoutingRuleVersionRow,
+  parseTicketRoutingPreviewRow,
+  parseTicketAssignmentCandidateRow,
+  parseTicketQueueWorkloadRow,
+  parseTicketAssignmentEventRow,
   type TicketQueueRow,
   type TicketCategoryRow,
   type TicketQueueMemberRow,
@@ -71,6 +77,13 @@ import {
   type TicketSlaClockRow,
   type TicketSlaStatusForRequesterRow,
   type TicketSlaClockEventRow,
+  type TicketRoutingRuleRow,
+  type TicketRoutingRuleVersionRow,
+  type TicketRoutingPreviewRow,
+  type TicketAssignmentCandidateRow,
+  type TicketQueueWorkloadRow,
+  type TicketAssignmentEventRow,
+  type TicketChannel,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -407,4 +420,64 @@ export async function getPlatformHelpdeskTicket(client: TicketQueryClient, ticke
   if (error) throw new TicketQueryError(error.message);
   const row = rows(data)[0];
   return row ? parsePlatformHelpdeskTicketDetail(row) : null;
+}
+
+// ===========================================================================
+// HRT-290 (CG-S12-HRT-018): Ticket Assignment read queries. Mirrors
+// supabase/migrations/20260731140000_create_ticket_assignment.sql.
+// ===========================================================================
+
+export async function listTicketRoutingRules(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<TicketRoutingRuleRow[]> {
+  const { data, error } = await client.rpc("list_ticket_routing_rules", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketRoutingRuleRow);
+}
+
+export async function listTicketRoutingRuleVersions(client: TicketQueryClient, ruleId: string, actorAuthUserId: string): Promise<TicketRoutingRuleVersionRow[]> {
+  const { data, error } = await client.rpc("list_ticket_routing_rule_versions", { p_rule_id: ruleId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketRoutingRuleVersionRow);
+}
+
+export async function previewTicketRouting(
+  client: TicketQueryClient,
+  tenantId: string,
+  channel: TicketChannel,
+  categoryId: string | null,
+  priority: string | null,
+  actorAuthUserId: string,
+): Promise<TicketRoutingPreviewRow | null> {
+  const { data, error } = await client.rpc("preview_ticket_routing", {
+    p_tenant_id: tenantId,
+    p_channel: channel,
+    p_category_id: categoryId,
+    p_priority: priority,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketRoutingPreviewRow(row) : null;
+}
+
+// Powers the assignment drawer's own "explainable eligibility" (section 15)
+// -- every active queue member of this ticket's own queue, never a raw
+// employee directory.
+export async function listTicketAssignmentCandidates(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketAssignmentCandidateRow[]> {
+  const { data, error } = await client.rpc("list_ticket_assignment_candidates", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketAssignmentCandidateRow);
+}
+
+// Read-only workload aggregation (decision 1 -- never a second source of
+// truth for who is assigned).
+export async function getTicketQueueWorkload(client: TicketQueryClient, queueId: string, actorAuthUserId: string): Promise<TicketQueueWorkloadRow[]> {
+  const { data, error } = await client.rpc("get_ticket_queue_workload", { p_queue_id: queueId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketQueueWorkloadRow);
+}
+
+export async function listTicketAssignmentEvents(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketAssignmentEventRow[]> {
+  const { data, error } = await client.rpc("list_ticket_assignment_events", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketAssignmentEventRow);
 }

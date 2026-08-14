@@ -85,6 +85,20 @@ import {
   type ResumeTicketSlaClockInput,
   type RecalculateTicketSlaClockInput,
   type RunTicketSlaEvaluationBatchInput,
+  CreateTicketRoutingRuleInputSchema,
+  CreateTicketRoutingRuleVersionInputSchema,
+  PublishTicketRoutingRuleVersionInputSchema,
+  ClaimTicketInputSchema,
+  AcceptTicketAssignmentInputSchema,
+  DeclineTicketAssignmentInputSchema,
+  AutoRouteTicketInputSchema,
+  type CreateTicketRoutingRuleInput,
+  type CreateTicketRoutingRuleVersionInput,
+  type PublishTicketRoutingRuleVersionInput,
+  type ClaimTicketInput,
+  type AcceptTicketAssignmentInput,
+  type DeclineTicketAssignmentInput,
+  type AutoRouteTicketInput,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -142,6 +156,17 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "timezone_required",
   "invalid_pause_reason",
   "ticket_sla_clock_not_found",
+  // HRT-290 (CG-S12-HRT-018): Ticket Assignment error codes.
+  "ticket_routing_rule_not_found",
+  "ticket_routing_rule_version_not_found",
+  "ticket_routing_rule_ambiguous_match",
+  "ticket_routing_rule_not_matched",
+  "invalid_assignment_mode",
+  "invalid_workload_limit",
+  "invalid_state",
+  "ticket_already_assigned",
+  "employee_not_eligible",
+  "workload_limit_exceeded",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -300,6 +325,8 @@ export async function assignTicket(client: TicketMutationRpcClient, input: Assig
     p_assignee_employee_id: v.assigneeEmployeeId,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
+    p_reason: v.reason ?? null,
+    p_override_workload_limit: v.overrideWorkloadLimit ?? false,
   });
 }
 
@@ -635,6 +662,89 @@ export async function runTicketSlaEvaluationBatch(client: TicketMutationRpcClien
     p_tenant_id: v.tenantId,
     p_as_of: v.asOf,
     p_period_label: v.periodLabel,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+// ===========================================================================
+// HRT-290 (CG-S12-HRT-018): Ticket Assignment mutation wrappers. Mirrors
+// supabase/migrations/20260731140000_create_ticket_assignment.sql.
+// ===========================================================================
+
+export async function createTicketRoutingRule(client: TicketMutationRpcClient, input: CreateTicketRoutingRuleInput) {
+  const v = CreateTicketRoutingRuleInputSchema.parse(input);
+  return callRpc(client, "create_ticket_routing_rule", {
+    p_tenant_id: v.tenantId,
+    p_code: v.code,
+    p_name: v.name,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function createTicketRoutingRuleVersion(client: TicketMutationRpcClient, input: CreateTicketRoutingRuleVersionInput) {
+  const v = CreateTicketRoutingRuleVersionInputSchema.parse(input);
+  return callRpc(client, "create_ticket_routing_rule_version", {
+    p_rule_id: v.ruleId,
+    p_channel: v.channel,
+    p_category_id: v.categoryId,
+    p_priority: v.priority,
+    p_target_queue_id: v.targetQueueId,
+    p_assignment_mode: v.assignmentMode,
+    p_max_active_assignments_per_member: v.maxActiveAssignmentsPerMember,
+    p_precedence_rank: v.precedenceRank,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function publishTicketRoutingRuleVersion(client: TicketMutationRpcClient, input: PublishTicketRoutingRuleVersionInput) {
+  const v = PublishTicketRoutingRuleVersionInputSchema.parse(input);
+  return callRpc(client, "publish_ticket_routing_rule_version", {
+    p_version_id: v.versionId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function claimTicket(client: TicketMutationRpcClient, input: ClaimTicketInput) {
+  const v = ClaimTicketInputSchema.parse(input);
+  return callRpc(client, "claim_ticket", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function acceptTicketAssignment(client: TicketMutationRpcClient, input: AcceptTicketAssignmentInput) {
+  const v = AcceptTicketAssignmentInputSchema.parse(input);
+  return callRpc(client, "accept_ticket_assignment", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function declineTicketAssignment(client: TicketMutationRpcClient, input: DeclineTicketAssignmentInput) {
+  const v = DeclineTicketAssignmentInputSchema.parse(input);
+  return callRpc(client, "decline_ticket_assignment", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function autoRouteTicket(client: TicketMutationRpcClient, input: AutoRouteTicketInput) {
+  const v = AutoRouteTicketInputSchema.parse(input);
+  return callRpc(client, "auto_route_ticket", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
   });

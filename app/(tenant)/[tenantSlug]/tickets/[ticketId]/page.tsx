@@ -11,6 +11,8 @@ import {
   listTicketQueueMembers,
   getTicketSlaClock,
   getTicketSlaStatusForRequester,
+  listTicketAssignmentCandidates,
+  listTicketAssignmentEvents,
   TicketQueryError,
 } from "../../../../../server/queries/ticketing.ts";
 import { listTicketKnowledgeArticleLinks, listTicketKnowledgeArticleLinksForRequester, KbQueryError } from "../../../../../server/queries/knowledge-base.ts";
@@ -29,6 +31,10 @@ import {
   startTicketSlaClockAction,
   pauseTicketSlaClockAction,
   resumeTicketSlaClockAction,
+  claimTicketAction,
+  acceptTicketAssignmentAction,
+  declineTicketAssignmentAction,
+  autoRouteTicketAction,
 } from "../actions.ts";
 
 /**
@@ -64,6 +70,8 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
   let slaStatusForRequester: Awaited<ReturnType<typeof getTicketSlaStatusForRequester>> = null;
   let kbLinks: Awaited<ReturnType<typeof listTicketKnowledgeArticleLinks>> = [];
   let kbLinksForRequester: Awaited<ReturnType<typeof listTicketKnowledgeArticleLinksForRequester>> = [];
+  let assignmentCandidates: Awaited<ReturnType<typeof listTicketAssignmentCandidates>> = [];
+  let assignmentEvents: Awaited<ReturnType<typeof listTicketAssignmentEvents>> = [];
 
   try {
     detail = await getTicket(supabase, ticketId, access.authUserId);
@@ -84,6 +92,17 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
         // projection below, and never shown to a requester.
         slaClock = await getTicketSlaClock(supabase, ticketId, access.authUserId);
         kbLinks = await listTicketKnowledgeArticleLinks(supabase, ticketId, access.authUserId);
+        // HRT-290 (CG-S12-HRT-018): bounded to internal/customer -- both new
+        // RPCs reject a helpdesk-channel ticket (channel_not_supported /
+        // ticket_not_found), so this is skipped entirely for one, matching
+        // the migration's own decision 2 rather than rendering a control
+        // that would only ever error.
+        if (detail.channel !== "helpdesk") {
+          [assignmentCandidates, assignmentEvents] = await Promise.all([
+            listTicketAssignmentCandidates(supabase, ticketId, access.authUserId),
+            listTicketAssignmentEvents(supabase, ticketId, access.authUserId),
+          ]);
+        }
       } else {
         // HRT-289 decision 10, security impact section 16: the requester sees
         // ONLY target/status via app.get_ticket_sla_status_for_requester --
@@ -121,6 +140,8 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       slaStatusForRequester={slaStatusForRequester}
       kbLinks={kbLinks}
       kbLinksForRequester={kbLinksForRequester}
+      assignmentCandidates={assignmentCandidates}
+      assignmentEvents={assignmentEvents}
       replyAction={replyToTicketAction.bind(null, tenantSlug, ticketId)}
       redactAction={(messageId: string, expectedVersion: number) => redactTicketMessageAction.bind(null, tenantSlug, ticketId, messageId, expectedVersion)}
       addWatcherAction={addTicketWatcherAction.bind(null, tenantSlug, ticketId)}
@@ -132,6 +153,10 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       startSlaClockAction={startTicketSlaClockAction.bind(null, tenantSlug, ticketId)}
       pauseSlaClockAction={(expectedVersion: number) => pauseTicketSlaClockAction.bind(null, tenantSlug, ticketId, expectedVersion)}
       resumeSlaClockAction={(expectedVersion: number) => resumeTicketSlaClockAction.bind(null, tenantSlug, ticketId, expectedVersion)}
+      claimAction={claimTicketAction.bind(null, tenantSlug, ticketId, recordVersion)}
+      acceptAssignmentAction={acceptTicketAssignmentAction.bind(null, tenantSlug, ticketId, recordVersion)}
+      declineAssignmentAction={declineTicketAssignmentAction.bind(null, tenantSlug, ticketId, recordVersion)}
+      autoRouteAction={autoRouteTicketAction.bind(null, tenantSlug, ticketId, recordVersion)}
       linkArticleAction={linkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId)}
       unlinkArticleAction={(linkId: string, expectedVersion: number) => unlinkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId, linkId, expectedVersion)}
     />

@@ -18,6 +18,8 @@ import type {
   TicketSlaClockRow,
   TicketSlaStatusForRequesterRow,
   SlaPhaseStatus,
+  TicketAssignmentCandidateRow,
+  TicketAssignmentEventRow,
 } from "../../../../../server/contracts/ticketing/ticketing.ts";
 import { TICKET_PRIORITIES, SLA_PAUSE_REASON_CODES } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
@@ -214,7 +216,7 @@ function AssignForm({ queueMembers, currentAssigneeId, assignAction }: { queueMe
   const [state, formAction, pending] = useActionState(assignAction, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-      <h3 className="text-sm font-semibold text-neutral-900">Assignment (TKT:Assign)</h3>
+      <h3 className="text-sm font-semibold text-neutral-900">Manual assignment (TKT:Assign)</h3>
       <select name="assigneeEmployeeId" defaultValue={currentAssigneeId ?? ""} className="rounded border border-neutral-300 p-1.5 text-sm">
         <option value="">Unassigned</option>
         {queueMembers.map((m) => (
@@ -223,6 +225,11 @@ function AssignForm({ queueMembers, currentAssigneeId, assignAction }: { queueMe
           </option>
         ))}
       </select>
+      <input name="reason" placeholder="Reason (optional)" className="rounded border border-neutral-300 p-1.5 text-sm" />
+      <label className="flex items-center gap-2 text-xs text-neutral-600">
+        <input type="checkbox" name="overrideWorkloadLimit" />
+        Override this employee&apos;s workload cap, if one is configured
+      </label>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Assigning…">
           Update assignment
@@ -234,6 +241,137 @@ function AssignForm({ queueMembers, currentAssigneeId, assignAction }: { queueMe
         </p>
       ) : null}
     </form>
+  );
+}
+
+// HRT-290 (CG-S12-HRT-018, section 15 "assignment drawer with explainable
+// eligibility"): claim (self-service, any active queue member), accept/
+// decline (assignee-only -- the RPC itself is the real gate; a non-assignee
+// submitting either sees a clear insufficient_authority error rather than a
+// hidden control, mirroring this file's own established "always rendered,
+// RPC-enforced" pattern for the SLA/catalog admin forms below), auto-route
+// (apply the published routing rule), and the live candidate/eligibility
+// list. Rendered only for internal/customer tickets (queues/actions.ts binds
+// nothing for a helpdesk ticket, and app.list_ticket_assignment_candidates
+// itself refuses one -- decision 2, no eligibility model exists for
+// helpdesk).
+function AssignmentDrawer({
+  currentAssigneeName,
+  candidates,
+  assignmentEvents,
+  claimAction,
+  acceptAssignmentAction,
+  declineAssignmentAction,
+  autoRouteAction,
+}: {
+  currentAssigneeName: string | null;
+  candidates: readonly TicketAssignmentCandidateRow[];
+  assignmentEvents: readonly TicketAssignmentEventRow[];
+  claimAction: BoundAction;
+  acceptAssignmentAction: BoundAction;
+  declineAssignmentAction: BoundAction;
+  autoRouteAction: BoundAction;
+}) {
+  const [claimState, claimFormAction, claimPending] = useActionState(claimAction, INITIAL_STATE);
+  const [acceptState, acceptFormAction, acceptPending] = useActionState(acceptAssignmentAction, INITIAL_STATE);
+  const [declineState, declineFormAction, declinePending] = useActionState(declineAssignmentAction, INITIAL_STATE);
+  const [routeState, routeFormAction, routePending] = useActionState(autoRouteAction, INITIAL_STATE);
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+      <h3 className="text-sm font-semibold text-neutral-900">Claim / accept / decline / auto-route</h3>
+      <div className="flex flex-wrap gap-2">
+        <form action={claimFormAction}>
+          <Button type="submit" variant="secondary" loading={claimPending} loadingLabel="Claiming…">
+            Claim for myself
+          </Button>
+        </form>
+        <form action={acceptFormAction}>
+          <Button type="submit" variant="secondary" loading={acceptPending} loadingLabel="Confirming…" disabled={!currentAssigneeName}>
+            Accept assignment
+          </Button>
+        </form>
+        <form action={routeFormAction}>
+          <Button type="submit" variant="secondary" loading={routePending} loadingLabel="Auto-routing…">
+            Auto-route (apply routing rule)
+          </Button>
+        </form>
+      </div>
+      {claimState.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {claimState.error}
+        </p>
+      ) : null}
+      {acceptState.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {acceptState.error}
+        </p>
+      ) : null}
+      {routeState.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {routeState.error}
+        </p>
+      ) : null}
+
+      <form action={declineFormAction} className="flex flex-wrap items-center gap-2">
+        <input name="reason" required placeholder="Decline reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-sm" />
+        <Button type="submit" variant="secondary" loading={declinePending} loadingLabel="Declining…" disabled={!currentAssigneeName}>
+          Decline (return to backlog)
+        </Button>
+      </form>
+      {declineState.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {declineState.error}
+        </p>
+      ) : null}
+
+      <div>
+        <h4 className="text-xs font-semibold text-neutral-700">Eligible candidates (this queue)</h4>
+        {candidates.length === 0 ? (
+          <p className="text-xs text-neutral-500">No active queue members.</p>
+        ) : (
+          <table className="mt-1 w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-left text-neutral-500">
+                <th className="p-1">Employee</th>
+                <th className="p-1">Eligible</th>
+                <th className="p-1">Active tickets</th>
+                <th className="p-1">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {candidates.map((c) => (
+                <tr key={c.employeeId} className="border-t border-neutral-100">
+                  <td className="p-1">{c.employeeName}</td>
+                  <td className="p-1">
+                    <StatusBadge tone={c.isEligible ? "success" : "neutral"} label={c.isEligible ? "Eligible" : "Not eligible"} />
+                  </td>
+                  <td className="p-1">{c.activeTicketCount}</td>
+                  <td className="p-1 text-neutral-500">{c.ineligibleReason ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div>
+        <h4 className="text-xs font-semibold text-neutral-700">Assignment history</h4>
+        {assignmentEvents.length === 0 ? (
+          <p className="text-xs text-neutral-500">No assignment events recorded yet.</p>
+        ) : (
+          <ul className="mt-1 flex flex-col gap-1 text-xs text-neutral-500">
+            {assignmentEvents.map((e) => (
+              <li key={e.id}>
+                {new Date(e.occurredAt).toLocaleString()} — {e.eventType.replace(/_/g, " ")} ({e.source})
+                {e.toAssigneeName ? ` → ${e.toAssigneeName}` : e.eventType === "unassign" || e.eventType === "decline" ? " → unassigned" : ""}
+                {e.reason ? `: ${e.reason}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -545,6 +683,12 @@ export function TicketDetailPanel({
   resumeSlaClockAction,
   linkArticleAction,
   unlinkArticleAction,
+  assignmentCandidates,
+  assignmentEvents,
+  claimAction,
+  acceptAssignmentAction,
+  declineAssignmentAction,
+  autoRouteAction,
 }: {
   tenantSlug: string;
   detail: TicketDetail;
@@ -571,6 +715,12 @@ export function TicketDetailPanel({
   resumeSlaClockAction: (expectedVersion: number) => BoundAction;
   linkArticleAction: BoundAction;
   unlinkArticleAction: (linkId: string, expectedVersion: number) => BoundAction;
+  assignmentCandidates: readonly TicketAssignmentCandidateRow[];
+  assignmentEvents: readonly TicketAssignmentEventRow[];
+  claimAction: BoundAction;
+  acceptAssignmentAction: BoundAction;
+  declineAssignmentAction: BoundAction;
+  autoRouteAction: BoundAction;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -649,6 +799,22 @@ export function TicketDetailPanel({
           <TransferForm queues={queues} currentQueueId={detail.queueId} transferAction={transferAction} />
           <ClassifyForm categories={categories} currentCategoryId={detail.categoryId} currentPriority={detail.priority} classifyAction={classifyAction} />
         </div>
+      ) : null}
+
+      {/* HRT-290 (CG-S12-HRT-018): claim/accept/decline/auto-route and the
+          explainable-eligibility candidate/history views -- internal/customer
+          channels only (decision 2), matching every new RPC's own reject of
+          a helpdesk-channel ticket. */}
+      {detail.isStaffViewer && detail.channel !== "helpdesk" ? (
+        <AssignmentDrawer
+          currentAssigneeName={detail.assigneeName}
+          candidates={assignmentCandidates}
+          assignmentEvents={assignmentEvents}
+          claimAction={claimAction}
+          acceptAssignmentAction={acceptAssignmentAction}
+          declineAssignmentAction={declineAssignmentAction}
+          autoRouteAction={autoRouteAction}
+        />
       ) : null}
 
       <section aria-label="History" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">

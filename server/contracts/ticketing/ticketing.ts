@@ -499,6 +499,14 @@ export const AssignTicketInputSchema = z.object({
   assigneeEmployeeId: z.string().uuid().nullable(),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string(),
+  // HRT-290 (CG-S12-HRT-018): two new, optional, DEFAULTed trailing fields --
+  // mirrors the migration's own explicit drop+create widening of
+  // app.assign_ticket (never a bare create or replace, which cannot add a
+  // parameter to an existing signature without leaving a stale second
+  // overload behind). Every pre-existing caller of this input type is
+  // unaffected -- both fields are optional here too.
+  reason: z.string().nullable().optional(),
+  overrideWorkloadLimit: z.boolean().optional(),
 });
 export type AssignTicketInput = z.infer<typeof AssignTicketInputSchema>;
 
@@ -1392,3 +1400,258 @@ export const RunTicketSlaEvaluationBatchInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type RunTicketSlaEvaluationBatchInput = z.infer<typeof RunTicketSlaEvaluationBatchInputSchema>;
+
+// ===========================================================================
+// HRT-290 (CG-S12-HRT-018): Ticket Assignment. Mirrors
+// supabase/migrations/20260731140000_create_ticket_assignment.sql. Extends
+// this module rather than a sibling one -- same "one canonical ticket
+// service" reasoning HRT-289's own header already established for SLA.
+// Routing rules/claim/accept/decline/auto-route are bounded to
+// internal/customer channels (the migration's own decision 2) -- there is
+// no helpdesk variant of any type below, matching app.assign_helpdesk_
+// ticket/app.transfer_helpdesk_support_queue remaining entirely unmodified.
+// ===========================================================================
+
+export const TICKET_ROUTING_RULE_VERSION_STATUSES = ["draft", "published", "superseded", "archived"] as const;
+export const TicketRoutingRuleVersionStatusSchema = z.enum(TICKET_ROUTING_RULE_VERSION_STATUSES);
+export type TicketRoutingRuleVersionStatus = z.infer<typeof TicketRoutingRuleVersionStatusSchema>;
+
+export const TICKET_ROUTING_ASSIGNMENT_MODES = ["manual", "least_loaded"] as const;
+export const TicketRoutingAssignmentModeSchema = z.enum(TICKET_ROUTING_ASSIGNMENT_MODES);
+export type TicketRoutingAssignmentMode = z.infer<typeof TicketRoutingAssignmentModeSchema>;
+
+export const TICKET_ASSIGNMENT_EVENT_TYPES = [
+  "auto_route",
+  "manual_assign",
+  "claim",
+  "accept",
+  "decline",
+  "reassign",
+  "unassign",
+  "transfer",
+] as const;
+export const TicketAssignmentEventTypeSchema = z.enum(TICKET_ASSIGNMENT_EVENT_TYPES);
+export type TicketAssignmentEventType = z.infer<typeof TicketAssignmentEventTypeSchema>;
+
+export const TICKET_ASSIGNMENT_EVENT_SOURCES = ["rule_engine", "manual", "claim", "self"] as const;
+export const TicketAssignmentEventSourceSchema = z.enum(TICKET_ASSIGNMENT_EVENT_SOURCES);
+export type TicketAssignmentEventSource = z.infer<typeof TicketAssignmentEventSourceSchema>;
+
+export const TicketRoutingRuleRowSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  status: z.enum(["active", "inactive"]),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketRoutingRuleRow = z.infer<typeof TicketRoutingRuleRowSchema>;
+
+export function parseTicketRoutingRuleRow(row: Record<string, unknown>): TicketRoutingRuleRow {
+  return TicketRoutingRuleRowSchema.parse({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    status: row.status,
+    recordVersion: row.record_version,
+  });
+}
+
+export const TicketRoutingRuleVersionRowSchema = z.object({
+  id: z.string().uuid(),
+  versionNumber: z.number().int().positive(),
+  status: TicketRoutingRuleVersionStatusSchema,
+  channel: TicketChannelSchema,
+  categoryId: z.string().uuid().nullable(),
+  priority: TicketPrioritySchema.nullable(),
+  targetQueueId: z.string().uuid(),
+  assignmentMode: TicketRoutingAssignmentModeSchema,
+  maxActiveAssignmentsPerMember: z.number().int().positive().nullable(),
+  precedenceRank: z.number().int(),
+  publishedAt: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketRoutingRuleVersionRow = z.infer<typeof TicketRoutingRuleVersionRowSchema>;
+
+export function parseTicketRoutingRuleVersionRow(row: Record<string, unknown>): TicketRoutingRuleVersionRow {
+  return TicketRoutingRuleVersionRowSchema.parse({
+    id: row.id,
+    versionNumber: row.version_number,
+    status: row.status,
+    channel: row.channel,
+    categoryId: row.category_id ?? null,
+    priority: row.priority ?? null,
+    targetQueueId: row.target_queue_id,
+    assignmentMode: row.assignment_mode,
+    maxActiveAssignmentsPerMember: row.max_active_assignments_per_member ?? null,
+    precedenceRank: row.precedence_rank,
+    publishedAt: row.published_at ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+export const TicketRoutingPreviewRowSchema = z.object({
+  matched: z.boolean(),
+  ruleId: z.string().uuid().nullable(),
+  ruleVersionId: z.string().uuid().nullable(),
+  versionNumber: z.number().int().positive().nullable(),
+  targetQueueId: z.string().uuid().nullable(),
+  targetQueueCode: z.string().nullable(),
+  assignmentMode: TicketRoutingAssignmentModeSchema.nullable(),
+  maxActiveAssignmentsPerMember: z.number().int().positive().nullable(),
+});
+export type TicketRoutingPreviewRow = z.infer<typeof TicketRoutingPreviewRowSchema>;
+
+export function parseTicketRoutingPreviewRow(row: Record<string, unknown>): TicketRoutingPreviewRow {
+  return TicketRoutingPreviewRowSchema.parse({
+    matched: row.matched,
+    ruleId: row.rule_id ?? null,
+    ruleVersionId: row.rule_version_id ?? null,
+    versionNumber: row.version_number ?? null,
+    targetQueueId: row.target_queue_id ?? null,
+    targetQueueCode: row.target_queue_code ?? null,
+    assignmentMode: row.assignment_mode ?? null,
+    maxActiveAssignmentsPerMember: row.max_active_assignments_per_member ?? null,
+  });
+}
+
+// Powers the assignment drawer's own "explainable eligibility" (section 15)
+// -- every active queue member with a live eligibility bit/reason and a live
+// workload count, never a raw employee directory.
+export const TicketAssignmentCandidateRowSchema = z.object({
+  employeeId: z.string().uuid(),
+  employeeName: z.string(),
+  isEligible: z.boolean(),
+  activeTicketCount: z.number().int().nonnegative(),
+  ineligibleReason: z.string().nullable(),
+});
+export type TicketAssignmentCandidateRow = z.infer<typeof TicketAssignmentCandidateRowSchema>;
+
+export function parseTicketAssignmentCandidateRow(row: Record<string, unknown>): TicketAssignmentCandidateRow {
+  return TicketAssignmentCandidateRowSchema.parse({
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    isEligible: row.is_eligible,
+    activeTicketCount: row.active_ticket_count,
+    ineligibleReason: row.ineligible_reason ?? null,
+  });
+}
+
+// Read-only workload aggregation (decision 1 -- never a second source of
+// truth for who is assigned; a live COUNT(*) every call).
+export const TicketQueueWorkloadRowSchema = z.object({
+  employeeId: z.string().uuid(),
+  employeeName: z.string(),
+  activeTicketCount: z.number().int().nonnegative(),
+  isEligible: z.boolean(),
+});
+export type TicketQueueWorkloadRow = z.infer<typeof TicketQueueWorkloadRowSchema>;
+
+export function parseTicketQueueWorkloadRow(row: Record<string, unknown>): TicketQueueWorkloadRow {
+  return TicketQueueWorkloadRowSchema.parse({
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    activeTicketCount: row.active_ticket_count,
+    isEligible: row.is_eligible,
+  });
+}
+
+export const TicketAssignmentEventRowSchema = z.object({
+  id: z.string().uuid(),
+  eventType: TicketAssignmentEventTypeSchema,
+  source: TicketAssignmentEventSourceSchema,
+  ruleVersionId: z.string().uuid().nullable(),
+  fromAssigneeEmployeeId: z.string().uuid().nullable(),
+  fromAssigneeName: z.string().nullable(),
+  toAssigneeEmployeeId: z.string().uuid().nullable(),
+  toAssigneeName: z.string().nullable(),
+  fromQueueId: z.string().uuid().nullable(),
+  toQueueId: z.string().uuid().nullable(),
+  reason: z.string().nullable(),
+  actorLabel: z.string().nullable(),
+  occurredAt: z.string(),
+});
+export type TicketAssignmentEventRow = z.infer<typeof TicketAssignmentEventRowSchema>;
+
+export function parseTicketAssignmentEventRow(row: Record<string, unknown>): TicketAssignmentEventRow {
+  return TicketAssignmentEventRowSchema.parse({
+    id: row.id,
+    eventType: row.event_type,
+    source: row.source,
+    ruleVersionId: row.rule_version_id ?? null,
+    fromAssigneeEmployeeId: row.from_assignee_employee_id ?? null,
+    fromAssigneeName: row.from_assignee_name ?? null,
+    toAssigneeEmployeeId: row.to_assignee_employee_id ?? null,
+    toAssigneeName: row.to_assignee_name ?? null,
+    fromQueueId: row.from_queue_id ?? null,
+    toQueueId: row.to_queue_id ?? null,
+    reason: row.reason ?? null,
+    actorLabel: row.actor_label ?? null,
+    occurredAt: row.occurred_at,
+  });
+}
+
+// --- Mutation inputs ---
+
+export const CreateTicketRoutingRuleInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  code: z.string().min(1),
+  name: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateTicketRoutingRuleInput = z.infer<typeof CreateTicketRoutingRuleInputSchema>;
+
+export const CreateTicketRoutingRuleVersionInputSchema = z.object({
+  ruleId: z.string().uuid(),
+  channel: TicketChannelSchema,
+  categoryId: z.string().uuid().nullable(),
+  priority: TicketPrioritySchema.nullable(),
+  targetQueueId: z.string().uuid(),
+  assignmentMode: TicketRoutingAssignmentModeSchema,
+  maxActiveAssignmentsPerMember: z.number().int().positive().nullable(),
+  precedenceRank: z.number().int(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateTicketRoutingRuleVersionInput = z.infer<typeof CreateTicketRoutingRuleVersionInputSchema>;
+
+export const PublishTicketRoutingRuleVersionInputSchema = z.object({
+  versionId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type PublishTicketRoutingRuleVersionInput = z.infer<typeof PublishTicketRoutingRuleVersionInputSchema>;
+
+export const ClaimTicketInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ClaimTicketInput = z.infer<typeof ClaimTicketInputSchema>;
+
+export const AcceptTicketAssignmentInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type AcceptTicketAssignmentInput = z.infer<typeof AcceptTicketAssignmentInputSchema>;
+
+export const DeclineTicketAssignmentInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type DeclineTicketAssignmentInput = z.infer<typeof DeclineTicketAssignmentInputSchema>;
+
+export const AutoRouteTicketInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type AutoRouteTicketInput = z.infer<typeof AutoRouteTicketInputSchema>;

@@ -2,8 +2,8 @@ import NextLink from "next/link";
 import { notFound } from "next/navigation";
 import { resolveTicketAccessForRequest } from "../../../../lib/portal/resolve-ticket-access.server.ts";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
-import { listTicketQueues, listTicketCategories, listTickets, listMyTickets, TicketQueryError } from "../../../../server/queries/ticketing.ts";
-import type { TicketStatus } from "../../../../server/contracts/ticketing/ticketing.ts";
+import { listTicketQueues, listTicketCategories, listTickets, listMyTickets, getTicketQueueWorkload, TicketQueryError } from "../../../../server/queries/ticketing.ts";
+import type { TicketStatus, TicketQueueWorkloadRow } from "../../../../server/contracts/ticketing/ticketing.ts";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
 import { TicketsListPanel } from "./tickets-list-panel.tsx";
 import { createTicketAction, createTicketQueueAction, createTicketCategoryAction, addTicketQueueMemberAction, setTicketCategoryCustomerVisibilityAction } from "./actions.ts";
@@ -45,6 +45,7 @@ export default async function TicketsListPage({
   let tickets: Awaited<ReturnType<typeof listTickets>> = [];
   let myTickets: Awaited<ReturnType<typeof listMyTickets>> = [];
   let orgUnits: { id: string; name: string; unitType: string }[] = [];
+  let workloadByQueue: Record<string, readonly TicketQueueWorkloadRow[]> = {};
 
   try {
     [queues, categories] = await Promise.all([listTicketQueues(supabase, access.tenant.id, access.authUserId), listTicketCategories(supabase, access.tenant.id, access.authUserId)]);
@@ -53,6 +54,24 @@ export default async function TicketsListPage({
     } else {
       myTickets = await listMyTickets(supabase, access.tenant.id, access.authUserId, { status: statusFilter, limit: 50 });
     }
+
+    // HRT-290 (CG-S12-HRT-018, section 17 "workload indicators"): a live,
+    // read-only aggregation per queue -- app.get_ticket_queue_workload
+    // itself refuses a caller who is neither an active member of that
+    // specific queue nor TKT:Edit/TKT:Assign, so this silently omits
+    // whichever queues the caller cannot view rather than surfacing a
+    // partial-failure error for an ordinary, expected authorization
+    // boundary.
+    const workloadEntries = await Promise.all(
+      queues.map(async (q) => {
+        try {
+          return [q.id, await getTicketQueueWorkload(supabase, q.id, access.authUserId)] as const;
+        } catch {
+          return [q.id, null] as const;
+        }
+      }),
+    );
+    workloadByQueue = Object.fromEntries(workloadEntries.filter((entry): entry is [string, TicketQueueWorkloadRow[]] => entry[1] !== null));
 
     // Direct table read (RLS-scoped, same shape HRT-274's own employee detail
     // page uses) -- no dedicated read RPC exists for the department dropdown;
@@ -78,6 +97,9 @@ export default async function TicketsListPage({
           <p className="text-xs text-neutral-500">Internal and interdepartmental service requests -- one canonical ticket model, shared across every future channel.</p>
         </div>
         <div className="flex items-center gap-3 text-xs">
+          <NextLink href={`/${tenantSlug}/tickets/routing`} className="text-info hover:underline">
+            Routing rules
+          </NextLink>
           <NextLink href={`/${tenantSlug}/tickets/sla`} className="text-info hover:underline">
             SLA policies &amp; calendars
           </NextLink>
@@ -94,6 +116,7 @@ export default async function TicketsListPage({
         tickets={tickets}
         myTickets={myTickets}
         orgUnits={orgUnits}
+        workloadByQueue={workloadByQueue}
         showQueueView={showQueueView}
         statusFilter={statusFilter}
         createTicketAction={createTicketAction.bind(null, tenantSlug)}

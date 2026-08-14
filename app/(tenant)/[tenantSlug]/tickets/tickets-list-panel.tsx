@@ -7,7 +7,7 @@ import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import type { TicketActionState } from "./actions.ts";
-import { TICKET_STATUSES, TICKET_PRIORITIES, type TicketStatus, type TicketQueueRow, type TicketCategoryRow, type TicketListRow, type MyTicketListRow } from "../../../../server/contracts/ticketing/ticketing.ts";
+import { TICKET_STATUSES, TICKET_PRIORITIES, type TicketStatus, type TicketQueueRow, type TicketCategoryRow, type TicketListRow, type MyTicketListRow, type TicketQueueWorkloadRow } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 const INITIAL_STATE: TicketActionState = { error: null };
 
@@ -295,6 +295,56 @@ function AdminCatalogForms({
   );
 }
 
+// HRT-290 (CG-S12-HRT-018, section 17 "workload indicators"): a compact,
+// read-only per-queue workload table -- only queues the caller can actually
+// view workload for appear here at all (page.tsx already filtered out the
+// rest, so an absent queue here means "not authorized to view", never a
+// silently-empty one presented as zero).
+function QueueWorkloadPanel({ queues, workloadByQueue }: { queues: readonly TicketQueueRow[]; workloadByQueue: Record<string, readonly TicketQueueWorkloadRow[]> }) {
+  const visibleQueues = queues.filter((q) => workloadByQueue[q.id] !== undefined);
+  if (visibleQueues.length === 0) return null;
+
+  return (
+    <details className="rounded-md border border-neutral-200 p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-neutral-900">Queue workload</summary>
+      <div className="mt-4 flex flex-col gap-4">
+        {visibleQueues.map((q) => {
+          const rows = workloadByQueue[q.id] ?? [];
+          return (
+            <div key={q.id}>
+              <h3 className="text-xs font-semibold text-neutral-700">{q.name}</h3>
+              {rows.length === 0 ? (
+                <p className="text-xs text-neutral-500">No active queue members.</p>
+              ) : (
+                <table className="mt-1 w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-left text-neutral-500">
+                      <th className="p-1">Employee</th>
+                      <th className="p-1">Active tickets</th>
+                      <th className="p-1">Eligible</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.employeeId} className="border-t border-neutral-100">
+                        <td className="p-1">{r.employeeName}</td>
+                        <td className="p-1">{r.activeTicketCount}</td>
+                        <td className="p-1">
+                          <StatusBadge tone={r.isEligible ? "success" : "neutral"} label={r.isEligible ? "Eligible" : "Not eligible"} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
 export function TicketsListPanel({
   tenantSlug,
   queues,
@@ -302,6 +352,7 @@ export function TicketsListPanel({
   tickets,
   myTickets,
   orgUnits,
+  workloadByQueue,
   showQueueView,
   statusFilter,
   createTicketAction,
@@ -316,6 +367,7 @@ export function TicketsListPanel({
   tickets: readonly TicketListRow[];
   myTickets: readonly MyTicketListRow[];
   orgUnits: readonly { id: string; name: string; unitType: string }[];
+  workloadByQueue: Record<string, readonly TicketQueueWorkloadRow[]>;
   showQueueView: boolean;
   statusFilter: TicketStatus | null;
   createTicketAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
@@ -421,6 +473,8 @@ export function TicketsListPanel({
       </section>
 
       <CreateTicketForm categories={categories} queues={queues} createTicketAction={createTicketAction} />
+
+      <QueueWorkloadPanel queues={queues} workloadByQueue={workloadByQueue} />
 
       <AdminCatalogForms
         queues={queues}

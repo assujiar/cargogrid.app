@@ -43,9 +43,25 @@ import {
   createSlaPolicy,
   createSlaPolicyVersion,
   publishSlaPolicyVersion,
+  createTicketRoutingRule,
+  createTicketRoutingRuleVersion,
+  publishTicketRoutingRuleVersion,
+  claimTicket,
+  acceptTicketAssignment,
+  declineTicketAssignment,
+  autoRouteTicket,
   TicketMutationError,
 } from "../../../../server/mutations/ticketing.ts";
-import type { MessageVisibility, TicketPriority, TicketStatus, SlaPauseReasonCode, TicketChannel } from "../../../../server/contracts/ticketing/ticketing.ts";
+import { previewTicketRouting, TicketQueryError } from "../../../../server/queries/ticketing.ts";
+import type { TicketRoutingPreviewRow } from "../../../../server/contracts/ticketing/ticketing.ts";
+import type {
+  MessageVisibility,
+  TicketPriority,
+  TicketStatus,
+  SlaPauseReasonCode,
+  TicketChannel,
+  TicketRoutingAssignmentMode,
+} from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface TicketActionState {
   readonly error: string | null;
@@ -306,10 +322,15 @@ export async function assignTicketAction(tenantSlug: string, ticketId: string, e
   if (!access) return NO_ACCESS;
 
   const assigneeEmployeeId = String(formData.get("assigneeEmployeeId") ?? "").trim() || null;
+  // HRT-290: reason/override are optional -- omitted entirely on the
+  // existing catalog-style form, present when submitted from the
+  // workload-cap-aware assignment drawer control.
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+  const overrideWorkloadLimit = formData.get("overrideWorkloadLimit") === "on";
 
   const supabase = await createSupabaseServerClient();
   try {
-    await assignTicket(supabase, { ticketId, expectedVersion, assigneeEmployeeId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    await assignTicket(supabase, { ticketId, expectedVersion, assigneeEmployeeId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId, reason, overrideWorkloadLimit });
   } catch (error) {
     return errorMessage("Could not assign this ticket", error);
   }
@@ -601,4 +622,177 @@ export async function publishSlaPolicyVersionAction(tenantSlug: string, versionI
   }
   revalidatePath(slaPath(tenantSlug));
   return OK;
+}
+
+// --- Ticket Assignment (HRT-290, CG-S12-HRT-018). Claim/accept/decline/
+// auto-route are bounded to internal/customer channels at the RPC layer
+// (a helpdesk ticket never renders these controls -- see the detail panel's
+// own channel check); this file only forwards, the RPC is what actually
+// enforces the boundary. ---
+
+export async function claimTicketAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await claimTicket(supabase, { ticketId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not claim this ticket", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function acceptTicketAssignmentAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await acceptTicketAssignment(supabase, { ticketId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not confirm this assignment", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function declineTicketAssignmentAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to decline a ticket assignment." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await declineTicketAssignment(supabase, { ticketId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not decline this assignment", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function autoRouteTicketAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await autoRouteTicket(supabase, { ticketId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not auto-route this ticket", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+// --- Ticket routing rule administration (TKT:Edit). Mirrors the SLA admin
+// forms above exactly: always rendered for any tenant member, the RPC layer
+// (app.check_ticket_authority('Edit', ...)) is what actually enforces the
+// bar. ---
+
+function routingPath(tenantSlug: string): string {
+  return `/${tenantSlug}/tickets/routing`;
+}
+
+export async function createTicketRoutingRuleAction(tenantSlug: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const code = String(formData.get("code") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!code || !name) return { error: "Code and name are both required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createTicketRoutingRule(supabase, { tenantId: access.tenant.id, code, name, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not create this routing rule", error);
+  }
+  revalidatePath(routingPath(tenantSlug));
+  return OK;
+}
+
+export async function createTicketRoutingRuleVersionAction(tenantSlug: string, ruleId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const channel = String(formData.get("channel") ?? "") as TicketChannel;
+  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  const priority = (String(formData.get("priority") ?? "").trim() || null) as TicketPriority | null;
+  const targetQueueId = String(formData.get("targetQueueId") ?? "").trim();
+  const assignmentMode = (String(formData.get("assignmentMode") ?? "manual") || "manual") as TicketRoutingAssignmentMode;
+  const maxRaw = String(formData.get("maxActiveAssignmentsPerMember") ?? "").trim();
+  const maxActiveAssignmentsPerMember = maxRaw ? Number(maxRaw) : null;
+  const precedenceRank = Number(formData.get("precedenceRank") ?? 0);
+  if (channel !== "internal" && channel !== "customer") return { error: "Channel must be internal or customer -- helpdesk has no eligibility model to route within." };
+  if (!targetQueueId) return { error: "A target queue is required." };
+  if (maxRaw && (!Number.isFinite(maxActiveAssignmentsPerMember) || (maxActiveAssignmentsPerMember ?? 0) <= 0)) return { error: "The workload cap must be a positive number, or left blank for no cap." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createTicketRoutingRuleVersion(supabase, {
+      ruleId,
+      channel,
+      categoryId,
+      priority,
+      targetQueueId,
+      assignmentMode,
+      maxActiveAssignmentsPerMember,
+      precedenceRank,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    return errorMessage("Could not create this routing rule version", error);
+  }
+  revalidatePath(routingPath(tenantSlug));
+  return OK;
+}
+
+export async function publishTicketRoutingRuleVersionAction(tenantSlug: string, versionId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await publishTicketRoutingRuleVersion(supabase, { versionId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not publish this routing rule version", error);
+  }
+  revalidatePath(routingPath(tenantSlug));
+  return OK;
+}
+
+// app.preview_ticket_routing (section 14, "routing preview") -- a real,
+// TKT:Edit-gated admin tool: verify which published rule version (if any)
+// would match a given channel/category/priority scope before it ever
+// affects a real ticket. A distinct result shape from TicketActionState
+// (carries the match itself, not just an error) since this reads rather
+// than mutates.
+export interface TicketRoutingPreviewActionState {
+  readonly error: string | null;
+  readonly result: TicketRoutingPreviewRow | null;
+}
+
+export async function previewTicketRoutingAction(tenantSlug: string, _prevState: TicketRoutingPreviewActionState, formData: FormData): Promise<TicketRoutingPreviewActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, result: null };
+
+  const channel = String(formData.get("channel") ?? "") as TicketChannel;
+  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  const priority = (String(formData.get("priority") ?? "").trim() || null) as TicketPriority | null;
+  if (channel !== "internal" && channel !== "customer") return { error: "Channel must be internal or customer.", result: null };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const result = await previewTicketRouting(supabase, access.tenant.id, channel, categoryId, priority, access.authUserId);
+    return { error: null, result };
+  } catch (error) {
+    if (error instanceof TicketMutationError || error instanceof TicketQueryError) return { error: `Could not preview routing: ${error.message}`, result: null };
+    throw error;
+  }
 }

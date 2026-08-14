@@ -28,6 +28,12 @@ import {
   getTicketSlaClock,
   getTicketSlaStatusForRequester,
   listTicketSlaClockEvents,
+  listTicketRoutingRules,
+  listTicketRoutingRuleVersions,
+  previewTicketRouting,
+  listTicketAssignmentCandidates,
+  getTicketQueueWorkload,
+  listTicketAssignmentEvents,
   TicketQueryError,
   type TicketQueryClient,
 } from "./ticketing.ts";
@@ -237,5 +243,74 @@ describe("HRT-289 SLA read queries", () => {
   test("listTicketSlaClockEvents throws TicketQueryError on RPC error", async () => {
     const { client } = fakeClient({ data: null, error: { message: "boom" } });
     await assert.rejects(() => listTicketSlaClockEvents(client, ID_1, ACTOR_ID), TicketQueryError);
+  });
+});
+
+describe("HRT-290 (CG-S12-HRT-018) ticket assignment read queries", () => {
+  test("listTicketRoutingRules / listTicketRoutingRuleVersions parse the scope/target tuple", async () => {
+    const { client: rulesClient } = fakeClient({ data: [{ id: ID_1, code: "GEN-ROUTE", name: "General", status: "active", record_version: 1 }], error: null });
+    const rules = await listTicketRoutingRules(rulesClient, TENANT_ID, ACTOR_ID);
+    assert.equal(rules[0]?.code, "GEN-ROUTE");
+
+    const { client: versionsClient } = fakeClient({
+      data: [{
+        id: ID_1, version_number: 2, status: "published", channel: "internal", category_id: ID_2, priority: null,
+        target_queue_id: ID_1, assignment_mode: "least_loaded", max_active_assignments_per_member: 3,
+        precedence_rank: 0, published_at: "2026-08-01T00:00:00Z", record_version: 1,
+      }],
+      error: null,
+    });
+    const versions = await listTicketRoutingRuleVersions(versionsClient, ID_1, ACTOR_ID);
+    assert.equal(versions[0]?.assignmentMode, "least_loaded");
+    assert.equal(versions[0]?.maxActiveAssignmentsPerMember, 3);
+  });
+
+  test("previewTicketRouting returns null on zero rows, and parses a matched=false row without a hard error", async () => {
+    const { client: empty } = fakeClient({ data: [], error: null });
+    const emptyResult = await previewTicketRouting(empty, TENANT_ID, "internal", ID_1, "normal", ACTOR_ID);
+    assert.equal(emptyResult, null);
+
+    const { client: noMatch } = fakeClient({
+      data: [{ matched: false, rule_id: null, rule_version_id: null, version_number: null, target_queue_id: null, target_queue_code: null, assignment_mode: null, max_active_assignments_per_member: null }],
+      error: null,
+    });
+    const noMatchResult = await previewTicketRouting(noMatch, TENANT_ID, "internal", ID_1, "normal", ACTOR_ID);
+    assert.equal(noMatchResult?.matched, false);
+  });
+
+  test("listTicketAssignmentCandidates parses eligibility/workload fields, never a raw employee directory shape", async () => {
+    const { client } = fakeClient({
+      data: [{ employee_id: ID_1, employee_name: "Staff One", is_eligible: true, active_ticket_count: 1, ineligible_reason: null }],
+      error: null,
+    });
+    const result = await listTicketAssignmentCandidates(client, ID_1, ACTOR_ID);
+    assert.equal(result[0]?.employeeName, "Staff One");
+    assert.equal(result[0]?.isEligible, true);
+  });
+
+  test("getTicketQueueWorkload is a read-only aggregation query", async () => {
+    const { client, calls } = fakeClient({ data: [{ employee_id: ID_1, employee_name: "Staff One", active_ticket_count: 2, is_eligible: true }], error: null });
+    const result = await getTicketQueueWorkload(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "get_ticket_queue_workload");
+    assert.equal(result[0]?.activeTicketCount, 2);
+  });
+
+  test("listTicketAssignmentEvents parses the ledger row shape including source/rule_version_id", async () => {
+    const { client } = fakeClient({
+      data: [{
+        id: ID_1, event_type: "claim", source: "claim", rule_version_id: null,
+        from_assignee_employee_id: null, from_assignee_name: null, to_assignee_employee_id: ID_2, to_assignee_name: "Staff One",
+        from_queue_id: null, to_queue_id: null, reason: null, actor_label: "staff1", occurred_at: "2026-08-01T00:00:00Z",
+      }],
+      error: null,
+    });
+    const result = await listTicketAssignmentEvents(client, ID_1, ACTOR_ID);
+    assert.equal(result[0]?.eventType, "claim");
+    assert.equal(result[0]?.toAssigneeName, "Staff One");
+  });
+
+  test("listTicketAssignmentEvents throws TicketQueryError on RPC error", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "boom" } });
+    await assert.rejects(() => listTicketAssignmentEvents(client, ID_1, ACTOR_ID), TicketQueryError);
   });
 });
