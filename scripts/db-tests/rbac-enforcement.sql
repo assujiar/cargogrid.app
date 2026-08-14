@@ -370,7 +370,93 @@ declare
     -- correct-by-design, not a live gap -- added here per this test''s own
     -- documented escape hatch rather than left as a permanently-red Tier A gate
     -- for every future checkpoint.
-    'get_self_employee'
+    'get_self_employee',
+    -- HRT-287 (Prompt 287, Customer-to-Tenant Ticket, CG-S12-HRT-015): this
+    -- migration is the first to use app.actor_holds_customer_user_layer as a
+    -- POSITIVE gate (app.list_customer_ticket_categories/app.list_my_tickets
+    -- return rows only if it is TRUE, the mirror image of its established
+    -- negative-exclusion use in RLS -- "not actor_holds_customer_user_layer").
+    -- It genuinely IS a real, narrow authority/context primitive (an active
+    -- customer_user-layer app.principal_memberships row check, the same
+    -- conceptual class as is_supreme_admin/actor_can_view_owner_scoped_row,
+    -- both already base keywords below) -- so the base regex keyword list is
+    -- widened here to include it, rather than special-casing each caller by
+    -- name, matching the sweep's own established evolution (ATW-023's own
+    -- resolve_customer_owner_account_scope/customer_warehouse_eligibility_
+    -- active/actor_can_view_owner_scoped_row were added the same way). This
+    -- credits app.list_customer_ticket_categories and app.list_my_tickets
+    -- (which now also calls it, HRT-287) transitively via the closure query
+    -- below -- neither needs its own v_expected entry.
+    --
+    -- HRT-288 (Prompt 288, Tenant-to-CargoGrid Helpdesk, CG-S12-HRT-016):
+    -- identically widens the base regex again for
+    -- app._is_tenant_helpdesk_authorized -- a real, narrow tenant-authority
+    -- primitive (a direct app.principal_memberships/app.role_assignments
+    -- query, deliberately NOT app.evaluate_permission/app.
+    -- check_ticket_authority, see that function's own header) used as a
+    -- POSITIVE gate by app.create_helpdesk_ticket, app.
+    -- list_helpdesk_ticket_categories, and app.list_tenant_helpdesk_tickets
+    -- -- all three credited transitively via the closure query below, no
+    -- separate v_expected entry needed for any of them.
+    --
+    -- app.is_ticket_queue_member (HRT-286, pre-existing -- this sweep never
+    -- actually reached the ticketing schema before HRT-287's own session,
+    -- since every prior db:test full-harness run aborted earlier at
+    -- ISS-2026-059's time-of-day-dependent procurement failure) is a
+    -- DIFFERENT, genuinely correct-by-design shape: its own WHERE clause
+    -- (`u.auth_user_id = p_auth_user_id`) can only ever answer "is THIS
+    -- caller-supplied identity an active member of this queue" -- a raw
+    -- self/other-scope equality predicate, the identical false-positive
+    -- shape app.get_self_employee/app.acknowledge_performance_outcome above
+    -- already document and are exempted for. Independently verified low-risk
+    -- even though p_auth_user_id is a plain parameter (not auth.uid()-only):
+    -- the boolean it discloses ("is employee X on queue Y") is already
+    -- broadly readable by any tenant employee via the catalog-visible
+    -- app.list_ticket_queue_members RPC (ticket_queue_members_select_scoped
+    -- RLS), so this function discloses nothing a legitimate tenant member
+    -- could not already see through the already-granted list RPC. Genuinely
+    -- correct-by-design, not a live gap -- added here per this test's own
+    -- documented escape hatch.
+    'is_ticket_queue_member',
+    -- HRT-283 (Prompt 283, KPI and Performance) batch-283-285 Tier C review:
+    -- app.acknowledge_performance_outcome, app.submit_performance_appeal, and
+    -- app.submit_performance_self_assessment each take
+    -- p_actor_auth_user_id, call app.assert_actor_is_session_identity first
+    -- (ATW-031), and then enforce a genuine, direct self-scope EQUALITY
+    -- check against the resolved caller''s own employee row before any
+    -- disclosure or mutation --
+    -- `v_self.master_record_id <> v_outcome.employee_id` (raises
+    -- insufficient_authority) for the first two, and an equivalent
+    -- `where ... employee_id = v_self.master_record_id` predicate on the
+    -- self-assessment row lookup for the third -- independently read and
+    -- reproduced live against each function''s own pg_get_functiondef
+    -- during the batch 283-285 Tier C review, not merely cited. This
+    -- sweep''s own `base` keyword list (evaluate_permission,
+    -- check_*_authority, is_supreme_admin, etc.) does not credit a raw
+    -- equality-based self-scope predicate as an authority check -- the
+    -- identical class of false positive `get_self_employee` above already
+    -- documents. Genuinely correct-by-design (independently re-verified,
+    -- not accepted from either function''s own build log), not a live
+    -- authority gap -- added here per this test''s own documented escape
+    -- hatch rather than left as a permanently-red Tier A gate.
+    'acknowledge_performance_outcome', 'submit_performance_appeal', 'submit_performance_self_assessment',
+    -- HRT-288 (Prompt 288, Tenant-to-CargoGrid Helpdesk, CG-S12-HRT-016):
+    -- app.ticket_channel_of takes ONLY p_ticket_id (no actor parameter at
+    -- all) and returns a single ticket's channel value -- it exists purely
+    -- so the ticket_messages/ticket_watchers/ticket_events SELECT policies
+    -- (which have no channel column of their own) can apply the same
+    -- helpdesk-channel exclusion app.tickets' own policy applies directly.
+    -- It is called from RLS policy expressions, which are evaluated as the
+    -- QUERYING role, so it must stay executable by authenticated -- the
+    -- identical "RLS-support primitive, not itself an authority check"
+    -- shape every base keyword above already covers structurally, but its
+    -- own body carries none of those keywords (a bare one-column select).
+    -- What it discloses to a direct, ungated call (an arbitrary ticket
+    -- id's channel -- one of 3 fixed values, no tenant/business content) is
+    -- lower-sensitivity than app.is_ticket_queue_member's own already-
+    -- accepted disclosure (a real membership boolean) -- genuinely
+    -- correct-by-design, not a live gap.
+    'ticket_channel_of'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor
@@ -413,7 +499,7 @@ begin
   edge as (select f.proname caller, m[1] callee from fn f, regexp_matches(f.prosrc, 'app\.([a-z0-9_]+)\s*\(', 'g') m),
   base as (
     select distinct proname from fn
-    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant'
+    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant|actor_holds_customer_user_layer|_is_tenant_helpdesk_authorized'
   ),
   closure as (
     select proname from base

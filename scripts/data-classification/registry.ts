@@ -369,3 +369,227 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
       "reason on app.leave_balance_ledger (HRT-280) — an HR adjustment/opening-balance reason that can incidentally disclose sensitive personal circumstances. Column-restricted from authenticated (service_role only); masked identically to app.leave_requests.reason.",
   },
 ];
+
+/**
+ * HRT-282 (Payroll Foundation, Benefit and Reimbursement, CG-S12-HRT-010) — the
+ * first real adopter of the 'payroll' category (reserved for this checkpoint since
+ * HRT-274, see the HRS_REGISTRY header comment above). Every row here is gated on
+ * the PROTECTED HRS:View payroll permission specifically, self-or-HRS:View-payroll
+ * (never plain HRS:View, never a manager-of-employee predicate — decision 5 of
+ * supabase/migrations/20260731000000_create_hris_payroll_foundation.sql's own
+ * header, the deliberate divergence from every other HRT capability's "manager
+ * sees effective team" shape).
+ */
+export const PAYROLL_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "hrs:payroll_component_versions.amounts",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "fixed_amount/percentage_rate on app.payroll_component_versions (HRT-282) — tenant compensation POLICY figures (e.g. the standard base-salary rate or allowance amount), gated identically to per-employee amounts even though not employee-specific, since a policy figure alone can reveal real compensation bands.",
+  },
+  {
+    id: "hrs:payroll_employee_component_assignments.amounts",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "override_amount/override_percentage/manual_amount on app.payroll_employee_component_assignments (HRT-282) — an individual employee's own compensation figure. RLS-gated via app.can_view_hris_payroll_row (self OR HRS:View payroll specifically).",
+  },
+  {
+    id: "hrs:payroll_run_employee_results.totals",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "gross_earnings/total_deductions/total_tax/total_benefit_employer_cost/total_reimbursement/total_loan_repayment/net_pay on app.payroll_run_employee_results and the identically-shaped app.payroll_calculation_lines/app.payroll_payslips (HRT-282) — an individual employee's own computed pay figures for one run. Never visible via manager-of-employee alone.",
+  },
+  {
+    id: "hrs:payroll_reimbursement_requests.amount",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description: "amount/description on app.payroll_reimbursement_requests (HRT-282) — an employee's own expense reimbursement claim.",
+  },
+  {
+    id: "hrs:payroll_loans.amounts",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description: "principal_amount/installment_amount on app.payroll_loans/app.payroll_loan_installments (HRT-282) — an employee's own loan/advance obligation.",
+  },
+  {
+    id: "hrs:payroll_finance_handoff.payment_instructions",
+    category: "payroll",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View payroll",
+    description:
+      "net_pay_amount/bank_reference_masked on app.payroll_finance_handoff_payment_instructions (HRT-282 migration 2) — employee-level payment data prepared for Finance. Readable by either side of the handoff boundary (HRS:View payroll or FIN:View), never by plain tenant membership. app.payroll_finance_handoff_gl_lines (the OTHER handoff table) is deliberately AGGREGATE ONLY with zero employee_id column, structurally excluded from this per-employee classification.",
+  },
+];
+
+/**
+ * HRT-283 (KPI and Performance, CG-S12-HRT-011) — performance ratings/scores/
+ * rationale/reasons registered under the existing 'pii' category (decision 9 of
+ * supabase/migrations/20260731030000_create_hris_kpi_performance.sql's own header):
+ * no 'performance' category is reserved anywhere in CATEGORIES above (unlike
+ * 'payroll', which HRT-274 explicitly reserved ahead of time), and adding one is a
+ * cross-cutting taxonomy change outside this single capability's own mandate — 'pii'
+ * (restricted-level personal data about a specific employee) is the closest existing
+ * fit. Every row here is gated on the PROTECTED HRS:View personal data permission
+ * specifically (the migration's own decision 0 — `permissions_action_check` is a
+ * fixed, repository-wide CHECK constraint no capability alters, confirmed live
+ * during this checkpoint's own testing — so this REUSES the action HRT-274 already
+ * seeded rather than adding a new one), self-or-direct-manager-or-assigned-reviewer-
+ * or-HRS:View-personal-data (never plain HRS:View).
+ */
+export const PERFORMANCE_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "hrs:performance_assessment_kpi_scores.scores",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "raw_score/manual_score/actual_value/score_rationale on app.performance_assessment_kpi_scores (HRT-283) — an individual employee's own per-goal performance rating and the assessor's free-text rationale. Visibility is additionally assessment-type- and stage-bound (app.can_view_performance_assessment_row) — self assessment always visible to self/manager; manager assessment visible to the employee only once submitted; reviewer (360) input never directly visible to the reviewed employee.",
+  },
+  {
+    id: "hrs:performance_outcomes.scores",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "baseline_score/calibrated_score/final_score/score_breakdown/acknowledgement_comment on app.performance_outcomes (HRT-283) — an employee's own computed and calibrated performance outcome for one cycle. Never visible to an assigned reviewer, only self/direct-manager/HRS:View personal data.",
+  },
+  {
+    id: "hrs:performance_calibration_adjustments.reasoning",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "adjustment_reason/previous_score/adjusted_score on app.performance_calibration_adjustments (HRT-283) — the governed calibration committee's own deliberation. Deliberately narrower than the outcome itself: HR-only, never visible to the outcome's own employee or their manager even though the outcome's resulting final_score is.",
+  },
+  {
+    id: "hrs:performance_appeals.reasoning",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "appeal_reason/decision_reason on app.performance_appeals (HRT-283) — an employee's own appeal narrative and HR's decision rationale.",
+  },
+];
+
+/**
+ * HRT-284 (Training and Talent, CG-S12-HRT-012) — training results/
+ * certificates/development-plan records registered under the existing
+ * 'pii' category (personal training/development evidence), gated on the
+ * same reused HRS:View personal data action every sibling person-scoped
+ * HRIS table uses (app.can_view_hris_training_talent_row: self/direct-
+ * manager/HRS:View personal data). Talent review/pool/succession records
+ * are registered separately below at a deliberately NARROWER protected
+ * action (HRS:Override) — the most restricted tier in this checkpoint
+ * (decision 6 of the migration's own header), never self- or manager-
+ * visible, matching app.can_view_talent_review_row / the talent_pools/
+ * talent_pool_members/talent_succession_candidates RLS policies exactly.
+ */
+export const TRAINING_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "hrs:training_enrollments.participation",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "employee_id/status/enrollment_source/completion_notes on app.training_enrollments (HRT-284) — an individual employee's own training participation and completion record. Visible to self, their direct manager, or an HRS:View personal data holder (app.can_view_hris_training_talent_row) — never plain tenant membership, even though the training CATALOGUE itself (course/session/provider) is broadly tenant-visible.",
+  },
+  {
+    id: "hrs:training_assessments.scores",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description: "score/max_score/passed/notes on app.training_assessments (HRT-284) — an employee's own assessment attempt history, including failed retries. Same visibility gate as training_enrollments.",
+  },
+  {
+    id: "hrs:training_certificates.evidence",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "certificate_number/issued_at/expiry_date/evidence_file_id on app.training_certificates (HRT-284) — an employee's own credential evidence, including externally-imported, unverified certificates (source=external_import). evidence_file_id points at a PLT-128 private, malware-scanned file — never itself a public/internal-classified asset.",
+  },
+  {
+    id: "hrs:training_development_plans.content",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "title/owner_note/linked_performance_outcome_id on app.training_development_plans and description/completed_note on app.training_development_plan_actions (HRT-284) — an employee's own development narrative, optionally cross-referencing a specific HRT-283 performance outcome.",
+  },
+  {
+    id: "hrs:talent_review.content",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:Override",
+    description:
+      "potential_rating/readiness_note/risk_of_loss on app.talent_reviews and the cycle/assignment rows around it (app.talent_review_cycles/_assignments, HRT-284, decision 6) — the most restricted tier in this checkpoint. Readable ONLY by an HRS:Override holder or the specific employee assigned as reviewer for that one case (app.can_view_talent_review_row) — never self (the review's own SUBJECT never sees it), never direct manager, never plain HRS:View personal data.",
+  },
+  {
+    id: "hrs:talent_pool.membership",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:Override",
+    description:
+      "employee_id/added_reason on app.talent_pool_members (HRT-284) — an employee's own high-potential/successor/critical-role pool membership and the human reason it was recorded. HRS:Override-only, zero self/manager/reviewer-assignment visibility of any kind (narrower than talent_reviews, which at least the assigned reviewer sees).",
+  },
+  {
+    id: "hrs:talent_succession_candidates.evidence",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:Override",
+    description: "readiness/decision_reason on app.talent_succession_candidates (HRT-284) — an employee's own succession-candidacy evidence for a specific position. HRS:Override-only, same tier as talent pool membership.",
+  },
+];
+
+/**
+ * Ticketing domain (HRT-286, Internal and Interdepartmental Ticket,
+ * CG-S12-HRT-014) — Phase 7's first Ticket-workstream registry entries, using
+ * the `support` category docs/standards/DATA_CLASSIFICATION_STANDARDS.md §1
+ * already reserves for exactly this domain (floor `restricted`, retention
+ * `audit_security_7y`). Row-level isolation (requester/queue-staff/watcher
+ * scope, app.can_access_ticket) is this capability's PRIMARY control — these
+ * entries classify the free-text CONTENT within an already-scoped row, not a
+ * second access boundary.
+ */
+export const TICKETING_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "tkt:ticket_messages.body",
+    category: "support",
+    level: "restricted",
+    owner: "Ticketing",
+    description:
+      "body on app.ticket_messages (HRT-286) — a ticket reply or internal note's free-text content, which can carry anything a real service conversation carries. Visibility is enforced structurally by the visibility enum (public vs. internal, decision 3), never by this classification alone; a redacted message's original body is never persisted anywhere else queryable, including app.audit_logs (decision 9).",
+  },
+  {
+    id: "tkt:tickets.free_text",
+    category: "support",
+    level: "restricted",
+    owner: "Ticketing",
+    description:
+      "subject/resolution_summary/cancelled_reason/last_reopen_reason on app.tickets (HRT-286) — deliberately excluded from app.ticket_audit_projection's own allowlist (structural fields only) so a bulk-readable app.audit_logs row never carries this free text, matching taxonomy class C-24's discipline.",
+  },
+];

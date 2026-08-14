@@ -52,6 +52,9 @@ export default async function SupremeLayout({ children }: { children: ReactNode 
           <a href="/supreme/tenants" className="text-neutral-700 hover:text-neutral-900">
             Tenants
           </a>
+          <a href="/supreme/helpdesk" className="text-neutral-700 hover:text-neutral-900">
+            Helpdesk
+          </a>
         </nav>
       </header>
       <Banner variant="warning">
