@@ -8,10 +8,12 @@ import {
   parseSeededProtectedFinActions,
   findEnforcedProtectedFinActions,
   findUnclassifiedProtectedFinActions,
+  parseSeededProtectedHrsActions,
+  findUnclassifiedProtectedHrsActions,
   REGISTRY,
 } from "./check-registry.ts";
 import { ENV_REGISTRY } from "../env/schema.ts";
-import { PHASE_0_REGISTRY, FINANCE_REGISTRY, type ClassificationEntry } from "./registry.ts";
+import { PHASE_0_REGISTRY, FINANCE_REGISTRY, PAYROLL_REGISTRY, type ClassificationEntry } from "./registry.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../supabase/migrations");
 
@@ -101,6 +103,56 @@ describe("FINANCE_REGISTRY", () => {
   test("is internally valid and adds no duplicate id against PHASE_0_REGISTRY", () => {
     const ids = new Set(PHASE_0_REGISTRY.map((e) => e.id));
     for (const entry of FINANCE_REGISTRY) {
+      assert.equal(ids.has(entry.id), false, `duplicate id ${entry.id}`);
+    }
+  });
+});
+
+// HRT-293 (Sensitive Personal and Payroll Data Controls, CG-S12-HRT-021)
+// Finding D: the HRS mirror of the parseSeededProtectedFinActions/
+// findUnclassifiedProtectedFinActions test blocks above.
+describe("parseSeededProtectedHrsActions", () => {
+  test("extracts exactly View payroll and View personal data from the real seeded permission catalog (regression guard)", () => {
+    const source = readFileSync(join(MIGRATIONS_DIR, "20260716103445_create_roles_permissions.sql"), "utf8");
+    assert.deepEqual(parseSeededProtectedHrsActions(source).sort(), ["View payroll", "View personal data"]);
+  });
+
+  test("ignores an unprotected (false) HRS row and a protected row from a different module", () => {
+    const source = "insert into app.permissions (action, resource_module_code, category, protected) values ('View', 'HRS', 'standard', false), ('View cost', 'FIN', 'sensitive', true), ('Override', 'HRS', 'sensitive', true);";
+    assert.deepEqual(parseSeededProtectedHrsActions(source), ["Override"]);
+  });
+});
+
+describe("findUnclassifiedProtectedHrsActions", () => {
+  test("finds zero gaps for View payroll and View personal data against this repository's real combined HR registries (regression guard)", () => {
+    assert.deepEqual(findUnclassifiedProtectedHrsActions(["View payroll", "View personal data"], REGISTRY), []);
+  });
+
+  test("flags an enforced action with no matching protectedAction registry entry", () => {
+    const gaps = findUnclassifiedProtectedHrsActions(["View payroll", "Some New HRS Action"], PHASE_0_REGISTRY);
+    assert.equal(gaps.length, 2);
+    assert.ok(gaps.some((g) => g.action === "Some New HRS Action"));
+  });
+
+  test("does not flag an action once it is registered via protectedAction", () => {
+    const registry: ClassificationEntry[] = [
+      { id: "hrs:test.figures", category: "payroll", level: "restricted", owner: "HRIS", description: "test", protectedAction: "HRS:View payroll" },
+    ];
+    assert.deepEqual(findUnclassifiedProtectedHrsActions(["View payroll"], registry), []);
+  });
+});
+
+describe("PAYROLL_REGISTRY", () => {
+  test("is included in the combined REGISTRY export (self-found HRT-293 regression guard — PAYROLL_REGISTRY was previously exported from registry.ts but never wired into check-registry.ts's own REGISTRY constant, so every one of its entries silently skipped both validateRegistry() and the protected-action adoption gate)", () => {
+    const registryIds = new Set(REGISTRY.map((e) => e.id));
+    for (const entry of PAYROLL_REGISTRY) {
+      assert.ok(registryIds.has(entry.id), `PAYROLL_REGISTRY entry ${entry.id} missing from REGISTRY`);
+    }
+  });
+
+  test("is internally valid and adds no duplicate id against PHASE_0_REGISTRY", () => {
+    const ids = new Set(PHASE_0_REGISTRY.map((e) => e.id));
+    for (const entry of PAYROLL_REGISTRY) {
       assert.equal(ids.has(entry.id), false, `duplicate id ${entry.id}`);
     }
   });

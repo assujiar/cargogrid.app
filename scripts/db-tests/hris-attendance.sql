@@ -481,6 +481,19 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', 'null', false);
 
+\echo '>> HRT-293 Finding B regression: app.waive_attendance_exception no longer duplicates the raw waive_reason ("late arrival excused, traffic incident", just used above) into app.audit_logs.reason -- a plain tenant_admin reading via app.query_audit_logs never sees it either'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug='att1');
+begin
+  if exists (select 1 from app.audit_logs where reason = 'late arrival excused, traffic incident') then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry the raw attendance-exception waive reason';
+  end if;
+  if exists (select 1 from app.query_audit_logs('00000000-0000-0000-0000-000000027801', v_tenant1, 200) where reason = 'late arrival excused, traffic incident') then
+    raise exception 'HRT-293 Finding B regression: a plain tenant_admin must never see the raw waive reason via app.query_audit_logs';
+  end if;
+end $$;
+
 \echo '>> geofence: branch-scoped required-geofence policy overrides tenant-wide for a branch-assigned employee -- a location outside the geofence is REJECTED, never a fake success (section 15)'
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027802", "role": "authenticated"}', false);
 set role authenticated;

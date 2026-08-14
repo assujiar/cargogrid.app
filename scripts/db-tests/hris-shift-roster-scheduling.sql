@@ -733,6 +733,20 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', 'null', false);
 
+\echo '>> HRT-293 Finding B regression: app.decide_schedule_swap_request/app.cancel_schedule_assignment/app.cancel_schedule_swap_request no longer duplicate their raw decided_reason/cancel_reason ("approved, coverage unaffected" / "shift no longer needed" / "no longer needed", all used above) into THEIR OWN app.audit_logs.reason rows. Scoped by action name (not a bare reason-string match): several OTHER, unrelated capabilities in this repository coincidentally reuse the identical generic fixture string "no longer needed" for their own real, correctly-non-sensitive audit reasons (e.g. app.release_inventory_reservation, app.set_warehouse_status) -- a bare string match without the action filter is a false-positive trap, not a real defect, self-found while first exercising this exact assertion live.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug='shr1');
+  v_fixed_actions text[] := array['decide_schedule_swap_request', 'cancel_schedule_assignment', 'cancel_schedule_swap_request'];
+begin
+  if exists (select 1 from app.audit_logs where reason in ('approved, coverage unaffected', 'shift no longer needed', 'no longer needed') and action = any (v_fixed_actions)) then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry a raw schedule-assignment/swap-request reason for decide_schedule_swap_request/cancel_schedule_assignment/cancel_schedule_swap_request';
+  end if;
+  if exists (select 1 from app.query_audit_logs('00000000-0000-0000-0000-000000027901', v_tenant1, 500) where reason in ('approved, coverage unaffected', 'shift no longer needed', 'no longer needed') and action = any (v_fixed_actions)) then
+    raise exception 'HRT-293 Finding B regression: a plain tenant_admin must never see a raw schedule-assignment/swap-request reason via app.query_audit_logs for these actions';
+  end if;
+end $$;
+
 \echo '>> decision 6: cancelling a schedule assignment that a PENDING swap request depends on cancels the swap request too, never leaves it silently stranded'
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027904", "role": "authenticated"}', false);
 set role authenticated;

@@ -1145,3 +1145,83 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> HRT-293 Finding A (CRITICAL) regression: app.employees'' five HR-narrative reason columns (revision_reason/suspend_reason/terminate_reason/archive_reason/leave_reason) are masked to self-or-HRS:View-personal-data identically to every other classified personal field -- previously returned unconditionally by app.get_employee_profile and included in app.employees'' own column-restricted grant to authenticated; app.employee_lifecycle_events.reason is masked the same way in app.get_employee_lifecycle_history and no longer carries a blanket table-level grant to authenticated'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HR1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_approver uuid := '00000000-0000-0000-0000-000000027103';
+  v_override_manager uuid := '00000000-0000-0000-0000-000000027104';
+  v_viewer uuid := '00000000-0000-0000-0000-000000027105';
+  v_pdv uuid := '00000000-0000-0000-0000-000000027107';
+  v_draft app.employees;
+  v_active app.employees;
+  v_suspended app.employees;
+  v_profile record;
+  v_before_count integer;
+  v_reason text := 'HRT-293 regression: confidential medical/disciplinary narrative';
+begin
+  v_draft := app.create_employee_draft(v_tenant1, 'HRT293 Regression Employee', 'full_time', 'hrt293regression@work.test', null, null, null, null, null, '2024-01-01', v_company, null, null, 'Engineer', null, null, null, 'hr_created', 'idem-hrt293-emp-reg-1', v_staff, 'staff');
+  perform app.add_employee_emergency_contact(v_draft.master_record_id, 'Emergency Contact', 'spouse', '+15550009999', 'ec@example.test', true, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  perform app.submit_employee_for_approval(v_draft.master_record_id, v_draft.record_version, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  v_active := app.decide_employee_approval(v_draft.master_record_id, v_draft.record_version, 'approve', null, v_approver, 'approver');
+  v_active := app.activate_employee(v_active.master_record_id, v_active.record_version, v_approver, 'approver');
+
+  v_before_count := (select count(*) from app.audit_logs);
+  v_suspended := app.suspend_employee(v_active.master_record_id, v_active.record_version, v_reason, v_override_manager, 'override_manager');
+
+  -- (a) A personal-data-viewer sees the real suspend_reason.
+  select * into v_profile from app.get_employee_profile(v_suspended.master_record_id, v_pdv);
+  if v_profile.suspend_reason is distinct from v_reason then
+    raise exception 'HRT-293 Finding A regression: pdv (HRS:View personal data) should see the real suspend_reason via get_employee_profile, got %', v_profile.suspend_reason;
+  end if;
+
+  -- (b) A plain HRS:View holder (no personal-data permission) gets it masked to null.
+  select * into v_profile from app.get_employee_profile(v_suspended.master_record_id, v_viewer);
+  if v_profile.suspend_reason is not null then
+    raise exception 'HRT-293 Finding A regression: plain HRS:View viewer should NOT see suspend_reason via get_employee_profile, got %', v_profile.suspend_reason;
+  end if;
+
+  -- (c) The same masking holds on app.employee_lifecycle_events via app.get_employee_lifecycle_history.
+  if exists (select 1 from app.get_employee_lifecycle_history(v_suspended.master_record_id, v_viewer) where to_status = 'suspended' and reason is not null) then
+    raise exception 'HRT-293 Finding A regression: plain HRS:View viewer should see a null reason in app.get_employee_lifecycle_history for the suspend transition';
+  end if;
+  if not exists (select 1 from app.get_employee_lifecycle_history(v_suspended.master_record_id, v_pdv) where to_status = 'suspended' and reason = v_reason) then
+    raise exception 'HRT-293 Finding A regression: pdv should see the real reason in app.get_employee_lifecycle_history for the suspend transition';
+  end if;
+
+  -- (d) A raw, forged-session SELECT of the sensitive columns via the `authenticated` role is denied outright -- a database guarantee, not merely RPC-layer masking.
+  perform set_config('request.jwt.claims', json_build_object('sub', v_viewer::text, 'role', 'authenticated')::text, true);
+  begin
+    set local role authenticated;
+    begin
+      execute 'select suspend_reason from app.employees where master_record_id = $1' using v_suspended.master_record_id;
+      raise exception 'HRT-293 Finding A regression: raw SELECT of app.employees.suspend_reason should be denied for the authenticated role (column-level grant)';
+    exception
+      when insufficient_privilege then null;
+    end;
+    begin
+      execute 'select reason from app.employee_lifecycle_events where master_record_id = $1' using v_suspended.master_record_id;
+      raise exception 'HRT-293 Finding A regression: raw SELECT of app.employee_lifecycle_events.reason should be denied for the authenticated role (column-level grant)';
+    exception
+      when insufficient_privilege then null;
+    end;
+    reset role;
+  end;
+
+  -- (e) HRT-293 Finding B: app.audit_logs never carries the raw suspend_reason, for this action or any prior action in this same test run, and a plain tenant_admin (zero HRS grant) reading via app.query_audit_logs never sees it either.
+  if exists (select 1 from app.audit_logs where reason = v_reason) then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry the raw suspend reason';
+  end if;
+  if not exists (select 1 from app.audit_logs where action = 'suspend_employee' and resource_id = v_suspended.master_record_id and reason is null and occurred_at >= now() - interval '5 minutes') then
+    raise exception 'HRT-293 Finding B regression: expected a suspend_employee audit_logs row with reason=null for this test''s own suspend call';
+  end if;
+  if exists (select 1 from app.query_audit_logs('00000000-0000-0000-0000-000000027101', v_tenant1, 200) where reason = v_reason) then
+    raise exception 'HRT-293 Finding B regression: a plain tenant_admin (zero HRS grant) must never see the raw suspend reason via app.query_audit_logs';
+  end if;
+end;
+$$;

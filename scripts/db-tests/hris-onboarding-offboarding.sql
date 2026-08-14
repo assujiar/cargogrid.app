@@ -1452,4 +1452,22 @@ begin
 end;
 $$;
 
+\echo '>> HRT-293 Finding B regression: app.waive_onboarding_task/app.reopen_onboarding_task/app.cancel_onboarding_case no longer duplicate their raw reason text (several distinct real reasons already used above in this same file) into app.audit_logs.reason for THEIR OWN action rows -- a plain tenant_admin reading via app.query_audit_logs never sees any of them either. Scoped to the specific action names this checkpoint fixed (self-found, disclosed as ISS-2026-093: app.cancel_approval_request, the SHARED PLT-123 approval-engine primitive these functions call internally to cancel an in-flight approval, independently logs the identical raw reason under its own action="cancel_approval_request" row -- a real, but out-of-scope-for-this-HR-checkpoint, C-24 gap in a cross-domain Platform Core primitive, not touched here).'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_fixed_actions text[] := array['waive_onboarding_task', 'reopen_onboarding_task', 'cancel_onboarding_case'];
+  v_reasons text[] := array[
+    'deferred to next quarter', 'training now required after all', 'deferred to next quarter (re-waived)',
+    'employee retracted resignation', 'reorg cancelled the exit', 'headcount rescinded before day one'
+  ];
+begin
+  if exists (select 1 from app.audit_logs where reason = any (v_reasons) and action = any (v_fixed_actions)) then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry a raw onboarding/offboarding task or case reason for waive_onboarding_task/reopen_onboarding_task/cancel_onboarding_case';
+  end if;
+  if exists (select 1 from app.query_audit_logs('00000000-0000-0000-0000-000000027701', v_tenant1, 500) where reason = any (v_reasons) and action = any (v_fixed_actions)) then
+    raise exception 'HRT-293 Finding B regression: a plain tenant_admin must never see a raw onboarding/offboarding reason via app.query_audit_logs for these actions';
+  end if;
+end $$;
+
 \echo 'ALL HRT-277 db-test assertions passed.'

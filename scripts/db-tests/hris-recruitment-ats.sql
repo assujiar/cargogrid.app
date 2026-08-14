@@ -1134,4 +1134,50 @@ begin
 end;
 $$;
 
+\echo '>> HRT-293 Finding B regression: app.set_candidate_status/app.record_assessment_result no longer duplicate the raw block/candidate-assessment reason (nor a candidate assessment''s raw numeric score) into app.audit_logs.reason/after_value'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrrec1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027602';
+  v_override_actor uuid := '00000000-0000-0000-0000-000000027603';
+  v_candidate app.candidates;
+  v_reason text := 'HRT-293 regression: candidate blocked, personal-circumstance-adjacent narrative';
+begin
+  v_candidate := app.create_candidate(v_tenant1, 'HRT293 Regression Candidate', 'hrt293cand@example.test', '+15550002222', 'staff_created', null, 'idem-hrt293-cand-1', v_staff, 'tester');
+  perform app.set_candidate_status(v_candidate.id, v_candidate.record_version, 'blocked', v_reason, v_override_actor, 'tester');
+
+  if exists (select 1 from app.audit_logs where reason = v_reason) then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry the raw candidate block reason';
+  end if;
+  if not exists (select 1 from app.audit_logs where action = 'set_candidate_status' and resource_id = v_candidate.id and reason is null) then
+    raise exception 'HRT-293 Finding B regression: expected a set_candidate_status audit_logs row with reason=null';
+  end if;
+
+  -- app.record_assessment_result's own separate C-24 vector: a raw numeric
+  -- score previously leaked into app.audit_logs.after_value under a key name
+  -- (`score`) the redactor's fixed pattern does not match. Exercised directly
+  -- against an isolated assessment row (service_role, mirroring how this
+  -- migration's own write path is reached -- no application/vacancy scaffold
+  -- needed to prove the audit-log projection shape).
+  declare
+    v_assessment_id uuid := gen_random_uuid();
+    v_dummy_application_id uuid;
+  begin
+    select id into v_dummy_application_id from app.job_applications where tenant_id = v_tenant1 limit 1;
+    if v_dummy_application_id is not null then
+      insert into app.candidate_assessments (id, tenant_id, application_id, assessment_type, criteria_version, max_score, status, created_by)
+      values (v_assessment_id, v_tenant1, v_dummy_application_id, 'other', 'v1', 100, 'pending', 'tester');
+      perform app.record_assessment_result(v_assessment_id, 1, 87.500, 'HRT-293 regression notes', v_staff, 'tester');
+      if exists (
+        select 1 from app.audit_logs
+        where action = 'record_assessment_result' and resource_id = v_assessment_id
+          and (after_value ? 'score' or after_value::text like '%87.5%')
+      ) then
+        raise exception 'HRT-293 Finding B regression: app.audit_logs.after_value must never carry the raw candidate assessment score';
+      end if;
+    end if;
+  end;
+end;
+$$;
+
 \echo 'ALL HRT-276 db-test assertions passed.'

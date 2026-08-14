@@ -931,4 +931,52 @@ begin
 end;
 $$;
 
+\echo '>> HRT-293 self-found regression (same shape as Finding A): app.employee_position_assignments.reason_note/decided_reason are no longer readable by any active tenant member via a raw column-level SELECT, and app.decide_employee_position_assignment/app.cancel_employee_position_assignment no longer duplicate the raw reason into app.audit_logs.reason (Finding B)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrpos1');
+  v_department_id uuid := (select id from app.org_units where tenant_id = v_tenant1 and unit_type = 'department');
+  v_position_solo_id uuid := (select id from app.positions where tenant_id = v_tenant1 and code = 'POS-SOLO');
+  v_grade_id uuid := (select id from app.position_grades where tenant_id = v_tenant1 and code = 'GR-1');
+  v_manager_id uuid;
+  v_manager_version integer;
+  v_staff uuid := '00000000-0000-0000-0000-000000027512';
+  v_approver uuid := '00000000-0000-0000-0000-000000027513';
+  v_proposal app.employee_position_assignments;
+  v_reason text := 'HRT-293 regression: personal circumstance narrative, never for the audit log';
+begin
+  -- Column-level defense in depth, verified directly (no fixture needed): the two
+  -- free-text reason columns must have no column-level SELECT grant to `authenticated`
+  -- at all, while a structural sibling column (change_reason, a fixed enum) does.
+  if has_column_privilege('authenticated', 'app.employee_position_assignments', 'reason_note', 'select') then
+    raise exception 'HRT-293 regression: app.employee_position_assignments.reason_note must not be selectable by authenticated';
+  end if;
+  if has_column_privilege('authenticated', 'app.employee_position_assignments', 'decided_reason', 'select') then
+    raise exception 'HRT-293 regression: app.employee_position_assignments.decided_reason must not be selectable by authenticated';
+  end if;
+  if not has_column_privilege('authenticated', 'app.employee_position_assignments', 'change_reason', 'select') then
+    raise exception 'HRT-293 regression: app.employee_position_assignments.change_reason should remain selectable (structural enum, not free text)';
+  end if;
+
+  -- Reject path (deliberately -- never touches the capacity/predecessor logic
+  -- POS-SOLO's own existing incumbent would otherwise trip): proves the same
+  -- `decided_reason` free text never reaches app.audit_logs.
+  select master_record_id, record_version into v_manager_id, v_manager_version
+  from app.employees where tenant_id = v_tenant1 and full_name = 'Hrpos1 Manager Person';
+
+  v_proposal := app.propose_employee_position_assignment(
+    v_manager_id, v_manager_version, v_position_solo_id, v_grade_id, null,
+    'primary', 100.00, current_date + 90, null, 'transfer', v_reason, v_staff, 'tester'
+  );
+  perform app.decide_employee_position_assignment(v_proposal.id, v_proposal.record_version, 'reject', v_reason, v_approver, 'tester');
+
+  if exists (select 1 from app.audit_logs where reason = v_reason) then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry the raw employee-position-assignment decision reason';
+  end if;
+  if not exists (select 1 from app.audit_logs where action = 'decide_employee_position_assignment' and resource_id = v_proposal.id and reason is null) then
+    raise exception 'HRT-293 Finding B regression: expected a decide_employee_position_assignment audit_logs row with reason=null';
+  end if;
+end;
+$$;
+
 \echo 'ALL HRT-275 db-test assertions passed.'
