@@ -298,6 +298,7 @@ export interface ListPlatformHelpdeskTicketsOptions {
   readonly severity?: HelpdeskSeverity | null;
   readonly supportQueueId?: string | null;
   readonly tenantId?: string | null;
+  readonly productArea?: string | null;
   readonly limit?: number;
   readonly afterId?: string | null;
 }
@@ -309,6 +310,7 @@ export async function listPlatformHelpdeskTickets(client: TicketQueryClient, act
     p_severity: options?.severity ?? null,
     p_support_queue_id: options?.supportQueueId ?? null,
     p_tenant_id: options?.tenantId ?? null,
+    p_product_area: options?.productArea ?? null,
     p_limit: options?.limit ?? 50,
     p_after_id: options?.afterId ?? null,
   });
