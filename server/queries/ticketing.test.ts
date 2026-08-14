@@ -16,6 +16,13 @@ import {
   getCustomerTicket,
   listCustomerTickets,
   listCustomerTicketMessages,
+  listHelpdeskTicketCategories,
+  getTenantHelpdeskTicket,
+  listTenantHelpdeskTickets,
+  listTenantHelpdeskTicketMessages,
+  listSupportQueues,
+  listPlatformHelpdeskTickets,
+  getPlatformHelpdeskTicket,
   TicketQueryError,
   type TicketQueryClient,
 } from "./ticketing.ts";
@@ -133,5 +140,56 @@ describe("HRT-287 (CG-S12-HRT-015): customer-facing read queries", () => {
     assert.equal(calls[0]?.fn, "list_customer_ticket_messages");
     assert.equal(calls[0]?.args.p_limit, 100);
     assert.equal((calls[0]?.args as Record<string, unknown>).p_visibility, undefined);
+  });
+});
+
+describe("HRT-288 (CG-S12-HRT-016): tenant-side helpdesk read queries", () => {
+  test("listHelpdeskTicketCategories calls the dedicated RPC", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listHelpdeskTicketCategories(client, TENANT_ID, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_helpdesk_ticket_categories");
+  });
+
+  test("getTenantHelpdeskTicket returns null on zero rows -- indistinguishable from a nonexistent, cross-tenant, or non-helpdesk-channel ticket id", async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    const result = await getTenantHelpdeskTicket(client, ID_1, ACTOR_ID);
+    assert.equal(result, null);
+  });
+
+  test("listTenantHelpdeskTickets defaults limit to 50 and forwards status", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listTenantHelpdeskTickets(client, TENANT_ID, ACTOR_ID, { status: "open" });
+    assert.equal(calls[0]?.args.p_status, "open");
+    assert.equal(calls[0]?.args.p_limit, 50);
+  });
+
+  test("listTenantHelpdeskTicketMessages calls the dedicated RPC, no visibility parameter exists to forward", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listTenantHelpdeskTicketMessages(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_tenant_helpdesk_ticket_messages");
+    assert.equal((calls[0]?.args as Record<string, unknown>).p_visibility, undefined);
+  });
+});
+
+describe("HRT-288: Platform-side (Supreme-Admin-facing) helpdesk read queries", () => {
+  test("listSupportQueues calls the dedicated RPC", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listSupportQueues(client, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_support_queues");
+    assert.deepEqual(calls[0]?.args, { p_actor_auth_user_id: ACTOR_ID });
+  });
+
+  test("listPlatformHelpdeskTickets never requires a tenantId -- the one deliberate cross-tenant read this capability introduces", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listPlatformHelpdeskTickets(client, ACTOR_ID, { severity: "high" });
+    assert.equal(calls[0]?.fn, "list_platform_helpdesk_tickets");
+    assert.equal(calls[0]?.args.p_tenant_id, null);
+    assert.equal(calls[0]?.args.p_severity, "high");
+  });
+
+  test("getPlatformHelpdeskTicket returns null on zero rows", async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    const result = await getPlatformHelpdeskTicket(client, ID_1, ACTOR_ID);
+    assert.equal(result, null);
   });
 });

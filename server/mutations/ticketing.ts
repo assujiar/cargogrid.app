@@ -26,6 +26,14 @@ import {
   SetTicketCategoryCustomerVisibilityInputSchema,
   CreateCustomerTicketInputSchema,
   ReplyToCustomerTicketInputSchema,
+  CreateHelpdeskTicketInputSchema,
+  ReplyToHelpdeskTicketInputSchema,
+  SetTicketCategoryHelpdeskVisibilityInputSchema,
+  CreateSupportQueueInputSchema,
+  AssignHelpdeskTicketInputSchema,
+  TransferHelpdeskSupportQueueInputSchema,
+  UpdateHelpdeskTicketClassificationInputSchema,
+  LinkHelpdeskSupportGrantInputSchema,
   type CreateTicketQueueInput,
   type CreateTicketCategoryInput,
   type AddTicketQueueMemberInput,
@@ -43,6 +51,14 @@ import {
   type SetTicketCategoryCustomerVisibilityInput,
   type CreateCustomerTicketInput,
   type ReplyToCustomerTicketInput,
+  type CreateHelpdeskTicketInput,
+  type ReplyToHelpdeskTicketInput,
+  type SetTicketCategoryHelpdeskVisibilityInput,
+  type CreateSupportQueueInput,
+  type AssignHelpdeskTicketInput,
+  type TransferHelpdeskSupportQueueInput,
+  type UpdateHelpdeskTicketClassificationInput,
+  type LinkHelpdeskSupportGrantInput,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -81,6 +97,12 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "account_not_available",
   "invalid_channel",
   "invalid_requester_identity",
+  "channel_not_supported",
+  "invalid_severity",
+  "invalid_environment",
+  "assignee_not_support_staff",
+  "support_queue_not_available",
+  "support_grant_not_found",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -315,6 +337,112 @@ export async function replyToCustomerTicket(client: TicketMutationRpcClient, inp
     p_body: v.body,
     p_attachment_file_ids: v.attachmentFileIds,
     p_idempotency_key: v.idempotencyKey,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+// --- HRT-288 (CG-S12-HRT-016): tenant-side helpdesk mutations. Authority is
+// always derived server-side (app._is_tenant_helpdesk_authorized) -- these
+// wrappers never trust or re-derive scope, they only forward. ---
+
+export async function createHelpdeskTicket(client: TicketMutationRpcClient, input: CreateHelpdeskTicketInput) {
+  const v = CreateHelpdeskTicketInputSchema.parse(input);
+  return callRpc(client, "create_helpdesk_ticket", {
+    p_tenant_id: v.tenantId,
+    p_category_id: v.categoryId,
+    p_priority: v.priority,
+    p_severity: v.severity,
+    p_product_area: v.productArea,
+    p_environment: v.environment,
+    p_external_reference: v.externalReference,
+    p_subject: v.subject,
+    p_body: v.body,
+    p_idempotency_key: v.idempotencyKey,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function replyToHelpdeskTicket(client: TicketMutationRpcClient, input: ReplyToHelpdeskTicketInput) {
+  const v = ReplyToHelpdeskTicketInputSchema.parse(input);
+  return callRpc(client, "reply_to_helpdesk_ticket", {
+    p_ticket_id: v.ticketId,
+    p_body: v.body,
+    p_attachment_file_ids: v.attachmentFileIds,
+    p_idempotency_key: v.idempotencyKey,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function setTicketCategoryHelpdeskVisibility(client: TicketMutationRpcClient, input: SetTicketCategoryHelpdeskVisibilityInput) {
+  const v = SetTicketCategoryHelpdeskVisibilityInputSchema.parse(input);
+  return callRpc(client, "set_ticket_category_helpdesk_visibility", {
+    p_category_id: v.categoryId,
+    p_helpdesk_visible: v.helpdeskVisible,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+// --- HRT-288: Platform-side (Supreme-Admin-gated) helpdesk mutations. ---
+
+export async function createSupportQueue(client: TicketMutationRpcClient, input: CreateSupportQueueInput) {
+  const v = CreateSupportQueueInputSchema.parse(input);
+  return callRpc(client, "create_support_queue", {
+    p_code: v.code,
+    p_name: v.name,
+    p_description: v.description,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function assignHelpdeskTicket(client: TicketMutationRpcClient, input: AssignHelpdeskTicketInput) {
+  const v = AssignHelpdeskTicketInputSchema.parse(input);
+  return callRpc(client, "assign_helpdesk_ticket", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_assignee_auth_user_id: v.assigneeAuthUserId,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function transferHelpdeskSupportQueue(client: TicketMutationRpcClient, input: TransferHelpdeskSupportQueueInput) {
+  const v = TransferHelpdeskSupportQueueInputSchema.parse(input);
+  return callRpc(client, "transfer_helpdesk_support_queue", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_new_support_queue_id: v.newSupportQueueId,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function updateHelpdeskTicketClassification(client: TicketMutationRpcClient, input: UpdateHelpdeskTicketClassificationInput) {
+  const v = UpdateHelpdeskTicketClassificationInputSchema.parse(input);
+  return callRpc(client, "update_helpdesk_ticket_classification", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_category_id: v.categoryId,
+    p_priority: v.priority,
+    p_severity: v.severity,
+    p_product_area: v.productArea,
+    p_environment: v.environment,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function linkHelpdeskSupportGrant(client: TicketMutationRpcClient, input: LinkHelpdeskSupportGrantInput) {
+  const v = LinkHelpdeskSupportGrantInputSchema.parse(input);
+  return callRpc(client, "link_helpdesk_support_grant", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_case_ref: v.caseRef,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
   });

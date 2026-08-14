@@ -18,6 +18,14 @@ import {
   setTicketCategoryCustomerVisibility,
   createCustomerTicket,
   replyToCustomerTicket,
+  createHelpdeskTicket,
+  replyToHelpdeskTicket,
+  setTicketCategoryHelpdeskVisibility,
+  createSupportQueue,
+  assignHelpdeskTicket,
+  transferHelpdeskSupportQueue,
+  updateHelpdeskTicketClassification,
+  linkHelpdeskSupportGrant,
   TicketMutationError,
   type TicketMutationRpcClient,
 } from "./ticketing.ts";
@@ -196,5 +204,109 @@ describe("HRT-287 (CG-S12-HRT-015): customer-channel and category-visibility mut
     await replyToCustomerTicket(client, { ticketId: ID_1, body: "Any update?", attachmentFileIds: null, idempotencyKey: null, actorAuthUserId: ACTOR_ID, actorLabel: "Customer A1" });
     assert.equal(calls[0]?.fn, "reply_to_customer_ticket");
     assert.equal((calls[0]?.args as Record<string, unknown>).p_visibility, undefined);
+  });
+});
+
+describe("HRT-288 (CG-S12-HRT-016): tenant-side helpdesk mutations", () => {
+  test("createHelpdeskTicket forwards severity/environment/reference -- no p_account_id/p_queue_id parameter exists to forge", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await createHelpdeskTicket(client, {
+      tenantId: TENANT_ID, categoryId: ID_1, priority: "normal", severity: "high", productArea: "Billing",
+      environment: "production", externalReference: "PO-4471", subject: "Invoice mismatch", body: "Our invoice is wrong.",
+      idempotencyKey: "idem-1", actorAuthUserId: ACTOR_ID, actorLabel: "Tenant Admin",
+    });
+    assert.equal(calls[0]?.fn, "create_helpdesk_ticket");
+    assert.equal(calls[0]?.args.p_severity, "high");
+    assert.equal((calls[0]?.args as Record<string, unknown>).p_account_id, undefined);
+    assert.equal((calls[0]?.args as Record<string, unknown>).p_queue_id, undefined);
+  });
+
+  test("insufficient_authority is classified for an unauthorized tenant actor (not tenant_admin/TKT:Edit)", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "insufficient_authority: identity X is not authorized to open a CargoGrid support case for tenant Y" } });
+    await assert.rejects(
+      () =>
+        createHelpdeskTicket(client, {
+          tenantId: TENANT_ID, categoryId: ID_1, priority: "normal", severity: null, productArea: null, environment: null,
+          externalReference: null, subject: "x", body: "y", idempotencyKey: null, actorAuthUserId: ACTOR_ID, actorLabel: "Bystander",
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "insufficient_authority");
+        return true;
+      },
+    );
+  });
+
+  test("replyToHelpdeskTicket calls reply_to_helpdesk_ticket -- no visibility parameter to forward", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await replyToHelpdeskTicket(client, { ticketId: ID_1, body: "Any update?", attachmentFileIds: null, idempotencyKey: null, actorAuthUserId: ACTOR_ID, actorLabel: "Tenant Admin" });
+    assert.equal(calls[0]?.fn, "reply_to_helpdesk_ticket");
+    assert.equal((calls[0]?.args as Record<string, unknown>).p_visibility, undefined);
+  });
+
+  test("setTicketCategoryHelpdeskVisibility forwards the boolean flag", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await setTicketCategoryHelpdeskVisibility(client, { categoryId: ID_1, helpdeskVisible: true, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.fn, "set_ticket_category_helpdesk_visibility");
+    assert.equal(calls[0]?.args.p_helpdesk_visible, true);
+  });
+});
+
+describe("HRT-288: Platform-side (Supreme-Admin-gated) helpdesk mutations", () => {
+  test("createSupportQueue calls create_support_queue", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await createSupportQueue(client, { code: "SQ-BILLING", name: "Billing Support", description: null, actorAuthUserId: ACTOR_ID, actorLabel: "supreme" });
+    assert.equal(calls[0]?.fn, "create_support_queue");
+    assert.equal(calls[0]?.args.p_code, "SQ-BILLING");
+  });
+
+  test("assignHelpdeskTicket forwards a nullable assigneeAuthUserId (unassign)", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await assignHelpdeskTicket(client, { ticketId: ID_1, expectedVersion: 2, assigneeAuthUserId: null, actorAuthUserId: ACTOR_ID, actorLabel: "supreme" });
+    assert.equal(calls[0]?.fn, "assign_helpdesk_ticket");
+    assert.equal(calls[0]?.args.p_assignee_auth_user_id, null);
+  });
+
+  test("assignee_not_support_staff is classified distinctly", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "assignee_not_support_staff: X does not hold Platform support (Supreme Admin) authority" } });
+    await assert.rejects(
+      () => assignHelpdeskTicket(client, { ticketId: ID_1, expectedVersion: 1, assigneeAuthUserId: ID_2, actorAuthUserId: ACTOR_ID, actorLabel: "supreme" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "assignee_not_support_staff");
+        return true;
+      },
+    );
+  });
+
+  test("transferHelpdeskSupportQueue forwards the target support queue and reason", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await transferHelpdeskSupportQueue(client, { ticketId: ID_1, expectedVersion: 1, newSupportQueueId: ID_2, reason: "route to billing", actorAuthUserId: ACTOR_ID, actorLabel: "supreme" });
+    assert.equal(calls[0]?.fn, "transfer_helpdesk_support_queue");
+    assert.equal(calls[0]?.args.p_new_support_queue_id, ID_2);
+  });
+
+  test("updateHelpdeskTicketClassification forwards severity/product area/environment alongside category/priority", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await updateHelpdeskTicketClassification(client, { ticketId: ID_1, expectedVersion: 1, categoryId: ID_2, priority: "urgent", severity: "critical", productArea: "Rate cards", environment: "production", actorAuthUserId: ACTOR_ID, actorLabel: "supreme" });
+    assert.equal(calls[0]?.args.p_severity, "critical");
+    assert.equal(calls[0]?.args.p_priority, "urgent");
+  });
+
+  test("linkHelpdeskSupportGrant forwards a nullable caseRef (unlink) and classifies support_grant_not_found distinctly", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await linkHelpdeskSupportGrant(client, { ticketId: ID_1, expectedVersion: 1, caseRef: null, actorAuthUserId: ACTOR_ID, actorLabel: "supreme" });
+    assert.equal(calls[0]?.fn, "link_helpdesk_support_grant");
+    assert.equal(calls[0]?.args.p_case_ref, null);
+
+    const { client: client2 } = fakeClient({ data: null, error: { message: "support_grant_not_found: no support access grant exists for case CASE-X in tenant Y" } });
+    await assert.rejects(
+      () => linkHelpdeskSupportGrant(client2, { ticketId: ID_1, expectedVersion: 1, caseRef: "CASE-X", actorAuthUserId: ACTOR_ID, actorLabel: "supreme" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "support_grant_not_found");
+        return true;
+      },
+    );
   });
 });

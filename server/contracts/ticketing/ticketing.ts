@@ -21,7 +21,7 @@
 
 import { z } from "zod";
 
-export const TICKET_CHANNELS = ["internal", "customer"] as const;
+export const TICKET_CHANNELS = ["internal", "customer", "helpdesk"] as const;
 export const TicketChannelSchema = z.enum(TICKET_CHANNELS);
 export type TicketChannel = z.infer<typeof TicketChannelSchema>;
 
@@ -50,9 +50,20 @@ export const TICKET_EVENT_TYPES = [
   "watcher_added",
   "watcher_removed",
   "message_redacted",
+  "support_grant_linked",
 ] as const;
 export const TicketEventTypeSchema = z.enum(TICKET_EVENT_TYPES);
 export type TicketEventType = z.infer<typeof TicketEventTypeSchema>;
+
+// --- HRT-288 (CG-S12-HRT-016): helpdesk-only metadata enums. ---
+
+export const HELPDESK_SEVERITIES = ["low", "medium", "high", "critical"] as const;
+export const HelpdeskSeveritySchema = z.enum(HELPDESK_SEVERITIES);
+export type HelpdeskSeverity = z.infer<typeof HelpdeskSeveritySchema>;
+
+export const HELPDESK_ENVIRONMENTS = ["production", "staging", "sandbox", "other"] as const;
+export const HelpdeskEnvironmentSchema = z.enum(HELPDESK_ENVIRONMENTS);
+export type HelpdeskEnvironment = z.infer<typeof HelpdeskEnvironmentSchema>;
 
 // --- Core rows ---
 
@@ -85,6 +96,7 @@ export const TicketCategoryRowSchema = z.object({
   name: z.string(),
   defaultQueueId: z.string().uuid().nullable(),
   customerVisible: z.boolean(),
+  helpdeskVisible: z.boolean(),
   status: z.enum(["active", "inactive"]),
   recordVersion: z.number().int().positive(),
 });
@@ -97,6 +109,7 @@ export function parseTicketCategoryRow(row: Record<string, unknown>): TicketCate
     name: row.name,
     defaultQueueId: row.default_queue_id ?? null,
     customerVisible: row.customer_visible ?? false,
+    helpdeskVisible: row.helpdesk_visible ?? false,
     status: row.status,
     recordVersion: row.record_version,
   });
@@ -691,3 +704,355 @@ export const ReplyToCustomerTicketInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type ReplyToCustomerTicketInput = z.infer<typeof ReplyToCustomerTicketInputSchema>;
+
+// --- HRT-288 (CG-S12-HRT-016): tenant-to-CargoGrid helpdesk rows/inputs.
+// Third founding channel -- the "requester" is the tenant itself (never a
+// specific employee/account row), "staff" is CargoGrid Platform support
+// (Supreme Admin only, this prompt's own disclosed bounded-scope decision).
+// Tenant-safe rows below are their own, deliberately narrow shapes (no
+// support_queue/assignee/support_access_case_ref exposure), mirroring the
+// customer channel's "every read path needs its own explicit safe
+// projection" discipline exactly. Platform-side (Supreme-Admin-facing) rows
+// are a SEPARATE, richer shape -- never reused for the tenant side.
+
+export const HelpdeskTicketCategoryRowSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+});
+export type HelpdeskTicketCategoryRow = z.infer<typeof HelpdeskTicketCategoryRowSchema>;
+
+export function parseHelpdeskTicketCategoryRow(row: Record<string, unknown>): HelpdeskTicketCategoryRow {
+  return HelpdeskTicketCategoryRowSchema.parse({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+  });
+}
+
+export const HelpdeskTicketListRowSchema = z.object({
+  id: z.string().uuid(),
+  ticketNumber: z.string(),
+  subject: z.string(),
+  status: TicketStatusSchema,
+  priority: TicketPrioritySchema,
+  severity: HelpdeskSeveritySchema.nullable(),
+  categoryName: z.string(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type HelpdeskTicketListRow = z.infer<typeof HelpdeskTicketListRowSchema>;
+
+export function parseHelpdeskTicketListRow(row: Record<string, unknown>): HelpdeskTicketListRow {
+  return HelpdeskTicketListRowSchema.parse({
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    severity: row.severity ?? null,
+    categoryName: row.category_name,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+export const HelpdeskTicketDetailSchema = z.object({
+  id: z.string().uuid(),
+  ticketNumber: z.string(),
+  subject: z.string(),
+  status: TicketStatusSchema,
+  priority: TicketPrioritySchema,
+  severity: HelpdeskSeveritySchema.nullable(),
+  productArea: z.string().nullable(),
+  environment: HelpdeskEnvironmentSchema.nullable(),
+  externalReference: z.string().nullable(),
+  categoryName: z.string(),
+  resolutionSummary: z.string().nullable(),
+  cancelledReason: z.string().nullable(),
+  lastReopenReason: z.string().nullable(),
+  reopenCount: z.number().int().nonnegative(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  closedAt: z.string().nullable(),
+});
+export type HelpdeskTicketDetail = z.infer<typeof HelpdeskTicketDetailSchema>;
+
+export function parseHelpdeskTicketDetail(row: Record<string, unknown>): HelpdeskTicketDetail {
+  return HelpdeskTicketDetailSchema.parse({
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    severity: row.severity ?? null,
+    productArea: row.product_area ?? null,
+    environment: row.environment ?? null,
+    externalReference: row.external_reference ?? null,
+    categoryName: row.category_name,
+    resolutionSummary: row.resolution_summary ?? null,
+    cancelledReason: row.cancelled_reason ?? null,
+    lastReopenReason: row.last_reopen_reason ?? null,
+    reopenCount: row.reopen_count,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at ?? null,
+    closedAt: row.closed_at ?? null,
+  });
+}
+
+export const HELPDESK_MESSAGE_AUTHOR_ROLES = ["requester", "staff"] as const;
+export const HelpdeskMessageAuthorRoleSchema = z.enum(HELPDESK_MESSAGE_AUTHOR_ROLES);
+
+export const HelpdeskTicketMessageRowSchema = z.object({
+  id: z.string().uuid(),
+  ticketId: z.string().uuid(),
+  body: z.string(),
+  isRedacted: z.boolean(),
+  attachmentFileIds: z.array(z.string().uuid()),
+  authorRole: HelpdeskMessageAuthorRoleSchema,
+  authorDisplay: z.string(),
+  createdAt: z.string(),
+  recordVersion: z.number().int().positive(),
+});
+export type HelpdeskTicketMessageRow = z.infer<typeof HelpdeskTicketMessageRowSchema>;
+
+export function parseHelpdeskTicketMessageRow(row: Record<string, unknown>): HelpdeskTicketMessageRow {
+  return HelpdeskTicketMessageRowSchema.parse({
+    id: row.id,
+    ticketId: row.ticket_id,
+    body: row.body,
+    isRedacted: row.is_redacted,
+    attachmentFileIds: row.attachment_file_ids ?? [],
+    authorRole: row.author_role,
+    authorDisplay: row.author_display,
+    createdAt: row.created_at,
+    recordVersion: row.record_version,
+  });
+}
+
+// --- Platform-side (Supreme-Admin-facing) helpdesk rows -- a genuinely
+// separate, cross-tenant-capable, richer shape. Never reused for the
+// tenant-safe rows above. ---
+
+export const SupportQueueRowSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  status: z.enum(["active", "inactive"]),
+  recordVersion: z.number().int().positive(),
+});
+export type SupportQueueRow = z.infer<typeof SupportQueueRowSchema>;
+
+export function parseSupportQueueRow(row: Record<string, unknown>): SupportQueueRow {
+  return SupportQueueRowSchema.parse({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    description: row.description ?? null,
+    status: row.status,
+    recordVersion: row.record_version,
+  });
+}
+
+export const PlatformHelpdeskTicketListRowSchema = z.object({
+  id: z.string().uuid(),
+  ticketNumber: z.string(),
+  tenantId: z.string().uuid(),
+  tenantName: z.string(),
+  subject: z.string(),
+  status: TicketStatusSchema,
+  priority: TicketPrioritySchema,
+  severity: HelpdeskSeveritySchema.nullable(),
+  productArea: z.string().nullable(),
+  supportQueueId: z.string().uuid().nullable(),
+  supportQueueCode: z.string().nullable(),
+  assigneeSupportAuthUserId: z.string().uuid().nullable(),
+  assigneeEmail: z.string().nullable(),
+  supportAccessCaseRef: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PlatformHelpdeskTicketListRow = z.infer<typeof PlatformHelpdeskTicketListRowSchema>;
+
+export function parsePlatformHelpdeskTicketListRow(row: Record<string, unknown>): PlatformHelpdeskTicketListRow {
+  return PlatformHelpdeskTicketListRowSchema.parse({
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    tenantId: row.tenant_id,
+    tenantName: row.tenant_name,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    severity: row.severity ?? null,
+    productArea: row.product_area ?? null,
+    supportQueueId: row.support_queue_id ?? null,
+    supportQueueCode: row.support_queue_code ?? null,
+    assigneeSupportAuthUserId: row.assignee_support_auth_user_id ?? null,
+    assigneeEmail: row.assignee_email ?? null,
+    supportAccessCaseRef: row.support_access_case_ref ?? null,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+export const PlatformHelpdeskTicketDetailSchema = z.object({
+  id: z.string().uuid(),
+  ticketNumber: z.string(),
+  tenantId: z.string().uuid(),
+  tenantName: z.string(),
+  subject: z.string(),
+  status: TicketStatusSchema,
+  priority: TicketPrioritySchema,
+  severity: HelpdeskSeveritySchema.nullable(),
+  productArea: z.string().nullable(),
+  environment: HelpdeskEnvironmentSchema.nullable(),
+  externalReference: z.string().nullable(),
+  categoryName: z.string(),
+  supportQueueId: z.string().uuid().nullable(),
+  supportQueueCode: z.string().nullable(),
+  assigneeSupportAuthUserId: z.string().uuid().nullable(),
+  assigneeEmail: z.string().nullable(),
+  supportAccessCaseRef: z.string().nullable(),
+  supportGrantStatus: z.string().nullable(),
+  supportGrantExpiresAt: z.string().nullable(),
+  supportGrantRevokedAt: z.string().nullable(),
+  resolutionSummary: z.string().nullable(),
+  cancelledReason: z.string().nullable(),
+  lastReopenReason: z.string().nullable(),
+  reopenCount: z.number().int().nonnegative(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  closedAt: z.string().nullable(),
+});
+export type PlatformHelpdeskTicketDetail = z.infer<typeof PlatformHelpdeskTicketDetailSchema>;
+
+export function parsePlatformHelpdeskTicketDetail(row: Record<string, unknown>): PlatformHelpdeskTicketDetail {
+  return PlatformHelpdeskTicketDetailSchema.parse({
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    tenantId: row.tenant_id,
+    tenantName: row.tenant_name,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    severity: row.severity ?? null,
+    productArea: row.product_area ?? null,
+    environment: row.environment ?? null,
+    externalReference: row.external_reference ?? null,
+    categoryName: row.category_name,
+    supportQueueId: row.support_queue_id ?? null,
+    supportQueueCode: row.support_queue_code ?? null,
+    assigneeSupportAuthUserId: row.assignee_support_auth_user_id ?? null,
+    assigneeEmail: row.assignee_email ?? null,
+    supportAccessCaseRef: row.support_access_case_ref ?? null,
+    supportGrantStatus: row.support_grant_status ?? null,
+    supportGrantExpiresAt: row.support_grant_expires_at ?? null,
+    supportGrantRevokedAt: row.support_grant_revoked_at ?? null,
+    resolutionSummary: row.resolution_summary ?? null,
+    cancelledReason: row.cancelled_reason ?? null,
+    lastReopenReason: row.last_reopen_reason ?? null,
+    reopenCount: row.reopen_count,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at ?? null,
+    closedAt: row.closed_at ?? null,
+  });
+}
+
+// --- HRT-288 helpdesk mutation inputs ---
+
+export const CreateHelpdeskTicketInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  categoryId: z.string().uuid(),
+  priority: TicketPrioritySchema,
+  severity: HelpdeskSeveritySchema.nullable(),
+  productArea: z.string().nullable(),
+  environment: HelpdeskEnvironmentSchema.nullable(),
+  externalReference: z.string().nullable(),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+  idempotencyKey: z.string().min(1).nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateHelpdeskTicketInput = z.infer<typeof CreateHelpdeskTicketInputSchema>;
+
+export const ReplyToHelpdeskTicketInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  body: z.string().min(1),
+  attachmentFileIds: z.array(z.string().uuid()).nullable(),
+  idempotencyKey: z.string().min(1).nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ReplyToHelpdeskTicketInput = z.infer<typeof ReplyToHelpdeskTicketInputSchema>;
+
+export const SetTicketCategoryHelpdeskVisibilityInputSchema = z.object({
+  categoryId: z.string().uuid(),
+  helpdeskVisible: z.boolean(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type SetTicketCategoryHelpdeskVisibilityInput = z.infer<typeof SetTicketCategoryHelpdeskVisibilityInputSchema>;
+
+export const CreateSupportQueueInputSchema = z.object({
+  code: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateSupportQueueInput = z.infer<typeof CreateSupportQueueInputSchema>;
+
+export const AssignHelpdeskTicketInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  assigneeAuthUserId: z.string().uuid().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type AssignHelpdeskTicketInput = z.infer<typeof AssignHelpdeskTicketInputSchema>;
+
+export const TransferHelpdeskSupportQueueInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  newSupportQueueId: z.string().uuid(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type TransferHelpdeskSupportQueueInput = z.infer<typeof TransferHelpdeskSupportQueueInputSchema>;
+
+export const UpdateHelpdeskTicketClassificationInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  categoryId: z.string().uuid(),
+  priority: TicketPrioritySchema,
+  severity: HelpdeskSeveritySchema.nullable(),
+  productArea: z.string().nullable(),
+  environment: HelpdeskEnvironmentSchema.nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type UpdateHelpdeskTicketClassificationInput = z.infer<typeof UpdateHelpdeskTicketClassificationInputSchema>;
+
+export const LinkHelpdeskSupportGrantInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  caseRef: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type LinkHelpdeskSupportGrantInput = z.infer<typeof LinkHelpdeskSupportGrantInputSchema>;

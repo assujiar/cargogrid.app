@@ -22,6 +22,17 @@ import {
   TransitionTicketStatusInputSchema,
   CreateCustomerTicketInputSchema,
   ReplyToCustomerTicketInputSchema,
+  parseHelpdeskTicketCategoryRow,
+  parseHelpdeskTicketDetail,
+  parseHelpdeskTicketListRow,
+  parseHelpdeskTicketMessageRow,
+  parseSupportQueueRow,
+  parsePlatformHelpdeskTicketListRow,
+  parsePlatformHelpdeskTicketDetail,
+  CreateHelpdeskTicketInputSchema,
+  ReplyToHelpdeskTicketInputSchema,
+  LinkHelpdeskSupportGrantInputSchema,
+  TICKET_CHANNELS,
 } from "./ticketing.ts";
 
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
@@ -213,5 +224,99 @@ describe("HRT-287 (CG-S12-HRT-015): customer-facing row parsers and mutation inp
   test("ReplyToCustomerTicketInputSchema has no visibility field at all -- always public, structurally", () => {
     const v = ReplyToCustomerTicketInputSchema.parse({ ticketId: ID_1, body: "Any update?", attachmentFileIds: null, idempotencyKey: null, actorAuthUserId: ACTOR, actorLabel: "Customer A1" });
     assert.equal((v as unknown as Record<string, unknown>).visibility, undefined);
+  });
+});
+
+describe("HRT-288 helpdesk channel/rows/inputs", () => {
+  test("TICKET_CHANNELS includes helpdesk alongside internal/customer", () => {
+    assert.deepEqual(TICKET_CHANNELS, ["internal", "customer", "helpdesk"]);
+  });
+
+  test("parseHelpdeskTicketCategoryRow maps a bare category row", () => {
+    const c = parseHelpdeskTicketCategoryRow({ id: ID_1, code: "CAT-SUPPORT", name: "Platform Support" });
+    assert.equal(c.code, "CAT-SUPPORT");
+  });
+
+  test("parseHelpdeskTicketListRow carries severity but no queue/assignee identity", () => {
+    const t = parseHelpdeskTicketListRow({
+      id: ID_1, ticket_number: "TKT-2026-000001", subject: "Invoice mismatch", status: "new", priority: "high", severity: "high",
+      category_name: "Platform Support", record_version: 1, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    });
+    assert.equal(t.severity, "high");
+    assert.equal((t as unknown as Record<string, unknown>).supportQueueId, undefined);
+    assert.equal((t as unknown as Record<string, unknown>).assigneeSupportAuthUserId, undefined);
+  });
+
+  test("parseHelpdeskTicketDetail: resolutionSummary is nullable (always null from the RPC, staff-authored by construction) and no support_queue/assignee/case_ref field exists", () => {
+    const d = parseHelpdeskTicketDetail({
+      id: ID_1, ticket_number: "TKT-2026-000001", subject: "Invoice mismatch", status: "open", priority: "high",
+      severity: "high", product_area: "Billing", environment: "production", external_reference: "PO-4471",
+      category_name: "Platform Support", resolution_summary: null, cancelled_reason: null, last_reopen_reason: null,
+      reopen_count: 0, record_version: 1, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", resolved_at: null, closed_at: null,
+    });
+    assert.equal(d.resolutionSummary, null);
+    assert.equal((d as unknown as Record<string, unknown>).supportQueueId, undefined);
+    assert.equal((d as unknown as Record<string, unknown>).supportAccessCaseRef, undefined);
+    assert.equal((d as unknown as Record<string, unknown>).assigneeSupportAuthUserId, undefined);
+  });
+
+  test("parseHelpdeskTicketMessageRow genericizes a staff author, mirroring the customer channel's own discipline", () => {
+    const m = parseHelpdeskTicketMessageRow({
+      id: ID_1, ticket_id: ID_2, body: "Looking into this now.", is_redacted: false, attachment_file_ids: [],
+      author_role: "staff", author_display: "CargoGrid Support", created_at: "2026-01-01T00:00:00Z", record_version: 1,
+    });
+    assert.equal(m.authorDisplay, "CargoGrid Support");
+    assert.equal((m as unknown as Record<string, unknown>).authorLabel, undefined);
+  });
+
+  test("parseSupportQueueRow maps a Platform-global queue row", () => {
+    const q = parseSupportQueueRow({ id: ID_1, code: "SQ-BILLING", name: "Billing Support", description: null, status: "active", record_version: 1 });
+    assert.equal(q.code, "SQ-BILLING");
+  });
+
+  test("parsePlatformHelpdeskTicketListRow carries tenant identity and support-queue/assignee identity (the Platform-only richer shape)", () => {
+    const t = parsePlatformHelpdeskTicketListRow({
+      id: ID_1, ticket_number: "TKT-2026-000001", tenant_id: TENANT_ID, tenant_name: "Acme Logistics",
+      subject: "Invoice mismatch", status: "new", priority: "high", severity: "high", product_area: "Billing",
+      support_queue_id: ID_2, support_queue_code: "SQ-BILLING", assignee_support_auth_user_id: null, assignee_email: null,
+      support_access_case_ref: null, record_version: 1, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    });
+    assert.equal(t.tenantName, "Acme Logistics");
+    assert.equal(t.supportQueueCode, "SQ-BILLING");
+  });
+
+  test("parsePlatformHelpdeskTicketDetail carries the support-grant correlation display fields", () => {
+    const d = parsePlatformHelpdeskTicketDetail({
+      id: ID_1, ticket_number: "TKT-2026-000001", tenant_id: TENANT_ID, tenant_name: "Acme Logistics", subject: "Invoice mismatch",
+      status: "open", priority: "high", severity: "high", product_area: "Billing", environment: "production", external_reference: "PO-4471",
+      category_name: "Platform Support", support_queue_id: ID_2, support_queue_code: "SQ-BILLING",
+      assignee_support_auth_user_id: null, assignee_email: null, support_access_case_ref: "CASE-500",
+      support_grant_status: "revoked", support_grant_expires_at: "2026-01-02T00:00:00Z", support_grant_revoked_at: "2026-01-01T12:00:00Z",
+      resolution_summary: null, cancelled_reason: null, last_reopen_reason: null, reopen_count: 0,
+      record_version: 1, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", resolved_at: null, closed_at: null,
+    });
+    assert.equal(d.supportAccessCaseRef, "CASE-500");
+    assert.equal(d.supportGrantStatus, "revoked");
+  });
+
+  test("CreateHelpdeskTicketInputSchema has no accountId/queueId-shaped field to spoof", () => {
+    const v = CreateHelpdeskTicketInputSchema.parse({
+      tenantId: TENANT_ID, categoryId: ID_1, priority: "normal", severity: "high", productArea: "Billing",
+      environment: "production", externalReference: "PO-4471", subject: "Invoice mismatch", body: "Our invoice does not match the rate card.",
+      idempotencyKey: null, actorAuthUserId: ACTOR, actorLabel: "Tenant Admin",
+    });
+    assert.equal(v.severity, "high");
+    assert.equal((v as unknown as Record<string, unknown>).queueId, undefined);
+    assert.equal((v as unknown as Record<string, unknown>).accountId, undefined);
+  });
+
+  test("ReplyToHelpdeskTicketInputSchema has no visibility field at all -- always public, structurally", () => {
+    const v = ReplyToHelpdeskTicketInputSchema.parse({ ticketId: ID_1, body: "Any update?", attachmentFileIds: null, idempotencyKey: null, actorAuthUserId: ACTOR, actorLabel: "Tenant Admin" });
+    assert.equal((v as unknown as Record<string, unknown>).visibility, undefined);
+  });
+
+  test("LinkHelpdeskSupportGrantInputSchema allows a null caseRef (unlink)", () => {
+    const v = LinkHelpdeskSupportGrantInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, caseRef: null, actorAuthUserId: ACTOR, actorLabel: "Supreme" });
+    assert.equal(v.caseRef, null);
   });
 });

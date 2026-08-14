@@ -388,6 +388,17 @@ declare
     -- (which now also calls it, HRT-287) transitively via the closure query
     -- below -- neither needs its own v_expected entry.
     --
+    -- HRT-288 (Prompt 288, Tenant-to-CargoGrid Helpdesk, CG-S12-HRT-016):
+    -- identically widens the base regex again for
+    -- app._is_tenant_helpdesk_authorized -- a real, narrow tenant-authority
+    -- primitive (a direct app.principal_memberships/app.role_assignments
+    -- query, deliberately NOT app.evaluate_permission/app.
+    -- check_ticket_authority, see that function's own header) used as a
+    -- POSITIVE gate by app.create_helpdesk_ticket, app.
+    -- list_helpdesk_ticket_categories, and app.list_tenant_helpdesk_tickets
+    -- -- all three credited transitively via the closure query below, no
+    -- separate v_expected entry needed for any of them.
+    --
     -- app.is_ticket_queue_member (HRT-286, pre-existing -- this sweep never
     -- actually reached the ticketing schema before HRT-287's own session,
     -- since every prior db:test full-harness run aborted earlier at
@@ -428,7 +439,24 @@ declare
     -- not accepted from either function''s own build log), not a live
     -- authority gap -- added here per this test''s own documented escape
     -- hatch rather than left as a permanently-red Tier A gate.
-    'acknowledge_performance_outcome', 'submit_performance_appeal', 'submit_performance_self_assessment'
+    'acknowledge_performance_outcome', 'submit_performance_appeal', 'submit_performance_self_assessment',
+    -- HRT-288 (Prompt 288, Tenant-to-CargoGrid Helpdesk, CG-S12-HRT-016):
+    -- app.ticket_channel_of takes ONLY p_ticket_id (no actor parameter at
+    -- all) and returns a single ticket's channel value -- it exists purely
+    -- so the ticket_messages/ticket_watchers/ticket_events SELECT policies
+    -- (which have no channel column of their own) can apply the same
+    -- helpdesk-channel exclusion app.tickets' own policy applies directly.
+    -- It is called from RLS policy expressions, which are evaluated as the
+    -- QUERYING role, so it must stay executable by authenticated -- the
+    -- identical "RLS-support primitive, not itself an authority check"
+    -- shape every base keyword above already covers structurally, but its
+    -- own body carries none of those keywords (a bare one-column select).
+    -- What it discloses to a direct, ungated call (an arbitrary ticket
+    -- id's channel -- one of 3 fixed values, no tenant/business content) is
+    -- lower-sensitivity than app.is_ticket_queue_member's own already-
+    -- accepted disclosure (a real membership boolean) -- genuinely
+    -- correct-by-design, not a live gap.
+    'ticket_channel_of'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor
@@ -471,7 +499,7 @@ begin
   edge as (select f.proname caller, m[1] callee from fn f, regexp_matches(f.prosrc, 'app\.([a-z0-9_]+)\s*\(', 'g') m),
   base as (
     select distinct proname from fn
-    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant|actor_holds_customer_user_layer'
+    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant|actor_holds_customer_user_layer|_is_tenant_helpdesk_authorized'
   ),
   closure as (
     select proname from base

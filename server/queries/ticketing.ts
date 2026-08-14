@@ -25,6 +25,13 @@ import {
   parseCustomerTicketDetail,
   parseCustomerTicketListRow,
   parseCustomerTicketMessageRow,
+  parseHelpdeskTicketCategoryRow,
+  parseHelpdeskTicketDetail,
+  parseHelpdeskTicketListRow,
+  parseHelpdeskTicketMessageRow,
+  parseSupportQueueRow,
+  parsePlatformHelpdeskTicketListRow,
+  parsePlatformHelpdeskTicketDetail,
   type TicketQueueRow,
   type TicketCategoryRow,
   type TicketQueueMemberRow,
@@ -42,6 +49,14 @@ import {
   type CustomerTicketDetail,
   type CustomerTicketListRow,
   type CustomerTicketMessageRow,
+  type HelpdeskTicketCategoryRow,
+  type HelpdeskTicketDetail,
+  type HelpdeskTicketListRow,
+  type HelpdeskTicketMessageRow,
+  type SupportQueueRow,
+  type PlatformHelpdeskTicketListRow,
+  type PlatformHelpdeskTicketDetail,
+  type HelpdeskSeverity,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -216,4 +231,94 @@ export async function listCustomerTicketMessages(
   });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parseCustomerTicketMessageRow);
+}
+
+// --- HRT-288 (CG-S12-HRT-016): tenant-side helpdesk read queries. Each
+// calls its own dedicated, tenant-safe projection RPC -- never the staff
+// wrappers above with fields merely dropped client-side. ---
+
+export async function listHelpdeskTicketCategories(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<HelpdeskTicketCategoryRow[]> {
+  const { data, error } = await client.rpc("list_helpdesk_ticket_categories", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseHelpdeskTicketCategoryRow);
+}
+
+export async function getTenantHelpdeskTicket(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<HelpdeskTicketDetail | null> {
+  const { data, error } = await client.rpc("get_tenant_helpdesk_ticket", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseHelpdeskTicketDetail(row) : null;
+}
+
+export async function listTenantHelpdeskTickets(
+  client: TicketQueryClient,
+  tenantId: string,
+  actorAuthUserId: string,
+  options?: { status?: TicketStatus | null; limit?: number; afterId?: string | null },
+): Promise<HelpdeskTicketListRow[]> {
+  const { data, error } = await client.rpc("list_tenant_helpdesk_tickets", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_status: options?.status ?? null,
+    p_limit: options?.limit ?? 50,
+    p_after_id: options?.afterId ?? null,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseHelpdeskTicketListRow);
+}
+
+export async function listTenantHelpdeskTicketMessages(
+  client: TicketQueryClient,
+  ticketId: string,
+  actorAuthUserId: string,
+  options?: { limit?: number; afterId?: string | null },
+): Promise<HelpdeskTicketMessageRow[]> {
+  const { data, error } = await client.rpc("list_tenant_helpdesk_ticket_messages", {
+    p_ticket_id: ticketId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: options?.limit ?? 100,
+    p_after_id: options?.afterId ?? null,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseHelpdeskTicketMessageRow);
+}
+
+// --- HRT-288: Platform-side (Supreme-Admin-facing) helpdesk read queries.
+// Cross-tenant by design -- app.list_platform_helpdesk_tickets is the ONE
+// deliberate cross-tenant read RPC this capability introduces. ---
+
+export async function listSupportQueues(client: TicketQueryClient, actorAuthUserId: string): Promise<SupportQueueRow[]> {
+  const { data, error } = await client.rpc("list_support_queues", { p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseSupportQueueRow);
+}
+
+export interface ListPlatformHelpdeskTicketsOptions {
+  readonly status?: TicketStatus | null;
+  readonly severity?: HelpdeskSeverity | null;
+  readonly supportQueueId?: string | null;
+  readonly tenantId?: string | null;
+  readonly limit?: number;
+  readonly afterId?: string | null;
+}
+
+export async function listPlatformHelpdeskTickets(client: TicketQueryClient, actorAuthUserId: string, options?: ListPlatformHelpdeskTicketsOptions): Promise<PlatformHelpdeskTicketListRow[]> {
+  const { data, error } = await client.rpc("list_platform_helpdesk_tickets", {
+    p_actor_auth_user_id: actorAuthUserId,
+    p_status: options?.status ?? null,
+    p_severity: options?.severity ?? null,
+    p_support_queue_id: options?.supportQueueId ?? null,
+    p_tenant_id: options?.tenantId ?? null,
+    p_limit: options?.limit ?? 50,
+    p_after_id: options?.afterId ?? null,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parsePlatformHelpdeskTicketListRow);
+}
+
+export async function getPlatformHelpdeskTicket(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<PlatformHelpdeskTicketDetail | null> {
+  const { data, error } = await client.rpc("get_platform_helpdesk_ticket", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parsePlatformHelpdeskTicketDetail(row) : null;
 }
