@@ -2056,3 +2056,171 @@ export const RunTicketEscalationEvaluationBatchInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type RunTicketEscalationEvaluationBatchInput = z.infer<typeof RunTicketEscalationEvaluationBatchInputSchema>;
+
+// ===========================================================================
+// HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records. Mirrors
+// supabase/migrations/20260731170000_create_ticket_linked_records.sql
+// exactly -- entity_type is the registry (decision 1), relationship is the
+// small fixed enum, safe_snapshot is always the bounded {label, detail,
+// status} shape (decision 2), never a per-type schema.
+// ===========================================================================
+
+export const TICKET_LINK_ENTITY_TYPES = ["shipment", "invoice", "warehouse", "vendor", "customer", "user"] as const;
+export const TicketLinkEntityTypeSchema = z.enum(TICKET_LINK_ENTITY_TYPES);
+export type TicketLinkEntityType = z.infer<typeof TicketLinkEntityTypeSchema>;
+
+// The subset a customer_user-layer caller may search/link/see (decision 7)
+// -- never vendor or user. Kept as a plain literal array (not derived from
+// the full list at the type level) so a drift between this and the live
+// app.ticket_link_customer_safe_entity_types() is a real, visible db-test
+// failure rather than silently inherited.
+export const TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES = ["shipment", "invoice", "warehouse", "customer"] as const;
+
+export const TICKET_LINK_RELATIONSHIPS = ["primary_subject", "related", "affected", "context"] as const;
+export const TicketLinkRelationshipSchema = z.enum(TICKET_LINK_RELATIONSHIPS);
+export type TicketLinkRelationship = z.infer<typeof TicketLinkRelationshipSchema>;
+
+export const TICKET_LINK_STATUSES = ["active", "removed"] as const;
+export const TicketLinkStatusSchema = z.enum(TICKET_LINK_STATUSES);
+export type TicketLinkStatus = z.infer<typeof TicketLinkStatusSchema>;
+
+export const TICKET_LINK_EVENT_TYPES = [
+  "linked", "unlinked", "link_denied", "search_denied", "summary_accessed", "deep_link_accessed",
+] as const;
+export const TicketLinkEventTypeSchema = z.enum(TICKET_LINK_EVENT_TYPES);
+export type TicketLinkEventType = z.infer<typeof TicketLinkEventTypeSchema>;
+
+// A candidate row from app.search_ticket_link_candidates -- already
+// independently authorized for the calling principal (never a row the
+// caller cannot see, C-05).
+export const TicketLinkCandidateRowSchema = z.object({
+  entityId: z.string().uuid(),
+  primaryLabel: z.string(),
+  secondaryLabel: z.string().nullable(),
+  statusLabel: z.string().nullable(),
+});
+export type TicketLinkCandidateRow = z.infer<typeof TicketLinkCandidateRowSchema>;
+
+export function parseTicketLinkCandidateRow(row: Record<string, unknown>): TicketLinkCandidateRow {
+  return TicketLinkCandidateRowSchema.parse({
+    entityId: row.entity_id,
+    primaryLabel: row.primary_label,
+    secondaryLabel: row.secondary_label ?? null,
+    statusLabel: row.status_label ?? null,
+  });
+}
+
+// One row from app.list_ticket_links -- label/detail/statusLabel are a LIVE,
+// principal-fresh re-check (decision 6), never the stored safe_snapshot;
+// liveAvailable=false collapses "deleted" and "revoked" into one
+// undifferentiated outward state deliberately (never leaks which).
+export const TicketLinkRowSchema = z.object({
+  id: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema,
+  entityId: z.string().uuid(),
+  relationship: TicketLinkRelationshipSchema,
+  status: TicketLinkStatusSchema,
+  liveAvailable: z.boolean(),
+  label: z.string().nullable(),
+  detail: z.string().nullable(),
+  statusLabel: z.string(),
+  linkedAt: z.string(),
+  createdBy: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketLinkRow = z.infer<typeof TicketLinkRowSchema>;
+
+export function parseTicketLinkRow(row: Record<string, unknown>): TicketLinkRow {
+  return TicketLinkRowSchema.parse({
+    id: row.id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    relationship: row.relationship,
+    status: row.status,
+    liveAvailable: row.live_available,
+    label: row.label ?? null,
+    detail: row.detail ?? null,
+    statusLabel: row.status_label,
+    linkedAt: row.linked_at,
+    createdBy: row.created_by ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+export const TicketLinkEventRowSchema = z.object({
+  id: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema.nullable(),
+  entityId: z.string().uuid().nullable(),
+  relationship: TicketLinkRelationshipSchema.nullable(),
+  eventType: TicketLinkEventTypeSchema,
+  reason: z.string().nullable(),
+  actorAuthUserId: z.string().uuid().nullable(),
+  actorLabel: z.string().nullable(),
+  occurredAt: z.string(),
+});
+export type TicketLinkEventRow = z.infer<typeof TicketLinkEventRowSchema>;
+
+export function parseTicketLinkEventRow(row: Record<string, unknown>): TicketLinkEventRow {
+  return TicketLinkEventRowSchema.parse({
+    id: row.id,
+    entityType: row.entity_type ?? null,
+    entityId: row.entity_id ?? null,
+    relationship: row.relationship ?? null,
+    eventType: row.event_type,
+    reason: row.reason ?? null,
+    actorAuthUserId: row.actor_auth_user_id ?? null,
+    actorLabel: row.actor_label ?? null,
+    occurredAt: row.occurred_at,
+  });
+}
+
+export const SearchTicketLinkCandidatesInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema,
+  searchText: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  limit: z.number().int().positive().nullable(),
+});
+export type SearchTicketLinkCandidatesInput = z.infer<typeof SearchTicketLinkCandidatesInputSchema>;
+
+export const LinkTicketRecordInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema,
+  entityId: z.string().uuid(),
+  relationship: TicketLinkRelationshipSchema,
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type LinkTicketRecordInput = z.infer<typeof LinkTicketRecordInputSchema>;
+
+export const UnlinkTicketRecordInputSchema = z.object({
+  linkId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type UnlinkTicketRecordInput = z.infer<typeof UnlinkTicketRecordInputSchema>;
+
+export const RecordTicketLinkAccessDenialInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  ticketId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().nullable(),
+  entityType: TicketLinkEntityTypeSchema,
+  entityId: z.string().uuid().nullable(),
+  reason: z.string().nullable(),
+});
+export type RecordTicketLinkAccessDenialInput = z.infer<typeof RecordTicketLinkAccessDenialInputSchema>;
+
+export const TICKET_LINK_SUMMARY_ACCESS_TYPES = ["summary_viewed", "deep_link_opened"] as const;
+export const TicketLinkSummaryAccessTypeSchema = z.enum(TICKET_LINK_SUMMARY_ACCESS_TYPES);
+export type TicketLinkSummaryAccessType = z.infer<typeof TicketLinkSummaryAccessTypeSchema>;
+
+export const RecordTicketLinkSummaryAccessInputSchema = z.object({
+  linkId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().nullable(),
+  accessType: TicketLinkSummaryAccessTypeSchema,
+});
+export type RecordTicketLinkSummaryAccessInput = z.infer<typeof RecordTicketLinkSummaryAccessInputSchema>;

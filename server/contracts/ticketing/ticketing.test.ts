@@ -61,6 +61,16 @@ import {
   CreateTicketEscalationPolicyVersionInputSchema,
   TICKET_ESCALATION_EVENT_TYPES,
   TICKET_ESCALATION_TRIGGER_TYPES,
+  parseTicketLinkCandidateRow,
+  parseTicketLinkRow,
+  parseTicketLinkEventRow,
+  LinkTicketRecordInputSchema,
+  UnlinkTicketRecordInputSchema,
+  RecordTicketLinkAccessDenialInputSchema,
+  RecordTicketLinkSummaryAccessInputSchema,
+  TICKET_LINK_ENTITY_TYPES,
+  TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES,
+  TICKET_LINK_RELATIONSHIPS,
 } from "./ticketing.ts";
 
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
@@ -604,5 +614,95 @@ describe("HRT-291 (CG-S12-HRT-019) ticket escalation contracts", () => {
 
   test("TICKET_ESCALATION_TRIGGER_TYPES never includes 'manual' -- manual escalation carries no configured level", () => {
     assert.equal((TICKET_ESCALATION_TRIGGER_TYPES as readonly string[]).includes("manual"), false);
+  });
+});
+
+describe("HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records", () => {
+  test("TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES is a proper subset of TICKET_LINK_ENTITY_TYPES excluding vendor/user", () => {
+    for (const t of TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES) {
+      assert.ok((TICKET_LINK_ENTITY_TYPES as readonly string[]).includes(t));
+    }
+    assert.equal(TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES.includes("vendor" as never), false);
+    assert.equal(TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES.includes("user" as never), false);
+  });
+
+  test("TICKET_LINK_ENTITY_TYPES is exactly the six documented types", () => {
+    assert.deepEqual([...TICKET_LINK_ENTITY_TYPES].sort(), ["customer", "invoice", "shipment", "user", "vendor", "warehouse"]);
+  });
+
+  test("TICKET_LINK_RELATIONSHIPS covers primary_subject/related/affected/context", () => {
+    assert.deepEqual([...TICKET_LINK_RELATIONSHIPS].sort(), ["affected", "context", "primary_subject", "related"]);
+  });
+
+  test("parseTicketLinkCandidateRow maps a search-result row, nulls carried through", () => {
+    const c = parseTicketLinkCandidateRow({ entity_id: ID_1, primary_label: "SHP-2026-0001", secondary_label: null, status_label: "confirmed" });
+    assert.equal(c.entityId, ID_1);
+    assert.equal(c.secondaryLabel, null);
+    assert.equal(c.statusLabel, "confirmed");
+  });
+
+  test("parseTicketLinkRow maps a LIVE, available link -- label/detail sourced from the live re-check, never a stored snapshot field", () => {
+    const l = parseTicketLinkRow({
+      id: ID_1, entity_type: "invoice", entity_id: ID_2, relationship: "primary_subject", status: "active",
+      live_available: true, label: "INV-2026-0001", detail: "USD 1100.00", status_label: "approved",
+      linked_at: "2026-08-01T00:00:00Z", created_by: "admin", record_version: 1,
+    });
+    assert.equal(l.liveAvailable, true);
+    assert.equal(l.label, "INV-2026-0001");
+  });
+
+  test("parseTicketLinkRow maps an UNAVAILABLE link (deleted or revoked, deliberately undifferentiated) -- label/detail are null, never a leaked stale value", () => {
+    const l = parseTicketLinkRow({
+      id: ID_1, entity_type: "warehouse", entity_id: ID_2, relationship: "related", status: "active",
+      live_available: false, label: null, detail: null, status_label: "unavailable",
+      linked_at: "2026-08-01T00:00:00Z", created_by: "admin", record_version: 1,
+    });
+    assert.equal(l.liveAvailable, false);
+    assert.equal(l.label, null);
+    assert.equal(l.statusLabel, "unavailable");
+  });
+
+  test("parseTicketLinkEventRow maps a denial event with no concrete entity_id", () => {
+    const e = parseTicketLinkEventRow({
+      id: ID_1, entity_type: "shipment", entity_id: null, relationship: null, event_type: "search_denied",
+      reason: "no_tenant_data_access", actor_auth_user_id: ACTOR, actor_label: null, occurred_at: "2026-08-01T00:00:00Z",
+    });
+    assert.equal(e.eventType, "search_denied");
+    assert.equal(e.entityId, null);
+  });
+
+  test("LinkTicketRecordInputSchema accepts a real request shape", () => {
+    const v = LinkTicketRecordInputSchema.parse({
+      ticketId: ID_1, entityType: "shipment", entityId: ID_2, relationship: "primary_subject", actorAuthUserId: ACTOR, actorLabel: "admin",
+    });
+    assert.equal(v.entityType, "shipment");
+  });
+
+  test("LinkTicketRecordInputSchema rejects an entity_type outside the registry at the type level", () => {
+    assert.throws(() =>
+      LinkTicketRecordInputSchema.parse({
+        ticketId: ID_1, entityType: "purchase_order", entityId: ID_2, relationship: "related", actorAuthUserId: ACTOR, actorLabel: "admin",
+      })
+    );
+  });
+
+  test("UnlinkTicketRecordInputSchema requires a non-empty reason", () => {
+    assert.throws(() =>
+      UnlinkTicketRecordInputSchema.parse({ linkId: ID_1, expectedVersion: 1, reason: "", actorAuthUserId: ACTOR, actorLabel: "admin" })
+    );
+  });
+
+  test("RecordTicketLinkAccessDenialInputSchema accepts a null entityId (a type-level denial, no concrete candidate)", () => {
+    const v = RecordTicketLinkAccessDenialInputSchema.parse({
+      tenantId: TENANT_ID, ticketId: ID_1, actorAuthUserId: ACTOR, actorLabel: "admin", entityType: "vendor", entityId: null, reason: "entity_type_not_permitted",
+    });
+    assert.equal(v.entityId, null);
+  });
+
+  test("RecordTicketLinkSummaryAccessInputSchema accepts summary_viewed and deep_link_opened", () => {
+    for (const accessType of ["summary_viewed", "deep_link_opened"] as const) {
+      const v = RecordTicketLinkSummaryAccessInputSchema.parse({ linkId: ID_1, actorAuthUserId: ACTOR, actorLabel: "admin", accessType });
+      assert.equal(v.accessType, accessType);
+    }
   });
 });

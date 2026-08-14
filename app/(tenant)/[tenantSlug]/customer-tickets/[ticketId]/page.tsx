@@ -1,10 +1,16 @@
 import { notFound } from "next/navigation";
 import { resolveCustomerTicketAccessForRequest } from "../../../../../lib/portal/resolve-customer-ticket-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
-import { getCustomerTicket, listCustomerTicketMessages, TicketQueryError } from "../../../../../server/queries/ticketing.ts";
+import { getCustomerTicket, listCustomerTicketMessages, listTicketLinks, TicketQueryError } from "../../../../../server/queries/ticketing.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { CustomerTicketDetailPanel } from "./customer-ticket-detail-panel.tsx";
-import { replyToCustomerTicketAction, transitionCustomerTicketStatusAction } from "../actions.ts";
+import {
+  replyToCustomerTicketAction,
+  transitionCustomerTicketStatusAction,
+  searchCustomerTicketLinkCandidatesAction,
+  linkCustomerTicketRecordAction,
+  unlinkCustomerTicketRecordAction,
+} from "../actions.ts";
 
 /**
  * Customer ticket thread/detail view (HRT-287, CG-S12-HRT-015). Uses ONLY
@@ -26,11 +32,15 @@ export default async function CustomerTicketDetailPage({ params }: { params: Pro
   let loadFailed = false;
   let detail: Awaited<ReturnType<typeof getCustomerTicket>> = null;
   let messages: Awaited<ReturnType<typeof listCustomerTicketMessages>> = [];
+  let ticketLinks: Awaited<ReturnType<typeof listTicketLinks>> = [];
 
   try {
     detail = await getCustomerTicket(supabase, ticketId, access.authUserId);
     if (detail) {
-      messages = await listCustomerTicketMessages(supabase, ticketId, access.authUserId, { limit: 200 });
+      [messages, ticketLinks] = await Promise.all([
+        listCustomerTicketMessages(supabase, ticketId, access.authUserId, { limit: 200 }),
+        listTicketLinks(supabase, ticketId, access.authUserId),
+      ]);
     }
   } catch (error) {
     if (!(error instanceof TicketQueryError)) throw error;
@@ -52,6 +62,10 @@ export default async function CustomerTicketDetailPage({ params }: { params: Pro
       messages={messages}
       replyAction={replyToCustomerTicketAction.bind(null, tenantSlug, ticketId)}
       transitionAction={(toStatus) => transitionCustomerTicketStatusAction.bind(null, tenantSlug, ticketId, recordVersion, toStatus)}
+      ticketLinks={ticketLinks}
+      searchTicketLinksAction={searchCustomerTicketLinkCandidatesAction.bind(null, tenantSlug, ticketId)}
+      linkTicketRecordAction={(entityType, entityId, relationship) => linkCustomerTicketRecordAction.bind(null, tenantSlug, ticketId, entityType, entityId, relationship)}
+      unlinkTicketRecordAction={(linkId: string, expectedVersion: number) => unlinkCustomerTicketRecordAction.bind(null, tenantSlug, ticketId, linkId, expectedVersion)}
     />
   );
 }

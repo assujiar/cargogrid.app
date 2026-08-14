@@ -54,6 +54,9 @@ import {
   parseTicketEscalationEventRow,
   parseTicketEscalationSuppressionRow,
   parseTicketBreachQueueRow,
+  parseTicketLinkCandidateRow,
+  parseTicketLinkRow,
+  parseTicketLinkEventRow,
   type TicketQueueRow,
   type TicketCategoryRow,
   type TicketQueueMemberRow,
@@ -102,6 +105,10 @@ import {
   type TicketEscalationEventRow,
   type TicketEscalationSuppressionRow,
   type TicketBreachQueueRow,
+  type TicketLinkEntityType,
+  type TicketLinkCandidateRow,
+  type TicketLinkRow,
+  type TicketLinkEventRow,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -593,4 +600,61 @@ export async function listTicketBreachQueue(client: TicketQueryClient, tenantId:
   });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parseTicketBreachQueueRow);
+}
+
+// ===========================================================================
+// HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records. Reads only --
+// mutations (link/unlink/record-denial/record-summary-access) live in
+// server/mutations/ticketing.ts, matching the established split for every
+// other capability in this file.
+// ===========================================================================
+
+// Bounded, principal-scoped, already-authorized candidates (C-05: never a
+// row the caller cannot independently see) for the given entity_type.
+export async function searchTicketLinkCandidates(
+  client: TicketQueryClient,
+  ticketId: string,
+  entityType: TicketLinkEntityType,
+  searchText: string | null,
+  actorAuthUserId: string,
+  limit?: number,
+): Promise<TicketLinkCandidateRow[]> {
+  const { data, error } = await client.rpc("search_ticket_link_candidates", {
+    p_ticket_id: ticketId,
+    p_entity_type: entityType,
+    p_search_text: searchText,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: limit ?? 20,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkCandidateRow);
+}
+
+// Every active link's label/detail/statusLabel is a LIVE, principal-fresh
+// re-check (decision 6 of the migration) -- never the row's own stored
+// safe_snapshot, which exists only as link-time history.
+export async function listTicketLinks(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketLinkRow[]> {
+  const { data, error } = await client.rpc("list_ticket_links", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkRow);
+}
+
+export interface ListTicketLinkEventsOptions {
+  readonly cursorOccurredAt?: string | null;
+  readonly cursorId?: string | null;
+  readonly limit?: number;
+}
+
+// Staff-only (app.is_ticket_staff) ledger of link/unlink/denial/access
+// events -- cursor-paginated, never OFFSET.
+export async function listTicketLinkEvents(client: TicketQueryClient, ticketId: string, actorAuthUserId: string, options?: ListTicketLinkEventsOptions): Promise<TicketLinkEventRow[]> {
+  const { data, error } = await client.rpc("list_ticket_link_events", {
+    p_ticket_id: ticketId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_cursor_occurred_at: options?.cursorOccurredAt ?? null,
+    p_cursor_id: options?.cursorId ?? null,
+    p_limit: options?.limit ?? 50,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkEventRow);
 }

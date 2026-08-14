@@ -54,6 +54,10 @@ import {
   suppressTicketEscalation,
   revokeTicketEscalationSuppression,
   runTicketEscalationEvaluationBatch,
+  linkTicketRecord,
+  unlinkTicketRecord,
+  recordTicketLinkAccessDenial,
+  recordTicketLinkSummaryAccess,
   TicketMutationError,
   type TicketMutationRpcClient,
 } from "./ticketing.ts";
@@ -598,5 +602,79 @@ describe("HRT-291 (CG-S12-HRT-019) ticket escalation mutations", () => {
     await runTicketEscalationEvaluationBatch(client, { tenantId: TENANT_ID, asOf: null, periodLabel: "2026-08-14", actorAuthUserId: ACTOR_ID, actorLabel: "admin" });
     assert.equal(calls[0]?.fn, "run_ticket_escalation_evaluation_batch");
     assert.equal(calls[0]?.args.p_period_label, "2026-08-14");
+  });
+});
+
+describe("HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records mutations", () => {
+  test("linkTicketRecord forwards entityType/entityId/relationship and classifies record_not_eligible distinctly from entity_type_not_permitted", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await linkTicketRecord(client, { ticketId: ID_1, entityType: "shipment", entityId: ID_2, relationship: "primary_subject", actorAuthUserId: ACTOR_ID, actorLabel: "admin" });
+    assert.equal(calls[0]?.fn, "link_ticket_record");
+    assert.equal(calls[0]?.args.p_entity_type, "shipment");
+    assert.equal(calls[0]?.args.p_relationship, "primary_subject");
+
+    const { client: notEligible } = fakeClient({ data: null, error: { message: "record_not_eligible: no eligible shipment record exists for x" } });
+    await assert.rejects(
+      () => linkTicketRecord(notEligible, { ticketId: ID_1, entityType: "shipment", entityId: ID_2, relationship: "related", actorAuthUserId: ACTOR_ID, actorLabel: "admin" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "record_not_eligible");
+        return true;
+      },
+    );
+
+    const { client: notPermitted } = fakeClient({ data: null, error: { message: "entity_type_not_permitted: vendor is not a customer-permitted link type" } });
+    await assert.rejects(
+      () => linkTicketRecord(notPermitted, { ticketId: ID_1, entityType: "vendor", entityId: ID_2, relationship: "related", actorAuthUserId: ACTOR_ID, actorLabel: "customer1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "entity_type_not_permitted");
+        return true;
+      },
+    );
+  });
+
+  test("unlinkTicketRecord forwards linkId/expectedVersion/reason and classifies reason_required distinctly from stale_version", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await unlinkTicketRecord(client, { linkId: ID_1, expectedVersion: 1, reason: "no longer relevant", actorAuthUserId: ACTOR_ID, actorLabel: "admin" });
+    assert.equal(calls[0]?.fn, "unlink_ticket_record");
+    assert.equal(calls[0]?.args.p_reason, "no longer relevant");
+
+    const { client: staleVersion } = fakeClient({ data: null, error: { message: "stale_version: expected version 1 but current version is 2" } });
+    await assert.rejects(
+      () => unlinkTicketRecord(staleVersion, { linkId: ID_1, expectedVersion: 1, reason: "x", actorAuthUserId: ACTOR_ID, actorLabel: "admin" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "stale_version");
+        return true;
+      },
+    );
+  });
+
+  test("recordTicketLinkAccessDenial always resolves (a follow-up audit call, never itself an enumeration surface) and forwards a null entityId for a type-level denial", async () => {
+    const { client, calls } = fakeClient({ data: undefined, error: null });
+    await recordTicketLinkAccessDenial(client, {
+      tenantId: TENANT_ID, ticketId: ID_1, actorAuthUserId: ACTOR_ID, actorLabel: "admin",
+      entityType: "vendor", entityId: null, reason: "entity_type_not_permitted",
+    });
+    assert.equal(calls[0]?.fn, "record_ticket_link_access_denial");
+    assert.equal(calls[0]?.args.p_entity_id, null);
+  });
+
+  test("recordTicketLinkSummaryAccess forwards linkId/accessType and classifies invalid_access_type", async () => {
+    const { client, calls } = fakeClient({ data: undefined, error: null });
+    await recordTicketLinkSummaryAccess(client, { linkId: ID_1, actorAuthUserId: ACTOR_ID, actorLabel: "admin", accessType: "deep_link_opened" });
+    assert.equal(calls[0]?.fn, "record_ticket_link_summary_access");
+    assert.equal(calls[0]?.args.p_access_type, "deep_link_opened");
+
+    const { client: invalid } = fakeClient({ data: null, error: { message: "invalid_access_type: not_a_real_type" } });
+    await assert.rejects(
+      () => recordTicketLinkSummaryAccess(invalid, { linkId: ID_1, actorAuthUserId: ACTOR_ID, actorLabel: "admin", accessType: "summary_viewed" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "invalid_access_type");
+        return true;
+      },
+    );
   });
 });

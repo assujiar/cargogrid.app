@@ -119,6 +119,16 @@ import {
   type SuppressTicketEscalationInput,
   type RevokeTicketEscalationSuppressionInput,
   type RunTicketEscalationEvaluationBatchInput,
+  SearchTicketLinkCandidatesInputSchema,
+  LinkTicketRecordInputSchema,
+  UnlinkTicketRecordInputSchema,
+  RecordTicketLinkAccessDenialInputSchema,
+  RecordTicketLinkSummaryAccessInputSchema,
+  type SearchTicketLinkCandidatesInput,
+  type LinkTicketRecordInput,
+  type UnlinkTicketRecordInput,
+  type RecordTicketLinkAccessDenialInput,
+  type RecordTicketLinkSummaryAccessInput,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -206,6 +216,13 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "ticket_escalation_not_found",
   "ticket_escalation_suppression_not_found",
   "invalid_period",
+  // HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records error codes.
+  "unsupported_entity_type",
+  "entity_type_not_permitted",
+  "invalid_relationship",
+  "record_not_eligible",
+  "ticket_link_not_found",
+  "invalid_access_type",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -915,5 +932,71 @@ export async function runTicketEscalationEvaluationBatch(client: TicketMutationR
     p_period_label: v.periodLabel,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
+  });
+}
+
+// ===========================================================================
+// HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records.
+// ===========================================================================
+
+// app.link_ticket_record raises the anti-enumerating record_not_eligible for
+// ANY invalid/unauthorized candidate (forged id, cross-tenant, deleted, or
+// merely unauthorized for THIS caller -- indistinguishable by design, C-05).
+// A caller wanting a durably-logged denial trail must catch this error and
+// separately call recordTicketLinkAccessDenial below, in a NEW request --
+// app.link_ticket_record's own RAISE aborts its transaction, so it cannot
+// self-log (mirrors app.get_customer_inventory_balance's identical,
+// already-established split, ATW-242).
+export async function linkTicketRecord(client: TicketMutationRpcClient, input: LinkTicketRecordInput) {
+  const v = LinkTicketRecordInputSchema.parse(input);
+  return callRpc(client, "link_ticket_record", {
+    p_ticket_id: v.ticketId,
+    p_entity_type: v.entityType,
+    p_entity_id: v.entityId,
+    p_relationship: v.relationship,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function unlinkTicketRecord(client: TicketMutationRpcClient, input: UnlinkTicketRecordInput) {
+  const v = UnlinkTicketRecordInputSchema.parse(input);
+  return callRpc(client, "unlink_ticket_record", {
+    p_link_id: v.linkId,
+    p_expected_version: v.expectedVersion,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+// The follow-up, always-succeeding audit call a linkTicketRecord() catch
+// block should issue (in a fresh request, never inside the same try/catch
+// transaction) after a genuine denial -- see app.record_ticket_link_access_
+// denial's own comment for why this cannot be folded into link_ticket_
+// record itself.
+export async function recordTicketLinkAccessDenial(client: TicketMutationRpcClient, input: RecordTicketLinkAccessDenialInput) {
+  const v = RecordTicketLinkAccessDenialInputSchema.parse(input);
+  return callRpc(client, "record_ticket_link_access_denial", {
+    p_tenant_id: v.tenantId,
+    p_ticket_id: v.ticketId,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+    p_entity_type: v.entityType,
+    p_entity_id: v.entityId,
+    p_reason: v.reason,
+  });
+}
+
+// Fired when a viewer actually expands a summary card or follows a deep
+// link -- never on every list render (audit impact "safe-summary/deep-link
+// access... audited", never a per-page-view spam source).
+export async function recordTicketLinkSummaryAccess(client: TicketMutationRpcClient, input: RecordTicketLinkSummaryAccessInput) {
+  const v = RecordTicketLinkSummaryAccessInputSchema.parse(input);
+  return callRpc(client, "record_ticket_link_summary_access", {
+    p_link_id: v.linkId,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+    p_access_type: v.accessType,
   });
 }

@@ -44,6 +44,9 @@ import {
   listTicketEscalationEvents,
   listTicketEscalationSuppressions,
   listTicketBreachQueue,
+  searchTicketLinkCandidates,
+  listTicketLinks,
+  listTicketLinkEvents,
   type TicketQueryClient,
 } from "./ticketing.ts";
 
@@ -398,5 +401,71 @@ describe("HRT-291 (CG-S12-HRT-019) ticket escalation read queries", () => {
     assert.equal(calls[0]?.fn, "list_ticket_breach_queue");
     assert.equal(calls[0]?.args.p_min_level, 1);
     assert.equal(result[0]?.currentLevel, 2);
+  });
+});
+
+describe("HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records reads", () => {
+  test("searchTicketLinkCandidates passes ticket/entityType/search/limit through and parses rows", async () => {
+    const { client, calls } = fakeClient({
+      data: [{ entity_id: ID_1, primary_label: "SHP-2026-0001", secondary_label: "sea / FCL", status_label: "confirmed" }],
+      error: null,
+    });
+    const result = await searchTicketLinkCandidates(client, ID_1, "shipment", "SHP", ACTOR_ID, 10);
+    assert.equal(calls[0]?.fn, "search_ticket_link_candidates");
+    assert.deepEqual(calls[0]?.args, { p_ticket_id: ID_1, p_entity_type: "shipment", p_search_text: "SHP", p_actor_auth_user_id: ACTOR_ID, p_limit: 10 });
+    assert.equal(result[0]?.primaryLabel, "SHP-2026-0001");
+  });
+
+  test("searchTicketLinkCandidates defaults limit to 20 when omitted", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await searchTicketLinkCandidates(client, ID_1, "warehouse", null, ACTOR_ID);
+    assert.equal(calls[0]?.args.p_limit, 20);
+  });
+
+  test("searchTicketLinkCandidates throws TicketQueryError on RPC error (e.g. unsupported_entity_type)", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "unsupported_entity_type: purchase_order" } });
+    await assert.rejects(() => searchTicketLinkCandidates(client, ID_1, "shipment", null, ACTOR_ID), TicketQueryError);
+  });
+
+  test("listTicketLinks parses a live-available and an unavailable row in the same call", async () => {
+    const { client, calls } = fakeClient({
+      data: [
+        {
+          id: ID_1, entity_type: "invoice", entity_id: ID_2, relationship: "primary_subject", status: "active",
+          live_available: true, label: "INV-2026-0001", detail: "USD 1100.00", status_label: "approved",
+          linked_at: "2026-08-01T00:00:00Z", created_by: "admin", record_version: 1,
+        },
+        {
+          id: ID_2, entity_type: "warehouse", entity_id: ID_1, relationship: "related", status: "active",
+          live_available: false, label: null, detail: null, status_label: "unavailable",
+          linked_at: "2026-08-01T00:00:00Z", created_by: "admin", record_version: 1,
+        },
+      ],
+      error: null,
+    });
+    const result = await listTicketLinks(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_ticket_links");
+    assert.equal(result[0]?.liveAvailable, true);
+    assert.equal(result[1]?.liveAvailable, false);
+    assert.equal(result[1]?.label, null);
+  });
+
+  test("listTicketLinks throws TicketQueryError on RPC error (e.g. ticket_not_found)", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "ticket_not_found: x" } });
+    await assert.rejects(() => listTicketLinks(client, ID_1, ACTOR_ID), TicketQueryError);
+  });
+
+  test("listTicketLinkEvents is cursor-paginated (occurred_at, id), never OFFSET", async () => {
+    const { client, calls } = fakeClient({
+      data: [{
+        id: ID_1, entity_type: "shipment", entity_id: ID_2, relationship: "primary_subject", event_type: "linked",
+        reason: null, actor_auth_user_id: ACTOR_ID, actor_label: "admin", occurred_at: "2026-08-01T00:00:00Z",
+      }],
+      error: null,
+    });
+    const result = await listTicketLinkEvents(client, ID_1, ACTOR_ID, { cursorOccurredAt: "2026-08-01T00:00:00Z", cursorId: ID_2, limit: 25 });
+    assert.equal(calls[0]?.fn, "list_ticket_link_events");
+    assert.deepEqual(calls[0]?.args, { p_ticket_id: ID_1, p_actor_auth_user_id: ACTOR_ID, p_cursor_occurred_at: "2026-08-01T00:00:00Z", p_cursor_id: ID_2, p_limit: 25 });
+    assert.equal(result[0]?.eventType, "linked");
   });
 });

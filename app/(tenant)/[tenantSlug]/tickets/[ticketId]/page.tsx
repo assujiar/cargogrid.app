@@ -17,6 +17,7 @@ import {
   getTicketEscalationStatusForRequester,
   listTicketEscalationEvents,
   listTicketEscalationSuppressions,
+  listTicketLinks,
   TicketQueryError,
 } from "../../../../../server/queries/ticketing.ts";
 import { listTicketKnowledgeArticleLinks, listTicketKnowledgeArticleLinksForRequester, KbQueryError } from "../../../../../server/queries/knowledge-base.ts";
@@ -44,6 +45,10 @@ import {
   resolveTicketEscalationAction,
   suppressTicketEscalationAction,
   revokeTicketEscalationSuppressionAction,
+  searchTicketLinkCandidatesAction,
+  linkTicketRecordAction,
+  unlinkTicketRecordAction,
+  recordTicketLinkSummaryAccessAction,
 } from "../actions.ts";
 
 /**
@@ -85,18 +90,26 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
   let escalationStatusForRequester: Awaited<ReturnType<typeof getTicketEscalationStatusForRequester>> = null;
   let escalationEvents: Awaited<ReturnType<typeof listTicketEscalationEvents>> = [];
   let suppressions: Awaited<ReturnType<typeof listTicketEscalationSuppressions>> = [];
+  let ticketLinks: Awaited<ReturnType<typeof listTicketLinks>> = [];
 
   try {
     detail = await getTicket(supabase, ticketId, access.authUserId);
     if (!detail) {
       notFoundError = true;
     } else {
-      [messages, watchers, events, queues, categories] = await Promise.all([
+      [messages, watchers, events, queues, categories, ticketLinks] = await Promise.all([
         listTicketMessages(supabase, ticketId, access.authUserId, { limit: 200 }),
         listTicketWatchers(supabase, ticketId, access.authUserId),
         listTicketEvents(supabase, ticketId, access.authUserId),
         listTicketQueues(supabase, access.tenant.id, access.authUserId),
         listTicketCategories(supabase, access.tenant.id, access.authUserId),
+        // HRT-292: fetched for EVERY viewer who reaches this panel (staff,
+        // requester, or watcher) -- unlike escalation/assignment, linking is
+        // not staff-only (business rule: staff OR requester-side party may
+        // link); app.list_ticket_links itself independently re-authorizes
+        // every row for the calling principal, so there is nothing here for
+        // a lesser-privileged viewer to over-see.
+        listTicketLinks(supabase, ticketId, access.authUserId),
       ]);
       if (detail.isStaffViewer) {
         queueMembers = await listTicketQueueMembers(supabase, detail.queueId, access.authUserId);
@@ -194,6 +207,11 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       revokeEscalationSuppressionAction={(suppressionId: string, expectedVersion: number) => revokeTicketEscalationSuppressionAction.bind(null, tenantSlug, ticketId, suppressionId, expectedVersion)}
       linkArticleAction={linkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId)}
       unlinkArticleAction={(linkId: string, expectedVersion: number) => unlinkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId, linkId, expectedVersion)}
+      ticketLinks={ticketLinks}
+      searchTicketLinksAction={searchTicketLinkCandidatesAction.bind(null, tenantSlug, ticketId)}
+      linkTicketRecordAction={(entityType, entityId, relationship) => linkTicketRecordAction.bind(null, tenantSlug, ticketId, entityType, entityId, relationship)}
+      unlinkTicketRecordAction={(linkId: string, expectedVersion: number) => unlinkTicketRecordAction.bind(null, tenantSlug, ticketId, linkId, expectedVersion)}
+      markTicketLinkViewedAction={(linkId: string) => recordTicketLinkSummaryAccessAction.bind(null, tenantSlug, linkId, "summary_viewed")}
     />
   );
 }

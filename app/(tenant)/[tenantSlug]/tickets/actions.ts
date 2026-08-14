@@ -59,10 +59,15 @@ import {
   resolveTicketEscalation,
   suppressTicketEscalation,
   revokeTicketEscalationSuppression,
+  linkTicketRecord,
+  unlinkTicketRecord,
+  recordTicketLinkAccessDenial,
+  recordTicketLinkSummaryAccess,
   TicketMutationError,
 } from "../../../../server/mutations/ticketing.ts";
-import { previewTicketRouting, previewTicketEscalation, TicketQueryError } from "../../../../server/queries/ticketing.ts";
-import type { TicketRoutingPreviewRow, TicketEscalationPreviewRow } from "../../../../server/contracts/ticketing/ticketing.ts";
+import { previewTicketRouting, previewTicketEscalation, searchTicketLinkCandidates, TicketQueryError } from "../../../../server/queries/ticketing.ts";
+import { TICKET_LINK_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS } from "../../../../server/contracts/ticketing/ticketing.ts";
+import type { TicketRoutingPreviewRow, TicketEscalationPreviewRow, TicketLinkCandidateRow } from "../../../../server/contracts/ticketing/ticketing.ts";
 import type {
   MessageVisibility,
   TicketPriority,
@@ -72,6 +77,8 @@ import type {
   TicketRoutingAssignmentMode,
   TicketEscalationTriggerType,
   TicketEscalationTargetType,
+  TicketLinkEntityType,
+  TicketLinkRelationship,
 } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface TicketActionState {
@@ -1034,5 +1041,131 @@ export async function revokeTicketEscalationSuppressionAction(
     return errorMessage("Could not revoke this suppression", error);
   }
   revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+// --- Typed Ticket-Linked Records (HRT-292, CG-S12-HRT-020). Search/link/
+// unlink are all permission-gated at the RPC layer itself (staff OR
+// requester-side party may link/unlink; every candidate is independently
+// re-authorized against its OWN domain, never trusted from ticket access
+// alone) -- this file only forwards. ---
+
+export interface TicketLinkSearchActionState {
+  readonly error: string | null;
+  readonly entityType: TicketLinkEntityType | null;
+  readonly relationship: TicketLinkRelationship;
+  readonly results: readonly TicketLinkCandidateRow[];
+}
+
+const LINK_SEARCH_INITIAL: TicketLinkSearchActionState = { error: null, entityType: null, relationship: "related", results: [] };
+
+export async function searchTicketLinkCandidatesAction(
+  tenantSlug: string,
+  ticketId: string,
+  _prevState: TicketLinkSearchActionState,
+  formData: FormData,
+): Promise<TicketLinkSearchActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { ...LINK_SEARCH_INITIAL, error: NO_ACCESS.error };
+
+  const entityType = String(formData.get("entityType") ?? "") as TicketLinkEntityType;
+  const relationship = (String(formData.get("relationship") ?? "related") || "related") as TicketLinkRelationship;
+  const searchText = String(formData.get("searchText") ?? "").trim() || null;
+  if (!(TICKET_LINK_ENTITY_TYPES as readonly string[]).includes(entityType)) {
+    return { error: "Select a record type to search.", entityType: null, relationship, results: [] };
+  }
+  if (!(TICKET_LINK_RELATIONSHIPS as readonly string[]).includes(relationship)) {
+    return { error: "Select a valid relationship.", entityType, relationship: "related", results: [] };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const results = await searchTicketLinkCandidates(supabase, ticketId, entityType, searchText, access.authUserId, 20);
+    return { error: null, entityType, relationship, results };
+  } catch (error) {
+    if (error instanceof TicketQueryError) return { error: `Could not search: ${error.message}`, entityType, relationship, results: [] };
+    throw error;
+  }
+}
+
+export async function linkTicketRecordAction(
+  tenantSlug: string,
+  ticketId: string,
+  entityType: TicketLinkEntityType,
+  entityId: string,
+  relationship: TicketLinkRelationship,
+  _prevState: TicketActionState,
+  _formData: FormData,
+): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await linkTicketRecord(supabase, { ticketId, entityType, entityId, relationship, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof TicketMutationError) {
+      // Durable denial audit (decision 9 of the migration): a genuinely
+      // separate call, fire-and-forget -- never blocks the user-facing
+      // error on it, and never lets an audit-write failure mask the real
+      // denial the user already sees.
+      if (error.code === "record_not_eligible" || error.code === "entity_type_not_permitted") {
+        void recordTicketLinkAccessDenial(supabase, {
+          tenantId: access.tenant.id, ticketId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId,
+          entityType, entityId, reason: error.code,
+        }).catch(() => {});
+      }
+      return { error: `Could not link this record: ${error.message}` };
+    }
+    throw error;
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function unlinkTicketRecordAction(
+  tenantSlug: string,
+  ticketId: string,
+  linkId: string,
+  expectedVersion: number,
+  _prevState: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await unlinkTicketRecord(supabase, { linkId, expectedVersion, reason: reason ?? "", actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not unlink this record", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+// Fired only when a viewer actually expands a link's full summary -- never
+// on every list render (audit impact "safe-summary/deep-link access...
+// audited", never a per-page-view spam source). A logging failure never
+// blocks the viewer from seeing data they are already independently
+// authorized to see -- the button's own client-side expand/collapse state
+// is not gated on this call succeeding.
+export async function recordTicketLinkSummaryAccessAction(
+  tenantSlug: string,
+  linkId: string,
+  accessType: "summary_viewed" | "deep_link_opened",
+  _prevState: TicketActionState,
+  _formData: FormData,
+): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+  const supabase = await createSupabaseServerClient();
+  try {
+    await recordTicketLinkSummaryAccess(supabase, { linkId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId, accessType });
+  } catch (error) {
+    return errorMessage("Could not record this view", error);
+  }
   return OK;
 }
