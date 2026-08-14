@@ -15,6 +15,9 @@ import {
   transferTicketQueue,
   updateTicketClassification,
   transitionTicketStatus,
+  setTicketCategoryCustomerVisibility,
+  createCustomerTicket,
+  replyToCustomerTicket,
   TicketMutationError,
   type TicketMutationRpcClient,
 } from "./ticketing.ts";
@@ -157,5 +160,41 @@ describe("lifecycle mutations", () => {
         return true;
       },
     );
+  });
+});
+
+describe("HRT-287 (CG-S12-HRT-015): customer-channel and category-visibility mutations", () => {
+  test("setTicketCategoryCustomerVisibility forwards the boolean flag", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await setTicketCategoryCustomerVisibility(client, { categoryId: ID_1, customerVisible: true, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.fn, "set_ticket_category_customer_visibility");
+    assert.equal(calls[0]?.args.p_customer_visible, true);
+  });
+
+  test("createCustomerTicket forwards accountId as p_account_id -- no p_queue_id parameter exists to forge", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await createCustomerTicket(client, { tenantId: TENANT_ID, accountId: ID_1, categoryId: ID_2, priority: "normal", subject: "Invoice discrepancy", body: "My invoice total is wrong.", idempotencyKey: "idem-1", actorAuthUserId: ACTOR_ID, actorLabel: "Customer A1" });
+    assert.equal(calls[0]?.fn, "create_customer_ticket");
+    assert.equal(calls[0]?.args.p_account_id, ID_1);
+    assert.equal((calls[0]?.args as Record<string, unknown>).p_queue_id, undefined);
+  });
+
+  test("account_not_available is classified distinctly (forged/unowned account id)", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "account_not_available: X is not an account this identity may file a ticket for" } });
+    await assert.rejects(
+      () => createCustomerTicket(client, { tenantId: TENANT_ID, accountId: ID_1, categoryId: ID_2, priority: "normal", subject: "x", body: "y", idempotencyKey: null, actorAuthUserId: ACTOR_ID, actorLabel: "Customer A1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "account_not_available");
+        return true;
+      },
+    );
+  });
+
+  test("replyToCustomerTicket calls reply_to_customer_ticket, not the internal reply_to_ticket -- no visibility parameter to forward", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await replyToCustomerTicket(client, { ticketId: ID_1, body: "Any update?", attachmentFileIds: null, idempotencyKey: null, actorAuthUserId: ACTOR_ID, actorLabel: "Customer A1" });
+    assert.equal(calls[0]?.fn, "reply_to_customer_ticket");
+    assert.equal((calls[0]?.args as Record<string, unknown>).p_visibility, undefined);
   });
 });

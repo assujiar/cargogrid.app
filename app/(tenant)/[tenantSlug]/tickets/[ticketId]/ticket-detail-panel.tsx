@@ -325,6 +325,7 @@ export function TicketDetailPanel({
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs text-neutral-500">{detail.ticketNumber}</span>
+          <StatusBadge tone={detail.channel === "customer" ? "info" : "neutral"} label={detail.channel === "customer" ? "Customer" : "Internal"} />
           <StatusBadge tone={STATUS_TONE[detail.status]} label={detail.status.replace(/_/g, " ")} />
           <span className="text-xs text-neutral-500">Priority: {detail.priority}</span>
           {detail.reopenCount > 0 ? <span className="text-xs text-neutral-500">Reopened {detail.reopenCount}×</span> : null}
@@ -338,7 +339,7 @@ export function TicketDetailPanel({
             <dt className="inline font-medium">Queue:</dt> <dd className="inline">{detail.queueName}</dd>
           </div>
           <div>
-            <dt className="inline font-medium">Requester:</dt> <dd className="inline">{detail.requesterName ?? "—"}</dd>
+            <dt className="inline font-medium">{detail.channel === "customer" ? "Customer account:" : "Requester:"}</dt> <dd className="inline">{detail.requesterName ?? "—"}</dd>
           </div>
           <div>
             <dt className="inline font-medium">Assignee:</dt> <dd className="inline">{detail.assigneeName ?? "Unassigned"}</dd>

@@ -11,6 +11,11 @@ import {
   listTicketWatchers,
   listTicketEvents,
   exportTickets,
+  listCustomerAccountsForActor,
+  listCustomerTicketCategories,
+  getCustomerTicket,
+  listCustomerTickets,
+  listCustomerTicketMessages,
   TicketQueryError,
   type TicketQueryClient,
 } from "./ticketing.ts";
@@ -92,5 +97,41 @@ describe("listTicketMessages / listTicketWatchers / listTicketEvents / exportTic
     await exportTickets(client, TENANT_ID, ACTOR_ID, "2026-01-01", "2026-06-30");
     assert.equal(calls[0]?.args.p_from_date, "2026-01-01");
     assert.equal(calls[0]?.args.p_to_date, "2026-06-30");
+  });
+});
+
+describe("HRT-287 (CG-S12-HRT-015): customer-facing read queries", () => {
+  test("listCustomerAccountsForActor calls the dedicated RPC, never the internal account listing", async () => {
+    const { client, calls } = fakeClient({ data: [{ account_id: ID_1, legal_name: "Acme Logistics", parent_account_id: null }], error: null });
+    const rows = await listCustomerAccountsForActor(client, TENANT_ID, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_customer_accounts_for_actor");
+    assert.equal(rows[0]?.legalName, "Acme Logistics");
+  });
+
+  test("listCustomerTicketCategories calls the dedicated RPC", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listCustomerTicketCategories(client, TENANT_ID, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_customer_ticket_categories");
+  });
+
+  test("getCustomerTicket returns null on zero rows -- indistinguishable from a nonexistent, cross-account, or internal-channel ticket id", async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    const result = await getCustomerTicket(client, ID_1, ACTOR_ID);
+    assert.equal(result, null);
+  });
+
+  test("listCustomerTickets forwards the optional account filter, defaults limit to 50", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listCustomerTickets(client, TENANT_ID, ACTOR_ID, { accountId: ID_1, status: "open" });
+    assert.equal(calls[0]?.args.p_account_id, ID_1);
+    assert.equal(calls[0]?.args.p_limit, 50);
+  });
+
+  test("listCustomerTicketMessages calls the dedicated RPC, defaults limit to 100 -- no visibility parameter exists to forward", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listCustomerTicketMessages(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_customer_ticket_messages");
+    assert.equal(calls[0]?.args.p_limit, 100);
+    assert.equal((calls[0]?.args as Record<string, unknown>).p_visibility, undefined);
   });
 });

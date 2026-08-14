@@ -371,6 +371,42 @@ declare
     -- documented escape hatch rather than left as a permanently-red Tier A gate
     -- for every future checkpoint.
     'get_self_employee',
+    -- HRT-287 (Prompt 287, Customer-to-Tenant Ticket, CG-S12-HRT-015): this
+    -- migration is the first to use app.actor_holds_customer_user_layer as a
+    -- POSITIVE gate (app.list_customer_ticket_categories/app.list_my_tickets
+    -- return rows only if it is TRUE, the mirror image of its established
+    -- negative-exclusion use in RLS -- "not actor_holds_customer_user_layer").
+    -- It genuinely IS a real, narrow authority/context primitive (an active
+    -- customer_user-layer app.principal_memberships row check, the same
+    -- conceptual class as is_supreme_admin/actor_can_view_owner_scoped_row,
+    -- both already base keywords below) -- so the base regex keyword list is
+    -- widened here to include it, rather than special-casing each caller by
+    -- name, matching the sweep's own established evolution (ATW-023's own
+    -- resolve_customer_owner_account_scope/customer_warehouse_eligibility_
+    -- active/actor_can_view_owner_scoped_row were added the same way). This
+    -- credits app.list_customer_ticket_categories and app.list_my_tickets
+    -- (which now also calls it, HRT-287) transitively via the closure query
+    -- below -- neither needs its own v_expected entry.
+    --
+    -- app.is_ticket_queue_member (HRT-286, pre-existing -- this sweep never
+    -- actually reached the ticketing schema before HRT-287's own session,
+    -- since every prior db:test full-harness run aborted earlier at
+    -- ISS-2026-059's time-of-day-dependent procurement failure) is a
+    -- DIFFERENT, genuinely correct-by-design shape: its own WHERE clause
+    -- (`u.auth_user_id = p_auth_user_id`) can only ever answer "is THIS
+    -- caller-supplied identity an active member of this queue" -- a raw
+    -- self/other-scope equality predicate, the identical false-positive
+    -- shape app.get_self_employee/app.acknowledge_performance_outcome above
+    -- already document and are exempted for. Independently verified low-risk
+    -- even though p_auth_user_id is a plain parameter (not auth.uid()-only):
+    -- the boolean it discloses ("is employee X on queue Y") is already
+    -- broadly readable by any tenant employee via the catalog-visible
+    -- app.list_ticket_queue_members RPC (ticket_queue_members_select_scoped
+    -- RLS), so this function discloses nothing a legitimate tenant member
+    -- could not already see through the already-granted list RPC. Genuinely
+    -- correct-by-design, not a live gap -- added here per this test's own
+    -- documented escape hatch.
+    'is_ticket_queue_member',
     -- HRT-283 (Prompt 283, KPI and Performance) batch-283-285 Tier C review:
     -- app.acknowledge_performance_outcome, app.submit_performance_appeal, and
     -- app.submit_performance_self_assessment each take
@@ -435,7 +471,7 @@ begin
   edge as (select f.proname caller, m[1] callee from fn f, regexp_matches(f.prosrc, 'app\.([a-z0-9_]+)\s*\(', 'g') m),
   base as (
     select distinct proname from fn
-    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant'
+    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant|actor_holds_customer_user_layer'
   ),
   closure as (
     select proname from base

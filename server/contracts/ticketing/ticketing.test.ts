@@ -11,10 +11,17 @@ import {
   parseTicketWatcherRow,
   parseTicketEventRow,
   parseTicketExportRow,
+  parseCustomerAccountRow,
+  parseCustomerTicketCategoryRow,
+  parseCustomerTicketDetail,
+  parseCustomerTicketListRow,
+  parseCustomerTicketMessageRow,
   CreateTicketInputSchema,
   CreateTicketForEmployeeInputSchema,
   ReplyToTicketInputSchema,
   TransitionTicketStatusInputSchema,
+  CreateCustomerTicketInputSchema,
+  ReplyToCustomerTicketInputSchema,
 } from "./ticketing.ts";
 
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
@@ -146,5 +153,65 @@ describe("mutation input schemas", () => {
   test("TransitionTicketStatusInputSchema accepts a null reason (only enforced server-side per-transition)", () => {
     const v = TransitionTicketStatusInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, toStatus: "open", reason: null, actorAuthUserId: ACTOR, actorLabel: "staff1" });
     assert.equal(v.reason, null);
+  });
+});
+
+describe("HRT-287 (CG-S12-HRT-015): customer-facing row parsers and mutation inputs", () => {
+  test("parseCustomerAccountRow maps a scoped account", () => {
+    const a = parseCustomerAccountRow({ account_id: ID_1, legal_name: "Acme Logistics", parent_account_id: null });
+    assert.equal(a.legalName, "Acme Logistics");
+    assert.equal(a.parentAccountId, null);
+  });
+
+  test("parseCustomerTicketCategoryRow carries no default_queue_id/status -- a deliberately narrower shape than the staff TicketCategoryRow", () => {
+    const c = parseCustomerTicketCategoryRow({ id: ID_1, code: "BILLING", name: "Billing Question" });
+    assert.equal(c.name, "Billing Question");
+    assert.equal((c as unknown as Record<string, unknown>).defaultQueueId, undefined);
+  });
+
+  test("parseCustomerTicketListRow carries account identity, never queue/assignee identity", () => {
+    const t = parseCustomerTicketListRow({
+      id: ID_1, ticket_number: "TKT-2026-000001", subject: "Invoice discrepancy", status: "new", priority: "normal",
+      category_name: "Billing Question", account_id: ID_2, account_name: "Acme Logistics",
+      record_version: 1, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    });
+    assert.equal(t.accountName, "Acme Logistics");
+    assert.equal((t as unknown as Record<string, unknown>).queueCode, undefined);
+    assert.equal((t as unknown as Record<string, unknown>).assigneeEmployeeId, undefined);
+  });
+
+  test("parseCustomerTicketDetail includes resolution_summary/cancelled_reason (communicated back to the requester) but no queue/assignee field", () => {
+    const d = parseCustomerTicketDetail({
+      id: ID_1, ticket_number: "TKT-2026-000001", subject: "Invoice discrepancy", status: "resolved", priority: "normal",
+      category_name: "Billing Question", account_id: ID_2, account_name: "Acme Logistics",
+      resolution_summary: "Corrected the invoice.", cancelled_reason: null, last_reopen_reason: null, reopen_count: 0,
+      record_version: 2, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-02T00:00:00Z", resolved_at: "2026-01-02T00:00:00Z", closed_at: null,
+    });
+    assert.equal(d.resolutionSummary, "Corrected the invoice.");
+    assert.equal((d as unknown as Record<string, unknown>).assigneeEmployeeId, undefined);
+    assert.equal((d as unknown as Record<string, unknown>).queueId, undefined);
+  });
+
+  test("parseCustomerTicketMessageRow uses author_display (genericized for staff), never a raw staff author_label", () => {
+    const m = parseCustomerTicketMessageRow({
+      id: ID_1, ticket_id: ID_2, body: "Looking into this now.", is_redacted: false, attachment_file_ids: [],
+      author_role: "staff", author_display: "Support Team", created_at: "2026-01-01T00:00:00Z", record_version: 1,
+    });
+    assert.equal(m.authorDisplay, "Support Team");
+    assert.equal((m as unknown as Record<string, unknown>).authorLabel, undefined);
+  });
+
+  test("CreateCustomerTicketInputSchema requires accountId (validated server-side against membership scope, never trusted alone)", () => {
+    const v = CreateCustomerTicketInputSchema.parse({
+      tenantId: TENANT_ID, accountId: ID_1, categoryId: ID_2, priority: "normal", subject: "Invoice discrepancy",
+      body: "My invoice total does not match the quote.", idempotencyKey: null, actorAuthUserId: ACTOR, actorLabel: "Customer A1",
+    });
+    assert.equal(v.accountId, ID_1);
+    assert.throws(() => CreateCustomerTicketInputSchema.parse({ tenantId: TENANT_ID, categoryId: ID_2, priority: "normal", subject: "x", body: "x", idempotencyKey: null, actorAuthUserId: ACTOR, actorLabel: "x" }));
+  });
+
+  test("ReplyToCustomerTicketInputSchema has no visibility field at all -- always public, structurally", () => {
+    const v = ReplyToCustomerTicketInputSchema.parse({ ticketId: ID_1, body: "Any update?", attachmentFileIds: null, idempotencyKey: null, actorAuthUserId: ACTOR, actorLabel: "Customer A1" });
+    assert.equal((v as unknown as Record<string, unknown>).visibility, undefined);
   });
 });

@@ -21,7 +21,29 @@ const STATUS_TONE: Record<TicketStatus, StatusTone> = {
   cancelled: "neutral",
 };
 
-function TicketRow({ tenantSlug, id, ticketNumber, subject, status, priority, categoryCode, queueCode }: { tenantSlug: string; id: string; ticketNumber: string; subject: string; status: TicketStatus; priority: string; categoryCode: string; queueCode: string }) {
+function TicketRow({
+  tenantSlug,
+  id,
+  ticketNumber,
+  subject,
+  status,
+  priority,
+  categoryCode,
+  queueCode,
+  isCustomerChannel,
+  requesterName,
+}: {
+  tenantSlug: string;
+  id: string;
+  ticketNumber: string;
+  subject: string;
+  status: TicketStatus;
+  priority: string;
+  categoryCode: string;
+  queueCode: string;
+  isCustomerChannel: boolean;
+  requesterName: string | null;
+}) {
   return (
     <tr className="border-t border-neutral-100">
       <td className="p-2 text-sm">
@@ -36,6 +58,9 @@ function TicketRow({ tenantSlug, id, ticketNumber, subject, status, priority, ca
       <td className="p-2 text-sm">{priority}</td>
       <td className="p-2 text-xs text-neutral-500">{categoryCode}</td>
       <td className="p-2 text-xs text-neutral-500">{queueCode}</td>
+      <td className="p-2 text-xs text-neutral-500">
+        <StatusBadge tone={isCustomerChannel ? "info" : "neutral"} label={isCustomerChannel ? "Customer" : "Internal"} /> {requesterName ?? "—"}
+      </td>
     </tr>
   );
 }
@@ -101,18 +126,46 @@ function CreateTicketForm({ categories, queues, createTicketAction }: { categori
   );
 }
 
+function CategoryCustomerVisibilityRow({ category, setCategoryCustomerVisibilityAction }: { category: TicketCategoryRow; setCategoryCustomerVisibilityAction: (categoryId: string, customerVisible: boolean) => (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState> }) {
+  const [state, formAction, pending] = useActionState(setCategoryCustomerVisibilityAction(category.id, !category.customerVisible), INITIAL_STATE);
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 text-xs">
+      <span>
+        {category.name} ({category.code})
+      </span>
+      <div className="flex items-center gap-2">
+        <StatusBadge tone={category.customerVisible ? "success" : "neutral"} label={category.customerVisible ? "Customer-visible" : "Internal only"} />
+        <form action={formAction}>
+          <Button type="submit" variant="secondary" loading={pending} loadingLabel="Updating…">
+            {category.customerVisible ? "Hide from customers" : "Show to customers"}
+          </Button>
+        </form>
+      </div>
+      {state.error ? (
+        <p role="alert" className="w-full text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
 function AdminCatalogForms({
   queues,
+  categories,
   orgUnits,
   createQueueAction,
   createCategoryAction,
   addQueueMemberAction,
+  setCategoryCustomerVisibilityAction,
 }: {
   queues: readonly TicketQueueRow[];
+  categories: readonly TicketCategoryRow[];
   orgUnits: readonly { id: string; name: string; unitType: string }[];
   createQueueAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
   createCategoryAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
   addQueueMemberAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
+  setCategoryCustomerVisibilityAction: (categoryId: string, customerVisible: boolean) => (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
 }) {
   const [queueState, queueFormAction, queuePending] = useActionState(createQueueAction, INITIAL_STATE);
   const [categoryState, categoryFormAction, categoryPending] = useActionState(createCategoryAction, INITIAL_STATE);
@@ -224,6 +277,19 @@ function AdminCatalogForms({
             </p>
           ) : null}
         </form>
+
+        <div className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold text-neutral-700">Customer visibility (HRT-287) -- which categories a Layer 4 customer may select when raising a ticket</h3>
+          {categories.length === 0 ? (
+            <p className="text-xs text-neutral-500">No categories yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {categories.map((c) => (
+                <CategoryCustomerVisibilityRow key={c.id} category={c} setCategoryCustomerVisibilityAction={setCategoryCustomerVisibilityAction} />
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </details>
   );
@@ -242,6 +308,7 @@ export function TicketsListPanel({
   createQueueAction,
   createCategoryAction,
   addQueueMemberAction,
+  setCategoryCustomerVisibilityAction,
 }: {
   tenantSlug: string;
   queues: readonly TicketQueueRow[];
@@ -255,6 +322,7 @@ export function TicketsListPanel({
   createQueueAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
   createCategoryAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
   addQueueMemberAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
+  setCategoryCustomerVisibilityAction: (categoryId: string, customerVisible: boolean) => (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -310,12 +378,42 @@ export function TicketsListPanel({
                   <th className="p-2">Priority</th>
                   <th className="p-2">Category</th>
                   <th className="p-2">Queue</th>
+                  {showQueueView ? <th className="p-2">Channel / requester</th> : null}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((t) => (
-                  <TicketRow key={t.id} tenantSlug={tenantSlug} id={t.id} ticketNumber={t.ticketNumber} subject={t.subject} status={t.status} priority={t.priority} categoryCode={t.categoryCode} queueCode={t.queueCode} />
-                ))}
+                {showQueueView
+                  ? tickets.map((t) => (
+                      <TicketRow
+                        key={t.id}
+                        tenantSlug={tenantSlug}
+                        id={t.id}
+                        ticketNumber={t.ticketNumber}
+                        subject={t.subject}
+                        status={t.status}
+                        priority={t.priority}
+                        categoryCode={t.categoryCode}
+                        queueCode={t.queueCode}
+                        isCustomerChannel={t.requesterCustomerAccountId !== null}
+                        requesterName={t.requesterName}
+                      />
+                    ))
+                  : myTickets.map((t) => (
+                      <tr key={t.id} className="border-t border-neutral-100">
+                        <td className="p-2 text-sm">
+                          <Link href={`/${tenantSlug}/tickets/${t.id}`} className="text-primary underline">
+                            {t.ticketNumber}
+                          </Link>
+                        </td>
+                        <td className="p-2 text-sm">{t.subject}</td>
+                        <td className="p-2 text-sm">
+                          <StatusBadge tone={STATUS_TONE[t.status]} label={t.status.replace(/_/g, " ")} />
+                        </td>
+                        <td className="p-2 text-sm">{t.priority}</td>
+                        <td className="p-2 text-xs text-neutral-500">{t.categoryCode}</td>
+                        <td className="p-2 text-xs text-neutral-500">{t.queueCode}</td>
+                      </tr>
+                    ))}
               </tbody>
             </table>
           </div>
@@ -324,7 +422,15 @@ export function TicketsListPanel({
 
       <CreateTicketForm categories={categories} queues={queues} createTicketAction={createTicketAction} />
 
-      <AdminCatalogForms queues={queues} orgUnits={orgUnits} createQueueAction={createQueueAction} createCategoryAction={createCategoryAction} addQueueMemberAction={addQueueMemberAction} />
+      <AdminCatalogForms
+        queues={queues}
+        categories={categories}
+        orgUnits={orgUnits}
+        createQueueAction={createQueueAction}
+        createCategoryAction={createCategoryAction}
+        addQueueMemberAction={addQueueMemberAction}
+        setCategoryCustomerVisibilityAction={setCategoryCustomerVisibilityAction}
+      />
     </div>
   );
 }

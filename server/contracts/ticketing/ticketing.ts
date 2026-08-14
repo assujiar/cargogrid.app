@@ -1,25 +1,27 @@
 /**
- * Ticketing contract (HRT-286, CG-S12-HRT-014) -- the canonical, cross-channel
- * ticket/conversation model's TypeScript surface. Mirrors
- * supabase/migrations/20260731060000_create_ticketing_internal.sql's tables/
- * RPCs. Follows the exact directory convention every prior HRT checkpoint
- * established: Zod schemas here, list/read projections in
+ * Ticketing contract (HRT-286/287, CG-S12-HRT-014/015) -- the canonical,
+ * cross-channel ticket/conversation model's TypeScript surface. Mirrors
+ * supabase/migrations/20260731060000_create_ticketing_internal.sql (HRT-286)
+ * and 20260731080000_extend_ticketing_customer_channel.sql (HRT-287)'s
+ * tables/RPCs. Follows the exact directory convention every prior HRT
+ * checkpoint established: Zod schemas here, list/read projections in
  * server/queries/ticketing.ts, RPC-calling mutation wrappers with an
- * enumerated error-code type in server/mutations/ticketing.ts.
+ * enumerated error-code type in server/mutations/ticketing.ts -- one
+ * canonical ticket service, HRT-287 extends it with new customer-facing
+ * functions alongside the existing internal ones, per this task's own
+ * explicit instruction, never a parallel "customer-ticketing" module.
  *
- * Directory/naming choice (disclosed, since Prompt 287/288 depend on it):
- * `server/contracts/ticketing/`, `server/queries/ticketing.ts`,
- * `server/mutations/ticketing.ts` -- "ticketing", not "internal-ticket", to
- * anticipate the SAME files growing a `channel` dimension across all three
- * future channels (customer, helpdesk) without a rename. Every row/input type
- * below is already channel-agnostic where the underlying RPC is (e.g.
- * `TicketRow`); channel is a plain field, never a type discriminant of its
- * own file/module.
+ * Directory/naming choice (HRT-286, confirmed correct by HRT-287): channel is
+ * a plain field, never a type discriminant of its own file/module. Customer
+ * row/input shapes below (CustomerTicket*, CustomerAccountRow, ...) are their
+ * OWN, deliberately narrower types -- never TicketDetail/TicketListRow with
+ * fields merely unused client-side, per HRT-287's own "every customer read
+ * path needs its own explicit customer-safe projection" business rule.
  */
 
 import { z } from "zod";
 
-export const TICKET_CHANNELS = ["internal"] as const;
+export const TICKET_CHANNELS = ["internal", "customer"] as const;
 export const TicketChannelSchema = z.enum(TICKET_CHANNELS);
 export type TicketChannel = z.infer<typeof TicketChannelSchema>;
 
@@ -82,6 +84,7 @@ export const TicketCategoryRowSchema = z.object({
   code: z.string(),
   name: z.string(),
   defaultQueueId: z.string().uuid().nullable(),
+  customerVisible: z.boolean(),
   status: z.enum(["active", "inactive"]),
   recordVersion: z.number().int().positive(),
 });
@@ -93,6 +96,7 @@ export function parseTicketCategoryRow(row: Record<string, unknown>): TicketCate
     code: row.code,
     name: row.name,
     defaultQueueId: row.default_queue_id ?? null,
+    customerVisible: row.customer_visible ?? false,
     status: row.status,
     recordVersion: row.record_version,
   });
@@ -132,6 +136,7 @@ export const TicketListRowSchema = z.object({
   categoryCode: z.string(),
   queueCode: z.string(),
   requesterEmployeeId: z.string().uuid().nullable(),
+  requesterCustomerAccountId: z.string().uuid().nullable(),
   requesterName: z.string().nullable(),
   assigneeEmployeeId: z.string().uuid().nullable(),
   assigneeName: z.string().nullable(),
@@ -151,6 +156,7 @@ export function parseTicketListRow(row: Record<string, unknown>): TicketListRow 
     categoryCode: row.category_code,
     queueCode: row.queue_code,
     requesterEmployeeId: row.requester_employee_id ?? null,
+    requesterCustomerAccountId: row.requester_customer_account_id ?? null,
     requesterName: row.requester_name ?? null,
     assigneeEmployeeId: row.assignee_employee_id ?? null,
     assigneeName: row.assignee_name ?? null,
@@ -207,7 +213,8 @@ export const TicketDetailSchema = z.object({
   priority: TicketPrioritySchema,
   subject: z.string(),
   status: TicketStatusSchema,
-  requesterEmployeeId: z.string().uuid(),
+  requesterEmployeeId: z.string().uuid().nullable(),
+  requesterCustomerAccountId: z.string().uuid().nullable(),
   requesterName: z.string().nullable(),
   requestedByAuthUserId: z.string().uuid(),
   requestedBy: z.string().nullable(),
@@ -243,7 +250,8 @@ export function parseTicketDetail(row: Record<string, unknown>): TicketDetail {
     priority: row.priority,
     subject: row.subject,
     status: row.status,
-    requesterEmployeeId: row.requester_employee_id,
+    requesterEmployeeId: row.requester_employee_id ?? null,
+    requesterCustomerAccountId: row.requester_customer_account_id ?? null,
     requesterName: row.requester_name ?? null,
     requestedByAuthUserId: row.requested_by_auth_user_id,
     requestedBy: row.requested_by ?? null,
@@ -510,3 +518,176 @@ export const TransitionTicketStatusInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type TransitionTicketStatusInput = z.infer<typeof TransitionTicketStatusInputSchema>;
+
+export const SetTicketCategoryCustomerVisibilityInputSchema = z.object({
+  categoryId: z.string().uuid(),
+  customerVisible: z.boolean(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type SetTicketCategoryCustomerVisibilityInput = z.infer<typeof SetTicketCategoryCustomerVisibilityInputSchema>;
+
+// --- HRT-287 (CG-S12-HRT-015): Layer 4 customer-facing rows/inputs. Each is
+// its own, deliberately narrower shape than its internal-channel sibling --
+// never TicketDetail/TicketListRow reused with fields merely unused
+// client-side (business rule, section 24). No queue/assignee identity, no
+// internal-note/event exposure anywhere in this section.
+
+export const CustomerAccountRowSchema = z.object({
+  accountId: z.string().uuid(),
+  legalName: z.string(),
+  parentAccountId: z.string().uuid().nullable(),
+});
+export type CustomerAccountRow = z.infer<typeof CustomerAccountRowSchema>;
+
+export function parseCustomerAccountRow(row: Record<string, unknown>): CustomerAccountRow {
+  return CustomerAccountRowSchema.parse({
+    accountId: row.account_id,
+    legalName: row.legal_name,
+    parentAccountId: row.parent_account_id ?? null,
+  });
+}
+
+export const CustomerTicketCategoryRowSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+});
+export type CustomerTicketCategoryRow = z.infer<typeof CustomerTicketCategoryRowSchema>;
+
+export function parseCustomerTicketCategoryRow(row: Record<string, unknown>): CustomerTicketCategoryRow {
+  return CustomerTicketCategoryRowSchema.parse({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+  });
+}
+
+export const CustomerTicketListRowSchema = z.object({
+  id: z.string().uuid(),
+  ticketNumber: z.string(),
+  subject: z.string(),
+  status: TicketStatusSchema,
+  priority: TicketPrioritySchema,
+  categoryName: z.string(),
+  accountId: z.string().uuid(),
+  accountName: z.string(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CustomerTicketListRow = z.infer<typeof CustomerTicketListRowSchema>;
+
+export function parseCustomerTicketListRow(row: Record<string, unknown>): CustomerTicketListRow {
+  return CustomerTicketListRowSchema.parse({
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    categoryName: row.category_name,
+    accountId: row.account_id,
+    accountName: row.account_name,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+export const CustomerTicketDetailSchema = z.object({
+  id: z.string().uuid(),
+  ticketNumber: z.string(),
+  subject: z.string(),
+  status: TicketStatusSchema,
+  priority: TicketPrioritySchema,
+  categoryName: z.string(),
+  accountId: z.string().uuid(),
+  accountName: z.string(),
+  resolutionSummary: z.string().nullable(),
+  cancelledReason: z.string().nullable(),
+  lastReopenReason: z.string().nullable(),
+  reopenCount: z.number().int().nonnegative(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  closedAt: z.string().nullable(),
+});
+export type CustomerTicketDetail = z.infer<typeof CustomerTicketDetailSchema>;
+
+export function parseCustomerTicketDetail(row: Record<string, unknown>): CustomerTicketDetail {
+  return CustomerTicketDetailSchema.parse({
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    categoryName: row.category_name,
+    accountId: row.account_id,
+    accountName: row.account_name,
+    resolutionSummary: row.resolution_summary ?? null,
+    cancelledReason: row.cancelled_reason ?? null,
+    lastReopenReason: row.last_reopen_reason ?? null,
+    reopenCount: row.reopen_count,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at ?? null,
+    closedAt: row.closed_at ?? null,
+  });
+}
+
+export const CUSTOMER_MESSAGE_AUTHOR_ROLES = ["requester", "staff"] as const;
+export const CustomerMessageAuthorRoleSchema = z.enum(CUSTOMER_MESSAGE_AUTHOR_ROLES);
+
+export const CustomerTicketMessageRowSchema = z.object({
+  id: z.string().uuid(),
+  ticketId: z.string().uuid(),
+  body: z.string(),
+  isRedacted: z.boolean(),
+  attachmentFileIds: z.array(z.string().uuid()),
+  authorRole: CustomerMessageAuthorRoleSchema,
+  authorDisplay: z.string(),
+  createdAt: z.string(),
+  recordVersion: z.number().int().positive(),
+});
+export type CustomerTicketMessageRow = z.infer<typeof CustomerTicketMessageRowSchema>;
+
+export function parseCustomerTicketMessageRow(row: Record<string, unknown>): CustomerTicketMessageRow {
+  return CustomerTicketMessageRowSchema.parse({
+    id: row.id,
+    ticketId: row.ticket_id,
+    body: row.body,
+    isRedacted: row.is_redacted,
+    attachmentFileIds: row.attachment_file_ids ?? [],
+    authorRole: row.author_role,
+    authorDisplay: row.author_display,
+    createdAt: row.created_at,
+    recordVersion: row.record_version,
+  });
+}
+
+// --- HRT-287 customer mutation inputs ---
+
+export const CreateCustomerTicketInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  accountId: z.string().uuid(),
+  categoryId: z.string().uuid(),
+  priority: TicketPrioritySchema,
+  subject: z.string().min(1),
+  body: z.string().min(1),
+  idempotencyKey: z.string().min(1).nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateCustomerTicketInput = z.infer<typeof CreateCustomerTicketInputSchema>;
+
+export const ReplyToCustomerTicketInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  body: z.string().min(1),
+  attachmentFileIds: z.array(z.string().uuid()).nullable(),
+  idempotencyKey: z.string().min(1).nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ReplyToCustomerTicketInput = z.infer<typeof ReplyToCustomerTicketInputSchema>;

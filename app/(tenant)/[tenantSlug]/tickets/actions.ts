@@ -31,6 +31,7 @@ import {
   transferTicketQueue,
   updateTicketClassification,
   transitionTicketStatus,
+  setTicketCategoryCustomerVisibility,
   TicketMutationError,
 } from "../../../../server/mutations/ticketing.ts";
 import type { MessageVisibility, TicketPriority, TicketStatus } from "../../../../server/contracts/ticketing/ticketing.ts";
@@ -137,6 +138,26 @@ export async function removeTicketQueueMemberAction(
     await removeTicketQueueMember(supabase, { memberId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     return errorMessage("Could not remove this queue member", error);
+  }
+  revalidatePath(listPath(tenantSlug));
+  return OK;
+}
+
+export async function setTicketCategoryCustomerVisibilityAction(
+  tenantSlug: string,
+  categoryId: string,
+  customerVisible: boolean,
+  _prevState: TicketActionState,
+  _formData: FormData,
+): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await setTicketCategoryCustomerVisibility(supabase, { categoryId, customerVisible, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not update customer visibility for this category", error);
   }
   revalidatePath(listPath(tenantSlug));
   return OK;

@@ -1,7 +1,10 @@
 /**
- * Ticketing mutation primitives (HRT-286, CG-S12-HRT-014). Thin, typed
- * wrappers around every write RPC in
- * supabase/migrations/20260731060000_create_ticketing_internal.sql.
+ * Ticketing mutation primitives (HRT-286/287, CG-S12-HRT-014/015). Thin,
+ * typed wrappers around every write RPC in
+ * supabase/migrations/20260731060000_create_ticketing_internal.sql and
+ * 20260731080000_extend_ticketing_customer_channel.sql. The internal-facing
+ * wrappers are unchanged in shape; HRT-287 adds the customer-facing wrappers
+ * at the bottom of this file -- same module, one canonical ticket service.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -20,6 +23,9 @@ import {
   TransferTicketQueueInputSchema,
   UpdateTicketClassificationInputSchema,
   TransitionTicketStatusInputSchema,
+  SetTicketCategoryCustomerVisibilityInputSchema,
+  CreateCustomerTicketInputSchema,
+  ReplyToCustomerTicketInputSchema,
   type CreateTicketQueueInput,
   type CreateTicketCategoryInput,
   type AddTicketQueueMemberInput,
@@ -34,6 +40,9 @@ import {
   type TransferTicketQueueInput,
   type UpdateTicketClassificationInput,
   type TransitionTicketStatusInput,
+  type SetTicketCategoryCustomerVisibilityInput,
+  type CreateCustomerTicketInput,
+  type ReplyToCustomerTicketInput,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -68,6 +77,10 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "idempotency_key_conflict",
   "invalid_date_range",
   "stale_version",
+  "ticket_category_not_found",
+  "account_not_available",
+  "invalid_channel",
+  "invalid_requester_identity",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -260,6 +273,48 @@ export async function transitionTicketStatus(client: TicketMutationRpcClient, in
     p_expected_version: v.expectedVersion,
     p_to_status: v.toStatus,
     p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function setTicketCategoryCustomerVisibility(client: TicketMutationRpcClient, input: SetTicketCategoryCustomerVisibilityInput) {
+  const v = SetTicketCategoryCustomerVisibilityInputSchema.parse(input);
+  return callRpc(client, "set_ticket_category_customer_visibility", {
+    p_category_id: v.categoryId,
+    p_customer_visible: v.customerVisible,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+// --- HRT-287 (CG-S12-HRT-015): Layer 4 customer-facing mutations. Scope is
+// always derived from authenticated membership at the RPC layer
+// (app.resolve_customer_owner_account_scope) -- these wrappers never trust
+// or re-derive scope themselves, matching business rule (section 24). ---
+
+export async function createCustomerTicket(client: TicketMutationRpcClient, input: CreateCustomerTicketInput) {
+  const v = CreateCustomerTicketInputSchema.parse(input);
+  return callRpc(client, "create_customer_ticket", {
+    p_tenant_id: v.tenantId,
+    p_account_id: v.accountId,
+    p_category_id: v.categoryId,
+    p_priority: v.priority,
+    p_subject: v.subject,
+    p_body: v.body,
+    p_idempotency_key: v.idempotencyKey,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function replyToCustomerTicket(client: TicketMutationRpcClient, input: ReplyToCustomerTicketInput) {
+  const v = ReplyToCustomerTicketInputSchema.parse(input);
+  return callRpc(client, "reply_to_customer_ticket", {
+    p_ticket_id: v.ticketId,
+    p_body: v.body,
+    p_attachment_file_ids: v.attachmentFileIds,
+    p_idempotency_key: v.idempotencyKey,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
   });

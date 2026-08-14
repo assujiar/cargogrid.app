@@ -1,7 +1,11 @@
 /**
- * Ticketing read queries (HRT-286, CG-S12-HRT-014). Thin, typed wrappers
- * around every read RPC in
- * supabase/migrations/20260731060000_create_ticketing_internal.sql.
+ * Ticketing read queries (HRT-286/287, CG-S12-HRT-014/015). Thin, typed
+ * wrappers around every read RPC in
+ * supabase/migrations/20260731060000_create_ticketing_internal.sql and
+ * 20260731080000_extend_ticketing_customer_channel.sql. The internal-facing
+ * wrappers are unchanged in shape; HRT-287 adds the customer-facing wrappers
+ * at the bottom of this file -- same module, per this task's own "one
+ * canonical ticket service" instruction.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -16,6 +20,11 @@ import {
   parseTicketWatcherRow,
   parseTicketEventRow,
   parseTicketExportRow,
+  parseCustomerAccountRow,
+  parseCustomerTicketCategoryRow,
+  parseCustomerTicketDetail,
+  parseCustomerTicketListRow,
+  parseCustomerTicketMessageRow,
   type TicketQueueRow,
   type TicketCategoryRow,
   type TicketQueueMemberRow,
@@ -28,6 +37,11 @@ import {
   type TicketExportRow,
   type TicketStatus,
   type TicketPriority,
+  type CustomerAccountRow,
+  type CustomerTicketCategoryRow,
+  type CustomerTicketDetail,
+  type CustomerTicketListRow,
+  type CustomerTicketMessageRow,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -143,4 +157,63 @@ export async function exportTickets(client: TicketQueryClient, tenantId: string,
   const { data, error } = await client.rpc("export_tickets", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId, p_from_date: fromDate, p_to_date: toDate });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parseTicketExportRow);
+}
+
+// --- HRT-287 (CG-S12-HRT-015): Layer 4 customer-facing read queries. Each
+// calls its own dedicated, customer-safe projection RPC -- never the
+// internal wrappers above with fields merely dropped client-side. ---
+
+export async function listCustomerAccountsForActor(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<CustomerAccountRow[]> {
+  const { data, error } = await client.rpc("list_customer_accounts_for_actor", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseCustomerAccountRow);
+}
+
+export async function listCustomerTicketCategories(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<CustomerTicketCategoryRow[]> {
+  const { data, error } = await client.rpc("list_customer_ticket_categories", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseCustomerTicketCategoryRow);
+}
+
+export async function getCustomerTicket(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<CustomerTicketDetail | null> {
+  const { data, error } = await client.rpc("get_customer_ticket", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseCustomerTicketDetail(row) : null;
+}
+
+export interface ListCustomerTicketsOptions {
+  readonly accountId?: string | null;
+  readonly status?: TicketStatus | null;
+  readonly limit?: number;
+  readonly afterId?: string | null;
+}
+
+export async function listCustomerTickets(client: TicketQueryClient, tenantId: string, actorAuthUserId: string, options?: ListCustomerTicketsOptions): Promise<CustomerTicketListRow[]> {
+  const { data, error } = await client.rpc("list_customer_tickets", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_account_id: options?.accountId ?? null,
+    p_status: options?.status ?? null,
+    p_limit: options?.limit ?? 50,
+    p_after_id: options?.afterId ?? null,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseCustomerTicketListRow);
+}
+
+export async function listCustomerTicketMessages(
+  client: TicketQueryClient,
+  ticketId: string,
+  actorAuthUserId: string,
+  options?: { limit?: number; afterId?: string | null },
+): Promise<CustomerTicketMessageRow[]> {
+  const { data, error } = await client.rpc("list_customer_ticket_messages", {
+    p_ticket_id: ticketId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: options?.limit ?? 100,
+    p_after_id: options?.afterId ?? null,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseCustomerTicketMessageRow);
 }

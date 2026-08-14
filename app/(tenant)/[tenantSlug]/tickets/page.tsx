@@ -5,7 +5,7 @@ import { listTicketQueues, listTicketCategories, listTickets, listMyTickets, Tic
 import type { TicketStatus } from "../../../../server/contracts/ticketing/ticketing.ts";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
 import { TicketsListPanel } from "./tickets-list-panel.tsx";
-import { createTicketAction, createTicketQueueAction, createTicketCategoryAction, addTicketQueueMemberAction } from "./actions.ts";
+import { createTicketAction, createTicketQueueAction, createTicketCategoryAction, addTicketQueueMemberAction, setTicketCategoryCustomerVisibilityAction } from "./actions.ts";
 
 /**
  * Internal ticket queue/list view (HRT-286, CG-S12-HRT-014) -- the first
@@ -89,6 +89,7 @@ export default async function TicketsListPage({
         createQueueAction={createTicketQueueAction.bind(null, tenantSlug)}
         createCategoryAction={createTicketCategoryAction.bind(null, tenantSlug)}
         addQueueMemberAction={addTicketQueueMemberAction.bind(null, tenantSlug)}
+        setCategoryCustomerVisibilityAction={(categoryId, customerVisible) => setTicketCategoryCustomerVisibilityAction.bind(null, tenantSlug, categoryId, customerVisible)}
       />
     </div>
   );
