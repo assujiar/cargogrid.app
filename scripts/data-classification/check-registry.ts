@@ -28,11 +28,20 @@ import {
   HRS_REGISTRY,
   PERFORMANCE_REGISTRY,
   TRAINING_REGISTRY,
+  TICKETING_REGISTRY,
   type ClassificationEntry,
   type RegistryViolation,
 } from "./registry.ts";
 
-export const REGISTRY: readonly ClassificationEntry[] = [...PHASE_0_REGISTRY, ...FINANCE_REGISTRY, ...PROCUREMENT_REGISTRY, ...HRS_REGISTRY, ...PERFORMANCE_REGISTRY, ...TRAINING_REGISTRY];
+export const REGISTRY: readonly ClassificationEntry[] = [
+  ...PHASE_0_REGISTRY,
+  ...FINANCE_REGISTRY,
+  ...PROCUREMENT_REGISTRY,
+  ...HRS_REGISTRY,
+  ...PERFORMANCE_REGISTRY,
+  ...TRAINING_REGISTRY,
+  ...TICKETING_REGISTRY,
+];
 
 export type AdoptionGapKind = "UNCLASSIFIED_SECRET_ENV_VAR";
 

@@ -564,3 +564,32 @@ export const TRAINING_REGISTRY: readonly ClassificationEntry[] = [
     description: "readiness/decision_reason on app.talent_succession_candidates (HRT-284) — an employee's own succession-candidacy evidence for a specific position. HRS:Override-only, same tier as talent pool membership.",
   },
 ];
+
+/**
+ * Ticketing domain (HRT-286, Internal and Interdepartmental Ticket,
+ * CG-S12-HRT-014) — Phase 7's first Ticket-workstream registry entries, using
+ * the `support` category docs/standards/DATA_CLASSIFICATION_STANDARDS.md §1
+ * already reserves for exactly this domain (floor `restricted`, retention
+ * `audit_security_7y`). Row-level isolation (requester/queue-staff/watcher
+ * scope, app.can_access_ticket) is this capability's PRIMARY control — these
+ * entries classify the free-text CONTENT within an already-scoped row, not a
+ * second access boundary.
+ */
+export const TICKETING_REGISTRY: readonly ClassificationEntry[] = [
+  {
+    id: "tkt:ticket_messages.body",
+    category: "support",
+    level: "restricted",
+    owner: "Ticketing",
+    description:
+      "body on app.ticket_messages (HRT-286) — a ticket reply or internal note's free-text content, which can carry anything a real service conversation carries. Visibility is enforced structurally by the visibility enum (public vs. internal, decision 3), never by this classification alone; a redacted message's original body is never persisted anywhere else queryable, including app.audit_logs (decision 9).",
+  },
+  {
+    id: "tkt:tickets.free_text",
+    category: "support",
+    level: "restricted",
+    owner: "Ticketing",
+    description:
+      "subject/resolution_summary/cancelled_reason/last_reopen_reason on app.tickets (HRT-286) — deliberately excluded from app.ticket_audit_projection's own allowlist (structural fields only) so a bulk-readable app.audit_logs row never carries this free text, matching taxonomy class C-24's discipline.",
+  },
+];
