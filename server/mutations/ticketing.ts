@@ -99,6 +99,26 @@ import {
   type AcceptTicketAssignmentInput,
   type DeclineTicketAssignmentInput,
   type AutoRouteTicketInput,
+  CreateTicketEscalationPolicyInputSchema,
+  CreateTicketEscalationPolicyVersionInputSchema,
+  AddTicketEscalationLevelInputSchema,
+  PublishTicketEscalationPolicyVersionInputSchema,
+  EscalateTicketInputSchema,
+  AcknowledgeTicketEscalationInputSchema,
+  ResolveTicketEscalationInputSchema,
+  SuppressTicketEscalationInputSchema,
+  RevokeTicketEscalationSuppressionInputSchema,
+  RunTicketEscalationEvaluationBatchInputSchema,
+  type CreateTicketEscalationPolicyInput,
+  type CreateTicketEscalationPolicyVersionInput,
+  type AddTicketEscalationLevelInput,
+  type PublishTicketEscalationPolicyVersionInput,
+  type EscalateTicketInput,
+  type AcknowledgeTicketEscalationInput,
+  type ResolveTicketEscalationInput,
+  type SuppressTicketEscalationInput,
+  type RevokeTicketEscalationSuppressionInput,
+  type RunTicketEscalationEvaluationBatchInput,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -167,6 +187,25 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "ticket_already_assigned",
   "employee_not_eligible",
   "workload_limit_exceeded",
+  // HRT-291 (CG-S12-HRT-019): Ticket Escalation error codes.
+  "ticket_escalation_policy_not_found",
+  "ticket_escalation_policy_version_not_found",
+  "ticket_escalation_policy_ambiguous_match",
+  "escalation_policy_incomplete",
+  "invalid_level_number",
+  "invalid_trigger_type",
+  "threshold_minutes_required",
+  "threshold_minutes_not_applicable",
+  "min_priority_required",
+  "invalid_target_type",
+  "invalid_target",
+  "escalation_target_not_eligible",
+  "escalation_suppressed",
+  "escalation_already_suppressed",
+  "invalid_expiry",
+  "ticket_escalation_not_found",
+  "ticket_escalation_suppression_not_found",
+  "invalid_period",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -745,6 +784,135 @@ export async function autoRouteTicket(client: TicketMutationRpcClient, input: Au
   return callRpc(client, "auto_route_ticket", {
     p_ticket_id: v.ticketId,
     p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+// ===========================================================================
+// HRT-291 (CG-S12-HRT-019): Ticket Escalation mutation wrappers. Mirrors
+// supabase/migrations/20260731160000_create_ticket_escalation.sql.
+// ===========================================================================
+
+export async function createTicketEscalationPolicy(client: TicketMutationRpcClient, input: CreateTicketEscalationPolicyInput) {
+  const v = CreateTicketEscalationPolicyInputSchema.parse(input);
+  return callRpc(client, "create_ticket_escalation_policy", {
+    p_tenant_id: v.tenantId,
+    p_code: v.code,
+    p_name: v.name,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function createTicketEscalationPolicyVersion(client: TicketMutationRpcClient, input: CreateTicketEscalationPolicyVersionInput) {
+  const v = CreateTicketEscalationPolicyVersionInputSchema.parse(input);
+  return callRpc(client, "create_ticket_escalation_policy_version", {
+    p_policy_id: v.policyId,
+    p_channel: v.channel,
+    p_category_id: v.categoryId,
+    p_priority: v.priority,
+    p_queue_id: v.queueId,
+    p_precedence_rank: v.precedenceRank,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function addTicketEscalationLevel(client: TicketMutationRpcClient, input: AddTicketEscalationLevelInput) {
+  const v = AddTicketEscalationLevelInputSchema.parse(input);
+  return callRpc(client, "add_ticket_escalation_level", {
+    p_policy_version_id: v.policyVersionId,
+    p_level_number: v.levelNumber,
+    p_trigger_type: v.triggerType,
+    p_threshold_minutes: v.thresholdMinutes,
+    p_min_priority: v.minPriority,
+    p_target_type: v.targetType,
+    p_target_queue_id: v.targetQueueId,
+    p_target_employee_id: v.targetEmployeeId,
+    p_action_notify: v.actionNotify,
+    p_action_reassign: v.actionReassign,
+    p_cooldown_minutes: v.cooldownMinutes,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function publishTicketEscalationPolicyVersion(client: TicketMutationRpcClient, input: PublishTicketEscalationPolicyVersionInput) {
+  const v = PublishTicketEscalationPolicyVersionInputSchema.parse(input);
+  return callRpc(client, "publish_ticket_escalation_policy_version", {
+    p_version_id: v.versionId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function escalateTicket(client: TicketMutationRpcClient, input: EscalateTicketInput) {
+  const v = EscalateTicketInputSchema.parse(input);
+  return callRpc(client, "escalate_ticket", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_target_type: v.targetType,
+    p_target_queue_id: v.targetQueueId,
+    p_target_employee_id: v.targetEmployeeId,
+    p_reassign: v.reassign,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function acknowledgeTicketEscalation(client: TicketMutationRpcClient, input: AcknowledgeTicketEscalationInput) {
+  const v = AcknowledgeTicketEscalationInputSchema.parse(input);
+  return callRpc(client, "acknowledge_ticket_escalation", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function resolveTicketEscalation(client: TicketMutationRpcClient, input: ResolveTicketEscalationInput) {
+  const v = ResolveTicketEscalationInputSchema.parse(input);
+  return callRpc(client, "resolve_ticket_escalation", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function suppressTicketEscalation(client: TicketMutationRpcClient, input: SuppressTicketEscalationInput) {
+  const v = SuppressTicketEscalationInputSchema.parse(input);
+  return callRpc(client, "suppress_ticket_escalation", {
+    p_ticket_id: v.ticketId,
+    p_reason: v.reason,
+    p_expires_at: v.expiresAt,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function revokeTicketEscalationSuppression(client: TicketMutationRpcClient, input: RevokeTicketEscalationSuppressionInput) {
+  const v = RevokeTicketEscalationSuppressionInputSchema.parse(input);
+  return callRpc(client, "revoke_ticket_escalation_suppression", {
+    p_ticket_id: v.ticketId,
+    p_suppression_id: v.suppressionId,
+    p_expected_version: v.expectedVersion,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function runTicketEscalationEvaluationBatch(client: TicketMutationRpcClient, input: RunTicketEscalationEvaluationBatchInput) {
+  const v = RunTicketEscalationEvaluationBatchInputSchema.parse(input);
+  return callRpc(client, "run_ticket_escalation_evaluation_batch", {
+    p_tenant_id: v.tenantId,
+    p_as_of: v.asOf,
+    p_period_label: v.periodLabel,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
   });

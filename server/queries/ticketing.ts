@@ -45,6 +45,15 @@ import {
   parseTicketAssignmentCandidateRow,
   parseTicketQueueWorkloadRow,
   parseTicketAssignmentEventRow,
+  parseTicketEscalationPolicyRow,
+  parseTicketEscalationPolicyVersionRow,
+  parseTicketEscalationLevelRow,
+  parseTicketEscalationPreviewRow,
+  parseTicketEscalationRow,
+  parseTicketEscalationStatusForRequesterRow,
+  parseTicketEscalationEventRow,
+  parseTicketEscalationSuppressionRow,
+  parseTicketBreachQueueRow,
   type TicketQueueRow,
   type TicketCategoryRow,
   type TicketQueueMemberRow,
@@ -84,6 +93,15 @@ import {
   type TicketQueueWorkloadRow,
   type TicketAssignmentEventRow,
   type TicketChannel,
+  type TicketEscalationPolicyRow,
+  type TicketEscalationPolicyVersionRow,
+  type TicketEscalationLevelRow,
+  type TicketEscalationPreviewRow,
+  type TicketEscalationRow,
+  type TicketEscalationStatusForRequesterRow,
+  type TicketEscalationEventRow,
+  type TicketEscalationSuppressionRow,
+  type TicketBreachQueueRow,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -480,4 +498,99 @@ export async function listTicketAssignmentEvents(client: TicketQueryClient, tick
   const { data, error } = await client.rpc("list_ticket_assignment_events", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parseTicketAssignmentEventRow);
+}
+
+// ===========================================================================
+// HRT-291 (CG-S12-HRT-019): Ticket Escalation read queries. Mirrors
+// supabase/migrations/20260731160000_create_ticket_escalation.sql.
+// ===========================================================================
+
+export async function listTicketEscalationPolicies(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<TicketEscalationPolicyRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_policies", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationPolicyRow);
+}
+
+export async function listTicketEscalationPolicyVersions(client: TicketQueryClient, policyId: string, actorAuthUserId: string): Promise<TicketEscalationPolicyVersionRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_policy_versions", { p_policy_id: policyId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationPolicyVersionRow);
+}
+
+export async function listTicketEscalationLevels(client: TicketQueryClient, policyVersionId: string, actorAuthUserId: string): Promise<TicketEscalationLevelRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_levels", { p_policy_version_id: policyVersionId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationLevelRow);
+}
+
+export async function previewTicketEscalation(
+  client: TicketQueryClient,
+  tenantId: string,
+  channel: TicketChannel,
+  categoryId: string | null,
+  priority: string | null,
+  queueId: string | null,
+  actorAuthUserId: string,
+): Promise<TicketEscalationPreviewRow | null> {
+  const { data, error } = await client.rpc("preview_ticket_escalation", {
+    p_tenant_id: tenantId,
+    p_channel: channel,
+    p_category_id: categoryId,
+    p_priority: priority,
+    p_queue_id: queueId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketEscalationPreviewRow(row) : null;
+}
+
+// Staff-only full projection -- never the customer/requester-safe row below.
+export async function getTicketEscalation(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationRow | null> {
+  const { data, error } = await client.rpc("get_ticket_escalation", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketEscalationRow(row) : null;
+}
+
+// The customer/requester-safe projection -- deliberately narrower than
+// getTicketEscalation above (security impact section 16). Never derive the
+// customer-facing badge from getTicketEscalation's own richer row.
+export async function getTicketEscalationStatusForRequester(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationStatusForRequesterRow | null> {
+  const { data, error } = await client.rpc("get_ticket_escalation_status_for_requester", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketEscalationStatusForRequesterRow(row) : null;
+}
+
+export async function listTicketEscalationEvents(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationEventRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_events", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationEventRow);
+}
+
+export async function listTicketEscalationSuppressions(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationSuppressionRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_suppressions", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationSuppressionRow);
+}
+
+export interface ListTicketBreachQueueOptions {
+  readonly minLevel?: number | null;
+  readonly limit?: number;
+  readonly afterId?: string | null;
+}
+
+// The breach/stuck queue browser (decision 13, a dedicated minimal view --
+// never a widened listTickets/listMyTickets).
+export async function listTicketBreachQueue(client: TicketQueryClient, tenantId: string, actorAuthUserId: string, options?: ListTicketBreachQueueOptions): Promise<TicketBreachQueueRow[]> {
+  const { data, error } = await client.rpc("list_ticket_breach_queue", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_min_level: options?.minLevel ?? null,
+    p_limit: options?.limit ?? 50,
+    p_after_id: options?.afterId ?? null,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketBreachQueueRow);
 }

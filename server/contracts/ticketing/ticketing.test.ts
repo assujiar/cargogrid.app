@@ -47,6 +47,20 @@ import {
   CreateTicketRoutingRuleVersionInputSchema,
   DeclineTicketAssignmentInputSchema,
   TICKET_ASSIGNMENT_EVENT_TYPES,
+  parseTicketEscalationPolicyVersionRow,
+  parseTicketEscalationLevelRow,
+  parseTicketEscalationPreviewRow,
+  parseTicketEscalationRow,
+  parseTicketEscalationStatusForRequesterRow,
+  parseTicketEscalationEventRow,
+  parseTicketEscalationSuppressionRow,
+  parseTicketBreachQueueRow,
+  EscalateTicketInputSchema,
+  SuppressTicketEscalationInputSchema,
+  AddTicketEscalationLevelInputSchema,
+  CreateTicketEscalationPolicyVersionInputSchema,
+  TICKET_ESCALATION_EVENT_TYPES,
+  TICKET_ESCALATION_TRIGGER_TYPES,
 } from "./ticketing.ts";
 
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
@@ -471,5 +485,124 @@ describe("HRT-290 (CG-S12-HRT-018) ticket assignment contracts", () => {
     assert.throws(() =>
       DeclineTicketAssignmentInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, reason: "", actorAuthUserId: ACTOR, actorLabel: "staff1" })
     );
+  });
+});
+
+describe("HRT-291 (CG-S12-HRT-019) ticket escalation contracts", () => {
+  test("parseTicketEscalationPolicyVersionRow maps the scope tuple", () => {
+    const v = parseTicketEscalationPolicyVersionRow({
+      id: ID_1, version_number: 2, status: "published", channel: "internal", category_id: ID_2, priority: "high",
+      queue_id: ID_1, precedence_rank: 5, published_at: "2026-08-01T00:00:00Z", record_version: 2,
+    });
+    assert.equal(v.channel, "internal");
+    assert.equal(v.priority, "high");
+    assert.equal(v.precedenceRank, 5);
+  });
+
+  test("parseTicketEscalationLevelRow maps trigger/target/action/cooldown", () => {
+    const l = parseTicketEscalationLevelRow({
+      id: ID_1, level_number: 1, trigger_type: "sla_response_breach", threshold_minutes: null, min_priority: null,
+      target_type: "employee", target_queue_id: null, target_queue_code: null, target_employee_id: ID_2, target_employee_name: "Staff One",
+      action_notify: true, action_reassign: true, cooldown_minutes: 30,
+    });
+    assert.equal(l.triggerType, "sla_response_breach");
+    assert.equal(l.targetType, "employee");
+    assert.equal(l.actionReassign, true);
+    assert.equal(l.cooldownMinutes, 30);
+  });
+
+  test("parseTicketEscalationPreviewRow handles matched=false with every other field null", () => {
+    const r = parseTicketEscalationPreviewRow({ matched: false, policy_id: null, policy_version_id: null, version_number: null, level_count: null });
+    assert.equal(r.matched, false);
+    assert.equal(r.levelCount, null);
+  });
+
+  test("parseTicketEscalationRow (staff-only projection) carries level/target/acknowledgement detail", () => {
+    const e = parseTicketEscalationRow({
+      id: ID_1, policy_version_id: ID_2, status: "acknowledged", current_level: 2, current_level_id: ID_1,
+      last_trigger_type: "inactivity", acknowledged_at: "2026-08-01T00:00:00Z", acknowledged_by: "staff1",
+      resolved_at: null, resolved_reason: null, last_triggered_at: "2026-08-01T00:00:00Z", record_version: 3,
+    });
+    assert.equal(e.status, "acknowledged");
+    assert.equal(e.currentLevel, 2);
+    assert.equal(e.acknowledgedBy, "staff1");
+  });
+
+  test("parseTicketEscalationStatusForRequesterRow (customer-safe projection) is a SINGLE boolean -- no level/target/trigger/hierarchy field exists on the shape", () => {
+    const r = parseTicketEscalationStatusForRequesterRow({ is_escalated: true });
+    assert.equal(r.isEscalated, true);
+    assert.equal(Object.keys(r).length, 1);
+  });
+
+  test("parseTicketEscalationEventRow maps a reassigned event with target identity", () => {
+    const e = parseTicketEscalationEventRow({
+      id: ID_1, level_number: 1, trigger_type: "sla_response_breach", event_type: "reassigned", target_type: "employee",
+      target_queue_id: null, target_queue_code: null, target_employee_id: ID_2, target_employee_name: "Staff One",
+      reason: null, actor_label: "admin", occurred_at: "2026-08-01T00:00:00Z",
+    });
+    assert.equal(e.eventType, "reassigned");
+    assert.equal(e.targetEmployeeName, "Staff One");
+  });
+
+  test("parseTicketEscalationSuppressionRow maps reason/expiry/revocation", () => {
+    const s = parseTicketEscalationSuppressionRow({
+      id: ID_1, reason: "already handling directly", expires_at: "2026-08-01T02:00:00Z", suppressed_by: "admin",
+      revoked_at: null, revoked_by: null, revoked_reason: null, record_version: 1, created_at: "2026-08-01T00:00:00Z",
+    });
+    assert.equal(s.reason, "already handling directly");
+    assert.equal(s.revokedAt, null);
+  });
+
+  test("parseTicketBreachQueueRow maps the dedicated breach-queue projection", () => {
+    const r = parseTicketBreachQueueRow({
+      ticket_id: ID_1, ticket_number: "TKT-2026-000001", subject: "Stuck ticket", status: "open", priority: "urgent",
+      queue_code: "SUP", current_level: 2, last_trigger_type: "inactivity", escalation_status: "active",
+      last_triggered_at: "2026-08-01T00:00:00Z", acknowledged_at: null,
+    });
+    assert.equal(r.currentLevel, 2);
+    assert.equal(r.escalationStatus, "active");
+  });
+
+  test("EscalateTicketInputSchema requires a non-empty reason", () => {
+    assert.throws(() =>
+      EscalateTicketInputSchema.parse({
+        ticketId: ID_1, expectedVersion: 1, targetType: "employee", targetQueueId: null, targetEmployeeId: ID_2,
+        reassign: false, reason: "", actorAuthUserId: ACTOR, actorLabel: "staff1",
+      })
+    );
+  });
+
+  test("SuppressTicketEscalationInputSchema requires a non-empty reason", () => {
+    assert.throws(() =>
+      SuppressTicketEscalationInputSchema.parse({ ticketId: ID_1, reason: "", expiresAt: "2026-08-01T02:00:00Z", actorAuthUserId: ACTOR, actorLabel: "admin" })
+    );
+  });
+
+  test("AddTicketEscalationLevelInputSchema accepts a queue target with action_reassign=false", () => {
+    const l = AddTicketEscalationLevelInputSchema.parse({
+      policyVersionId: ID_1, levelNumber: 1, triggerType: "inactivity", thresholdMinutes: 30, minPriority: null,
+      targetType: "queue", targetQueueId: ID_2, targetEmployeeId: null, actionNotify: true, actionReassign: false,
+      cooldownMinutes: 60, actorAuthUserId: ACTOR, actorLabel: "staff1",
+    });
+    assert.equal(l.targetType, "queue");
+    assert.equal(l.actionReassign, false);
+  });
+
+  test("CreateTicketEscalationPolicyVersionInputSchema accepts channel=helpdesk at the type level -- server-side rejection is what actually enforces the boundary (decision 1, verified live in scripts/db-tests/ticketing-escalation.sql)", () => {
+    const v = CreateTicketEscalationPolicyVersionInputSchema.parse({
+      policyId: ID_1, channel: "helpdesk", categoryId: null, priority: null, queueId: null, precedenceRank: 0,
+      actorAuthUserId: ACTOR, actorLabel: "staff1",
+    });
+    assert.equal(v.channel, "helpdesk");
+  });
+
+  test("TICKET_ESCALATION_EVENT_TYPES covers triggered/notified/notification_failed/reassigned/reassign_skipped/acknowledged/suppressed/suppression_ended/resolved/recovered", () => {
+    for (const t of ["triggered", "notified", "notification_failed", "reassigned", "reassign_skipped", "acknowledged", "suppressed", "suppression_ended", "resolved", "recovered"]) {
+      assert.ok((TICKET_ESCALATION_EVENT_TYPES as readonly string[]).includes(t));
+    }
+  });
+
+  test("TICKET_ESCALATION_TRIGGER_TYPES never includes 'manual' -- manual escalation carries no configured level", () => {
+    assert.equal((TICKET_ESCALATION_TRIGGER_TYPES as readonly string[]).includes("manual"), false);
   });
 });

@@ -20,6 +20,10 @@ import type {
   SlaPhaseStatus,
   TicketAssignmentCandidateRow,
   TicketAssignmentEventRow,
+  TicketEscalationRow,
+  TicketEscalationStatusForRequesterRow,
+  TicketEscalationEventRow,
+  TicketEscalationSuppressionRow,
 } from "../../../../../server/contracts/ticketing/ticketing.ts";
 import { TICKET_PRIORITIES, SLA_PAUSE_REASON_CODES } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
@@ -658,6 +662,222 @@ function LinkArticleForm({ linkArticleAction }: { linkArticleAction: BoundAction
   );
 }
 
+// HRT-291 (CG-S12-HRT-019): escalation timeline/level/acknowledge/suppress
+// section. Staff sees the full projection (current level, trigger, target
+// history, active suppressions) plus every control; a requester/customer
+// sees ONLY a single is_escalated badge -- the component never receives the
+// staff-only fields for a requester viewer in the first place (page.tsx
+// fetches the two projections from two DIFFERENT RPCs, mirroring the SLA
+// section's own established split), so there is no client-side field to
+// accidentally leak. Bounded to internal/customer channels (decision 1) --
+// rendered only when detail.channel !== "helpdesk", matching the assignment
+// drawer's own established guard.
+function EscalationSection({
+  isStaffViewer,
+  escalation,
+  escalationStatusForRequester,
+  escalationEvents,
+  suppressions,
+  queues,
+  escalateAction,
+  acknowledgeAction,
+  resolveAction,
+  suppressAction,
+  revokeSuppressionAction,
+}: {
+  isStaffViewer: boolean;
+  escalation: TicketEscalationRow | null;
+  escalationStatusForRequester: TicketEscalationStatusForRequesterRow | null;
+  escalationEvents: readonly TicketEscalationEventRow[];
+  suppressions: readonly TicketEscalationSuppressionRow[];
+  queues: readonly TicketQueueRow[];
+  escalateAction: BoundAction;
+  acknowledgeAction: (expectedVersion: number) => BoundAction;
+  resolveAction: (expectedVersion: number) => BoundAction;
+  suppressAction: BoundAction;
+  revokeSuppressionAction: (suppressionId: string, expectedVersion: number) => BoundAction;
+}) {
+  const [escalateState, escalateFormAction, escalatePending] = useActionState(escalateAction, INITIAL_STATE);
+  const [suppressState, suppressFormAction, suppressPending] = useActionState(suppressAction, INITIAL_STATE);
+
+  if (!isStaffViewer) {
+    if (!escalationStatusForRequester) return null;
+    return (
+      <section aria-label="Escalation status" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Escalation status</h2>
+        <StatusBadge
+          tone={escalationStatusForRequester.isEscalated ? "warning" : "neutral"}
+          label={escalationStatusForRequester.isEscalated ? "Escalated for priority handling" : "Normal handling"}
+        />
+      </section>
+    );
+  }
+
+  const activeSuppression = suppressions.find((s) => s.revokedAt === null) ?? null;
+
+  return (
+    <section aria-label="Escalation" className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Escalation</h2>
+
+      {escalation ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <StatusBadge tone={escalation.status === "resolved" ? "neutral" : escalation.status === "acknowledged" ? "info" : "warning"} label={`Level ${escalation.currentLevel} — ${escalation.status.replace(/_/g, " ")}`} />
+          <span>Trigger: {escalation.lastTriggerType.replace(/_/g, " ")}</span>
+          <span>Last triggered: {new Date(escalation.lastTriggeredAt).toLocaleString()}</span>
+          {escalation.acknowledgedAt ? <span>Acknowledged by {escalation.acknowledgedBy} at {new Date(escalation.acknowledgedAt).toLocaleString()}</span> : null}
+        </div>
+      ) : (
+        <p className="text-xs text-neutral-500">This ticket has not been escalated.</p>
+      )}
+
+      {escalation && escalation.status !== "resolved" ? (
+        <div className="flex flex-wrap gap-2">
+          {escalation.status === "active" ? (
+            <AcknowledgeButton expectedVersion={escalation.recordVersion} acknowledgeAction={acknowledgeAction} />
+          ) : null}
+          <ResolveEscalationForm expectedVersion={escalation.recordVersion} resolveAction={resolveAction} />
+        </div>
+      ) : null}
+
+      <form action={escalateFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
+        <h3 className="text-xs font-semibold text-neutral-700">Manually escalate</h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Target type
+            <select name="targetType" required defaultValue="employee" className="rounded border border-neutral-300 p-1.5 text-xs">
+              <option value="employee">Employee</option>
+              <option value="queue">Queue</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Target queue (if target type = queue)
+            <select name="targetQueueId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-xs">
+              <option value="">Select…</option>
+              {queues.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Target employee id (if target type = employee)
+            <input name="targetEmployeeId" placeholder="employee UUID" className="min-w-[14rem] rounded border border-neutral-300 p-1.5 text-xs" />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-neutral-600">
+            <input type="checkbox" name="reassign" />
+            Also reassign to this employee
+          </label>
+        </div>
+        <input name="reason" required placeholder="Reason (required)" className="rounded border border-neutral-300 p-1.5 text-xs" />
+        <div>
+          <Button type="submit" variant="secondary" loading={escalatePending} loadingLabel="Escalating…">
+            Escalate
+          </Button>
+        </div>
+        {escalateState.error ? (
+          <p role="alert" className="text-xs text-danger">
+            {escalateState.error}
+          </p>
+        ) : null}
+      </form>
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-xs font-semibold text-neutral-700">Suppression</h3>
+        {activeSuppression ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <StatusBadge tone="warning" label={`Suppressed until ${new Date(activeSuppression.expiresAt).toLocaleString()}`} />
+            <span className="text-neutral-500">{activeSuppression.reason}</span>
+            <RevokeSuppressionForm suppressionId={activeSuppression.id} expectedVersion={activeSuppression.recordVersion} revokeSuppressionAction={revokeSuppressionAction} />
+          </div>
+        ) : (
+          <form action={suppressFormAction} className="flex flex-wrap items-end gap-2">
+            <input name="reason" required placeholder="Suppression reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+            <label className="flex flex-col gap-1 text-xs text-neutral-600">
+              Suppress until
+              <input name="expiresAt" type="datetime-local" required className="rounded border border-neutral-300 p-1.5 text-xs" />
+            </label>
+            <Button type="submit" variant="secondary" loading={suppressPending} loadingLabel="Suppressing…">
+              Suppress escalation
+            </Button>
+          </form>
+        )}
+        {suppressState.error ? (
+          <p role="alert" className="text-xs text-danger">
+            {suppressState.error}
+          </p>
+        ) : null}
+      </div>
+
+      <div>
+        <h3 className="text-xs font-semibold text-neutral-700">Escalation history</h3>
+        {escalationEvents.length === 0 ? (
+          <p className="text-xs text-neutral-500">No escalation events recorded yet.</p>
+        ) : (
+          <ul className="mt-1 flex flex-col gap-1 text-xs text-neutral-500">
+            {escalationEvents.map((e) => (
+              <li key={e.id}>
+                {new Date(e.occurredAt).toLocaleString()} — level {e.levelNumber} {e.eventType.replace(/_/g, " ")} ({e.triggerType.replace(/_/g, " ")})
+                {e.targetEmployeeName ? ` → ${e.targetEmployeeName}` : e.targetQueueCode ? ` → ${e.targetQueueCode}` : ""}
+                {e.reason ? `: ${e.reason}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function AcknowledgeButton({ expectedVersion, acknowledgeAction }: { expectedVersion: number; acknowledgeAction: (expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(acknowledgeAction(expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction}>
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Acknowledging…">
+        Acknowledge
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function ResolveEscalationForm({ expectedVersion, resolveAction }: { expectedVersion: number; resolveAction: (expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(resolveAction(expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-center gap-2">
+      <input name="reason" placeholder="Note (optional)" className="min-w-[8rem] rounded border border-neutral-300 p-1.5 text-xs" />
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Resolving…">
+        Resolve / de-escalate
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function RevokeSuppressionForm({ suppressionId, expectedVersion, revokeSuppressionAction }: { suppressionId: string; expectedVersion: number; revokeSuppressionAction: (suppressionId: string, expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(revokeSuppressionAction(suppressionId, expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex items-center gap-2">
+      <Button type="submit" variant="destructive" loading={pending} loadingLabel="Revoking…">
+        Revoke suppression
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 export function TicketDetailPanel({
   detail,
   messages,
@@ -689,6 +909,15 @@ export function TicketDetailPanel({
   acceptAssignmentAction,
   declineAssignmentAction,
   autoRouteAction,
+  escalation,
+  escalationStatusForRequester,
+  escalationEvents,
+  suppressions,
+  escalateAction,
+  acknowledgeEscalationAction,
+  resolveEscalationAction,
+  suppressEscalationAction,
+  revokeEscalationSuppressionAction,
 }: {
   tenantSlug: string;
   detail: TicketDetail;
@@ -721,6 +950,15 @@ export function TicketDetailPanel({
   acceptAssignmentAction: BoundAction;
   declineAssignmentAction: BoundAction;
   autoRouteAction: BoundAction;
+  escalation: TicketEscalationRow | null;
+  escalationStatusForRequester: TicketEscalationStatusForRequesterRow | null;
+  escalationEvents: readonly TicketEscalationEventRow[];
+  suppressions: readonly TicketEscalationSuppressionRow[];
+  escalateAction: BoundAction;
+  acknowledgeEscalationAction: (expectedVersion: number) => BoundAction;
+  resolveEscalationAction: (expectedVersion: number) => BoundAction;
+  suppressEscalationAction: BoundAction;
+  revokeEscalationSuppressionAction: (suppressionId: string, expectedVersion: number) => BoundAction;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -814,6 +1052,30 @@ export function TicketDetailPanel({
           acceptAssignmentAction={acceptAssignmentAction}
           declineAssignmentAction={declineAssignmentAction}
           autoRouteAction={autoRouteAction}
+        />
+      ) : null}
+
+      {/* HRT-291 (CG-S12-HRT-019): escalation timeline/level/acknowledge/
+          suppress -- internal/customer channels only (decision 1), matching
+          every new RPC's own reject of a helpdesk-channel ticket. A
+          requester/customer viewer still sees the minimal, structurally
+          separate is_escalated badge (EscalationSection's own non-staff
+          branch) -- rendered unconditionally on channel for that viewer,
+          since app.get_ticket_escalation_status_for_requester itself is not
+          channel-restricted the way the staff-side RPCs are. */}
+      {detail.channel !== "helpdesk" ? (
+        <EscalationSection
+          isStaffViewer={detail.isStaffViewer}
+          escalation={escalation}
+          escalationStatusForRequester={escalationStatusForRequester}
+          escalationEvents={escalationEvents}
+          suppressions={suppressions}
+          queues={queues}
+          escalateAction={escalateAction}
+          acknowledgeAction={acknowledgeEscalationAction}
+          resolveAction={resolveEscalationAction}
+          suppressAction={suppressEscalationAction}
+          revokeSuppressionAction={revokeEscalationSuppressionAction}
         />
       ) : null}
 

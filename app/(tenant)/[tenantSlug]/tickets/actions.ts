@@ -50,10 +50,19 @@ import {
   acceptTicketAssignment,
   declineTicketAssignment,
   autoRouteTicket,
+  createTicketEscalationPolicy,
+  createTicketEscalationPolicyVersion,
+  addTicketEscalationLevel,
+  publishTicketEscalationPolicyVersion,
+  escalateTicket,
+  acknowledgeTicketEscalation,
+  resolveTicketEscalation,
+  suppressTicketEscalation,
+  revokeTicketEscalationSuppression,
   TicketMutationError,
 } from "../../../../server/mutations/ticketing.ts";
-import { previewTicketRouting, TicketQueryError } from "../../../../server/queries/ticketing.ts";
-import type { TicketRoutingPreviewRow } from "../../../../server/contracts/ticketing/ticketing.ts";
+import { previewTicketRouting, previewTicketEscalation, TicketQueryError } from "../../../../server/queries/ticketing.ts";
+import type { TicketRoutingPreviewRow, TicketEscalationPreviewRow } from "../../../../server/contracts/ticketing/ticketing.ts";
 import type {
   MessageVisibility,
   TicketPriority,
@@ -61,6 +70,8 @@ import type {
   SlaPauseReasonCode,
   TicketChannel,
   TicketRoutingAssignmentMode,
+  TicketEscalationTriggerType,
+  TicketEscalationTargetType,
 } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface TicketActionState {
@@ -795,4 +806,233 @@ export async function previewTicketRoutingAction(tenantSlug: string, _prevState:
     if (error instanceof TicketMutationError || error instanceof TicketQueryError) return { error: `Could not preview routing: ${error.message}`, result: null };
     throw error;
   }
+}
+
+// --- Ticket Escalation (HRT-291, CG-S12-HRT-019). Policy/level administration
+// (TKT:Edit) mirrors the SLA/routing admin forms above exactly; manual
+// escalate/acknowledge/resolve (is_ticket_staff) and suppress/revoke
+// (TKT:Assign) mirror the assignment drawer's own "always rendered, RPC-
+// enforced" pattern -- every write here is permission-gated at the RPC
+// layer, this file only forwards. ---
+
+function escalationPath(tenantSlug: string): string {
+  return `/${tenantSlug}/tickets/escalation`;
+}
+
+export async function createTicketEscalationPolicyAction(tenantSlug: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const code = String(formData.get("code") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!code || !name) return { error: "Code and name are both required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createTicketEscalationPolicy(supabase, { tenantId: access.tenant.id, code, name, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not create this escalation policy", error);
+  }
+  revalidatePath(escalationPath(tenantSlug));
+  return OK;
+}
+
+export async function createTicketEscalationPolicyVersionAction(tenantSlug: string, policyId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const channel = String(formData.get("channel") ?? "") as TicketChannel;
+  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  const priority = (String(formData.get("priority") ?? "").trim() || null) as TicketPriority | null;
+  const queueId = String(formData.get("queueId") ?? "").trim() || null;
+  const precedenceRank = Number(formData.get("precedenceRank") ?? 0);
+  if (channel !== "internal" && channel !== "customer") return { error: "Channel must be internal or customer -- helpdesk has no escalation model." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createTicketEscalationPolicyVersion(supabase, {
+      policyId, channel, categoryId, priority, queueId, precedenceRank,
+      actorAuthUserId: access.authUserId, actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    return errorMessage("Could not create this escalation policy version", error);
+  }
+  revalidatePath(escalationPath(tenantSlug));
+  return OK;
+}
+
+export async function addTicketEscalationLevelAction(tenantSlug: string, policyVersionId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const levelNumber = Number(formData.get("levelNumber") ?? Number.NaN);
+  const triggerType = String(formData.get("triggerType") ?? "") as TicketEscalationTriggerType;
+  const thresholdRaw = String(formData.get("thresholdMinutes") ?? "").trim();
+  const thresholdMinutes = thresholdRaw ? Number(thresholdRaw) : null;
+  const minPriority = (String(formData.get("minPriority") ?? "").trim() || null) as TicketPriority | null;
+  const targetType = String(formData.get("targetType") ?? "") as TicketEscalationTargetType;
+  const targetQueueId = String(formData.get("targetQueueId") ?? "").trim() || null;
+  const targetEmployeeId = String(formData.get("targetEmployeeId") ?? "").trim() || null;
+  const actionNotify = formData.get("actionNotify") === "on";
+  const actionReassign = formData.get("actionReassign") === "on";
+  const cooldownMinutes = Number(formData.get("cooldownMinutes") ?? 60);
+  if (!Number.isInteger(levelNumber) || levelNumber <= 0) return { error: "A positive level number is required." };
+  if (!triggerType) return { error: "A trigger type is required." };
+  if (targetType !== "queue" && targetType !== "employee") return { error: "Target type must be queue or employee." };
+  if (targetType === "queue" && !targetQueueId) return { error: "A target queue is required for a queue-targeted level." };
+  if (targetType === "employee" && !targetEmployeeId) return { error: "A target employee id is required for an employee-targeted level." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await addTicketEscalationLevel(supabase, {
+      policyVersionId, levelNumber, triggerType, thresholdMinutes, minPriority,
+      targetType, targetQueueId: targetType === "queue" ? targetQueueId : null, targetEmployeeId: targetType === "employee" ? targetEmployeeId : null,
+      actionNotify, actionReassign, cooldownMinutes,
+      actorAuthUserId: access.authUserId, actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    return errorMessage("Could not save this escalation level", error);
+  }
+  revalidatePath(escalationPath(tenantSlug));
+  return OK;
+}
+
+export async function publishTicketEscalationPolicyVersionAction(tenantSlug: string, versionId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await publishTicketEscalationPolicyVersion(supabase, { versionId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not publish this escalation policy version", error);
+  }
+  revalidatePath(escalationPath(tenantSlug));
+  return OK;
+}
+
+export interface TicketEscalationPreviewActionState {
+  readonly error: string | null;
+  readonly result: TicketEscalationPreviewRow | null;
+}
+
+export async function previewTicketEscalationAction(tenantSlug: string, _prevState: TicketEscalationPreviewActionState, formData: FormData): Promise<TicketEscalationPreviewActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, result: null };
+
+  const channel = String(formData.get("channel") ?? "") as TicketChannel;
+  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  const priority = (String(formData.get("priority") ?? "").trim() || null) as TicketPriority | null;
+  const queueId = String(formData.get("queueId") ?? "").trim() || null;
+  if (channel !== "internal" && channel !== "customer") return { error: "Channel must be internal or customer.", result: null };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const result = await previewTicketEscalation(supabase, access.tenant.id, channel, categoryId, priority, queueId, access.authUserId);
+    return { error: null, result };
+  } catch (error) {
+    if (error instanceof TicketMutationError || error instanceof TicketQueryError) return { error: `Could not preview escalation: ${error.message}`, result: null };
+    throw error;
+  }
+}
+
+export async function escalateTicketAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const targetType = String(formData.get("targetType") ?? "") as TicketEscalationTargetType;
+  const targetQueueId = String(formData.get("targetQueueId") ?? "").trim() || null;
+  const targetEmployeeId = String(formData.get("targetEmployeeId") ?? "").trim() || null;
+  const reassign = formData.get("reassign") === "on";
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (targetType !== "queue" && targetType !== "employee") return { error: "Target type must be queue or employee." };
+  if (!reason) return { error: "A reason is required to manually escalate a ticket." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await escalateTicket(supabase, {
+      ticketId, expectedVersion, targetType,
+      targetQueueId: targetType === "queue" ? targetQueueId : null,
+      targetEmployeeId: targetType === "employee" ? targetEmployeeId : null,
+      reassign, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    return errorMessage("Could not escalate this ticket", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function acknowledgeTicketEscalationAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await acknowledgeTicketEscalation(supabase, { ticketId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not acknowledge this escalation", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function resolveTicketEscalationAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await resolveTicketEscalation(supabase, { ticketId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not resolve this escalation", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function suppressTicketEscalationAction(tenantSlug: string, ticketId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  const expiresAtInput = String(formData.get("expiresAt") ?? "").trim();
+  if (!reason) return { error: "A reason is required to suppress escalation." };
+  if (!expiresAtInput) return { error: "An expiry date/time is required." };
+  const expiresAt = new Date(expiresAtInput);
+  if (Number.isNaN(expiresAt.getTime())) return { error: "The expiry date/time is not valid." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await suppressTicketEscalation(supabase, { ticketId, reason, expiresAt: expiresAt.toISOString(), actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not suppress escalation for this ticket", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function revokeTicketEscalationSuppressionAction(
+  tenantSlug: string,
+  ticketId: string,
+  suppressionId: string,
+  expectedVersion: number,
+  _prevState: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await revokeTicketEscalationSuppression(supabase, { ticketId, suppressionId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not revoke this suppression", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
 }

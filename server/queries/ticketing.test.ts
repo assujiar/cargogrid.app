@@ -35,6 +35,15 @@ import {
   getTicketQueueWorkload,
   listTicketAssignmentEvents,
   TicketQueryError,
+  listTicketEscalationPolicies,
+  listTicketEscalationPolicyVersions,
+  listTicketEscalationLevels,
+  previewTicketEscalation,
+  getTicketEscalation,
+  getTicketEscalationStatusForRequester,
+  listTicketEscalationEvents,
+  listTicketEscalationSuppressions,
+  listTicketBreachQueue,
   type TicketQueryClient,
 } from "./ticketing.ts";
 
@@ -312,5 +321,82 @@ describe("HRT-290 (CG-S12-HRT-018) ticket assignment read queries", () => {
   test("listTicketAssignmentEvents throws TicketQueryError on RPC error", async () => {
     const { client } = fakeClient({ data: null, error: { message: "boom" } });
     await assert.rejects(() => listTicketAssignmentEvents(client, ID_1, ACTOR_ID), TicketQueryError);
+  });
+});
+
+describe("HRT-291 (CG-S12-HRT-019) ticket escalation read queries", () => {
+  test("listTicketEscalationPolicies / listTicketEscalationPolicyVersions / listTicketEscalationLevels parse their own row shapes", async () => {
+    const { client: policiesClient } = fakeClient({ data: [{ id: ID_1, code: "GEN-ESC", name: "General escalation", status: "active", record_version: 1 }], error: null });
+    const policies = await listTicketEscalationPolicies(policiesClient, TENANT_ID, ACTOR_ID);
+    assert.equal(policies[0]?.code, "GEN-ESC");
+
+    const { client: versionsClient } = fakeClient({
+      data: [{ id: ID_1, version_number: 1, status: "published", channel: "internal", category_id: ID_2, priority: null, queue_id: ID_1, precedence_rank: 0, published_at: "2026-08-01T00:00:00Z", record_version: 1 }],
+      error: null,
+    });
+    const versions = await listTicketEscalationPolicyVersions(versionsClient, ID_1, ACTOR_ID);
+    assert.equal(versions[0]?.channel, "internal");
+
+    const { client: levelsClient } = fakeClient({
+      data: [{
+        id: ID_1, level_number: 1, trigger_type: "inactivity", threshold_minutes: 30, min_priority: null,
+        target_type: "employee", target_queue_id: null, target_queue_code: null, target_employee_id: ID_2, target_employee_name: "Staff One",
+        action_notify: true, action_reassign: false, cooldown_minutes: 60,
+      }],
+      error: null,
+    });
+    const levels = await listTicketEscalationLevels(levelsClient, ID_1, ACTOR_ID);
+    assert.equal(levels[0]?.triggerType, "inactivity");
+    assert.equal(levels[0]?.thresholdMinutes, 30);
+  });
+
+  test("previewTicketEscalation returns null when the RPC returns zero rows", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    const result = await previewTicketEscalation(client, TENANT_ID, "internal", null, null, null, ACTOR_ID);
+    assert.equal(result, null);
+    assert.equal(calls[0]?.fn, "preview_ticket_escalation");
+  });
+
+  test("getTicketEscalation (staff-only) and getTicketEscalationStatusForRequester (customer-safe) call DIFFERENT RPCs and never share a projection", async () => {
+    const { client: staffClient, calls: staffCalls } = fakeClient({
+      data: [{
+        id: ID_1, policy_version_id: ID_2, status: "active", current_level: 1, current_level_id: ID_1,
+        last_trigger_type: "manual", acknowledged_at: null, acknowledged_by: null, resolved_at: null, resolved_reason: null,
+        last_triggered_at: "2026-08-01T00:00:00Z", record_version: 1,
+      }],
+      error: null,
+    });
+    const staffRow = await getTicketEscalation(staffClient, ID_1, ACTOR_ID);
+    assert.equal(staffCalls[0]?.fn, "get_ticket_escalation");
+    assert.equal(staffRow?.currentLevel, 1);
+
+    const { client: requesterClient, calls: requesterCalls } = fakeClient({ data: [{ is_escalated: true }], error: null });
+    const requesterRow = await getTicketEscalationStatusForRequester(requesterClient, ID_1, ACTOR_ID);
+    assert.equal(requesterCalls[0]?.fn, "get_ticket_escalation_status_for_requester");
+    assert.equal(requesterRow?.isEscalated, true);
+    assert.equal(Object.keys(requesterRow ?? {}).length, 1);
+  });
+
+  test("listTicketEscalationEvents / listTicketEscalationSuppressions throw TicketQueryError on RPC error", async () => {
+    const { client: eventsClient } = fakeClient({ data: null, error: { message: "ticket_not_found: x" } });
+    await assert.rejects(() => listTicketEscalationEvents(eventsClient, ID_1, ACTOR_ID), TicketQueryError);
+
+    const { client: suppressionsClient } = fakeClient({ data: null, error: { message: "channel_not_supported: x" } });
+    await assert.rejects(() => listTicketEscalationSuppressions(suppressionsClient, ID_1, ACTOR_ID), TicketQueryError);
+  });
+
+  test("listTicketBreachQueue is the dedicated breach/stuck-queue browser, cursor-paginated", async () => {
+    const { client, calls } = fakeClient({
+      data: [{
+        ticket_id: ID_1, ticket_number: "TKT-2026-000001", subject: "Stuck ticket", status: "open", priority: "urgent",
+        queue_code: "SUP", current_level: 2, last_trigger_type: "inactivity", escalation_status: "active",
+        last_triggered_at: "2026-08-01T00:00:00Z", acknowledged_at: null,
+      }],
+      error: null,
+    });
+    const result = await listTicketBreachQueue(client, TENANT_ID, ACTOR_ID, { minLevel: 1, limit: 25 });
+    assert.equal(calls[0]?.fn, "list_ticket_breach_queue");
+    assert.equal(calls[0]?.args.p_min_level, 1);
+    assert.equal(result[0]?.currentLevel, 2);
   });
 });
