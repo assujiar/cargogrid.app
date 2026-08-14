@@ -123,12 +123,14 @@ const OUTCOME_STATUS_TONE: Record<string, StatusTone> = {
 
 export function TeamWorkspacePanel({
   workspace,
+  teamQueueBound,
   decideLeaveAction,
   decideOvertimeAction,
   decideTimesheetAction,
   decideTrainingAction,
 }: {
   workspace: MssTeamWorkspace;
+  teamQueueBound: number;
   decideLeaveAction: (requestStepId: string) => BoundAction;
   decideOvertimeAction: (requestId: string, expectedVersion: number) => BoundAction;
   decideTimesheetAction: (entryId: string, expectedVersion: number) => BoundAction;
@@ -139,6 +141,9 @@ export function TeamWorkspacePanel({
       <h1 className="text-lg font-semibold text-text-primary">My team</h1>
 
       <Card title={`Team roster (${workspace.team.length})`}>
+        {workspace.teamTruncated ? (
+          <p className="mb-2 text-xs text-warning">Showing the first {workspace.team.length} direct reports. You have more than that — contact HR to see the rest of your team.</p>
+        ) : null}
         <ul className="flex flex-wrap gap-2 text-sm">
           {workspace.team.map((t) => (
             <li key={t.masterRecordId} className="rounded-full bg-neutral-100 px-3 py-1">
@@ -149,6 +154,9 @@ export function TeamWorkspacePanel({
       </Card>
 
       <Card title={`Approvals (${workspace.approvalQueue.length})`}>
+        {workspace.approvalQueueTruncated ? (
+          <p className="mb-2 text-xs text-warning">Showing up to {teamQueueBound} pending items per category. More may be waiting — check each capability&apos;s own admin workspace for the full queue.</p>
+        ) : null}
         {workspace.approvalQueue.length === 0 ? (
           <EmptyState title="Nothing pending" description="No approvals are waiting for your effective team." />
         ) : (

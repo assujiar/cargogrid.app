@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-hris-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
-import { getMssTeamWorkspace, SelfServiceQueryError } from "../../../../../server/queries/self-service.ts";
+import { getMssTeamWorkspace, SelfServiceQueryError, TEAM_QUEUE_BOUND } from "../../../../../server/queries/self-service.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { TeamWorkspacePanel } from "./team-workspace-panel.tsx";
@@ -53,6 +53,7 @@ export default async function MssTeamWorkspacePage({ params }: { params: Promise
   return (
     <TeamWorkspacePanel
       workspace={workspace}
+      teamQueueBound={TEAM_QUEUE_BOUND}
       decideLeaveAction={(requestStepId: string) => decideLeaveQueueItemAction.bind(null, tenantSlug, requestStepId)}
       decideOvertimeAction={(requestId: string, expectedVersion: number) => decideOvertimeQueueItemAction.bind(null, tenantSlug, requestId, expectedVersion)}
       decideTimesheetAction={(entryId: string, expectedVersion: number) => decideTimesheetQueueItemAction.bind(null, tenantSlug, entryId, expectedVersion)}

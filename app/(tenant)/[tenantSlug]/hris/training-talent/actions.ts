@@ -30,6 +30,7 @@ import {
   recordTrainingAssessment,
   issueTrainingCertificate,
   importHistoricalTrainingCertificate,
+  attachTrainingCertificateEvidence,
   verifyTrainingCertificate,
   revokeTrainingCertificate,
   runTrainingCertificateExpiryBatch,
@@ -410,6 +411,33 @@ export async function importHistoricalTrainingCertificateAction(tenantSlug: stri
     });
   } catch (error) {
     if (error instanceof TrainingTalentMutationError) return { error: `Could not import this historical certificate: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(path(tenantSlug));
+  return OK;
+}
+
+// Batch 283-285 Tier C fix (spec-compliance lens finding 1): the malware-scan/
+// tenant/record-type re-validation this wraps (app.attach_training_certificate_
+// evidence, reusing PLT-128) was real, tested, and granted at the SQL layer
+// from HRT-284's own original commit, but had no UI caller anywhere -- the
+// Certificates section's own description text ("private and malware-scanned
+// before attach") was therefore describing a feature no user could actually
+// reach. Wired here rather than merely disclosed: the backend was already
+// complete, and this section's own copy already claimed the capability existed.
+export async function attachTrainingCertificateEvidenceAction(tenantSlug: string, certificateId: string, expectedVersion: number, _prevState: TrainingTalentAdminActionState, formData: FormData): Promise<TrainingTalentAdminActionState> {
+  const access = await resolveHrisAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return NO_ACCESS;
+
+  const evidenceFileId = String(formData.get("evidenceFileId") ?? "").trim();
+  if (!evidenceFileId) return { error: "An evidence file id is required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await attachTrainingCertificateEvidence(supabase, { certificateId, expectedVersion, evidenceFileId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof TrainingTalentMutationError) return { error: `Could not attach this evidence file: ${error.message}` };
     throw error;
   }
 

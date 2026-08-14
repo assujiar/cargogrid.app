@@ -37,7 +37,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getMyEmployeeProfile, listMyTeamEmployees, EmployeeQueryError } from "./employee.ts";
 import { getMyAttendanceStatus, AttendanceQueryError } from "./attendance.ts";
 import { getMySchedule, listScheduleAssignments, ShiftRosterQueryError } from "./shift-roster.ts";
-import { listLeaveApprovalInboxForActor, getLeaveRequestDetail, LeaveQueryError } from "./leave.ts";
+import { listLeaveApprovalInboxForActor, getLeaveRequestDetail, listLeaveRequests, LeaveQueryError } from "./leave.ts";
 import {
   listMyOvertimeRequests,
   listOvertimeRequests,
@@ -92,7 +92,8 @@ function toSelfServiceError(error: unknown): SelfServiceQueryError {
   return new SelfServiceQueryError(error instanceof Error ? error.message : String(error));
 }
 
-const TEAM_QUEUE_BOUND = 20;
+/** Exported (not merely a private const) so the UI can render an honest "showing up to N" disclosure instead of a hardcoded duplicate literal drifting out of sync -- batch 283-285 Tier C fix, spec-compliance lens finding 3. */
+export const TEAM_QUEUE_BOUND = 20;
 const TEAM_LIST_BOUND = 50;
 
 // --- ESS home ---
@@ -135,6 +136,20 @@ export async function getEssHomeSummary(client: SelfServiceQueryClient, tenantId
     const today = attendanceStatuses[0] ?? null;
     const latestPayslipRow = myPayslips[0] ?? null;
 
+    // `list_leave_requests` (HRT-280) accepts an `employeeId` filter -- never
+    // a client-supplied value, always the caller's OWN server-resolved
+    // `masterRecordId` from the profile already fetched above -- and its own
+    // RLS/authority predicate always permits `r.employee_id =
+    // v_self.master_record_id` for the calling identity regardless of role,
+    // so this can never disclose anything beyond what the caller could
+    // already see. Batch 283-285 Tier C fix (spec-compliance lens finding
+    // 4): replaces the previous hardcoded `0` placeholder, which shipped a
+    // fake value on a public contract alongside otherwise-real sibling
+    // counts.
+    const myPendingLeaveRequests = profile
+      ? await listLeaveRequests(client, tenantId, actorAuthUserId, { employeeId: profile.masterRecordId, status: "pending_approval", limit: 200 })
+      : [];
+
     return {
       hasEmployeeProfile: profile !== null,
       attendanceToday: {
@@ -143,7 +158,7 @@ export async function getEssHomeSummary(client: SelfServiceQueryClient, tenantId
         openExceptionCount: today?.openExceptionCount ?? 0,
       },
       upcomingScheduleCount: mySchedule.length,
-      pendingLeaveRequestCount: 0, // no `list_my_leave_requests` RPC exists (leave.ts only exposes the tenant-scoped `listLeaveRequests`, gated by the caller's own scope) -- disclosed in the build log rather than approximated with a client-supplied employee id.
+      pendingLeaveRequestCount: myPendingLeaveRequests.length,
       pendingOvertimeRequestCount: myOvertimeRequests.filter((r) => r.status === "pending_approval").length,
       pendingTimesheetEntryCount: myTimesheetEntries.filter((r) => r.status === "pending_approval").length,
       latestPayslip: latestPayslipRow ? { payslipId: latestPayslipRow.id, currency: latestPayslipRow.currency, netPay: latestPayslipRow.netPay } : null,
@@ -182,12 +197,24 @@ function pickCurrentCycle(cycles: readonly PerformanceCycleRow[]): PerformanceCy
 
 export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenantId: string, actorAuthUserId: string): Promise<MssTeamWorkspace> {
   try {
-    const team = await listMyTeamEmployees(client, tenantId, actorAuthUserId, { limit: TEAM_LIST_BOUND });
+    // Batch 283-285 Tier C fix (spec-compliance lens finding 3): fetch one
+    // row past the bound so a genuine "more than TEAM_LIST_BOUND direct
+    // reports" case can be surfaced to the caller (`teamTruncated`) instead
+    // of silently dropping members 51+ with no signal anywhere in the UI.
+    // `app.list_my_team_employees` already supports real cursor pagination
+    // (`afterEmployeeNumber`) -- this checkpoint still bounds to a single
+    // page (section 17's own "bounded server composition" contract) but no
+    // longer hides that a boundary was hit.
+    const teamPage = await listMyTeamEmployees(client, tenantId, actorAuthUserId, { limit: TEAM_LIST_BOUND + 1 });
+    const teamTruncated = teamPage.length > TEAM_LIST_BOUND;
+    const team = teamTruncated ? teamPage.slice(0, TEAM_LIST_BOUND) : teamPage;
     if (team.length === 0) {
       return {
         isManager: false,
         team: [],
+        teamTruncated: false,
         approvalQueue: [],
+        approvalQueueTruncated: false,
         teamScheduleUpcoming: [],
         currentPerformanceCycle: null,
         teamGoalAssignments: [],
@@ -241,8 +268,8 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
       });
     }
 
-    const overtimeQueueItems: ManagerApprovalQueueItem[] = overtimePending
-      .filter((r) => teamIds.has(r.employeeId))
+    const overtimeTeamScoped = overtimePending.filter((r) => teamIds.has(r.employeeId));
+    const overtimeQueueItems: ManagerApprovalQueueItem[] = overtimeTeamScoped
       .slice(0, TEAM_QUEUE_BOUND)
       .map((r) => ({
         kind: "overtime" as const,
@@ -253,8 +280,8 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
         recordVersion: r.recordVersion,
       }));
 
-    const timesheetQueueItems: ManagerApprovalQueueItem[] = timesheetPending
-      .filter((r) => teamIds.has(r.employeeId))
+    const timesheetTeamScoped = timesheetPending.filter((r) => teamIds.has(r.employeeId));
+    const timesheetQueueItems: ManagerApprovalQueueItem[] = timesheetTeamScoped
       .slice(0, TEAM_QUEUE_BOUND)
       .map((r) => ({
         kind: "timesheet_entry" as const,
@@ -265,8 +292,8 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
         recordVersion: r.recordVersion,
       }));
 
-    const trainingQueueItems: ManagerApprovalQueueItem[] = teamEnrollments
-      .filter((e) => e.status === "pending_approval" && e.employeeId && teamIds.has(e.employeeId))
+    const trainingTeamScoped = teamEnrollments.filter((e) => e.status === "pending_approval" && e.employeeId && teamIds.has(e.employeeId));
+    const trainingQueueItems: ManagerApprovalQueueItem[] = trainingTeamScoped
       .slice(0, TEAM_QUEUE_BOUND)
       .map((e) => ({
         kind: "training_enrollment" as const,
@@ -277,10 +304,27 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
         recordVersion: e.recordVersion,
       }));
 
+    // Batch 283-285 Tier C fix (spec-compliance lens finding 3): the leave
+    // queue slices the RAW (not-yet-team-filtered) inbox before resolving
+    // each step's own employee, so its own team-scoped count is not known
+    // without a per-step detail fetch this composition layer already pays
+    // for above -- `leaveInboxSteps.length > TEAM_QUEUE_BOUND` is a
+    // deliberately conservative (may over-flag) proxy for "more pending
+    // leave approvals may exist than shown", consistent with this queue's
+    // own pre-existing fetch order. The other three queues compute the
+    // precise team-scoped truncation signal directly.
+    const approvalQueueTruncated =
+      leaveInboxSteps.length > TEAM_QUEUE_BOUND ||
+      overtimeTeamScoped.length > TEAM_QUEUE_BOUND ||
+      timesheetTeamScoped.length > TEAM_QUEUE_BOUND ||
+      trainingTeamScoped.length > TEAM_QUEUE_BOUND;
+
     return {
       isManager: true,
       team,
+      teamTruncated,
       approvalQueue: [...leaveQueueItems, ...overtimeQueueItems, ...timesheetQueueItems, ...trainingQueueItems],
+      approvalQueueTruncated,
       teamScheduleUpcoming: teamSchedule.filter((a) => teamIds.has(a.employeeId)),
       currentPerformanceCycle: currentCycle,
       teamGoalAssignments: teamGoalAssignments.filter((g) => teamIds.has(g.employeeId)),

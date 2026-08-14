@@ -370,7 +370,29 @@ declare
     -- correct-by-design, not a live gap -- added here per this test''s own
     -- documented escape hatch rather than left as a permanently-red Tier A gate
     -- for every future checkpoint.
-    'get_self_employee'
+    'get_self_employee',
+    -- HRT-283 (Prompt 283, KPI and Performance) batch-283-285 Tier C review:
+    -- app.acknowledge_performance_outcome, app.submit_performance_appeal, and
+    -- app.submit_performance_self_assessment each take
+    -- p_actor_auth_user_id, call app.assert_actor_is_session_identity first
+    -- (ATW-031), and then enforce a genuine, direct self-scope EQUALITY
+    -- check against the resolved caller''s own employee row before any
+    -- disclosure or mutation --
+    -- `v_self.master_record_id <> v_outcome.employee_id` (raises
+    -- insufficient_authority) for the first two, and an equivalent
+    -- `where ... employee_id = v_self.master_record_id` predicate on the
+    -- self-assessment row lookup for the third -- independently read and
+    -- reproduced live against each function''s own pg_get_functiondef
+    -- during the batch 283-285 Tier C review, not merely cited. This
+    -- sweep''s own `base` keyword list (evaluate_permission,
+    -- check_*_authority, is_supreme_admin, etc.) does not credit a raw
+    -- equality-based self-scope predicate as an authority check -- the
+    -- identical class of false positive `get_self_employee` above already
+    -- documents. Genuinely correct-by-design (independently re-verified,
+    -- not accepted from either function''s own build log), not a live
+    -- authority gap -- added here per this test''s own documented escape
+    -- hatch rather than left as a permanently-red Tier A gate.
+    'acknowledge_performance_outcome', 'submit_performance_appeal', 'submit_performance_self_assessment'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor

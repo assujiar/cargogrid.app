@@ -7,6 +7,7 @@ import {
   listPerformanceTemplateKpiItems,
   listPerformanceCycles,
   listPerformanceGoalAssignments,
+  listPerformanceReviewerAssignments,
   listMyPerformanceAssessments,
   listPerformanceAssessmentKpiScores,
   listPerformanceOutcomes,
@@ -90,12 +91,22 @@ export default async function KpiPerformanceAdminPage({ params }: { params: Prom
   let outcomes: Awaited<ReturnType<typeof listPerformanceOutcomes>> = [];
   let appeals: Awaited<ReturnType<typeof listPerformanceAppeals>> = [];
   let distribution: Awaited<ReturnType<typeof reportPerformanceCycleScoreDistribution>> = [];
+  // Batch 283-285 Tier C fix (spec-compliance lens finding 2): reviewer
+  // assignments were resolvable and reassignable at the RPC layer from this
+  // checkpoint's own original commit (app.list_performance_reviewer_
+  // assignments / app.reassign_performance_reviewer_assignment, both real
+  // and tested), but the admin panel never fetched or rendered them --
+  // "manager reassignment does NOT silently transfer already-submitted
+  // reviews" (decision 5, a named mandatory-reading business rule) had no
+  // reachable UI path for an HR user.
+  let reviewerAssignments: Awaited<ReturnType<typeof listPerformanceReviewerAssignments>> = [];
 
   if (currentCycle) {
-    [goalAssignments, outcomes, appeals] = await Promise.all([
+    [goalAssignments, outcomes, appeals, reviewerAssignments] = await Promise.all([
       listPerformanceGoalAssignments(supabase, access.tenant.id, currentCycle.id, access.authUserId),
       listPerformanceOutcomes(supabase, access.tenant.id, currentCycle.id, access.authUserId),
       listPerformanceAppeals(supabase, access.tenant.id, currentCycle.id, access.authUserId),
+      listPerformanceReviewerAssignments(supabase, access.tenant.id, currentCycle.id, access.authUserId),
     ]);
     // The aggregate k-anonymity-floor report is HRS:View personal data
     // gated -- a manager/reviewer-only actor legitimately gets
@@ -130,6 +141,7 @@ export default async function KpiPerformanceAdminPage({ params }: { params: Prom
       cycles={cycles}
       currentCycle={currentCycle}
       goalAssignments={goalAssignments}
+      reviewerAssignments={reviewerAssignments}
       myManagerReviewerAssessments={myManagerReviewerAssessments}
       scoresByAssessmentId={scoresByAssessmentId}
       goalsByEmployeeId={goalsByEmployeeId}

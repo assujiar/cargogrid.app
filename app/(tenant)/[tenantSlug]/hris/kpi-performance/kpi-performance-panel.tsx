@@ -10,6 +10,7 @@ import type {
   PerformanceTemplateKpiItemRow,
   PerformanceCycleRow,
   PerformanceGoalAssignmentRow,
+  PerformanceReviewerAssignmentRow,
   PerformanceMyAssessmentRow,
   PerformanceAssessmentKpiScoreRow,
   PerformanceOutcomeRow,
@@ -319,6 +320,47 @@ function AssignReviewerForm({ action }: { action: BoundAction }) {
   );
 }
 
+/**
+ * Batch 283-285 Tier C fix (spec-compliance lens finding 2): the "manager
+ * reassignment does NOT silently transfer already-submitted reviews"
+ * business rule (decision 5, a named mandatory-reading item) was real and
+ * tested at the RPC layer (`app.reassign_performance_reviewer_assignment`)
+ * from this checkpoint's own original commit, but had no reachable UI form
+ * -- the bound action existed only as a `void`-ed, unused prop. Wired here
+ * as a peer of `AssignReviewerForm` rather than merely disclosed.
+ */
+function ReviewerAssignmentRowItem({ assignment, reassignAction }: {
+  assignment: PerformanceReviewerAssignmentRow;
+  reassignAction: (assignmentId: string) => BoundAction;
+}) {
+  const [state, formAction, pending] = useActionState(reassignAction(assignment.id), INITIAL_STATE);
+  return (
+    <li className="flex flex-col gap-1 rounded-md border border-neutral-200 p-2 text-sm">
+      <div className="flex items-center justify-between">
+        <span>{assignment.employeeFullName ?? assignment.employeeId} — {assignment.role} assigned to {assignment.assignedToFullName ?? assignment.assignedToEmployeeId}</span>
+        <StatusBadge tone={assignment.status === "active" ? "success" : "neutral"} label={assignment.status.replace(/_/g, " ")} />
+      </div>
+      {assignment.status === "active" ? (
+        <details className="text-xs">
+          <summary className="cursor-pointer">Reassign</summary>
+          <form action={formAction} className="mt-1 flex flex-wrap items-end gap-2">
+            <label className="text-xs text-neutral-500">
+              New assignee (employee ID)
+              <input name="newAssignedToEmployeeId" required className="mt-1 rounded border border-neutral-300 p-1 text-xs" />
+            </label>
+            <label className="text-xs text-neutral-500">
+              Reason (required)
+              <input name="reason" required className="mt-1 rounded border border-neutral-300 p-1 text-xs" />
+            </label>
+            <Button type="submit" variant="secondary" loading={pending} loadingLabel="Reassigning…">Reassign</Button>
+          </form>
+          <ErrorLine error={state.error} />
+        </details>
+      ) : null}
+    </li>
+  );
+}
+
 function ScoreGoalForm({
   assessmentId, goal, existingScore, action,
 }: {
@@ -502,7 +544,7 @@ function AppealRowItem({ appeal, decideAction }: { appeal: PerformanceAppealRow;
 }
 
 export function KpiPerformanceAdminPanel({
-  kpiDefinitions, templates, templateItemsByTemplateId, cycles, currentCycle, goalAssignments,
+  kpiDefinitions, templates, templateItemsByTemplateId, cycles, currentCycle, goalAssignments, reviewerAssignments,
   myManagerReviewerAssessments, scoresByAssessmentId, goalsByEmployeeId, outcomes, appeals, distribution,
   createPerformanceKpiDefinitionAction, createPerformanceTemplateAction, addPerformanceTemplateKpiItemAction, publishPerformanceTemplateAction,
   createPerformanceCycleAction, advancePerformanceCycleStageAction, cancelPerformanceCycleAction,
@@ -516,6 +558,7 @@ export function KpiPerformanceAdminPanel({
   cycles: PerformanceCycleRow[];
   currentCycle: PerformanceCycleRow | null;
   goalAssignments: PerformanceGoalAssignmentRow[];
+  reviewerAssignments: PerformanceReviewerAssignmentRow[];
   myManagerReviewerAssessments: PerformanceMyAssessmentRow[];
   scoresByAssessmentId: Record<string, PerformanceAssessmentKpiScoreRow[]>;
   goalsByEmployeeId: Record<string, PerformanceGoalAssignmentRow[]>;
@@ -541,7 +584,6 @@ export function KpiPerformanceAdminPanel({
   decidePerformanceAppealAction: (appealId: string, expectedVersion: number, decision: "uphold" | "overturn") => BoundAction;
 }) {
   const [calibrationView, setCalibrationView] = useState<"table" | "cards">("table");
-  void reassignPerformanceReviewerAssignmentAction; // exposed for a future reassignment form; RPC is real and tested (see build log).
 
   return (
     <div className="flex flex-col gap-8 p-6">
@@ -593,6 +635,13 @@ export function KpiPerformanceAdminPanel({
             <h2 className="text-sm font-semibold text-neutral-700">Goal assignment — {currentCycle.code}</h2>
             <AssignGoalForm kpiDefinitions={kpiDefinitions} action={assignPerformanceGoalAction(currentCycle.id)} />
             <AssignReviewerForm action={assignPerformanceReviewerAction(currentCycle.id)} />
+            {reviewerAssignments.length > 0 ? (
+              <ul className="flex flex-col gap-1">
+                {reviewerAssignments.map((a) => (
+                  <ReviewerAssignmentRowItem key={a.id} assignment={a} reassignAction={reassignPerformanceReviewerAssignmentAction} />
+                ))}
+              </ul>
+            ) : null}
             {goalAssignments.length === 0 ? (
               <EmptyState title="No goals assigned yet for this cycle" />
             ) : (

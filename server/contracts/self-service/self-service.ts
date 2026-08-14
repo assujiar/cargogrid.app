@@ -99,7 +99,11 @@ export type ManagerApprovalQueueItem =
 export interface MssTeamWorkspace {
   readonly isManager: boolean;
   readonly team: readonly MyTeamEmployeeRow[];
+  /** True when the caller has more than `TEAM_LIST_BOUND` direct reports and the roster below was truncated to that bound -- surfaced so the UI never silently hides team members (batch 283-285 Tier C fix, spec-compliance lens finding 3: a bounded composition read is a deliberate, disclosed section-17 scope choice, but truncating it with NO caller-visible signal is not). */
+  readonly teamTruncated: boolean;
   readonly approvalQueue: readonly ManagerApprovalQueueItem[];
+  /** True when one or more of the underlying leave/overtime/timesheet/training queues had more team-scoped pending items than `TEAM_QUEUE_BOUND` and was truncated -- same disclosure rationale as `teamTruncated`. */
+  readonly approvalQueueTruncated: boolean;
   readonly teamScheduleUpcoming: readonly ScheduleAssignmentListRow[];
   readonly currentPerformanceCycle: PerformanceCycleRow | null;
   readonly teamGoalAssignments: readonly PerformanceGoalAssignmentRow[];

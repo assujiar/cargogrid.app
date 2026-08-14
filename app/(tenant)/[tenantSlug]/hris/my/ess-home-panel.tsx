@@ -32,6 +32,7 @@ export function EssHomePanel({ summary, tenantSlug }: { readonly summary: EssHom
 
         <Card title="Leave and overtime">
           <div className="flex flex-col gap-3">
+            <Stat label="Pending leave requests" value={String(summary.pendingLeaveRequestCount)} />
             <Stat label="Pending overtime requests" value={String(summary.pendingOvertimeRequestCount)} />
             <Stat label="Pending timesheet entries" value={String(summary.pendingTimesheetEntryCount)} />
             <div className="flex flex-wrap gap-3 text-sm">

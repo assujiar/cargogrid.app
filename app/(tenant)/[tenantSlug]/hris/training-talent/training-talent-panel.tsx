@@ -394,17 +394,18 @@ function AssessmentForm({ recordAssessmentAction }: { recordAssessmentAction: Bo
 
 // --- Certificate ---
 
-function CertificateSection({ certificates, issueAction, importAction, verifyAction, revokeAction, runExpiryBatchAction, runReminderBatchAction }: {
+function CertificateSection({ certificates, issueAction, importAction, attachEvidenceAction, verifyAction, revokeAction, runExpiryBatchAction, runReminderBatchAction }: {
   certificates: TrainingCertificateRow[];
   issueAction: BoundAction;
   importAction: BoundAction;
+  attachEvidenceAction: (certificateId: string, expectedVersion: number) => BoundAction;
   verifyAction: (certificateId: string, expectedVersion: number) => BoundAction;
   revokeAction: (certificateId: string, expectedVersion: number) => BoundAction;
   runExpiryBatchAction: BoundAction;
   runReminderBatchAction: BoundAction;
 }) {
   return (
-    <Section title="Certificates" description="Provider/certificate evidence files are private and malware-scanned before attach (PLT-128). Expiry/reminder are real durable jobs (PLT-131/132).">
+    <Section title="Certificates" description="Certificate evidence files are private and malware-scanned before attach (PLT-128); provider evidence is not yet a built capability (disclosed in the build log). Expiry/reminder are real durable jobs (PLT-131/132).">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <InlineForm action={issueAction} submitLabel="Issue certificate">
           <input name="employeeId" required placeholder="employee id" className="rounded border border-neutral-300 p-2 text-sm" />
@@ -428,9 +429,17 @@ function CertificateSection({ certificates, issueAction, importAction, verifyAct
         <ul className="flex flex-col gap-2 text-sm">
           {certificates.slice(0, 25).map((c) => (
             <li key={c.id} className="flex items-center justify-between gap-2 rounded border border-neutral-200 p-2">
-              <span>{c.employeeFullName ?? c.employeeId} — {c.courseName ?? c.externalCourseName} ({c.source === "external_import" ? "imported" : "internal"}, {c.verificationStatus})</span>
+              <span>{c.employeeFullName ?? c.employeeId} — {c.courseName ?? c.externalCourseName} ({c.source === "external_import" ? "imported" : "internal"}, {c.verificationStatus}{c.evidenceFileId ? ", evidence attached" : ""})</span>
               <div className="flex items-center gap-2">
                 <StatusBadge tone={CERTIFICATE_STATUS_TONE[c.status] ?? "neutral"} label={c.status} />
+                {c.status !== "revoked" ? (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer">{c.evidenceFileId ? "Replace evidence" : "Attach evidence"}</summary>
+                    <InlineForm action={attachEvidenceAction(c.id, c.recordVersion)} submitLabel="Attach">
+                      <input name="evidenceFileId" required placeholder="evidence file id (malware-scanned, PLT-128)" className="rounded border border-neutral-300 p-2 text-sm" />
+                    </InlineForm>
+                  </details>
+                ) : null}
                 {c.verificationStatus === "unverified" ? <PublishButton action={verifyAction(c.id, c.recordVersion)} /> : null}
                 {c.status !== "revoked" ? (
                   <details className="text-xs">
@@ -744,6 +753,7 @@ export interface TrainingTalentAdminPanelProps {
   recordAssessmentAction: BoundAction;
   issueCertificateAction: BoundAction;
   importCertificateAction: BoundAction;
+  attachCertificateEvidenceAction: (certificateId: string, expectedVersion: number) => BoundAction;
   verifyCertificateAction: (certificateId: string, expectedVersion: number) => BoundAction;
   revokeCertificateAction: (certificateId: string, expectedVersion: number) => BoundAction;
   runExpiryBatchAction: BoundAction;
@@ -781,6 +791,7 @@ export function TrainingTalentAdminPanel(props: TrainingTalentAdminPanelProps) {
       />
       <CertificateSection
         certificates={props.certificates} issueAction={props.issueCertificateAction} importAction={props.importCertificateAction}
+        attachEvidenceAction={props.attachCertificateEvidenceAction}
         verifyAction={props.verifyCertificateAction} revokeAction={props.revokeCertificateAction} runExpiryBatchAction={props.runExpiryBatchAction}
         runReminderBatchAction={props.runReminderBatchAction}
       />

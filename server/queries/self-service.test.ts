@@ -77,6 +77,41 @@ describe("getEssHomeSummary", () => {
     const client = fakeClient({ get_my_employee_profile: { data: null, error: { message: "insufficient_authority: x" } } });
     await assert.rejects(() => getEssHomeSummary(client, TENANT_ID, ACTOR_ID), SelfServiceQueryError);
   });
+
+  // Batch 283-285 Tier C fix (spec-compliance lens finding 4): this used to
+  // be a hardcoded `0` regardless of the caller's real pending leave
+  // requests -- now computed via `list_leave_requests` scoped to the
+  // caller's OWN server-resolved employee id (never a client-supplied one).
+  test("pendingLeaveRequestCount reflects the caller's own pending leave requests, self-scoped by the server-resolved employee id", async () => {
+    const client = fakeClient({
+      get_my_employee_profile: {
+        data: [
+          {
+            master_record_id: TEAM_MEMBER_1, employee_number: "E1", tenant_id: TENANT_ID, user_id: ACTOR_ID, full_name: "A",
+            employment_type: "full_time", lifecycle_status: "active", intake_source: "hr_created", work_email: null, work_phone: null,
+            personal_email: null, personal_phone: null, national_id_number: null, date_of_birth: null, gender: null,
+            personal_address_street: null, personal_address_city: null, personal_address_province: null, personal_address_postal_code: null,
+            personal_address_country: null, hire_date: null, probation_end_date: null, employment_end_date: null,
+            company_org_unit_id: null, branch_org_unit_id: null, department_org_unit_id: null, position_title: null,
+            manager_employee_id: null, record_version: 1, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        error: null,
+      },
+      list_leave_requests: {
+        data: [
+          {
+            id: LEAVE_REQUEST_ID, employee_id: TEAM_MEMBER_1, employee_name: "A", leave_type_id: TEAM_MEMBER_1, leave_type_code: "AL", category: "leave",
+            status: "pending_approval", date_from: "2026-08-10", date_to: "2026-08-10", day_portion: "full_day", total_units: 1,
+            payroll_input_status: "pending", record_version: 1, reason_visible: true, reason: null,
+          },
+        ],
+        error: null,
+      },
+    });
+    const summary = await getEssHomeSummary(client, TENANT_ID, ACTOR_ID);
+    assert.equal(summary.pendingLeaveRequestCount, 1);
+  });
 });
 
 describe("getMssTeamWorkspace", () => {
@@ -166,5 +201,44 @@ describe("getMssTeamWorkspace", () => {
       assert.equal(leaveItem.requestStepId, LEAVE_STEP_ID);
       assert.equal(leaveItem.recordVersion, 4);
     }
+    // Batch 283-285 Tier C fix regression coverage: neither bound was hit here.
+    assert.equal(workspace.teamTruncated, false);
+    assert.equal(workspace.approvalQueueTruncated, false);
+  });
+
+  // Batch 283-285 Tier C fix (spec-compliance lens finding 3): a manager with
+  // more direct reports than the bounded page size must be told the roster
+  // was truncated, not left to discover it silently.
+  test("teamTruncated is true when the caller has more direct reports than the bounded page size", async () => {
+    const team = Array.from({ length: 51 }, (_, i) => ({
+      master_record_id: `623e4567-e89b-12d3-a456-42661417${String(4100 + i)}`,
+      employee_number: `E${i}`, full_name: `Member ${i}`, employment_type: "full_time", lifecycle_status: "active", position_title: null, hire_date: null,
+    }));
+    const client = fakeClient({ list_my_team_employees: { data: team, error: null } });
+    const workspace = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID);
+    assert.equal(workspace.isManager, true);
+    assert.equal(workspace.team.length, 50);
+    assert.equal(workspace.teamTruncated, true);
+  });
+
+  // Batch 283-285 Tier C fix (spec-compliance lens finding 3): more
+  // team-scoped pending overtime items than the queue bound must set the
+  // truncation flag, even though the rendered queue itself stays bounded.
+  test("approvalQueueTruncated is true when a team-scoped queue category exceeds the per-category bound", async () => {
+    const overtimeRows = Array.from({ length: 21 }, (_, i) => ({
+      id: `a23e4567-e89b-12d3-a456-4266141750${String(i).padStart(2, "0")}`, employee_id: TEAM_MEMBER_1, employee_number: "E1", employee_full_name: "Team Member",
+      work_date: "2026-08-01", request_type: "planned", status: "pending_approval", requested_minutes: 60, reconciliation_status: "not_reconciled",
+      eligible_minutes: null, eligible_classification: null, approved_minutes: null, payroll_input_status: "pending", record_version: 1,
+    }));
+    const client = fakeClient({
+      list_my_team_employees: {
+        data: [{ master_record_id: TEAM_MEMBER_1, employee_number: "E1", full_name: "Team Member", employment_type: "full_time", lifecycle_status: "active", position_title: null, hire_date: null }],
+        error: null,
+      },
+      list_overtime_requests: { data: overtimeRows, error: null },
+    });
+    const workspace = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID);
+    assert.equal(workspace.approvalQueue.filter((i) => i.kind === "overtime").length, 20);
+    assert.equal(workspace.approvalQueueTruncated, true);
   });
 });
