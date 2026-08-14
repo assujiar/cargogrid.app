@@ -1056,3 +1056,339 @@ export const LinkHelpdeskSupportGrantInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type LinkHelpdeskSupportGrantInput = z.infer<typeof LinkHelpdeskSupportGrantInputSchema>;
+
+// ===========================================================================
+// HRT-289 (CG-S12-HRT-017): SLA -- tightly ticket-coupled (every SLA row
+// scopes off channel/category/priority/queue/support_queue and every clock
+// is 1:1 with a ticket), so it extends THIS module rather than a sibling
+// one -- documented per this task's own explicit "your call, document it"
+// instruction. Mirrors supabase/migrations/20260731120000_create_ticket_sla.sql.
+// The Knowledge Base half (genuinely standalone -- an article has no
+// required ticket relationship) instead lives in its own sibling module,
+// server/contracts/knowledge-base/knowledge-base.ts.
+// ===========================================================================
+
+export const SLA_CLOCK_STATUSES = ["running", "paused", "completed", "cancelled"] as const;
+export const SlaClockStatusSchema = z.enum(SLA_CLOCK_STATUSES);
+export type SlaClockStatus = z.infer<typeof SlaClockStatusSchema>;
+
+export const SLA_PHASE_STATUSES = ["pending", "met", "breached"] as const;
+export const SlaPhaseStatusSchema = z.enum(SLA_PHASE_STATUSES);
+export type SlaPhaseStatus = z.infer<typeof SlaPhaseStatusSchema>;
+
+export const SLA_PAUSE_REASON_CODES = ["waiting_on_customer", "waiting_on_third_party", "internal_investigation", "other"] as const;
+export const SlaPauseReasonCodeSchema = z.enum(SLA_PAUSE_REASON_CODES);
+export type SlaPauseReasonCode = z.infer<typeof SlaPauseReasonCodeSchema>;
+
+export const SlaCalendarRowSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  status: z.enum(["active", "inactive"]),
+  recordVersion: z.number().int().positive(),
+});
+export type SlaCalendarRow = z.infer<typeof SlaCalendarRowSchema>;
+
+export function parseSlaCalendarRow(row: Record<string, unknown>): SlaCalendarRow {
+  return SlaCalendarRowSchema.parse({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    status: row.status,
+    recordVersion: row.record_version,
+  });
+}
+
+export const SlaCalendarVersionRowSchema = z.object({
+  id: z.string().uuid(),
+  versionNumber: z.number().int().positive(),
+  status: z.enum(["draft", "published", "superseded"]),
+  timezone: z.string(),
+  is24x7: z.boolean(),
+  publishedAt: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type SlaCalendarVersionRow = z.infer<typeof SlaCalendarVersionRowSchema>;
+
+export function parseSlaCalendarVersionRow(row: Record<string, unknown>): SlaCalendarVersionRow {
+  return SlaCalendarVersionRowSchema.parse({
+    id: row.id,
+    versionNumber: row.version_number,
+    status: row.status,
+    timezone: row.timezone,
+    is24x7: row.is_24x7,
+    publishedAt: row.published_at ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+export const SlaPolicyRowSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  status: z.enum(["active", "inactive"]),
+  recordVersion: z.number().int().positive(),
+});
+export type SlaPolicyRow = z.infer<typeof SlaPolicyRowSchema>;
+
+export function parseSlaPolicyRow(row: Record<string, unknown>): SlaPolicyRow {
+  return SlaPolicyRowSchema.parse({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    status: row.status,
+    recordVersion: row.record_version,
+  });
+}
+
+export const SlaPolicyVersionRowSchema = z.object({
+  id: z.string().uuid(),
+  versionNumber: z.number().int().positive(),
+  status: z.enum(["draft", "published", "superseded"]),
+  channel: TicketChannelSchema,
+  categoryId: z.string().uuid().nullable(),
+  priority: TicketPrioritySchema.nullable(),
+  customerAccountId: z.string().uuid().nullable(),
+  queueId: z.string().uuid().nullable(),
+  supportQueueId: z.string().uuid().nullable(),
+  calendarId: z.string().uuid(),
+  responseTargetMinutes: z.number().int().positive(),
+  resolutionTargetMinutes: z.number().int().positive(),
+  precedenceRank: z.number().int(),
+  publishedAt: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type SlaPolicyVersionRow = z.infer<typeof SlaPolicyVersionRowSchema>;
+
+export function parseSlaPolicyVersionRow(row: Record<string, unknown>): SlaPolicyVersionRow {
+  return SlaPolicyVersionRowSchema.parse({
+    id: row.id,
+    versionNumber: row.version_number,
+    status: row.status,
+    channel: row.channel,
+    categoryId: row.category_id ?? null,
+    priority: row.priority ?? null,
+    customerAccountId: row.customer_account_id ?? null,
+    queueId: row.queue_id ?? null,
+    supportQueueId: row.support_queue_id ?? null,
+    calendarId: row.calendar_id,
+    responseTargetMinutes: row.response_target_minutes,
+    resolutionTargetMinutes: row.resolution_target_minutes,
+    precedenceRank: row.precedence_rank,
+    publishedAt: row.published_at ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+export const TicketSlaClockRowSchema = z.object({
+  id: z.string().uuid(),
+  ticketId: z.string().uuid(),
+  slaPolicyVersionId: z.string().uuid(),
+  slaCalendarVersionId: z.string().uuid(),
+  status: SlaClockStatusSchema,
+  startedAt: z.string(),
+  responseTargetMinutes: z.number().int().positive(),
+  responseStatus: SlaPhaseStatusSchema,
+  responseMetAt: z.string().nullable(),
+  responseBreachedAt: z.string().nullable(),
+  resolutionTargetMinutes: z.number().int().positive(),
+  resolutionStatus: SlaPhaseStatusSchema,
+  resolutionMetAt: z.string().nullable(),
+  resolutionBreachedAt: z.string().nullable(),
+  lastEvaluatedAt: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketSlaClockRow = z.infer<typeof TicketSlaClockRowSchema>;
+
+export function parseTicketSlaClockRow(row: Record<string, unknown>): TicketSlaClockRow {
+  return TicketSlaClockRowSchema.parse({
+    id: row.id,
+    ticketId: row.ticket_id,
+    slaPolicyVersionId: row.sla_policy_version_id,
+    slaCalendarVersionId: row.sla_calendar_version_id,
+    status: row.status,
+    startedAt: row.started_at,
+    responseTargetMinutes: row.response_target_minutes,
+    responseStatus: row.response_status,
+    responseMetAt: row.response_met_at ?? null,
+    responseBreachedAt: row.response_breached_at ?? null,
+    resolutionTargetMinutes: row.resolution_target_minutes,
+    resolutionStatus: row.resolution_status,
+    resolutionMetAt: row.resolution_met_at ?? null,
+    resolutionBreachedAt: row.resolution_breached_at ?? null,
+    lastEvaluatedAt: row.last_evaluated_at ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+// Customer/requester-safe projection -- deliberately NO calendar/policy
+// identity, no timestamps beyond status (mirrors app.get_ticket_sla_status_
+// for_requester's own deliberately narrow column list, security impact
+// section 16 "customer users see only customer-safe target/status").
+export const TicketSlaStatusForRequesterRowSchema = z.object({
+  ticketId: z.string().uuid(),
+  responseTargetMinutes: z.number().int().positive(),
+  responseStatus: SlaPhaseStatusSchema,
+  resolutionTargetMinutes: z.number().int().positive(),
+  resolutionStatus: SlaPhaseStatusSchema,
+});
+export type TicketSlaStatusForRequesterRow = z.infer<typeof TicketSlaStatusForRequesterRowSchema>;
+
+export function parseTicketSlaStatusForRequesterRow(row: Record<string, unknown>): TicketSlaStatusForRequesterRow {
+  return TicketSlaStatusForRequesterRowSchema.parse({
+    ticketId: row.ticket_id,
+    responseTargetMinutes: row.response_target_minutes,
+    responseStatus: row.response_status,
+    resolutionTargetMinutes: row.resolution_target_minutes,
+    resolutionStatus: row.resolution_status,
+  });
+}
+
+export const TicketSlaClockEventRowSchema = z.object({
+  id: z.string().uuid(),
+  phase: z.enum(["response", "resolution"]).nullable(),
+  eventType: z.enum(["started", "paused", "resumed", "met", "breached", "reminder", "recalculated", "cancelled"]),
+  reminderThresholdPct: z.number().int().nullable(),
+  businessMinutesElapsed: z.number().int().nullable(),
+  occurredAt: z.string(),
+  actorLabel: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+export type TicketSlaClockEventRow = z.infer<typeof TicketSlaClockEventRowSchema>;
+
+export function parseTicketSlaClockEventRow(row: Record<string, unknown>): TicketSlaClockEventRow {
+  return TicketSlaClockEventRowSchema.parse({
+    id: row.id,
+    phase: row.phase ?? null,
+    eventType: row.event_type,
+    reminderThresholdPct: row.reminder_threshold_pct ?? null,
+    businessMinutesElapsed: row.business_minutes_elapsed ?? null,
+    occurredAt: row.occurred_at,
+    actorLabel: row.actor_label ?? null,
+    reason: row.reason ?? null,
+  });
+}
+
+// --- SLA mutation inputs ---
+
+export const CreateSlaCalendarInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  code: z.string().min(1),
+  name: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateSlaCalendarInput = z.infer<typeof CreateSlaCalendarInputSchema>;
+
+export const CreateSlaCalendarVersionInputSchema = z.object({
+  calendarId: z.string().uuid(),
+  timezone: z.string().min(1),
+  is24x7: z.boolean(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateSlaCalendarVersionInput = z.infer<typeof CreateSlaCalendarVersionInputSchema>;
+
+export const AddSlaCalendarBusinessHoursInputSchema = z.object({
+  calendarVersionId: z.string().uuid(),
+  dayOfWeek: z.number().int().min(0).max(6),
+  startTime: z.string(),
+  endTime: z.string(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type AddSlaCalendarBusinessHoursInput = z.infer<typeof AddSlaCalendarBusinessHoursInputSchema>;
+
+export const AddSlaCalendarHolidayInputSchema = z.object({
+  calendarVersionId: z.string().uuid(),
+  holidayDate: z.string(),
+  name: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type AddSlaCalendarHolidayInput = z.infer<typeof AddSlaCalendarHolidayInputSchema>;
+
+export const PublishSlaCalendarVersionInputSchema = z.object({
+  versionId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type PublishSlaCalendarVersionInput = z.infer<typeof PublishSlaCalendarVersionInputSchema>;
+
+export const CreateSlaPolicyInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  code: z.string().min(1),
+  name: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateSlaPolicyInput = z.infer<typeof CreateSlaPolicyInputSchema>;
+
+export const CreateSlaPolicyVersionInputSchema = z.object({
+  policyId: z.string().uuid(),
+  channel: TicketChannelSchema,
+  categoryId: z.string().uuid().nullable(),
+  priority: TicketPrioritySchema.nullable(),
+  customerAccountId: z.string().uuid().nullable(),
+  queueId: z.string().uuid().nullable(),
+  supportQueueId: z.string().uuid().nullable(),
+  calendarId: z.string().uuid(),
+  responseTargetMinutes: z.number().int().positive(),
+  resolutionTargetMinutes: z.number().int().positive(),
+  precedenceRank: z.number().int(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateSlaPolicyVersionInput = z.infer<typeof CreateSlaPolicyVersionInputSchema>;
+
+export const PublishSlaPolicyVersionInputSchema = z.object({
+  versionId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type PublishSlaPolicyVersionInput = z.infer<typeof PublishSlaPolicyVersionInputSchema>;
+
+export const StartTicketSlaClockInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type StartTicketSlaClockInput = z.infer<typeof StartTicketSlaClockInputSchema>;
+
+export const PauseTicketSlaClockInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  pauseReasonCode: SlaPauseReasonCodeSchema,
+  reason: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type PauseTicketSlaClockInput = z.infer<typeof PauseTicketSlaClockInputSchema>;
+
+export const ResumeTicketSlaClockInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ResumeTicketSlaClockInput = z.infer<typeof ResumeTicketSlaClockInputSchema>;
+
+export const RecalculateTicketSlaClockInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type RecalculateTicketSlaClockInput = z.infer<typeof RecalculateTicketSlaClockInputSchema>;
+
+export const RunTicketSlaEvaluationBatchInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  asOf: z.string().nullable(),
+  periodLabel: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type RunTicketSlaEvaluationBatchInput = z.infer<typeof RunTicketSlaEvaluationBatchInputSchema>;

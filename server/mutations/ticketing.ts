@@ -59,6 +59,32 @@ import {
   type TransferHelpdeskSupportQueueInput,
   type UpdateHelpdeskTicketClassificationInput,
   type LinkHelpdeskSupportGrantInput,
+  CreateSlaCalendarInputSchema,
+  CreateSlaCalendarVersionInputSchema,
+  AddSlaCalendarBusinessHoursInputSchema,
+  AddSlaCalendarHolidayInputSchema,
+  PublishSlaCalendarVersionInputSchema,
+  CreateSlaPolicyInputSchema,
+  CreateSlaPolicyVersionInputSchema,
+  PublishSlaPolicyVersionInputSchema,
+  StartTicketSlaClockInputSchema,
+  PauseTicketSlaClockInputSchema,
+  ResumeTicketSlaClockInputSchema,
+  RecalculateTicketSlaClockInputSchema,
+  RunTicketSlaEvaluationBatchInputSchema,
+  type CreateSlaCalendarInput,
+  type CreateSlaCalendarVersionInput,
+  type AddSlaCalendarBusinessHoursInput,
+  type AddSlaCalendarHolidayInput,
+  type PublishSlaCalendarVersionInput,
+  type CreateSlaPolicyInput,
+  type CreateSlaPolicyVersionInput,
+  type PublishSlaPolicyVersionInput,
+  type StartTicketSlaClockInput,
+  type PauseTicketSlaClockInput,
+  type ResumeTicketSlaClockInput,
+  type RecalculateTicketSlaClockInput,
+  type RunTicketSlaEvaluationBatchInput,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -103,6 +129,19 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "assignee_not_support_staff",
   "support_queue_not_available",
   "support_grant_not_found",
+  // HRT-289 (CG-S12-HRT-017): SLA error codes.
+  "sla_calendar_not_found",
+  "sla_calendar_version_not_found",
+  "sla_policy_not_found",
+  "sla_policy_version_not_found",
+  "sla_policy_not_matched",
+  "sla_policy_ambiguous_match",
+  "sla_calendar_not_published",
+  "calendar_incomplete",
+  "invalid_timezone",
+  "timezone_required",
+  "invalid_pause_reason",
+  "ticket_sla_clock_not_found",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -443,6 +482,159 @@ export async function linkHelpdeskSupportGrant(client: TicketMutationRpcClient, 
     p_ticket_id: v.ticketId,
     p_expected_version: v.expectedVersion,
     p_case_ref: v.caseRef,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+// ===========================================================================
+// HRT-289 (CG-S12-HRT-017): SLA mutation wrappers. Mirrors
+// supabase/migrations/20260731120000_create_ticket_sla.sql.
+// ===========================================================================
+
+export async function createSlaCalendar(client: TicketMutationRpcClient, input: CreateSlaCalendarInput) {
+  const v = CreateSlaCalendarInputSchema.parse(input);
+  return callRpc(client, "create_sla_calendar", {
+    p_tenant_id: v.tenantId,
+    p_code: v.code,
+    p_name: v.name,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function createSlaCalendarVersion(client: TicketMutationRpcClient, input: CreateSlaCalendarVersionInput) {
+  const v = CreateSlaCalendarVersionInputSchema.parse(input);
+  return callRpc(client, "create_sla_calendar_version", {
+    p_calendar_id: v.calendarId,
+    p_timezone: v.timezone,
+    p_is_24x7: v.is24x7,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function addSlaCalendarBusinessHours(client: TicketMutationRpcClient, input: AddSlaCalendarBusinessHoursInput) {
+  const v = AddSlaCalendarBusinessHoursInputSchema.parse(input);
+  return callRpc(client, "add_sla_calendar_business_hours", {
+    p_calendar_version_id: v.calendarVersionId,
+    p_day_of_week: v.dayOfWeek,
+    p_start_time: v.startTime,
+    p_end_time: v.endTime,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function addSlaCalendarHoliday(client: TicketMutationRpcClient, input: AddSlaCalendarHolidayInput) {
+  const v = AddSlaCalendarHolidayInputSchema.parse(input);
+  return callRpc(client, "add_sla_calendar_holiday", {
+    p_calendar_version_id: v.calendarVersionId,
+    p_holiday_date: v.holidayDate,
+    p_name: v.name,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function publishSlaCalendarVersion(client: TicketMutationRpcClient, input: PublishSlaCalendarVersionInput) {
+  const v = PublishSlaCalendarVersionInputSchema.parse(input);
+  return callRpc(client, "publish_sla_calendar_version", {
+    p_version_id: v.versionId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function createSlaPolicy(client: TicketMutationRpcClient, input: CreateSlaPolicyInput) {
+  const v = CreateSlaPolicyInputSchema.parse(input);
+  return callRpc(client, "create_sla_policy", {
+    p_tenant_id: v.tenantId,
+    p_code: v.code,
+    p_name: v.name,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function createSlaPolicyVersion(client: TicketMutationRpcClient, input: CreateSlaPolicyVersionInput) {
+  const v = CreateSlaPolicyVersionInputSchema.parse(input);
+  return callRpc(client, "create_sla_policy_version", {
+    p_policy_id: v.policyId,
+    p_channel: v.channel,
+    p_category_id: v.categoryId,
+    p_priority: v.priority,
+    p_customer_account_id: v.customerAccountId,
+    p_queue_id: v.queueId,
+    p_support_queue_id: v.supportQueueId,
+    p_calendar_id: v.calendarId,
+    p_response_target_minutes: v.responseTargetMinutes,
+    p_resolution_target_minutes: v.resolutionTargetMinutes,
+    p_precedence_rank: v.precedenceRank,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function publishSlaPolicyVersion(client: TicketMutationRpcClient, input: PublishSlaPolicyVersionInput) {
+  const v = PublishSlaPolicyVersionInputSchema.parse(input);
+  return callRpc(client, "publish_sla_policy_version", {
+    p_version_id: v.versionId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function startTicketSlaClock(client: TicketMutationRpcClient, input: StartTicketSlaClockInput) {
+  const v = StartTicketSlaClockInputSchema.parse(input);
+  return callRpc(client, "start_ticket_sla_clock", {
+    p_ticket_id: v.ticketId,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function pauseTicketSlaClock(client: TicketMutationRpcClient, input: PauseTicketSlaClockInput) {
+  const v = PauseTicketSlaClockInputSchema.parse(input);
+  return callRpc(client, "pause_ticket_sla_clock", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_pause_reason_code: v.pauseReasonCode,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function resumeTicketSlaClock(client: TicketMutationRpcClient, input: ResumeTicketSlaClockInput) {
+  const v = ResumeTicketSlaClockInputSchema.parse(input);
+  return callRpc(client, "resume_ticket_sla_clock", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function recalculateTicketSlaClock(client: TicketMutationRpcClient, input: RecalculateTicketSlaClockInput) {
+  const v = RecalculateTicketSlaClockInputSchema.parse(input);
+  return callRpc(client, "recalculate_ticket_sla_clock", {
+    p_ticket_id: v.ticketId,
+    p_expected_version: v.expectedVersion,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function runTicketSlaEvaluationBatch(client: TicketMutationRpcClient, input: RunTicketSlaEvaluationBatchInput) {
+  const v = RunTicketSlaEvaluationBatchInputSchema.parse(input);
+  return callRpc(client, "run_ticket_sla_evaluation_batch", {
+    p_tenant_id: v.tenantId,
+    p_as_of: v.asOf,
+    p_period_label: v.periodLabel,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
   });

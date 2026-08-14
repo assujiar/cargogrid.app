@@ -4,6 +4,8 @@ import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { TicketActionState } from "../actions.ts";
+import type { KbActionState } from "../../knowledge-base/actions.ts";
+import type { KbTicketArticleLinkRow, KbTicketArticleLinkForRequesterRow } from "../../../../../server/contracts/knowledge-base/knowledge-base.ts";
 import type {
   TicketDetail,
   TicketMessageRow,
@@ -13,10 +15,19 @@ import type {
   TicketCategoryRow,
   TicketQueueMemberRow,
   TicketStatus,
+  TicketSlaClockRow,
+  TicketSlaStatusForRequesterRow,
+  SlaPhaseStatus,
 } from "../../../../../server/contracts/ticketing/ticketing.ts";
-import { TICKET_PRIORITIES } from "../../../../../server/contracts/ticketing/ticketing.ts";
+import { TICKET_PRIORITIES, SLA_PAUSE_REASON_CODES } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
 const INITIAL_STATE: TicketActionState = { error: null };
+
+const SLA_PHASE_TONE: Record<SlaPhaseStatus, StatusTone> = {
+  pending: "info",
+  met: "success",
+  breached: "danger",
+};
 
 const STATUS_TONE: Record<TicketStatus, StatusTone> = {
   new: "info",
@@ -286,6 +297,229 @@ function ClassifyForm({ categories, currentCategoryId, currentPriority, classify
   );
 }
 
+// HRT-289 (CG-S12-HRT-017): SLA status/controls -- a distinct section, never
+// woven into the lifecycle Status section above, matching the underlying
+// RPCs' own "explicit, separate action" discipline (decision 1). Staff sees
+// the full projection (calendar/policy identity implied by target minutes)
+// plus pause/resume/start controls; a requester sees ONLY the narrower
+// target/status projection with no controls at all -- the component never
+// receives the staff-only fields for a requester viewer in the first place
+// (page.tsx fetches the two projections from two DIFFERENT RPCs), so there
+// is no client-side field to accidentally leak.
+function SlaSection({
+  isStaffViewer,
+  slaClock,
+  slaStatusForRequester,
+  startSlaClockAction,
+  pauseSlaClockAction,
+  resumeSlaClockAction,
+}: {
+  isStaffViewer: boolean;
+  slaClock: TicketSlaClockRow | null;
+  slaStatusForRequester: TicketSlaStatusForRequesterRow | null;
+  startSlaClockAction: BoundAction;
+  pauseSlaClockAction: (expectedVersion: number) => BoundAction;
+  resumeSlaClockAction: (expectedVersion: number) => BoundAction;
+}) {
+  const [startState, startFormAction, startPending] = useActionState(startSlaClockAction, INITIAL_STATE);
+
+  if (!isStaffViewer) {
+    if (!slaStatusForRequester) return null;
+    return (
+      <section aria-label="Service level" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Service level</h2>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span>Response:</span>
+          <StatusBadge tone={SLA_PHASE_TONE[slaStatusForRequester.responseStatus]} label={slaStatusForRequester.responseStatus} />
+          <span>Resolution:</span>
+          <StatusBadge tone={SLA_PHASE_TONE[slaStatusForRequester.resolutionStatus]} label={slaStatusForRequester.resolutionStatus} />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="Service level" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Service level (SLA)</h2>
+      {!slaClock ? (
+        <form action={startFormAction} className="flex flex-col gap-2">
+          <p className="text-xs text-neutral-500">No SLA clock has been started for this ticket yet.</p>
+          <div>
+            <Button type="submit" variant="secondary" loading={startPending} loadingLabel="Starting…">
+              Start SLA clock
+            </Button>
+          </div>
+          {startState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {startState.error}
+            </p>
+          ) : null}
+        </form>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <StatusBadge tone={slaClock.status === "running" ? "info" : slaClock.status === "paused" ? "warning" : "neutral"} label={slaClock.status.replace(/_/g, " ")} />
+            <span>Response ({slaClock.responseTargetMinutes}m):</span>
+            <StatusBadge tone={SLA_PHASE_TONE[slaClock.responseStatus]} label={slaClock.responseStatus} />
+            <span>Resolution ({slaClock.resolutionTargetMinutes}m):</span>
+            <StatusBadge tone={SLA_PHASE_TONE[slaClock.resolutionStatus]} label={slaClock.resolutionStatus} />
+          </div>
+          {slaClock.status === "running" ? (
+            <PauseClockForm expectedVersion={slaClock.recordVersion} pauseSlaClockAction={pauseSlaClockAction} />
+          ) : slaClock.status === "paused" ? (
+            <ResumeClockForm expectedVersion={slaClock.recordVersion} resumeSlaClockAction={resumeSlaClockAction} />
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function PauseClockForm({ expectedVersion, pauseSlaClockAction }: { expectedVersion: number; pauseSlaClockAction: (expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(pauseSlaClockAction(expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-center gap-2">
+      <select name="pauseReasonCode" required defaultValue="" className="rounded border border-neutral-300 p-1.5 text-xs">
+        <option value="" disabled>
+          Pause reason…
+        </option>
+        {SLA_PAUSE_REASON_CODES.map((code) => (
+          <option key={code} value={code}>
+            {code.replace(/_/g, " ")}
+          </option>
+        ))}
+      </select>
+      <input name="reason" placeholder="Note (optional)" className="min-w-[8rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Pausing…">
+        Pause clock
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function ResumeClockForm({ expectedVersion, resumeSlaClockAction }: { expectedVersion: number; resumeSlaClockAction: (expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(resumeSlaClockAction(expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex items-center gap-2">
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Resuming…">
+        Resume clock
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+// HRT-289 (CG-S12-HRT-017): knowledge-article linking reuses the SAME
+// public/internal visibility discipline app.ticket_messages already
+// established (this capability's own decision 7) -- staff choose the
+// visibility explicitly when linking; the requester's own list only ever
+// includes public-visibility links, structurally (a distinct RPC/query, not
+// a client-side filter).
+function KnowledgeBaseSection({
+  isStaffViewer,
+  kbLinks,
+  kbLinksForRequester,
+  linkArticleAction,
+  unlinkArticleAction,
+}: {
+  isStaffViewer: boolean;
+  kbLinks: readonly KbTicketArticleLinkRow[];
+  kbLinksForRequester: readonly KbTicketArticleLinkForRequesterRow[];
+  linkArticleAction: BoundAction;
+  unlinkArticleAction: (linkId: string, expectedVersion: number) => BoundAction;
+}) {
+  if (!isStaffViewer) {
+    if (kbLinksForRequester.length === 0) return null;
+    return (
+      <section aria-label="Related knowledge articles" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Related articles</h2>
+        <ul className="flex flex-col gap-1 text-sm">
+          {kbLinksForRequester.map((l) => (
+            <li key={l.id}>
+              <span className="font-medium text-neutral-900">{l.articleTitle}</span>
+              {l.articleSummary ? <p className="text-xs text-neutral-500">{l.articleSummary}</p> : null}
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="Related knowledge articles" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Knowledge base</h2>
+      {kbLinks.length === 0 ? (
+        <p className="text-xs text-neutral-500">No articles linked yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {kbLinks.map((l) => (
+            <KbLinkRow key={l.id} link={l} unlinkArticleAction={unlinkArticleAction} />
+          ))}
+        </ul>
+      )}
+      <LinkArticleForm linkArticleAction={linkArticleAction} />
+    </section>
+  );
+}
+
+function KbLinkRow({ link, unlinkArticleAction }: { link: KbTicketArticleLinkRow; unlinkArticleAction: (linkId: string, expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(unlinkArticleAction(link.id, link.recordVersion), INITIAL_STATE);
+  return (
+    <li className="flex flex-wrap items-center gap-2 text-sm">
+      <StatusBadge tone={link.visibility === "public" ? "info" : "warning"} label={link.visibility} />
+      <span className="font-medium text-neutral-900">{link.articleTitle}</span>
+      {link.note ? <span className="text-xs text-neutral-500">— {link.note}</span> : null}
+      <form action={formAction}>
+        <Button type="submit" variant="destructive" loading={pending} loadingLabel="Unlinking…">
+          Unlink
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="w-full text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function LinkArticleForm({ linkArticleAction }: { linkArticleAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(linkArticleAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
+      <label className="flex flex-col gap-1 text-xs text-neutral-600">
+        Article id
+        <input name="articleId" required placeholder="UUID" className="min-w-[16rem] rounded border border-neutral-300 p-1.5 text-xs" />
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-neutral-600">
+        Visibility
+        <select name="visibility" defaultValue="internal" className="rounded border border-neutral-300 p-1.5 text-xs">
+          <option value="internal">Internal (staff-only reference)</option>
+          <option value="public">Public (visible to requester)</option>
+        </select>
+      </label>
+      <input name="note" placeholder="Note (optional)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Linking…">
+        Link article
+      </Button>
+      {state.error ? (
+        <p role="alert" className="w-full text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 export function TicketDetailPanel({
   detail,
   messages,
@@ -294,6 +528,10 @@ export function TicketDetailPanel({
   queues,
   categories,
   queueMembers,
+  slaClock,
+  slaStatusForRequester,
+  kbLinks,
+  kbLinksForRequester,
   replyAction,
   redactAction,
   addWatcherAction,
@@ -302,6 +540,11 @@ export function TicketDetailPanel({
   transferAction,
   classifyAction,
   transitionAction,
+  startSlaClockAction,
+  pauseSlaClockAction,
+  resumeSlaClockAction,
+  linkArticleAction,
+  unlinkArticleAction,
 }: {
   tenantSlug: string;
   detail: TicketDetail;
@@ -311,6 +554,10 @@ export function TicketDetailPanel({
   queues: readonly TicketQueueRow[];
   categories: readonly TicketCategoryRow[];
   queueMembers: readonly TicketQueueMemberRow[];
+  slaClock: TicketSlaClockRow | null;
+  slaStatusForRequester: TicketSlaStatusForRequesterRow | null;
+  kbLinks: readonly KbTicketArticleLinkRow[];
+  kbLinksForRequester: readonly KbTicketArticleLinkForRequesterRow[];
   replyAction: BoundAction;
   redactAction: (messageId: string, expectedVersion: number) => BoundAction;
   addWatcherAction: BoundAction;
@@ -319,6 +566,11 @@ export function TicketDetailPanel({
   transferAction: BoundAction;
   classifyAction: BoundAction;
   transitionAction: (toStatus: TicketStatus) => BoundAction;
+  startSlaClockAction: BoundAction;
+  pauseSlaClockAction: (expectedVersion: number) => BoundAction;
+  resumeSlaClockAction: (expectedVersion: number) => BoundAction;
+  linkArticleAction: BoundAction;
+  unlinkArticleAction: (linkId: string, expectedVersion: number) => BoundAction;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -371,6 +623,23 @@ export function TicketDetailPanel({
         <h2 className="text-sm font-semibold text-neutral-900">Status</h2>
         <StatusTransitionControls status={detail.status} transitionAction={transitionAction} />
       </section>
+
+      <SlaSection
+        isStaffViewer={detail.isStaffViewer}
+        slaClock={slaClock}
+        slaStatusForRequester={slaStatusForRequester}
+        startSlaClockAction={startSlaClockAction}
+        pauseSlaClockAction={pauseSlaClockAction}
+        resumeSlaClockAction={resumeSlaClockAction}
+      />
+
+      <KnowledgeBaseSection
+        isStaffViewer={detail.isStaffViewer}
+        kbLinks={kbLinks}
+        kbLinksForRequester={kbLinksForRequester}
+        linkArticleAction={linkArticleAction}
+        unlinkArticleAction={unlinkArticleAction}
+      />
 
       <WatcherList watchers={watchers} isStaffViewer={detail.isStaffViewer} isRequesterViewer={detail.isRequesterViewer} addWatcherAction={addWatcherAction} removeWatcherAction={removeWatcherAction} />
 

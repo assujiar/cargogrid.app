@@ -26,6 +26,17 @@ import {
   transferHelpdeskSupportQueue,
   updateHelpdeskTicketClassification,
   linkHelpdeskSupportGrant,
+  createSlaCalendar,
+  createSlaCalendarVersion,
+  publishSlaCalendarVersion,
+  createSlaPolicy,
+  createSlaPolicyVersion,
+  publishSlaPolicyVersion,
+  startTicketSlaClock,
+  pauseTicketSlaClock,
+  resumeTicketSlaClock,
+  recalculateTicketSlaClock,
+  runTicketSlaEvaluationBatch,
   TicketMutationError,
   type TicketMutationRpcClient,
 } from "./ticketing.ts";
@@ -308,5 +319,86 @@ describe("HRT-288: Platform-side (Supreme-Admin-gated) helpdesk mutations", () =
         return true;
       },
     );
+  });
+});
+
+describe("HRT-289 SLA mutations", () => {
+  test("createSlaCalendar forwards tenant/code/name", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await createSlaCalendar(client, { tenantId: TENANT_ID, code: "STD", name: "Standard Hours", actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.fn, "create_sla_calendar");
+    assert.equal(calls[0]?.args.p_code, "STD");
+  });
+
+  test("createSlaCalendarVersion forwards timezone/is24x7", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await createSlaCalendarVersion(client, { calendarId: ID_1, timezone: "UTC", is24x7: false, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.args.p_timezone, "UTC");
+    assert.equal(calls[0]?.args.p_is_24x7, false);
+  });
+
+  test("publishSlaCalendarVersion classifies calendar_incomplete distinctly", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "calendar_incomplete: version X has no business hours and is not is_24x7" } });
+    await assert.rejects(
+      () => publishSlaCalendarVersion(client, { versionId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "calendar_incomplete");
+        return true;
+      },
+    );
+  });
+
+  test("createSlaPolicy / createSlaPolicyVersion / publishSlaPolicyVersion forward the full scope+target tuple", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await createSlaPolicy(client, { tenantId: TENANT_ID, code: "NARROW", name: "Narrow", actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    await createSlaPolicyVersion(client, {
+      policyId: ID_1, channel: "internal", categoryId: ID_2, priority: null, customerAccountId: null, queueId: null,
+      supportQueueId: null, calendarId: ID_1, responseTargetMinutes: 60, resolutionTargetMinutes: 480, precedenceRank: 0,
+      actorAuthUserId: ACTOR_ID, actorLabel: "staff1",
+    });
+    await publishSlaPolicyVersion(client, { versionId: ID_1, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.fn, "create_sla_policy");
+    assert.equal(calls[1]?.fn, "create_sla_policy_version");
+    assert.equal(calls[1]?.args.p_category_id, ID_2);
+    assert.equal(calls[2]?.fn, "publish_sla_policy_version");
+  });
+
+  test("startTicketSlaClock classifies sla_policy_ambiguous_match and sla_policy_not_matched distinctly", async () => {
+    const { client: ambiguous } = fakeClient({ data: null, error: { message: "sla_policy_ambiguous_match: 2 candidate SLA policy versions tie for tenant X channel internal" } });
+    await assert.rejects(
+      () => startTicketSlaClock(ambiguous, { ticketId: ID_1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "sla_policy_ambiguous_match");
+        return true;
+      },
+    );
+
+    const { client: notMatched } = fakeClient({ data: null, error: { message: "sla_policy_not_matched: no published SLA policy version matches ticket X" } });
+    await assert.rejects(
+      () => startTicketSlaClock(notMatched, { ticketId: ID_1, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "sla_policy_not_matched");
+        return true;
+      },
+    );
+  });
+
+  test("pauseTicketSlaClock forwards the closed pause_reason_code set; resumeTicketSlaClock/recalculateTicketSlaClock forward reason", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await pauseTicketSlaClock(client, { ticketId: ID_1, expectedVersion: 1, pauseReasonCode: "waiting_on_customer", reason: "awaiting screenshot", actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    await resumeTicketSlaClock(client, { ticketId: ID_1, expectedVersion: 2, actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    await recalculateTicketSlaClock(client, { ticketId: ID_1, expectedVersion: 3, reason: "correction after audit", actorAuthUserId: ACTOR_ID, actorLabel: "admin" });
+    assert.equal(calls[0]?.args.p_pause_reason_code, "waiting_on_customer");
+    assert.equal(calls[1]?.fn, "resume_ticket_sla_clock");
+    assert.equal(calls[2]?.args.p_reason, "correction after audit");
+  });
+
+  test("runTicketSlaEvaluationBatch forwards period_label -- the job-level idempotency key", async () => {
+    const { client, calls } = fakeClient({ data: { evaluated_count: 3, job_id: ID_1 }, error: null });
+    await runTicketSlaEvaluationBatch(client, { tenantId: TENANT_ID, asOf: null, periodLabel: "period-2026-08-14", actorAuthUserId: ACTOR_ID, actorLabel: "staff1" });
+    assert.equal(calls[0]?.args.p_period_label, "period-2026-08-14");
   });
 });

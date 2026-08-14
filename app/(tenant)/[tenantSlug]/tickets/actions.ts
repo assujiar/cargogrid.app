@@ -32,9 +32,20 @@ import {
   updateTicketClassification,
   transitionTicketStatus,
   setTicketCategoryCustomerVisibility,
+  startTicketSlaClock,
+  pauseTicketSlaClock,
+  resumeTicketSlaClock,
+  createSlaCalendar,
+  createSlaCalendarVersion,
+  addSlaCalendarBusinessHours,
+  addSlaCalendarHoliday,
+  publishSlaCalendarVersion,
+  createSlaPolicy,
+  createSlaPolicyVersion,
+  publishSlaPolicyVersion,
   TicketMutationError,
 } from "../../../../server/mutations/ticketing.ts";
-import type { MessageVisibility, TicketPriority, TicketStatus } from "../../../../server/contracts/ticketing/ticketing.ts";
+import type { MessageVisibility, TicketPriority, TicketStatus, SlaPauseReasonCode, TicketChannel } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface TicketActionState {
   readonly error: string | null;
@@ -368,5 +379,226 @@ export async function transitionTicketStatusAction(
     return errorMessage("Could not update this ticket's status", error);
   }
   revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+// --- SLA clock (HRT-289, CG-S12-HRT-017) -- explicit, separate calls from
+// the ticket lifecycle above (decision 1 of the SLA migration): starting a
+// clock is a SECOND step the UI takes right after ticket creation succeeds,
+// never a hidden side effect of any ticket write. Every write here is
+// permission-gated at the RPC layer itself (app.is_ticket_staff / TKT:Close
+// for a correction) -- this file only forwards.
+
+export async function startTicketSlaClockAction(tenantSlug: string, ticketId: string, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await startTicketSlaClock(supabase, { ticketId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not start the SLA clock for this ticket", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function pauseTicketSlaClockAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const pauseReasonCode = String(formData.get("pauseReasonCode") ?? "") as SlaPauseReasonCode;
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+  if (!pauseReasonCode) return { error: "A pause reason is required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await pauseTicketSlaClock(supabase, { ticketId, expectedVersion, pauseReasonCode, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not pause the SLA clock", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function resumeTicketSlaClockAction(tenantSlug: string, ticketId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await resumeTicketSlaClock(supabase, { ticketId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not resume the SLA clock", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+// --- SLA calendar/policy administration (TKT:Edit, HRT-289). Mirrors the
+// "always rendered, gated at the RPC" pattern createTicketQueueAction/
+// createTicketCategoryAction already use above -- these forms render for
+// any tenant member; app.check_ticket_authority('Edit', ...) is what
+// actually enforces the bar, never this file. ---
+
+function slaPath(tenantSlug: string): string {
+  return `/${tenantSlug}/tickets/sla`;
+}
+
+export async function createSlaCalendarAction(tenantSlug: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const code = String(formData.get("code") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!code || !name) return { error: "Code and name are both required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createSlaCalendar(supabase, { tenantId: access.tenant.id, code, name, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not create this SLA calendar", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
+  return OK;
+}
+
+export async function createSlaCalendarVersionAction(tenantSlug: string, calendarId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const timezone = String(formData.get("timezone") ?? "").trim();
+  const is24x7 = formData.get("is24x7") === "on";
+  if (!timezone) return { error: "A timezone is required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createSlaCalendarVersion(supabase, { calendarId, timezone, is24x7, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not create this calendar version", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
+  return OK;
+}
+
+export async function addSlaCalendarBusinessHoursAction(tenantSlug: string, calendarVersionId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const dayOfWeek = Number(formData.get("dayOfWeek") ?? Number.NaN);
+  const startTime = String(formData.get("startTime") ?? "").trim();
+  const endTime = String(formData.get("endTime") ?? "").trim();
+  if (!Number.isInteger(dayOfWeek) || !startTime || !endTime) return { error: "Day of week, start time, and end time are all required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await addSlaCalendarBusinessHours(supabase, { calendarVersionId, dayOfWeek, startTime, endTime, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not add these business hours", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
+  return OK;
+}
+
+export async function addSlaCalendarHolidayAction(tenantSlug: string, calendarVersionId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const holidayDate = String(formData.get("holidayDate") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!holidayDate || !name) return { error: "A date and name are both required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await addSlaCalendarHoliday(supabase, { calendarVersionId, holidayDate, name, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not add this holiday", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
+  return OK;
+}
+
+export async function publishSlaCalendarVersionAction(tenantSlug: string, versionId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await publishSlaCalendarVersion(supabase, { versionId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not publish this calendar version", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
+  return OK;
+}
+
+export async function createSlaPolicyAction(tenantSlug: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const code = String(formData.get("code") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!code || !name) return { error: "Code and name are both required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createSlaPolicy(supabase, { tenantId: access.tenant.id, code, name, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not create this SLA policy", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
+  return OK;
+}
+
+export async function createSlaPolicyVersionAction(tenantSlug: string, policyId: string, _prevState: TicketActionState, formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const channel = String(formData.get("channel") ?? "") as TicketChannel;
+  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  const priority = (String(formData.get("priority") ?? "").trim() || null) as TicketPriority | null;
+  const calendarId = String(formData.get("calendarId") ?? "").trim();
+  const responseTargetMinutes = Number(formData.get("responseTargetMinutes") ?? Number.NaN);
+  const resolutionTargetMinutes = Number(formData.get("resolutionTargetMinutes") ?? Number.NaN);
+  const precedenceRank = Number(formData.get("precedenceRank") ?? 0);
+  if (!channel || !calendarId || !Number.isFinite(responseTargetMinutes) || !Number.isFinite(resolutionTargetMinutes)) {
+    return { error: "Channel, calendar, and both response/resolution targets are required." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await createSlaPolicyVersion(supabase, {
+      policyId,
+      channel,
+      categoryId,
+      priority,
+      customerAccountId: null,
+      queueId: null,
+      supportQueueId: null,
+      calendarId,
+      responseTargetMinutes,
+      resolutionTargetMinutes,
+      precedenceRank,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    return errorMessage("Could not create this policy version", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
+  return OK;
+}
+
+export async function publishSlaPolicyVersionAction(tenantSlug: string, versionId: string, expectedVersion: number, _prevState: TicketActionState, _formData: FormData): Promise<TicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await publishSlaPolicyVersion(supabase, { versionId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not publish this policy version", error);
+  }
+  revalidatePath(slaPath(tenantSlug));
   return OK;
 }

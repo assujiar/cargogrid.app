@@ -23,12 +23,18 @@ import {
   listSupportQueues,
   listPlatformHelpdeskTickets,
   getPlatformHelpdeskTicket,
+  listSlaPolicies,
+  listSlaPolicyVersions,
+  getTicketSlaClock,
+  getTicketSlaStatusForRequester,
+  listTicketSlaClockEvents,
   TicketQueryError,
   type TicketQueryClient,
 } from "./ticketing.ts";
 
 const TENANT_ID = "123e4567-e89b-12d3-a456-426614174000";
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
+const ID_2 = "523e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "323e4567-e89b-12d3-a456-426614174000";
 
 function fakeClient(response: { data: unknown; error: { message: string } | null }): { client: TicketQueryClient; calls: { fn: string; args: Record<string, unknown> }[] } {
@@ -191,5 +197,45 @@ describe("HRT-288: Platform-side (Supreme-Admin-facing) helpdesk read queries", 
     const { client } = fakeClient({ data: [], error: null });
     const result = await getPlatformHelpdeskTicket(client, ID_1, ACTOR_ID);
     assert.equal(result, null);
+  });
+});
+
+describe("HRT-289 SLA read queries", () => {
+  test("listSlaPolicies passes tenant/actor through", async () => {
+    const { client, calls } = fakeClient({ data: [{ id: ID_1, code: "NARROW", name: "Narrow", status: "active", record_version: 1 }], error: null });
+    const result = await listSlaPolicies(client, TENANT_ID, ACTOR_ID);
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID });
+    assert.equal(result[0]?.code, "NARROW");
+  });
+
+  test("listSlaPolicyVersions parses scope/target fields", async () => {
+    const { client } = fakeClient({
+      data: [{
+        id: ID_1, version_number: 1, status: "published", channel: "internal", category_id: null, priority: null,
+        customer_account_id: null, queue_id: null, support_queue_id: null, calendar_id: ID_2,
+        response_target_minutes: 60, resolution_target_minutes: 480, precedence_rank: 0, published_at: null, record_version: 1,
+      }],
+      error: null,
+    });
+    const result = await listSlaPolicyVersions(client, ID_1, ACTOR_ID);
+    assert.equal(result[0]?.responseTargetMinutes, 60);
+  });
+
+  test("getTicketSlaClock returns null on zero rows (non-staff caller)", async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    const result = await getTicketSlaClock(client, ID_1, ACTOR_ID);
+    assert.equal(result, null);
+  });
+
+  test("getTicketSlaStatusForRequester calls the narrower requester-safe RPC, distinct from getTicketSlaClock", async () => {
+    const { client, calls } = fakeClient({ data: [{ ticket_id: ID_1, response_target_minutes: 60, response_status: "pending", resolution_target_minutes: 480, resolution_status: "pending" }], error: null });
+    const result = await getTicketSlaStatusForRequester(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "get_ticket_sla_status_for_requester");
+    assert.equal(result?.responseStatus, "pending");
+  });
+
+  test("listTicketSlaClockEvents throws TicketQueryError on RPC error", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "boom" } });
+    await assert.rejects(() => listTicketSlaClockEvents(client, ID_1, ACTOR_ID), TicketQueryError);
   });
 });

@@ -32,6 +32,13 @@ import {
   parseSupportQueueRow,
   parsePlatformHelpdeskTicketListRow,
   parsePlatformHelpdeskTicketDetail,
+  parseSlaCalendarRow,
+  parseSlaCalendarVersionRow,
+  parseSlaPolicyRow,
+  parseSlaPolicyVersionRow,
+  parseTicketSlaClockRow,
+  parseTicketSlaStatusForRequesterRow,
+  parseTicketSlaClockEventRow,
   type TicketQueueRow,
   type TicketCategoryRow,
   type TicketQueueMemberRow,
@@ -57,6 +64,13 @@ import {
   type PlatformHelpdeskTicketListRow,
   type PlatformHelpdeskTicketDetail,
   type HelpdeskSeverity,
+  type SlaCalendarRow,
+  type SlaCalendarVersionRow,
+  type SlaPolicyRow,
+  type SlaPolicyVersionRow,
+  type TicketSlaClockRow,
+  type TicketSlaStatusForRequesterRow,
+  type TicketSlaClockEventRow,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -316,6 +330,76 @@ export async function listPlatformHelpdeskTickets(client: TicketQueryClient, act
   });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parsePlatformHelpdeskTicketListRow);
+}
+
+// ===========================================================================
+// HRT-289 (CG-S12-HRT-017): SLA read queries. Mirrors
+// supabase/migrations/20260731120000_create_ticket_sla.sql. Extends this
+// module rather than a sibling one -- see the contract file's own header for
+// the documented reasoning.
+// ===========================================================================
+
+export async function listSlaCalendars(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<SlaCalendarRow[]> {
+  const { data, error } = await client.rpc("list_sla_calendars", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseSlaCalendarRow);
+}
+
+export async function listSlaCalendarVersions(client: TicketQueryClient, calendarId: string, actorAuthUserId: string): Promise<SlaCalendarVersionRow[]> {
+  const { data, error } = await client.rpc("list_sla_calendar_versions", { p_calendar_id: calendarId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseSlaCalendarVersionRow);
+}
+
+export async function listSlaPolicies(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<SlaPolicyRow[]> {
+  const { data, error } = await client.rpc("list_sla_policies", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseSlaPolicyRow);
+}
+
+export async function listSlaPolicyVersions(client: TicketQueryClient, policyId: string, actorAuthUserId: string): Promise<SlaPolicyVersionRow[]> {
+  const { data, error } = await client.rpc("list_sla_policy_versions", { p_policy_id: policyId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseSlaPolicyVersionRow);
+}
+
+export async function getTicketSlaClock(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketSlaClockRow | null> {
+  const { data, error } = await client.rpc("get_ticket_sla_clock", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketSlaClockRow(row) : null;
+}
+
+// The customer/requester-safe projection -- deliberately narrower than
+// getTicketSlaClock above (security impact section 16). Never derive the
+// customer-facing SLA badge from getTicketSlaClock's own richer row.
+export async function getTicketSlaStatusForRequester(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketSlaStatusForRequesterRow | null> {
+  const { data, error } = await client.rpc("get_ticket_sla_status_for_requester", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketSlaStatusForRequesterRow(row) : null;
+}
+
+export async function listTicketSlaClockEvents(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketSlaClockEventRow[]> {
+  const { data, error } = await client.rpc("list_ticket_sla_clock_events", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketSlaClockEventRow);
+}
+
+export interface TicketSlaEventForRequesterRow {
+  readonly phase: "response" | "resolution";
+  readonly eventType: "met" | "breached";
+  readonly occurredAt: string;
+}
+
+export async function listTicketSlaEventsForRequester(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketSlaEventForRequesterRow[]> {
+  const { data, error } = await client.rpc("list_ticket_sla_events_for_requester", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map((row) => ({
+    phase: row.phase as "response" | "resolution",
+    eventType: row.event_type as "met" | "breached",
+    occurredAt: row.occurred_at as string,
+  }));
 }
 
 export async function getPlatformHelpdeskTicket(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<PlatformHelpdeskTicketDetail | null> {

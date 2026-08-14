@@ -1,3 +1,4 @@
+import NextLink from "next/link";
 import { notFound } from "next/navigation";
 import { resolveTicketAccessForRequest } from "../../../../lib/portal/resolve-ticket-access.server.ts";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
@@ -71,9 +72,19 @@ export default async function TicketsListPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-900">Tickets</h1>
-        <p className="text-xs text-neutral-500">Internal and interdepartmental service requests -- one canonical ticket model, shared across every future channel.</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold text-neutral-900">Tickets</h1>
+          <p className="text-xs text-neutral-500">Internal and interdepartmental service requests -- one canonical ticket model, shared across every future channel.</p>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <NextLink href={`/${tenantSlug}/tickets/sla`} className="text-info hover:underline">
+            SLA policies &amp; calendars
+          </NextLink>
+          <NextLink href={`/${tenantSlug}/knowledge-base`} className="text-info hover:underline">
+            Knowledge base
+          </NextLink>
+        </div>
       </div>
 
       <TicketsListPanel

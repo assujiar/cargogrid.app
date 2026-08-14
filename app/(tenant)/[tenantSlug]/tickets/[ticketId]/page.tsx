@@ -9,8 +9,12 @@ import {
   listTicketQueues,
   listTicketCategories,
   listTicketQueueMembers,
+  getTicketSlaClock,
+  getTicketSlaStatusForRequester,
   TicketQueryError,
 } from "../../../../../server/queries/ticketing.ts";
+import { listTicketKnowledgeArticleLinks, listTicketKnowledgeArticleLinksForRequester, KbQueryError } from "../../../../../server/queries/knowledge-base.ts";
+import { linkTicketKnowledgeArticleAction, unlinkTicketKnowledgeArticleAction } from "../../knowledge-base/actions.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { TicketDetailPanel } from "./ticket-detail-panel.tsx";
 import {
@@ -22,6 +26,9 @@ import {
   transferTicketQueueAction,
   updateTicketClassificationAction,
   transitionTicketStatusAction,
+  startTicketSlaClockAction,
+  pauseTicketSlaClockAction,
+  resumeTicketSlaClockAction,
 } from "../actions.ts";
 
 /**
@@ -53,6 +60,10 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
   let queues: Awaited<ReturnType<typeof listTicketQueues>> = [];
   let categories: Awaited<ReturnType<typeof listTicketCategories>> = [];
   let queueMembers: Awaited<ReturnType<typeof listTicketQueueMembers>> = [];
+  let slaClock: Awaited<ReturnType<typeof getTicketSlaClock>> = null;
+  let slaStatusForRequester: Awaited<ReturnType<typeof getTicketSlaStatusForRequester>> = null;
+  let kbLinks: Awaited<ReturnType<typeof listTicketKnowledgeArticleLinks>> = [];
+  let kbLinksForRequester: Awaited<ReturnType<typeof listTicketKnowledgeArticleLinksForRequester>> = [];
 
   try {
     detail = await getTicket(supabase, ticketId, access.authUserId);
@@ -68,10 +79,22 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       ]);
       if (detail.isStaffViewer) {
         queueMembers = await listTicketQueueMembers(supabase, detail.queueId, access.authUserId);
+        // HRT-289 decision 10: the STAFF-facing full SLA projection (calendar/
+        // policy identity included) -- never derived from the requester-safe
+        // projection below, and never shown to a requester.
+        slaClock = await getTicketSlaClock(supabase, ticketId, access.authUserId);
+        kbLinks = await listTicketKnowledgeArticleLinks(supabase, ticketId, access.authUserId);
+      } else {
+        // HRT-289 decision 10, security impact section 16: the requester sees
+        // ONLY target/status via app.get_ticket_sla_status_for_requester --
+        // never the staff projection, structurally (a different RPC, not a
+        // client-side field filter).
+        slaStatusForRequester = await getTicketSlaStatusForRequester(supabase, ticketId, access.authUserId);
+        kbLinksForRequester = await listTicketKnowledgeArticleLinksForRequester(supabase, ticketId, access.authUserId);
       }
     }
   } catch (error) {
-    if (!(error instanceof TicketQueryError)) throw error;
+    if (!(error instanceof TicketQueryError) && !(error instanceof KbQueryError)) throw error;
     loadFailed = true;
   }
 
@@ -94,6 +117,10 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       queues={queues}
       categories={categories}
       queueMembers={queueMembers}
+      slaClock={slaClock}
+      slaStatusForRequester={slaStatusForRequester}
+      kbLinks={kbLinks}
+      kbLinksForRequester={kbLinksForRequester}
       replyAction={replyToTicketAction.bind(null, tenantSlug, ticketId)}
       redactAction={(messageId: string, expectedVersion: number) => redactTicketMessageAction.bind(null, tenantSlug, ticketId, messageId, expectedVersion)}
       addWatcherAction={addTicketWatcherAction.bind(null, tenantSlug, ticketId)}
@@ -102,6 +129,11 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       transferAction={transferTicketQueueAction.bind(null, tenantSlug, ticketId, recordVersion)}
       classifyAction={updateTicketClassificationAction.bind(null, tenantSlug, ticketId, recordVersion)}
       transitionAction={(toStatus) => transitionTicketStatusAction.bind(null, tenantSlug, ticketId, recordVersion, toStatus)}
+      startSlaClockAction={startTicketSlaClockAction.bind(null, tenantSlug, ticketId)}
+      pauseSlaClockAction={(expectedVersion: number) => pauseTicketSlaClockAction.bind(null, tenantSlug, ticketId, expectedVersion)}
+      resumeSlaClockAction={(expectedVersion: number) => resumeTicketSlaClockAction.bind(null, tenantSlug, ticketId, expectedVersion)}
+      linkArticleAction={linkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId)}
+      unlinkArticleAction={(linkId: string, expectedVersion: number) => unlinkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId, linkId, expectedVersion)}
     />
   );
 }

@@ -33,6 +33,12 @@ import {
   ReplyToHelpdeskTicketInputSchema,
   LinkHelpdeskSupportGrantInputSchema,
   TICKET_CHANNELS,
+  parseSlaPolicyVersionRow,
+  parseTicketSlaClockRow,
+  parseTicketSlaStatusForRequesterRow,
+  parseTicketSlaClockEventRow,
+  CreateSlaPolicyVersionInputSchema,
+  PauseTicketSlaClockInputSchema,
 } from "./ticketing.ts";
 
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
@@ -318,5 +324,64 @@ describe("HRT-288 helpdesk channel/rows/inputs", () => {
   test("LinkHelpdeskSupportGrantInputSchema allows a null caseRef (unlink)", () => {
     const v = LinkHelpdeskSupportGrantInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, caseRef: null, actorAuthUserId: ACTOR, actorLabel: "Supreme" });
     assert.equal(v.caseRef, null);
+  });
+});
+
+describe("HRT-289 SLA contract", () => {
+  test("parseSlaPolicyVersionRow carries scope/target/precedence through, nulls preserved for wildcard dimensions", () => {
+    const v = parseSlaPolicyVersionRow({
+      id: ID_1, version_number: 2, status: "published", channel: "internal", category_id: null, priority: null,
+      customer_account_id: null, queue_id: null, support_queue_id: null, calendar_id: ID_2,
+      response_target_minutes: 60, resolution_target_minutes: 480, precedence_rank: 0,
+      published_at: "2026-01-01T00:00:00Z", record_version: 1,
+    });
+    assert.equal(v.channel, "internal");
+    assert.equal(v.categoryId, null);
+    assert.equal(v.responseTargetMinutes, 60);
+  });
+
+  test("parseTicketSlaClockRow maps the full staff-facing projection, including calendar/policy identity", () => {
+    const c = parseTicketSlaClockRow({
+      id: ID_1, ticket_id: ID_2, sla_policy_version_id: ID_1, sla_calendar_version_id: ID_2, status: "running",
+      started_at: "2026-01-01T00:00:00Z", response_target_minutes: 60, response_status: "pending", response_met_at: null,
+      response_breached_at: null, resolution_target_minutes: 480, resolution_status: "pending", resolution_met_at: null,
+      resolution_breached_at: null, last_evaluated_at: null, record_version: 1,
+    });
+    assert.equal(c.slaPolicyVersionId, ID_1);
+    assert.equal(c.status, "running");
+  });
+
+  test("parseTicketSlaStatusForRequesterRow carries ONLY target/status -- structurally cannot carry a calendar/policy id (not in the schema at all)", () => {
+    const r = parseTicketSlaStatusForRequesterRow({
+      ticket_id: ID_1, response_target_minutes: 60, response_status: "met", resolution_target_minutes: 480, resolution_status: "pending",
+    });
+    assert.equal(r.responseStatus, "met");
+    assert.equal((r as unknown as Record<string, unknown>).slaPolicyVersionId, undefined);
+    assert.equal((r as unknown as Record<string, unknown>).slaCalendarVersionId, undefined);
+  });
+
+  test("parseTicketSlaClockEventRow maps a reminder event with its threshold", () => {
+    const e = parseTicketSlaClockEventRow({
+      id: ID_1, phase: "response", event_type: "reminder", reminder_threshold_pct: 80, business_minutes_elapsed: 48,
+      occurred_at: "2026-01-01T00:00:00Z", actor_label: null, reason: null,
+    });
+    assert.equal(e.eventType, "reminder");
+    assert.equal(e.reminderThresholdPct, 80);
+  });
+
+  test("CreateSlaPolicyVersionInputSchema accepts a fully-wildcard scope (channel-only default policy)", () => {
+    const v = CreateSlaPolicyVersionInputSchema.parse({
+      policyId: ID_1, channel: "customer", categoryId: null, priority: null, customerAccountId: null, queueId: null,
+      supportQueueId: null, calendarId: ID_2, responseTargetMinutes: 30, resolutionTargetMinutes: 240, precedenceRank: 0,
+      actorAuthUserId: ACTOR, actorLabel: "Admin",
+    });
+    assert.equal(v.channel, "customer");
+    assert.equal(v.categoryId, null);
+  });
+
+  test("PauseTicketSlaClockInputSchema rejects a pause reason code outside the closed set", () => {
+    assert.throws(() =>
+      PauseTicketSlaClockInputSchema.parse({ ticketId: ID_1, expectedVersion: 1, pauseReasonCode: "made_up", reason: null, actorAuthUserId: ACTOR, actorLabel: "Staff" })
+    );
   });
 });
