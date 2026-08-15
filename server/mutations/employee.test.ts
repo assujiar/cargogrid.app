@@ -8,7 +8,9 @@ import {
   activateEmployee,
   linkEmployeeUser,
   suspendEmployee,
+  reactivateEmployee,
   terminateEmployee,
+  archiveEmployeeProfile,
   transferEmployee,
   addEmployeeEmergencyContact,
   requestEmployeeChange,
@@ -16,6 +18,7 @@ import {
   validateEmployeeImportRow,
   commitEmployeeImportJob,
   reactivateUserAfterRehire,
+  activateDueEmployeeLifecycleTransitions,
   EmployeeMutationError,
   type EmployeeMutationRpcClient,
 } from "./employee.ts";
@@ -416,6 +419,201 @@ describe("reactivateUserAfterRehire", () => {
         assert.equal(err.code, "no_rehire_event");
         return true;
       },
+    );
+  });
+});
+
+// ISS-2026-065 closure (supabase/migrations/
+// 20260731310000_add_hris_employee_lifecycle_effective_dating_iss2026065.sql):
+// every one of the 7 lifecycle-transition RPCs threads an optional effectiveDate
+// (and, for the 3 RPCs with no pre-existing reason parameter, backdateReason)
+// through to p_effective_date/p_backdate_reason. Omitting it (the pre-migration
+// call shape every existing caller still uses) maps to null, letting the RPC's
+// own server-side default (current_date) apply -- fully backward-compatible.
+describe("ISS-2026-065: effective-dated lifecycle parameters", () => {
+  test("createEmployeeDraft omits effectiveDate/backdateReason -> both null", async () => {
+    const { client, calls } = fakeRpcClient({ data: [EMPLOYEE_ROW], error: null });
+    await createEmployeeDraft(client, {
+      tenantId: TENANT_ID,
+      fullName: "Budi Santoso",
+      employmentType: "full_time",
+      workEmail: null,
+      personalEmail: null,
+      personalPhone: null,
+      nationalIdNumber: null,
+      dateOfBirth: null,
+      gender: null,
+      hireDate: null,
+      companyOrgUnitId: null,
+      branchOrgUnitId: null,
+      departmentOrgUnitId: null,
+      positionTitle: null,
+      managerEmployeeId: null,
+      userId: null,
+      employeeNumber: null,
+      intakeSource: "hr_created",
+      idempotencyKey: null,
+      actorAuthUserId: ACTOR_ID,
+      actorLabel: "staff",
+    });
+    assert.equal(calls[0]?.args.p_effective_date, null);
+    assert.equal(calls[0]?.args.p_backdate_reason, null);
+  });
+
+  test("createEmployeeDraft threads through an explicit effectiveDate/backdateReason", async () => {
+    const { client, calls } = fakeRpcClient({ data: [EMPLOYEE_ROW], error: null });
+    await createEmployeeDraft(client, {
+      tenantId: TENANT_ID,
+      fullName: "Budi Santoso",
+      employmentType: "full_time",
+      workEmail: null,
+      personalEmail: null,
+      personalPhone: null,
+      nationalIdNumber: null,
+      dateOfBirth: null,
+      gender: null,
+      hireDate: null,
+      companyOrgUnitId: null,
+      branchOrgUnitId: null,
+      departmentOrgUnitId: null,
+      positionTitle: null,
+      managerEmployeeId: null,
+      userId: null,
+      employeeNumber: null,
+      intakeSource: "hr_created",
+      idempotencyKey: null,
+      actorAuthUserId: ACTOR_ID,
+      actorLabel: "staff",
+      effectiveDate: "2026-01-01",
+      backdateReason: "historical parity migration",
+    });
+    assert.equal(calls[0]?.args.p_effective_date, "2026-01-01");
+    assert.equal(calls[0]?.args.p_backdate_reason, "historical parity migration");
+  });
+
+  test("updateEmployeeDraft threads through effectiveDate/backdateReason", async () => {
+    const { client, calls } = fakeRpcClient({ data: [EMPLOYEE_ROW], error: null });
+    await updateEmployeeDraft(client, {
+      masterRecordId: MASTER_RECORD_ID,
+      expectedVersion: 1,
+      fullName: "Budi Santoso",
+      employmentType: "full_time",
+      workEmail: null,
+      personalEmail: null,
+      personalPhone: null,
+      nationalIdNumber: null,
+      dateOfBirth: null,
+      gender: null,
+      hireDate: null,
+      probationEndDate: null,
+      companyOrgUnitId: null,
+      branchOrgUnitId: null,
+      departmentOrgUnitId: null,
+      positionTitle: null,
+      managerEmployeeId: null,
+      actorAuthUserId: ACTOR_ID,
+      actorLabel: "staff",
+      effectiveDate: "2026-01-01",
+      backdateReason: "correction",
+    });
+    assert.equal(calls[0]?.args.p_effective_date, "2026-01-01");
+    assert.equal(calls[0]?.args.p_backdate_reason, "correction");
+  });
+
+  test("suspendEmployee threads through effectiveDate (no separate backdateReason param -- reason already mandatory)", async () => {
+    const { client, calls } = fakeRpcClient({ data: [{ ...EMPLOYEE_ROW, lifecycle_status: "suspended" }], error: null });
+    await suspendEmployee(client, { masterRecordId: MASTER_RECORD_ID, expectedVersion: 1, reason: "scheduled suspension", actorAuthUserId: ACTOR_ID, actorLabel: "manager", effectiveDate: "2026-09-01" });
+    assert.equal(calls[0]?.args.p_effective_date, "2026-09-01");
+    assert.ok(!("p_backdate_reason" in calls[0]!.args));
+  });
+
+  test("reactivateEmployee threads through effectiveDate/backdateReason", async () => {
+    const { client, calls } = fakeRpcClient({ data: [{ ...EMPLOYEE_ROW, lifecycle_status: "active" }], error: null });
+    await reactivateEmployee(client, { masterRecordId: MASTER_RECORD_ID, expectedVersion: 1, actorAuthUserId: ACTOR_ID, actorLabel: "manager", effectiveDate: "2026-09-01", backdateReason: "end of suspension" });
+    assert.equal(calls[0]?.fn, "reactivate_employee");
+    assert.equal(calls[0]?.args.p_effective_date, "2026-09-01");
+    assert.equal(calls[0]?.args.p_backdate_reason, "end of suspension");
+  });
+
+  test("terminateEmployee threads through effectiveDate", async () => {
+    const { client, calls } = fakeRpcClient({ data: [{ ...EMPLOYEE_ROW, lifecycle_status: "terminated" }], error: null });
+    await terminateEmployee(client, { masterRecordId: MASTER_RECORD_ID, expectedVersion: 1, reason: "resignation", employmentEndDate: "2026-09-30", actorAuthUserId: ACTOR_ID, actorLabel: "manager", effectiveDate: "2026-09-01" });
+    assert.equal(calls[0]?.args.p_effective_date, "2026-09-01");
+  });
+
+  test("archiveEmployeeProfile threads through effectiveDate", async () => {
+    const { client, calls } = fakeRpcClient({ data: [{ ...EMPLOYEE_ROW, lifecycle_status: "archived" }], error: null });
+    await archiveEmployeeProfile(client, { masterRecordId: MASTER_RECORD_ID, expectedVersion: 1, reason: "retention closure", actorAuthUserId: ACTOR_ID, actorLabel: "staff", effectiveDate: "2026-01-01" });
+    assert.equal(calls[0]?.fn, "archive_employee_profile");
+    assert.equal(calls[0]?.args.p_effective_date, "2026-01-01");
+  });
+
+  test("transferEmployee threads through effectiveDate", async () => {
+    const { client, calls } = fakeRpcClient({ data: [EMPLOYEE_ROW], error: null });
+    await transferEmployee(client, {
+      masterRecordId: MASTER_RECORD_ID,
+      expectedVersion: 1,
+      companyOrgUnitId: null,
+      branchOrgUnitId: null,
+      departmentOrgUnitId: null,
+      positionTitle: "Senior Analyst",
+      managerEmployeeId: null,
+      reason: "org restructuring",
+      actorAuthUserId: ACTOR_ID,
+      actorLabel: "staff",
+      effectiveDate: "2026-01-01",
+    });
+    assert.equal(calls[0]?.args.p_effective_date, "2026-01-01");
+  });
+
+  // ISS-2026-065 Tier C follow-up fix (20260731320000): app.record_employee_
+  // lifecycle_version now raises lifecycle_conflict when a write would silently
+  // supersede/truncate a still-live, differently-reasoned lifecycle version --
+  // reachable through any of the 7 RPCs; transferEmployee exercised here as the
+  // representative case (the same classifyError mechanism applies uniformly).
+  test("transferEmployee classifies lifecycle_conflict from the shared version writer", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "lifecycle_conflict: employee X already has a terminate lifecycle version not yet in effect" } });
+    await assert.rejects(
+      () =>
+        transferEmployee(client, {
+          masterRecordId: MASTER_RECORD_ID,
+          expectedVersion: 1,
+          companyOrgUnitId: null,
+          branchOrgUnitId: null,
+          departmentOrgUnitId: null,
+          positionTitle: "Senior Analyst",
+          managerEmployeeId: null,
+          reason: "org restructuring",
+          actorAuthUserId: ACTOR_ID,
+          actorLabel: "staff",
+        }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "lifecycle_conflict",
+    );
+  });
+});
+
+describe("activateDueEmployeeLifecycleTransitions", () => {
+  test("calls activate_due_employee_lifecycle_transitions with mapped snake_case args and returns the activated count", async () => {
+    const { client, calls } = fakeRpcClient({ data: 3, error: null });
+    const result = await activateDueEmployeeLifecycleTransitions(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, actorLabel: "sweeper" });
+    assert.equal(calls[0]?.fn, "activate_due_employee_lifecycle_transitions");
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "sweeper" });
+    assert.equal(result, 3);
+  });
+
+  test("throws invalid_response when the RPC returns a non-numeric result", async () => {
+    const { client } = fakeRpcClient({ data: null, error: null });
+    await assert.rejects(
+      () => activateDueEmployeeLifecycleTransitions(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, actorLabel: "sweeper" }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "invalid_response",
+    );
+  });
+
+  test("classifies insufficient_authority (HRS:Override required)", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "insufficient_authority: identity lacks HRS:Override" } });
+    await assert.rejects(
+      () => activateDueEmployeeLifecycleTransitions(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, actorLabel: "sweeper" }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "insufficient_authority",
     );
   });
 });

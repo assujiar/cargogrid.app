@@ -19,6 +19,7 @@ import {
   parseEmployeeDuplicateSearchRow,
   parseEmployeeExportRow,
   parseEmployeeChangeRequest,
+  parseEmployeeLifecycleVersion,
   type EmployeeListRow,
   type EmployeeProfile,
   type EmployeeOwnProfile,
@@ -30,6 +31,7 @@ import {
   type EmployeeExportRow,
   type EmployeeChangeRequest,
   type EmployeeLifecycleStatus,
+  type EmployeeLifecycleVersion,
 } from "../contracts/employee/employee.ts";
 
 export type EmployeeQueryClient = Pick<SupabaseClient, "rpc">;
@@ -169,4 +171,21 @@ export async function exportEmployees(
   });
   if (error) throw new EmployeeQueryError(error.message);
   return rows(data).map(parseEmployeeExportRow);
+}
+
+/**
+ * ISS-2026-065 closure: the genuinely point-in-time-correct read -- reconstructs
+ * what the employee's lifecycle state genuinely was/will be as of any date, from
+ * app.employee_lifecycle_versions' own validity_range directly, never from
+ * app.employees' current-state columns (which only ever reflect "now"). Mirrors
+ * getEmployeeCurrentAssignment (server/queries/position.ts, HRT-275) exactly.
+ * Returns null (never throws) when no version covers p_as_of (e.g. a date before
+ * the employee was ever hired) -- matches app.get_employee_current_assignment's
+ * own "zero rows, not an error" shape for an out-of-range date.
+ */
+export async function getEmployeeLifecycleAsOf(client: EmployeeQueryClient, masterRecordId: string, actorAuthUserId: string, asOf?: string | null): Promise<EmployeeLifecycleVersion | null> {
+  const { data, error } = await client.rpc("get_employee_lifecycle_as_of", { p_master_record_id: masterRecordId, p_actor_auth_user_id: actorAuthUserId, p_as_of: asOf ?? null });
+  if (error) throw new EmployeeQueryError(error.message);
+  const row = firstRow(data);
+  return row ? parseEmployeeLifecycleVersion(row) : null;
 }

@@ -9,6 +9,7 @@ import {
   listEmployeeEmergencyContacts,
   searchEmployeeDuplicateCandidates,
   exportEmployees,
+  getEmployeeLifecycleAsOf,
   EmployeeQueryError,
   type EmployeeQueryClient,
 } from "./employee.ts";
@@ -173,5 +174,58 @@ describe("searchEmployeeDuplicateCandidates / exportEmployees", () => {
     const result = await exportEmployees(client, TENANT_ID, ACTOR_ID);
     assert.equal(result[0]?.employeeNumber, "EMP-2026-000009");
     assert.deepEqual(Object.keys(result[0] ?? {}).includes("personalEmail" as never), false);
+  });
+});
+
+// ISS-2026-065 closure: the "as of" read (supabase/migrations/
+// 20260731310000_add_hris_employee_lifecycle_effective_dating_iss2026065.sql).
+describe("getEmployeeLifecycleAsOf", () => {
+  const VERSION_ROW = {
+    id: MASTER_RECORD_ID,
+    master_record_id: MASTER_RECORD_ID,
+    lifecycle_status: "suspended",
+    employment_type: "full_time",
+    company_org_unit_id: null,
+    branch_org_unit_id: null,
+    department_org_unit_id: null,
+    position_title: null,
+    manager_employee_id: null,
+    hire_date: null,
+    probation_end_date: null,
+    employment_end_date: null,
+    effective_start_date: "2026-08-20",
+    effective_end_date: null,
+    status: "scheduled",
+    change_reason: "suspend",
+    decided_by: "override",
+    decided_at: "2026-08-15T00:00:00.000Z",
+    decided_reason: null,
+    record_version: 1,
+  };
+
+  test("calls get_employee_lifecycle_as_of with p_as_of defaulted to null when omitted", async () => {
+    const { client, calls } = fakeClient({ data: [VERSION_ROW], error: null });
+    await getEmployeeLifecycleAsOf(client, MASTER_RECORD_ID, ACTOR_ID);
+    assert.deepEqual(calls[0]?.args, { p_master_record_id: MASTER_RECORD_ID, p_actor_auth_user_id: ACTOR_ID, p_as_of: null });
+  });
+
+  test("threads through an explicit p_as_of date and parses the reconstructed version row", async () => {
+    const { client, calls } = fakeClient({ data: [VERSION_ROW], error: null });
+    const result = await getEmployeeLifecycleAsOf(client, MASTER_RECORD_ID, ACTOR_ID, "2026-08-20");
+    assert.equal(calls[0]?.args.p_as_of, "2026-08-20");
+    assert.equal(result?.lifecycleStatus, "suspended");
+    assert.equal(result?.status, "scheduled");
+    assert.equal(result?.changeReason, "suspend");
+  });
+
+  test("returns null (never throws) when no version covers the requested date", async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    const result = await getEmployeeLifecycleAsOf(client, MASTER_RECORD_ID, ACTOR_ID, "2000-01-01");
+    assert.equal(result, null);
+  });
+
+  test("propagates an RPC error as EmployeeQueryError", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "employee_not_found: nope" } });
+    await assert.rejects(() => getEmployeeLifecycleAsOf(client, MASTER_RECORD_ID, ACTOR_ID), EmployeeQueryError);
   });
 });

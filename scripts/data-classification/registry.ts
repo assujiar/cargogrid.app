@@ -274,6 +274,15 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
       "revision_reason/suspend_reason/terminate_reason/archive_reason/leave_reason on app.employees, and the identically-shaped `reason` column on app.employee_lifecycle_events (HRT-274) — free-text disciplinary/medical/performance narrative a caller-supplied p_reason populates at every lifecycle transition (suspend_employee, terminate_employee, etc). Classified one level above the `pii` category floor (`restricted`, not `confidential`), matching national_id_number's own precedent — HRT-293 (CG-S12-HRT-021) Finding A found these five columns unconditionally returned by app.get_employee_profile and included in app.employees' own column-restricted grant to `authenticated`, and app.employee_lifecycle_events.reason carried unrestricted table-level SELECT — all fixed the same checkpoint (20260731180000): masked to self-or-HRS:View-personal-data identically to every other classified personal field, and column-restricted from `authenticated` at the grant layer. Never duplicated into app.audit_logs.reason (Finding B, same checkpoint) — the domain table above is the one place this value lives.",
   },
   {
+    id: "hrs:employee_lifecycle_versions.decided_reason",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "decided_reason on app.employee_lifecycle_versions (ISS-2026-065 closure, 20260731310000) — the identically-shaped free-text HR-narrative reason app.employee_lifecycle_events.reason/app.employees' own five reason columns already carry (hrs:employees.lifecycle_reason_narrative above), now also captured on every effective-dated lifecycle version row. Column-restricted from `authenticated` at the grant layer from creation (never needed a later 20260731200000-shaped raw-table-grant-sweep fix), and masked to self-or-HRS:View-personal-data by app.get_employee_lifecycle_as_of, mirroring app.get_employee_profile/app.get_employee_lifecycle_history exactly. Never copied into app.audit_logs (app.employee_lifecycle_version_audit_projection is an explicit non-pii jsonb_build_object, never to_jsonb(row)).",
+  },
+  {
     id: "hrs:candidates.national_id_number",
     category: "pii",
     level: "restricted",
