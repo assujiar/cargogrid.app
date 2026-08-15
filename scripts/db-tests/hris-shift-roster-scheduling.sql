@@ -517,6 +517,108 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', 'null', false);
 
+\echo '>> PLT-132 (HRT-295, CG-S12-HRT-023): a genuine per-employee-day assignment failure is durably recorded and the batch job still reaches completed -- the OTHER employee in the SAME run still gets scheduled correctly. Run as postgres (no SET ROLE) -- a temporary CHECK constraint is DDL, which the authenticated role used elsewhere in this file has no privilege to issue.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug='shr1');
+  v_emp1 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp1work@shr1.test');
+  v_emp1_company uuid;
+  v_emp1_branch uuid;
+  v_emp_bad uuid;
+  v_cycle_id uuid := (select id from app.roster_cycles where tenant_id = v_tenant1 and name = 'Morning-Morning-Off');
+  v_result record;
+  v_job app.jobs;
+  v_audit_count integer;
+  v_audit app.audit_logs;
+begin
+  select company_org_unit_id, branch_org_unit_id into v_emp1_company, v_emp1_branch from app.employees where master_record_id = v_emp1;
+
+  -- A fresh, minimal, active employee -- the target of a temporary,
+  -- narrowly-scoped CHECK constraint below.
+  v_emp_bad := (app.create_employee_draft(
+    v_tenant1, 'PLT132 Bad Employee', 'full_time', 'plt132badwork@shr1.test', 'plt132badp@shr1.test', '0800009999',
+    null, null, null, '2024-01-01', v_emp1_company, v_emp1_branch, null, 'PLT-132 Test', null, null, null,
+    'hr_created', 'idem-plt132-bad-shr1', '00000000-0000-0000-0000-000000027902', 'staff'
+  )).master_record_id;
+  perform app.add_employee_emergency_contact(v_emp_bad, 'Contact Bad', 'spouse', '0810009999', null, true, '00000000-0000-0000-0000-000000027902', 'staff');
+  perform app.submit_employee_for_approval(v_emp_bad, 1, '00000000-0000-0000-0000-000000027902', 'staff');
+  perform app.decide_employee_approval(v_emp_bad, 2, 'approve', null, '00000000-0000-0000-0000-000000027903', 'approver');
+  perform app.activate_employee(v_emp_bad, 3, '00000000-0000-0000-0000-000000027903', 'approver');
+
+  -- A temporary, narrowly-scoped CHECK constraint keyed to ONE real,
+  -- already-committed employee's own id -- a genuine Postgres check_violation
+  -- raised by real SQL execution against that employee's real
+  -- app.schedule_assignments row, structurally indistinguishable from any of
+  -- this schema's own dozens of pre-existing CHECK constraints (never an
+  -- artificial statement-timeout). This deliberately uses a DIFFERENT real
+  -- errcode (the default P0001/raise_exception, not check_violation) so this
+  -- proof exercises the NEW `when others` branch specifically, never the
+  -- pre-existing, unchanged four-code allowlist (insufficient_privilege/
+  -- check_violation/no_data_found/unique_violation) that already silently
+  -- skips a check_violation -- see this migration's own header. Dropped
+  -- again at the end of this section for hygiene (scripts/db-tests/run.sh
+  -- runs every *.sql file against the SAME disposable database in
+  -- sequence).
+  execute format(
+    'create or replace function app._hrt295_plt132_sentinel_guard() returns trigger language plpgsql as $g$ begin if new.employee_id = %L then raise exception ''hrt295_plt132_sentinel_block: simulated real downstream rejection for employee %%'', new.employee_id; end if; return new; end; $g$;',
+    v_emp_bad
+  );
+  execute 'create trigger hrt295_plt132_sentinel_guard before insert on app.schedule_assignments for each row execute function app._hrt295_plt132_sentinel_guard()';
+
+  select * into v_result from app.generate_roster_schedule_assignments(v_tenant1, v_cycle_id, array[v_emp1, v_emp_bad], '2026-09-01'::date, '2026-09-02'::date, '00000000-0000-0000-0000-000000027902', 'staff');
+
+  -- Before the HRT-295 fix, this uncaught exception (outside the pre-existing
+  -- four-code allowlist) would have rolled back the ENTIRE transaction,
+  -- including app.enqueue_job's own earlier INSERT -- HRT-294's own live
+  -- reproduction found the job row simply gone afterward (neither pending
+  -- nor dead_letter). Assert a REAL, terminal, non-lost row instead.
+  select * into v_job from app.jobs where job_id = v_result.job_id;
+  if v_job.job_id is null then
+    raise exception 'CRITICAL (PLT-132 regression): the roster batch job row was lost entirely after a genuine per-employee-day failure -- exactly HRT-294''s own live-reproduced defect';
+  end if;
+  if v_job.status <> 'completed' then
+    raise exception 'FAIL: expected the roster job to reach completed even with one genuinely failing employee, got %', v_job.status;
+  end if;
+
+  -- The healthy sibling employee (emp1) in the SAME run must still have been
+  -- scheduled correctly for this brand-new date range (day_offset 0 =
+  -- MORNING) -- one bad employee-day must never take the rest of the batch
+  -- down with it.
+  if (select count(*) from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-01' and source = 'bulk_generated') <> 1 then
+    raise exception 'FAIL: the healthy sibling employee (emp1) in the same roster run did not get a real bulk_generated assignment';
+  end if;
+
+  -- The failing employee must have zero rows left behind for EITHER day the
+  -- trigger blocked (atomic per-item rollback) -- both 2026-09-01 and
+  -- 2026-09-02 resolve to a MORNING shift for this cycle (offsets 0 and 1),
+  -- so v_emp_bad genuinely fails BOTH days in this same run.
+  if exists (select 1 from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp_bad and work_date in ('2026-09-01', '2026-09-02')) then
+    raise exception 'FAIL: the genuinely failing employee must have zero schedule_assignments rows left behind for either blocked day (atomic per-item rollback)';
+  end if;
+
+  -- Real, durable, FINDABLE evidence of the specific failures -- queryable
+  -- straight out of app.audit_logs, never merely a silent skipped_count
+  -- increment. Exactly TWO rows -- one per genuinely failing day.
+  select count(*) into v_audit_count from app.audit_logs
+    where action = 'generate_roster_schedule_assignments_item_failed' and resource_type = 'app.employees' and resource_id = v_emp_bad and result = 'failure';
+  if v_audit_count <> 2 then
+    raise exception 'FAIL: expected exactly two durable, findable failure audit rows (one per blocked day) for the genuinely failing employee, got %', v_audit_count;
+  end if;
+
+  select * into v_audit from app.audit_logs where action = 'generate_roster_schedule_assignments_item_failed' and resource_id = v_emp_bad and (after_value ->> 'work_date') = '2026-09-01';
+  if v_audit.reason is null or v_audit.reason not like '%hrt295_plt132_sentinel_block%' then
+    raise exception 'FAIL: expected the durable failure record to carry the REAL error detail (the sentinel trigger message), got %', v_audit.reason;
+  end if;
+  if (v_audit.after_value ->> 'job_id')::uuid <> v_job.job_id then
+    raise exception 'FAIL: the durable failure record must correlate back to the same job_id';
+  end if;
+
+  execute 'drop trigger hrt295_plt132_sentinel_guard on app.schedule_assignments';
+  execute 'drop function app._hrt295_plt132_sentinel_guard()';
+
+  raise notice 'PASS (PLT-132/HRT-295, roster): a genuine per-employee-day assignment failure outside the pre-existing four-code allowlist no longer loses the batch job row -- it reaches completed, the failing employee''s own state is cleanly rolled back, the healthy sibling employee (emp1) in the same run still gets scheduled correctly, and the failure itself is durably recorded and findable in app.audit_logs with real error detail';
+end $$;
+
 \echo '>> app.set_roster_holiday / app.list_roster_holidays: a real holiday is created; a same-date re-set replaces (never duplicates) the active row'
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027902", "role": "authenticated"}', false);
 set role authenticated;

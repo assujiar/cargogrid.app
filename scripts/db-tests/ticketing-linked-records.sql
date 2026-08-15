@@ -269,8 +269,8 @@ begin
   foreach v_type in array v_full loop
     v_ok := true;
     begin
-      insert into app.ticket_links (tenant_id, ticket_id, entity_type, entity_id, created_by_auth_user_id, safe_snapshot)
-      values ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', v_type, gen_random_uuid(), '00000000-0000-0000-0000-000000000000', '{}'::jsonb);
+      insert into app.ticket_links (tenant_id, ticket_id, entity_type, entity_id, created_by_auth_user_id, created_by_role, safe_snapshot)
+      values ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', v_type, gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'staff', '{}'::jsonb);
     exception
       when check_violation then v_ok := false;
       when foreign_key_violation then v_ok := true; -- the CHECK passed; only the (unrelated) FK to a fake tenant/ticket failed
@@ -281,8 +281,8 @@ begin
   end loop;
 
   begin
-    insert into app.ticket_links (tenant_id, ticket_id, entity_type, entity_id, created_by_auth_user_id, safe_snapshot)
-    values ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', 'not_a_real_type', gen_random_uuid(), '00000000-0000-0000-0000-000000000000', '{}'::jsonb);
+    insert into app.ticket_links (tenant_id, ticket_id, entity_type, entity_id, created_by_auth_user_id, created_by_role, safe_snapshot)
+    values ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', 'not_a_real_type', gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'staff', '{}'::jsonb);
     raise exception 'FAIL: a value outside the registry must be rejected by the CHECK constraint';
   exception
     when check_violation then null;
@@ -977,6 +977,272 @@ begin
   end;
 
   raise notice 'PASS: the denial/access audit companions durably log exactly once per call, validate their own input';
+end;
+$$;
+
+\echo '>> 17. closed/cancelled tickets are mutation-inert for app.link_ticket_record (new-engagement operation); app.unlink_ticket_record remains permitted as legitimate post-closure cleanup (HRT-295 fix for ISS-2026-109, supabase/migrations/20260731270000)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lnk1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'GENERAL');
+  v_queue uuid := (select id from app.ticket_queues where tenant_id = v_tenant1 and code = 'SUP');
+  v_admin uuid := '00000000-0000-0000-0000-000000292101';
+  v_shipment_id uuid := '00000000-0000-0000-0000-000000292199';
+  v_invoice_id uuid := '00000000-0000-0000-0000-000000292198';
+  v_close_role uuid; v_close_draft app.role_versions;
+  v_ticket_closed app.tickets;
+  v_ticket_cancelled app.tickets;
+  v_link app.ticket_links;
+  v_msg text;
+begin
+  -- TKT:Close/Reopen -- the main fixture only granted admin TKT:Edit/Assign
+  -- (deliberately narrow, matching section 9's own careful permission
+  -- scoping). Additive role assignment: admin's existing roles are
+  -- untouched, this only ADDS the authority needed to drive a ticket to
+  -- resolved/closed for this section's own fixture.
+  v_close_role := (app.create_role(v_tenant1, 'Ticket Closer', 'TKT Close/Reopen', 'tester')).id;
+  v_close_draft := app.create_role_version(v_close_role, 'tester');
+  perform app.set_role_version_permissions(v_close_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Close', 'Reopen')), 'tester');
+  perform app.publish_role_version(v_close_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_close_role and status = 'published'), v_admin, v_admin, 'tester');
+
+  -- Ticket A -> driven to CLOSED (new -> open -> resolved -> closed).
+  v_ticket_closed := app.create_ticket(v_tenant1, v_category, v_queue, 'normal', 'Terminal Status Guard Test A', 'body', 'idem-lnk-term-a', v_admin, 'admin');
+  v_link := app.link_ticket_record(v_ticket_closed.id, 'shipment', v_shipment_id, 'primary_subject', v_admin, 'admin');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'open', null, v_admin, 'admin');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'resolved', 'done', v_admin, 'admin');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'closed', null, v_admin, 'admin');
+  if v_ticket_closed.status <> 'closed' then raise exception 'FAIL (fixture bug): ticket A must be closed'; end if;
+
+  begin
+    perform app.link_ticket_record(v_ticket_closed.id, 'invoice', v_invoice_id, 'related', v_admin, 'admin');
+    raise exception 'FAIL: linking a new record to a closed ticket must be rejected';
+  exception when others then
+    v_msg := sqlerrm;
+    if v_msg not like 'invalid_transition%' then raise exception 'FAIL: expected invalid_transition, got: %', v_msg; end if;
+  end;
+
+  -- Cleanup (unlink) of the PRE-EXISTING shipment link (linked before
+  -- close) remains permitted on a closed ticket -- deliberate design
+  -- decision, see the migration's own header: cleanup is not a new
+  -- engagement.
+  perform app.unlink_ticket_record(v_link.id, v_link.record_version, 'cleanup after close', v_admin, 'admin');
+  if (select status from app.ticket_links where id = v_link.id) <> 'removed' then
+    raise exception 'FAIL: unlink_ticket_record must still succeed on a closed ticket (cleanup remains permitted)';
+  end if;
+
+  -- Ticket B -> driven to CANCELLED (new -> cancelled).
+  v_ticket_cancelled := app.create_ticket(v_tenant1, v_category, v_queue, 'normal', 'Terminal Status Guard Test B', 'body', 'idem-lnk-term-b', v_admin, 'admin');
+  v_link := app.link_ticket_record(v_ticket_cancelled.id, 'shipment', v_shipment_id, 'related', v_admin, 'admin');
+  v_ticket_cancelled := app.transition_ticket_status(v_ticket_cancelled.id, v_ticket_cancelled.record_version, 'cancelled', 'no longer needed', v_admin, 'admin');
+  if v_ticket_cancelled.status <> 'cancelled' then raise exception 'FAIL (fixture bug): ticket B must be cancelled'; end if;
+
+  begin
+    perform app.link_ticket_record(v_ticket_cancelled.id, 'invoice', v_invoice_id, 'related', v_admin, 'admin');
+    raise exception 'FAIL: linking a new record to a cancelled ticket must be rejected';
+  exception when others then
+    v_msg := sqlerrm;
+    if v_msg not like 'invalid_transition%' then raise exception 'FAIL: expected invalid_transition, got: %', v_msg; end if;
+  end;
+
+  perform app.unlink_ticket_record(v_link.id, v_link.record_version, 'cleanup after cancel', v_admin, 'admin');
+  if (select status from app.ticket_links where id = v_link.id) <> 'removed' then
+    raise exception 'FAIL: unlink_ticket_record must still succeed on a cancelled ticket (cleanup remains permitted)';
+  end if;
+
+  raise notice 'PASS: link_ticket_record rejects both closed and cancelled tickets with invalid_transition; unlink_ticket_record remains permitted on both as the deliberate cleanup-is-allowed design decision';
+end;
+$$;
+
+\echo '>> 18. app.list_customer_ticket_links genericizes a staff creator''s identity to "Support Team" for a customer-layer caller; the staff-facing app.list_ticket_links is unaffected and keeps returning the real identity (HRT-295 fix for ISS-2026-110, supabase/migrations/20260731270000)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lnk1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'GENERAL');
+  v_admin uuid := '00000000-0000-0000-0000-000000292101';
+  v_customer1 uuid := '00000000-0000-0000-0000-000000292110';
+  v_account_a uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Lnk Customer A');
+  v_shipment_id uuid := '00000000-0000-0000-0000-000000292199';
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-LNK1');
+  v_ticket app.tickets;
+  v_staff_link app.ticket_links;
+  v_customer_link app.ticket_links;
+  v_row record;
+  v_customer_row_count integer;
+begin
+  v_ticket := app.create_customer_ticket(v_tenant1, v_account_a, v_category, 'normal', 'Customer Link Genericization Test', 'body', 'idem-lnk-cust-generic-1', v_customer1, 'customer1');
+
+  -- Staff (admin) links the shipment -- created_by on the raw row is
+  -- admin's own actor_label ('admin', this fixture's own convention). The
+  -- genericization under test keys on WHO created the row (a live
+  -- app.is_ticket_staff check on the creator's auth_user_id), not on the
+  -- label string itself -- production passes the caller's raw internal
+  -- auth_user_id as this same label (server/mutations/ticketing.ts call
+  -- sites), which is exactly what this fix prevents from ever reaching a
+  -- customer.
+  v_staff_link := app.link_ticket_record(v_ticket.id, 'shipment', v_shipment_id, 'primary_subject', v_admin, 'admin');
+
+  -- Customer1 (a real requester-side party on their own ticket) links the
+  -- warehouse themselves -- created_by on THIS row is genuinely customer1's
+  -- own identity, not a staff identity at all.
+  v_customer_link := app.link_ticket_record(v_ticket.id, 'warehouse', v_warehouse_id, 'related', v_customer1, 'customer1');
+
+  -- Staff-facing app.list_ticket_links is UNCHANGED -- still returns the
+  -- raw actor_label for both rows (this is the pre-existing, correct
+  -- behavior for the staff panel, which legitimately needs to know who
+  -- linked what).
+  if (select created_by from app.list_ticket_links(v_ticket.id, v_admin) where id = v_staff_link.id) <> 'admin' then
+    raise exception 'FAIL: app.list_ticket_links (staff-facing) must be unaffected -- expected the raw actor_label ''admin''';
+  end if;
+
+  -- Customer-facing app.list_customer_ticket_links genericizes the STAFF
+  -- creator's row to the fixed label -- never the raw internal identity.
+  select * into v_row from app.list_customer_ticket_links(v_ticket.id, v_customer1) where id = v_staff_link.id;
+  if v_row.created_by <> 'Support Team' then
+    raise exception 'FAIL: app.list_customer_ticket_links must genericize a staff creator''s identity to ''Support Team'', got %', v_row.created_by;
+  end if;
+  if v_row.created_by = 'admin' then
+    raise exception 'CRITICAL: app.list_customer_ticket_links leaked the raw staff actor_label to a customer caller';
+  end if;
+
+  -- The customer's OWN row keeps its own real label -- genericization is
+  -- staff-identity-specific, not a blanket redaction of every row.
+  select * into v_row from app.list_customer_ticket_links(v_ticket.id, v_customer1) where id = v_customer_link.id;
+  if v_row.created_by <> 'customer1' then
+    raise exception 'FAIL: app.list_customer_ticket_links must keep a non-staff creator''s own real label, got %', v_row.created_by;
+  end if;
+
+  select count(*) into v_customer_row_count from app.list_customer_ticket_links(v_ticket.id, v_customer1);
+  if v_customer_row_count <> 2 then
+    raise exception 'FAIL: expected both active links visible to the customer, got %', v_customer_row_count;
+  end if;
+
+  -- Every other column stays byte-identical to the staff-facing read for
+  -- the SAME row -- only created_by is genericized.
+  if (select label from app.list_customer_ticket_links(v_ticket.id, v_customer1) where id = v_staff_link.id) <> 'SHP-LNK-0001' then
+    raise exception 'FAIL: label must still be the real, live shipment label -- genericization is scoped to created_by only';
+  end if;
+
+  -- Schema-privilege defense in depth (C-11/C-12 self-check): the new
+  -- function is deliberately EXECUTE-granted to authenticated/service_role
+  -- only, never anon (mirrors this migration's own established sweep).
+  if has_function_privilege('anon', 'app.list_customer_ticket_links(uuid, uuid)', 'EXECUTE') then
+    raise exception 'CRITICAL: anon has EXECUTE on app.list_customer_ticket_links';
+  end if;
+  if not has_function_privilege('authenticated', 'app.list_customer_ticket_links(uuid, uuid)', 'EXECUTE') then
+    raise exception 'FAIL: authenticated must have EXECUTE on app.list_customer_ticket_links';
+  end if;
+
+  raise notice 'PASS: app.list_customer_ticket_links genericizes a staff creator''s identity to Support Team for a customer caller, keeps a customer''s own real label, leaves every other column (including app.list_ticket_links'' own staff-facing read) unaffected, and carries the correct anon/authenticated privilege boundary';
+end;
+$$;
+
+-- ===========================================================================
+-- HRT-295 Tier C review fix (security lens finding, High): section 18 above
+-- never sets request.jwt.claims/role authenticated for its own app.list_
+-- customer_ticket_links calls -- app.assert_actor_is_session_identity is an
+-- intentional no-op when auth.uid() IS NULL (the service_role/superuser/
+-- db-test convention), so section 18 runs as an unauthenticated superuser
+-- call and never exercises the real RLS-session-bound path this RPC runs
+-- under in production. This section closes that gap with a GENUINE forged
+-- customer session, live-reproducing the original defect first (before the
+-- fix landed, this exact call raised actor_identity_mismatch for every
+-- ordinary multi-party ticket -- 20260731270000's own line 514 passed the
+-- LINK'S CREATOR, not the calling actor, into app.is_ticket_staff -> app.
+-- check_ticket_authority -> app.evaluate_permission -> app.assert_actor_is_
+-- session_identity, which unconditionally rejects a third-party actor).
+-- Fixed by 20260731300000 (app.ticket_links.created_by_role, captured once
+-- at link-creation time, never re-derived live against a third party).
+-- ===========================================================================
+
+\echo '>> 19. HRT-295 Tier C review: app.list_customer_ticket_links via a GENUINE forged customer session -- must succeed with zero actor_identity_mismatch for a ticket whose links were created by a DIFFERENT identity than the reading customer (the ordinary case, not an edge case)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lnk1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'GENERAL');
+  v_admin uuid := '00000000-0000-0000-0000-000000292101';
+  v_customer1 uuid := '00000000-0000-0000-0000-000000292110';
+  v_account_a uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Lnk Customer A');
+  v_shipment_id uuid := '00000000-0000-0000-0000-000000292199';
+  v_ticket app.tickets;
+  v_staff_link app.ticket_links;
+  v_rows_json jsonb;
+  v_row_count integer;
+begin
+  v_ticket := app.create_customer_ticket(v_tenant1, v_account_a, v_category, 'normal', 'HRT-295 Tier C forged-session regression', 'body', 'idem-lnk-cust-forged-session-1', v_customer1, 'customer1');
+
+  -- Staff links a record -- created_by_role='staff', captured at write time
+  -- by the REAL calling actor's own already-verified session (v_admin here
+  -- is passed as a plain parameter in this db-test convention, matching
+  -- every other call in this file -- the crosscheck engages only once a
+  -- REAL forged session is present below, on the READ side, which is
+  -- exactly what this section adds).
+  v_staff_link := app.link_ticket_record(v_ticket.id, 'shipment', v_shipment_id, 'primary_subject', v_admin, 'admin');
+
+  -- The read below is the one that matters: a GENUINE forged customer
+  -- session, not a bare superuser call. Before the Tier C fix
+  -- (20260731300000), this exact call raised actor_identity_mismatch.
+  perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000292110", "role": "authenticated"}', false);
+  set role authenticated;
+  begin
+    select jsonb_agg(jsonb_build_object('id', l.id, 'created_by', l.created_by)) into v_rows_json
+    from app.list_customer_ticket_links(v_ticket.id, v_customer1) l;
+  exception when others then
+    reset role;
+    perform set_config('request.jwt.claims', 'null', false);
+    raise exception 'HRT-295 Tier C REGRESSION: a genuine forged customer session must be able to call app.list_customer_ticket_links on its OWN ticket without error -- got: % (sqlstate %)', sqlerrm, sqlstate;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims', 'null', false);
+
+  select jsonb_array_length(v_rows_json) into v_row_count;
+  if v_row_count <> 1 then
+    raise exception 'FAIL: expected exactly 1 link visible to the forged customer session, got %', v_row_count;
+  end if;
+  if (v_rows_json -> 0 ->> 'created_by') <> 'Support Team' then
+    raise exception 'FAIL: expected the staff creator genericized to Support Team even under a real forged session, got %', (v_rows_json -> 0 ->> 'created_by');
+  end if;
+
+  raise notice 'PASS (HRT-295 Tier C, 20260731300000), part 1: app.list_customer_ticket_links succeeds under a GENUINE forged customer session for a ticket whose ONLY link was created by a DIFFERENT identity (staff) -- zero actor_identity_mismatch, correctly genericized to Support Team';
+end;
+$$;
+
+\echo '>> 19b. HRT-295 Tier C review: the SAME forged customer session links a SECOND record themselves (a genuine requester-side write, not a third party), then re-reads via the SAME forged session -- proves the fix did not merely paper over the staff-creator case, and that a customer reading their OWN self-created link (never a third-party actor at all) still works correctly'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lnk1');
+  v_ticket_id uuid := (select id from app.tickets where tenant_id = (select id from app.tenants where slug = 'lnk1') and idempotency_key = 'idem-lnk-cust-forged-session-1');
+  v_customer1 uuid := '00000000-0000-0000-0000-000000292110';
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = (select id from app.tenants where slug = 'lnk1') and code = 'WH-LNK1');
+  v_rows_json jsonb;
+  v_row_count integer;
+  v_staff_row jsonb;
+  v_customer_row jsonb;
+begin
+  perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000292110", "role": "authenticated"}', false);
+  set role authenticated;
+  perform app.link_ticket_record(v_ticket_id, 'warehouse', v_warehouse_id, 'related', v_customer1, 'customer1');
+
+  select jsonb_agg(jsonb_build_object('created_by', l.created_by, 'entity_type', l.entity_type)) into v_rows_json
+  from app.list_customer_ticket_links(v_ticket_id, v_customer1) l;
+  reset role;
+  perform set_config('request.jwt.claims', 'null', false);
+
+  select jsonb_array_length(v_rows_json) into v_row_count;
+  if v_row_count <> 2 then
+    raise exception 'FAIL: expected exactly 2 links visible (staff-created shipment + customer-created warehouse), got %', v_row_count;
+  end if;
+
+  select v into v_staff_row from jsonb_array_elements(v_rows_json) v where v ->> 'entity_type' = 'shipment';
+  select v into v_customer_row from jsonb_array_elements(v_rows_json) v where v ->> 'entity_type' = 'warehouse';
+  if v_staff_row ->> 'created_by' <> 'Support Team' then
+    raise exception 'FAIL: expected the staff-created shipment link genericized to Support Team, got %', v_staff_row ->> 'created_by';
+  end if;
+  if v_customer_row ->> 'created_by' <> 'customer1' then
+    raise exception 'FAIL: expected the customer''s OWN self-created warehouse link to keep its own real label, got %', v_customer_row ->> 'created_by';
+  end if;
+
+  raise notice 'PASS (HRT-295 Tier C, 20260731300000), part 2: the SAME genuine forged customer session both creates a new link AND re-reads the full list (2 rows: staff-created genericized, customer-created real label) -- durable across repeated real-session reads, never a first-call artifact';
 end;
 $$;
 

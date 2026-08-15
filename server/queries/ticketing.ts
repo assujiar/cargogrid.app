@@ -285,6 +285,18 @@ export async function listCustomerTicketMessages(
   return rows(data).map(parseCustomerTicketMessageRow);
 }
 
+// HRT-295 (ISS-2026-110 fix): the customer-safe counterpart to
+// listTicketLinks -- calls app.list_customer_ticket_links, which genericizes
+// a staff creator's identity to "Support Team" (mirrors
+// listCustomerTicketMessages' own author-label substitution) instead of the
+// raw internal created_by app.list_ticket_links returns. Every other
+// consumer of TicketLinkRow is unaffected -- same schema, same parser.
+export async function listCustomerTicketLinks(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketLinkRow[]> {
+  const { data, error } = await client.rpc("list_customer_ticket_links", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkRow);
+}
+
 // --- HRT-288 (CG-S12-HRT-016): tenant-side helpdesk read queries. Each
 // calls its own dedicated, tenant-safe projection RPC -- never the staff
 // wrappers above with fields merely dropped client-side. ---

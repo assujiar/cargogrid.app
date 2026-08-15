@@ -29,6 +29,7 @@ import {
   DecideEmployeeChangeRequestInputSchema,
   ValidateEmployeeImportRowInputSchema,
   CommitEmployeeImportJobInputSchema,
+  ReactivateUserAfterRehireInputSchema,
   parseEmployeeMutationResult,
   parseEmployeeEmergencyContact,
   parseEmployeeDuplicateCandidate,
@@ -55,6 +56,7 @@ import {
   type DecideEmployeeChangeRequestInput,
   type ValidateEmployeeImportRowInput,
   type CommitEmployeeImportJobInput,
+  type ReactivateUserAfterRehireInput,
   type EmployeeMutationResult,
   type EmployeeEmergencyContact,
   type EmployeeDuplicateCandidate,
@@ -107,6 +109,17 @@ export const EMPLOYEE_KNOWN_MUTATION_ERROR_CODES = [
   "import_export_job_not_fully_validated",
   "import_export_job_has_invalid_rows",
   "invalid_response",
+  // HRT-295 / ISS-2026-104 + ISS-2026-108: app.terminate_employee/
+  // app.suspend_employee/app.reactivate_employee now call app.transition_user_status,
+  // and the new app.reactivate_user_after_rehire calls it too -- these are the error
+  // codes that shared primitive (and the new RPC's own checks) can newly raise through
+  // this service layer (mirrors ISS-2026-114's own established "widen the array when a
+  // fix makes a new code reachable" pattern).
+  "last_critical_admin",
+  "invalid_user_transition",
+  "no_linked_identity",
+  "no_rehire_event",
+  "stale_rehire_event",
 ] as const;
 type KnownEmployeeMutationErrorCode = (typeof EMPLOYEE_KNOWN_MUTATION_ERROR_CODES)[number];
 export type EmployeeMutationErrorCode = KnownEmployeeMutationErrorCode | "mutation_failed";
@@ -498,5 +511,33 @@ export async function commitEmployeeImportJob(client: EmployeeMutationRpcClient,
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   const row = firstRow(data);
   if (!row) throw new EmployeeMutationError("invalid_response", "commit_employee_import_job returned no row");
+  return row;
+}
+
+// --- Platform identity reactivation (PLT-107/110, HRT-295 / ISS-2026-108) ---
+
+/**
+ * The governed reactivation RPC a genuine rehire needs (app.reactivate_user_after_rehire)
+ * -- gated at least as strictly as app.request_onboarding_access_revocation (HRS:Override
+ * + a non-empty reason), callable only for a linked employee whose CURRENT
+ * lifecycle_status is active with a real, on-file terminated -> active (rehire) event.
+ * Restores app.users.status/app.tenant_user_identities.status to active; deliberately does
+ * NOT re-grant role_assignments -- a real role grant is always a separate, explicit
+ * app.request_onboarding_access_provisioning call. Returns the raw app.users row (this
+ * service layer has no dedicated Platform-user parser, matching
+ * validateEmployeeImportRow/commitEmployeeImportJob's own identical raw-record shape
+ * above).
+ */
+export async function reactivateUserAfterRehire(client: EmployeeMutationRpcClient, input: ReactivateUserAfterRehireInput): Promise<Record<string, unknown>> {
+  const parsed = ReactivateUserAfterRehireInputSchema.parse(input);
+  const { data, error } = await client.rpc("reactivate_user_after_rehire", {
+    p_master_record_id: parsed.masterRecordId,
+    p_reason: parsed.reason,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
+  const row = firstRow(data);
+  if (!row) throw new EmployeeMutationError("invalid_response", "reactivate_user_after_rehire returned no row");
   return row;
 }

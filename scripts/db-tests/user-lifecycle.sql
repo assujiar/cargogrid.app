@@ -182,12 +182,60 @@ declare
 begin
   select id into v_user2_id from app.users where email = 'admin2@example.test';
   begin
-    update app.users set status = 'active' where id = v_user2_id;
-    raise exception 'assertion failed: expected reviving a revoked user to fail, but it succeeded';
+    update app.users set status = 'suspended' where id = v_user2_id;
+    raise exception 'assertion failed: expected reviving a revoked user to suspended to fail, but it succeeded';
   exception
     when check_violation then
       null; -- expected
   end;
+end;
+$$;
+
+\echo '>> HRT-295 / ISS-2026-108 amendment: revoked remains terminal for every transition EXCEPT one narrow, deliberately-added edge (revoked -> active) -- the ONLY caller anywhere in this repository that ever reaches it is app.reactivate_user_after_rehire (HRIS, HRS:Override + a genuine on-file rehire event -- see scripts/db-tests/hris-employee-master.sql and scripts/db-tests/hris-onboarding-offboarding.sql for that full, governed, end-to-end proof). This block only proves the trigger''s own structural boundary: revoked -> invited is still hard-blocked, revoked -> active is now structurally permitted (a bare update succeeding here is expected and correct -- service_role already has undifferentiated raw access to every table in this schema; the authorization boundary lives in the RPC layer, not this data-integrity trigger)'
+do $$
+declare
+  v_user2_id uuid;
+begin
+  select id into v_user2_id from app.users where email = 'admin2@example.test';
+
+  begin
+    update app.users set status = 'invited' where id = v_user2_id;
+    raise exception 'assertion failed: expected reviving a revoked user to invited to fail, but it succeeded';
+  exception
+    when check_violation then
+      null; -- expected
+  end;
+
+  update app.users set status = 'active' where id = v_user2_id;
+  if (select status from app.users where id = v_user2_id) <> 'active' then
+    raise exception 'assertion failed: expected the revoked -> active edge to be structurally permitted';
+  end if;
+end;
+$$;
+
+\echo '>> HRT-295 / ISS-2026-108 amendment: the identical amendment on app.tenant_user_identities'' own transition trigger (invited/active/revoked, no suspended state at this layer) -- the underlying identity link is STILL revoked at this point (the two bare app.users updates just above never cascade to it, unlike app.transition_user_status) -- revoked -> invited still blocked; revoked -> active now structurally permitted'
+do $$
+declare
+  v_user2 app.users;
+begin
+  select * into v_user2 from app.users where email = 'admin2@example.test';
+
+  if (select status from app.tenant_user_identities where auth_user_id = v_user2.auth_user_id and tenant_id = v_user2.tenant_id) <> 'revoked' then
+    raise exception 'assertion failed: expected the underlying identity link to still be revoked (a bare app.users update never cascades to it)';
+  end if;
+
+  begin
+    update app.tenant_user_identities set status = 'invited' where auth_user_id = v_user2.auth_user_id and tenant_id = v_user2.tenant_id;
+    raise exception 'assertion failed: expected reviving a revoked identity link to invited to fail, but it succeeded';
+  exception
+    when check_violation then
+      null; -- expected
+  end;
+
+  update app.tenant_user_identities set status = 'active' where auth_user_id = v_user2.auth_user_id and tenant_id = v_user2.tenant_id;
+  if (select status from app.tenant_user_identities where auth_user_id = v_user2.auth_user_id and tenant_id = v_user2.tenant_id) <> 'active' then
+    raise exception 'assertion failed: expected the identity link''s revoked -> active edge to be structurally permitted';
+  end if;
 end;
 $$;
 

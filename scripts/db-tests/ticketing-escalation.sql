@@ -986,4 +986,301 @@ begin
 end;
 $$;
 
+\echo '>> 13. PLT-132 (HRT-295, CG-S12-HRT-023): a genuine per-ticket evaluation failure is durably recorded and the batch job still reaches completed -- the OTHER ticket in the SAME run still escalates correctly'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'esc1');
+  v_queue uuid := (select id from app.ticket_queues where tenant_id = v_tenant1 and code = 'SUP');
+  v_category uuid;
+  v_policy app.ticket_escalation_policies;
+  v_version app.ticket_escalation_policy_versions;
+  v_ticket_bad app.tickets;
+  v_ticket_good app.tickets;
+  v_result record;
+  v_job app.jobs;
+  v_audit_count integer;
+  v_audit app.audit_logs;
+  v_bad_esc_count integer;
+begin
+  -- A dedicated category keeps this section''s own escalation policy fully
+  -- isolated from every earlier section''s own policies/tickets in this same
+  -- file (several already target urgent-priority tickets in the shared
+  -- v_category) -- never relies on precedence-rank tie-breaking to pick the
+  -- right policy.
+  v_category := (app.create_ticket_category(v_tenant1, 'PLT132CAT', 'PLT-132 regression category', v_queue, '00000000-0000-0000-0000-000000291102', 'staff1')).id;
+
+  v_policy := app.create_ticket_escalation_policy(v_tenant1, 'PLT132-ESC', 'PLT-132 regression escalation', '00000000-0000-0000-0000-000000291102', 'staff1');
+  v_version := app.create_ticket_escalation_policy_version(v_policy.id, 'internal', v_category, 'urgent', v_queue, 0, '00000000-0000-0000-0000-000000291102', 'staff1');
+  perform app.add_ticket_escalation_level(v_version.id, 1, 'priority_threshold', null, 'urgent', 'queue', v_queue, null, true, false, 30, '00000000-0000-0000-0000-000000291102', 'staff1');
+  perform app.publish_ticket_escalation_policy_version(v_version.id, v_version.record_version, '00000000-0000-0000-0000-000000291102', 'staff1');
+
+  v_ticket_bad := app.create_ticket(v_tenant1, v_category, null, 'urgent', 'PLT-132 sentinel-blocked ticket', 'body', 'idem-plt132-esc-bad', '00000000-0000-0000-0000-000000291105', 'req1');
+  v_ticket_good := app.create_ticket(v_tenant1, v_category, null, 'urgent', 'PLT-132 healthy sibling ticket', 'body', 'idem-plt132-esc-good', '00000000-0000-0000-0000-000000291105', 'req1');
+
+  -- A temporary, narrowly-scoped CHECK constraint keyed to ONE real,
+  -- already-committed ticket''s own id -- a genuine Postgres check_violation
+  -- raised by real SQL execution against that ticket''s real
+  -- ticket_escalation_events row, structurally indistinguishable from any of
+  -- this schema''s own dozens of pre-existing CHECK constraints (never an
+  -- artificial statement-timeout). Stands in for a real downstream rejection
+  -- (e.g. a business-rule trigger some future migration adds) without
+  -- touching app._evaluate_ticket_escalation/app._apply_ticket_escalation''s
+  -- own code at all -- proving the NEW exception boundary in
+  -- app.run_ticket_escalation_evaluation_batch genuinely catches ANY
+  -- per-item SQL error, not merely the specific ones already reachable
+  -- through this tightly CHECK/FK-constrained schema''s own existing
+  -- validation (this task''s own exhaustive search found no such
+  -- organically-reachable failure for this specific function -- a real
+  -- property of how defensively this table is already constrained, not a
+  -- gap in this test). Dropped again at the end of this section for hygiene
+  -- (scripts/db-tests/run.sh runs every *.sql file against the SAME
+  -- disposable database in sequence).
+  execute format(
+    'alter table app.ticket_escalation_events add constraint hrt295_plt132_sentinel_block check (ticket_id is distinct from %L) not valid',
+    v_ticket_bad.id
+  );
+
+  select * into v_result from app.run_ticket_escalation_evaluation_batch(v_tenant1, now(), 'esc-plt132-hrt295', '00000000-0000-0000-0000-000000291102', 'staff1');
+
+  -- Before the HRT-295 fix, this uncaught check_violation would have rolled
+  -- back the ENTIRE transaction, including app.enqueue_job''s own earlier
+  -- INSERT -- HRT-294''s own live reproduction found the job row simply gone
+  -- afterward (neither pending nor dead_letter). Assert a REAL, terminal,
+  -- non-lost row instead.
+  select * into v_job from app.jobs where job_id = v_result.job_id;
+  if v_job.job_id is null then
+    raise exception 'CRITICAL (PLT-132 regression): the batch job row was lost entirely after a genuine per-ticket failure -- exactly HRT-294''s own live-reproduced defect';
+  end if;
+  if v_job.status <> 'completed' then
+    raise exception 'FAIL: expected the job to reach completed even with one genuinely failing ticket, got %', v_job.status;
+  end if;
+
+  -- The failing ticket''s own per-item work must be cleanly, atomically
+  -- rolled back (PL/pgSQL''s own implicit per-block savepoint) -- never a
+  -- half-applied escalation state left behind for it.
+  select count(*) into v_bad_esc_count from app.ticket_escalations where ticket_id = v_ticket_bad.id;
+  if v_bad_esc_count <> 0 then
+    raise exception 'FAIL: the genuinely failing ticket must have zero escalation state left behind (atomic per-item rollback), got %', v_bad_esc_count;
+  end if;
+
+  -- The healthy sibling ticket in the SAME run must still have escalated
+  -- correctly -- one bad ticket must never take the rest of the batch down.
+  if not exists (
+    select 1 from app.ticket_escalations e
+    where e.ticket_id = v_ticket_good.id and e.status = 'active' and e.current_level = 1
+  ) then
+    raise exception 'FAIL: the healthy sibling ticket in the same batch run was not escalated';
+  end if;
+  if not exists (
+    select 1 from app.ticket_escalation_events ev
+    where ev.ticket_id = v_ticket_good.id and ev.event_type = 'triggered' and ev.level_number = 1
+  ) then
+    raise exception 'FAIL: the healthy sibling ticket has no triggered ledger row even though its own sibling genuinely failed';
+  end if;
+
+  -- Real, durable, FINDABLE evidence of the specific failure -- queryable
+  -- straight out of app.audit_logs, never merely a silent skip/counter.
+  select count(*) into v_audit_count
+  from app.audit_logs
+  where action = 'run_ticket_escalation_evaluation_batch_item_failed'
+    and resource_type = 'app.tickets'
+    and resource_id = v_ticket_bad.id
+    and result = 'failure';
+  if v_audit_count <> 1 then
+    raise exception 'FAIL: expected exactly one durable, findable failure audit row for the genuinely failing ticket, got %', v_audit_count;
+  end if;
+
+  select * into v_audit from app.audit_logs
+  where action = 'run_ticket_escalation_evaluation_batch_item_failed' and resource_id = v_ticket_bad.id;
+  if v_audit.reason is null or v_audit.reason not like '%hrt295_plt132_sentinel_block%' then
+    raise exception 'FAIL: expected the durable failure record to carry the REAL error detail (the sentinel constraint name), got %', v_audit.reason;
+  end if;
+  if (v_audit.after_value ->> 'job_id')::uuid <> v_job.job_id then
+    raise exception 'FAIL: the durable failure record must correlate back to the same job_id';
+  end if;
+
+  execute 'alter table app.ticket_escalation_events drop constraint hrt295_plt132_sentinel_block';
+
+  raise notice 'PASS (PLT-132/HRT-295): a genuine per-ticket evaluation failure no longer loses the batch job row -- it reaches completed, the failing ticket''s own state is cleanly rolled back, the healthy sibling ticket in the same run still escalates correctly, and the failure itself is durably recorded and findable in app.audit_logs with real error detail';
+end;
+$$;
+
+-- ===========================================================================
+-- HRT-295 Tier C review fix (spec-compliance/security lens finding): section
+-- 13 above only forces an ORDINARY per-item business failure (a real
+-- check_violation) -- it never proves the SPECIFIC live-reproduction
+-- technique ISS-2026-112's own original discovery used (a genuine
+-- statement_timeout/operator cancellation MID-LOOP), which 20260731260000's
+-- own inner `when query_canceled then raise;` deliberately does NOT absorb
+-- as a per-item failure -- it re-raises, and until 20260731290000 nothing
+-- caught it again, so the batch job row still vanished with zero trace for
+-- this specific failure mode even after 20260731260000 shipped. This
+-- section closes that gap with its own genuine, real statement_timeout
+-- reproduction (never accepted as "structurally symmetric" from the
+-- per-item fixture above).
+--
+-- Deterministic-by-construction, not tuned-millisecond-guessing (that would
+-- itself be a new machine-speed-dependent flake, exactly the class this
+-- checkpoint's own task explicitly warns against): a temporary trigger
+-- forces ONE real, already-committed sentinel ticket''s own evaluation to
+-- pg_sleep(10) seconds, and the statement_timeout below (2000ms) is chosen
+-- to be comfortably shorter than that sleep and comfortably longer than
+-- the REAL evaluation time for every OTHER eligible ticket in tenant esc1
+-- combined -- a wide, deliberately generous margin (self-found while
+-- authoring this section: this file's own cumulative fixture state, by
+-- section 14, includes a dozen-plus real, unrelated tickets from earlier
+-- sections that the batch''s own tenant-wide selection query also visits;
+-- an earlier, tighter 300ms/2s pairing was live-reproduced to occasionally
+-- let the WHOLE loop finish inside the budget on a run with enough
+-- accumulated fixture state, exactly the "tuned-millisecond" flake this
+-- design otherwise avoids). None of those other tickets can ever match
+-- this section''s own brand-new, uniquely-categoried policy (app._resolve_
+-- ticket_escalation_policy_version_for_ticket''s own category_id match is
+-- exact, never wildcard-first for a specific-category ticket), so
+-- cancellation reliably lands while stuck inside the sentinel's own
+-- artificial delay regardless of iteration order or machine speed, never a
+-- race against real per-item evaluation speed.
+-- ===========================================================================
+
+\echo '>> 14. PLT-132 Tier C review (20260731290000): a GENUINE statement_timeout mid-loop no longer destroys the batch job row -- the call returns normally with a partial evaluated_count, the job survives in a real terminal state (dead_letter, since these self-claim batches use max_attempts=1), and a subsequent requeue+retry completes the remaining work'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'esc1');
+  v_queue uuid := (select id from app.ticket_queues where tenant_id = v_tenant1 and code = 'SUP');
+  v_category uuid;
+  v_policy app.ticket_escalation_policies;
+  v_version app.ticket_escalation_policy_versions;
+  v_ticket_slow app.tickets;
+  v_ticket_fast1 app.tickets;
+  v_ticket_fast2 app.tickets;
+  v_result record;
+  v_job app.jobs;
+  v_error_text text;
+  v_audit_count integer;
+  v_admin uuid := '00000000-0000-0000-0000-000000291102';
+begin
+  v_category := (app.create_ticket_category(v_tenant1, 'PLT132TOCAT', 'PLT-132 Tier C timeout regression category', v_queue, v_admin, 'staff1')).id;
+  v_policy := app.create_ticket_escalation_policy(v_tenant1, 'PLT132TO-ESC', 'PLT-132 Tier C timeout regression escalation', v_admin, 'staff1');
+  v_version := app.create_ticket_escalation_policy_version(v_policy.id, 'internal', v_category, 'urgent', v_queue, 0, v_admin, 'staff1');
+  perform app.add_ticket_escalation_level(v_version.id, 1, 'priority_threshold', null, 'urgent', 'queue', v_queue, null, true, false, 30, v_admin, 'staff1');
+  perform app.publish_ticket_escalation_policy_version(v_version.id, v_version.record_version, v_admin, 'staff1');
+
+  v_ticket_fast1 := app.create_ticket(v_tenant1, v_category, null, 'urgent', 'PLT-132 TO fast ticket 1', 'body', 'idem-plt132to-fast1', '00000000-0000-0000-0000-000000291105', 'req1');
+  v_ticket_slow := app.create_ticket(v_tenant1, v_category, null, 'urgent', 'PLT-132 TO slow (sentinel) ticket', 'body', 'idem-plt132to-slow', '00000000-0000-0000-0000-000000291105', 'req1');
+  v_ticket_fast2 := app.create_ticket(v_tenant1, v_category, null, 'urgent', 'PLT-132 TO fast ticket 2', 'body', 'idem-plt132to-fast2', '00000000-0000-0000-0000-000000291105', 'req1');
+end $$;
+
+-- Temporary trigger: ONLY the sentinel ticket's own escalation-event INSERT
+-- sleeps -- a real, deterministic delay, not a guessed timing window.
+-- Dropped again at the end of this section for hygiene (scripts/db-tests/
+-- run.sh runs every *.sql file against the SAME disposable database in
+-- sequence).
+create or replace function app.plt132to_sentinel_delay() returns trigger
+language plpgsql
+as $$
+begin
+  if new.ticket_id = (select id from app.tickets where idempotency_key = 'idem-plt132to-slow') then
+    perform pg_sleep(10);
+  end if;
+  return new;
+end;
+$$;
+
+create trigger plt132to_sentinel_delay_trigger
+  before insert on app.ticket_escalation_events
+  for each row execute function app.plt132to_sentinel_delay();
+
+-- HRT-295 Tier C review: self-found while authoring this section
+-- (RECURRING_DEFECT_TAXONOMY.md C-04-shaped self-check on this test's own
+-- new mechanism, not review-caught) -- `SET statement_timeout` executed AS
+-- A STATEMENT INSIDE a `do $$ ... $$` block does NOT re-arm the timeout
+-- alarm for THAT SAME top-level statement's own remaining execution
+-- (Postgres arms the one-shot statement_timeout alarm ONCE, at the start
+-- of the top-level statement the client sent -- an internal `SET` changes
+-- the GUC value but not the already-scheduled alarm for the statement
+-- currently running). Live-confirmed directly: `do $$ begin set
+-- statement_timeout = '500ms'; perform pg_sleep(3); end $$;` completes the
+-- full 3-second sleep, uninterrupted, no matter how the SET/PERFORM are
+-- nested inside the block. `statement_timeout` must therefore be set as
+-- its own, separate, TOP-LEVEL statement BEFORE the do-block that performs
+-- the real RPC call -- exactly as the underlying 20260731290000 migration
+-- fix's own independent Postgres-semantics verification already did (never
+-- inside a do-block) -- verified correctly earlier, not a defect in the
+-- fix itself, only in this test's own initial authoring.
+set statement_timeout = '2000ms';
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'esc1');
+  v_job app.jobs;
+  v_evaluated integer;
+  v_job_id uuid;
+begin
+  begin
+    select evaluated_count, job_id into v_evaluated, v_job_id
+    from app.run_ticket_escalation_evaluation_batch(v_tenant1, now(), 'esc-plt132to-hrt295-tierc', '00000000-0000-0000-0000-000000291102', 'staff1');
+  exception when others then
+    raise exception 'PLT-132 TIER C REGRESSION: the top-level call must return NORMALLY after a genuine mid-loop statement_timeout (per the verified Postgres semantics this fix relies on) -- got a propagated error instead: %', sqlerrm;
+  end;
+
+  raise notice 'call returned normally: evaluated_count=%, job_id=%', v_evaluated, v_job_id;
+
+  select * into v_job from app.jobs where job_id = v_job_id;
+  if v_job.job_id is null then
+    raise exception 'CRITICAL (PLT-132 Tier C REGRESSION): the batch job row was lost entirely after a genuine statement_timeout mid-loop -- exactly ISS-2026-112''s own original live-reproduced defect, now for the query_canceled failure mode specifically';
+  end if;
+  if v_job.status <> 'dead_letter' then
+    raise exception 'FAIL: expected the job to reach a real terminal dead_letter state (max_attempts=1 for this self-claim batch shape), got %', v_job.status;
+  end if;
+  if v_job.attempts <> 1 then
+    raise exception 'FAIL: expected attempts=1 (app.record_job_failure genuinely incremented it), got %', v_job.attempts;
+  end if;
+
+  if not exists (
+    select 1 from app.audit_logs
+    where tenant_id = v_tenant1 and action = 'run_ticket_escalation_evaluation_batch_interrupted' and resource_id = v_job_id and result = 'failure' and reason = 'query_canceled'
+  ) then
+    raise exception 'FAIL: expected a durable, findable run_ticket_escalation_evaluation_batch_interrupted audit_logs row for this job';
+  end if;
+  if not exists (
+    select 1 from app.audit_logs
+    where tenant_id = v_tenant1 and action = 'record_job_failure' and resource_id = v_job_id and result = 'failure' and reason like 'batch_interrupted: query_canceled%'
+  ) then
+    raise exception 'FAIL: expected app.record_job_failure''s own durable audit_logs row for this job';
+  end if;
+
+  -- Genuine recovery, not merely "a row exists": esc1's own real tenant_admin
+  -- (app.is_support_grant_authority: Supreme Admin OR the target tenant's own
+  -- active tenant_admin) requeues the dead-lettered job, and a plain replay
+  -- of the SAME RPC call (same idempotency key, no more artificial delay --
+  -- the sentinel trigger is dropped below FIRST) picks up the SAME job and
+  -- completes it for real, proving PLT-132's own retry mechanism genuinely
+  -- works end to end, not just that a row is left behind.
+  drop trigger plt132to_sentinel_delay_trigger on app.ticket_escalation_events;
+  drop function app.plt132to_sentinel_delay();
+
+  perform app.requeue_dead_letter_job(v_job_id, '00000000-0000-0000-0000-000000291101', 'admin');
+  if (select status from app.jobs where job_id = v_job_id) <> 'pending' then
+    raise exception 'FAIL: expected requeue_dead_letter_job to reset the job to pending';
+  end if;
+
+  select evaluated_count into v_evaluated
+  from app.run_ticket_escalation_evaluation_batch(v_tenant1, now(), 'esc-plt132to-hrt295-tierc', '00000000-0000-0000-0000-000000291102', 'staff1');
+  if (select status from app.jobs where job_id = v_job_id) <> 'completed' then
+    raise exception 'FAIL: expected the requeued job to reach completed on a genuine, undelayed retry';
+  end if;
+  if v_evaluated < 3 then
+    raise exception 'FAIL: expected the retry to genuinely re-evaluate all 3 eligible tickets (per-item idempotency makes a full replay safe), got %', v_evaluated;
+  end if;
+
+  raise notice 'PASS (PLT-132 Tier C, 20260731290000): a genuine statement_timeout mid-loop no longer destroys the job row -- the call returned normally, the job reached a real dead_letter state with durable audit evidence, and a requeue+retry genuinely completed the remaining work';
+end $$;
+reset statement_timeout;
+
+-- Defensive cleanup in case an assertion above raised before reaching the
+-- drop statements inline (scripts/db-tests/run.sh runs every *.sql file
+-- against the SAME disposable database in sequence -- never leave a
+-- sentinel trigger/function behind for a later file to trip over).
+drop trigger if exists plt132to_sentinel_delay_trigger on app.ticket_escalation_events;
+drop function if exists app.plt132to_sentinel_delay();
+
 \echo '>> ticketing-escalation.sql: ALL PASSED'

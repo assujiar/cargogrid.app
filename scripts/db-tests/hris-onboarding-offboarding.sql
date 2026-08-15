@@ -14,7 +14,7 @@
 
 \set ON_ERROR_STOP on
 
-\echo '>> setup: two tenants (hrt2771, hrt2772). hrt2771 gets a tenant_admin, HR staff (HRS Create/Edit/Export/View/View personal data), an approver (HRS Approve/View/Override), a viewer (HRS View only), a customer_user-layer actor, org units + a position, an interviewer employee linked to a real Platform user, a candidate carried through the full recruitment pipeline to an ACCEPTED offer, and a published tenant-wide approval routing definition (shared by both offer approval and case finalize approval, PLT-123 convention). hrt2772 gets a tenant_admin and HR staff for cross-tenant checks. A global Supreme Admin is also seeded.'
+\echo '>> setup: two tenants (hrt2771, hrt2772). hrt2771 gets a tenant_admin, HR staff (HRS Create/Edit/Export/View/View personal data), an approver (HRS Create/Edit/Approve/View/Override -- HRT-295: widened from Approve/View/Override so this SAME identity can complete a full job-offer-to-employee conversion including its own auto-approved position assignment, ISS-2026-107), a viewer (HRS View only), a customer_user-layer actor, org units + a position, an interviewer employee linked to a real Platform user, a candidate carried through the full recruitment pipeline to an ACCEPTED offer, and a published tenant-wide approval routing definition (shared by both offer approval and case finalize approval, PLT-123 convention). hrt2772 gets a tenant_admin and HR staff for cross-tenant checks. A global Supreme Admin is also seeded.'
 do $$
 declare
   v_tenant1 uuid;
@@ -104,9 +104,19 @@ begin
   perform app.publish_role_version(v_staff_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_staff_role and status = 'published'), '00000000-0000-0000-0000-000000027702', '00000000-0000-0000-0000-000000027701', 'tester');
 
-  v_approver_role := (app.create_role(v_tenant1, 'HRS Approver', 'Approve/View/Override', 'tester')).id;
+  -- HRT-295 (ISS-2026-107): widened from Approve/View/Override to also
+  -- include Create/Edit -- a job_offer-sourced app.start_onboarding_case
+  -- conversion now calls app.propose_employee_position_assignment
+  -- (HRS:Edit) and app.decide_employee_position_assignment (HRS:Approve)
+  -- in the SAME transaction as the top-level HRS:Create gate, so the ONE
+  -- actor driving that conversion needs all three. This role is used ONLY
+  -- for that purpose below (027703) -- the separate v_staff_role (027702)
+  -- deliberately keeps lacking Approve, preserving every existing
+  -- segregation-of-duty assertion in this file (e.g. "HRS:Edit alone
+  -- cannot publish" below) unchanged.
+  v_approver_role := (app.create_role(v_tenant1, 'HRS Approver', 'Create/Edit/Approve/View/Override', 'tester')).id;
   v_approver_draft := app.create_role_version(v_approver_role, 'tester');
-  perform app.set_role_version_permissions(v_approver_draft.id, array(select id from app.permissions where resource_module_code = 'HRS' and action in ('Approve', 'View', 'Override')), 'tester');
+  perform app.set_role_version_permissions(v_approver_draft.id, array(select id from app.permissions where resource_module_code = 'HRS' and action in ('Create', 'Edit', 'Approve', 'View', 'Override')), 'tester');
   perform app.publish_role_version(v_approver_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_approver_role and status = 'published'), '00000000-0000-0000-0000-000000027703', '00000000-0000-0000-0000-000000027701', 'tester');
 
@@ -311,9 +321,12 @@ declare
   v_company uuid := (select id from app.org_units where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'CO-HRT2771');
   v_branch uuid := (select id from app.org_units where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'BR-HRT2771');
   v_department uuid := (select id from app.org_units where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'DEPT-HRT2771');
+  v_position_id uuid := (select id from app.positions where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'POS-HRT277');
   v_case app.onboarding_offboarding_cases;
   v_case_retry app.onboarding_offboarding_cases;
   v_employee_count_before integer;
+  v_hire_employee app.employees;
+  v_assignment_count integer;
 begin
   select count(*) into v_employee_count_before from app.employees where tenant_id = v_tenant1;
 
@@ -328,11 +341,15 @@ begin
   exception when check_violation then null;
   end;
 
+  -- HRT-295 (ISS-2026-107): the actor completing a job_offer-sourced
+  -- conversion must now hold HRS:Edit and HRS:Approve, not merely
+  -- HRS:Create -- 027703 (widened above), not 027702, per this file's own
+  -- updated setup comment.
   select * into v_case from app.start_onboarding_case(
     v_tenant1, 'onboarding', 'job_offer', v_offer_id, null, null, null,
     null, null, null, null, null, null, null, null,
     v_company, v_branch, v_department, null, null,
-    null, '00000000-0000-0000-0000-000000027702', 'tester'
+    null, '00000000-0000-0000-0000-000000027703', 'tester'
   );
   if v_case.status <> 'active' or v_case.employee_master_record_id is null or v_case.checklist_template_version_id is null then
     raise exception 'assertion failed: expected an active case with a linked employee and locked-in checklist version';
@@ -346,6 +363,31 @@ begin
   if (select status from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'it-access') <> 'blocked' then
     raise exception 'assertion failed: expected it-access to start blocked (its own dependency on welcome-doc is not yet satisfied)';
   end if;
+
+  -- HRT-295 / ISS-2026-107 core regression: a real, ACTIVE, primary
+  -- employee_position_assignments row now backs this hire, against the SAME
+  -- position (POS-HRT277) the vacancy/offer were actually for, and
+  -- app.employees.position_id is populated -- both were previously proven to
+  -- stay at zero/NULL for every job_offer-sourced conversion. A dedicated,
+  -- capacity-limited end-to-end proof (including the over-hire/capacity-gate
+  -- closure) follows later in this same file.
+  select * into v_hire_employee from app.employees where master_record_id = v_case.employee_master_record_id;
+  select count(*) into v_assignment_count
+  from app.employee_position_assignments
+  where master_record_id = v_case.employee_master_record_id and position_id = v_position_id and assignment_type = 'primary' and status = 'active';
+  if v_assignment_count <> 1 then
+    raise exception 'assertion failed: expected exactly ONE active primary employee_position_assignments row for the converted hire, found %', v_assignment_count;
+  end if;
+  if v_hire_employee.position_id <> v_position_id then
+    raise exception 'assertion failed: expected app.employees.position_id populated with the vacancy''s own position (%), got %', v_position_id, v_hire_employee.position_id;
+  end if;
+
+  -- A caller holding ONLY HRS:Create (027702, unchanged) is now correctly
+  -- denied for a job_offer conversion -- design decision 2, this migration's
+  -- own header. Proven unconditionally, with a fresh offer built for exactly
+  -- this purpose, in the dedicated capacity-limited regression block later in
+  -- this same file (which also proves a denied attempt leaves no partial
+  -- employee/assignment row behind).
 
   -- Retry against the SAME offer -- structurally idempotent (acceptance
   -- criterion 1), even WITHOUT a caller-supplied idempotency_key, via the
@@ -887,6 +929,127 @@ begin
     perform app.rehire_employee(v_employee_id, v_employee.record_version, 'again', '00000000-0000-0000-0000-000000027703', 'tester');
     raise exception 'assertion failed: expected invalid_transition on a non-terminated employee';
   exception when check_violation then null;
+  end;
+end;
+$$;
+
+\echo '>> HRT-295 (CG-S12-HRT-023) / ISS-2026-108 fix: app.reactivate_user_after_rehire is the governed RPC a genuine rehire needs -- gated at least as strictly as app.request_onboarding_access_revocation (HRS:Override + a non-empty reason), callable only for a linked employee with a real, on-file rehire event. Restores app.users/app.tenant_user_identities to active with no duplicate identity row anywhere -- continuing the SAME "Existing Employee Two" identity this file''s own rehire block above just drove through a real terminate -> rehire cycle -- and a genuine forged-session ESS attempt (app.get_my_employee_profile, has_active_tenant_membership-gated, the exact same surface ISS-2026-104''s own independent re-derivation note used for the OTHER direction) that failed before reactivation now succeeds after it'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_employee_id uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and full_name = 'Existing Employee Two');
+  v_worker_auth uuid := '00000000-0000-0000-0000-000000027708';
+  v_user_id uuid;
+  v_employee_count integer;
+  v_user_count integer;
+  v_link_count integer;
+  v_profile_count integer;
+begin
+  select id into v_user_id from app.users where auth_user_id = v_worker_auth and tenant_id = v_tenant1;
+
+  -- Before reactivation: revoked, and every genuine ESS attempt correctly fails --
+  -- the exact live-tested failure mode ISS-2026-108 names ("resolve a different
+  -- target identity, or reactivate the user first" -- advice the system provided
+  -- no RPC to follow, until now).
+  if (select status from app.users where id = v_user_id) <> 'revoked' then
+    raise exception 'assertion failed: expected the rehired employee''s linked Platform user to still be revoked before reactivation';
+  end if;
+  if app.has_active_tenant_membership(v_tenant1, v_worker_auth) then
+    raise exception 'assertion failed: expected has_active_tenant_membership=false before reactivation';
+  end if;
+  select count(*) into v_profile_count from app.get_my_employee_profile(v_tenant1, v_worker_auth);
+  if v_profile_count <> 0 then
+    raise exception 'assertion failed: expected the rehired-but-not-yet-reactivated employee''s own self-read to return zero rows, got %', v_profile_count;
+  end if;
+
+  -- HRS:Edit alone cannot reactivate Platform access (needs Override -- the same
+  -- immediate-security-relevant bar as app.request_onboarding_access_revocation).
+  begin
+    perform app.reactivate_user_after_rehire(v_employee_id, 'restore access after rejoining', '00000000-0000-0000-0000-000000027702', 'tester');
+    raise exception 'assertion failed: expected an HRS:Edit-only actor to be denied reactivating Platform access, but it succeeded';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- A null/empty reason is rejected (business rule 5, the same established
+  -- pattern as waive/reopen/cancel/rehire/access-revocation).
+  begin
+    perform app.reactivate_user_after_rehire(v_employee_id, '', '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected reason_required for an empty reason';
+  exception when check_violation then null;
+  end;
+
+  perform app.reactivate_user_after_rehire(v_employee_id, 'restore access after rejoining', '00000000-0000-0000-0000-000000027703', 'tester');
+
+  if (select status from app.users where id = v_user_id) <> 'active' then
+    raise exception 'assertion failed: expected the linked Platform user status=active after reactivation';
+  end if;
+  if (select status from app.tenant_user_identities where auth_user_id = v_worker_auth and tenant_id = v_tenant1) <> 'active' then
+    raise exception 'assertion failed: expected the underlying tenant_user_identities linkage status=active after reactivation';
+  end if;
+  if not app.has_active_tenant_membership(v_tenant1, v_worker_auth) then
+    raise exception 'assertion failed: expected has_active_tenant_membership=true after reactivation';
+  end if;
+
+  -- No duplicate identity anywhere -- the SAME master_record_id/user_id/
+  -- auth_user_id throughout, exactly ISS-2026-108's own required proof.
+  select count(*) into v_employee_count from app.employees where tenant_id = v_tenant1 and full_name = 'Existing Employee Two';
+  if v_employee_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 employee row for Existing Employee Two, found %', v_employee_count;
+  end if;
+  select count(*) into v_user_count from app.users where auth_user_id = v_worker_auth and tenant_id = v_tenant1;
+  if v_user_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 app.users row for this identity, found %', v_user_count;
+  end if;
+  select count(*) into v_link_count from app.tenant_user_identities where auth_user_id = v_worker_auth and tenant_id = v_tenant1;
+  if v_link_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 tenant_user_identities row for this identity, found %', v_link_count;
+  end if;
+
+  -- Calling it a second time (already active, not revoked) is rejected, not a
+  -- silent no-op that could mask a real caller error.
+  begin
+    perform app.reactivate_user_after_rehire(v_employee_id, 'again', '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected reactivating an already-active identity to fail';
+  exception when check_violation then null;
+  end;
+
+  -- Real forged session (request.jwt.claims + set role authenticated, the same
+  -- technique every db-test file in this repository uses) -- the rehired
+  -- employee's own genuine self-service ESS attempt now succeeds where it failed
+  -- before reactivation, with no impersonation involved.
+  perform set_config('request.jwt.claims', json_build_object('sub', v_worker_auth::text, 'role', 'authenticated')::text, true);
+  begin
+    set local role authenticated;
+    select count(*) into v_profile_count from app.get_my_employee_profile(v_tenant1, v_worker_auth);
+    if v_profile_count <> 1 then
+      raise exception 'assertion failed: expected the reactivated employee''s own forged-session self-read to return exactly 1 row, got %', v_profile_count;
+    end if;
+    reset role;
+  end;
+end;
+$$;
+
+\echo '>> HRT-295 / ISS-2026-108 negative case: app.reactivate_user_after_rehire is gated to a GENUINE rehire event, not merely "any revoked identity" -- Existing Employee One (this file''s own earlier cancel-with-no-finalize-approval block) has a revoked linked Platform user but was NEVER actually terminated (the offboarding case was cancelled before finalize, and the employee row was explicitly asserted to survive unchanged), so no terminated -> active transition is ever on file for them'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_employee_id uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and full_name = 'Existing Employee One');
+  v_employee app.employees;
+begin
+  select * into v_employee from app.employees where master_record_id = v_employee_id;
+  if v_employee.lifecycle_status <> 'active' then
+    raise exception 'assertion failed: expected Existing Employee One to still be active (their offboarding case was cancelled, never finalized), got %', v_employee.lifecycle_status;
+  end if;
+  if (select status from app.users where auth_user_id = '00000000-0000-0000-0000-000000027707' and tenant_id = v_tenant1) <> 'revoked' then
+    raise exception 'assertion failed: expected Existing Employee One''s linked Platform user to still be revoked from the earlier cancelled-case access_revocation task';
+  end if;
+
+  begin
+    perform app.reactivate_user_after_rehire(v_employee_id, 'attempted reactivation with no real rehire', '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected no_rehire_event for an employee who was revoked but never actually terminated/rehired';
+  exception
+    when check_violation then
+      if sqlerrm not like 'no_rehire_event%' then raise; end if;
   end;
 end;
 $$;
@@ -1469,5 +1632,163 @@ begin
     raise exception 'HRT-293 Finding B regression: a plain tenant_admin must never see a raw onboarding/offboarding reason via app.query_audit_logs for these actions';
   end if;
 end $$;
+
+\echo '>> HRT-295 (CG-S12-HRT-023) / ISS-2026-107 fix, full end-to-end proof: a capacity-limited (capacity=1) position is published as a vacancy; a real candidate applies through the GENUINELY PUBLIC intake surface (app.submit_public_job_application, the exact surface ISS-2026-107''s own live reproduction used), is interviewed, and accepts a real offer. An actor holding HRS:Create+Edit but lacking HRS:Approve is denied completing the conversion (design decision 2); the SAME conversion by an actor holding Create+Edit+Approve succeeds, creates a real ACTIVE app.employee_position_assignments row, and populates app.employees.position_id via app.sync_employee_current_assignment_cache -- the ONE code path that ever writes it. A second vacancy against the now-fully-occupied position then correctly FAILS app.publish_job_vacancy''s own capacity gate -- ISS-2026-107''s own live reproduction proved this previously SUCCEEDED, silently allowing an unlimited over-hire.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'DEPT-HRT2771');
+  v_grade_id uuid := (select id from app.position_grades where tenant_id = (select id from app.tenants where slug = 'hrt2771') and code = 'GR-HRT277');
+  v_position app.positions;
+  v_vacancy app.job_vacancies;
+  v_publish record;
+  v_second_vacancy app.job_vacancies;
+  v_submit record;
+  v_application app.job_applications;
+  v_interview app.interviews;
+  v_interviewer app.employees;
+  v_offer_version app.job_offer_versions;
+  v_offer app.job_offers;
+  v_pending_step app.approval_request_steps;
+  v_case app.onboarding_offboarding_cases;
+  v_employee app.employees;
+  v_assignment_count integer;
+  v_headcount integer;
+  v_employee_count_before integer;
+begin
+  -- A dedicated, capacity=1 position -- distinct from POS-HRT277 (capacity=5,
+  -- used by every earlier block in this file) so this block's own headcount
+  -- assertions can never be confused with occupancy left over from any
+  -- earlier test.
+  v_position := app.create_position(v_tenant1, 'POS-HRT277-CAP1', 'Capacity-Limited Engineer', v_department, v_grade_id, 1, 'ISS-2026-107 regression: single-seat position', '00000000-0000-0000-0000-000000027702', 'tester');
+
+  select * into v_vacancy from app.create_job_vacancy_draft(v_tenant1, v_position.id, 'Capacity-Limited Engineer', 'full_time', 1, null, null, null, 'idem-hrt2771-cap1-vac1', '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_publish from app.publish_job_vacancy(v_vacancy.id, v_vacancy.record_version, 30, '00000000-0000-0000-0000-000000027703', 'tester');
+
+  -- A dedicated, self-contained interviewer -- deliberately NOT the file's
+  -- shared "Interviewer One" (027706), which an earlier block in this same
+  -- file legitimately offboards (revoking their Platform access) well before
+  -- this block runs. Reusing a shared fixture identity this late in such a
+  -- large file would make this regression''s own pass/fail depend on ordering
+  -- elsewhere; a fresh, self-contained identity does not.
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000027711', 'interviewer-cap1@hrt2771.test');
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000000027711', 'interviewer-cap1@hrt2771.test', 'Interviewer Cap1', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'interviewer-cap1@hrt2771.test'), 'active', 'onboarded', 'tester');
+  v_interviewer := app.create_employee_draft(
+    v_tenant1, 'Interviewer Cap1', 'full_time', 'interviewer-cap1@hrt2771.test', null, null, null, null, null, '2020-01-01',
+    v_company, v_branch, v_department, 'Staff Engineer', null,
+    (select id from app.users where email = 'interviewer-cap1@hrt2771.test'), null, 'hr_created', 'idem-hrt2771-cap1-interviewer',
+    '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+
+  if app.count_position_active_primary_headcount(v_position.id, daterange(current_date, current_date, '[]')) <> 0 then
+    raise exception 'assertion failed: expected zero headcount consumed before any hire lands';
+  end if;
+
+  -- Real, genuinely public candidate intake (never staff_created) -- the
+  -- exact surface ISS-2026-107's own live reproduction used.
+  select * into v_submit from app.submit_public_job_application(v_publish.raw_posting_token, 'client-cap1', 'Grace Hopper Two', 'gracehoppertwo@example.test', '+62902', true, 'privacy-policy-v1', 'idem-hrt2771-cap1-app1');
+  if v_submit.submit_status <> 'ok' then
+    raise exception 'assertion failed: expected the public application to succeed, got %', v_submit.submit_status;
+  end if;
+  select * into v_application from app.job_applications where id = v_submit.application_id;
+
+  select * into v_application from app.transition_application_stage(v_application.id, v_application.record_version, 'screening', '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_application from app.transition_application_stage(v_application.id, v_application.record_version, 'assessment', '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_application from app.transition_application_stage(v_application.id, v_application.record_version, 'interview', '00000000-0000-0000-0000-000000027702', 'tester');
+
+  select * into v_interview from app.schedule_interview(v_application.id, 1, 'video', now() + interval '1 day', 60, 'https://meet.example.test', array[v_interviewer.master_record_id], '00000000-0000-0000-0000-000000027702', 'tester');
+  perform app.complete_interview(v_interview.id, v_interview.record_version, '00000000-0000-0000-0000-000000027702', 'tester');
+  perform app.submit_interview_feedback(v_interview.id, 5, 'strong_yes', 'excellent candidate', '00000000-0000-0000-0000-000000027711', 'tester');
+
+  select * into v_application from app.transition_application_stage(v_application.id, v_application.record_version, 'offer', '00000000-0000-0000-0000-000000027702', 'tester');
+
+  select * into v_offer_version from app.create_job_offer_version(v_application.id, 16000000, 'IDR', current_date + 14, current_date + 45, 'Capacity-Limited Engineer', 'full_time', 'standard benefits', '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_offer from app.job_offers where application_id = v_application.id;
+  select * into v_offer from app.submit_job_offer_for_approval(v_offer.id, v_offer.record_version, '00000000-0000-0000-0000-000000027702', 'tester');
+  select s.* into v_pending_step from app.approval_request_steps s where s.request_id = v_offer.approval_request_id and s.status = 'active';
+  select * into v_offer from app.decide_job_offer_approval(v_pending_step.id, 'approved', null, '00000000-0000-0000-0000-000000027703', 'tester');
+  select * into v_offer from app.extend_job_offer(v_offer.id, v_offer.record_version, '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_offer from app.record_offer_response(v_offer.id, v_offer.record_version, 'accepted', 'excited to join', '00000000-0000-0000-0000-000000027702', 'tester');
+  if v_offer.status <> 'accepted' then
+    raise exception 'assertion failed: fixture setup expected the offer to reach accepted, got %', v_offer.status;
+  end if;
+
+  -- Design decision 2 (this checkpoint's own migration header): completing
+  -- a job_offer conversion now also needs HRS:Approve, not merely
+  -- HRS:Create/Edit -- 027702 (Create/Edit/Export/View/View personal data,
+  -- correctly still lacking Approve) is denied. The WHOLE conversion rolls
+  -- back: no new employee row, no case, at all -- never a partial hire with
+  -- unconsumed headcount (027702's own HRS:Edit is enough to get past
+  -- app.propose_employee_position_assignment's own gate, so this proves the
+  -- failure and full rollback happen specifically at the decide/Approve
+  -- step, not merely that SOME check exists somewhere).
+  select count(*) into v_employee_count_before from app.employees where tenant_id = v_tenant1;
+  begin
+    perform app.start_onboarding_case(
+      v_tenant1, 'onboarding', 'job_offer', v_offer.id, null, null, current_date,
+      null, null, null, null, null, null, null, null, null, null, null, null, null,
+      'idem-hrt2771-cap1-case-denied', '00000000-0000-0000-0000-000000027702', 'tester'
+    );
+    raise exception 'assertion failed: expected an actor lacking HRS:Approve (027702 holds Create+Edit only) to be denied completing a job_offer conversion';
+  exception when insufficient_privilege then null;
+  end;
+  if (select count(*) from app.employees where tenant_id = v_tenant1) <> v_employee_count_before then
+    raise exception 'assertion failed: a denied conversion must never leave a partial employee row behind';
+  end if;
+  if exists (select 1 from app.onboarding_offboarding_cases where source_job_offer_id = v_offer.id) then
+    raise exception 'assertion failed: a denied conversion must never leave a partial case row behind';
+  end if;
+
+  -- The chartered conversion itself, by an actor holding Create+Edit+Approve.
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'job_offer', v_offer.id, null, null, current_date,
+    null, null, null, null, null, null, null, null, null, null, null, null, null,
+    'idem-hrt2771-cap1-case1', '00000000-0000-0000-0000-000000027703', 'tester'
+  );
+  if v_case.status <> 'active' or v_case.employee_master_record_id is null then
+    raise exception 'assertion failed: expected an active case with a linked employee';
+  end if;
+
+  select * into v_employee from app.employees where master_record_id = v_case.employee_master_record_id;
+
+  -- The core ISS-2026-107 assertions: a real, ACTIVE, primary assignment row
+  -- exists for the SAME position the vacancy/offer were actually for, and
+  -- app.employees.position_id is populated via the ONE code path that ever
+  -- writes it -- previously BOTH were live-proven to stay at zero/NULL.
+  select count(*) into v_assignment_count
+  from app.employee_position_assignments
+  where master_record_id = v_employee.master_record_id and position_id = v_position.id and assignment_type = 'primary' and status = 'active';
+  if v_assignment_count <> 1 then
+    raise exception 'assertion failed: expected exactly ONE active primary employee_position_assignments row for this hire against POS-HRT277-CAP1, found %', v_assignment_count;
+  end if;
+  if v_employee.position_id <> v_position.id then
+    raise exception 'assertion failed: expected app.employees.position_id populated with the vacancy''s own position (%), got %', v_position.id, v_employee.position_id;
+  end if;
+
+  -- The capacity gate itself: the position's own remaining capacity is now
+  -- genuinely zero.
+  v_headcount := app.count_position_active_primary_headcount(v_position.id, daterange(current_date, current_date, '[]'));
+  if v_headcount <> 1 then
+    raise exception 'assertion failed: expected count_position_active_primary_headcount to report 1 (of capacity 1) after this hire, got %', v_headcount;
+  end if;
+
+  -- Over-hire proof, closed: a SECOND vacancy against the SAME now-fully-
+  -- occupied position must be REJECTED at publish time -- ISS-2026-107's own
+  -- live reproduction proved this previously SUCCEEDED (silently allowing an
+  -- unlimited over-hire) because the conversion never consumed real
+  -- headcount.
+  select * into v_second_vacancy from app.create_job_vacancy_draft(v_tenant1, v_position.id, 'Capacity-Limited Engineer (2nd req)', 'full_time', 1, null, null, null, 'idem-hrt2771-cap1-vac2', '00000000-0000-0000-0000-000000027702', 'tester');
+  begin
+    perform app.publish_job_vacancy(v_second_vacancy.id, v_second_vacancy.record_version, 30, '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected vacancy_headcount_exceeds_position_capacity for a second vacancy against a now-fully-occupied capacity=1 position';
+  exception
+    when check_violation then
+      if sqlerrm not like 'vacancy_headcount_exceeds_position_capacity%' then raise; end if;
+  end;
+end;
+$$;
 
 \echo 'ALL HRT-277 db-test assertions passed.'

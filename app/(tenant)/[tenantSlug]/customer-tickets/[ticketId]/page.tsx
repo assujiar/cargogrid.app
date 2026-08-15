@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { resolveCustomerTicketAccessForRequest } from "../../../../../lib/portal/resolve-customer-ticket-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
-import { getCustomerTicket, listCustomerTicketMessages, listTicketLinks, TicketQueryError } from "../../../../../server/queries/ticketing.ts";
+import { getCustomerTicket, listCustomerTicketMessages, listCustomerTicketLinks, TicketQueryError } from "../../../../../server/queries/ticketing.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { CustomerTicketDetailPanel } from "./customer-ticket-detail-panel.tsx";
 import {
@@ -20,6 +20,13 @@ import {
  * here (getCustomerTicket returns null for all three), which is why this
  * page renders a plain 404 rather than a "forbidden" state that would
  * disclose which case occurred.
+ *
+ * HRT-295 (ISS-2026-110 fix): linked records are read via
+ * listCustomerTicketLinks (app.list_customer_ticket_links), not the
+ * staff-facing listTicketLinks -- the latter returned a linking staff
+ * member's raw internal auth_user_id as created_by, which this "use client"
+ * detail panel would have serialized to the browser regardless of whether
+ * any component actually rendered it.
  */
 export default async function CustomerTicketDetailPage({ params }: { params: Promise<{ tenantSlug: string; ticketId: string }> }) {
   const { tenantSlug, ticketId } = await params;
@@ -32,14 +39,14 @@ export default async function CustomerTicketDetailPage({ params }: { params: Pro
   let loadFailed = false;
   let detail: Awaited<ReturnType<typeof getCustomerTicket>> = null;
   let messages: Awaited<ReturnType<typeof listCustomerTicketMessages>> = [];
-  let ticketLinks: Awaited<ReturnType<typeof listTicketLinks>> = [];
+  let ticketLinks: Awaited<ReturnType<typeof listCustomerTicketLinks>> = [];
 
   try {
     detail = await getCustomerTicket(supabase, ticketId, access.authUserId);
     if (detail) {
       [messages, ticketLinks] = await Promise.all([
         listCustomerTicketMessages(supabase, ticketId, access.authUserId, { limit: 200 }),
-        listTicketLinks(supabase, ticketId, access.authUserId),
+        listCustomerTicketLinks(supabase, ticketId, access.authUserId),
       ]);
     }
   } catch (error) {

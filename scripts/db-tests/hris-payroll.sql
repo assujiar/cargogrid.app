@@ -559,4 +559,315 @@ begin
   raise notice 'OK: zero payroll function writes to any app.finance_* table -- the handoff boundary is structurally, not just procedurally, honored';
 end $$;
 
+-- ===========================================================================
+-- HRT-295 (ISS-2026-105 resolution, CRITICAL): app._resolve_payroll_time_
+-- inputs_for_period's own covered-dates derivation now ALSO excludes a
+-- work_date covered by an approved app.overtime_requests row (not merely a
+-- timesheet_entries row) from the attendance-session regular-minutes
+-- fallback -- closing a real, live, double-counted payroll figure. Fresh
+-- employee (emp3), fresh October 2026 period, exact same scenario shape
+-- HRT-294's own live reproduction used: a real attendance session AND a
+-- real approved overtime request on the IDENTICAL work_date, no timesheet
+-- entry for that date at all -- plus a second, uncontested attendance-only
+-- day to prove the ordinary (non-double-counted) fallback path is
+-- completely untouched by this fix.
+--
+-- Attendance sessions are seeded via app.record_manual_attendance_event
+-- (manual_hr channel) using genuine claimed historical timestamps -- the
+-- SAME HRT-295 fix (ISS-2026-106, hris-attendance.sql) that makes this
+-- fixture possible without the raw `UPDATE app.attendance_sessions ...`
+-- workaround the pre-existing ISS-2026-074 fixture above needed.
+-- ===========================================================================
+
+\echo '>> ISS-2026-105 fixture: emp3 -- day A (2026-10-05) carries BOTH a real attendance session (raw span 690 min, 08:00-19:30) AND a real, approved overtime request for the SAME day (17:00-19:30, 150 min) with NO timesheet entry; day B (2026-10-06) is an ordinary, uncontested attendance-only day (480 min, no overtime, no timesheet)'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='pay1');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant and code='CO-PAY1');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant and code='BR-PAY1');
+  v_emp3 uuid;
+  v_hourly_comp app.payroll_components;
+  v_ot_policy app.overtime_policies;
+  v_ot_version app.overtime_policy_versions;
+  v_ts_period app.timesheet_periods;
+  v_req app.overtime_requests;
+  v_summary app.timesheet_period_summaries;
+  v_pti app.payroll_time_inputs;
+  v_pay_period app.payroll_periods;
+  v_day_a_session app.attendance_sessions;
+  v_day_b_session app.attendance_sessions;
+  v_approve_row record;
+begin
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000028208', 'emp3@pay1.test');
+  perform app.invite_user(v_tenant, '00000000-0000-0000-0000-000000028208', 'emp3@pay1.test', 'Pay1 Emp Three', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'emp3@pay1.test'), 'active', 'onboarded', 'tester');
+  perform app.create_employee_draft(v_tenant, 'Pay1 Emp Three', 'full_time', 'emp3work@pay1.test', 'emp3p@pay1.test', '0800000010', null, null, null, '2024-01-01', v_company, v_branch, null, 'Hourly Staff', null, (select id from app.users where email = 'emp3@pay1.test'), null, 'hr_created', 'idem-emp3-pr1', '00000000-0000-0000-0000-000000028202', 'tester');
+  perform app.add_employee_emergency_contact((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp3work@pay1.test'), 'Contact Three', 'spouse', '0810000010', null, true, '00000000-0000-0000-0000-000000028202', 'tester');
+  perform app.submit_employee_for_approval((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp3work@pay1.test'), 1, '00000000-0000-0000-0000-000000028202', 'tester');
+  perform app.decide_employee_approval((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp3work@pay1.test'), 2, 'approve', null, '00000000-0000-0000-0000-000000028203', 'tester');
+  perform app.activate_employee((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp3work@pay1.test'), 3, '00000000-0000-0000-0000-000000028203', 'tester');
+  v_emp3 := (select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp3work@pay1.test');
+
+  -- hourly_rate component (reuse the SAME tenant-level component ISS-2026-074's
+  -- own emp2 fixture above already created+approved -- 50,000 IDR/hour).
+  select * into v_hourly_comp from app.payroll_components where tenant_id = v_tenant and code = 'hourly_base';
+  perform app.assign_payroll_component_to_employee(v_tenant, v_emp3, v_hourly_comp.id, null, null, null, 'IDR', '2024-01-01', null, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  -- Overtime policy for pay1 (did not exist before this fixture): standard
+  -- workday baseline 540 minutes -- matches the SAME 08:00-17:00 window the
+  -- tenant-wide attendance policy (created by the ISS-2026-074 fixture
+  -- above) already publishes, so reconciliation against the real 690-minute
+  -- attendance span cleanly nets out to a real 150-minute overtime claim.
+  v_ot_policy := app.create_overtime_policy(v_tenant, null, 'Pay1 Overtime', '00000000-0000-0000-0000-000000028202', 'hr');
+  v_ot_version := app.create_overtime_policy_version(v_ot_policy.id, 15, 'nearest', 30, 180, 600, 540, 0, true, '2024-01-01'::date, '00000000-0000-0000-0000-000000028202', 'hr');
+  perform app.publish_overtime_policy_version(v_ot_version.id, 1, '00000000-0000-0000-0000-000000028203', 'approver');
+
+  v_ts_period := app.create_timesheet_period(v_tenant, null, 'pay1-ts-2026-10', '2026-10-01'::date, '2026-10-31'::date, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  -- Day A: 2026-10-05 (a Monday -- 'weekday' classification), manual_hr
+  -- entry (HRT-295/ISS-2026-106's own fix -- the claimed historical
+  -- timestamp is now authoritative, not clock_timestamp()). Raw span
+  -- 08:00-19:30 = 690 minutes. NO timesheet entry is ever created for this
+  -- work_date -- the exact composition ISS-2026-105's own live
+  -- reproduction used.
+  perform app.record_manual_attendance_event(v_tenant, v_emp3, 'clock_in', '2026-10-05 08:00:00+07'::timestamptz, 'ISS-2026-105 fixture: day A', 'iss105-daya-in', '00000000-0000-0000-0000-000000028202', 'hr');
+  perform app.record_manual_attendance_event(v_tenant, v_emp3, 'clock_out', '2026-10-05 19:30:00+07'::timestamptz, 'ISS-2026-105 fixture: day A', 'iss105-daya-out', '00000000-0000-0000-0000-000000028202', 'hr');
+  select * into v_day_a_session from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp3 and work_date = '2026-10-05'::date;
+  if v_day_a_session.id is null or extract(epoch from (v_day_a_session.effective_clock_out_at - v_day_a_session.effective_clock_in_at)) / 60 <> 690 then
+    raise exception 'assertion failed: expected day A attendance session with a real 690-minute span, got %', v_day_a_session;
+  end if;
+
+  -- Day B: 2026-10-06 (Tuesday), ordinary attendance-only day, 08:00-16:00
+  -- = 480 minutes, no overtime request, no timesheet entry -- proves the
+  -- ordinary (non-double-counted) fallback path is completely untouched by
+  -- this fix.
+  perform app.record_manual_attendance_event(v_tenant, v_emp3, 'clock_in', '2026-10-06 08:00:00+07'::timestamptz, 'ISS-2026-105 fixture: day B (uncontested)', 'iss105-dayb-in', '00000000-0000-0000-0000-000000028202', 'hr');
+  perform app.record_manual_attendance_event(v_tenant, v_emp3, 'clock_out', '2026-10-06 16:00:00+07'::timestamptz, 'ISS-2026-105 fixture: day B (uncontested)', 'iss105-dayb-out', '00000000-0000-0000-0000-000000028202', 'hr');
+  select * into v_day_b_session from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp3 and work_date = '2026-10-06'::date;
+  if v_day_b_session.id is null or extract(epoch from (v_day_b_session.effective_clock_out_at - v_day_b_session.effective_clock_in_at)) / 60 <> 480 then
+    raise exception 'assertion failed: expected day B attendance session with a real 480-minute span, got %', v_day_b_session;
+  end if;
+
+  -- emp3 (self) creates and submits a real overtime request for day A,
+  -- 17:00-19:30 (150 minutes) -- reconciles as 'matched' against the SAME
+  -- real attendance session (690 - 540 baseline = 150, within tolerance).
+  v_req := app.create_overtime_request(
+    v_tenant, 'emergency_after_the_fact', '2026-10-05 17:00:00+07'::timestamptz, '2026-10-05 19:30:00+07'::timestamptz,
+    0, 'unplanned client escalation, stayed late', null, null, null, 'iss105-ot-1', '00000000-0000-0000-0000-000000028208', 'emp3'
+  );
+  if v_req.requested_minutes <> 150 then raise exception 'assertion failed: expected requested_minutes=150, got %', v_req.requested_minutes; end if;
+  v_req := app.submit_overtime_request(v_req.id, v_req.record_version, '00000000-0000-0000-0000-000000028208', 'emp3');
+  if v_req.reconciliation_status <> 'matched' or v_req.reconciled_actual_minutes <> 150 then
+    raise exception 'assertion failed: expected reconciliation matched/150 against the real attendance session, got %/%', v_req.reconciliation_status, v_req.reconciled_actual_minutes;
+  end if;
+
+  -- A distinct approver decides -- approved as real overtime, weekday
+  -- classification, 150 minutes.
+  v_req := app.decide_overtime_request(v_req.id, v_req.record_version, 'approve', 'confirmed with client, approved', null, '00000000-0000-0000-0000-000000028203', 'approver');
+  if v_req.status <> 'approved' or v_req.eligible_classification <> 'weekday' or v_req.approved_minutes <> 150 then
+    raise exception 'assertion failed: expected approved/weekday/150, got %/%/%', v_req.status, v_req.eligible_classification, v_req.approved_minutes;
+  end if;
+
+  -- HR approves BOTH attendance sessions for payroll input (recalculate
+  -- exceptions first and waive any stale ones, exactly the governed pattern
+  -- the pre-existing ISS-2026-074 fixture above already establishes).
+  perform app.recalculate_attendance_exceptions_for_range(v_tenant, '2026-10-01'::date, '2026-10-31'::date, v_emp3, '00000000-0000-0000-0000-000000028202', 'hr');
+  perform app.waive_attendance_exception(x.id, x.record_version, 'ISS-2026-105 fixture: no real exception expected, defensive waive', '00000000-0000-0000-0000-000000028203', 'approver')
+    from app.attendance_exceptions x where x.tenant_id = v_tenant and x.employee_id = v_emp3 and x.status in ('open', 'acknowledged');
+  for v_approve_row in select * from app.approve_attendance_for_payroll_input(v_tenant, '2026-10-01'::date, '2026-10-31'::date, v_emp3, '00000000-0000-0000-0000-000000028202', 'hr') loop
+    if not v_approve_row.approved then raise exception 'assertion failed: attendance approval failed for session %: %', v_approve_row.session_id, v_approve_row.skip_reason; end if;
+  end loop;
+  if (select payroll_input_status from app.attendance_sessions where id = v_day_a_session.id) <> 'approved'
+     or (select payroll_input_status from app.attendance_sessions where id = v_day_b_session.id) <> 'approved' then
+    raise exception 'assertion failed: expected both day A and day B attendance sessions approved for payroll input';
+  end if;
+
+  -- Timesheet period summary for emp3: ZERO timesheet_entries (regular=0),
+  -- ONE approved overtime request (150 weekday minutes) -- a real, valid,
+  -- submittable/approvable state (app._compute_timesheet_period_summary
+  -- sums whatever real approved rows exist; zero entries is not an error).
+  v_summary := app.submit_timesheet_period_summary(v_ts_period.id, v_emp3, '00000000-0000-0000-0000-000000028202', 'hr');
+  if v_summary.total_regular_minutes <> 0 or v_summary.total_overtime_weekday_minutes <> 150 or v_summary.entry_count <> 0 or v_summary.overtime_request_count <> 1 then
+    raise exception 'assertion failed: expected regular=0/ot_weekday=150/entries=0/ot_count=1, got %/%/%/%', v_summary.total_regular_minutes, v_summary.total_overtime_weekday_minutes, v_summary.entry_count, v_summary.overtime_request_count;
+  end if;
+  v_summary := app.approve_timesheet_period_summary(v_summary.id, v_summary.record_version, 'confirmed, no timesheet entries this period', '00000000-0000-0000-0000-000000028203', 'approver');
+
+  v_pti := app.generate_payroll_time_input(v_ts_period.id, v_emp3, '00000000-0000-0000-0000-000000028203', 'approver');
+  if v_pti.regular_minutes <> 0 or v_pti.overtime_weekday_minutes <> 150
+     or array_length(v_pti.source_entry_ids, 1) is not null or array_length(v_pti.source_overtime_request_ids, 1) <> 1 then
+    raise exception 'assertion failed: expected payroll_time_inputs regular=0/ot_weekday=150/zero source_entry_ids/one source_overtime_request_id, got regular=%, ot=%, entries=%, ot_ids=%', v_pti.regular_minutes, v_pti.overtime_weekday_minutes, v_pti.source_entry_ids, v_pti.source_overtime_request_ids;
+  end if;
+
+  v_pay_period := app.create_payroll_period(v_tenant, null, 'pay1-2026-10', 'monthly', '2026-10-01', '2026-10-31', '2026-11-05', '00000000-0000-0000-0000-000000028202', 'hr');
+  v_pay_period := app.freeze_payroll_period_inputs(v_pay_period.id, v_pay_period.record_version, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  raise notice 'ISS-2026-105 fixture ready: emp3=%, day_a_session=%, day_b_session=%, payroll_period=%', v_emp3, v_day_a_session.id, v_day_b_session.id, v_pay_period.id;
+end $$;
+
+\echo '>> ISS-2026-105 core assertion (Tier C review corrected, 20260731280000): frozen snapshot regular_minutes=1020 -- day B''s 480 raw minutes PLUS day A''s real 540-minute non-overtime regular portion (690 raw - 150 already-claimed overtime), overtime_weekday_minutes=150 (unchanged) -- NEVER 1170 (the pre-ISS-2026-105 double-count, both days'' full raw spans), NEVER 840 (690+150 double-counted on day A alone), and NEVER 480 (20260731240000''s own shipped shape, which excluded day A entirely and paid its real, worked, HR-approved regular hours as zero -- the residual gap all four Tier C review lenses independently live-reproduced and 20260731280000 closes)'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='pay1');
+  v_period app.payroll_periods;
+  v_emp3 uuid := (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='pay1') and work_email = 'emp3work@pay1.test');
+  v_day_a_session_id uuid := (select id from app.attendance_sessions where tenant_id = (select id from app.tenants where slug='pay1') and employee_id = (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='pay1') and work_email='emp3work@pay1.test') and work_date = '2026-10-05'::date);
+  v_day_b_session_id uuid := (select id from app.attendance_sessions where tenant_id = (select id from app.tenants where slug='pay1') and employee_id = (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='pay1') and work_email='emp3work@pay1.test') and work_date = '2026-10-06'::date);
+  v_snapshot app.payroll_input_snapshots;
+  v_raw_span_sum integer;
+begin
+  select * into v_period from app.payroll_periods where tenant_id=v_tenant and code='pay1-2026-10';
+  select * into v_snapshot from app.payroll_input_snapshots where payroll_period_id = v_period.id and employee_id = v_emp3;
+
+  if v_snapshot.regular_minutes <> 1020 then
+    raise exception 'ISS-2026-105 REGRESSION: expected regular_minutes=1020 (day B''s 480 + day A''s real 540-minute non-overtime portion), got % -- 1170 would mean the exclusion never ran (both raw days counted in full), 840 would mean day A was double-counted, 480 would mean day A was wrongly excluded ENTIRELY (paying its real worked regular hours as zero -- 20260731240000''s own shipped-but-incomplete shape)', v_snapshot.regular_minutes;
+  end if;
+  if v_snapshot.overtime_weekday_minutes <> 150 then
+    raise exception 'assertion failed: expected overtime_weekday_minutes=150 (unaffected by this fix), got %', v_snapshot.overtime_weekday_minutes;
+  end if;
+
+  -- Mechanism-level proof, not merely an arithmetic coincidence: BOTH day A
+  -- and day B''s own attendance sessions must now be present in
+  -- source_attendance_session_ids (20260731280000: day A's own session now
+  -- contributes its real, reduced-by-overtime regular portion instead of
+  -- being wholly excluded).
+  if array_length(v_snapshot.source_attendance_session_ids, 1) <> 2 or not (v_day_a_session_id = any (v_snapshot.source_attendance_session_ids)) or not (v_day_b_session_id = any (v_snapshot.source_attendance_session_ids)) then
+    raise exception 'ISS-2026-105 REGRESSION: expected source_attendance_session_ids to contain BOTH day A''s (%) and day B''s (%) sessions, got %', v_day_a_session_id, v_day_b_session_id, v_snapshot.source_attendance_session_ids;
+  end if;
+
+  -- Explicit no-double-count invariant, computed independently of the fix
+  -- under test: the raw, uncapped sum of EVERY approved attendance session
+  -- in the period (what the pre-ISS-2026-105 buggy fallback would have
+  -- summed, 690 + 480 = 1170) must exceed what this frozen snapshot
+  -- actually counted as regular by EXACTLY day A's own already-claimed
+  -- overtime minutes (150) -- never by day A's whole raw span (690, which
+  -- would mean the day was wrongly excluded outright again).
+  select coalesce(sum(greatest(0, round(extract(epoch from (s.effective_clock_out_at - s.effective_clock_in_at)) / 60)))::integer, 0)
+  into v_raw_span_sum
+  from app.attendance_sessions s
+  where s.tenant_id = v_tenant and s.employee_id = v_emp3 and s.work_date between '2026-10-01' and '2026-10-31' and s.payroll_input_status = 'approved';
+  if v_raw_span_sum <> 1170 then
+    raise exception 'assertion failed: fixture sanity check failed, expected raw span sum 1170 (690+480), got %', v_raw_span_sum;
+  end if;
+  if v_raw_span_sum - v_snapshot.regular_minutes <> 150 then
+    raise exception 'ISS-2026-105 REGRESSION: expected the fix to exclude exactly day A''s own already-claimed 150 overtime minutes from regular_minutes (never its whole 690-minute raw span), got a delta of % (raw_sum=%, regular_minutes=%)', v_raw_span_sum - v_snapshot.regular_minutes, v_raw_span_sum, v_snapshot.regular_minutes;
+  end if;
+
+  raise notice 'OK: ISS-2026-105 double-count closed AND day A''s real regular portion is paid -- regular_minutes=% (day A''s 540 + day B''s 480), overtime_weekday_minutes=% (day A, separately), raw span sum=% (never double-counted, never zeroed)', v_snapshot.regular_minutes, v_snapshot.overtime_weekday_minutes, v_raw_span_sum;
+end $$;
+
+\echo '>> ISS-2026-105: the corrected regular_minutes reaches a REAL calculated payroll run -- gross/net pay reflect 1020 minutes (17h) at 50,000 IDR/hour = 850,000 IDR, never the pre-ISS-2026-105-shaped 1170-minute (19.5h/975,000 IDR) double-counted figure, and never 20260731240000''s own shipped-but-incomplete 480-minute (8h/400,000 IDR) figure that zeroed day A''s real regular pay entirely'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='pay1');
+  v_period app.payroll_periods;
+  v_run app.payroll_runs;
+  v_result app.payroll_run_employee_results;
+  v_emp3 uuid := (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='pay1') and work_email = 'emp3work@pay1.test');
+begin
+  select * into v_period from app.payroll_periods where tenant_id=v_tenant and code='pay1-2026-10';
+  v_run := app.create_payroll_run(v_tenant, v_period.id, 'regular', null, 'IDR', null, '00000000-0000-0000-0000-000000028202', 'hr');
+  v_run := app.calculate_payroll_run(v_run.id, v_run.record_version, null, '00000000-0000-0000-0000-000000028202', 'hr');
+  if v_run.status <> 'calculated' then raise exception 'assertion failed: expected calculated, got % (exception_count=%)', v_run.status, v_run.exception_count; end if;
+
+  select * into v_result from app.payroll_run_employee_results where payroll_run_id = v_run.id and employee_id = v_emp3;
+  if v_result.gross_earnings <> 850000 or v_result.net_pay <> 850000 then
+    raise exception 'ISS-2026-105 REGRESSION: expected gross/net pay 850,000 IDR (1020 min / 60 * 50,000), got %/%', v_result.gross_earnings, v_result.net_pay;
+  end if;
+  raise notice 'OK: ISS-2026-105 real payroll run calculated correctly -- emp3 gross=% net=% (no double-counted overtime day inflated the figure, AND day A''s real regular hours are genuinely paid)', v_result.gross_earnings, v_result.net_pay;
+end $$;
+
+-- ===========================================================================
+-- Tier C review fix (20260731280000): a SECOND, independent employee (emp5)
+-- proves the subtraction is keyed to the day's OWN real approved_minutes
+-- value, not a hand-derived "raw span minus policy baseline" shortcut --
+-- distinguishing this fix from the "capping" alternative 20260731240000's
+-- own header evaluated and rejected. emp5's overtime request only claims
+-- a PARTIAL 120-minute window (18:15-20:15) of a 735-minute raw span;
+-- reconciliation/decision resolves the real approved figure to 180 minutes
+-- (the overtime policy's own max_daily_minutes cap) -- the correct regular
+-- contribution is therefore 735-180=555, neither the raw 735 (double-
+-- count) nor 0 (20260731240000's own gap) nor 540 (the attendance policy's
+-- own standard workday, a DIFFERENT config value this fix deliberately
+-- never reads).
+-- ===========================================================================
+
+\echo '>> ISS-2026-105 Tier C second fixture: emp5 -- day A (2026-10-12) raw span 735 minutes (08:00-20:15), a real approved overtime request keyed to a PARTIAL claimed window that reconciles/decides to 180 approved minutes (the policy''s own max_daily_minutes cap) -- correct regular contribution is 735-180=555, never 0 and never the coincidental 540 standard-workday figure'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='pay1');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant and code='CO-PAY1');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant and code='BR-PAY1');
+  v_emp5 uuid;
+  v_hourly_comp app.payroll_components;
+  v_ts_period app.timesheet_periods;
+  v_req app.overtime_requests;
+  v_summary app.timesheet_period_summaries;
+  v_pti app.payroll_time_inputs;
+  v_pay_period app.payroll_periods;
+  v_day_a_session app.attendance_sessions;
+  v_snapshot app.payroll_input_snapshots;
+begin
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000028209', 'emp5@pay1.test');
+  perform app.invite_user(v_tenant, '00000000-0000-0000-0000-000000028209', 'emp5@pay1.test', 'Pay1 Emp Five', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'emp5@pay1.test'), 'active', 'onboarded', 'tester');
+  perform app.create_employee_draft(v_tenant, 'Pay1 Emp Five', 'full_time', 'emp5work@pay1.test', 'emp5p@pay1.test', '0800000011', null, null, null, '2024-01-01', v_company, v_branch, null, 'Hourly Staff', null, (select id from app.users where email = 'emp5@pay1.test'), null, 'hr_created', 'idem-emp5-pr1', '00000000-0000-0000-0000-000000028202', 'tester');
+  perform app.add_employee_emergency_contact((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp5work@pay1.test'), 'Contact Five', 'spouse', '0810000011', null, true, '00000000-0000-0000-0000-000000028202', 'tester');
+  perform app.submit_employee_for_approval((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp5work@pay1.test'), 1, '00000000-0000-0000-0000-000000028202', 'tester');
+  perform app.decide_employee_approval((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp5work@pay1.test'), 2, 'approve', null, '00000000-0000-0000-0000-000000028203', 'tester');
+  perform app.activate_employee((select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp5work@pay1.test'), 3, '00000000-0000-0000-0000-000000028203', 'tester');
+  v_emp5 := (select master_record_id from app.employees where tenant_id = v_tenant and work_email = 'emp5work@pay1.test');
+
+  select * into v_hourly_comp from app.payroll_components where tenant_id = v_tenant and code = 'hourly_base';
+  perform app.assign_payroll_component_to_employee(v_tenant, v_emp5, v_hourly_comp.id, null, null, null, 'IDR', '2024-01-01', null, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  -- Scoped to v_branch (not null/tenant-wide) -- emp3's own tenant-wide
+  -- October 2026 period already exists above; a distinct org-unit-scoped
+  -- period for the SAME date range is a genuinely different exclusion-
+  -- constraint scope, not a collision.
+  v_ts_period := app.create_timesheet_period(v_tenant, v_branch, 'pay1-ts-2026-10-emp5', '2026-10-01'::date, '2026-10-31'::date, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  perform app.record_manual_attendance_event(v_tenant, v_emp5, 'clock_in', '2026-10-12 08:00:00+07'::timestamptz, 'ISS-2026-105 Tier C fixture: emp5 day A', 'iss105tc-daya-in', '00000000-0000-0000-0000-000000028202', 'hr');
+  perform app.record_manual_attendance_event(v_tenant, v_emp5, 'clock_out', '2026-10-12 20:15:00+07'::timestamptz, 'ISS-2026-105 Tier C fixture: emp5 day A', 'iss105tc-daya-out', '00000000-0000-0000-0000-000000028202', 'hr');
+  select * into v_day_a_session from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp5 and work_date = '2026-10-12'::date;
+  if v_day_a_session.id is null or extract(epoch from (v_day_a_session.effective_clock_out_at - v_day_a_session.effective_clock_in_at)) / 60 <> 735 then
+    raise exception 'assertion failed: expected emp5 day A session 735 min, got %', v_day_a_session;
+  end if;
+
+  v_req := app.create_overtime_request(
+    v_tenant, 'emergency_after_the_fact', '2026-10-12 18:15:00+07'::timestamptz, '2026-10-12 20:15:00+07'::timestamptz,
+    0, 'ISS-2026-105 Tier C fixture: partial overtime claim', null, null, null, 'iss105tc-ot-1', '00000000-0000-0000-0000-000000028209', 'emp5'
+  );
+  if v_req.requested_minutes <> 120 then raise exception 'assertion failed: expected requested_minutes=120, got %', v_req.requested_minutes; end if;
+  v_req := app.submit_overtime_request(v_req.id, v_req.record_version, '00000000-0000-0000-0000-000000028209', 'emp5');
+  v_req := app.decide_overtime_request(v_req.id, v_req.record_version, 'approve', 'ISS-2026-105 Tier C fixture: approved (reconciliation-derived figure, capped by policy)', null, '00000000-0000-0000-0000-000000028203', 'approver');
+  if v_req.status <> 'approved' or v_req.approved_minutes <> 180 then
+    raise exception 'assertion failed: expected approved/180 (the policy''s own max_daily_minutes cap), got %/%', v_req.status, v_req.approved_minutes;
+  end if;
+
+  perform app.recalculate_attendance_exceptions_for_range(v_tenant, '2026-10-01'::date, '2026-10-31'::date, v_emp5, '00000000-0000-0000-0000-000000028202', 'hr');
+  perform app.waive_attendance_exception(x.id, x.record_version, 'ISS-2026-105 Tier C fixture: defensive waive', '00000000-0000-0000-0000-000000028203', 'approver')
+    from app.attendance_exceptions x where x.tenant_id = v_tenant and x.employee_id = v_emp5 and x.status in ('open', 'acknowledged');
+  perform app.approve_attendance_for_payroll_input(v_tenant, '2026-10-01'::date, '2026-10-31'::date, v_emp5, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  v_summary := app.submit_timesheet_period_summary(v_ts_period.id, v_emp5, '00000000-0000-0000-0000-000000028202', 'hr');
+  v_summary := app.approve_timesheet_period_summary(v_summary.id, v_summary.record_version, 'confirmed', '00000000-0000-0000-0000-000000028203', 'approver');
+
+  v_pti := app.generate_payroll_time_input(v_ts_period.id, v_emp5, '00000000-0000-0000-0000-000000028203', 'approver');
+
+  v_pay_period := app.create_payroll_period(v_tenant, null, 'pay1-2026-10-emp5', 'monthly', '2026-10-01', '2026-10-31', '2026-11-05', '00000000-0000-0000-0000-000000028202', 'hr');
+  v_pay_period := app.freeze_payroll_period_inputs(v_pay_period.id, v_pay_period.record_version, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  select * into v_snapshot from app.payroll_input_snapshots where payroll_period_id = v_pay_period.id and employee_id = v_emp5;
+  if v_snapshot.regular_minutes <> 555 then
+    raise exception 'ISS-2026-105 Tier C REGRESSION: expected regular_minutes=555 (735 raw - 180 real approved overtime), got % -- 0 would mean the day was wrongly excluded entirely (20260731240000''s own gap), 735 would mean double-counted, 540 would mean the fix is keyed to the WRONG config value (attendance policy standard workday, not the day''s own real approved_minutes)', v_snapshot.regular_minutes;
+  end if;
+  if v_snapshot.overtime_weekday_minutes <> 180 then
+    raise exception 'assertion failed: expected overtime_weekday_minutes=180, got %', v_snapshot.overtime_weekday_minutes;
+  end if;
+  if not (v_day_a_session.id = any (v_snapshot.source_attendance_session_ids)) then
+    raise exception 'ISS-2026-105 Tier C REGRESSION: expected emp5 day A''s session to be present in source_attendance_session_ids (contributing its reduced regular portion), got %', v_snapshot.source_attendance_session_ids;
+  end if;
+  raise notice 'OK: ISS-2026-105 Tier C fix verified independently -- emp5 regular_minutes=% (735 raw - 180 real approved overtime, never a config-derived baseline)', v_snapshot.regular_minutes;
+end $$;
+
 \echo 'HRT-282 PAYROLL FOUNDATION, BENEFIT AND REIMBURSEMENT TEST SUITE COMPLETE'

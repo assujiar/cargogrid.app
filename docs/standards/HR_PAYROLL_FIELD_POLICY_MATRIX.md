@@ -209,3 +209,21 @@ adoption gate `FIN-214` (Prompt 214) already established, not a new invention.
   registry.ts`, though each is already correctly column-restricted at the grant layer and masked at its
   own owning read RPC. Bounded, disclosed registry-editing scope (§3 Finding C) — not silently claimed
   complete.
+- **HR-authoring-discipline policy note (`CG-S12-HRT-023`, Prompt 295, `2026-08-15`) — formal residual-risk
+  acceptance for `ISS-2026-111` (`docs/runtime/KNOWN_ISSUES.md`), `ACCEPTED_RISK`, Medium.** HRS field
+  masking (`app.has_view_personal_data()`, this document's own §1 registry) and Ticketing's own
+  `is_ticket_staff`/RLS access control are two independently-correct domains with no shared
+  content-sensitivity boundary between them — a ticket's free-text fields (`app.tickets.subject`,
+  `app.ticket_messages.body`, `app.ticket_escalations.reason`, and every other ticket narrative column)
+  are gated purely on ticket-staff status, never on any HRS permission, by design (a ticket-staff gate
+  is the correct, complete control for ticket content in general). **Policy: HR staff and managers must
+  never quote HRS-personal-data-masked content verbatim into a ticket subject, body, note, or escalation
+  reason** — paraphrase, or reference the underlying HR record by id, so a ticket-staff member without
+  `HRS:View personal data` cannot recover masked content merely by having ticket access. This is an
+  authoring-discipline control, not a technical one — no per-field content-classification mechanism
+  exists anywhere in this repository (this document classifies COLUMNS, never free-text CONTENT), and
+  retrofitting a blunt whole-domain `HRS:View personal data` gate onto every ticket free-text read would
+  block or degrade the overwhelming majority of ordinary, non-HR-sensitive ticket content for any manager
+  lacking that unrelated permission — a real regression to a legitimate, already-working workflow, not a
+  fix. See `docs/runtime/KNOWN_ISSUES.md`'s `ISS-2026-111` entry for the full owner/rationale/reopen-trigger
+  record.

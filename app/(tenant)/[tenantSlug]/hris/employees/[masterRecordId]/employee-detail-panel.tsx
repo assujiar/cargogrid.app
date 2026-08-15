@@ -95,6 +95,7 @@ function LifecycleActions({
   suspendAction,
   reactivateAction,
   terminateAction,
+  reactivateAccessAction,
   archiveAction,
 }: {
   status: EmployeeLifecycleStatus;
@@ -105,6 +106,7 @@ function LifecycleActions({
   suspendAction: BoundAction;
   reactivateAction: BoundAction;
   terminateAction: BoundAction;
+  reactivateAccessAction: BoundAction;
   archiveAction: BoundAction;
 }) {
   return (
@@ -117,6 +119,20 @@ function LifecycleActions({
       {status === "suspended" ? <ActionForm action={reactivateAction} label="Reactivate" variant="primary" /> : null}
       {(status === "active" || status === "on_leave" || status === "suspended") ? (
         <ReasonActionForm action={terminateAction} label="Terminate" variant="destructive" reasonLabel="Termination reason (required)" extraDateField />
+      ) : null}
+      {/* HRT-295 (ISS-2026-108 fix, Tier C review wiring): restores a REHIRED
+          employee's own Platform/ESS/MSS access -- app.reactivate_user_after_rehire
+          requires the employee's CURRENT status to already be 'active' (mirroring
+          this same gate here) AND a real, on-file terminated->active rehire event;
+          there is no client-visible signal distinguishing "a normal always-active
+          employee" from "a rehired employee whose access is still revoked" (the
+          RPC itself is the only source of truth for that), so this action is
+          offered alongside "Start leave" for every active employee and the RPC's
+          own real, already-tested validation (no_rehire_event) surfaces plainly to
+          the caller when it does not apply -- never a silent, always-hidden dead
+          feature. */}
+      {status === "active" ? (
+        <ReasonActionForm action={reactivateAccessAction} label="Restore Platform access (rehire)" reasonLabel="Rehire access restoration reason (required)" />
       ) : null}
       {(status === "draft" || status === "submitted" || status === "approved" || status === "terminated") ? <ReasonActionForm action={archiveAction} label="Archive" reasonLabel="Archive reason (optional)" requireReason={false} /> : null}
     </div>
@@ -298,6 +314,7 @@ export function EmployeeDetailPanel({
   suspendAction,
   reactivateAction,
   terminateAction,
+  reactivateAccessAction,
   archiveAction,
   transferAction,
   addContactAction,
@@ -323,6 +340,7 @@ export function EmployeeDetailPanel({
   suspendAction: BoundAction;
   reactivateAction: BoundAction;
   terminateAction: BoundAction;
+  reactivateAccessAction: BoundAction;
   archiveAction: BoundAction;
   transferAction: BoundAction;
   addContactAction: BoundAction;
@@ -375,6 +393,7 @@ export function EmployeeDetailPanel({
         suspendAction={suspendAction}
         reactivateAction={reactivateAction}
         terminateAction={terminateAction}
+        reactivateAccessAction={reactivateAccessAction}
         archiveAction={archiveAction}
       />
 

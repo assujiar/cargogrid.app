@@ -690,3 +690,17 @@ export const CommitEmployeeImportJobInputSchema = z.object({
   actorLabel: z.string().min(1),
 });
 export type CommitEmployeeImportJobInput = z.input<typeof CommitEmployeeImportJobInputSchema>;
+
+// --- Platform identity reactivation (PLT-107/110, HRT-295 / ISS-2026-108) ---
+// app.reactivate_user_after_rehire has no p_expected_version -- it targets the
+// linked app.users row, not app.employees, mirroring
+// app.request_onboarding_access_revocation's own identical shape rather than
+// RecordActionInputBase.
+
+export const ReactivateUserAfterRehireInputSchema = z.object({
+  masterRecordId: z.string().uuid(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ReactivateUserAfterRehireInput = z.input<typeof ReactivateUserAfterRehireInputSchema>;

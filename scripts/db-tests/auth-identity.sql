@@ -108,20 +108,26 @@ begin
 end;
 $$;
 
-\echo '>> revoked is terminal -- no further transition is ever allowed'
+\echo '>> revoked is terminal for every transition except one narrow, deliberately-added edge (HRT-295 / ISS-2026-108 amendment): revoked -> invited is still hard-blocked; revoked -> active is now structurally permitted (the ONLY caller anywhere in this repository that ever reaches it is app.reactivate_user_after_rehire, HRIS, HRS:Override + a genuine on-file rehire event -- see scripts/db-tests/hris-employee-master.sql and scripts/db-tests/hris-onboarding-offboarding.sql for that full, governed, end-to-end proof; a bare update succeeding here is expected and correct -- service_role already has undifferentiated raw access to this table, the authorization boundary lives in the RPC layer, not this data-integrity trigger)'
 do $$
 declare
   v_tenant_id uuid;
 begin
   select id into v_tenant_id from app.tenants where slug = 'acmeauth';
   begin
-    update app.tenant_user_identities set status = 'active'
+    update app.tenant_user_identities set status = 'invited'
     where auth_user_id = '00000000-0000-0000-0000-000000000001' and tenant_id = v_tenant_id;
-    raise exception 'assertion failed: expected reviving a revoked identity link to fail, but it succeeded';
+    raise exception 'assertion failed: expected reviving a revoked identity link to invited to fail, but it succeeded';
   exception
     when check_violation then
       null; -- expected
   end;
+
+  update app.tenant_user_identities set status = 'active'
+  where auth_user_id = '00000000-0000-0000-0000-000000000001' and tenant_id = v_tenant_id;
+  if (select status from app.tenant_user_identities where auth_user_id = '00000000-0000-0000-0000-000000000001' and tenant_id = v_tenant_id) <> 'active' then
+    raise exception 'assertion failed: expected the revoked -> active edge to be structurally permitted';
+  end if;
 end;
 $$;
 

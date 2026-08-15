@@ -25,6 +25,7 @@ import {
   suspendEmployeeAction,
   reactivateEmployeeAction,
   terminateEmployeeAction,
+  reactivateUserAfterRehireAction,
   archiveEmployeeProfileAction,
   transferEmployeeAction,
   addEmployeeEmergencyContactAction,
@@ -123,6 +124,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       suspendAction={suspendEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       reactivateAction={reactivateEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       terminateAction={terminateEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
+      reactivateAccessAction={reactivateUserAfterRehireAction.bind(null, tenantSlug, masterRecordId)}
       archiveAction={archiveEmployeeProfileAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       transferAction={transferEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       addContactAction={addEmployeeEmergencyContactAction.bind(null, tenantSlug, masterRecordId)}

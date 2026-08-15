@@ -16,6 +16,7 @@ import {
   getCustomerTicket,
   listCustomerTickets,
   listCustomerTicketMessages,
+  listCustomerTicketLinks,
   listHelpdeskTicketCategories,
   getTenantHelpdeskTicket,
   listTenantHelpdeskTickets,
@@ -164,6 +165,32 @@ describe("HRT-287 (CG-S12-HRT-015): customer-facing read queries", () => {
     assert.equal(calls[0]?.fn, "list_customer_ticket_messages");
     assert.equal(calls[0]?.args.p_limit, 100);
     assert.equal((calls[0]?.args as Record<string, unknown>).p_visibility, undefined);
+  });
+
+  // HRT-295 (ISS-2026-110 fix): listCustomerTicketLinks calls the dedicated
+  // customer-safe RPC, never listTicketLinks -- and parses a genericized
+  // created_by exactly like any other TicketLinkRow column (the
+  // genericization itself is proven live at the database layer by
+  // scripts/db-tests/ticketing-linked-records.sql; this unit test proves
+  // the TS wrapper calls the right RPC and does not re-raw the value).
+  test("listCustomerTicketLinks calls the dedicated RPC, never list_ticket_links", async () => {
+    const { client, calls } = fakeClient({
+      data: [{
+        id: ID_1, entity_type: "shipment", entity_id: ID_2, relationship: "primary_subject", status: "active",
+        live_available: true, label: "SHP-0001", detail: "confirmed", status_label: "confirmed",
+        linked_at: "2026-08-01T00:00:00Z", created_by: "Support Team", record_version: 1,
+      }],
+      error: null,
+    });
+    const result = await listCustomerTicketLinks(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_customer_ticket_links");
+    assert.deepEqual(calls[0]?.args, { p_ticket_id: ID_1, p_actor_auth_user_id: ACTOR_ID });
+    assert.equal(result[0]?.createdBy, "Support Team");
+  });
+
+  test("listCustomerTicketLinks throws TicketQueryError on RPC error", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "ticket_not_found: x" } });
+    await assert.rejects(() => listCustomerTicketLinks(client, ID_1, ACTOR_ID), TicketQueryError);
   });
 });
 
