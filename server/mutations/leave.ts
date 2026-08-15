@@ -83,6 +83,9 @@ export const LEAVE_KNOWN_MUTATION_ERROR_CODES = [
   "work_date_out_of_range",
   "stale_version",
   "reason_required",
+  // HRT-294 (CG-S12-HRT-022, ISS-2026-114): raised by app.publish_leave_type_policy_version
+  // since HRT-280's own creation migration, never added here (API-parity gap).
+  "policy_version_not_found",
 ] as const;
 
 export type KnownLeaveMutationErrorCode = (typeof LEAVE_KNOWN_MUTATION_ERROR_CODES)[number];

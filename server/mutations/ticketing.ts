@@ -223,6 +223,9 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "record_not_eligible",
   "ticket_link_not_found",
   "invalid_access_type",
+  // HRT-294 (CG-S12-HRT-022, ISS-2026-114): raised by app.add_ticket_escalation_level
+  // since HRT-291's own creation migration, never added here (API-parity gap).
+  "invalid_cooldown",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];

@@ -86,6 +86,10 @@ export const SHIFT_ROSTER_KNOWN_MUTATION_ERROR_CODES = [
   "self_approval_not_permitted",
   "invalid_decision",
   "schedule_swap_request_not_found",
+  // HRT-294 (CG-S12-HRT-022, ISS-2026-114): raised by app.assign_employee_schedule
+  // since its own Tier C fix migration (replacing a raw constraint-name leak),
+  // never added here (API-parity gap).
+  "schedule_assignment_conflict",
 ] as const;
 
 export type KnownShiftRosterMutationErrorCode = (typeof SHIFT_ROSTER_KNOWN_MUTATION_ERROR_CODES)[number];
