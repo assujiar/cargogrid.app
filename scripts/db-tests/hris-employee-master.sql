@@ -1145,3 +1145,362 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> HRT-293 Finding A (CRITICAL) regression: app.employees'' five HR-narrative reason columns (revision_reason/suspend_reason/terminate_reason/archive_reason/leave_reason) are masked to self-or-HRS:View-personal-data identically to every other classified personal field -- previously returned unconditionally by app.get_employee_profile and included in app.employees'' own column-restricted grant to authenticated; app.employee_lifecycle_events.reason is masked the same way in app.get_employee_lifecycle_history and no longer carries a blanket table-level grant to authenticated'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HR1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_approver uuid := '00000000-0000-0000-0000-000000027103';
+  v_override_manager uuid := '00000000-0000-0000-0000-000000027104';
+  v_viewer uuid := '00000000-0000-0000-0000-000000027105';
+  v_pdv uuid := '00000000-0000-0000-0000-000000027107';
+  v_draft app.employees;
+  v_active app.employees;
+  v_suspended app.employees;
+  v_profile record;
+  v_before_count integer;
+  v_reason text := 'HRT-293 regression: confidential medical/disciplinary narrative';
+begin
+  v_draft := app.create_employee_draft(v_tenant1, 'HRT293 Regression Employee', 'full_time', 'hrt293regression@work.test', null, null, null, null, null, '2024-01-01', v_company, null, null, 'Engineer', null, null, null, 'hr_created', 'idem-hrt293-emp-reg-1', v_staff, 'staff');
+  perform app.add_employee_emergency_contact(v_draft.master_record_id, 'Emergency Contact', 'spouse', '+15550009999', 'ec@example.test', true, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  perform app.submit_employee_for_approval(v_draft.master_record_id, v_draft.record_version, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  v_active := app.decide_employee_approval(v_draft.master_record_id, v_draft.record_version, 'approve', null, v_approver, 'approver');
+  v_active := app.activate_employee(v_active.master_record_id, v_active.record_version, v_approver, 'approver');
+
+  v_before_count := (select count(*) from app.audit_logs);
+  v_suspended := app.suspend_employee(v_active.master_record_id, v_active.record_version, v_reason, v_override_manager, 'override_manager');
+
+  -- (a) A personal-data-viewer sees the real suspend_reason.
+  select * into v_profile from app.get_employee_profile(v_suspended.master_record_id, v_pdv);
+  if v_profile.suspend_reason is distinct from v_reason then
+    raise exception 'HRT-293 Finding A regression: pdv (HRS:View personal data) should see the real suspend_reason via get_employee_profile, got %', v_profile.suspend_reason;
+  end if;
+
+  -- (b) A plain HRS:View holder (no personal-data permission) gets it masked to null.
+  select * into v_profile from app.get_employee_profile(v_suspended.master_record_id, v_viewer);
+  if v_profile.suspend_reason is not null then
+    raise exception 'HRT-293 Finding A regression: plain HRS:View viewer should NOT see suspend_reason via get_employee_profile, got %', v_profile.suspend_reason;
+  end if;
+
+  -- (c) The same masking holds on app.employee_lifecycle_events via app.get_employee_lifecycle_history.
+  if exists (select 1 from app.get_employee_lifecycle_history(v_suspended.master_record_id, v_viewer) where to_status = 'suspended' and reason is not null) then
+    raise exception 'HRT-293 Finding A regression: plain HRS:View viewer should see a null reason in app.get_employee_lifecycle_history for the suspend transition';
+  end if;
+  if not exists (select 1 from app.get_employee_lifecycle_history(v_suspended.master_record_id, v_pdv) where to_status = 'suspended' and reason = v_reason) then
+    raise exception 'HRT-293 Finding A regression: pdv should see the real reason in app.get_employee_lifecycle_history for the suspend transition';
+  end if;
+
+  -- (d) A raw, forged-session SELECT of the sensitive columns via the `authenticated` role is denied outright -- a database guarantee, not merely RPC-layer masking.
+  perform set_config('request.jwt.claims', json_build_object('sub', v_viewer::text, 'role', 'authenticated')::text, true);
+  begin
+    set local role authenticated;
+    begin
+      execute 'select suspend_reason from app.employees where master_record_id = $1' using v_suspended.master_record_id;
+      raise exception 'HRT-293 Finding A regression: raw SELECT of app.employees.suspend_reason should be denied for the authenticated role (column-level grant)';
+    exception
+      when insufficient_privilege then null;
+    end;
+    begin
+      execute 'select reason from app.employee_lifecycle_events where master_record_id = $1' using v_suspended.master_record_id;
+      raise exception 'HRT-293 Finding A regression: raw SELECT of app.employee_lifecycle_events.reason should be denied for the authenticated role (column-level grant)';
+    exception
+      when insufficient_privilege then null;
+    end;
+    reset role;
+  end;
+
+  -- (e) HRT-293 Finding B: app.audit_logs never carries the raw suspend_reason, for this action or any prior action in this same test run, and a plain tenant_admin (zero HRS grant) reading via app.query_audit_logs never sees it either.
+  if exists (select 1 from app.audit_logs where reason = v_reason) then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry the raw suspend reason';
+  end if;
+  if not exists (select 1 from app.audit_logs where action = 'suspend_employee' and resource_id = v_suspended.master_record_id and reason is null and occurred_at >= now() - interval '5 minutes') then
+    raise exception 'HRT-293 Finding B regression: expected a suspend_employee audit_logs row with reason=null for this test''s own suspend call';
+  end if;
+  if exists (select 1 from app.query_audit_logs('00000000-0000-0000-0000-000000027101', v_tenant1, 200) where reason = v_reason) then
+    raise exception 'HRT-293 Finding B regression: a plain tenant_admin (zero HRS grant) must never see the raw suspend reason via app.query_audit_logs';
+  end if;
+end;
+$$;
+
+\echo '>> HRT-295 (CG-S12-HRT-023) / ISS-2026-104 fix: app.suspend_employee/app.terminate_employee now couple to the REAL Platform-authority revoke in the SAME transaction -- zero Onboarding/Offboarding case ever created (the exact live-reproduced gap: a terminated or suspended employee previously kept full role-granted authority indefinitely unless HR separately, manually drove a wholly optional case to one specific task). Role_assignments are stripped (ISS-2026-072 centralized fix, both suspend AND revoke), app.users.status is coupled correctly, and app.reactivate_employee (this capability''s own existing un-suspend path) mirrors it on the way back -- WITHOUT auto-restoring the stripped role_assignments, matching this same migration''s rehire precedent'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HR1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_approver uuid := '00000000-0000-0000-0000-000000027103';
+  v_override_manager uuid := '00000000-0000-0000-0000-000000027104';
+  v_worker_auth uuid := '00000000-0000-0000-0000-000000027112';
+  v_viewer_role_version_id uuid;
+  v_worker_user app.users;
+  v_draft app.employees;
+  v_active app.employees;
+  v_decision app.rbac_decision;
+  v_active_role_count integer;
+  v_profile_count integer;
+begin
+  insert into auth.users (id, email) values (v_worker_auth, 'termcoupling@hrmemp1.test');
+  perform app.invite_user(v_tenant1, v_worker_auth, 'termcoupling@hrmemp1.test', 'Term Coupling Worker', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'termcoupling@hrmemp1.test'), 'active', 'onboarded', 'tester');
+  select * into v_worker_user from app.users where email = 'termcoupling@hrmemp1.test';
+
+  -- A real, unrelated role assignment -- proves system-wide, not merely
+  -- ticketing-specific, authority retention (ISS-2026-104's own live
+  -- reproduction used an unrelated PRC:Create grant for the identical point;
+  -- this file's own tenant carries an HRS Viewer role, reused here).
+  select id into v_viewer_role_version_id from app.role_versions
+  where role_id = (select id from app.roles where tenant_id = v_tenant1 and name = 'HRS Viewer') and status = 'published';
+  perform app.assign_role(v_tenant1, v_viewer_role_version_id, v_worker_auth, '00000000-0000-0000-0000-000000027101', 'tester');
+
+  v_draft := app.create_employee_draft(
+    v_tenant1, 'Term Coupling Worker', 'full_time', 'termcoupling@hrmemp1.test', null, null, null, null, null, '2024-01-01',
+    v_company, null, null, 'Engineer', null, v_worker_user.id, null, 'hr_created', 'idem-termcoupling-1',
+    v_staff, 'staff'
+  );
+  perform app.add_employee_emergency_contact(v_draft.master_record_id, 'Emergency Contact', 'spouse', '+15550009999', 'ec@example.test', true, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  perform app.submit_employee_for_approval(v_draft.master_record_id, v_draft.record_version, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  v_active := app.decide_employee_approval(v_draft.master_record_id, v_draft.record_version, 'approve', null, v_approver, 'approver');
+  v_active := app.activate_employee(v_active.master_record_id, v_active.record_version, v_approver, 'approver');
+
+  -- Baseline, before any lifecycle change: full authority.
+  v_decision := app.evaluate_permission(v_worker_auth, v_tenant1, 'HRS', 'View');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: expected the worker to hold HRS:View before suspend, got allowed=%', v_decision.allowed;
+  end if;
+  select count(*) into v_profile_count from app.get_my_employee_profile(v_tenant1, v_worker_auth);
+  if v_profile_count <> 1 then
+    raise exception 'assertion failed: expected the worker to read their own employee profile before suspend, got % row(s)', v_profile_count;
+  end if;
+
+  -- --- suspend: permission-gated authority blocked; self-service reads (tenant
+  -- membership only) deliberately UNCHANGED -- a temporary freeze, not an exit.
+  v_active := app.suspend_employee(v_active.master_record_id, v_active.record_version, 'under investigation', v_override_manager, 'override_manager');
+  if v_active.lifecycle_status <> 'suspended' then
+    raise exception 'assertion failed: expected suspended, got %', v_active.lifecycle_status;
+  end if;
+  if (select status from app.users where id = v_worker_user.id) <> 'suspended' then
+    raise exception 'assertion failed: expected the linked Platform user status=suspended after app.suspend_employee';
+  end if;
+  select count(*) into v_active_role_count from app.role_assignments where tenant_id = v_tenant1 and auth_user_id = v_worker_auth and status = 'active';
+  if v_active_role_count <> 0 then
+    raise exception 'assertion failed: expected zero active role_assignments after suspend, found %', v_active_role_count;
+  end if;
+  v_decision := app.evaluate_permission(v_worker_auth, v_tenant1, 'HRS', 'View');
+  if v_decision.allowed then
+    raise exception 'assertion failed: expected HRS:View denied for a suspended employee once role_assignments are revoked, got allowed=true';
+  end if;
+  if not app.has_active_tenant_membership(v_tenant1, v_worker_auth) then
+    raise exception 'assertion failed: suspend deliberately does not revoke tenant_user_identities (unlike terminate) -- expected has_active_tenant_membership to remain true';
+  end if;
+  select count(*) into v_profile_count from app.get_my_employee_profile(v_tenant1, v_worker_auth);
+  if v_profile_count <> 1 then
+    raise exception 'assertion failed: suspend deliberately preserves self-service reads (a suspended employee can still see their own profile / open a ticket about the suspension) -- expected 1 row, got %', v_profile_count;
+  end if;
+
+  -- --- reactivate (this capability's own existing un-suspend path, checked per
+  -- this task's own instruction): restores the Platform user to active, but does
+  -- NOT auto-restore the stripped role_assignment.
+  v_active := app.reactivate_employee(v_active.master_record_id, v_active.record_version, v_override_manager, 'override_manager');
+  if v_active.lifecycle_status <> 'active' then
+    raise exception 'assertion failed: expected active after reactivate, got %', v_active.lifecycle_status;
+  end if;
+  if (select status from app.users where id = v_worker_user.id) <> 'active' then
+    raise exception 'assertion failed: expected the linked Platform user status=active after app.reactivate_employee';
+  end if;
+  v_decision := app.evaluate_permission(v_worker_auth, v_tenant1, 'HRS', 'View');
+  if v_decision.allowed then
+    raise exception 'assertion failed: expected HRS:View to remain denied after reactivation -- role_assignments are never auto-restored by a status flip';
+  end if;
+
+  -- A real, separate, explicit re-grant restores it.
+  perform app.assign_role(v_tenant1, v_viewer_role_version_id, v_worker_auth, '00000000-0000-0000-0000-000000027101', 'tester');
+  v_decision := app.evaluate_permission(v_worker_auth, v_tenant1, 'HRS', 'View');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: expected HRS:View restored after an explicit, separate app.assign_role re-grant';
+  end if;
+
+  -- --- terminate: zero Onboarding/Offboarding case ever created -- exactly
+  -- ISS-2026-104's own live reproduction shape. Blocks BOTH permission-gated
+  -- authority AND self-service reads (unlike suspend -- a genuine exit, not a
+  -- temporary freeze).
+  v_active := app.terminate_employee(v_active.master_record_id, v_active.record_version, 'resignation', current_date, v_override_manager, 'override_manager');
+  if v_active.lifecycle_status <> 'terminated' then
+    raise exception 'assertion failed: expected terminated, got %', v_active.lifecycle_status;
+  end if;
+  if (select status from app.users where id = v_worker_user.id) <> 'revoked' then
+    raise exception 'assertion failed: expected the linked Platform user ACTUALLY revoked via app.transition_user_status, never a separate optional offboarding case';
+  end if;
+  select count(*) into v_active_role_count from app.role_assignments where tenant_id = v_tenant1 and auth_user_id = v_worker_auth and status = 'active';
+  if v_active_role_count <> 0 then
+    raise exception 'assertion failed: expected zero active role_assignments after termination, found %', v_active_role_count;
+  end if;
+  v_decision := app.evaluate_permission(v_worker_auth, v_tenant1, 'HRS', 'View');
+  if v_decision.allowed then
+    raise exception 'assertion failed: expected HRS:View denied for a terminated employee, got allowed=true (system-wide authority-retention gap, ISS-2026-104)';
+  end if;
+  if app.has_active_tenant_membership(v_tenant1, v_worker_auth) then
+    raise exception 'assertion failed: expected has_active_tenant_membership=false for a terminated employee';
+  end if;
+  select count(*) into v_profile_count from app.get_my_employee_profile(v_tenant1, v_worker_auth);
+  if v_profile_count <> 0 then
+    raise exception 'assertion failed: expected a terminated employee''s own self-read (app.get_my_employee_profile) to return zero rows, got %', v_profile_count;
+  end if;
+
+  -- Real forged session (request.jwt.claims + set role authenticated, this
+  -- file's own established technique) -- proves this is not merely an
+  -- internal-call artifact: a genuine terminated-employee session reading
+  -- HRS-gated self data now fails.
+  perform set_config('request.jwt.claims', json_build_object('sub', v_worker_auth::text, 'role', 'authenticated')::text, true);
+  begin
+    set local role authenticated;
+    select count(*) into v_profile_count from app.get_my_employee_profile(v_tenant1, v_worker_auth);
+    if v_profile_count <> 0 then
+      raise exception 'assertion failed: expected a terminated employee''s own forged-session self-read to return zero rows, got %', v_profile_count;
+    end if;
+    reset role;
+  end;
+  perform set_config('request.jwt.claims', 'null', true);
+
+  -- app.terminate_employee against an ALREADY-revoked linked user (idempotency
+  -- of the Platform coupling itself, not merely the HR-side state machine) --
+  -- re-terminating is rejected on the employee's own lifecycle_status (terminated
+  -- is not in the allowed from-set) before the Platform call is ever reached, so
+  -- this also proves the earlier revoke never left the row in a state a second
+  -- legitimate call could not cleanly reason about.
+  begin
+    perform app.terminate_employee(v_active.master_record_id, v_active.record_version, 'again', current_date, v_override_manager, 'override_manager');
+    raise exception 'assertion failed: expected re-terminating an already-terminated employee to fail on invalid_transition';
+  exception when check_violation then null;
+  end;
+end;
+$$;
+
+-- ===========================================================================
+-- HRT-295 Tier C review fix (integration lens finding, test-coverage gap,
+-- not a functional defect): 20260731230000's own header/comment states three
+-- separate times that terminating/suspending a tenant's last active
+-- tenant_admin is "now reachable from HRIS for the first time" via the
+-- last_critical_admin guard (ISS-2026-072's own pre-existing check inside
+-- app.transition_user_status) -- but no db-test anywhere in this repository
+-- ever drove app.terminate_employee/app.suspend_employee against a tenant's
+-- last active tenant_admin. The code itself is genuinely correct (confirmed
+-- below) -- this closes the missing regression-coverage gap so a future
+-- regression here would actually be caught by `pnpm run db:test`.
+-- ===========================================================================
+
+\echo '>> HRT-295 Tier C review: app.terminate_employee/app.suspend_employee against a tenant''s LAST active tenant_admin correctly raises last_critical_admin (ISS-2026-072''s own pre-existing guard, newly reachable from HRIS via 20260731230000) and rolls back the WHOLE transaction atomically -- never a half-applied HR-side state change with the Platform side left untouched'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HR1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_approver uuid := '00000000-0000-0000-0000-000000027103';
+  v_override_manager uuid := '00000000-0000-0000-0000-000000027104';
+  v_new_admin_auth uuid := '00000000-0000-0000-0000-000000027120';
+  v_new_admin_user app.users;
+  v_draft app.employees;
+  v_active app.employees;
+  v_original_admin_membership uuid;
+  v_pre_status text;
+  v_pre_version integer;
+  v_pre_lifecycle text;
+begin
+  -- A second employee, linked to a new Platform user, granted tenant_admin
+  -- -- now TWO active tenant_admins for hrmemp1 (the fixture's own
+  -- pre-existing 00000000-...027101, plus this new one).
+  insert into auth.users (id, email) values (v_new_admin_auth, 'lastcriticaladmin@hrmemp1.test');
+  perform app.invite_user(v_tenant1, v_new_admin_auth, 'lastcriticaladmin@hrmemp1.test', 'Last Critical Admin Worker', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'lastcriticaladmin@hrmemp1.test'), 'active', 'onboarded', 'tester');
+  select * into v_new_admin_user from app.users where email = 'lastcriticaladmin@hrmemp1.test';
+  perform app.grant_principal_membership(v_new_admin_auth, 'tenant_admin', v_tenant1, null, 'tester');
+
+  v_draft := app.create_employee_draft(
+    v_tenant1, 'Last Critical Admin Worker', 'full_time', 'lastcriticaladmin@hrmemp1.test', null, null, null, null, null, '2024-01-01',
+    v_company, null, null, 'Head of Operations', null, v_new_admin_user.id, null, 'hr_created', 'idem-lastcriticaladmin-1',
+    v_staff, 'staff'
+  );
+  perform app.add_employee_emergency_contact(v_draft.master_record_id, 'Emergency Contact', 'spouse', '+15550008888', 'ec2@example.test', true, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  perform app.submit_employee_for_approval(v_draft.master_record_id, v_draft.record_version, v_staff, 'staff');
+  select * into v_draft from app.employees where master_record_id = v_draft.master_record_id;
+  v_active := app.decide_employee_approval(v_draft.master_record_id, v_draft.record_version, 'approve', null, v_approver, 'approver');
+  v_active := app.activate_employee(v_active.master_record_id, v_active.record_version, v_approver, 'approver');
+
+  -- Revoke the fixture's own ORIGINAL tenant_admin (00000000-...027101) so
+  -- this NEW employee's linked identity becomes the tenant's ONLY active
+  -- tenant_admin -- the exact precondition last_critical_admin guards.
+  select id into v_original_admin_membership from app.principal_memberships
+  where auth_user_id = '00000000-0000-0000-0000-000000027101' and tenant_id = v_tenant1 and layer = 'tenant_admin' and status = 'active';
+  perform app.revoke_principal_membership(v_original_admin_membership, 'HRT-295 Tier C fixture: isolate the last-critical-admin precondition', 'tester');
+
+  if (select count(*) from app.principal_memberships where tenant_id = v_tenant1 and layer = 'tenant_admin' and status = 'active') <> 1 then
+    raise exception 'assertion failed: expected exactly one active tenant_admin remaining for hrmemp1 (this new employee''s own identity)';
+  end if;
+
+  v_pre_lifecycle := v_active.lifecycle_status;
+  v_pre_version := v_active.record_version;
+  v_pre_status := (select status from app.users where id = v_new_admin_user.id);
+
+  -- terminate_employee: rejected, and the WHOLE transaction rolls back --
+  -- never a half-applied state (HR side flipped, Platform side untouched,
+  -- or vice versa).
+  begin
+    perform app.terminate_employee(v_active.master_record_id, v_active.record_version, 'attempted termination of the last critical admin', current_date, v_override_manager, 'override_manager');
+    raise exception 'assertion failed: expected app.terminate_employee against the tenant''s last active tenant_admin to raise last_critical_admin';
+  exception
+    when others then
+      if sqlerrm not like 'last_critical_admin:%' then
+        raise;
+      end if;
+  end;
+
+  if (select lifecycle_status from app.employees where master_record_id = v_active.master_record_id) <> v_pre_lifecycle
+     or (select record_version from app.employees where master_record_id = v_active.master_record_id) <> v_pre_version then
+    raise exception 'HRT-295 Tier C REGRESSION: expected the employee''s own lifecycle_status/record_version genuinely UNCHANGED after a rejected last_critical_admin termination (atomic rollback), got a partial change';
+  end if;
+  if (select status from app.users where id = v_new_admin_user.id) <> v_pre_status then
+    raise exception 'HRT-295 Tier C REGRESSION: expected the linked Platform user''s own status genuinely UNCHANGED after a rejected last_critical_admin termination (atomic rollback), got a partial change';
+  end if;
+  if (select count(*) from app.principal_memberships where tenant_id = v_tenant1 and layer = 'tenant_admin' and status = 'active') <> 1 then
+    raise exception 'HRT-295 Tier C REGRESSION: expected the tenant_admin membership itself genuinely unaffected by the rejected call';
+  end if;
+
+  -- suspend_employee: identical guard, identical atomic rollback.
+  begin
+    perform app.suspend_employee(v_active.master_record_id, v_active.record_version, 'attempted suspension of the last critical admin', v_override_manager, 'override_manager');
+    raise exception 'assertion failed: expected app.suspend_employee against the tenant''s last active tenant_admin to raise last_critical_admin';
+  exception
+    when others then
+      if sqlerrm not like 'last_critical_admin:%' then
+        raise;
+      end if;
+  end;
+  if (select lifecycle_status from app.employees where master_record_id = v_active.master_record_id) <> v_pre_lifecycle then
+    raise exception 'HRT-295 Tier C REGRESSION: expected the employee''s own lifecycle_status genuinely UNCHANGED after a rejected last_critical_admin suspension (atomic rollback)';
+  end if;
+  if (select status from app.users where id = v_new_admin_user.id) <> v_pre_status then
+    raise exception 'HRT-295 Tier C REGRESSION: expected the linked Platform user''s own status genuinely UNCHANGED after a rejected last_critical_admin suspension (atomic rollback)';
+  end if;
+
+  -- Positive control: re-grant a second tenant_admin (the original,
+  -- restoring hygiene for anything downstream that might rely on it too),
+  -- and confirm termination now succeeds normally once this employee is no
+  -- longer the LAST one.
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000027101', 'tenant_admin', v_tenant1, null, 'tester');
+  v_active := app.terminate_employee(v_active.master_record_id, v_active.record_version, 'resignation, no longer the last critical admin', current_date, v_override_manager, 'override_manager');
+  if v_active.lifecycle_status <> 'terminated' then
+    raise exception 'assertion failed: expected termination to succeed once a second active tenant_admin exists, got %', v_active.lifecycle_status;
+  end if;
+  if (select status from app.users where id = v_new_admin_user.id) <> 'revoked' then
+    raise exception 'assertion failed: expected the linked Platform user to be genuinely revoked once termination succeeds';
+  end if;
+
+  raise notice 'PASS: last_critical_admin correctly blocks both app.terminate_employee and app.suspend_employee against a tenant''s last active tenant_admin, with a genuine atomic rollback both times, and a normal termination succeeds once a second admin exists';
+end;
+$$;

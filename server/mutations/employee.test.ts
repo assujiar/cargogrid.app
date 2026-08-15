@@ -15,6 +15,7 @@ import {
   decideEmployeeChangeRequest,
   validateEmployeeImportRow,
   commitEmployeeImportJob,
+  reactivateUserAfterRehire,
   EmployeeMutationError,
   type EmployeeMutationRpcClient,
 } from "./employee.ts";
@@ -380,6 +381,39 @@ describe("commitEmployeeImportJob", () => {
       (err: unknown) => {
         assert.ok(err instanceof EmployeeMutationError);
         assert.equal(err.code, "import_export_job_has_invalid_rows");
+        return true;
+      },
+    );
+  });
+});
+
+describe("reactivateUserAfterRehire", () => {
+  test("calls reactivate_user_after_rehire with the exact snake_case params, no expected_version", async () => {
+    const { client, calls } = fakeRpcClient({ data: { id: USER_ID, status: "active" }, error: null });
+
+    const row = await reactivateUserAfterRehire(client, { masterRecordId: MASTER_RECORD_ID, reason: "restore access after rejoining", actorAuthUserId: ACTOR_ID, actorLabel: "manager" });
+
+    assert.equal(calls[0]?.fn, "reactivate_user_after_rehire");
+    assert.equal(calls[0]?.args.p_master_record_id, MASTER_RECORD_ID);
+    assert.equal(calls[0]?.args.p_reason, "restore access after rejoining");
+    assert.equal(calls[0]?.args.p_actor_auth_user_id, ACTOR_ID);
+    assert.ok(!("p_expected_version" in calls[0]!.args));
+    assert.equal(row.status, "active");
+  });
+
+  test("requires a reason at the schema level (empty string rejected before any RPC call)", async () => {
+    await assert.rejects(() =>
+      reactivateUserAfterRehire(fakeRpcClient({ data: [], error: null }).client, { masterRecordId: MASTER_RECORD_ID, reason: "", actorAuthUserId: ACTOR_ID, actorLabel: "manager" }),
+    );
+  });
+
+  test("classifies no_rehire_event (HRT-295 / ISS-2026-108's own new error code)", async () => {
+    const client = fakeRpcClient({ data: null, error: { message: "no_rehire_event: employee x has no recorded terminated -> active (rehire) transition on file, cannot reactivate Platform access via this path" } }).client;
+    await assert.rejects(
+      () => reactivateUserAfterRehire(client, { masterRecordId: MASTER_RECORD_ID, reason: "attempted reactivation", actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof EmployeeMutationError);
+        assert.equal(err.code, "no_rehire_event");
         return true;
       },
     );

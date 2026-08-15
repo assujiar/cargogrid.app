@@ -481,6 +481,19 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', 'null', false);
 
+\echo '>> HRT-293 Finding B regression: app.waive_attendance_exception no longer duplicates the raw waive_reason ("late arrival excused, traffic incident", just used above) into app.audit_logs.reason -- a plain tenant_admin reading via app.query_audit_logs never sees it either'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug='att1');
+begin
+  if exists (select 1 from app.audit_logs where reason = 'late arrival excused, traffic incident') then
+    raise exception 'HRT-293 Finding B regression: app.audit_logs.reason must never carry the raw attendance-exception waive reason';
+  end if;
+  if exists (select 1 from app.query_audit_logs('00000000-0000-0000-0000-000000027801', v_tenant1, 200) where reason = 'late arrival excused, traffic incident') then
+    raise exception 'HRT-293 Finding B regression: a plain tenant_admin must never see the raw waive reason via app.query_audit_logs';
+  end if;
+end $$;
+
 \echo '>> geofence: branch-scoped required-geofence policy overrides tenant-wide for a branch-assigned employee -- a location outside the geofence is REJECTED, never a fake success (section 15)'
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027802", "role": "authenticated"}', false);
 set role authenticated;
@@ -786,5 +799,154 @@ select set_config('request.jwt.claims', 'null', false);
 
 \echo '>> structural regression guard: this migration''s own additive functions do not alter app.employees.user_id/app.users.status shape (no cross-domain mutation)'
 select count(*) as employees_with_user_id from app.employees where user_id is not null and tenant_id = (select id from app.tenants where slug='att1');
+
+-- ===========================================================================
+-- HRT-295 (ISS-2026-106 resolution, High): app._ingest_attendance_event now
+-- uses the caller-supplied, already-required p_client_reported_at (not
+-- clock_timestamp()) as the authoritative source for work_date/
+-- raw_clock_in_at/raw_clock_out_at on the manual_hr and device_import
+-- channels specifically -- live-reproduction below is emp4 (att1 tenant,
+-- clean slate, unused by any earlier block in this file), who has never
+-- touched Attendance before this point.
+-- ===========================================================================
+
+\echo '>> ISS-2026-106: manual_hr honors the caller-claimed historical timestamp for work_date/raw_clock_in_at/raw_clock_out_at -- two DIFFERENT historical workdays recorded by the SAME HR actor on the SAME real calendar day (the exact duplicate_workday_session collision the original finding live-reproduced pre-fix)'
+-- Run under the default (unrestricted) connecting role, not 'authenticated'
+-- -- record_manual_attendance_event's own internal app.evaluate_permission
+-- check uses the EXPLICIT p_actor_auth_user_id parameter (never auth.uid()),
+-- so no session-role switch is required to exercise it correctly, and this
+-- block's own assertions need to read app.attendance_events.client_
+-- reported_at/server_received_at directly, which 'authenticated' cannot
+-- (those columns sit on the SAME row as the deliberately column-restricted
+-- location/raw_payload fields, so a bare `select *` under 'authenticated'
+-- is correctly denied outright -- proven separately, unaffected by this fix,
+-- by this file's own pre-existing schema-privilege block above).
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='att1');
+  v_emp4 uuid := (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='att1') and work_email = 'emp4work@att1.test');
+  v_session app.attendance_sessions;
+  v_event app.attendance_events;
+begin
+  -- Day 1: 2024-03-04, a genuinely different real calendar day from
+  -- whenever this suite actually executes.
+  perform app.record_manual_attendance_event(v_tenant, v_emp4, 'clock_in', '2024-03-04 08:00:00+07'::timestamptz, 'backfill: employee forgot to clock in', 'iss106-day1-in', '00000000-0000-0000-0000-000000027802', 'staff');
+  perform app.record_manual_attendance_event(v_tenant, v_emp4, 'clock_out', '2024-03-04 17:00:00+07'::timestamptz, 'backfill: employee forgot to clock out', 'iss106-day1-out', '00000000-0000-0000-0000-000000027802', 'staff');
+
+  select * into v_session from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp4 and work_date = '2024-03-04'::date;
+  if v_session.id is null then
+    raise exception 'assertion failed: expected an attendance_sessions row with work_date=2024-03-04 (the CLAIMED date), got none -- clock_timestamp() (today) was used instead';
+  end if;
+  if v_session.raw_clock_in_at <> '2024-03-04 08:00:00+07'::timestamptz or v_session.raw_clock_out_at <> '2024-03-04 17:00:00+07'::timestamptz or v_session.status <> 'closed' then
+    raise exception 'assertion failed: expected raw_clock_in_at/raw_clock_out_at to equal the CLAIMED historical timestamps exactly, got in=%, out=%, status=%', v_session.raw_clock_in_at, v_session.raw_clock_out_at, v_session.status;
+  end if;
+
+  -- Day 2: 2024-03-05 -- a SECOND, DIFFERENT claimed historical workday,
+  -- same real calendar day as Day 1's own two calls above. Pre-fix this
+  -- collided with duplicate_workday_session (both calls resolved to
+  -- clock_timestamp()'s own real, identical, "today" date) -- the exact
+  -- structural block ISS-2026-106's own live reproduction named. Must
+  -- succeed now.
+  perform app.record_manual_attendance_event(v_tenant, v_emp4, 'clock_in', '2024-03-05 08:00:00+07'::timestamptz, 'backfill: second historical day, same real calendar day as day 1', 'iss106-day2-in', '00000000-0000-0000-0000-000000027802', 'staff');
+  perform app.record_manual_attendance_event(v_tenant, v_emp4, 'clock_out', '2024-03-05 12:30:00+07'::timestamptz, 'backfill: second historical day, same real calendar day as day 1', 'iss106-day2-out', '00000000-0000-0000-0000-000000027802', 'staff');
+
+  select * into v_session from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp4 and work_date = '2024-03-05'::date;
+  if v_session.id is null then
+    raise exception 'assertion failed: expected a SECOND attendance_sessions row with work_date=2024-03-05 -- a single manual_hr caller must be able to record more than one historical attendance day per real calendar day';
+  end if;
+  if v_session.raw_clock_in_at <> '2024-03-05 08:00:00+07'::timestamptz or v_session.raw_clock_out_at <> '2024-03-05 12:30:00+07'::timestamptz then
+    raise exception 'assertion failed: day-2 raw_clock_in_at/raw_clock_out_at do not match the claimed historical timestamps, got in=%, out=%', v_session.raw_clock_in_at, v_session.raw_clock_out_at;
+  end if;
+  if (select count(*) from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp4) <> 2 then
+    raise exception 'assertion failed: expected exactly 2 distinct attendance_sessions rows for emp4 (2024-03-04 and 2024-03-05), got %', (select count(*) from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp4);
+  end if;
+
+  -- client_reported_at was already correctly captured pre-fix (audit-only)
+  -- -- re-confirmed unchanged, plus server_received_at stays the REAL
+  -- clock_timestamp() (today, not the claimed historical date) on every
+  -- channel, unconditionally -- this fix never touches server_received_at.
+  select * into v_event from app.attendance_events where tenant_id = v_tenant and employee_id = v_emp4 and event_type = 'clock_in' and idempotency_key = 'iss106-day1-in';
+  if v_event.client_reported_at <> '2024-03-04 08:00:00+07'::timestamptz then
+    raise exception 'assertion failed: client_reported_at should still equal the caller-supplied timestamp';
+  end if;
+  if v_event.server_received_at::date <> current_date then
+    raise exception 'assertion failed: server_received_at should stay the REAL server clock (today), got %', v_event.server_received_at;
+  end if;
+
+  -- Ordering guard now compares the SAME effective-time basis on both
+  -- sides -- a clock-out claimed BEFORE the already-recorded historical
+  -- clock-in is still correctly rejected (not silently accepted, and not
+  -- mis-evaluated against real clock_timestamp() on one side only). The
+  -- clock-in is issued OUTSIDE the exception-catching block below -- a
+  -- caught exception inside a plpgsql `begin...exception` block rolls back
+  -- to that block's own implicit savepoint, which would silently undo this
+  -- clock-in too if it were issued inside the same block.
+  perform app.record_manual_attendance_event(v_tenant, v_emp4, 'clock_in', '2024-03-06 08:00:00+07'::timestamptz, 'ordering guard setup', 'iss106-order-in', '00000000-0000-0000-0000-000000027802', 'staff');
+  begin
+    perform app.record_manual_attendance_event(v_tenant, v_emp4, 'clock_out', '2024-03-06 07:00:00+07'::timestamptz, 'ordering guard: clock-out before clock-in', 'iss106-order-out', '00000000-0000-0000-0000-000000027802', 'staff');
+    raise exception 'assertion failed: expected impossible_ordering for a claimed clock-out BEFORE the claimed clock-in';
+  exception when others then
+    if sqlerrm not like 'impossible_ordering%' then raise; end if;
+  end;
+  -- Close the open 2024-03-06 session cleanly so it does not leak into
+  -- later assertions in this file as a stray open session.
+  perform app.record_manual_attendance_event(v_tenant, v_emp4, 'clock_out', '2024-03-06 17:00:00+07'::timestamptz, 'ordering guard cleanup', 'iss106-order-out-2', '00000000-0000-0000-0000-000000027802', 'staff');
+end $$;
+
+\echo '>> ISS-2026-106: mobile_web/kiosk (live self-service channels) remain UNCHANGED -- a spoofed p_client_reported_at claiming a wildly different date has ZERO effect on work_date/raw_clock_in_at, exactly as before this fix (the anti-spoofing property decision 10 of HRT-278''s own build log established)'
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027808", "role": "authenticated"}', false);
+set role authenticated;
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='att1');
+  v_emp4 uuid := (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='att1') and work_email = 'emp4work@att1.test');
+  v_session app.attendance_sessions;
+begin
+  perform app.record_attendance_clock_event(v_tenant, 'clock_in', 'mobile_web', '2019-06-15 08:00:00+07'::timestamptz, null, null, 'iss106-spoof-in', '00000000-0000-0000-0000-000000027808', 'emp4');
+  select * into v_session from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp4 and status = 'open';
+  if v_session.id is null then
+    raise exception 'assertion failed: expected a real open session for emp4 after the mobile_web clock-in';
+  end if;
+  if v_session.work_date = '2019-06-15'::date then
+    raise exception 'SECURITY FAILURE: mobile_web work_date followed a spoofed p_client_reported_at (2019-06-15) -- the live self-service anti-spoofing property regressed';
+  end if;
+  if v_session.work_date < (current_date - 2) or v_session.work_date > (current_date + 2) then
+    raise exception 'assertion failed: expected mobile_web work_date to resolve near the REAL server today (timezone/day-boundary-adjusted), got %', v_session.work_date;
+  end if;
+  perform app.record_attendance_clock_event(v_tenant, 'clock_out', 'mobile_web', '2019-06-15 09:00:00+07'::timestamptz, null, null, 'iss106-spoof-out', '00000000-0000-0000-0000-000000027808', 'emp4');
+end $$;
+reset role;
+select set_config('request.jwt.claims', 'null', false);
+
+\echo '>> ISS-2026-106: device_import also honors the staged event_at for a genuinely different historical work_date (a legacy batch import spanning distinct calendar days, not merely distinct clock times on the same day)'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='att1');
+  v_emp4 uuid := (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='att1') and work_email = 'emp4work@att1.test');
+  v_source_file app.files;
+  v_job app.jobs;
+  v_row app.import_staging_rows;
+  v_session app.attendance_sessions;
+begin
+  v_source_file := app.initiate_file_upload(v_tenant, 'attendance_device_import_source', 'import_job', gen_random_uuid(), 'kiosk-export-iss106.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-devimport-src-iss106', '00000000-0000-0000-0000-000000027802', 'staff');
+  perform app.record_file_scan_result(v_source_file.id, 'clean', null, '00000000-0000-0000-0000-000000027802', 'staff');
+
+  v_job := app.create_import_export_job(v_tenant, 'import', 'attendance_device_import', v_source_file.id, '{}'::jsonb, 'idem-devimport-job-iss106', '00000000-0000-0000-0000-000000027802', 'staff');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', (select code from app.master_records where id = v_emp4),
+    'event_type', 'clock_in', 'event_at', '2024-03-10 09:15:00+07', 'device_label', 'Kiosk-Legacy'
+  )), '00000000-0000-0000-0000-000000027802', 'staff');
+  select * into v_row from app.import_staging_rows where job_id = v_job.job_id and row_number = 1;
+  perform app.validate_attendance_device_import_row(v_row.id, '00000000-0000-0000-0000-000000027802', 'staff');
+  perform app.commit_attendance_device_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000027802', 'staff');
+
+  select * into v_session from app.attendance_sessions where tenant_id = v_tenant and employee_id = v_emp4 and work_date = '2024-03-10'::date;
+  if v_session.id is null then
+    raise exception 'assertion failed: expected an attendance_sessions row with work_date=2024-03-10 from the device-imported event, got none';
+  end if;
+  if v_session.raw_clock_in_at <> '2024-03-10 09:15:00+07'::timestamptz then
+    raise exception 'assertion failed: device-imported raw_clock_in_at should equal the staged event_at exactly, got %', v_session.raw_clock_in_at;
+  end if;
+end $$;
 
 \echo 'ALL HRT-278 ATTENDANCE ASSERTIONS PASSED'

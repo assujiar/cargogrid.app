@@ -14,7 +14,19 @@ import { updatePositionAction, setPositionStatusAction } from "../actions.ts";
  * direct, RLS-scoped table read against app.employee_position_assignments, mirroring
  * the employee detail page's own established files/change-requests direct-read
  * precedent -- no dedicated "list assignments by position" RPC exists yet, and RLS
- * already scopes this correctly).
+ * scopes the ROWS correctly).
+ *
+ * HRT-293 (Sensitive Personal and Payroll Data Controls) fix: the assignment
+ * read below now selects an explicit column list, never `select("*")`.
+ * `reason_note`/`decided_reason` are free-text HR narrative (the same class
+ * Finding A named for app.employees) this page never actually renders
+ * (confirmed -- position-detail-panel.tsx has zero reference to either) and
+ * app.employee_position_assignments' own grant to `authenticated` no longer
+ * includes either column (supabase/migrations/
+ * 20260731200000_harden_hris_raw_table_reason_column_grant_sweep_batch_293.sql)
+ * -- a bare `select("*")` against a column-restricted table is rejected
+ * outright by Postgres, so this explicit list is required for this read to
+ * keep working at all, not merely a defense-in-depth style choice.
  */
 export default async function PositionDetailPage({ params }: { params: Promise<{ tenantSlug: string; positionId: string }> }) {
   const { tenantSlug, positionId } = await params;
@@ -42,7 +54,9 @@ export default async function PositionDetailPage({ params }: { params: Promise<{
 
     const { data: assignmentRows, error: assignmentError } = await supabase
       .from("employee_position_assignments")
-      .select("*")
+      .select(
+        "id, tenant_id, master_record_id, position_id, grade_id, manager_employee_id, assignment_type, allocation_pct, effective_start_date, effective_end_date, status, change_reason, previous_assignment_id, decided_by, decided_at, record_version, created_at, updated_at",
+      )
       .eq("position_id", positionId)
       .eq("status", "active")
       .order("effective_start_date", { ascending: false });

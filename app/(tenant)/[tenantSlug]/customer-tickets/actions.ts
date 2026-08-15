@@ -15,8 +15,18 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
 import { resolveCustomerTicketAccessForRequest } from "../../../../lib/portal/resolve-customer-ticket-access.server.ts";
-import { createCustomerTicket, replyToCustomerTicket, transitionTicketStatus, TicketMutationError } from "../../../../server/mutations/ticketing.ts";
-import type { TicketPriority, TicketStatus } from "../../../../server/contracts/ticketing/ticketing.ts";
+import {
+  createCustomerTicket,
+  replyToCustomerTicket,
+  transitionTicketStatus,
+  linkTicketRecord,
+  unlinkTicketRecord,
+  recordTicketLinkAccessDenial,
+  TicketMutationError,
+} from "../../../../server/mutations/ticketing.ts";
+import { searchTicketLinkCandidates, TicketQueryError } from "../../../../server/queries/ticketing.ts";
+import { TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS } from "../../../../server/contracts/ticketing/ticketing.ts";
+import type { TicketPriority, TicketStatus, TicketLinkEntityType, TicketLinkRelationship, TicketLinkCandidateRow } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface CustomerTicketActionState {
   readonly error: string | null;
@@ -117,6 +127,103 @@ export async function transitionCustomerTicketStatusAction(
     await transitionTicketStatus(supabase, { ticketId, expectedVersion, toStatus, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     return errorMessage("Could not update this ticket's status", error);
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+// --- Typed Ticket-Linked Records (HRT-292, CG-S12-HRT-020). Same shared
+// RPCs the internal staff surface uses (server/{queries,mutations}/
+// ticketing.ts) -- the customer-safe entity-type narrowing and the
+// account-owner-scope narrowing are BOTH enforced server-side, at the RPC
+// layer, regardless of what this file offers; this file only forwards. ---
+
+export interface CustomerTicketLinkSearchActionState {
+  readonly error: string | null;
+  readonly entityType: TicketLinkEntityType | null;
+  readonly relationship: TicketLinkRelationship;
+  readonly results: readonly TicketLinkCandidateRow[];
+}
+
+export async function searchCustomerTicketLinkCandidatesAction(
+  tenantSlug: string,
+  ticketId: string,
+  _prevState: CustomerTicketLinkSearchActionState,
+  formData: FormData,
+): Promise<CustomerTicketLinkSearchActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, entityType: null, relationship: "related", results: [] };
+
+  const entityType = String(formData.get("entityType") ?? "") as TicketLinkEntityType;
+  const relationship = (String(formData.get("relationship") ?? "related") || "related") as TicketLinkRelationship;
+  const searchText = String(formData.get("searchText") ?? "").trim() || null;
+  if (!(TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES as readonly string[]).includes(entityType)) {
+    return { error: "Select a record type to search.", entityType: null, relationship, results: [] };
+  }
+  if (!(TICKET_LINK_RELATIONSHIPS as readonly string[]).includes(relationship)) {
+    return { error: "Select a valid relationship.", entityType, relationship: "related", results: [] };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const results = await searchTicketLinkCandidates(supabase, ticketId, entityType, searchText, access.authUserId, 20);
+    return { error: null, entityType, relationship, results };
+  } catch (error) {
+    if (error instanceof TicketQueryError) return { error: `Could not search: ${error.message}`, entityType, relationship, results: [] };
+    throw error;
+  }
+}
+
+export async function linkCustomerTicketRecordAction(
+  tenantSlug: string,
+  ticketId: string,
+  entityType: TicketLinkEntityType,
+  entityId: string,
+  relationship: TicketLinkRelationship,
+  _prevState: CustomerTicketActionState,
+  _formData: FormData,
+): Promise<CustomerTicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await linkTicketRecord(supabase, { ticketId, entityType, entityId, relationship, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof TicketMutationError) {
+      if (error.code === "record_not_eligible" || error.code === "entity_type_not_permitted") {
+        void recordTicketLinkAccessDenial(supabase, {
+          tenantId: access.tenant.id, ticketId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId,
+          entityType, entityId, reason: error.code,
+        }).catch(() => {});
+      }
+      return { error: `Could not link this record: ${error.message}` };
+    }
+    throw error;
+  }
+  revalidatePath(detailPath(tenantSlug, ticketId));
+  return OK;
+}
+
+export async function unlinkCustomerTicketRecordAction(
+  tenantSlug: string,
+  ticketId: string,
+  linkId: string,
+  expectedVersion: number,
+  _prevState: CustomerTicketActionState,
+  formData: FormData,
+): Promise<CustomerTicketActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to unlink a record." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await unlinkTicketRecord(supabase, { linkId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    return errorMessage("Could not unlink this record", error);
   }
   revalidatePath(detailPath(tenantSlug, ticketId));
   return OK;

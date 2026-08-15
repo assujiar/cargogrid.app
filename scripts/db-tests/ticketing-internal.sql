@@ -809,4 +809,81 @@ begin
 end;
 $$;
 
+\echo '>> 16. closed/cancelled tickets are mutation-inert for app.add_ticket_watcher and app.reply_to_ticket (new-engagement operations); app.remove_ticket_watcher remains permitted as legitimate post-closure cleanup (HRT-295 fix for ISS-2026-109, supabase/migrations/20260731270000)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'tkt1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'HARDWARE');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000286004';
+  v_req1 uuid := '00000000-0000-0000-0000-000000286002';
+  v_bystander_emp uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'bystanderwork@tkt1.test');
+  v_ticket_closed app.tickets;
+  v_ticket_cancelled app.tickets;
+  v_watcher app.ticket_watchers;
+  v_msg text;
+begin
+  -- Ticket A -> driven to CLOSED (new -> open -> resolved -> closed, the
+  -- real graph app.ticket_status_transitions defines).
+  v_ticket_closed := app.create_ticket(v_tenant1, v_category, null, 'normal', 'Terminal Status Guard Test A', 'body', 'idem-term-closed-a', v_req1, 'requester1');
+  v_watcher := app.add_ticket_watcher(v_ticket_closed.id, v_bystander_emp, v_staff1, 'staff1');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'open', null, v_staff1, 'staff1');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'resolved', 'done', v_staff1, 'staff1');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'closed', null, v_staff1, 'staff1');
+  if v_ticket_closed.status <> 'closed' then raise exception 'FAIL (fixture bug): ticket A must be closed'; end if;
+
+  begin
+    perform app.add_ticket_watcher(v_ticket_closed.id, v_bystander_emp, v_staff1, 'staff1');
+    raise exception 'FAIL: adding a watcher to a closed ticket must be rejected';
+  exception when others then
+    v_msg := sqlerrm;
+    if v_msg not like 'invalid_transition%' then raise exception 'FAIL: expected invalid_transition, got: %', v_msg; end if;
+  end;
+
+  begin
+    perform app.reply_to_ticket(v_ticket_closed.id, 'still trying to reply after close', 'public', null, null, v_req1, 'requester1');
+    raise exception 'FAIL: a closed ticket should reject new messages';
+  exception when others then
+    v_msg := sqlerrm;
+    if v_msg not like 'ticket_closed%' then raise exception 'FAIL: expected ticket_closed, got: %', v_msg; end if;
+  end;
+
+  -- Removal of the PRE-EXISTING watcher (added before close) remains
+  -- permitted -- deliberate design decision, see the migration's own
+  -- header: cleanup is not a new engagement.
+  perform app.remove_ticket_watcher(v_watcher.id, v_watcher.record_version, v_staff1, 'staff1');
+  if (select status from app.ticket_watchers where id = v_watcher.id) <> 'removed' then
+    raise exception 'FAIL: remove_ticket_watcher must still succeed on a closed ticket (cleanup remains permitted)';
+  end if;
+
+  -- Ticket B -> driven to CANCELLED (new -> cancelled, self-cancel).
+  v_ticket_cancelled := app.create_ticket(v_tenant1, v_category, null, 'normal', 'Terminal Status Guard Test B', 'body', 'idem-term-cancel-b', v_req1, 'requester1');
+  v_watcher := app.add_ticket_watcher(v_ticket_cancelled.id, v_bystander_emp, v_staff1, 'staff1');
+  v_ticket_cancelled := app.transition_ticket_status(v_ticket_cancelled.id, v_ticket_cancelled.record_version, 'cancelled', 'no longer needed', v_req1, 'requester1');
+  if v_ticket_cancelled.status <> 'cancelled' then raise exception 'FAIL (fixture bug): ticket B must be cancelled'; end if;
+
+  begin
+    perform app.add_ticket_watcher(v_ticket_cancelled.id, v_bystander_emp, v_staff1, 'staff1');
+    raise exception 'FAIL: adding a watcher to a cancelled ticket must be rejected';
+  exception when others then
+    v_msg := sqlerrm;
+    if v_msg not like 'invalid_transition%' then raise exception 'FAIL: expected invalid_transition, got: %', v_msg; end if;
+  end;
+
+  begin
+    perform app.reply_to_ticket(v_ticket_cancelled.id, 'still trying to reply after cancel', 'public', null, null, v_req1, 'requester1');
+    raise exception 'FAIL: a cancelled ticket should reject new messages (re-confirms section 7''s own pre-existing assertion, co-located here for the full closed/cancelled matrix)';
+  exception when others then
+    v_msg := sqlerrm;
+    if v_msg not like 'ticket_cancelled%' then raise exception 'FAIL: expected ticket_cancelled, got: %', v_msg; end if;
+  end;
+
+  perform app.remove_ticket_watcher(v_watcher.id, v_watcher.record_version, v_staff1, 'staff1');
+  if (select status from app.ticket_watchers where id = v_watcher.id) <> 'removed' then
+    raise exception 'FAIL: remove_ticket_watcher must still succeed on a cancelled ticket (cleanup remains permitted)';
+  end if;
+
+  raise notice 'PASS: add_ticket_watcher and reply_to_ticket reject both closed and cancelled tickets (invalid_transition / ticket_closed / ticket_cancelled); remove_ticket_watcher remains permitted on both as the deliberate cleanup-is-allowed design decision';
+end;
+$$;
+
 \echo '>> all ticketing-internal (HRT-286) assertions passed'

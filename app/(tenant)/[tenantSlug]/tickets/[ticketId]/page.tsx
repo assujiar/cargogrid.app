@@ -13,6 +13,11 @@ import {
   getTicketSlaStatusForRequester,
   listTicketAssignmentCandidates,
   listTicketAssignmentEvents,
+  getTicketEscalation,
+  getTicketEscalationStatusForRequester,
+  listTicketEscalationEvents,
+  listTicketEscalationSuppressions,
+  listTicketLinks,
   TicketQueryError,
 } from "../../../../../server/queries/ticketing.ts";
 import { listTicketKnowledgeArticleLinks, listTicketKnowledgeArticleLinksForRequester, KbQueryError } from "../../../../../server/queries/knowledge-base.ts";
@@ -35,6 +40,15 @@ import {
   acceptTicketAssignmentAction,
   declineTicketAssignmentAction,
   autoRouteTicketAction,
+  escalateTicketAction,
+  acknowledgeTicketEscalationAction,
+  resolveTicketEscalationAction,
+  suppressTicketEscalationAction,
+  revokeTicketEscalationSuppressionAction,
+  searchTicketLinkCandidatesAction,
+  linkTicketRecordAction,
+  unlinkTicketRecordAction,
+  recordTicketLinkSummaryAccessAction,
 } from "../actions.ts";
 
 /**
@@ -72,18 +86,30 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
   let kbLinksForRequester: Awaited<ReturnType<typeof listTicketKnowledgeArticleLinksForRequester>> = [];
   let assignmentCandidates: Awaited<ReturnType<typeof listTicketAssignmentCandidates>> = [];
   let assignmentEvents: Awaited<ReturnType<typeof listTicketAssignmentEvents>> = [];
+  let escalation: Awaited<ReturnType<typeof getTicketEscalation>> = null;
+  let escalationStatusForRequester: Awaited<ReturnType<typeof getTicketEscalationStatusForRequester>> = null;
+  let escalationEvents: Awaited<ReturnType<typeof listTicketEscalationEvents>> = [];
+  let suppressions: Awaited<ReturnType<typeof listTicketEscalationSuppressions>> = [];
+  let ticketLinks: Awaited<ReturnType<typeof listTicketLinks>> = [];
 
   try {
     detail = await getTicket(supabase, ticketId, access.authUserId);
     if (!detail) {
       notFoundError = true;
     } else {
-      [messages, watchers, events, queues, categories] = await Promise.all([
+      [messages, watchers, events, queues, categories, ticketLinks] = await Promise.all([
         listTicketMessages(supabase, ticketId, access.authUserId, { limit: 200 }),
         listTicketWatchers(supabase, ticketId, access.authUserId),
         listTicketEvents(supabase, ticketId, access.authUserId),
         listTicketQueues(supabase, access.tenant.id, access.authUserId),
         listTicketCategories(supabase, access.tenant.id, access.authUserId),
+        // HRT-292: fetched for EVERY viewer who reaches this panel (staff,
+        // requester, or watcher) -- unlike escalation/assignment, linking is
+        // not staff-only (business rule: staff OR requester-side party may
+        // link); app.list_ticket_links itself independently re-authorizes
+        // every row for the calling principal, so there is nothing here for
+        // a lesser-privileged viewer to over-see.
+        listTicketLinks(supabase, ticketId, access.authUserId),
       ]);
       if (detail.isStaffViewer) {
         queueMembers = await listTicketQueueMembers(supabase, detail.queueId, access.authUserId);
@@ -102,6 +128,14 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
             listTicketAssignmentCandidates(supabase, ticketId, access.authUserId),
             listTicketAssignmentEvents(supabase, ticketId, access.authUserId),
           ]);
+          // HRT-291 (CG-S12-HRT-019): bounded to internal/customer, matching
+          // HRT-290's own established guard -- both new staff-facing RPCs
+          // reject a helpdesk-channel ticket.
+          [escalation, escalationEvents, suppressions] = await Promise.all([
+            getTicketEscalation(supabase, ticketId, access.authUserId),
+            listTicketEscalationEvents(supabase, ticketId, access.authUserId),
+            listTicketEscalationSuppressions(supabase, ticketId, access.authUserId),
+          ]);
         }
       } else {
         // HRT-289 decision 10, security impact section 16: the requester sees
@@ -110,6 +144,11 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
         // client-side field filter).
         slaStatusForRequester = await getTicketSlaStatusForRequester(supabase, ticketId, access.authUserId);
         kbLinksForRequester = await listTicketKnowledgeArticleLinksForRequester(supabase, ticketId, access.authUserId);
+        // HRT-291 (decision 12): the customer-safe is_escalated-only
+        // projection -- never the staff-side escalation row.
+        if (detail.channel !== "helpdesk") {
+          escalationStatusForRequester = await getTicketEscalationStatusForRequester(supabase, ticketId, access.authUserId);
+        }
       }
     }
   } catch (error) {
@@ -142,6 +181,10 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       kbLinksForRequester={kbLinksForRequester}
       assignmentCandidates={assignmentCandidates}
       assignmentEvents={assignmentEvents}
+      escalation={escalation}
+      escalationStatusForRequester={escalationStatusForRequester}
+      escalationEvents={escalationEvents}
+      suppressions={suppressions}
       replyAction={replyToTicketAction.bind(null, tenantSlug, ticketId)}
       redactAction={(messageId: string, expectedVersion: number) => redactTicketMessageAction.bind(null, tenantSlug, ticketId, messageId, expectedVersion)}
       addWatcherAction={addTicketWatcherAction.bind(null, tenantSlug, ticketId)}
@@ -157,8 +200,18 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       acceptAssignmentAction={acceptTicketAssignmentAction.bind(null, tenantSlug, ticketId, recordVersion)}
       declineAssignmentAction={declineTicketAssignmentAction.bind(null, tenantSlug, ticketId, recordVersion)}
       autoRouteAction={autoRouteTicketAction.bind(null, tenantSlug, ticketId, recordVersion)}
+      escalateAction={escalateTicketAction.bind(null, tenantSlug, ticketId, recordVersion)}
+      acknowledgeEscalationAction={(expectedVersion: number) => acknowledgeTicketEscalationAction.bind(null, tenantSlug, ticketId, expectedVersion)}
+      resolveEscalationAction={(expectedVersion: number) => resolveTicketEscalationAction.bind(null, tenantSlug, ticketId, expectedVersion)}
+      suppressEscalationAction={suppressTicketEscalationAction.bind(null, tenantSlug, ticketId)}
+      revokeEscalationSuppressionAction={(suppressionId: string, expectedVersion: number) => revokeTicketEscalationSuppressionAction.bind(null, tenantSlug, ticketId, suppressionId, expectedVersion)}
       linkArticleAction={linkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId)}
       unlinkArticleAction={(linkId: string, expectedVersion: number) => unlinkTicketKnowledgeArticleAction.bind(null, tenantSlug, ticketId, linkId, expectedVersion)}
+      ticketLinks={ticketLinks}
+      searchTicketLinksAction={searchTicketLinkCandidatesAction.bind(null, tenantSlug, ticketId)}
+      linkTicketRecordAction={(entityType, entityId, relationship) => linkTicketRecordAction.bind(null, tenantSlug, ticketId, entityType, entityId, relationship)}
+      unlinkTicketRecordAction={(linkId: string, expectedVersion: number) => unlinkTicketRecordAction.bind(null, tenantSlug, ticketId, linkId, expectedVersion)}
+      markTicketLinkViewedAction={(linkId: string) => recordTicketLinkSummaryAccessAction.bind(null, tenantSlug, linkId, "summary_viewed")}
     />
   );
 }

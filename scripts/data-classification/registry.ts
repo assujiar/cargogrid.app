@@ -265,6 +265,15 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
       "phone/email on app.employee_emergency_contacts — personal data of a named third party (not the employee themself), masked by app.list_employee_emergency_contacts identically to app.vendor_contacts' own email/phone masking (PRC-251) — name/relationship remain visible unmasked, mirroring the vendor-contact precedent exactly.",
   },
   {
+    id: "hrs:employees.lifecycle_reason_narrative",
+    category: "pii",
+    level: "restricted",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "revision_reason/suspend_reason/terminate_reason/archive_reason/leave_reason on app.employees, and the identically-shaped `reason` column on app.employee_lifecycle_events (HRT-274) — free-text disciplinary/medical/performance narrative a caller-supplied p_reason populates at every lifecycle transition (suspend_employee, terminate_employee, etc). Classified one level above the `pii` category floor (`restricted`, not `confidential`), matching national_id_number's own precedent — HRT-293 (CG-S12-HRT-021) Finding A found these five columns unconditionally returned by app.get_employee_profile and included in app.employees' own column-restricted grant to `authenticated`, and app.employee_lifecycle_events.reason carried unrestricted table-level SELECT — all fixed the same checkpoint (20260731180000): masked to self-or-HRS:View-personal-data identically to every other classified personal field, and column-restricted from `authenticated` at the grant layer. Never duplicated into app.audit_logs.reason (Finding B, same checkpoint) — the domain table above is the one place this value lives.",
+  },
+  {
     id: "hrs:candidates.national_id_number",
     category: "pii",
     level: "restricted",
@@ -297,6 +306,33 @@ export const HRS_REGISTRY: readonly ClassificationEntry[] = [
     owner: "HRIS",
     protectedAction: "HRS:View personal data",
     description: "address on app.candidates — masked identically to email/phone.",
+  },
+  {
+    id: "hrs:candidate_assessments.score_notes",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "score/notes on app.candidate_assessments (HRT-276, Recruitment/ATS) — a candidate's own assessment result and assessor narrative. Column-restricted from `authenticated` at the grant layer since HRT-276's own Tier C review round (20260730870000) — HRT-293 (CG-S12-HRT-021) Finding C registered this checkpoint's own already-correct control, and the same checkpoint's Finding B closed a separate audit-log-specific bypass of the identical field (app.record_assessment_result's own after_value snapshot carried the raw score under a key name app.redact_audit_payload's fixed pattern does not match).",
+  },
+  {
+    id: "hrs:interview_feedback.content",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "rating/recommendation/notes on app.interview_feedback (HRT-276, Recruitment/ATS) — an interviewer's own candidate evaluation. Column-restricted from `authenticated` at the grant layer since HRT-276's own Tier C review round (20260730870000) — registered here by HRT-293 (CG-S12-HRT-021) Finding C, which found this already-correct control unregistered.",
+  },
+  {
+    id: "hrs:job_offer_versions.compensation",
+    category: "pii",
+    level: "confidential",
+    owner: "HRIS",
+    protectedAction: "HRS:View personal data",
+    description:
+      "compensation_amount/compensation_currency/benefits_note on app.job_offer_versions (HRT-276, Recruitment/ATS) — a candidate's own offered compensation package. Column-restricted from `authenticated` at the grant layer since HRT-276's own Tier C review round (20260730870000) — registered here by HRT-293 (CG-S12-HRT-021) Finding C, which found this already-correct control unregistered.",
   },
   {
     id: "hrs:attendance_events.location",

@@ -795,9 +795,23 @@ do $$
 declare
   v_has_privilege boolean;
 begin
-  select has_table_privilege('authenticated', 'app.approval_requests', 'SELECT') into v_has_privilege;
+  -- Batch 291-293 Tier C fix (20260731210000, Finding 5 CRITICAL, self-found
+  -- sibling of ISS-2026-093): app.approval_requests.ended_reason -- a
+  -- free-text cancellation/rejection narrative, RLS-readable by any active
+  -- tenant member with zero permission of any kind -- is now excluded from
+  -- the raw-table grant; the table is column-restricted, not whole-table, so
+  -- has_table_privilege(..., 'SELECT') correctly now returns false for a
+  -- bare table-level check (Postgres tracks column- and table-level ACLs
+  -- independently). Assert the shape directly: a structural column stays
+  -- selectable, the restricted column does not.
+  select has_column_privilege('authenticated', 'app.approval_requests', 'status', 'SELECT') into v_has_privilege;
   if not v_has_privilege then
-    raise exception 'assertion failed: expected authenticated to hold direct SELECT on app.approval_requests';
+    raise exception 'assertion failed: expected authenticated to hold column-restricted direct SELECT on app.approval_requests (status)';
+  end if;
+
+  select has_column_privilege('authenticated', 'app.approval_requests', 'ended_reason', 'SELECT') into v_has_privilege;
+  if v_has_privilege then
+    raise exception 'assertion failed: expected authenticated to hold NO SELECT on app.approval_requests.ended_reason (batch review Finding 5)';
   end if;
 
   select has_table_privilege('authenticated', 'app.approval_request_steps', 'SELECT') into v_has_privilege;

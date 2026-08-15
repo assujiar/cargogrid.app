@@ -3,10 +3,189 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
-import type { CustomerTicketActionState } from "../actions.ts";
-import type { CustomerTicketDetail, CustomerTicketMessageRow, TicketStatus } from "../../../../../server/contracts/ticketing/ticketing.ts";
+import type { CustomerTicketActionState, CustomerTicketLinkSearchActionState } from "../actions.ts";
+import type {
+  CustomerTicketDetail,
+  CustomerTicketMessageRow,
+  TicketStatus,
+  TicketLinkRow,
+  TicketLinkEntityType,
+  TicketLinkRelationship,
+} from "../../../../../server/contracts/ticketing/ticketing.ts";
+import { TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
 const INITIAL_STATE: CustomerTicketActionState = { error: null };
+
+const CUSTOMER_LINK_ENTITY_TYPE_LABELS: Record<TicketLinkEntityType, string> = {
+  shipment: "Shipment",
+  invoice: "Invoice",
+  warehouse: "Warehouse",
+  vendor: "Vendor",
+  customer: "My account",
+  user: "User",
+};
+
+const CUSTOMER_LINK_RELATIONSHIP_LABELS: Record<TicketLinkRelationship, string> = {
+  primary_subject: "Primary subject",
+  related: "Related",
+  affected: "Affected",
+  context: "Context",
+};
+
+type LinkBoundAction = (prevState: CustomerTicketActionState, formData: FormData) => Promise<CustomerTicketActionState>;
+
+// A narrower customer-facing counterpart to the staff LinkedRecordsSection
+// (ticket-detail-panel.tsx) -- same shared RPCs underneath (app.
+// search_ticket_link_candidates/app.link_ticket_record/app.
+// unlink_ticket_record/app.list_ticket_links), but scoped to the
+// customer-safe entity types (shipment/invoice/warehouse/customer -- never
+// vendor/user, decision 7 of the migration), which the server independently
+// enforces regardless of what this component offers.
+function CustomerLinkedRecordsSection({
+  links,
+  searchAction,
+  linkAction,
+  unlinkAction,
+}: {
+  links: readonly TicketLinkRow[];
+  searchAction: (prevState: CustomerTicketLinkSearchActionState, formData: FormData) => Promise<CustomerTicketLinkSearchActionState>;
+  linkAction: (entityType: TicketLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => LinkBoundAction;
+  unlinkAction: (linkId: string, expectedVersion: number) => LinkBoundAction;
+}) {
+  const [searchState, searchFormAction, searchPending] = useActionState(searchAction, { error: null, entityType: null, relationship: "related", results: [] } as CustomerTicketLinkSearchActionState);
+  const linkedEntityIds = new Set(links.filter((l) => l.entityType === searchState.entityType).map((l) => l.entityId));
+
+  return (
+    <section aria-label="Linked records" className="flex flex-col gap-3">
+      <h2 className="text-sm font-semibold text-neutral-900">Linked records</h2>
+      <p className="text-xs text-neutral-500">Shipments, invoices, warehouses, and your account referenced by this ticket.</p>
+
+      {links.length === 0 ? (
+        <p className="text-xs text-neutral-500">No records linked yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {links.map((l) => (
+            <CustomerLinkedRecordRow key={l.id} link={l} unlinkAction={unlinkAction} />
+          ))}
+        </ul>
+      )}
+
+      <form action={searchFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
+        <h3 className="text-xs font-semibold text-neutral-700">Find a record to link</h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Record type
+            <select name="entityType" required defaultValue={searchState.entityType ?? ""} className="rounded border border-neutral-300 p-1.5 text-xs">
+              <option value="" disabled>
+                Select…
+              </option>
+              {TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {CUSTOMER_LINK_ENTITY_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Relationship
+            <select name="relationship" defaultValue={searchState.relationship} className="rounded border border-neutral-300 p-1.5 text-xs">
+              {TICKET_LINK_RELATIONSHIPS.map((r) => (
+                <option key={r} value={r}>
+                  {CUSTOMER_LINK_RELATIONSHIP_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <input name="searchText" placeholder="Search by number/name…" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+          <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
+            Search
+          </Button>
+        </div>
+        {searchState.error ? (
+          <p role="alert" className="text-xs text-danger">
+            {searchState.error}
+          </p>
+        ) : null}
+        {searchState.entityType ? (
+          searchState.results.length === 0 ? (
+            <p className="text-xs text-neutral-500">No matching records found on your account.</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {searchState.results.map((c) => (
+                <CustomerLinkCandidateRow
+                  key={c.entityId}
+                  candidate={c}
+                  alreadyLinked={linkedEntityIds.has(c.entityId)}
+                  linkAction={linkAction(searchState.entityType as TicketLinkEntityType, c.entityId, searchState.relationship)}
+                />
+              ))}
+            </ul>
+          )
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+function CustomerLinkedRecordRow({ link, unlinkAction }: { link: TicketLinkRow; unlinkAction: (linkId: string, expectedVersion: number) => LinkBoundAction }) {
+  const [state, formAction, pending] = useActionState(unlinkAction(link.id, link.recordVersion), INITIAL_STATE);
+  return (
+    <li className="flex flex-col gap-1 rounded border border-neutral-100 p-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone="neutral" label={CUSTOMER_LINK_ENTITY_TYPE_LABELS[link.entityType]} />
+        {link.liveAvailable ? (
+          <>
+            <span className="font-medium text-neutral-900">{link.label}</span>
+            {link.detail ? <span className="text-neutral-500">— {link.detail}</span> : null}
+          </>
+        ) : (
+          <StatusBadge tone="warning" label="Unavailable" />
+        )}
+      </div>
+      <form action={formAction} className="flex items-center gap-2">
+        <input name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] rounded border border-neutral-300 p-1 text-xs" />
+        <Button type="submit" variant="destructive" loading={pending} loadingLabel="Unlinking…">
+          Unlink
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function CustomerLinkCandidateRow({
+  candidate,
+  alreadyLinked,
+  linkAction,
+}: {
+  candidate: { entityId: string; primaryLabel: string; secondaryLabel: string | null; statusLabel: string | null };
+  alreadyLinked: boolean;
+  linkAction: LinkBoundAction;
+}) {
+  const [state, formAction, pending] = useActionState(linkAction, INITIAL_STATE);
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 rounded bg-white p-1.5 text-xs">
+      <div>
+        <span className="font-medium text-neutral-900">{candidate.primaryLabel}</span>
+        {candidate.secondaryLabel ? <span className="text-neutral-500"> — {candidate.secondaryLabel}</span> : null}
+      </div>
+      <form action={formAction}>
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Linking…" disabled={alreadyLinked}>
+          {alreadyLinked ? "Already linked" : "Link"}
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="w-full text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
 
 const STATUS_TONE: Record<TicketStatus, StatusTone> = {
   new: "info",
@@ -92,11 +271,19 @@ export function CustomerTicketDetailPanel({
   messages,
   replyAction,
   transitionAction,
+  ticketLinks,
+  searchTicketLinksAction,
+  linkTicketRecordAction,
+  unlinkTicketRecordAction,
 }: {
   detail: CustomerTicketDetail;
   messages: readonly CustomerTicketMessageRow[];
   replyAction: BoundAction;
   transitionAction: (toStatus: TicketStatus) => BoundAction;
+  ticketLinks: readonly TicketLinkRow[];
+  searchTicketLinksAction: (prevState: CustomerTicketLinkSearchActionState, formData: FormData) => Promise<CustomerTicketLinkSearchActionState>;
+  linkTicketRecordAction: (entityType: TicketLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => LinkBoundAction;
+  unlinkTicketRecordAction: (linkId: string, expectedVersion: number) => LinkBoundAction;
 }) {
   const actions = nextCustomerActions(detail.status);
 
@@ -150,6 +337,13 @@ export function CustomerTicketDetailPanel({
         </ul>
         {detail.status !== "cancelled" ? <ReplyForm replyAction={replyAction} /> : <p className="text-xs text-neutral-500">This ticket is cancelled and can no longer receive new messages.</p>}
       </section>
+
+      <CustomerLinkedRecordsSection
+        links={ticketLinks}
+        searchAction={searchTicketLinksAction}
+        linkAction={linkTicketRecordAction}
+        unlinkAction={unlinkTicketRecordAction}
+      />
     </div>
   );
 }

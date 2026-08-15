@@ -45,6 +45,18 @@ import {
   parseTicketAssignmentCandidateRow,
   parseTicketQueueWorkloadRow,
   parseTicketAssignmentEventRow,
+  parseTicketEscalationPolicyRow,
+  parseTicketEscalationPolicyVersionRow,
+  parseTicketEscalationLevelRow,
+  parseTicketEscalationPreviewRow,
+  parseTicketEscalationRow,
+  parseTicketEscalationStatusForRequesterRow,
+  parseTicketEscalationEventRow,
+  parseTicketEscalationSuppressionRow,
+  parseTicketBreachQueueRow,
+  parseTicketLinkCandidateRow,
+  parseTicketLinkRow,
+  parseTicketLinkEventRow,
   type TicketQueueRow,
   type TicketCategoryRow,
   type TicketQueueMemberRow,
@@ -84,6 +96,19 @@ import {
   type TicketQueueWorkloadRow,
   type TicketAssignmentEventRow,
   type TicketChannel,
+  type TicketEscalationPolicyRow,
+  type TicketEscalationPolicyVersionRow,
+  type TicketEscalationLevelRow,
+  type TicketEscalationPreviewRow,
+  type TicketEscalationRow,
+  type TicketEscalationStatusForRequesterRow,
+  type TicketEscalationEventRow,
+  type TicketEscalationSuppressionRow,
+  type TicketBreachQueueRow,
+  type TicketLinkEntityType,
+  type TicketLinkCandidateRow,
+  type TicketLinkRow,
+  type TicketLinkEventRow,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -258,6 +283,18 @@ export async function listCustomerTicketMessages(
   });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parseCustomerTicketMessageRow);
+}
+
+// HRT-295 (ISS-2026-110 fix): the customer-safe counterpart to
+// listTicketLinks -- calls app.list_customer_ticket_links, which genericizes
+// a staff creator's identity to "Support Team" (mirrors
+// listCustomerTicketMessages' own author-label substitution) instead of the
+// raw internal created_by app.list_ticket_links returns. Every other
+// consumer of TicketLinkRow is unaffected -- same schema, same parser.
+export async function listCustomerTicketLinks(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketLinkRow[]> {
+  const { data, error } = await client.rpc("list_customer_ticket_links", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkRow);
 }
 
 // --- HRT-288 (CG-S12-HRT-016): tenant-side helpdesk read queries. Each
@@ -480,4 +517,156 @@ export async function listTicketAssignmentEvents(client: TicketQueryClient, tick
   const { data, error } = await client.rpc("list_ticket_assignment_events", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parseTicketAssignmentEventRow);
+}
+
+// ===========================================================================
+// HRT-291 (CG-S12-HRT-019): Ticket Escalation read queries. Mirrors
+// supabase/migrations/20260731160000_create_ticket_escalation.sql.
+// ===========================================================================
+
+export async function listTicketEscalationPolicies(client: TicketQueryClient, tenantId: string, actorAuthUserId: string): Promise<TicketEscalationPolicyRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_policies", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationPolicyRow);
+}
+
+export async function listTicketEscalationPolicyVersions(client: TicketQueryClient, policyId: string, actorAuthUserId: string): Promise<TicketEscalationPolicyVersionRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_policy_versions", { p_policy_id: policyId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationPolicyVersionRow);
+}
+
+export async function listTicketEscalationLevels(client: TicketQueryClient, policyVersionId: string, actorAuthUserId: string): Promise<TicketEscalationLevelRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_levels", { p_policy_version_id: policyVersionId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationLevelRow);
+}
+
+export async function previewTicketEscalation(
+  client: TicketQueryClient,
+  tenantId: string,
+  channel: TicketChannel,
+  categoryId: string | null,
+  priority: string | null,
+  queueId: string | null,
+  actorAuthUserId: string,
+): Promise<TicketEscalationPreviewRow | null> {
+  const { data, error } = await client.rpc("preview_ticket_escalation", {
+    p_tenant_id: tenantId,
+    p_channel: channel,
+    p_category_id: categoryId,
+    p_priority: priority,
+    p_queue_id: queueId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketEscalationPreviewRow(row) : null;
+}
+
+// Staff-only full projection -- never the customer/requester-safe row below.
+export async function getTicketEscalation(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationRow | null> {
+  const { data, error } = await client.rpc("get_ticket_escalation", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketEscalationRow(row) : null;
+}
+
+// The customer/requester-safe projection -- deliberately narrower than
+// getTicketEscalation above (security impact section 16). Never derive the
+// customer-facing badge from getTicketEscalation's own richer row.
+export async function getTicketEscalationStatusForRequester(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationStatusForRequesterRow | null> {
+  const { data, error } = await client.rpc("get_ticket_escalation_status_for_requester", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  const row = rows(data)[0];
+  return row ? parseTicketEscalationStatusForRequesterRow(row) : null;
+}
+
+export async function listTicketEscalationEvents(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationEventRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_events", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationEventRow);
+}
+
+export async function listTicketEscalationSuppressions(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketEscalationSuppressionRow[]> {
+  const { data, error } = await client.rpc("list_ticket_escalation_suppressions", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketEscalationSuppressionRow);
+}
+
+export interface ListTicketBreachQueueOptions {
+  readonly minLevel?: number | null;
+  readonly limit?: number;
+  readonly afterId?: string | null;
+}
+
+// The breach/stuck queue browser (decision 13, a dedicated minimal view --
+// never a widened listTickets/listMyTickets).
+export async function listTicketBreachQueue(client: TicketQueryClient, tenantId: string, actorAuthUserId: string, options?: ListTicketBreachQueueOptions): Promise<TicketBreachQueueRow[]> {
+  const { data, error } = await client.rpc("list_ticket_breach_queue", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_min_level: options?.minLevel ?? null,
+    p_limit: options?.limit ?? 50,
+    p_after_id: options?.afterId ?? null,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketBreachQueueRow);
+}
+
+// ===========================================================================
+// HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records. Reads only --
+// mutations (link/unlink/record-denial/record-summary-access) live in
+// server/mutations/ticketing.ts, matching the established split for every
+// other capability in this file.
+// ===========================================================================
+
+// Bounded, principal-scoped, already-authorized candidates (C-05: never a
+// row the caller cannot independently see) for the given entity_type.
+export async function searchTicketLinkCandidates(
+  client: TicketQueryClient,
+  ticketId: string,
+  entityType: TicketLinkEntityType,
+  searchText: string | null,
+  actorAuthUserId: string,
+  limit?: number,
+): Promise<TicketLinkCandidateRow[]> {
+  const { data, error } = await client.rpc("search_ticket_link_candidates", {
+    p_ticket_id: ticketId,
+    p_entity_type: entityType,
+    p_search_text: searchText,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: limit ?? 20,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkCandidateRow);
+}
+
+// Every active link's label/detail/statusLabel is a LIVE, principal-fresh
+// re-check (decision 6 of the migration) -- never the row's own stored
+// safe_snapshot, which exists only as link-time history.
+export async function listTicketLinks(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketLinkRow[]> {
+  const { data, error } = await client.rpc("list_ticket_links", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkRow);
+}
+
+export interface ListTicketLinkEventsOptions {
+  readonly cursorOccurredAt?: string | null;
+  readonly cursorId?: string | null;
+  readonly limit?: number;
+}
+
+// Staff-only (app.is_ticket_staff) ledger of link/unlink/denial/access
+// events -- cursor-paginated, never OFFSET.
+export async function listTicketLinkEvents(client: TicketQueryClient, ticketId: string, actorAuthUserId: string, options?: ListTicketLinkEventsOptions): Promise<TicketLinkEventRow[]> {
+  const { data, error } = await client.rpc("list_ticket_link_events", {
+    p_ticket_id: ticketId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_cursor_occurred_at: options?.cursorOccurredAt ?? null,
+    p_cursor_id: options?.cursorId ?? null,
+    p_limit: options?.limit ?? 50,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketLinkEventRow);
 }

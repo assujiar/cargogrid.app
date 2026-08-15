@@ -607,4 +607,62 @@ begin
 end;
 $$;
 
+\echo '>> HRT-295 / ISS-2026-072 fix (the role_assignments half, previously OPEN, High -- docs/runtime/KNOWN_ISSUES.md): app.transition_user_status'' own suspend/revoke branch now strips every ACTIVE app.role_assignments row for the target identity in this tenant, centrally, for EVERY caller -- not merely the one call site (app.request_onboarding_access_revocation) that used to duplicate this inline. Re-grant afterward is always a separate, explicit, governed act -- never an automatic side effect of a later suspended -> active status flip.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_grantee_id uuid;
+  v_decision app.rbac_decision;
+  v_active_count integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
+  v_grantee_id := (select id from app.users where email = 'grantee@example.test');
+
+  -- Baseline: grantee still holds the active FIN:Approve role_assignment from this
+  -- file's own setup block, unaffected by every test above.
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: expected grantee to still hold FIN:Approve before this block''s own suspend call, got allowed=%', v_decision.allowed;
+  end if;
+
+  perform app.transition_user_status(v_grantee_id, 'suspended', 'HRT-295 role_assignments cascade regression', 'tester');
+
+  select count(*) into v_active_count from app.role_assignments
+  where tenant_id = v_tenant_id and auth_user_id = '00000000-0000-0000-0000-000000000401' and status = 'active';
+  if v_active_count <> 0 then
+    raise exception 'assertion failed: expected zero active role_assignments after suspend, found %', v_active_count;
+  end if;
+
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.allowed then
+    raise exception 'assertion failed: expected FIN:Approve to be denied for a suspended identity once its role_assignments are revoked, got allowed=true';
+  end if;
+
+  -- Reactivating the Platform user (suspended -> active, a pre-existing, unblocked
+  -- transition) does NOT auto-restore the stripped role_assignment.
+  perform app.transition_user_status(v_grantee_id, 'active', 'back on duty', 'tester');
+
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.allowed then
+    raise exception 'assertion failed: expected FIN:Approve to remain denied after reactivation -- role_assignments are never auto-restored by a status flip';
+  end if;
+
+  -- A real, separate, explicit re-grant restores it -- proving the intended
+  -- division of responsibility, not merely that revoke works.
+  perform app.assign_role(
+    v_tenant_id,
+    (select rv.id from app.role_versions rv join app.roles r on r.id = rv.role_id where r.tenant_id = v_tenant_id and r.name = 'RBAC Finance Approver' and rv.status = 'published'),
+    '00000000-0000-0000-0000-000000000401',
+    '00000000-0000-0000-0000-000000000401',
+    'tester'
+  );
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: expected FIN:Approve restored after an explicit, separate app.assign_role re-grant';
+  end if;
+
+  raise notice 'HRT-295 role_assignments cascade proof: suspend strips active grants system-wide, reactivation alone never restores them, an explicit re-grant does';
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'

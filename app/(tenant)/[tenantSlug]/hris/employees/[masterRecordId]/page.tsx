@@ -6,10 +6,11 @@ import {
   listEmployeeEmergencyContacts,
   getEmployeeLifecycleHistory,
   listEmployeeDuplicateCandidates,
+  getEmployeeChangeRequests,
   EmployeeQueryError,
 } from "../../../../../../server/queries/employee.ts";
 import { parseFile, type File as HrisFile } from "../../../../../../server/contracts/document/document.ts";
-import { parseEmployeeChangeRequest, type EmployeeChangeRequest } from "../../../../../../server/contracts/employee/employee.ts";
+import type { EmployeeChangeRequest } from "../../../../../../server/contracts/employee/employee.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { PermissionState } from "../../../../../../components/ui/permission-state.tsx";
 import { EmployeeDetailPanel } from "./employee-detail-panel.tsx";
@@ -24,6 +25,7 @@ import {
   suspendEmployeeAction,
   reactivateEmployeeAction,
   terminateEmployeeAction,
+  reactivateUserAfterRehireAction,
   archiveEmployeeProfileAction,
   transferEmployeeAction,
   addEmployeeEmergencyContactAction,
@@ -71,16 +73,16 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
     if (fileError) throw new EmployeeQueryError(fileError.message);
     files = (fileRows ?? []).map((row) => parseFile(row as Record<string, unknown>));
 
-    // Direct table read (RLS-scoped, same shape as the files read above) -- no
-    // dedicated read RPC exists for change requests; app.employee_change_requests'
-    // own tenant-scoped RLS SELECT policy already governs this correctly.
-    const { data: changeRequestRows, error: changeRequestError } = await supabase
-      .from("employee_change_requests")
-      .select("*")
-      .eq("master_record_id", masterRecordId)
-      .order("created_at", { ascending: false });
-    if (changeRequestError) throw new EmployeeQueryError(changeRequestError.message);
-    changeRequests = (changeRequestRows ?? []).map((row) => parseEmployeeChangeRequest(row as Record<string, unknown>));
+    // Batch 291-293 Tier C fix (20260731210000, Finding 6, closes ISS-2026-092):
+    // was a direct raw-table read (`.select("*")`) relying on RLS alone --
+    // RLS scopes ROWS (any active tenant member), never COLUMNS, so it never
+    // masked reason/decided_reason (an employee's own free-text reason for a
+    // personal_email/phone/address correction, and HR's own decision
+    // rationale) to self-or-HRS:View-personal-data the way every other
+    // sensitive HR read RPC does. app.get_employee_change_requests is the
+    // new masked read path -- mirrors getEmployeeLifecycleHistory/
+    // listEmployeeDuplicateCandidates immediately above.
+    changeRequests = await getEmployeeChangeRequests(supabase, masterRecordId, access.authUserId);
 
     const { data: orgUnitRows, error: orgUnitError } = await supabase.from("org_units").select("id, name, unit_type").eq("tenant_id", access.tenant.id).eq("status", "active");
     if (orgUnitError) throw new EmployeeQueryError(orgUnitError.message);
@@ -122,6 +124,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       suspendAction={suspendEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       reactivateAction={reactivateEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       terminateAction={terminateEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
+      reactivateAccessAction={reactivateUserAfterRehireAction.bind(null, tenantSlug, masterRecordId)}
       archiveAction={archiveEmployeeProfileAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       transferAction={transferEmployeeAction.bind(null, tenantSlug, masterRecordId, profile.recordVersion)}
       addContactAction={addEmployeeEmergencyContactAction.bind(null, tenantSlug, masterRecordId)}

@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
-import type { TicketActionState } from "../actions.ts";
+import type { TicketActionState, TicketLinkSearchActionState } from "../actions.ts";
 import type { KbActionState } from "../../knowledge-base/actions.ts";
 import type { KbTicketArticleLinkRow, KbTicketArticleLinkForRequesterRow } from "../../../../../server/contracts/knowledge-base/knowledge-base.ts";
 import type {
@@ -20,10 +20,33 @@ import type {
   SlaPhaseStatus,
   TicketAssignmentCandidateRow,
   TicketAssignmentEventRow,
+  TicketEscalationRow,
+  TicketEscalationStatusForRequesterRow,
+  TicketEscalationEventRow,
+  TicketEscalationSuppressionRow,
+  TicketLinkRow,
+  TicketLinkEntityType,
+  TicketLinkRelationship,
 } from "../../../../../server/contracts/ticketing/ticketing.ts";
-import { TICKET_PRIORITIES, SLA_PAUSE_REASON_CODES } from "../../../../../server/contracts/ticketing/ticketing.ts";
+import { TICKET_PRIORITIES, SLA_PAUSE_REASON_CODES, TICKET_LINK_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
 const INITIAL_STATE: TicketActionState = { error: null };
+
+const TICKET_LINK_ENTITY_TYPE_LABELS: Record<TicketLinkEntityType, string> = {
+  shipment: "Shipment",
+  invoice: "Invoice",
+  warehouse: "Warehouse",
+  vendor: "Vendor",
+  customer: "Customer account",
+  user: "User",
+};
+
+const TICKET_LINK_RELATIONSHIP_LABELS: Record<TicketLinkRelationship, string> = {
+  primary_subject: "Primary subject",
+  related: "Related",
+  affected: "Affected",
+  context: "Context",
+};
 
 const SLA_PHASE_TONE: Record<SlaPhaseStatus, StatusTone> = {
   pending: "info",
@@ -658,6 +681,410 @@ function LinkArticleForm({ linkArticleAction }: { linkArticleAction: BoundAction
   );
 }
 
+// HRT-291 (CG-S12-HRT-019): escalation timeline/level/acknowledge/suppress
+// section. Staff sees the full projection (current level, trigger, target
+// history, active suppressions) plus every control; a requester/customer
+// sees ONLY a single is_escalated badge -- the component never receives the
+// staff-only fields for a requester viewer in the first place (page.tsx
+// fetches the two projections from two DIFFERENT RPCs, mirroring the SLA
+// section's own established split), so there is no client-side field to
+// accidentally leak. Bounded to internal/customer channels (decision 1) --
+// rendered only when detail.channel !== "helpdesk", matching the assignment
+// drawer's own established guard.
+function EscalationSection({
+  isStaffViewer,
+  escalation,
+  escalationStatusForRequester,
+  escalationEvents,
+  suppressions,
+  queues,
+  escalateAction,
+  acknowledgeAction,
+  resolveAction,
+  suppressAction,
+  revokeSuppressionAction,
+}: {
+  isStaffViewer: boolean;
+  escalation: TicketEscalationRow | null;
+  escalationStatusForRequester: TicketEscalationStatusForRequesterRow | null;
+  escalationEvents: readonly TicketEscalationEventRow[];
+  suppressions: readonly TicketEscalationSuppressionRow[];
+  queues: readonly TicketQueueRow[];
+  escalateAction: BoundAction;
+  acknowledgeAction: (expectedVersion: number) => BoundAction;
+  resolveAction: (expectedVersion: number) => BoundAction;
+  suppressAction: BoundAction;
+  revokeSuppressionAction: (suppressionId: string, expectedVersion: number) => BoundAction;
+}) {
+  const [escalateState, escalateFormAction, escalatePending] = useActionState(escalateAction, INITIAL_STATE);
+  const [suppressState, suppressFormAction, suppressPending] = useActionState(suppressAction, INITIAL_STATE);
+
+  if (!isStaffViewer) {
+    if (!escalationStatusForRequester) return null;
+    return (
+      <section aria-label="Escalation status" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+        <h2 className="text-sm font-semibold text-neutral-900">Escalation status</h2>
+        <StatusBadge
+          tone={escalationStatusForRequester.isEscalated ? "warning" : "neutral"}
+          label={escalationStatusForRequester.isEscalated ? "Escalated for priority handling" : "Normal handling"}
+        />
+      </section>
+    );
+  }
+
+  const activeSuppression = suppressions.find((s) => s.revokedAt === null) ?? null;
+
+  return (
+    <section aria-label="Escalation" className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Escalation</h2>
+
+      {escalation ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <StatusBadge tone={escalation.status === "resolved" ? "neutral" : escalation.status === "acknowledged" ? "info" : "warning"} label={`Level ${escalation.currentLevel} — ${escalation.status.replace(/_/g, " ")}`} />
+          <span>Trigger: {escalation.lastTriggerType.replace(/_/g, " ")}</span>
+          <span>Last triggered: {new Date(escalation.lastTriggeredAt).toLocaleString()}</span>
+          {escalation.acknowledgedAt ? <span>Acknowledged by {escalation.acknowledgedBy} at {new Date(escalation.acknowledgedAt).toLocaleString()}</span> : null}
+        </div>
+      ) : (
+        <p className="text-xs text-neutral-500">This ticket has not been escalated.</p>
+      )}
+
+      {escalation && escalation.status !== "resolved" ? (
+        <div className="flex flex-wrap gap-2">
+          {escalation.status === "active" ? (
+            <AcknowledgeButton expectedVersion={escalation.recordVersion} acknowledgeAction={acknowledgeAction} />
+          ) : null}
+          <ResolveEscalationForm expectedVersion={escalation.recordVersion} resolveAction={resolveAction} />
+        </div>
+      ) : null}
+
+      <form action={escalateFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
+        <h3 className="text-xs font-semibold text-neutral-700">Manually escalate</h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Target type
+            <select name="targetType" required defaultValue="employee" className="rounded border border-neutral-300 p-1.5 text-xs">
+              <option value="employee">Employee</option>
+              <option value="queue">Queue</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Target queue (if target type = queue)
+            <select name="targetQueueId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-xs">
+              <option value="">Select…</option>
+              {queues.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Target employee id (if target type = employee)
+            <input name="targetEmployeeId" placeholder="employee UUID" className="min-w-[14rem] rounded border border-neutral-300 p-1.5 text-xs" />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-neutral-600">
+            <input type="checkbox" name="reassign" />
+            Also reassign to this employee
+          </label>
+        </div>
+        <input name="reason" required placeholder="Reason (required)" className="rounded border border-neutral-300 p-1.5 text-xs" />
+        <div>
+          <Button type="submit" variant="secondary" loading={escalatePending} loadingLabel="Escalating…">
+            Escalate
+          </Button>
+        </div>
+        {escalateState.error ? (
+          <p role="alert" className="text-xs text-danger">
+            {escalateState.error}
+          </p>
+        ) : null}
+      </form>
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-xs font-semibold text-neutral-700">Suppression</h3>
+        {activeSuppression ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <StatusBadge tone="warning" label={`Suppressed until ${new Date(activeSuppression.expiresAt).toLocaleString()}`} />
+            <span className="text-neutral-500">{activeSuppression.reason}</span>
+            <RevokeSuppressionForm suppressionId={activeSuppression.id} expectedVersion={activeSuppression.recordVersion} revokeSuppressionAction={revokeSuppressionAction} />
+          </div>
+        ) : (
+          <form action={suppressFormAction} className="flex flex-wrap items-end gap-2">
+            <input name="reason" required placeholder="Suppression reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+            <label className="flex flex-col gap-1 text-xs text-neutral-600">
+              Suppress until
+              <input name="expiresAt" type="datetime-local" required className="rounded border border-neutral-300 p-1.5 text-xs" />
+            </label>
+            <Button type="submit" variant="secondary" loading={suppressPending} loadingLabel="Suppressing…">
+              Suppress escalation
+            </Button>
+          </form>
+        )}
+        {suppressState.error ? (
+          <p role="alert" className="text-xs text-danger">
+            {suppressState.error}
+          </p>
+        ) : null}
+      </div>
+
+      <div>
+        <h3 className="text-xs font-semibold text-neutral-700">Escalation history</h3>
+        {escalationEvents.length === 0 ? (
+          <p className="text-xs text-neutral-500">No escalation events recorded yet.</p>
+        ) : (
+          <ul className="mt-1 flex flex-col gap-1 text-xs text-neutral-500">
+            {escalationEvents.map((e) => (
+              <li key={e.id}>
+                {new Date(e.occurredAt).toLocaleString()} — level {e.levelNumber} {e.eventType.replace(/_/g, " ")} ({e.triggerType.replace(/_/g, " ")})
+                {e.targetEmployeeName ? ` → ${e.targetEmployeeName}` : e.targetQueueCode ? ` → ${e.targetQueueCode}` : ""}
+                {e.reason ? `: ${e.reason}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function AcknowledgeButton({ expectedVersion, acknowledgeAction }: { expectedVersion: number; acknowledgeAction: (expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(acknowledgeAction(expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction}>
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Acknowledging…">
+        Acknowledge
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function ResolveEscalationForm({ expectedVersion, resolveAction }: { expectedVersion: number; resolveAction: (expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(resolveAction(expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-wrap items-center gap-2">
+      <input name="reason" placeholder="Note (optional)" className="min-w-[8rem] rounded border border-neutral-300 p-1.5 text-xs" />
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Resolving…">
+        Resolve / de-escalate
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function RevokeSuppressionForm({ suppressionId, expectedVersion, revokeSuppressionAction }: { suppressionId: string; expectedVersion: number; revokeSuppressionAction: (suppressionId: string, expectedVersion: number) => BoundAction }) {
+  const [state, formAction, pending] = useActionState(revokeSuppressionAction(suppressionId, expectedVersion), INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex items-center gap-2">
+      <Button type="submit" variant="destructive" loading={pending} loadingLabel="Revoking…">
+        Revoke suppression
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+// HRT-292 (CG-S12-HRT-020): authorized link search/add/remove and safe
+// summary cards. Every candidate the search action returns is ALREADY
+// independently authorized for the current viewer (C-05) -- this component
+// never filters or re-checks anything client-side, it only renders what the
+// server already decided. An unavailable link (deleted OR revoked source --
+// deliberately undifferentiated, see the migration's own decision 6) shows
+// a generic badge and no label/detail, never the stale content a prior
+// snapshot might still carry. canManage mirrors WatcherList's own
+// established staff-or-requester rule (add_ticket_watcher's shape) --
+// plain watchers may still SEE links, never add/remove one.
+function LinkedRecordsSection({
+  canManage,
+  entityTypeOptions,
+  links,
+  searchAction,
+  linkAction,
+  unlinkAction,
+  markViewedAction,
+}: {
+  canManage: boolean;
+  entityTypeOptions: readonly TicketLinkEntityType[];
+  links: readonly TicketLinkRow[];
+  searchAction: (prevState: TicketLinkSearchActionState, formData: FormData) => Promise<TicketLinkSearchActionState>;
+  linkAction: (entityType: TicketLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => BoundAction;
+  unlinkAction: (linkId: string, expectedVersion: number) => BoundAction;
+  markViewedAction: (linkId: string) => BoundAction;
+}) {
+  const [searchState, searchFormAction, searchPending] = useActionState(searchAction, { error: null, entityType: null, relationship: "related", results: [] } as TicketLinkSearchActionState);
+  const linkedEntityIds = new Set(links.filter((l) => l.entityType === searchState.entityType).map((l) => l.entityId));
+
+  return (
+    <section aria-label="Linked records" className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Linked records</h2>
+      <p className="text-xs text-neutral-500">Shipments, invoices, warehouses, vendors, customer accounts, and users referenced by this ticket. Linking never grants access -- every summary below is re-authorized fresh for you on every view.</p>
+
+      {links.length === 0 ? (
+        <p className="text-xs text-neutral-500">No records linked yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {links.map((l) => (
+            <LinkedRecordRow key={l.id} link={l} canManage={canManage} unlinkAction={unlinkAction} markViewedAction={markViewedAction} />
+          ))}
+        </ul>
+      )}
+
+      {canManage ? (
+        <form action={searchFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
+          <h3 className="text-xs font-semibold text-neutral-700">Find a record to link</h3>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs text-neutral-600">
+              Record type
+              <select name="entityType" required defaultValue={searchState.entityType ?? ""} className="rounded border border-neutral-300 p-1.5 text-xs">
+                <option value="" disabled>
+                  Select…
+                </option>
+                {entityTypeOptions.map((t) => (
+                  <option key={t} value={t}>
+                    {TICKET_LINK_ENTITY_TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-neutral-600">
+              Relationship
+              <select name="relationship" defaultValue={searchState.relationship} className="rounded border border-neutral-300 p-1.5 text-xs">
+                {TICKET_LINK_RELATIONSHIPS.map((r) => (
+                  <option key={r} value={r}>
+                    {TICKET_LINK_RELATIONSHIP_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <input name="searchText" placeholder="Search by number/name…" defaultValue="" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+            <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
+              Search
+            </Button>
+          </div>
+          {searchState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {searchState.error}
+            </p>
+          ) : null}
+          {searchState.entityType ? (
+            searchState.results.length === 0 ? (
+              <p className="text-xs text-neutral-500">No matching, authorized {TICKET_LINK_ENTITY_TYPE_LABELS[searchState.entityType].toLowerCase()} records found.</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {searchState.results.map((c) => (
+                  <LinkCandidateRow
+                    key={c.entityId}
+                    candidate={c}
+                    alreadyLinked={linkedEntityIds.has(c.entityId)}
+                    linkAction={linkAction(searchState.entityType as TicketLinkEntityType, c.entityId, searchState.relationship)}
+                  />
+                ))}
+              </ul>
+            )
+          ) : null}
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+function LinkedRecordRow({
+  link,
+  canManage,
+  unlinkAction,
+  markViewedAction,
+}: {
+  link: TicketLinkRow;
+  canManage: boolean;
+  unlinkAction: (linkId: string, expectedVersion: number) => BoundAction;
+  markViewedAction: (linkId: string) => BoundAction;
+}) {
+  const [unlinkState, unlinkFormAction, unlinkPending] = useActionState(unlinkAction(link.id, link.recordVersion), INITIAL_STATE);
+  const [viewedState, viewedFormAction, viewedPending] = useActionState(markViewedAction(link.id), INITIAL_STATE);
+
+  return (
+    <li className="flex flex-col gap-1 rounded border border-neutral-100 p-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone="neutral" label={TICKET_LINK_ENTITY_TYPE_LABELS[link.entityType]} />
+        <StatusBadge tone="info" label={TICKET_LINK_RELATIONSHIP_LABELS[link.relationship]} />
+        {link.liveAvailable ? (
+          <>
+            <span className="font-medium text-neutral-900">{link.label}</span>
+            {link.detail ? <span className="text-neutral-500">— {link.detail}</span> : null}
+            <span className="text-neutral-400">({link.statusLabel})</span>
+          </>
+        ) : (
+          <StatusBadge tone="warning" label="Unavailable -- deleted or access no longer granted" />
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-neutral-500">
+        <span>Linked {new Date(link.linkedAt).toLocaleString()}{link.createdBy ? ` by ${link.createdBy}` : ""}</span>
+        {link.liveAvailable ? (
+          <form action={viewedFormAction}>
+            <Button type="submit" variant="secondary" loading={viewedPending} loadingLabel="Marking…">
+              Mark viewed
+            </Button>
+          </form>
+        ) : null}
+        {canManage ? (
+          <form action={unlinkFormAction} className="flex items-center gap-2">
+            <input name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] rounded border border-neutral-300 p-1 text-xs" />
+            <Button type="submit" variant="destructive" loading={unlinkPending} loadingLabel="Unlinking…">
+              Unlink
+            </Button>
+          </form>
+        ) : null}
+      </div>
+      {unlinkState.error ? (
+        <p role="alert" className="text-danger">
+          {unlinkState.error}
+        </p>
+      ) : null}
+      {viewedState.error ? (
+        <p role="alert" className="text-danger">
+          {viewedState.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function LinkCandidateRow({ candidate, alreadyLinked, linkAction }: { candidate: { entityId: string; primaryLabel: string; secondaryLabel: string | null; statusLabel: string | null }; alreadyLinked: boolean; linkAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(linkAction, INITIAL_STATE);
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 rounded bg-white p-1.5 text-xs">
+      <div>
+        <span className="font-medium text-neutral-900">{candidate.primaryLabel}</span>
+        {candidate.secondaryLabel ? <span className="text-neutral-500"> — {candidate.secondaryLabel}</span> : null}
+        {candidate.statusLabel ? <span className="text-neutral-400"> ({candidate.statusLabel})</span> : null}
+      </div>
+      <form action={formAction} className="flex items-center gap-2">
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Linking…" disabled={alreadyLinked}>
+          {alreadyLinked ? "Already linked" : "Link"}
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="w-full text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
 export function TicketDetailPanel({
   detail,
   messages,
@@ -689,6 +1116,20 @@ export function TicketDetailPanel({
   acceptAssignmentAction,
   declineAssignmentAction,
   autoRouteAction,
+  escalation,
+  escalationStatusForRequester,
+  escalationEvents,
+  suppressions,
+  escalateAction,
+  acknowledgeEscalationAction,
+  resolveEscalationAction,
+  suppressEscalationAction,
+  revokeEscalationSuppressionAction,
+  ticketLinks,
+  searchTicketLinksAction,
+  linkTicketRecordAction,
+  unlinkTicketRecordAction,
+  markTicketLinkViewedAction,
 }: {
   tenantSlug: string;
   detail: TicketDetail;
@@ -721,6 +1162,20 @@ export function TicketDetailPanel({
   acceptAssignmentAction: BoundAction;
   declineAssignmentAction: BoundAction;
   autoRouteAction: BoundAction;
+  escalation: TicketEscalationRow | null;
+  escalationStatusForRequester: TicketEscalationStatusForRequesterRow | null;
+  escalationEvents: readonly TicketEscalationEventRow[];
+  suppressions: readonly TicketEscalationSuppressionRow[];
+  escalateAction: BoundAction;
+  acknowledgeEscalationAction: (expectedVersion: number) => BoundAction;
+  resolveEscalationAction: (expectedVersion: number) => BoundAction;
+  suppressEscalationAction: BoundAction;
+  revokeEscalationSuppressionAction: (suppressionId: string, expectedVersion: number) => BoundAction;
+  ticketLinks: readonly TicketLinkRow[];
+  searchTicketLinksAction: (prevState: TicketLinkSearchActionState, formData: FormData) => Promise<TicketLinkSearchActionState>;
+  linkTicketRecordAction: (entityType: TicketLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => BoundAction;
+  unlinkTicketRecordAction: (linkId: string, expectedVersion: number) => BoundAction;
+  markTicketLinkViewedAction: (linkId: string) => BoundAction;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -816,6 +1271,48 @@ export function TicketDetailPanel({
           autoRouteAction={autoRouteAction}
         />
       ) : null}
+
+      {/* HRT-291 (CG-S12-HRT-019): escalation timeline/level/acknowledge/
+          suppress -- internal/customer channels only (decision 1), matching
+          every new RPC's own reject of a helpdesk-channel ticket. A
+          requester/customer viewer still sees the minimal, structurally
+          separate is_escalated badge (EscalationSection's own non-staff
+          branch) -- rendered unconditionally on channel for that viewer,
+          since app.get_ticket_escalation_status_for_requester itself is not
+          channel-restricted the way the staff-side RPCs are. */}
+      {detail.channel !== "helpdesk" ? (
+        <EscalationSection
+          isStaffViewer={detail.isStaffViewer}
+          escalation={escalation}
+          escalationStatusForRequester={escalationStatusForRequester}
+          escalationEvents={escalationEvents}
+          suppressions={suppressions}
+          queues={queues}
+          escalateAction={escalateAction}
+          acknowledgeAction={acknowledgeEscalationAction}
+          resolveAction={resolveEscalationAction}
+          suppressAction={suppressEscalationAction}
+          revokeSuppressionAction={revokeEscalationSuppressionAction}
+        />
+      ) : null}
+
+      {/* HRT-292 (CG-S12-HRT-020): every viewer who reaches THIS panel is
+          either staff, an internal/helpdesk requester, or a watcher --
+          never a customer_user (that principal only ever reaches the
+          separate customer-tickets panel/RPC surface) -- so the FULL
+          registry is offered here; the customer-safe-only narrowing lives
+          entirely server-side in app.link_ticket_record/app.
+          search_ticket_link_candidates and is exercised by the customer
+          panel instead. */}
+      <LinkedRecordsSection
+        canManage={detail.isStaffViewer || detail.isRequesterViewer}
+        entityTypeOptions={TICKET_LINK_ENTITY_TYPES}
+        links={ticketLinks}
+        searchAction={searchTicketLinksAction}
+        linkAction={linkTicketRecordAction}
+        unlinkAction={unlinkTicketRecordAction}
+        markViewedAction={markTicketLinkViewedAction}
+      />
 
       <section aria-label="History" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">History</h2>

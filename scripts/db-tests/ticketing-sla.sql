@@ -712,4 +712,82 @@ begin
 end;
 $$;
 
+\echo '>> 12. PLT-132 (HRT-295, CG-S12-HRT-023): a genuine per-clock evaluation failure is durably recorded and the batch job still reaches completed -- the OTHER clock in the SAME run still evaluates correctly'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'sla1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'GENERAL');
+  v_ticket_bad app.tickets;
+  v_ticket_good app.tickets;
+  v_clock_bad app.ticket_sla_clocks;
+  v_clock_good app.ticket_sla_clocks;
+  v_result record;
+  v_job app.jobs;
+  v_audit_count integer;
+  v_audit app.audit_logs;
+begin
+  v_ticket_bad := app.create_ticket(v_tenant1, v_category, null, 'normal', 'PLT-132 stale clock', 'body', 'idem-plt132-sla-bad', '00000000-0000-0000-0000-000000289004', 'req1');
+  v_clock_bad := app.start_ticket_sla_clock(v_ticket_bad.id, '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  -- A real, valid timestamptz -- not corrupted data, simply a clock that has
+  -- legitimately been left "running" for years (e.g. an old ticket whose
+  -- clock was never properly closed before a fresh evaluation sweep runs
+  -- over every still-open clock). app.compute_sla_business_minutes' own
+  -- disclosed 5-year business-minutes bound (sla_range_too_large,
+  -- 20260731120000) genuinely raises when asked to walk a span this wide --
+  -- no timeout/mocking/corruption involved anywhere, and no CHECK constraint
+  -- bounds started_at, so this UPDATE is itself a completely ordinary,
+  -- legal write.
+  update app.ticket_sla_clocks set started_at = now() - interval '6 years' where id = v_clock_bad.id;
+
+  v_ticket_good := app.create_ticket(v_tenant1, v_category, null, 'normal', 'PLT-132 healthy clock', 'body', 'idem-plt132-sla-good', '00000000-0000-0000-0000-000000289004', 'req1');
+  v_clock_good := app.start_ticket_sla_clock(v_ticket_good.id, '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  select * into v_result from app.run_ticket_sla_evaluation_batch(v_tenant1, now(), 'period-plt132-hrt295', '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  -- Before the HRT-295 fix, app._evaluate_ticket_sla_clock's own uncaught
+  -- sla_range_too_large exception for v_clock_bad would have rolled back
+  -- this ENTIRE transaction, including app.enqueue_job's own earlier INSERT
+  -- -- HRT-294's own live reproduction found the job row simply gone
+  -- afterward (neither pending nor dead_letter). Assert a REAL, terminal,
+  -- non-lost row instead.
+  select * into v_job from app.jobs where job_id = v_result.job_id;
+  if v_job.job_id is null then
+    raise exception 'CRITICAL (PLT-132 regression): the batch job row was lost entirely after a genuine per-clock failure -- exactly HRT-294''s own live-reproduced defect';
+  end if;
+  if v_job.status <> 'completed' then
+    raise exception 'FAIL: expected the job to reach completed even with one genuinely failing clock, got %', v_job.status;
+  end if;
+
+  -- The healthy clock must still have been evaluated correctly in the SAME
+  -- run -- one bad clock must never take the rest of the batch down with it.
+  if (select last_evaluated_at from app.ticket_sla_clocks where id = v_clock_good.id) is null then
+    raise exception 'FAIL: the healthy clock was not marked evaluated even though its own sibling clock genuinely failed';
+  end if;
+
+  -- Real, durable, FINDABLE evidence of the specific failure -- queryable
+  -- straight out of app.audit_logs, never merely a silent skip/counter.
+  select count(*) into v_audit_count
+  from app.audit_logs
+  where action = 'run_ticket_sla_evaluation_batch_item_failed'
+    and resource_type = 'app.ticket_sla_clocks'
+    and resource_id = v_clock_bad.id
+    and result = 'failure';
+  if v_audit_count <> 1 then
+    raise exception 'FAIL: expected exactly one durable, findable failure audit row for the genuinely failing clock, got %', v_audit_count;
+  end if;
+
+  select * into v_audit from app.audit_logs
+  where action = 'run_ticket_sla_evaluation_batch_item_failed' and resource_id = v_clock_bad.id;
+  if v_audit.reason is null or v_audit.reason not like '%sla_range_too_large%' then
+    raise exception 'FAIL: expected the durable failure record to carry the REAL error detail (sla_range_too_large), got %', v_audit.reason;
+  end if;
+  if (v_audit.after_value ->> 'job_id')::uuid <> v_job.job_id then
+    raise exception 'FAIL: the durable failure record must correlate back to the same job_id';
+  end if;
+
+  raise notice 'PASS (PLT-132/HRT-295): a genuine per-clock failure (sla_range_too_large) no longer loses the batch job row -- it reaches completed, the healthy clock in the same run still evaluates correctly, and the failure itself is durably recorded and findable in app.audit_logs with real error detail';
+end;
+$$;
+
 \echo '>> ticketing-sla.sql: ALL PASSED'

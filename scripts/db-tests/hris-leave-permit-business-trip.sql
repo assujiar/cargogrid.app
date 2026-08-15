@@ -713,6 +713,95 @@ begin
   end if;
 end $$;
 
+-- ===========================================================================
+-- HRT-295 Tier C review fix (correctness lens finding, test-coverage gap):
+-- both 20260731260000's own header ("Regression proof... hris-leave-permit-
+-- business-trip.sql") and docs/runtime/KNOWN_ISSUES.md's ISS-2026-112
+-- resolution note claimed a real regression fixture for app.run_leave_
+-- accrual_batch/app.run_leave_carry_forward_batch existed in THIS file --
+-- git diff on this file was byte-for-byte EMPTY at that point (a false
+-- claim, confirmed by a repo-wide grep for the exact audit action names
+-- the fix introduces returning zero matches anywhere). The underlying CODE
+-- fix in 20260731260000/20260731290000 is genuinely correct (independently
+-- verified below) -- this closes the missing test-protection gap only.
+-- ===========================================================================
+
+\echo '>> PLT-132 (HRT-295, CG-S12-HRT-023 Tier C review): a genuine per-employee failure in app.run_leave_accrual_batch/app.run_leave_carry_forward_batch is durably recorded and the batch job still reaches completed -- the healthy sibling employee in the SAME run still accrues/expires correctly'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug='lv1');
+  v_annual_id uuid := (select id from app.leave_types where tenant_id=(select id from app.tenants where slug='lv1') and code='annual');
+  v_emp1 uuid := (select master_record_id from app.employees where work_email='emp1work@lv1.test');
+  v_emp2 uuid := (select master_record_id from app.employees where work_email='emp2work@lv1.test');
+  v_accrued integer; v_skipped integer; v_job_id uuid;
+  v_job_status text;
+  v_audit_count integer;
+begin
+  execute format('alter table app.leave_balance_ledger add constraint plt132_tc_sentinel_block_emp2_accrual check (employee_id is distinct from %L) not valid', v_emp2);
+
+  select accrued_count, skipped_count, job_id into v_accrued, v_skipped, v_job_id
+  from app.run_leave_accrual_batch(v_tenant1, v_annual_id, current_date, '2026-09-plt132tc', '00000000-0000-0000-0000-000000028003', 'approver');
+
+  select status into v_job_status from app.jobs where job_id = v_job_id;
+  if v_job_status <> 'completed' then
+    raise exception 'PLT-132 TIER C REGRESSION: expected the job to reach completed despite emp2''s own forced failure, got %', v_job_status;
+  end if;
+  if v_accrued < 1 then
+    raise exception 'assertion failed: expected the healthy sibling employee (emp1) to still accrue in the SAME run, got accrued_count=%', v_accrued;
+  end if;
+  if exists (select 1 from app.leave_balance_ledger where tenant_id = v_tenant1 and employee_id = v_emp2 and idempotency_key like 'accrual:%2026-09-plt132tc') then
+    raise exception 'PLT-132 TIER C REGRESSION: emp2''s own forced-failure ledger row must NOT exist (cleanly rolled back)';
+  end if;
+
+  select count(*) into v_audit_count from app.audit_logs
+  where tenant_id = v_tenant1 and action = 'run_leave_accrual_batch_item_failed' and resource_id = v_emp2 and result = 'failure';
+  if v_audit_count < 1 then
+    raise exception 'PLT-132 TIER C REGRESSION: expected a durable, findable run_leave_accrual_batch_item_failed audit_logs row for emp2, got %', v_audit_count;
+  end if;
+
+  raise notice 'OK: PLT-132/HRT-295 run_leave_accrual_batch -- job % reached completed with emp2''s forced failure durably recorded (% audit row(s)) and emp1 still accrued (%)', v_job_id, v_audit_count, v_accrued;
+
+  alter table app.leave_balance_ledger drop constraint plt132_tc_sentinel_block_emp2_accrual;
+end $$;
+
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug='lv1');
+  v_annual_id uuid := (select id from app.leave_types where tenant_id=(select id from app.tenants where slug='lv1') and code='annual');
+  v_emp1 uuid := (select master_record_id from app.employees where work_email='emp1work@lv1.test');
+  v_emp2 uuid := (select master_record_id from app.employees where work_email='emp2work@lv1.test');
+  v_job_status text;
+  v_audit_count integer;
+  v_job_id uuid;
+begin
+  -- Push BOTH emp1 and emp2 above the carry-forward cap so both are genuine
+  -- candidates for a real forfeiture posting in the SAME run.
+  perform app.adjust_leave_balance(v_tenant1, v_emp1, v_annual_id, 10, current_date - 1, 'PLT-132 Tier C fixture: push emp1 above cap', 'lv-emp1-push-above-cap-plt132tc', '00000000-0000-0000-0000-000000028003', 'approver');
+  perform app.adjust_leave_balance(v_tenant1, v_emp2, v_annual_id, 10, current_date - 1, 'PLT-132 Tier C fixture: push emp2 above cap', 'lv-emp2-push-above-cap-plt132tc', '00000000-0000-0000-0000-000000028003', 'approver');
+
+  execute format('alter table app.leave_balance_ledger add constraint plt132_tc_sentinel_block_emp2_carryfwd check (employee_id is distinct from %L) not valid', v_emp2);
+
+  select job_id into v_job_id from app.run_leave_carry_forward_batch(v_tenant1, v_annual_id, current_date, '2026-fy-plt132tc', '00000000-0000-0000-0000-000000028003', 'approver');
+
+  select status into v_job_status from app.jobs where job_id = v_job_id;
+  if v_job_status <> 'completed' then
+    raise exception 'PLT-132 TIER C REGRESSION: expected the job to reach completed despite emp2''s own forced failure, got %', v_job_status;
+  end if;
+  if not exists (select 1 from app.leave_balance_ledger where tenant_id = v_tenant1 and employee_id = v_emp1 and event_type = 'carry_forward_expire' and idempotency_key like '%2026-fy-plt132tc') then
+    raise exception 'assertion failed: expected the healthy sibling employee (emp1) to still get a real carry_forward_expire posting in the SAME run';
+  end if;
+
+  select count(*) into v_audit_count from app.audit_logs
+  where tenant_id = v_tenant1 and action = 'run_leave_carry_forward_batch_item_failed' and resource_id = v_emp2 and result = 'failure';
+  if v_audit_count < 1 then
+    raise exception 'PLT-132 TIER C REGRESSION: expected a durable, findable run_leave_carry_forward_batch_item_failed audit_logs row for emp2, got %', v_audit_count;
+  end if;
+
+  raise notice 'OK: PLT-132/HRT-295 run_leave_carry_forward_batch -- job % reached completed with emp2''s forced failure durably recorded (% audit row(s)) and emp1 still got its real forfeiture posted', v_job_id, v_audit_count;
+
+  alter table app.leave_balance_ledger drop constraint plt132_tc_sentinel_block_emp2_carryfwd;
+end $$;
+
 \echo '>> evidence gate (C-10): a required-evidence leave type blocks submission with no evidence_file_id; a non-existent evidence_file_id is rejected as evidence_file_not_found'
 do $$
 declare

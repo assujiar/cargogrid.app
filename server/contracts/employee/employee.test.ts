@@ -314,6 +314,28 @@ describe("parseEmployeeEmergencyContact / parseEmployeeLifecycleEvent / parseEmp
     assert.equal(parsed.fieldKey, "personal_email");
     assert.equal(parsed.status, "pending");
   });
+
+  test("parseEmployeeChangeRequest -- masked row (batch 291-293 Tier C fix, ISS-2026-092/099): app.get_employee_change_requests nulls current_value_snapshot/requested_value/reason/decided_reason for a caller who is neither self nor HRS:View personal data", () => {
+    const parsed = parseEmployeeChangeRequest({
+      id: MASTER_RECORD_ID,
+      master_record_id: MASTER_RECORD_ID,
+      requested_by_user_id: ACTOR_ID,
+      field_key: "personal_email",
+      current_value_snapshot: null,
+      requested_value: null,
+      reason: null,
+      status: "pending",
+      decided_by: null,
+      decided_at: null,
+      decided_reason: null,
+      record_version: 1,
+      created_at: "2026-08-09T00:00:00.000Z",
+    });
+    assert.equal(parsed.currentValueSnapshot, null);
+    assert.equal(parsed.requestedValue, null);
+    assert.equal(parsed.fieldKey, "personal_email");
+    assert.equal(parsed.status, "pending");
+  });
 });
 
 describe("mutation input schemas", () => {

@@ -147,6 +147,9 @@ export const RECRUITMENT_KNOWN_MUTATION_ERROR_CODES = [
   "invalid_response",
   "intake_client_key_required",
   "invalid_response_shape",
+  // HRT-294 (CG-S12-HRT-022, ISS-2026-114): raised by app.decide_job_offer_approval
+  // since its own Tier C fix migration, never added here (API-parity gap).
+  "offer_approval_no_longer_applicable",
 ] as const;
 type KnownRecruitmentMutationErrorCode = (typeof RECRUITMENT_KNOWN_MUTATION_ERROR_CODES)[number];
 export type RecruitmentMutationErrorCode = KnownRecruitmentMutationErrorCode | "mutation_failed";

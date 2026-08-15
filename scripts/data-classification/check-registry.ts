@@ -26,6 +26,7 @@ import {
   FINANCE_REGISTRY,
   PROCUREMENT_REGISTRY,
   HRS_REGISTRY,
+  PAYROLL_REGISTRY,
   PERFORMANCE_REGISTRY,
   TRAINING_REGISTRY,
   TICKETING_REGISTRY,
@@ -33,11 +34,21 @@ import {
   type RegistryViolation,
 } from "./registry.ts";
 
+// HRT-293 (CG-S12-HRT-021) self-found defect, fixed here: PAYROLL_REGISTRY
+// (HRT-282, exported from registry.ts since that checkpoint) was never
+// imported into this combined REGISTRY constant — every one of its entries
+// was silently excluded from BOTH validateRegistry()'s own internal-
+// consistency check (owner/level-floor/duplicate rules) and, now, this
+// checkpoint's own new HRS protected-action adoption gate below (surfaced
+// live: "HRS:View payroll" showed as unclassified despite PAYROLL_REGISTRY
+// already naming it as five separate entries' own protectedAction, purely
+// because none of those entries were ever actually part of REGISTRY).
 export const REGISTRY: readonly ClassificationEntry[] = [
   ...PHASE_0_REGISTRY,
   ...FINANCE_REGISTRY,
   ...PROCUREMENT_REGISTRY,
   ...HRS_REGISTRY,
+  ...PAYROLL_REGISTRY,
   ...PERFORMANCE_REGISTRY,
   ...TRAINING_REGISTRY,
   ...TICKETING_REGISTRY,
@@ -106,6 +117,54 @@ function loadFinanceMigrationsSource(): string {
     .join("\n");
 }
 
+/**
+ * HRT-293 (Sensitive Personal and Payroll Data Controls, CG-S12-HRT-021)
+ * Finding D: `findUnclassifiedProtectedFinActions` above and its two
+ * supporting functions were hard-coded to `'FIN'`-prefixed permission rows
+ * and filenames containing `"finance"` only — there was no equivalent HRS
+ * sweep, so `pnpm run data-classification:check` could not (and did not)
+ * catch Finding C (unregistered-but-sensitive HRS fields). This mirrors the
+ * exact same three-function shape for the `HRS` module — `parseSeededProtectedFinActions`'s
+ * own regex was already parameterizable by module code (only the literal
+ * `'FIN'` needed to move to an argument), and `findEnforcedProtectedFinActions`
+ * was already fully module-agnostic (it only ever inspects the SOURCE TEXT
+ * a caller hands it, never a FIN-specific pattern) — reused directly below,
+ * not duplicated. Only `parseSeededProtectedFinActions` and
+ * `findUnclassifiedProtectedFinActions` needed a real HRS-specific sibling.
+ */
+export function parseSeededProtectedHrsActions(permissionCatalogSource: string): string[] {
+  const actions: string[] = [];
+  // Matches e.g. ('View payroll', 'HRS', 'sensitive', true) across the seed migration's own multi-row `values (...)` literal.
+  const rowPattern = /\(\s*'([^']+)'\s*,\s*'HRS'\s*,\s*'[^']*'\s*,\s*true\s*\)/g;
+  for (const match of permissionCatalogSource.matchAll(rowPattern)) {
+    const action = match[1];
+    if (action) actions.push(action);
+  }
+  return actions;
+}
+
+export type HrsPolicyGapKind = "UNCLASSIFIED_PROTECTED_HRS_ACTION";
+
+export interface HrsPolicyGap {
+  readonly action: string;
+  readonly kind: HrsPolicyGapKind;
+}
+
+/** HRT-293 Finding D: every protected HRS action a real HRIS/payroll migration enforces must have a registry entry naming it as that entry's own `protectedAction` — the HRS mirror of `findUnclassifiedProtectedFinActions`. */
+export function findUnclassifiedProtectedHrsActions(enforcedActions: readonly string[], classificationRegistry: readonly ClassificationEntry[]): HrsPolicyGap[] {
+  const classifiedActions = new Set(classificationRegistry.map((e) => e.protectedAction).filter((a): a is string => Boolean(a)));
+  return enforcedActions.filter((action) => !classifiedActions.has(`HRS:${action}`)).map((action) => ({ action, kind: "UNCLASSIFIED_PROTECTED_HRS_ACTION" as const }));
+}
+
+/** Every migration file belonging to the HRIS/payroll/ticketing HR domain (Phase 7) — mirrors `loadFinanceMigrationsSource`'s own filename-substring convention. All 25+ HRT-274..293 migrations are named `*_hris_*`, confirmed by direct `ls` sweep at authoring time. */
+function loadHrisMigrationsSource(): string {
+  const dir = join(import.meta.dirname, "../../supabase/migrations");
+  return readdirSync(dir)
+    .filter((f) => f.includes("hris"))
+    .map((f) => readFileSync(join(dir, f), "utf8"))
+    .join("\n");
+}
+
 function main(): void {
   const registryViolations: RegistryViolation[] = validateRegistry(REGISTRY);
   const adoptionGaps = findUnclassifiedSecretEnvVars(ENV_REGISTRY, REGISTRY);
@@ -114,8 +173,13 @@ function main(): void {
   const enforcedFinActions = findEnforcedProtectedFinActions(protectedFinActions, loadFinanceMigrationsSource());
   const financePolicyGaps = findUnclassifiedProtectedFinActions(enforcedFinActions, REGISTRY);
 
-  if (registryViolations.length === 0 && adoptionGaps.length === 0 && financePolicyGaps.length === 0) {
-    console.log("✔ data-classification registry is internally valid, every secret-classified env var is classified, and every enforced protected Finance action is classified.");
+  // HRT-293 Finding D: the HRS mirror of the three Finance checks immediately above.
+  const protectedHrsActions = parseSeededProtectedHrsActions(loadPermissionCatalogSource());
+  const enforcedHrsActions = findEnforcedProtectedFinActions(protectedHrsActions, loadHrisMigrationsSource());
+  const hrsPolicyGaps = findUnclassifiedProtectedHrsActions(enforcedHrsActions, REGISTRY);
+
+  if (registryViolations.length === 0 && adoptionGaps.length === 0 && financePolicyGaps.length === 0 && hrsPolicyGaps.length === 0) {
+    console.log("✔ data-classification registry is internally valid, every secret-classified env var is classified, and every enforced protected Finance/HRS action is classified.");
     return;
   }
 
@@ -128,8 +192,11 @@ function main(): void {
   for (const g of financePolicyGaps) {
     console.error(`✖ protected Finance action "FIN:${g.action}" [${g.kind}] — add a FINANCE_REGISTRY entry naming it as protectedAction before it ships`);
   }
-  const total = registryViolations.length + adoptionGaps.length + financePolicyGaps.length;
-  console.error(`\n${total} data-classification issue(s) — see docs/standards/DATA_CLASSIFICATION_STANDARDS.md §6/§7 and docs/standards/FINANCE_FIELD_POLICY_MATRIX.md.`);
+  for (const g of hrsPolicyGaps) {
+    console.error(`✖ protected HRS action "HRS:${g.action}" [${g.kind}] — add an HRS_REGISTRY/PAYROLL_REGISTRY/PERFORMANCE_REGISTRY/TRAINING_REGISTRY entry naming it as protectedAction before it ships`);
+  }
+  const total = registryViolations.length + adoptionGaps.length + financePolicyGaps.length + hrsPolicyGaps.length;
+  console.error(`\n${total} data-classification issue(s) — see docs/standards/DATA_CLASSIFICATION_STANDARDS.md §6/§7, docs/standards/FINANCE_FIELD_POLICY_MATRIX.md, and docs/standards/HR_PAYROLL_FIELD_POLICY_MATRIX.md.`);
   process.exit(1);
 }
 

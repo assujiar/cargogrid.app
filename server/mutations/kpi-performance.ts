@@ -53,6 +53,10 @@ export const PERFORMANCE_KNOWN_MUTATION_ERROR_CODES = [
   "manager_assessment_missing", "invalid_agreement",
   "performance_appeal_not_found", "self_approval_not_permitted", "invalid_decision",
   "outcome_not_writable",
+  // HRT-294 (CG-S12-HRT-022, ISS-2026-114): raised by
+  // app.archive_performance_kpi_definition_version since its own creation
+  // migration, never added here (API-parity gap).
+  "performance_kpi_definition_version_not_found",
 ] as const;
 export type PerformanceKnownMutationErrorCode = (typeof PERFORMANCE_KNOWN_MUTATION_ERROR_CODES)[number];
 

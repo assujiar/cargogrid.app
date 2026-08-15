@@ -1655,3 +1655,572 @@ export const AutoRouteTicketInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type AutoRouteTicketInput = z.infer<typeof AutoRouteTicketInputSchema>;
+
+// ===========================================================================
+// HRT-291 (CG-S12-HRT-019): Ticket Escalation. Mirrors
+// supabase/migrations/20260731160000_create_ticket_escalation.sql. Bounded
+// to internal/customer channels (the migration's own decision 1) -- there is
+// no helpdesk variant of any type below, matching HRT-288/290's own
+// precedent. Target is queue or employee only (decision 2) -- no role/team
+// target type exists.
+// ===========================================================================
+
+export const TICKET_ESCALATION_TRIGGER_TYPES = [
+  "sla_response_warning",
+  "sla_response_breach",
+  "sla_resolution_warning",
+  "sla_resolution_breach",
+  "priority_threshold",
+  "inactivity",
+  "assignment_failure",
+] as const;
+export const TicketEscalationTriggerTypeSchema = z.enum(TICKET_ESCALATION_TRIGGER_TYPES);
+export type TicketEscalationTriggerType = z.infer<typeof TicketEscalationTriggerTypeSchema>;
+
+// The ledger's own trigger_type also admits 'manual' (a manual escalation
+// carries no configured level) -- a superset of the level-authoring enum
+// above, never the other way around.
+export const TICKET_ESCALATION_EVENT_TRIGGER_TYPES = [...TICKET_ESCALATION_TRIGGER_TYPES, "manual"] as const;
+export const TicketEscalationEventTriggerTypeSchema = z.enum(TICKET_ESCALATION_EVENT_TRIGGER_TYPES);
+export type TicketEscalationEventTriggerType = z.infer<typeof TicketEscalationEventTriggerTypeSchema>;
+
+export const TICKET_ESCALATION_TARGET_TYPES = ["queue", "employee"] as const;
+export const TicketEscalationTargetTypeSchema = z.enum(TICKET_ESCALATION_TARGET_TYPES);
+export type TicketEscalationTargetType = z.infer<typeof TicketEscalationTargetTypeSchema>;
+
+export const TICKET_ESCALATION_STATUSES = ["active", "acknowledged", "resolved"] as const;
+export const TicketEscalationStatusSchema = z.enum(TICKET_ESCALATION_STATUSES);
+export type TicketEscalationStatus = z.infer<typeof TicketEscalationStatusSchema>;
+
+export const TICKET_ESCALATION_EVENT_TYPES = [
+  "triggered",
+  "notified",
+  "notification_failed",
+  "reassigned",
+  "reassign_skipped",
+  "acknowledged",
+  "suppressed",
+  "suppression_ended",
+  "resolved",
+  "recovered",
+] as const;
+export const TicketEscalationEventTypeSchema = z.enum(TICKET_ESCALATION_EVENT_TYPES);
+export type TicketEscalationEventType = z.infer<typeof TicketEscalationEventTypeSchema>;
+
+export const TicketEscalationPolicyRowSchema = z.object({
+  id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  status: z.enum(["active", "inactive"]),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketEscalationPolicyRow = z.infer<typeof TicketEscalationPolicyRowSchema>;
+
+export function parseTicketEscalationPolicyRow(row: Record<string, unknown>): TicketEscalationPolicyRow {
+  return TicketEscalationPolicyRowSchema.parse({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    status: row.status,
+    recordVersion: row.record_version,
+  });
+}
+
+export const TicketEscalationPolicyVersionRowSchema = z.object({
+  id: z.string().uuid(),
+  versionNumber: z.number().int().positive(),
+  status: z.enum(["draft", "published", "superseded"]),
+  channel: TicketChannelSchema,
+  categoryId: z.string().uuid().nullable(),
+  priority: TicketPrioritySchema.nullable(),
+  queueId: z.string().uuid().nullable(),
+  precedenceRank: z.number().int(),
+  publishedAt: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketEscalationPolicyVersionRow = z.infer<typeof TicketEscalationPolicyVersionRowSchema>;
+
+export function parseTicketEscalationPolicyVersionRow(row: Record<string, unknown>): TicketEscalationPolicyVersionRow {
+  return TicketEscalationPolicyVersionRowSchema.parse({
+    id: row.id,
+    versionNumber: row.version_number,
+    status: row.status,
+    channel: row.channel,
+    categoryId: row.category_id ?? null,
+    priority: row.priority ?? null,
+    queueId: row.queue_id ?? null,
+    precedenceRank: row.precedence_rank,
+    publishedAt: row.published_at ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+export const TicketEscalationLevelRowSchema = z.object({
+  id: z.string().uuid(),
+  levelNumber: z.number().int().positive(),
+  triggerType: TicketEscalationTriggerTypeSchema,
+  thresholdMinutes: z.number().int().positive().nullable(),
+  minPriority: TicketPrioritySchema.nullable(),
+  targetType: TicketEscalationTargetTypeSchema,
+  targetQueueId: z.string().uuid().nullable(),
+  targetQueueCode: z.string().nullable(),
+  targetEmployeeId: z.string().uuid().nullable(),
+  targetEmployeeName: z.string().nullable(),
+  actionNotify: z.boolean(),
+  actionReassign: z.boolean(),
+  cooldownMinutes: z.number().int().positive(),
+});
+export type TicketEscalationLevelRow = z.infer<typeof TicketEscalationLevelRowSchema>;
+
+export function parseTicketEscalationLevelRow(row: Record<string, unknown>): TicketEscalationLevelRow {
+  return TicketEscalationLevelRowSchema.parse({
+    id: row.id,
+    levelNumber: row.level_number,
+    triggerType: row.trigger_type,
+    thresholdMinutes: row.threshold_minutes ?? null,
+    minPriority: row.min_priority ?? null,
+    targetType: row.target_type,
+    targetQueueId: row.target_queue_id ?? null,
+    targetQueueCode: row.target_queue_code ?? null,
+    targetEmployeeId: row.target_employee_id ?? null,
+    targetEmployeeName: row.target_employee_name ?? null,
+    actionNotify: row.action_notify,
+    actionReassign: row.action_reassign,
+    cooldownMinutes: row.cooldown_minutes,
+  });
+}
+
+export const TicketEscalationPreviewRowSchema = z.object({
+  matched: z.boolean(),
+  policyId: z.string().uuid().nullable(),
+  policyVersionId: z.string().uuid().nullable(),
+  versionNumber: z.number().int().positive().nullable(),
+  levelCount: z.number().int().nonnegative().nullable(),
+});
+export type TicketEscalationPreviewRow = z.infer<typeof TicketEscalationPreviewRowSchema>;
+
+export function parseTicketEscalationPreviewRow(row: Record<string, unknown>): TicketEscalationPreviewRow {
+  return TicketEscalationPreviewRowSchema.parse({
+    matched: row.matched,
+    policyId: row.policy_id ?? null,
+    policyVersionId: row.policy_version_id ?? null,
+    versionNumber: row.version_number ?? null,
+    levelCount: row.level_count ?? null,
+  });
+}
+
+// Staff-only full projection -- never returned to a requester (decision 12).
+export const TicketEscalationRowSchema = z.object({
+  id: z.string().uuid(),
+  policyVersionId: z.string().uuid().nullable(),
+  status: TicketEscalationStatusSchema,
+  currentLevel: z.number().int().positive(),
+  currentLevelId: z.string().uuid().nullable(),
+  lastTriggerType: TicketEscalationEventTriggerTypeSchema,
+  acknowledgedAt: z.string().nullable(),
+  acknowledgedBy: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  resolvedReason: z.enum(["ticket_resolved", "ticket_closed", "ticket_cancelled", "manual_recovery"]).nullable(),
+  lastTriggeredAt: z.string(),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketEscalationRow = z.infer<typeof TicketEscalationRowSchema>;
+
+export function parseTicketEscalationRow(row: Record<string, unknown>): TicketEscalationRow {
+  return TicketEscalationRowSchema.parse({
+    id: row.id,
+    policyVersionId: row.policy_version_id ?? null,
+    status: row.status,
+    currentLevel: row.current_level,
+    currentLevelId: row.current_level_id ?? null,
+    lastTriggerType: row.last_trigger_type,
+    acknowledgedAt: row.acknowledged_at ?? null,
+    acknowledgedBy: row.acknowledged_by ?? null,
+    resolvedAt: row.resolved_at ?? null,
+    resolvedReason: row.resolved_reason ?? null,
+    lastTriggeredAt: row.last_triggered_at,
+    recordVersion: row.record_version,
+  });
+}
+
+// Customer/requester-safe projection -- a SINGLE boolean, structurally
+// incapable of carrying level/target/trigger/hierarchy (decision 12,
+// security impact section 16). Mirrors TicketSlaStatusForRequesterRowSchema's
+// own deliberately narrow shape.
+export const TicketEscalationStatusForRequesterRowSchema = z.object({
+  isEscalated: z.boolean(),
+});
+export type TicketEscalationStatusForRequesterRow = z.infer<typeof TicketEscalationStatusForRequesterRowSchema>;
+
+export function parseTicketEscalationStatusForRequesterRow(row: Record<string, unknown>): TicketEscalationStatusForRequesterRow {
+  return TicketEscalationStatusForRequesterRowSchema.parse({
+    isEscalated: row.is_escalated,
+  });
+}
+
+export const TicketEscalationEventRowSchema = z.object({
+  id: z.string().uuid(),
+  levelNumber: z.number().int().nonnegative(),
+  triggerType: TicketEscalationEventTriggerTypeSchema,
+  eventType: TicketEscalationEventTypeSchema,
+  targetType: TicketEscalationTargetTypeSchema.nullable(),
+  targetQueueId: z.string().uuid().nullable(),
+  targetQueueCode: z.string().nullable(),
+  targetEmployeeId: z.string().uuid().nullable(),
+  targetEmployeeName: z.string().nullable(),
+  reason: z.string().nullable(),
+  actorLabel: z.string().nullable(),
+  occurredAt: z.string(),
+});
+export type TicketEscalationEventRow = z.infer<typeof TicketEscalationEventRowSchema>;
+
+export function parseTicketEscalationEventRow(row: Record<string, unknown>): TicketEscalationEventRow {
+  return TicketEscalationEventRowSchema.parse({
+    id: row.id,
+    levelNumber: row.level_number,
+    triggerType: row.trigger_type,
+    eventType: row.event_type,
+    targetType: row.target_type ?? null,
+    targetQueueId: row.target_queue_id ?? null,
+    targetQueueCode: row.target_queue_code ?? null,
+    targetEmployeeId: row.target_employee_id ?? null,
+    targetEmployeeName: row.target_employee_name ?? null,
+    reason: row.reason ?? null,
+    actorLabel: row.actor_label ?? null,
+    occurredAt: row.occurred_at,
+  });
+}
+
+export const TicketEscalationSuppressionRowSchema = z.object({
+  id: z.string().uuid(),
+  reason: z.string(),
+  expiresAt: z.string(),
+  suppressedBy: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+  revokedBy: z.string().nullable(),
+  revokedReason: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+});
+export type TicketEscalationSuppressionRow = z.infer<typeof TicketEscalationSuppressionRowSchema>;
+
+export function parseTicketEscalationSuppressionRow(row: Record<string, unknown>): TicketEscalationSuppressionRow {
+  return TicketEscalationSuppressionRowSchema.parse({
+    id: row.id,
+    reason: row.reason,
+    expiresAt: row.expires_at,
+    suppressedBy: row.suppressed_by ?? null,
+    revokedAt: row.revoked_at ?? null,
+    revokedBy: row.revoked_by ?? null,
+    revokedReason: row.revoked_reason ?? null,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+  });
+}
+
+// The breach/stuck queue browser (decision 13) -- a dedicated, minimal read
+// row, never a widened TicketListRow/MyTicketListRow.
+export const TicketBreachQueueRowSchema = z.object({
+  ticketId: z.string().uuid(),
+  ticketNumber: z.string(),
+  subject: z.string(),
+  status: TicketStatusSchema,
+  priority: TicketPrioritySchema,
+  queueCode: z.string(),
+  currentLevel: z.number().int().positive(),
+  lastTriggerType: TicketEscalationEventTriggerTypeSchema,
+  escalationStatus: TicketEscalationStatusSchema,
+  lastTriggeredAt: z.string(),
+  acknowledgedAt: z.string().nullable(),
+});
+export type TicketBreachQueueRow = z.infer<typeof TicketBreachQueueRowSchema>;
+
+export function parseTicketBreachQueueRow(row: Record<string, unknown>): TicketBreachQueueRow {
+  return TicketBreachQueueRowSchema.parse({
+    ticketId: row.ticket_id,
+    ticketNumber: row.ticket_number,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    queueCode: row.queue_code,
+    currentLevel: row.current_level,
+    lastTriggerType: row.last_trigger_type,
+    escalationStatus: row.escalation_status,
+    lastTriggeredAt: row.last_triggered_at,
+    acknowledgedAt: row.acknowledged_at ?? null,
+  });
+}
+
+// --- Mutation inputs ---
+
+export const CreateTicketEscalationPolicyInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  code: z.string().min(1),
+  name: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateTicketEscalationPolicyInput = z.infer<typeof CreateTicketEscalationPolicyInputSchema>;
+
+export const CreateTicketEscalationPolicyVersionInputSchema = z.object({
+  policyId: z.string().uuid(),
+  channel: TicketChannelSchema,
+  categoryId: z.string().uuid().nullable(),
+  priority: TicketPrioritySchema.nullable(),
+  queueId: z.string().uuid().nullable(),
+  precedenceRank: z.number().int(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type CreateTicketEscalationPolicyVersionInput = z.infer<typeof CreateTicketEscalationPolicyVersionInputSchema>;
+
+export const AddTicketEscalationLevelInputSchema = z.object({
+  policyVersionId: z.string().uuid(),
+  levelNumber: z.number().int().positive(),
+  triggerType: TicketEscalationTriggerTypeSchema,
+  thresholdMinutes: z.number().int().positive().nullable(),
+  minPriority: TicketPrioritySchema.nullable(),
+  targetType: TicketEscalationTargetTypeSchema,
+  targetQueueId: z.string().uuid().nullable(),
+  targetEmployeeId: z.string().uuid().nullable(),
+  actionNotify: z.boolean(),
+  actionReassign: z.boolean(),
+  cooldownMinutes: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type AddTicketEscalationLevelInput = z.infer<typeof AddTicketEscalationLevelInputSchema>;
+
+export const PublishTicketEscalationPolicyVersionInputSchema = z.object({
+  versionId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type PublishTicketEscalationPolicyVersionInput = z.infer<typeof PublishTicketEscalationPolicyVersionInputSchema>;
+
+export const EscalateTicketInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  targetType: TicketEscalationTargetTypeSchema,
+  targetQueueId: z.string().uuid().nullable(),
+  targetEmployeeId: z.string().uuid().nullable(),
+  reassign: z.boolean(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type EscalateTicketInput = z.infer<typeof EscalateTicketInputSchema>;
+
+export const AcknowledgeTicketEscalationInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type AcknowledgeTicketEscalationInput = z.infer<typeof AcknowledgeTicketEscalationInputSchema>;
+
+export const ResolveTicketEscalationInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ResolveTicketEscalationInput = z.infer<typeof ResolveTicketEscalationInputSchema>;
+
+export const SuppressTicketEscalationInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  reason: z.string().min(1),
+  expiresAt: z.string(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type SuppressTicketEscalationInput = z.infer<typeof SuppressTicketEscalationInputSchema>;
+
+export const RevokeTicketEscalationSuppressionInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  suppressionId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type RevokeTicketEscalationSuppressionInput = z.infer<typeof RevokeTicketEscalationSuppressionInputSchema>;
+
+export const RunTicketEscalationEvaluationBatchInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  asOf: z.string().nullable(),
+  periodLabel: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type RunTicketEscalationEvaluationBatchInput = z.infer<typeof RunTicketEscalationEvaluationBatchInputSchema>;
+
+// ===========================================================================
+// HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records. Mirrors
+// supabase/migrations/20260731170000_create_ticket_linked_records.sql
+// exactly -- entity_type is the registry (decision 1), relationship is the
+// small fixed enum, safe_snapshot is always the bounded {label, detail,
+// status} shape (decision 2), never a per-type schema.
+// ===========================================================================
+
+export const TICKET_LINK_ENTITY_TYPES = ["shipment", "invoice", "warehouse", "vendor", "customer", "user"] as const;
+export const TicketLinkEntityTypeSchema = z.enum(TICKET_LINK_ENTITY_TYPES);
+export type TicketLinkEntityType = z.infer<typeof TicketLinkEntityTypeSchema>;
+
+// The subset a customer_user-layer caller may search/link/see (decision 7)
+// -- never vendor or user. Kept as a plain literal array (not derived from
+// the full list at the type level) so a drift between this and the live
+// app.ticket_link_customer_safe_entity_types() is a real, visible db-test
+// failure rather than silently inherited.
+export const TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES = ["shipment", "invoice", "warehouse", "customer"] as const;
+
+export const TICKET_LINK_RELATIONSHIPS = ["primary_subject", "related", "affected", "context"] as const;
+export const TicketLinkRelationshipSchema = z.enum(TICKET_LINK_RELATIONSHIPS);
+export type TicketLinkRelationship = z.infer<typeof TicketLinkRelationshipSchema>;
+
+export const TICKET_LINK_STATUSES = ["active", "removed"] as const;
+export const TicketLinkStatusSchema = z.enum(TICKET_LINK_STATUSES);
+export type TicketLinkStatus = z.infer<typeof TicketLinkStatusSchema>;
+
+export const TICKET_LINK_EVENT_TYPES = [
+  "linked", "unlinked", "link_denied", "search_denied", "summary_accessed", "deep_link_accessed",
+] as const;
+export const TicketLinkEventTypeSchema = z.enum(TICKET_LINK_EVENT_TYPES);
+export type TicketLinkEventType = z.infer<typeof TicketLinkEventTypeSchema>;
+
+// A candidate row from app.search_ticket_link_candidates -- already
+// independently authorized for the calling principal (never a row the
+// caller cannot see, C-05).
+export const TicketLinkCandidateRowSchema = z.object({
+  entityId: z.string().uuid(),
+  primaryLabel: z.string(),
+  secondaryLabel: z.string().nullable(),
+  statusLabel: z.string().nullable(),
+});
+export type TicketLinkCandidateRow = z.infer<typeof TicketLinkCandidateRowSchema>;
+
+export function parseTicketLinkCandidateRow(row: Record<string, unknown>): TicketLinkCandidateRow {
+  return TicketLinkCandidateRowSchema.parse({
+    entityId: row.entity_id,
+    primaryLabel: row.primary_label,
+    secondaryLabel: row.secondary_label ?? null,
+    statusLabel: row.status_label ?? null,
+  });
+}
+
+// One row from app.list_ticket_links -- label/detail/statusLabel are a LIVE,
+// principal-fresh re-check (decision 6), never the stored safe_snapshot;
+// liveAvailable=false collapses "deleted" and "revoked" into one
+// undifferentiated outward state deliberately (never leaks which).
+export const TicketLinkRowSchema = z.object({
+  id: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema,
+  entityId: z.string().uuid(),
+  relationship: TicketLinkRelationshipSchema,
+  status: TicketLinkStatusSchema,
+  liveAvailable: z.boolean(),
+  label: z.string().nullable(),
+  detail: z.string().nullable(),
+  statusLabel: z.string(),
+  linkedAt: z.string(),
+  createdBy: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketLinkRow = z.infer<typeof TicketLinkRowSchema>;
+
+export function parseTicketLinkRow(row: Record<string, unknown>): TicketLinkRow {
+  return TicketLinkRowSchema.parse({
+    id: row.id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    relationship: row.relationship,
+    status: row.status,
+    liveAvailable: row.live_available,
+    label: row.label ?? null,
+    detail: row.detail ?? null,
+    statusLabel: row.status_label,
+    linkedAt: row.linked_at,
+    createdBy: row.created_by ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+export const TicketLinkEventRowSchema = z.object({
+  id: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema.nullable(),
+  entityId: z.string().uuid().nullable(),
+  relationship: TicketLinkRelationshipSchema.nullable(),
+  eventType: TicketLinkEventTypeSchema,
+  reason: z.string().nullable(),
+  actorAuthUserId: z.string().uuid().nullable(),
+  actorLabel: z.string().nullable(),
+  occurredAt: z.string(),
+});
+export type TicketLinkEventRow = z.infer<typeof TicketLinkEventRowSchema>;
+
+export function parseTicketLinkEventRow(row: Record<string, unknown>): TicketLinkEventRow {
+  return TicketLinkEventRowSchema.parse({
+    id: row.id,
+    entityType: row.entity_type ?? null,
+    entityId: row.entity_id ?? null,
+    relationship: row.relationship ?? null,
+    eventType: row.event_type,
+    reason: row.reason ?? null,
+    actorAuthUserId: row.actor_auth_user_id ?? null,
+    actorLabel: row.actor_label ?? null,
+    occurredAt: row.occurred_at,
+  });
+}
+
+export const SearchTicketLinkCandidatesInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema,
+  searchText: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  limit: z.number().int().positive().nullable(),
+});
+export type SearchTicketLinkCandidatesInput = z.infer<typeof SearchTicketLinkCandidatesInputSchema>;
+
+export const LinkTicketRecordInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  entityType: TicketLinkEntityTypeSchema,
+  entityId: z.string().uuid(),
+  relationship: TicketLinkRelationshipSchema,
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type LinkTicketRecordInput = z.infer<typeof LinkTicketRecordInputSchema>;
+
+export const UnlinkTicketRecordInputSchema = z.object({
+  linkId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type UnlinkTicketRecordInput = z.infer<typeof UnlinkTicketRecordInputSchema>;
+
+export const RecordTicketLinkAccessDenialInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  ticketId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().nullable(),
+  entityType: TicketLinkEntityTypeSchema,
+  entityId: z.string().uuid().nullable(),
+  reason: z.string().nullable(),
+});
+export type RecordTicketLinkAccessDenialInput = z.infer<typeof RecordTicketLinkAccessDenialInputSchema>;
+
+export const TICKET_LINK_SUMMARY_ACCESS_TYPES = ["summary_viewed", "deep_link_opened"] as const;
+export const TicketLinkSummaryAccessTypeSchema = z.enum(TICKET_LINK_SUMMARY_ACCESS_TYPES);
+export type TicketLinkSummaryAccessType = z.infer<typeof TicketLinkSummaryAccessTypeSchema>;
+
+export const RecordTicketLinkSummaryAccessInputSchema = z.object({
+  linkId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().nullable(),
+  accessType: TicketLinkSummaryAccessTypeSchema,
+});
+export type RecordTicketLinkSummaryAccessInput = z.infer<typeof RecordTicketLinkSummaryAccessInputSchema>;

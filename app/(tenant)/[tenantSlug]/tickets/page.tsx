@@ -103,6 +103,12 @@ export default async function TicketsListPage({
           <NextLink href={`/${tenantSlug}/tickets/sla`} className="text-info hover:underline">
             SLA policies &amp; calendars
           </NextLink>
+          <NextLink href={`/${tenantSlug}/tickets/escalation`} className="text-info hover:underline">
+            Escalation policies
+          </NextLink>
+          <NextLink href={`/${tenantSlug}/tickets/breach-queue`} className="text-info hover:underline">
+            Breach queue
+          </NextLink>
           <NextLink href={`/${tenantSlug}/knowledge-base`} className="text-info hover:underline">
             Knowledge base
           </NextLink>

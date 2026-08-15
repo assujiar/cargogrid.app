@@ -30,6 +30,7 @@ import {
   flagEmployeeDuplicateCandidate,
   decideEmployeeDuplicateCandidate,
   decideEmployeeChangeRequest,
+  reactivateUserAfterRehire,
   EmployeeMutationError,
 } from "../../../../../server/mutations/employee.ts";
 import type { EmployeeReviewDecision, EmploymentType } from "../../../../../server/contracts/employee/employee.ts";
@@ -214,6 +215,23 @@ export async function terminateEmployeeAction(tenantSlug: string, masterRecordId
   const reason = String(formData.get("reason") ?? "").trim();
   const employmentEndDate = String(formData.get("employmentEndDate") ?? "").trim();
   return runLifecycleAction(tenantSlug, masterRecordId, terminateEmployee as LifecycleMutation, { masterRecordId, expectedVersion, reason, employmentEndDate }, "terminate this employee");
+}
+
+/**
+ * HRT-295 (ISS-2026-108 fix, Tier C review wiring): the governed
+ * app.reactivate_user_after_rehire RPC (server/mutations/employee.ts) had a
+ * real, tested SQL/TS wrapper but no server action or UI caller anywhere in
+ * the app -- a rehired employee's Platform/ESS/MSS access was therefore still
+ * practically unreachable for a real HR user, even though the database
+ * mechanism itself worked. No `expectedVersion` here (unlike every sibling
+ * lifecycle action above) -- the RPC targets the linked app.users row, not
+ * app.employees, mirroring app.request_onboarding_access_revocation's own
+ * identical shape, per this same RPC's own contract comment
+ * (server/contracts/employee/employee.ts).
+ */
+export async function reactivateUserAfterRehireAction(tenantSlug: string, masterRecordId: string, _prevState: EmployeeActionState, formData: FormData) {
+  const reason = String(formData.get("reason") ?? "").trim();
+  return runLifecycleAction(tenantSlug, masterRecordId, reactivateUserAfterRehire as LifecycleMutation, { masterRecordId, reason }, "restore this employee's Platform access");
 }
 
 export async function archiveEmployeeProfileAction(tenantSlug: string, masterRecordId: string, expectedVersion: number, _prevState: EmployeeActionState, formData: FormData) {
