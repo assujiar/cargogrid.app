@@ -508,7 +508,7 @@ export function EmployeeDetailPanel({
                 {changeRequests.map((r) => (
                   <li key={r.id} className="rounded-md border border-neutral-100 p-2 text-sm">
                     <p>
-                      <span className="font-medium">{r.fieldKey.replace(/_/g, " ")}</span>: {r.currentValueSnapshot ?? "—"} → {r.requestedValue}
+                      <span className="font-medium">{r.fieldKey.replace(/_/g, " ")}</span>: {r.currentValueSnapshot ?? "—"} → {r.requestedValue ?? "—"}
                     </p>
                     {r.reason ? <p className="text-xs text-neutral-500">Reason: {r.reason}</p> : null}
                     <p className="text-xs text-neutral-500">

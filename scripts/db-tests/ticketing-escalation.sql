@@ -286,11 +286,23 @@ begin
   end if;
   raise notice 'PASS: manual escalation happy path -- real level advance, real ledger row';
 
-  -- Stale version: the ticket''s own record_version has NOT changed (escalate
-  -- does not touch app.tickets), so re-supplying the ORIGINAL (now-stale
-  -- relative to a concurrent caller''s expectation) version still succeeds
-  -- for a genuinely fresh read -- prove staleness instead via a deliberately
-  -- wrong expected_version.
+  -- Batch 291-293 Tier C fix (20260731210000, Finding 3, C-01): escalate_ticket
+  -- now unconditionally bumps app.tickets' own record_version after applying
+  -- an escalation (previously it did not, for a queue target or an employee
+  -- target with p_reassign=false -- a genuine double-submit/network-retry
+  -- reusing the SAME pre-escalation expected_version silently advanced a
+  -- SECOND level instead of being rejected). v_ticket.record_version here is
+  -- still the value captured BEFORE the first escalate call above, so
+  -- reusing it now is exactly that double-submit scenario -- prove it is
+  -- correctly rejected.
+  begin
+    perform app.escalate_ticket(v_ticket.id, v_ticket.record_version, 'queue', (select id from app.ticket_queues where tenant_id = v_tenant1 and code = 'SUP'), null, false, 'stale retry', '00000000-0000-0000-0000-000000291102', 'staff1');
+    raise exception 'FAIL: reusing the pre-escalation expected_version for a second call should now raise stale_version (double-submit protection, batch review Finding 3)';
+  exception when others then
+    if sqlerrm not like 'stale_version%' then raise exception 'FAIL: expected stale_version, got: %', sqlerrm; end if;
+  end;
+  raise notice 'PASS: escalate_ticket now rejects a genuine double-submit reusing the pre-escalation expected_version (batch review Finding 3 fix, live-verified)';
+
   begin
     perform app.escalate_ticket(v_ticket.id, v_ticket.record_version + 99, 'employee', null, v_staff1_emp, false, 'again', '00000000-0000-0000-0000-000000291102', 'staff1');
     raise exception 'FAIL: a wrong expected_version should raise stale_version';
@@ -299,7 +311,10 @@ begin
   end;
   raise notice 'PASS: escalate_ticket enforces the ticket''s own record_version (stale-version rejection)';
 
-  -- A second manual escalate (fresh version) advances to level 2.
+  -- A second, genuinely LEGITIMATE manual escalate uses a FRESH expected_version
+  -- (re-read after the first escalate call's own record_version bump) and
+  -- advances to level 2.
+  select * into v_ticket from app.tickets where id = v_ticket.id;
   v_escalation2 := app.escalate_ticket(v_ticket.id, v_ticket.record_version, 'queue', (select id from app.ticket_queues where tenant_id = v_tenant1 and code = 'SUP'), null, false, 'still unresolved, notify the whole queue', '00000000-0000-0000-0000-000000291102', 'staff1');
   if v_escalation2.current_level <> 2 then
     raise exception 'FAIL: expected level 2 after a second manual escalate, got %', v_escalation2.current_level;

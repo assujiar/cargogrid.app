@@ -387,7 +387,13 @@ export const EmployeeChangeRequestSchema = z.object({
   requestedByUserId: z.string().uuid(),
   fieldKey: EmployeeChangeRequestFieldSchema,
   currentValueSnapshot: z.string().nullable(),
-  requestedValue: z.string(),
+  // Batch 291-293 Tier C fix (20260731210000, Finding 6, closes ISS-2026-092):
+  // requestedValue is now nullable -- app.get_employee_change_requests (the
+  // new masked read RPC) nulls it, like currentValueSnapshot/reason/
+  // decidedReason, unless the caller is the employee themselves or holds
+  // HRS:View personal data (it is always a classified personal_email/phone/
+  // address value, per employee_change_requests_field_key_check).
+  requestedValue: z.string().nullable(),
   reason: z.string().nullable(),
   status: EmployeeChangeRequestStatusSchema,
   decidedBy: z.string().nullable(),
@@ -405,7 +411,7 @@ export function parseEmployeeChangeRequest(row: Record<string, unknown>): Employ
     requestedByUserId: row.requested_by_user_id,
     fieldKey: row.field_key,
     currentValueSnapshot: row.current_value_snapshot ?? null,
-    requestedValue: row.requested_value,
+    requestedValue: row.requested_value ?? null,
     reason: row.reason ?? null,
     status: row.status,
     decidedBy: row.decided_by ?? null,

@@ -18,6 +18,7 @@ import {
   parseEmployeeDuplicateCandidate,
   parseEmployeeDuplicateSearchRow,
   parseEmployeeExportRow,
+  parseEmployeeChangeRequest,
   type EmployeeListRow,
   type EmployeeProfile,
   type EmployeeOwnProfile,
@@ -27,6 +28,7 @@ import {
   type EmployeeDuplicateCandidate,
   type EmployeeDuplicateSearchRow,
   type EmployeeExportRow,
+  type EmployeeChangeRequest,
   type EmployeeLifecycleStatus,
 } from "../contracts/employee/employee.ts";
 
@@ -117,6 +119,20 @@ export async function listEmployeeDuplicateCandidates(client: EmployeeQueryClien
   const { data, error } = await client.rpc("list_employee_duplicate_candidates", { p_master_record_id: masterRecordId, p_actor_auth_user_id: actorAuthUserId });
   if (error) throw new EmployeeQueryError(error.message);
   return rows(data).map(parseEmployeeDuplicateCandidate);
+}
+
+/**
+ * Batch 291-293 Tier C fix (20260731210000, Finding 6, closes ISS-2026-092):
+ * the masked read path for app.employee_change_requests, replacing the raw
+ * `.from("employee_change_requests").select("*")` table read this checkpoint's
+ * own page.tsx previously used -- reason/decided_reason/current_value_
+ * snapshot/requested_value are nulled server-side unless the caller is the
+ * employee themselves or holds HRS:View personal data.
+ */
+export async function getEmployeeChangeRequests(client: EmployeeQueryClient, masterRecordId: string, actorAuthUserId: string): Promise<EmployeeChangeRequest[]> {
+  const { data, error } = await client.rpc("get_employee_change_requests", { p_master_record_id: masterRecordId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new EmployeeQueryError(error.message);
+  return rows(data).map(parseEmployeeChangeRequest);
 }
 
 export async function searchEmployeeDuplicateCandidates(

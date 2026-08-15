@@ -797,7 +797,7 @@ begin
 end;
 $$;
 
-\echo '>> 13. cross-tenant isolation via RPC and raw-table RLS; actor_holds_customer_user_layer exclusion'
+\echo '>> 13. cross-tenant isolation via RPC; raw-table SELECT is closed entirely for authenticated (batch 291-293 Tier C fix, 20260731210000, Finding 1 CRITICAL)'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'lnk1');
@@ -813,29 +813,48 @@ begin
     if sqlerrm not like 'ticket_not_found%' then raise exception 'FAIL: expected ticket_not_found, got: %', sqlerrm; end if;
   end;
 
+  -- Batch 291-293 Tier C fix (20260731210000, Finding 1 CRITICAL): the
+  -- original RLS-only shape (app.can_access_ticket, never re-checking the
+  -- linked record's own cross-domain FIN/PRC/OPS authorization or the
+  -- helpdesk tenant-data-view gate) let a same-tenant domain-denied staff
+  -- member and a cross-tenant, zero-grant Supreme Admin both raw-read full
+  -- safe_snapshot content -- live-reproduced by the batch review. Fixed by
+  -- revoking raw table-level SELECT from authenticated entirely (mirrors how
+  -- writes were already RPC-only) -- every legitimate read now goes through
+  -- app.list_ticket_links/app.list_ticket_link_events (SECURITY DEFINER)
+  -- only. A raw select attempt is denied at the privilege-check stage,
+  -- before RLS is ever evaluated, for ANY authenticated caller regardless of
+  -- tenant or customer_user layer -- a strictly stronger guarantee than the
+  -- RLS-scoped-to-zero-rows assertion this section previously made.
   perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000292201", "role": "authenticated"}', false);
   set role authenticated;
-  select count(*) into v_count from app.ticket_links where tenant_id = v_tenant1;
-  if v_count <> 0 then
-    raise exception 'CRITICAL: raw-table RLS admitted a cross-tenant actor to tenant1''s ticket_links, count=%', v_count;
-  end if;
-  select count(*) into v_count from app.ticket_link_events where tenant_id = v_tenant1;
-  if v_count <> 0 then
-    raise exception 'CRITICAL: raw-table RLS admitted a cross-tenant actor to tenant1''s ticket_link_events, count=%', v_count;
-  end if;
+  begin
+    select count(*) into v_count from app.ticket_links where tenant_id = v_tenant1;
+    raise exception 'CRITICAL: raw-table SELECT on app.ticket_links must be denied to authenticated entirely, got count=%', v_count;
+  exception when others then
+    if sqlerrm not like '%permission denied for table ticket_links%' then raise exception 'FAIL: expected permission denied, got: %', sqlerrm; end if;
+  end;
+  begin
+    select count(*) into v_count from app.ticket_link_events where tenant_id = v_tenant1;
+    raise exception 'CRITICAL: raw-table SELECT on app.ticket_link_events must be denied to authenticated entirely, got count=%', v_count;
+  exception when others then
+    if sqlerrm not like '%permission denied for table ticket_link_events%' then raise exception 'FAIL: expected permission denied, got: %', sqlerrm; end if;
+  end;
   reset role;
   perform set_config('request.jwt.claims', 'null', false);
 
   perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000292110", "role": "authenticated"}', false);
   set role authenticated;
-  select count(*) into v_count from app.ticket_links where ticket_id = v_ticket_id;
-  if v_count <> 0 then
-    raise exception 'CRITICAL: a customer_user-layer actor''s raw-table read of app.ticket_links was not excluded by actor_holds_customer_user_layer';
-  end if;
+  begin
+    select count(*) into v_count from app.ticket_links where ticket_id = v_ticket_id;
+    raise exception 'CRITICAL: a customer_user-layer actor''s raw-table read of app.ticket_links must be denied entirely, got count=%', v_count;
+  exception when others then
+    if sqlerrm not like '%permission denied for table ticket_links%' then raise exception 'FAIL: expected permission denied, got: %', sqlerrm; end if;
+  end;
   reset role;
   perform set_config('request.jwt.claims', 'null', false);
 
-  raise notice 'PASS: cross-tenant isolation holds via RPC and raw-table RLS; actor_holds_customer_user_layer excludes every customer_user-layer raw-table read';
+  raise notice 'PASS: cross-tenant isolation holds via the RPC layer; raw-table SELECT is closed entirely for authenticated on both new tables (batch review Finding 1 fix, live-verified)';
 end;
 $$;
 
@@ -909,7 +928,20 @@ begin
     raise exception 'CRITICAL: authenticated has EXECUTE on an internal (service_role-only) HRT-292 helper function';
   end if;
 
-  raise notice 'PASS: anon has zero table/function access to any HRT-292 object; authenticated has zero EXECUTE on the internal-only helpers';
+  -- Batch 291-293 Tier C fix (20260731210000, Finding 1 CRITICAL): authenticated
+  -- must have ZERO raw table-level SELECT on either table -- every read goes
+  -- through the SECURITY DEFINER RPCs only (section 13 live-proves the
+  -- resulting permission-denied behavior; this is the static grant check).
+  select bool_or(has_table_privilege('authenticated', t.oid, 'SELECT'))
+  into v_has_table_priv
+  from pg_class t
+  join pg_namespace n on n.oid = t.relnamespace
+  where n.nspname = 'app' and t.relname in ('ticket_links', 'ticket_link_events');
+  if coalesce(v_has_table_priv, false) then
+    raise exception 'CRITICAL: authenticated retains raw-table SELECT on app.ticket_links/app.ticket_link_events (batch review Finding 1 must close this entirely)';
+  end if;
+
+  raise notice 'PASS: anon has zero table/function access to any HRT-292 object; authenticated has zero EXECUTE on the internal-only helpers and zero raw-table SELECT on ticket_links/ticket_link_events';
 end;
 $$;
 
