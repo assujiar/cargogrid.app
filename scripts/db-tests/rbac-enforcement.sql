@@ -456,7 +456,32 @@ declare
     -- lower-sensitivity than app.is_ticket_queue_member's own already-
     -- accepted disclosure (a real membership boolean) -- genuinely
     -- correct-by-design, not a live gap.
-    'ticket_channel_of'
+    'ticket_channel_of',
+    -- CPL-300 (Prompt 300, Customer User Scope, CG-S13-CPL-002): app.
+    -- resolve_customer_account_scope and app.actor_is_active_customer_
+    -- portal_account_admin are genuinely new authority/scope PRIMITIVES (the
+    -- same class as resolve_customer_owner_account_scope/actor_holds_
+    -- customer_user_layer already above) -- they ARE the check, so they
+    -- cannot check themselves, and the base regex keyword list is widened
+    -- (rather than special-cased per caller) to credit every caller
+    -- transitively, matching resolve_customer_owner_account_scope's own
+    -- original addition and HRT-287/288's own actor_holds_customer_user_
+    -- layer/_is_tenant_helpdesk_authorized precedent exactly. This credits
+    -- app.get_customer_portal_scope_context, app.invite_customer_portal_
+    -- user, app.set_customer_portal_account_membership_status, and app.
+    -- list_customer_portal_account_memberships transitively via the closure
+    -- query below -- no separate v_expected entry needed for any of them.
+    'resolve_customer_account_scope', 'actor_is_active_customer_portal_account_admin',
+    -- app.accept_customer_portal_invite's own authority shape is a raw
+    -- self-row-identity equality check ("only the invited identity may
+    -- accept their own invite", v_membership.auth_user_id <>
+    -- p_auth_user_id) -- the identical false-positive class app.get_self_
+    -- employee/app.is_ticket_queue_member above already document and are
+    -- exempted for (a caller-supplied identity can only ever be compared
+    -- against the ONE row it names, never used to reach a third party's
+    -- data). Genuinely correct-by-design, not a live gap -- added here per
+    -- this test's own documented escape hatch.
+    'accept_customer_portal_invite'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor
@@ -490,6 +515,35 @@ begin
     end if;
   end loop;
 
+  -- 2b. Tier C security-rls/correctness-spec review fix (CPL-300, Prompt 300, Finding 1,
+  --     CRITICAL): every one of this migration's 8 SECURITY DEFINER functions granted to
+  --     authenticated must itself call app.assert_actor_is_session_identity -- not merely be
+  --     covered transitively via the base-regex closure below (section 3), which exempts
+  --     STABLE/pure-read functions from the separate side-effecting-only actor-authority sweep
+  --     further down this file (`f.provolatile = 'v'`). These four reads (resolve_customer_
+  --     account_scope, actor_is_active_customer_portal_account_admin, get_customer_portal_
+  --     scope_context, list_customer_portal_account_memberships) are exactly the shape that
+  --     blanket "reads are exempt" reasoning does not cover: the identity parameter IS the
+  --     scoping mechanism, not a value re-derived from an already-scoped row, so forging it is
+  --     the entire attack, not a no-op -- live-verified IDOR, both lenses independently
+  --     reproduced. A static, narrow, named-list check (this repository's own established
+  --     pattern, section 2 above) rather than widening the STABLE-inclusive general sweep,
+  --     which would also flag the pre-existing, out-of-this-checkpoint's-scope ATW-023/ATW-242
+  --     functions (app.resolve_customer_owner_account_scope, app.evaluate_customer_inventory_
+  --     access, etc.) this migration mirrors but does not own.
+  foreach v_fn in array array['resolve_customer_account_scope', 'actor_is_active_customer_portal_account_admin',
+                              'get_customer_portal_scope_context', 'invite_customer_portal_user',
+                              'accept_customer_portal_invite', 'set_customer_portal_account_membership_status',
+                              'list_customer_portal_account_memberships', 'grant_initial_customer_portal_account_admin'] loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = v_fn
+        and p.prosrc like '%assert_actor_is_session_identity%'
+    ) then
+      raise exception 'assertion failed: app.% must call app.assert_actor_is_session_identity -- it is granted to authenticated and takes an identity/actor parameter as the sole scoping mechanism (CPL-300 Tier C review fix, Finding 1)', v_fn;
+    end if;
+  end loop;
+
   -- 3. The sweep itself: no NEW function may join the unauthorized set. This is the part
   --    that keeps the class closed as Phase 6+ adds surface, rather than re-opening it.
   with recursive fn as (
@@ -499,7 +553,7 @@ begin
   edge as (select f.proname caller, m[1] callee from fn f, regexp_matches(f.prosrc, 'app\.([a-z0-9_]+)\s*\(', 'g') m),
   base as (
     select distinct proname from fn
-    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant|actor_holds_customer_user_layer|_is_tenant_helpdesk_authorized'
+    where prosrc ~ 'evaluate_permission|can_access_record|is_supreme_admin|has_active_membership|check_[a-z_]*authority|is_eligible_[a-z_]*approver|resolve_customer_owner_account_scope|customer_warehouse_eligibility_active|actor_can_view_owner_scoped_row|authorize_file_access|assert_session_identity_in_tenant|actor_holds_customer_user_layer|_is_tenant_helpdesk_authorized|resolve_customer_account_scope|actor_is_active_customer_portal_account_admin'
   ),
   closure as (
     select proname from base
