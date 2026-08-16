@@ -847,7 +847,12 @@ begin
     raise exception 'assertion failed: expected authenticated to hold no EXECUTE on the service_role-only app.validate_employee_import_row';
   end if;
 
-  select has_function_privilege('anon', 'app.create_employee_draft(uuid, text, text, text, text, text, text, date, text, date, uuid, uuid, uuid, text, uuid, uuid, text, text, text, uuid, text)', 'EXECUTE') into v_has_privilege;
+  -- ISS-2026-065 closure: app.create_employee_draft's own signature grew two new
+  -- trailing parameters (p_effective_date/p_backdate_reason, both defaulted) --
+  -- referenced here by its current, full signature (the only one that exists;
+  -- the migration DROPped the old 21-arg overload rather than layering a second
+  -- one alongside it -- see that migration's own header).
+  select has_function_privilege('anon', 'app.create_employee_draft(uuid, text, text, text, text, text, text, date, text, date, uuid, uuid, uuid, text, uuid, uuid, text, text, text, uuid, text, date, text)', 'EXECUTE') into v_has_privilege;
   if v_has_privilege then
     raise exception 'assertion failed: expected anon to hold no EXECUTE on app.create_employee_draft';
   end if;

@@ -3,7 +3,7 @@
 **Prompt:** `CG-S12-HRT-001` (273, HRIS and Ticketing WBS Runtime Kickoff)
 **Runtime output of:** `273_HRIS_TICKETING_WBS_RUNTIME_KICKOFF_PROMPT.md`
 **Runtime state set by this checkpoint:** `PHASE_7_IN_PROGRESS`
-**Runtime state NOT set by this checkpoint:** `PHASE_7_VERIFIED` — reserved exclusively for Prompt 297 (`CG-S12-HRT-025`, Closure Verification), per `273_*.md` §"Required output" and `272_HRIS_TICKETING_README.md` §10.
+**Runtime state NOT set by this checkpoint:** `PHASE_7_VERIFIED` — reserved exclusively for Prompt 297 (`CG-S12-HRT-025`, Closure Verification), per `273_*.md` §"Required output" and `272_HRIS_TICKETING_README.md` §10. **Update (2026-08-15):** Prompt 297 has since run (§30) and closed `PHASE_7_PARTIALLY_COMPLETE` — `PHASE_7_VERIFIED` remains unset pending a dedicated future HRT follow-up closing `ISS-2026-065`.
 **Owner (every row, this build's standing convention):** Claude Code (runtime build agent)
 
 ---
@@ -211,10 +211,10 @@ The HR track (12 capabilities, `HRT-274..285`) is longer than the Ticket track (
 | 293 | `CG-S12-HRT-021` | Sensitive personal and payroll data controls | **VERIFIED** (Batch 1 `291-293` Tier C batch closed 2026-08-15) | Implementation complete and independently Tier-C-verified — the convergence hardening checkpoint over all 19 already-`VERIFIED` HR (274-285) and Ticket (286-292) Phase 7 capabilities; third and last of Batch 1, closing the FULL "lanjut 291-300" Batch 1 range. A corrective/hardening pass (no new capability), fixing 2 CRITICAL + 2 HIGH audit findings plus 8 self-found sibling instances at root cause via 3 additive migrations. **Finding A (CRITICAL)**: `app.employees`' 5 HR-narrative lifecycle-reason columns (revision/suspend/terminate/archive/leave) were returned unconditionally by `get_employee_profile` — never wrapped in the masking guard protecting national_id/DOB two lines above — plus exposed via an unrestricted raw-table grant and an unrestricted grant on `app.employee_lifecycle_events`; any plain tenant member or plain `HRS:View` holder could read why a named colleague was suspended/terminated/on leave. Fixed in `20260731180000`; a self-found sibling sweep (`20260731200000`) closed the identical shape on 5 further tables plus one UI `select("*")`. **Finding B (CRITICAL)**: the previously-claimed-closed C-24 unmasked-audit-log-reason leak (readable by any plain `tenant_admin` via `query_audit_logs`) was live across most of Phase 7 — 37 `capture_audit_event` call sites fixed across Employee Master/Leave/Recruitment-ATS/Onboarding/Attendance/Shift-Roster (`20260731190000`), including a distinct raw-score vector in `record_assessment_result` the capability's own original Tier C review missed. **2 HIGH fixed**: 5 new data-classification registry entries; the FIN-only adoption gate (`check-registry.ts`) extended with an HRS mirror, plus a self-found gap where `PAYROLL_REGISTRY` was never wired into the combined `REGISTRY` constant. **3 Medium disclosed, not fixed** (`ISS-2026-091`/`092`/`093`), each genuinely outside this checkpoint's bounded migration-plus-registry-plus-docs scope. New `docs/standards/HR_PAYROLL_FIELD_POLICY_MATRIX.md` published, mirroring `FINANCE_FIELD_POLICY_MATRIX.md`'s structure. Gate suite fresh after Implement: `typecheck` 0 errors; `lint` 0/271; `pnpm run test` 4112/4112; `db:test` 167/168 files pass, the sole failure independently proven pre-existing (`ISS-2026-077`, a day-of-week-dependent fixture bug in HRT-280's own file); `next build` clean. See §26 below for full detail, including the batch's own combined Tier C review (4 lenses, 9 CONFIRMED findings, 0 rejected, closing this batch). |
 | 294 | `CG-S12-HRT-022` | Integrated verification | **VERIFIED** — with findings triaged and assigned (standalone verification checkpoint closed 2026-08-15) | Implementation complete and independently verified — standalone, never-batched checkpoint (`docs/standards/BUILD_EXECUTION_PROTOCOL.md` §3.3) over all 21 already-`VERIFIED` Phase 7 capabilities (`HRT-274..293`), mirroring `CG-S11-PRC-019`/`PRC-268`'s own precedent. Six parallel live-verification lenses (40-anchor traceability; Critical Flow 1 Employee→Payroll→Finance; Critical Flow 2 Recruitment→Onboarding; Critical Flow 3 ticket channels; cross-cutting privacy/abuse matrix; API/jobs/migration/performance/accessibility) each ran against a disposable, fully-migrated Postgres 16 database; a synthesis pass independently re-derived every candidate finding a second time before registering or fixing anything. All three Critical Flows executed live end to end with real distinct actors, surfacing 11 new findings (`ISS-2026-104`..`114`), 0 rejected: 1 Critical, 5 High, 3 Medium, 1 Low, plus 2 small/bounded/additive repairs made within this checkpoint's own charter (`ISS-2026-113`/`114`, both RESOLVED). Gate suite fresh: `typecheck` 0 errors; `lint` 0/271; `pnpm run test` 4113/4113; `db:test` ALL PASSED (165 files, 222 migrations); `next build` correctly skipped (no `app/`/`components/` touched). See §27 below for full detail, including the complete 40-anchor traceability table. |
 | 295 | `CG-S12-HRT-023` | Privacy/integrity hardening | **VERIFIED** (standalone Hardening checkpoint closed 2026-08-15) | Implementation complete and independently Tier-C-verified — standalone, never-batched Hardening checkpoint (`docs/standards/BUILD_EXECUTION_PROTOCOL.md` §3.3), closing all nine findings Prompt 294 registered (`ISS-2026-104` through `112`). Five sequential repair groups (Employee↔Platform identity coupling; attendance/payroll time accuracy including the CRITICAL payroll double-count; recruitment→onboarding position headcount; PLT-132 batch job failure handling; ticket closure/masking/identity hardening), then this checkpoint's own full Tier C review (4 parallel adversarial lenses, live-tested against a from-scratch, fully-migrated disposable Postgres 16 database), which caught and closed three residual gaps the repair groups' own fixes still had (`ISS-2026-105` payroll exclusion→understatement; `108` reactivation RPC unreachable, no UI caller; `112` `query_canceled` mid-loop still destroyed the job row) plus one self-introduced regression (the `110` fix's own live re-check broke `list_customer_ticket_links` for every ordinary customer session, fixed by capturing creator role at write time). All six Critical/High findings fully closed; the two Medium ticket findings fully closed; the third (`111`) formally risk-accepted with documented owner/rationale/reopening-trigger. Gate suite: `typecheck` 0 errors; `lint` 0/271; `pnpm run test` 4118/4118; `db:test` ALL PASSED (165 files); `next build` clean; `docs:check`/`security:check`/`security:audit`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` all clean (35 files, 0 forbidden, 1 expected caution). See §28 below for full detail. |
-| 296 | `CG-S12-HRT-024` | Documentation and handoff | **READY** | Upstream: `HRT-295` `VERIFIED` (§28). Dependency-clean and next-eligible within the still-open "lanjut 291-300" operator authorization (5 of 10 prompts remain: 296-297 finish Phase 7, 298-300 start Phase 8) — no fresh, separate operator authorization is required before it may begin. |
-| 297 | `CG-S12-HRT-025` | Closure verification | **BLOCKED** | Upstream: `HRT-296` `VERIFIED`. Only this prompt may set `PHASE_7_VERIFIED`. |
+| 296 | `CG-S12-HRT-024` | Documentation and handoff | **VERIFIED** (docs-only checkpoint closed 2026-08-15) | Implementation complete and independently verified — a docs-only checkpoint per Prompt 296 §13/§14/§15 ("None planned" for database/API/UI impact) and §24 ("No runtime behavior changes"): zero migration, `server/`, `app/`, or `scripts/db-tests/` file touched, confirmed via `git status` both by the workflow's own verify pass and independently by the orchestrating session. Four new documents published under `docs/build-log/phase-07/` (859 lines total), mirroring the Phase 6 documentation-handoff precedent one phase up: `HRIS_TICKETING_HANDOFF_PACKAGE.md` (319 lines, the fresh-context reconstruction package), `HRIS_TICKETING_ROLE_GUIDES.md` (six role guides), `HRIS_TICKETING_RUNBOOKS.md` (five scenario runbooks), `STEPS_13_14_HANDOFF_CONTRACT.md` (the Step 13/14 boundary contract). This checkpoint's own VERIFY phase independently fact-checked 20 claims against the live repository (zero discrepancy), ran the §24 sanitization check (zero sensitive-shaped reuse found), spot-checked 16 referenced paths (zero dead link), and re-ran `docs:check`/`security:check`/`git:check-paths` plus `typecheck`/`lint` as additional cross-checks, all clean. See §29 below for full detail. |
+| 297 | `CG-S12-HRT-025` | Closure verification | **`PHASE_7_PARTIALLY_COMPLETE`** (closed 2026-08-15, `PHASE_7_VERIFIED` NOT set) | Independent closure-verification checkpoint, run to completion. 41 of 42 required-verification items `PROVEN`; item 5/41 not met — `ISS-2026-065` (Employee Master effective-dating, High) independently re-confirmed still genuinely open by direct live-database schema inspection. `PHASE_7_VERIFIED` is correctly **not** set; Phase 8 is blocked pending a dedicated future HRT follow-up. See §30 below for full detail. |
 
-**Summary (superseded by §23–§28 below): 23 VERIFIED (273–295), 1 READY (296), 1 BLOCKED (297).**
+**Summary (superseded by §30 below): 24 VERIFIED (273–296), 1 PARTIALLY_COMPLETE-closure (297), 0 BLOCKED. `PHASE_7_VERIFIED` NOT set.**
 
 ---
 
@@ -475,3 +475,142 @@ This checkpoint required **two workflow runs**: the first was interrupted mid-re
 **Gate suite independently re-run by the orchestrating session, every number matching, never accepted on any report alone**, including direct code reads of the three highest-stakes fixes (the corrected payroll arithmetic, the identity-reactivation RPC's full authorization/validation chain, and the PLT-132 outer-boundary job-preservation logic): `typecheck` 0 errors; `lint` 0 errors/271 warnings; `pnpm run test` **4118/4118 pass**; `pnpm run db:test` **ALL PASSED** (165 files, three known day-of-week flakes set aside and restored, confirmed clean via `git status`); `next build` clean; `docs:check`/`security:check`/`security:audit`/`data-classification:check`/`threat-model:check`/`standards:check`/`git:check-paths` all clean (35 files, 0 forbidden, 1 expected caution on the append-only `KNOWN_ISSUES.md` ledger).
 
 **Task state**: `CG-S12-HRT-023` (Prompt 295) is now **`VERIFIED`** (§10). `PHASE_7_VERIFIED` remains unset (reserved for Prompt 297). `CG-S12-HRT-024` (Prompt 296, Documentation Handoff) is dependency-clean and next-eligible within the still-open "lanjut 291-300" authorization, requiring no fresh authorization. Full detail: `docs/build-log/phase-07/HRT-295.md`; ledger record: `docs/runtime/TASK_LEDGER.md`'s `CG-S12-HRT-023` row.
+
+---
+
+## 29. Update — HRT-296 (Prompt 296, HRIS and Ticketing Documentation and Handoff) VERIFIED
+
+`CG-S12-HRT-024` (Prompt 296) is a docs-only checkpoint per Prompt 296 §13/§14/§15 ("None planned" for database/API/UI impact) and §24 ("No runtime behavior changes") — zero migration, `server/`, `app/`, or `scripts/db-tests/` file touched at any point in this session, confirmed via `git status` both by the workflow's own verify pass and independently by the orchestrating session. `PHASE_7_VERIFIED` remains unset (reserved exclusively for Prompt 297). This checkpoint's own role was the VERIFY phase over work three parallel writer passes had already produced on this branch: confirm the docs-only scope boundary held, fact-check a meaningful sample of claims against the live repository, run the §24 sanitization check, spot-check referenced file paths for dead links, run the three gates named in the checkpoint's own instructions (`docs:check`/`security:check`/`git:check-paths`), fix anything genuinely wrong (bounded doc-correction only, no scope expansion), and record the result.
+
+**Four new documents produced, 859 lines total, mirroring the Phase 6 documentation-handoff precedent** (`PROCUREMENT_VENDOR_HANDOFF_PACKAGE.md`/`STEPS_12_14_HANDOFF_CONTRACT.md`/`PROCUREMENT_VENDOR_RUNBOOKS.md`) one phase up:
+
+- **`HRIS_TICKETING_HANDOFF_PACKAGE.md`** (319 lines) — the fresh-context reconstruction package: the full two-track dependency DAG, canonical schema/API/field-policy summary across all 24 `VERIFIED` Phase 7 capabilities, the complete current `KNOWN_ISSUES.md` disclosure list, and the measured gate-suite baseline. Also discloses the two-track DAG's own deviation from the execution index's own pre-HRT-274 diagram — the Ticket track genuinely depends on HRT-274.
+- **`HRIS_TICKETING_ROLE_GUIDES.md`** (195 lines) — six role guides (Employee/ESS, Manager/MSS, HR/Payroll staff, Recruiter, Service/Support agent, Platform Support), each with real UI routes/RPCs and common errors.
+- **`HRIS_TICKETING_RUNBOOKS.md`** (164 lines) — five scenario runbooks: time/payroll exceptions, privacy requests/leaks, ticket/SLA/escalation job failures, support access grants, linked-record denial — each using a real historical Phase 7 defect (e.g. the HRT-295 payroll double-count fix sequence) as its worked diagnostic example.
+- **`STEPS_13_14_HANDOFF_CONTRACT.md`** (181 lines) — the Step 13 (Phase 8, Customer Portal/Loyalty) / Step 14 (Phase 9, Intelligence/Enterprise) boundary contract: Step 13 documented as a genuinely real, bounded, `VERIFIED` relationship; Step 14 as no built contract, but with all twelve capability-level AI/autonomy deferrals named in Phase 7's own source prompts catalogued with verbatim citations, not just the two named in the source spec.
+
+**Fact-check performed this checkpoint**: more than the minimum eight claims were checked — 20 specific claims (migration/route/file counts, exact monetary figures, twelve verbatim source-prompt quotes for the Step 14 disclosures) were independently re-verified against the live repository, every one matching exactly with zero discrepancy found (e.g. 48 Phase 7 migrations of 230 total; 37/6/2 `hris`/`tickets`/`customer-tickets` UI routes; `ISS-2026-105`'s exact monetary figures — 125,000 IDR overstatement → 450,000 IDR understatement → resolved — against `KNOWN_ISSUES.md` lines 518–530). 16 distinct referenced paths were spot-checked (exceeding the required 10 minimum), spanning Phase 2/5/6/7 build-log cross-references, `lib/portal/*-guard.ts` files, and `server/contracts/`/`server/queries/` files — zero dead link found.
+
+**Sanitization check (Prompt 296 §24, hard requirement)**: all four new files were grepped for reuse of the sensitive-shaped live-reproduction text `docs/runtime/KNOWN_ISSUES.md` itself carries (e.g. `ISS-2026-111`'s own quoted leave-request reason string, "Ongoing HIV treatment - confidential, needs extended medical leave") — zero matches beyond the documents' own sanitization-discipline prose, which describes the rule without repeating the underlying sensitive text; also checked for raw-looking PII patterns (16-digit IDs, SSN-shaped strings, real-looking email/phone patterns) — zero matches. All example names/employee codes across all four documents (`Jane Doe`, `EMP-0001`, `emp1`/`emp3`/`emp5`, `pay1`, `esc1`, `lnk1`) are fictional/fixture-derived.
+
+**Corrections made this checkpoint: none were necessary.** Every claim sampled, every sanitization check, and every path spot-checked was already accurate in the writer passes' own text — this checkpoint made zero edits to any of the four documents.
+
+**Gate suite, run fresh by this checkpoint's own verify pass, then independently re-verified by the orchestrating session**: `pnpm run docs:check` clean ("documentation checks passed (link resolution, canonical files, ADR index, HANDOFF/TASK_LEDGER coherence)"); `pnpm run security:check` clean ("no secret-shaped pattern found in any tracked file"); `pnpm run git:check-paths` clean ("0 forbidden paths touched (4 file(s) checked, 0 caution flag(s))", run against the real staged four-file changeset, then unstaged — no commit made at any point); `pnpm run typecheck` 0 errors; `pnpm run lint` 0 errors/271 warnings — byte-identical to the number cited in the handoff package's own §6, confirming no drift. No gate was disabled or suppressed to reach this result. A pure documentation checkpoint changes no schema/application code, so `db:test`/`pnpm run test`/`next build` were not re-run in full by this verification pass — the handoff package's own §6 already records a fresh, full `db:test`/`test` run from the writer pass (4118/4118 tests; `db:test` 165/165 with the three disclosed day-of-week-flaky files set aside, restored immediately after).
+
+**Task state**: `CG-S12-HRT-024` (Prompt 296) is now **`VERIFIED`** (§10). `PHASE_7_VERIFIED` remains unset — only Prompt 297 may set it, and it hasn't run yet. `CG-S12-HRT-025` (Prompt 297, Closure Verification) is dependency-clean and next-eligible within the still-open "lanjut 291-300" authorization, requiring no fresh authorization. **This is the LAST prompt of Phase 7, and the only prompt authorized to set `PHASE_7_VERIFIED`.** Full detail: `docs/build-log/phase-07/HRT-296.md`; ledger record: `docs/runtime/TASK_LEDGER.md`'s `CG-S12-HRT-024` row.
+
+---
+
+## 30. Update — HRT-025 (Prompt 297, HRIS and Ticketing Closure Verification) `PHASE_7_PARTIALLY_COMPLETE`
+
+`CG-S12-HRT-025` (Prompt 297), the FINAL Phase 7 checkpoint and the only prompt authorized to set
+`PHASE_7_VERIFIED`, ran to completion and **does not set it**. Full disposition, the complete
+42-item requirement table, and the full `docs/runtime/KNOWN_ISSUES.md` true-status reconciliation:
+`docs/build-log/phase-07/HRIS_TICKETING_CLOSURE_REPORT.md`.
+
+**Result: 41 of 42 required-verification items `PROVEN`.** Item 5/41 (effective-dated employee
+identity/lifecycle) is not met: `ISS-2026-065` (Employee Master, High, first disclosed at `HRT-274`)
+was independently re-confirmed this checkpoint — by direct live-database schema inspection against a
+completely fresh, from-empty database migrated through all 230 migrations, not by citation — to
+remain genuinely, fully `OPEN`. No part of `HRT-275`, `HRT-293`, `HRT-294`, `HRT-295`, or `HRT-296`'s
+own subsequent work touches this gap, despite three of those checkpoints explicitly depending on
+Employee Master's own data model. This is a real, named, binding, repeated Prompt 274 requirement
+(§5/§13/§17/§18/§20) — Phase-7-owned, not a pre-existing cross-cutting Platform Core issue — and a
+genuine effective-dated/bi-temporal mechanism is materially new capability work, correctly outside a
+bounded verification checkpoint's own mandate to build.
+
+**Also independently re-confirmed this checkpoint**: all seven Phase-7 `KNOWN_ISSUES.md` entries
+whose header line still reads `OPEN` but which carry a later-appended `RESOLVED` paragraph
+(`ISS-2026-104`/`105`/`106`/`108`/`110`/`112` in full, `107` for its job_offer path) are genuinely,
+live-reproducibly closed — verified by direct code/live-database inspection, not by trusting the
+appended paragraph's own text alone, per this checkpoint's own explicit methodology requirement.
+`ISS-2026-072`'s residual `app.evaluate_permission` half remains genuinely open but is independently
+assessed as non-blocking (pre-existing Platform Core infrastructure, not currently exploitable, with
+direct Phase 6 precedent — `ISS-2026-040` — for this exact disclosed/non-blocking treatment).
+
+**Closure state: `PHASE_7_PARTIALLY_COMPLETE`.** `PHASE_7_BLOCKED` was considered and rejected (no
+Critical gate fails; no live security breach, tenant-isolation break, or data-corruption path
+exists — the one Critical finding Phase 7 ever produced, `ISS-2026-105`, is genuinely `RESOLVED`).
+`PHASE_7_ROLLED_BACK` does not apply (nothing built needs undoing). **Phase 8 (Customer Portal and
+Loyalty) is BLOCKED** pending a dedicated future HRT follow-up prompt scoped to close `ISS-2026-065`
+for real (mirroring how `HRT-275` closed the identical effective-dating requirement for
+position/grade/manager assignments specifically), after which this closure checkpoint may be re-run
+or updated in place. Not a production/market/pilot/GA claim (Prompt 297's own §"Completion gate",
+quoted verbatim in the closure report).
+
+**Gate suite independently re-run fresh this checkpoint**: `pnpm run db:test` **`ALL PASSED`** (230
+migrations, 165/165 test files, fresh uniquely-named disposable database, three pre-registered
+day-of-week-flaky files set aside and restored immediately after, `git status` confirmed clean);
+`typecheck` 0 errors; `lint` 0 errors/271 warnings (unchanged baseline); `pnpm run test`
+**4118/4118 pass**; `security:audit`/`standards:check`/`docs:check`/`security:check`/
+`data-classification:check` all clean. `next build` not independently re-run this checkpoint (a
+concurrent session held the build lock throughout — disclosed as an evidence gap, not silently
+treated as passed; `typecheck`/`lint` both clean and independently cover the overwhelming majority
+of what it would additionally catch).
+
+**Task state**: `CG-S12-HRT-025` (Prompt 297) is now **`PHASE_7_PARTIALLY_COMPLETE`** — Phase 7's own
+closure checkpoint has run; `PHASE_7_VERIFIED` remains unset. `CG-S12-HRT-026`/Prompt 298 (Phase 8
+kickoff) is **not** eligible until a dedicated future HRT follow-up prompt closes `ISS-2026-065` for
+real and this closure checkpoint is re-run or updated in place. Full detail:
+`docs/build-log/phase-07/HRIS_TICKETING_CLOSURE_REPORT.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S12-HRT-025` row.
+
+---
+
+## 31. Update — dedicated `ISS-2026-065` closure task (commit `fe1434f`) plus finalization re-check — `PHASE_7_VERIFIED` set (2026-08-16)
+
+Per §30's own named resume condition, a dedicated HRT follow-up task (commit `fe1434f`, 2026-08-15,
+`docs/build-log/phase-07/HRT-ISS-065-CLOSURE.md`, no source prompt number — an operator-authorized,
+bounded new-capability insertion, mirroring the `ATW-011A`/`ATW-016A` inserted-task precedent) closed
+`ISS-2026-065` for real: a new, versioned, effective-dated `app.employee_lifecycle_versions` table
+(`supabase/migrations/20260731310000`), all 7 lifecycle-transition RPCs widened with an optional
+effective-date/backdate parameter, a genuine `app.get_employee_lifecycle_as_of` "as of" read, and a
+`HRS:Override`-gated maintenance sweep — plus a mandatory Tier C adversarial review (per
+`BUILD_EXECUTION_PROTOCOL.md` §3.2 trigger 3, since this mechanism writes through Platform
+identity/access authority) that found and fixed six further Critical/High-severity defects in the
+first implementation pass, all via one additive follow-up migration
+(`20260731320000`), before acceptance.
+
+This checkpoint (the finalization re-check named by `HRIS_TICKETING_CLOSURE_REPORT.md` §22/§24) is the
+orchestrating session's own independent re-verification of that closure — not an acceptance of the
+closure task's, or either of two parallel re-verification lenses', report on its word. Firsthand this
+checkpoint: read `git show fe1434f` and `HRT-ISS-065-CLOSURE.md` in full; read the core
+conflict-protection logic (`app.record_employee_lifecycle_version`'s direction-aware bucket-(a)/(b)
+supersede rule) directly and confirmed it matches its own documented design; built an independent,
+from-empty, 232-migration disposable database myself (zero errors); ran the shipped dedicated test
+file (`hris-employee-master-lifecycle-effective-dating.sql`, 19 scenario blocks) against it —
+`ALL PASSED`; live-probed `ISS-2026-072`'s residual half myself against a fresh fixture (a raw
+`UPDATE app.users SET status='suspended'` bypassing `app.transition_user_status` left
+`evaluate_permission` still `allowed=true`, independently proving the gap real; the real governed path
+correctly denies afterward, proving the practical path stays closed); grep-confirmed no second
+`app.users.status`-mutation path exists anywhere. Ran the full `pnpm run db:test` suite myself (166
+files, 232 migrations, three pre-registered day-of-week flakes set aside/restored, `git status`
+confirmed clean before/after) — `ALL PASSED`, 0 `assertion failed`. Ran every other gate fresh myself:
+`typecheck` 0 errors; `lint` 0 errors/271 warnings; `pnpm run test` **4134/4134 pass**; `next build`
+clean; `docs:check`/`security:check`/`security:audit`/`data-classification:check`/`standards:check`/
+`threat-model:check` (25 entries, unchanged)/`git:check-paths` all PASS — every number matching commit
+`fe1434f`'s own claims exactly.
+
+**Determination**: item 5/41 of Prompt 297's own requirement table is now genuinely `PROVEN`;
+`ISS-2026-065` is genuinely, fully `RESOLVED`; no new Critical/High issue was introduced by the closure
+work (`git show fe1434f --stat` shows `docs/runtime/KNOWN_ISSUES.md` gained exactly 2 lines — one
+append-only resolution paragraph, no new numbered entry); `ISS-2026-072`'s residual half remains
+correctly, unchanged, non-blocking (neither `app.evaluate_permission` nor `app.transition_user_status`
+was touched by the closure work; it was never a `PHASE_7_VERIFIED` precondition to begin with, only an
+optional, separate follow-up per §22 item 2 of the closure report).
+
+**Closure state: `PHASE_7_VERIFIED` is set, 2026-08-16**, superseding `HRIS_TICKETING_CLOSURE_REPORT.md`
+§20's original 2026-08-15 `PHASE_7_PARTIALLY_COMPLETE` conclusion (preserved verbatim there as history,
+not rewritten — see that report's own §24 for the full independent re-derivation). Not a
+production/market/pilot/GA claim. **Phase 8 (Customer Portal and Loyalty) is now dependency-clean and
+unblocked** — Prompt 298 still requires a fresh, separate, explicit operator authorization before it
+may begin, per this repository's own standing phase-boundary authorization discipline; this checkpoint
+records only that the dependency itself is satisfied.
+
+**Task state**: the dedicated `ISS-2026-065` closure task and this finalization re-check are both
+recorded in `docs/runtime/TASK_LEDGER.md` as `CG-S12-HRT-ISS065-CLOSURE` and `CG-S12-HRT-025-FINALIZE`
+respectively. `docs/runtime/KNOWN_ISSUES.md` was not modified by this checkpoint (already correctly
+updated by the `ISS-2026-065` closure commit itself). **Phase 7 (HRIS and Ticketing) is closed.** Full
+detail: `docs/build-log/phase-07/HRIS_TICKETING_CLOSURE_REPORT.md` §24;
+`docs/build-log/phase-07/HRT-ISS-065-CLOSURE.md`; ledger records:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S12-HRT-ISS065-CLOSURE`/`CG-S12-HRT-025-FINALIZE` rows.

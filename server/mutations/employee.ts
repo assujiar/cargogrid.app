@@ -61,6 +61,8 @@ import {
   type EmployeeEmergencyContact,
   type EmployeeDuplicateCandidate,
   type EmployeeChangeRequest,
+  ActivateDueEmployeeLifecycleTransitionsInputSchema,
+  type ActivateDueEmployeeLifecycleTransitionsInput,
 } from "../contracts/employee/employee.ts";
 
 export type EmployeeMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -120,6 +122,21 @@ export const EMPLOYEE_KNOWN_MUTATION_ERROR_CODES = [
   "no_linked_identity",
   "no_rehire_event",
   "stale_rehire_event",
+  // ISS-2026-065 closure (20260731310000): a genuine HR backdated correction
+  // (a past effectiveDate) requires a non-empty reason -- reused from the RPC's
+  // own existing reason parameter where one exists, or the new backdateReason
+  // parameter where it doesn't (createEmployeeDraft/updateEmployeeDraft/
+  // reactivateEmployee).
+  "backdate_reason_required",
+  // ISS-2026-065 Tier C follow-up fix (20260731320000): app.record_employee_
+  // lifecycle_version -- the shared writer all 7 lifecycle-transition RPCs call
+  // -- now refuses to silently supersede/truncate a still-live, differently-
+  // reasoned lifecycle version (a genuine conflict between two independently-
+  // decided events); the caller must resolve it explicitly. Widening this array
+  // mirrors ISS-2026-114's own established "widen the array when a fix makes a
+  // new code reachable" pattern (see backdate_reason_required's own comment,
+  // immediately above).
+  "lifecycle_conflict",
 ] as const;
 type KnownEmployeeMutationErrorCode = (typeof EMPLOYEE_KNOWN_MUTATION_ERROR_CODES)[number];
 export type EmployeeMutationErrorCode = KnownEmployeeMutationErrorCode | "mutation_failed";
@@ -176,6 +193,10 @@ export async function createEmployeeDraft(client: EmployeeMutationRpcClient, inp
     p_idempotency_key: parsed.idempotencyKey ?? null,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-065 closure: optional, defaults to current_date server-side when
+    // omitted (undefined -> null) -- fully backward-compatible.
+    p_effective_date: parsed.effectiveDate ?? null,
+    p_backdate_reason: parsed.backdateReason ?? null,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "create_employee_draft");
@@ -203,6 +224,9 @@ export async function updateEmployeeDraft(client: EmployeeMutationRpcClient, inp
     p_manager_employee_id: parsed.managerEmployeeId ?? null,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-065 closure: see createEmployeeDraft's own identical fields.
+    p_effective_date: parsed.effectiveDate ?? null,
+    p_backdate_reason: parsed.backdateReason ?? null,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "update_employee_draft");
@@ -292,6 +316,10 @@ export async function suspendEmployee(client: EmployeeMutationRpcClient, input: 
     p_reason: parsed.reason,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-065 closure: a future date schedules the suspension (Platform-
+    // identity revocation deferred to the sweep); a past date backdates it
+    // (already HRS:Override-gated + mandatory-reason unconditionally above).
+    p_effective_date: parsed.effectiveDate ?? null,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "suspend_employee");
@@ -304,6 +332,11 @@ export async function reactivateEmployee(client: EmployeeMutationRpcClient, inpu
     p_expected_version: parsed.expectedVersion,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-065 closure: a future date schedules the un-suspension (Platform-
+    // identity restoration deferred to the sweep); a past date backdates it
+    // (already HRS:Override-gated; backdateReason becomes mandatory server-side).
+    p_effective_date: parsed.effectiveDate ?? null,
+    p_backdate_reason: parsed.backdateReason ?? null,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "reactivate_employee");
@@ -318,6 +351,10 @@ export async function terminateEmployee(client: EmployeeMutationRpcClient, input
     p_employment_end_date: parsed.employmentEndDate,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-065 closure: a future date schedules the termination (Platform-
+    // identity revocation deferred to the sweep); a past date backdates it
+    // (already HRS:Override-gated + mandatory-reason unconditionally above).
+    p_effective_date: parsed.effectiveDate ?? null,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "terminate_employee");
@@ -331,6 +368,9 @@ export async function archiveEmployeeProfile(client: EmployeeMutationRpcClient, 
     p_reason: parsed.reason ?? null,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-065 closure: a future date schedules the archival; a past date
+    // backdates it -- newly gated at HRS:Override + a now-mandatory p_reason.
+    p_effective_date: parsed.effectiveDate ?? null,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "archive_employee_profile");
@@ -349,9 +389,25 @@ export async function transferEmployee(client: EmployeeMutationRpcClient, input:
     p_reason: parsed.reason ?? null,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-065 closure: a future date schedules the transfer; a past date
+    // backdates it -- newly gated at HRS:Override + a now-mandatory p_reason.
+    p_effective_date: parsed.effectiveDate ?? null,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "transfer_employee");
+}
+
+/** ISS-2026-065 closure: HRS:Override-gated maintenance sweep -- activates every app.employee_lifecycle_versions row whose effective_start_date has arrived but which is still status='scheduled'. No live scheduler invokes this automatically in this repository yet (disclosed; the same standing ISS-2026-015 gap app.activate_due_employee_position_assignments already discloses) -- callable on demand today. Returns the number of transitions activated. */
+export async function activateDueEmployeeLifecycleTransitions(client: EmployeeMutationRpcClient, input: ActivateDueEmployeeLifecycleTransitionsInput): Promise<number> {
+  const parsed = ActivateDueEmployeeLifecycleTransitionsInputSchema.parse(input);
+  const { data, error } = await client.rpc("activate_due_employee_lifecycle_transitions", {
+    p_tenant_id: parsed.tenantId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
+  if (typeof data !== "number") throw new EmployeeMutationError("invalid_response", "activate_due_employee_lifecycle_transitions returned a non-numeric result");
+  return data;
 }
 
 // --- Emergency contacts ---

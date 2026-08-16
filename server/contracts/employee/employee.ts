@@ -331,6 +331,67 @@ export function parseEmployeeLifecycleEvent(row: Record<string, unknown>): Emplo
   });
 }
 
+// --- ISS-2026-065 closure: effective-dated lifecycle version history ---
+// (supabase/migrations/20260731310000_add_hris_employee_lifecycle_effective_dating_iss2026065.sql).
+
+export const EMPLOYEE_LIFECYCLE_VERSION_STATUSES = ["scheduled", "active", "superseded"] as const;
+export const EmployeeLifecycleVersionStatusSchema = z.enum(EMPLOYEE_LIFECYCLE_VERSION_STATUSES);
+export type EmployeeLifecycleVersionStatus = z.infer<typeof EmployeeLifecycleVersionStatusSchema>;
+
+export const EMPLOYEE_LIFECYCLE_CHANGE_REASONS = ["hire", "transfer", "promotion", "demotion", "suspend", "reactivate", "terminate", "archive", "correction"] as const;
+export const EmployeeLifecycleChangeReasonSchema = z.enum(EMPLOYEE_LIFECYCLE_CHANGE_REASONS);
+export type EmployeeLifecycleChangeReason = z.infer<typeof EmployeeLifecycleChangeReasonSchema>;
+
+/** app.get_employee_lifecycle_as_of's own projection -- reconstructs the genuine lifecycle state as of any date, never app.employees' own current-state columns. decidedReason is null (masked) unless the caller is self or holds HRS:View personal data. */
+export const EmployeeLifecycleVersionSchema = z.object({
+  id: z.string().uuid(),
+  masterRecordId: z.string().uuid(),
+  lifecycleStatus: EmployeeLifecycleStatusSchema,
+  employmentType: EmploymentTypeSchema,
+  companyOrgUnitId: z.string().uuid().nullable(),
+  branchOrgUnitId: z.string().uuid().nullable(),
+  departmentOrgUnitId: z.string().uuid().nullable(),
+  positionTitle: z.string().nullable(),
+  managerEmployeeId: z.string().uuid().nullable(),
+  hireDate: z.string().nullable(),
+  probationEndDate: z.string().nullable(),
+  employmentEndDate: z.string().nullable(),
+  effectiveStartDate: z.string(),
+  effectiveEndDate: z.string().nullable(),
+  status: EmployeeLifecycleVersionStatusSchema,
+  changeReason: EmployeeLifecycleChangeReasonSchema,
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string(),
+  decidedReason: z.string().nullable(),
+  recordVersion: z.number().int(),
+});
+export type EmployeeLifecycleVersion = z.infer<typeof EmployeeLifecycleVersionSchema>;
+
+export function parseEmployeeLifecycleVersion(row: Record<string, unknown>): EmployeeLifecycleVersion {
+  return EmployeeLifecycleVersionSchema.parse({
+    id: row.id,
+    masterRecordId: row.master_record_id,
+    lifecycleStatus: row.lifecycle_status,
+    employmentType: row.employment_type,
+    companyOrgUnitId: row.company_org_unit_id ?? null,
+    branchOrgUnitId: row.branch_org_unit_id ?? null,
+    departmentOrgUnitId: row.department_org_unit_id ?? null,
+    positionTitle: row.position_title ?? null,
+    managerEmployeeId: row.manager_employee_id ?? null,
+    hireDate: row.hire_date ?? null,
+    probationEndDate: row.probation_end_date ?? null,
+    employmentEndDate: row.employment_end_date ?? null,
+    effectiveStartDate: row.effective_start_date,
+    effectiveEndDate: row.effective_end_date ?? null,
+    status: row.status,
+    changeReason: row.change_reason,
+    decidedBy: row.decided_by ?? null,
+    decidedAt: row.decided_at,
+    decidedReason: row.decided_reason ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
 export const EmployeeDuplicateCandidateSchema = z.object({
   id: z.string().uuid(),
   sourceMasterRecordId: z.string().uuid(),
@@ -518,6 +579,13 @@ export const CreateEmployeeDraftInputSchema = z.object({
   idempotencyKey: z.string().nullable(),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string(),
+  // ISS-2026-065 closure: optional, defaults to current_date server-side when
+  // omitted -- fully backward-compatible for every existing caller. Always
+  // materializes immediately regardless of this date (this migration's own
+  // header, decision 5); backdating requires HRS:Override + a non-empty
+  // backdateReason.
+  effectiveDate: z.string().optional(),
+  backdateReason: z.string().optional(),
 });
 export type CreateEmployeeDraftInput = z.input<typeof CreateEmployeeDraftInputSchema>;
 
@@ -545,6 +613,10 @@ export const UpdateEmployeeDraftInputSchema = z.object({
   departmentOrgUnitId: z.string().uuid().nullable(),
   positionTitle: z.string().nullable(),
   managerEmployeeId: z.string().uuid().nullable(),
+  // ISS-2026-065 closure: see CreateEmployeeDraftInputSchema's own identical
+  // fields -- same semantics (always immediate; backdating gated).
+  effectiveDate: z.string().optional(),
+  backdateReason: z.string().optional(),
 });
 export type UpdateEmployeeDraftInput = z.input<typeof UpdateEmployeeDraftInputSchema>;
 
@@ -570,20 +642,28 @@ export type StartEmployeeLeaveInput = z.input<typeof StartEmployeeLeaveInputSche
 export const EndEmployeeLeaveInputSchema = z.object(RecordActionInputBase);
 export type EndEmployeeLeaveInput = z.input<typeof EndEmployeeLeaveInputSchema>;
 
-export const SuspendEmployeeInputSchema = z.object({ ...RecordActionInputBase, reason: z.string().min(1) });
+// ISS-2026-065 closure: effectiveDate is optional on every one of the 5 real
+// lifecycle-transition RPCs below -- a future date schedules the transition
+// (deferred to app.activate_due_employee_lifecycle_transitions), a past date
+// backdates it (gated at HRS:Override + a mandatory reason server-side; suspend/
+// terminate/reactivate are already Override-gated unconditionally, so nothing
+// widens for them -- see the migration's own header, decision 4).
+
+export const SuspendEmployeeInputSchema = z.object({ ...RecordActionInputBase, reason: z.string().min(1), effectiveDate: z.string().optional() });
 export type SuspendEmployeeInput = z.input<typeof SuspendEmployeeInputSchema>;
 
-export const ReactivateEmployeeInputSchema = z.object(RecordActionInputBase);
+export const ReactivateEmployeeInputSchema = z.object({ ...RecordActionInputBase, effectiveDate: z.string().optional(), backdateReason: z.string().optional() });
 export type ReactivateEmployeeInput = z.input<typeof ReactivateEmployeeInputSchema>;
 
 export const TerminateEmployeeInputSchema = z.object({
   ...RecordActionInputBase,
   reason: z.string().min(1),
   employmentEndDate: z.string().min(1),
+  effectiveDate: z.string().optional(),
 });
 export type TerminateEmployeeInput = z.input<typeof TerminateEmployeeInputSchema>;
 
-export const ArchiveEmployeeProfileInputSchema = z.object({ ...RecordActionInputBase, reason: z.string().nullable() });
+export const ArchiveEmployeeProfileInputSchema = z.object({ ...RecordActionInputBase, reason: z.string().nullable(), effectiveDate: z.string().optional() });
 export type ArchiveEmployeeProfileInput = z.input<typeof ArchiveEmployeeProfileInputSchema>;
 
 export const TransferEmployeeInputSchema = z.object({
@@ -594,8 +674,26 @@ export const TransferEmployeeInputSchema = z.object({
   positionTitle: z.string().nullable(),
   managerEmployeeId: z.string().uuid().nullable(),
   reason: z.string().nullable(),
+  effectiveDate: z.string().optional(),
 });
 export type TransferEmployeeInput = z.input<typeof TransferEmployeeInputSchema>;
+
+// --- ISS-2026-065 closure: the "as of" read and the maintenance sweep ---
+
+export const GetEmployeeLifecycleAsOfInputSchema = z.object({
+  masterRecordId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  asOf: z.string().optional(),
+});
+export type GetEmployeeLifecycleAsOfInput = z.input<typeof GetEmployeeLifecycleAsOfInputSchema>;
+
+/** app.activate_due_employee_lifecycle_transitions -- HRS:Override-gated, idempotent, NOT wired to any live scheduler in this repository (disclosed NOT_RUN; callable on demand). */
+export const ActivateDueEmployeeLifecycleTransitionsInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ActivateDueEmployeeLifecycleTransitionsInput = z.input<typeof ActivateDueEmployeeLifecycleTransitionsInputSchema>;
 
 export const AddEmployeeEmergencyContactInputSchema = z.object({
   masterRecordId: z.string().uuid(),
