@@ -5,6 +5,7 @@ import { getCustomerPortalScopeContext, CustomerPortalScopeQueryError } from "..
 import { PermissionState } from "../../../../components/ui/permission-state.tsx";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { CustomerPortalNav } from "../../../../components/domain/customer-portal-nav.tsx";
 import { CustomerPortalScopePanel } from "./customer-portal-scope-panel.tsx";
 
 /**
@@ -23,6 +24,11 @@ import { CustomerPortalScopePanel } from "./customer-portal-scope-panel.tsx";
  * (never a page render); tenant_not_found/tenant_suspended/forbidden -> a
  * distinct denied state, deliberately not confirming/denying tenant
  * existence beyond what the viewer is already entitled to know.
+ *
+ * Carries `CustomerPortalNav` (CPL-301) so this page and the full dashboard
+ * form one coherent portal shell -- see that component's own header for why
+ * this is a shared presentational component rather than a `layout.tsx`
+ * route-group restructuring.
  */
 export default async function CustomerPortalPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;
@@ -56,11 +62,18 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
   }
 
   if (loadFailed) {
-    return <ErrorState description="Something went wrong loading your account access. Please try again." />;
+    return (
+      <div className="flex flex-col gap-4">
+        <CustomerPortalNav tenantSlug={tenantSlug} current="scope" />
+        <ErrorState description="Something went wrong loading your account access. Please try again." />
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <CustomerPortalNav tenantSlug={tenantSlug} current="scope" />
+
       <div>
         <h1 className="text-xl font-semibold text-neutral-900">Your account access</h1>
         <p className="text-xs text-neutral-500">Every company/account/site you can act within, resolved from your own active membership grants -- never from a URL, filter, or payload.</p>
