@@ -554,3 +554,63 @@ kickoff) is **not** eligible until a dedicated future HRT follow-up prompt close
 real and this closure checkpoint is re-run or updated in place. Full detail:
 `docs/build-log/phase-07/HRIS_TICKETING_CLOSURE_REPORT.md`; ledger record:
 `docs/runtime/TASK_LEDGER.md`'s `CG-S12-HRT-025` row.
+
+---
+
+## 31. Update — dedicated `ISS-2026-065` closure task (commit `fe1434f`) plus finalization re-check — `PHASE_7_VERIFIED` set (2026-08-16)
+
+Per §30's own named resume condition, a dedicated HRT follow-up task (commit `fe1434f`, 2026-08-15,
+`docs/build-log/phase-07/HRT-ISS-065-CLOSURE.md`, no source prompt number — an operator-authorized,
+bounded new-capability insertion, mirroring the `ATW-011A`/`ATW-016A` inserted-task precedent) closed
+`ISS-2026-065` for real: a new, versioned, effective-dated `app.employee_lifecycle_versions` table
+(`supabase/migrations/20260731310000`), all 7 lifecycle-transition RPCs widened with an optional
+effective-date/backdate parameter, a genuine `app.get_employee_lifecycle_as_of` "as of" read, and a
+`HRS:Override`-gated maintenance sweep — plus a mandatory Tier C adversarial review (per
+`BUILD_EXECUTION_PROTOCOL.md` §3.2 trigger 3, since this mechanism writes through Platform
+identity/access authority) that found and fixed six further Critical/High-severity defects in the
+first implementation pass, all via one additive follow-up migration
+(`20260731320000`), before acceptance.
+
+This checkpoint (the finalization re-check named by `HRIS_TICKETING_CLOSURE_REPORT.md` §22/§24) is the
+orchestrating session's own independent re-verification of that closure — not an acceptance of the
+closure task's, or either of two parallel re-verification lenses', report on its word. Firsthand this
+checkpoint: read `git show fe1434f` and `HRT-ISS-065-CLOSURE.md` in full; read the core
+conflict-protection logic (`app.record_employee_lifecycle_version`'s direction-aware bucket-(a)/(b)
+supersede rule) directly and confirmed it matches its own documented design; built an independent,
+from-empty, 232-migration disposable database myself (zero errors); ran the shipped dedicated test
+file (`hris-employee-master-lifecycle-effective-dating.sql`, 19 scenario blocks) against it —
+`ALL PASSED`; live-probed `ISS-2026-072`'s residual half myself against a fresh fixture (a raw
+`UPDATE app.users SET status='suspended'` bypassing `app.transition_user_status` left
+`evaluate_permission` still `allowed=true`, independently proving the gap real; the real governed path
+correctly denies afterward, proving the practical path stays closed); grep-confirmed no second
+`app.users.status`-mutation path exists anywhere. Ran the full `pnpm run db:test` suite myself (166
+files, 232 migrations, three pre-registered day-of-week flakes set aside/restored, `git status`
+confirmed clean before/after) — `ALL PASSED`, 0 `assertion failed`. Ran every other gate fresh myself:
+`typecheck` 0 errors; `lint` 0 errors/271 warnings; `pnpm run test` **4134/4134 pass**; `next build`
+clean; `docs:check`/`security:check`/`security:audit`/`data-classification:check`/`standards:check`/
+`threat-model:check` (25 entries, unchanged)/`git:check-paths` all PASS — every number matching commit
+`fe1434f`'s own claims exactly.
+
+**Determination**: item 5/41 of Prompt 297's own requirement table is now genuinely `PROVEN`;
+`ISS-2026-065` is genuinely, fully `RESOLVED`; no new Critical/High issue was introduced by the closure
+work (`git show fe1434f --stat` shows `docs/runtime/KNOWN_ISSUES.md` gained exactly 2 lines — one
+append-only resolution paragraph, no new numbered entry); `ISS-2026-072`'s residual half remains
+correctly, unchanged, non-blocking (neither `app.evaluate_permission` nor `app.transition_user_status`
+was touched by the closure work; it was never a `PHASE_7_VERIFIED` precondition to begin with, only an
+optional, separate follow-up per §22 item 2 of the closure report).
+
+**Closure state: `PHASE_7_VERIFIED` is set, 2026-08-16**, superseding `HRIS_TICKETING_CLOSURE_REPORT.md`
+§20's original 2026-08-15 `PHASE_7_PARTIALLY_COMPLETE` conclusion (preserved verbatim there as history,
+not rewritten — see that report's own §24 for the full independent re-derivation). Not a
+production/market/pilot/GA claim. **Phase 8 (Customer Portal and Loyalty) is now dependency-clean and
+unblocked** — Prompt 298 still requires a fresh, separate, explicit operator authorization before it
+may begin, per this repository's own standing phase-boundary authorization discipline; this checkpoint
+records only that the dependency itself is satisfied.
+
+**Task state**: the dedicated `ISS-2026-065` closure task and this finalization re-check are both
+recorded in `docs/runtime/TASK_LEDGER.md` as `CG-S12-HRT-ISS065-CLOSURE` and `CG-S12-HRT-025-FINALIZE`
+respectively. `docs/runtime/KNOWN_ISSUES.md` was not modified by this checkpoint (already correctly
+updated by the `ISS-2026-065` closure commit itself). **Phase 7 (HRIS and Ticketing) is closed.** Full
+detail: `docs/build-log/phase-07/HRIS_TICKETING_CLOSURE_REPORT.md` §24;
+`docs/build-log/phase-07/HRT-ISS-065-CLOSURE.md`; ledger records:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S12-HRT-ISS065-CLOSURE`/`CG-S12-HRT-025-FINALIZE` rows.
