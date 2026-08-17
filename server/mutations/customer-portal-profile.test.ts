@@ -78,6 +78,7 @@ describe("submitCustomerProfileChangeRequest", () => {
         tenantId: TENANT_ID,
         accountId: ACCOUNT_ID,
         // @ts-expect-error -- deliberately an out-of-registry field for this test
+        // SUPPRESS(owner=cpl314-customer-profile, reason=deliberate out-of-registry field-name test fixture proving the Zod/CHECK boundary rejects it at runtime, expires=NONE, adr=NONE)
         fieldName: "legal_name",
         proposedValue: "Forged Legal Name",
         actorAuthUserId: ACTOR_ID,

@@ -47,6 +47,41 @@
  * identical pure-addition shape -- a company-profile screen is a natural
  * sibling of "Your account access" (CPL-300's own `customer-portal` scope
  * page), which this nav already links to.
+ *
+ * CPL-315 (`customer-portal-users`, Customer User Management) widens
+ * `current` again, the identical pure-addition shape -- the "manage users"
+ * screen (invite/role-change/revoke/pending-invites/access-review) is the
+ * account_admin-facing counterpart to CPL-300's own `customer-portal` scope
+ * page (which shows the SIGNED-IN identity's own access; this one manages
+ * OTHER identities' access on the same account), so it sits beside it in the
+ * same shared shell rather than becoming a standalone route family.
+ *
+ * CPL-316 (`customer-loyalty`, Loyalty Program and Earning) widens `current`
+ * again, the identical pure-addition shape -- the FIRST-EVER Loyalty-domain
+ * customer-facing screen (own enrollment + earning history), a natural
+ * sibling of the account-access/dashboard/invoices screens this nav already
+ * links between.
+ *
+ * CPL-317 (`customer-loyalty-tier`, Membership Tier) widens `current` again,
+ * the identical pure-addition shape -- current tier/progress/benefits is a
+ * natural sibling of CPL-316's own loyalty enrollment/earning-history screen
+ * (reads the SAME app.loyalty_accounts scope, a distinct derived view over
+ * it), not a standalone route family.
+ *
+ * CPL-318 (`customer-loyalty-points`, Points Ledger) widens `current` again,
+ * the identical pure-addition shape -- point balance/ledger-history/expiry-
+ * schedule is a natural sibling of CPL-316/317's own loyalty screens (reads
+ * the SAME app.loyalty_accounts scope, a distinct derived view over it), not
+ * a standalone route family.
+ *
+ * CPL-319 (`customer-loyalty-benefits`, Cashback Discount Voucher) widens
+ * `current` again, the identical pure-addition shape -- the cashback/
+ * discount/voucher benefit wallet is a natural sibling of CPL-316/317/318's
+ * own loyalty screens (reads app.loyalty_accounts-scoped entitlements, a
+ * distinct benefit type from points), not a standalone route family. The
+ * FIRST route under this shared nav to carry a genuine customer-initiated
+ * write (redeeming one's own voucher), still just a read-plus-action screen
+ * like every sibling here.
  */
 
 import { Link } from "../ui/link.tsx";
@@ -56,7 +91,7 @@ export function CustomerPortalNav({
   current,
 }: {
   readonly tenantSlug: string;
-  readonly current: "scope" | "dashboard" | "inventory" | "warehouse-orders" | "invoices" | "receipts" | "tickets" | "profile";
+  readonly current: "scope" | "dashboard" | "inventory" | "warehouse-orders" | "invoices" | "receipts" | "tickets" | "profile" | "users" | "loyalty" | "loyalty-tier" | "points" | "benefits";
 }) {
   return (
     <nav aria-label="Customer portal" className="flex gap-4 border-b border-neutral-200 pb-2 text-sm">
@@ -108,6 +143,41 @@ export function CustomerPortalNav({
         </span>
       ) : (
         <Link href={`/${tenantSlug}/customer-profile`}>Company profile</Link>
+      )}
+      {current === "users" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Manage users
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-portal-users`}>Manage users</Link>
+      )}
+      {current === "loyalty" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Loyalty program
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-loyalty`}>Loyalty program</Link>
+      )}
+      {current === "loyalty-tier" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Membership tier
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-loyalty-tier`}>Membership tier</Link>
+      )}
+      {current === "points" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Points balance
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-loyalty-points`}>Points balance</Link>
+      )}
+      {current === "benefits" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Cashback &amp; vouchers
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-loyalty-benefits`}>Cashback &amp; vouchers</Link>
       )}
       {current === "scope" ? (
         <span className="font-medium text-text-primary" aria-current="page">
