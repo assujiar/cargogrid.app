@@ -71,6 +71,11 @@ import {
   TICKET_LINK_ENTITY_TYPES,
   TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES,
   TICKET_LINK_RELATIONSHIPS,
+  parseTicketPortalLinkCandidateRow,
+  parseTicketPortalLinkRow,
+  LinkTicketPortalRecordInputSchema,
+  UnlinkTicketPortalRecordInputSchema,
+  TICKET_PORTAL_LINK_ENTITY_TYPES,
 } from "./ticketing.ts";
 
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
@@ -704,5 +709,63 @@ describe("HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records", () => {
       const v = RecordTicketLinkSummaryAccessInputSchema.parse({ linkId: ID_1, actorAuthUserId: ACTOR, actorLabel: "admin", accessType });
       assert.equal(v.accessType, accessType);
     }
+  });
+});
+
+describe("CPL-313 (CG-S13-CPL-015): Portal Ticket-Linked Records (warehouse_order/document) -- a SEPARATE, parallel type family from TICKET_LINK_ENTITY_TYPES above, never merged into it", () => {
+  test("TICKET_PORTAL_LINK_ENTITY_TYPES is exactly warehouse_order/document -- never overlapping TICKET_LINK_ENTITY_TYPES", () => {
+    assert.deepEqual([...TICKET_PORTAL_LINK_ENTITY_TYPES].sort(), ["document", "warehouse_order"]);
+    for (const t of TICKET_PORTAL_LINK_ENTITY_TYPES) {
+      assert.equal((TICKET_LINK_ENTITY_TYPES as readonly string[]).includes(t), false);
+    }
+  });
+
+  test("TICKET_LINK_ENTITY_TYPES itself is unchanged by this checkpoint -- still exactly the original six values (the reason a parallel table was required, ISS-2026-122 item 1)", () => {
+    assert.deepEqual([...TICKET_LINK_ENTITY_TYPES].sort(), ["customer", "invoice", "shipment", "user", "vendor", "warehouse"]);
+  });
+
+  test("parseTicketPortalLinkCandidateRow maps a search-result row, nulls carried through", () => {
+    const c = parseTicketPortalLinkCandidateRow({ entity_id: ID_1, primary_label: "WH-OUT-0001", secondary_label: null, status_label: "confirmed" });
+    assert.equal(c.entityId, ID_1);
+    assert.equal(c.secondaryLabel, null);
+    assert.equal(c.statusLabel, "confirmed");
+  });
+
+  test("parseTicketPortalLinkRow maps a LIVE, available link", () => {
+    const l = parseTicketPortalLinkRow({
+      id: ID_1, entity_type: "warehouse_order", entity_id: ID_2, relationship: "related", status: "active",
+      live_available: true, label: "WH-OUT-0001", detail: "Outbound / manual", status_label: "confirmed",
+      linked_at: "2026-08-17T00:00:00Z", created_by: ACTOR, record_version: 1,
+    });
+    assert.equal(l.entityType, "warehouse_order");
+    assert.equal(l.liveAvailable, true);
+  });
+
+  test("parseTicketPortalLinkRow maps an UNAVAILABLE document link -- label/detail null, never a leaked stale value", () => {
+    const l = parseTicketPortalLinkRow({
+      id: ID_1, entity_type: "document", entity_id: ID_2, relationship: "related", status: "active",
+      live_available: false, label: null, detail: null, status_label: "unavailable",
+      linked_at: "2026-08-17T00:00:00Z", created_by: ACTOR, record_version: 1,
+    });
+    assert.equal(l.liveAvailable, false);
+    assert.equal(l.label, null);
+  });
+
+  test("LinkTicketPortalRecordInputSchema accepts warehouse_order/document, rejects a TICKET_LINK_ENTITY_TYPES value at the type level", () => {
+    const v = LinkTicketPortalRecordInputSchema.parse({
+      ticketId: ID_1, entityType: "warehouse_order", entityId: ID_2, relationship: "primary_subject", actorAuthUserId: ACTOR, actorLabel: "admin",
+    });
+    assert.equal(v.entityType, "warehouse_order");
+    assert.throws(() =>
+      LinkTicketPortalRecordInputSchema.parse({
+        ticketId: ID_1, entityType: "shipment", entityId: ID_2, relationship: "related", actorAuthUserId: ACTOR, actorLabel: "admin",
+      })
+    );
+  });
+
+  test("UnlinkTicketPortalRecordInputSchema requires a non-empty reason", () => {
+    assert.throws(() =>
+      UnlinkTicketPortalRecordInputSchema.parse({ linkId: ID_1, expectedVersion: 1, reason: "", actorAuthUserId: ACTOR, actorLabel: "admin" })
+    );
   });
 });

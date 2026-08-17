@@ -2224,3 +2224,113 @@ export const RecordTicketLinkSummaryAccessInputSchema = z.object({
   accessType: TicketLinkSummaryAccessTypeSchema,
 });
 export type RecordTicketLinkSummaryAccessInput = z.infer<typeof RecordTicketLinkSummaryAccessInputSchema>;
+
+// ===========================================================================
+// CPL-313 (CG-S13-CPL-015, Prompt 313): Portal ticket-linked records --
+// warehouse_order/document. A deliberately SEPARATE, PARALLEL type family
+// from TICKET_LINK_ENTITY_TYPES above (never merged into it) -- widening
+// the existing six-value TICKET_LINK_ENTITY_TYPES/TicketLinkEntityTypeSchema
+// would break an existing, protected test assertion
+// (server/contracts/ticketing/ticketing.test.ts, "TICKET_LINK_ENTITY_TYPES
+// is exactly the six documented types") and the equivalent live db-test
+// assertion in scripts/db-tests/ticketing-linked-records.sql -- both
+// discovered BEFORE writing any code, per the source prompt's own
+// instruction to check app._ticket_link_resolve_candidate's actual body
+// first. Mirrors supabase/migrations/20260801140000_create_customer_portal_
+// ticket_linked_records.sql exactly; see that migration's own header for
+// full design rationale.
+// ===========================================================================
+
+export const TICKET_PORTAL_LINK_ENTITY_TYPES = ["warehouse_order", "document"] as const;
+export const TicketPortalLinkEntityTypeSchema = z.enum(TICKET_PORTAL_LINK_ENTITY_TYPES);
+export type TicketPortalLinkEntityType = z.infer<typeof TicketPortalLinkEntityTypeSchema>;
+
+// A candidate row from app.search_ticket_portal_link_candidates /
+// app.search_customer_ticket_portal_link_candidates_precreate -- already
+// independently authorized for the calling principal (C-05).
+export const TicketPortalLinkCandidateRowSchema = z.object({
+  entityId: z.string().uuid(),
+  primaryLabel: z.string(),
+  secondaryLabel: z.string().nullable(),
+  statusLabel: z.string().nullable(),
+});
+export type TicketPortalLinkCandidateRow = z.infer<typeof TicketPortalLinkCandidateRowSchema>;
+
+export function parseTicketPortalLinkCandidateRow(row: Record<string, unknown>): TicketPortalLinkCandidateRow {
+  return TicketPortalLinkCandidateRowSchema.parse({
+    entityId: row.entity_id,
+    primaryLabel: row.primary_label,
+    secondaryLabel: row.secondary_label ?? null,
+    statusLabel: row.status_label ?? null,
+  });
+}
+
+// One row from app.list_ticket_portal_links -- label/detail/statusLabel are
+// a LIVE, principal-fresh re-check, never the stored safe_snapshot;
+// liveAvailable=false collapses "deleted" and "revoked" into one
+// undifferentiated outward state deliberately (mirrors TicketLinkRow).
+export const TicketPortalLinkRowSchema = z.object({
+  id: z.string().uuid(),
+  entityType: TicketPortalLinkEntityTypeSchema,
+  entityId: z.string().uuid(),
+  relationship: TicketLinkRelationshipSchema,
+  status: TicketLinkStatusSchema,
+  liveAvailable: z.boolean(),
+  label: z.string().nullable(),
+  detail: z.string().nullable(),
+  statusLabel: z.string(),
+  linkedAt: z.string(),
+  createdBy: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+});
+export type TicketPortalLinkRow = z.infer<typeof TicketPortalLinkRowSchema>;
+
+export function parseTicketPortalLinkRow(row: Record<string, unknown>): TicketPortalLinkRow {
+  return TicketPortalLinkRowSchema.parse({
+    id: row.id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    relationship: row.relationship,
+    status: row.status,
+    liveAvailable: row.live_available,
+    label: row.label ?? null,
+    detail: row.detail ?? null,
+    statusLabel: row.status_label,
+    linkedAt: row.linked_at,
+    createdBy: row.created_by ?? null,
+    recordVersion: row.record_version,
+  });
+}
+
+export const LinkTicketPortalRecordInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  entityType: TicketPortalLinkEntityTypeSchema,
+  entityId: z.string().uuid(),
+  relationship: TicketLinkRelationshipSchema,
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type LinkTicketPortalRecordInput = z.infer<typeof LinkTicketPortalRecordInputSchema>;
+
+export const UnlinkTicketPortalRecordInputSchema = z.object({
+  linkId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().min(1),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type UnlinkTicketPortalRecordInput = z.infer<typeof UnlinkTicketPortalRecordInputSchema>;
+
+// The ticket CREATE form's own picker offers exactly these four types --
+// deliberately spans both TICKET_LINK_ENTITY_TYPES (shipment/invoice) and
+// TICKET_PORTAL_LINK_ENTITY_TYPES (warehouse_order/document) at once,
+// mirroring app.search_customer_ticket_link_candidates_precreate's own
+// identical span (see that function's own comment). Lives here, not in
+// app/(tenant)/[tenantSlug]/customer-tickets/actions.ts, because that file
+// is a "use server" module -- every export from a "use server" file must be
+// an async function, so a plain runtime constant cannot live there (a real
+// `next build` failure this checkpoint's own build caught live, not reasoned
+// about in advance).
+export const TICKET_PRECREATE_LINK_ENTITY_TYPES = ["shipment", "invoice", "warehouse_order", "document"] as const;
+export const TicketPrecreateLinkEntityTypeSchema = z.enum(TICKET_PRECREATE_LINK_ENTITY_TYPES);
+export type TicketPrecreateLinkEntityType = z.infer<typeof TicketPrecreateLinkEntityTypeSchema>;

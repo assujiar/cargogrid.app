@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
-import type { CustomerTicketActionState, CustomerTicketLinkSearchActionState } from "../actions.ts";
+import type { CustomerTicketActionState, CustomerTicketLinkSearchActionState, CustomerTicketPortalLinkSearchActionState } from "../actions.ts";
 import type {
   CustomerTicketDetail,
   CustomerTicketMessageRow,
@@ -11,8 +11,11 @@ import type {
   TicketLinkRow,
   TicketLinkEntityType,
   TicketLinkRelationship,
+  TicketPortalLinkRow,
+  TicketPortalLinkEntityType,
+  TicketSlaStatusForRequesterRow,
 } from "../../../../../server/contracts/ticketing/ticketing.ts";
-import { TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS } from "../../../../../server/contracts/ticketing/ticketing.ts";
+import { TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS, TICKET_PORTAL_LINK_ENTITY_TYPES } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
 const INITIAL_STATE: CustomerTicketActionState = { error: null };
 
@@ -23,6 +26,15 @@ const CUSTOMER_LINK_ENTITY_TYPE_LABELS: Record<TicketLinkEntityType, string> = {
   vendor: "Vendor",
   customer: "My account",
   user: "User",
+};
+
+// CPL-313: a SEPARATE label map for the SEPARATE app.ticket_portal_links
+// registry -- see server/contracts/ticketing/ticketing.ts's own header
+// comment for why warehouse_order/document are not folded into
+// TicketLinkEntityType above.
+const CUSTOMER_PORTAL_LINK_ENTITY_TYPE_LABELS: Record<TicketPortalLinkEntityType, string> = {
+  warehouse_order: "Warehouse order",
+  document: "Document",
 };
 
 const CUSTOMER_LINK_RELATIONSHIP_LABELS: Record<TicketLinkRelationship, string> = {
@@ -187,6 +199,168 @@ function CustomerLinkCandidateRow({
   );
 }
 
+// CPL-313: a SEPARATE section for the SEPARATE app.ticket_portal_links
+// registry (warehouse_order/document) -- mirrors CustomerLinkedRecordsSection
+// above structurally, but calls the SEPARATE search/link/unlink RPCs
+// (app.search_ticket_portal_link_candidates/app.link_ticket_portal_record/
+// app.unlink_ticket_portal_record/app.list_ticket_portal_links). Rendered as
+// its own section, never merged into the list above -- the two registries
+// remain genuinely separate all the way to the UI.
+function CustomerPortalLinkedRecordsSection({
+  links,
+  searchAction,
+  linkAction,
+  unlinkAction,
+}: {
+  links: readonly TicketPortalLinkRow[];
+  searchAction: (prevState: CustomerTicketPortalLinkSearchActionState, formData: FormData) => Promise<CustomerTicketPortalLinkSearchActionState>;
+  linkAction: (entityType: TicketPortalLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => LinkBoundAction;
+  unlinkAction: (linkId: string, expectedVersion: number) => LinkBoundAction;
+}) {
+  const [searchState, searchFormAction, searchPending] = useActionState(searchAction, { error: null, entityType: null, relationship: "related", results: [] } as CustomerTicketPortalLinkSearchActionState);
+  const linkedEntityIds = new Set(links.filter((l) => l.entityType === searchState.entityType).map((l) => l.entityId));
+
+  return (
+    <section aria-label="Linked warehouse orders and documents" className="flex flex-col gap-3">
+      <h2 className="text-sm font-semibold text-neutral-900">Linked warehouse orders &amp; documents</h2>
+      <p className="text-xs text-neutral-500">Warehouse orders and documents (quote attachments, ePOD evidence) referenced by this ticket.</p>
+
+      {links.length === 0 ? (
+        <p className="text-xs text-neutral-500">None linked yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {links.map((l) => (
+            <CustomerPortalLinkedRecordRow key={l.id} link={l} unlinkAction={unlinkAction} />
+          ))}
+        </ul>
+      )}
+
+      <form action={searchFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
+        <h3 className="text-xs font-semibold text-neutral-700">Find a record to link</h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Record type
+            <select name="entityType" required defaultValue={searchState.entityType ?? ""} className="rounded border border-neutral-300 p-1.5 text-xs">
+              <option value="" disabled>
+                Select…
+              </option>
+              {TICKET_PORTAL_LINK_ENTITY_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {CUSTOMER_PORTAL_LINK_ENTITY_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Relationship
+            <select name="relationship" defaultValue={searchState.relationship} className="rounded border border-neutral-300 p-1.5 text-xs">
+              {TICKET_LINK_RELATIONSHIPS.map((r) => (
+                <option key={r} value={r}>
+                  {CUSTOMER_LINK_RELATIONSHIP_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <input name="searchText" placeholder="Search by number/name…" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+          <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
+            Search
+          </Button>
+        </div>
+        {searchState.error ? (
+          <p role="alert" className="text-xs text-danger">
+            {searchState.error}
+          </p>
+        ) : null}
+        {searchState.entityType ? (
+          searchState.results.length === 0 ? (
+            <p className="text-xs text-neutral-500">No matching records found on your account.</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {searchState.results.map((c) => (
+                <CustomerLinkCandidateRow
+                  key={c.entityId}
+                  candidate={c}
+                  alreadyLinked={linkedEntityIds.has(c.entityId)}
+                  linkAction={linkAction(searchState.entityType as TicketPortalLinkEntityType, c.entityId, searchState.relationship)}
+                />
+              ))}
+            </ul>
+          )
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+function CustomerPortalLinkedRecordRow({ link, unlinkAction }: { link: TicketPortalLinkRow; unlinkAction: (linkId: string, expectedVersion: number) => LinkBoundAction }) {
+  const [state, formAction, pending] = useActionState(unlinkAction(link.id, link.recordVersion), INITIAL_STATE);
+  return (
+    <li className="flex flex-col gap-1 rounded border border-neutral-100 p-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone="neutral" label={CUSTOMER_PORTAL_LINK_ENTITY_TYPE_LABELS[link.entityType]} />
+        {link.liveAvailable ? (
+          <>
+            <span className="font-medium text-neutral-900">{link.label}</span>
+            {link.detail ? <span className="text-neutral-500">— {link.detail}</span> : null}
+          </>
+        ) : (
+          <StatusBadge tone="warning" label="Unavailable" />
+        )}
+      </div>
+      <form action={formAction} className="flex items-center gap-2">
+        <input name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] rounded border border-neutral-300 p-1 text-xs" />
+        <Button type="submit" variant="destructive" loading={pending} loadingLabel="Unlinking…">
+          Unlink
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+// CPL-313: SLA target/status, sourced ONLY from app.get_ticket_sla_status_
+// for_requester (HRT-289, already-VERIFIED) -- never a second, invented SLA
+// source. `slaStatus === null` means no SLA clock has been started for this
+// ticket yet (the common case immediately after a customer files a new
+// ticket, before staff triage) -- rendered as an honest "not yet tracked"
+// state, never a fabricated target/countdown.
+const SLA_PHASE_TONE: Record<"pending" | "met" | "breached", StatusTone> = {
+  pending: "info",
+  met: "success",
+  breached: "danger",
+};
+
+function SlaStatusSection({ slaStatus }: { slaStatus: TicketSlaStatusForRequesterRow | null }) {
+  if (!slaStatus) {
+    return (
+      <div className="rounded bg-neutral-50 p-2 text-xs text-neutral-500">
+        <span className="font-medium text-neutral-700">Service level: </span>
+        Not yet tracked -- a target is assigned once your ticket is triaged.
+      </div>
+    );
+  }
+  return (
+    <dl className="grid grid-cols-2 gap-2 text-xs text-neutral-500 sm:grid-cols-4">
+      <div>
+        <dt className="font-medium">Response target</dt>
+        <dd className="flex items-center gap-1">
+          {slaStatus.responseTargetMinutes} min <StatusBadge tone={SLA_PHASE_TONE[slaStatus.responseStatus]} label={slaStatus.responseStatus} />
+        </dd>
+      </div>
+      <div>
+        <dt className="font-medium">Resolution target</dt>
+        <dd className="flex items-center gap-1">
+          {slaStatus.resolutionTargetMinutes} min <StatusBadge tone={SLA_PHASE_TONE[slaStatus.resolutionStatus]} label={slaStatus.resolutionStatus} />
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 const STATUS_TONE: Record<TicketStatus, StatusTone> = {
   new: "info",
   open: "info",
@@ -266,24 +440,61 @@ function TransitionForm({ toStatus, label, requiresReason, transitionAction }: {
   );
 }
 
+// CPL-313 (Complaint and Ticket): closure confirmation UX. app.ticket_
+// status_transitions (HRT-286) does NOT mark resolved->closed
+// requester_allowed -- only staff may actually close a ticket (a canonical
+// Ticketing lifecycle decision this checkpoint's own bounded scope does not
+// reopen or widen). "Closure confirmation" from the portal side is
+// therefore this explicit, disclosed banner plus the ALREADY-existing
+// reopen action below (requester_allowed=true for resolved/closed->open) --
+// a customer who does NOT reopen is treated as having implicitly confirmed
+// the resolution; a customer who disagrees has a real, working action.
+function ClosureConfirmationBanner({ status }: { status: TicketStatus }) {
+  if (status === "resolved") {
+    return (
+      <p className="rounded bg-info/10 p-2 text-xs text-neutral-700">
+        This ticket has been marked resolved. If the resolution above solves your issue, no action is needed -- our team will close it. If it does not, use <span className="font-medium">Reopen ticket</span> below and tell us why.
+      </p>
+    );
+  }
+  if (status === "closed") {
+    return (
+      <p className="rounded bg-neutral-50 p-2 text-xs text-neutral-500">
+        This ticket is closed. If your issue returns or was not fully resolved, use <span className="font-medium">Reopen ticket</span> below.
+      </p>
+    );
+  }
+  return null;
+}
+
 export function CustomerTicketDetailPanel({
   detail,
   messages,
   replyAction,
   transitionAction,
+  slaStatus,
   ticketLinks,
   searchTicketLinksAction,
   linkTicketRecordAction,
   unlinkTicketRecordAction,
+  ticketPortalLinks,
+  searchTicketPortalLinksAction,
+  linkTicketPortalRecordAction,
+  unlinkTicketPortalRecordAction,
 }: {
   detail: CustomerTicketDetail;
   messages: readonly CustomerTicketMessageRow[];
   replyAction: BoundAction;
   transitionAction: (toStatus: TicketStatus) => BoundAction;
+  slaStatus: TicketSlaStatusForRequesterRow | null;
   ticketLinks: readonly TicketLinkRow[];
   searchTicketLinksAction: (prevState: CustomerTicketLinkSearchActionState, formData: FormData) => Promise<CustomerTicketLinkSearchActionState>;
   linkTicketRecordAction: (entityType: TicketLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => LinkBoundAction;
   unlinkTicketRecordAction: (linkId: string, expectedVersion: number) => LinkBoundAction;
+  ticketPortalLinks: readonly TicketPortalLinkRow[];
+  searchTicketPortalLinksAction: (prevState: CustomerTicketPortalLinkSearchActionState, formData: FormData) => Promise<CustomerTicketPortalLinkSearchActionState>;
+  linkTicketPortalRecordAction: (entityType: TicketPortalLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => LinkBoundAction;
+  unlinkTicketPortalRecordAction: (linkId: string, expectedVersion: number) => LinkBoundAction;
 }) {
   const actions = nextCustomerActions(detail.status);
 
@@ -313,12 +524,14 @@ export function CustomerTicketDetailPanel({
             <dd>{new Date(detail.updatedAt).toLocaleString()}</dd>
           </div>
         </dl>
+        <SlaStatusSection slaStatus={slaStatus} />
         {detail.resolutionSummary ? (
           <p className="rounded bg-success/10 p-2 text-sm text-neutral-800">
             <span className="font-medium">Resolution: </span>
             {detail.resolutionSummary}
           </p>
         ) : null}
+        <ClosureConfirmationBanner status={detail.status} />
         {actions.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {actions.map((a) => (
@@ -343,6 +556,13 @@ export function CustomerTicketDetailPanel({
         searchAction={searchTicketLinksAction}
         linkAction={linkTicketRecordAction}
         unlinkAction={unlinkTicketRecordAction}
+      />
+
+      <CustomerPortalLinkedRecordsSection
+        links={ticketPortalLinks}
+        searchAction={searchTicketPortalLinksAction}
+        linkAction={linkTicketPortalRecordAction}
+        unlinkAction={unlinkTicketPortalRecordAction}
       />
     </div>
   );

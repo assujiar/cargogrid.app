@@ -109,6 +109,11 @@ import {
   type TicketLinkCandidateRow,
   type TicketLinkRow,
   type TicketLinkEventRow,
+  parseTicketPortalLinkCandidateRow,
+  parseTicketPortalLinkRow,
+  type TicketPortalLinkEntityType,
+  type TicketPortalLinkCandidateRow,
+  type TicketPortalLinkRow,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketQueryClient = Pick<SupabaseClient, "rpc">;
@@ -649,6 +654,63 @@ export async function listTicketLinks(client: TicketQueryClient, ticketId: strin
   const { data, error } = await client.rpc("list_ticket_links", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
   if (error) throw new TicketQueryError(error.message);
   return rows(data).map(parseTicketLinkRow);
+}
+
+// ===========================================================================
+// CPL-313 (CG-S13-CPL-015): the SEPARATE, parallel warehouse_order/document
+// portal-link surface -- see server/contracts/ticketing/ticketing.ts's own
+// header comment for why this is not folded into TICKET_LINK_ENTITY_TYPES.
+// ===========================================================================
+
+export async function searchTicketPortalLinkCandidates(
+  client: TicketQueryClient,
+  ticketId: string,
+  entityType: TicketPortalLinkEntityType,
+  searchText: string | null,
+  actorAuthUserId: string,
+  limit?: number,
+): Promise<TicketPortalLinkCandidateRow[]> {
+  const { data, error } = await client.rpc("search_ticket_portal_link_candidates", {
+    p_ticket_id: ticketId,
+    p_entity_type: entityType,
+    p_search_text: searchText,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: limit ?? 20,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketPortalLinkCandidateRow);
+}
+
+// The ticket CREATE form's own picker search -- no ticket exists yet, so
+// this calls app.search_customer_ticket_link_candidates_precreate, which
+// deliberately spans BOTH the existing HRT-292 registry (shipment/invoice)
+// and this checkpoint's own new app.ticket_portal_links registry
+// (warehouse_order/document) in one call -- see that function's own comment
+// for why a single search surface is correct even though the eventual link
+// call routes to two structurally different tables underneath.
+export async function searchCustomerTicketLinkCandidatesPrecreate(
+  client: TicketQueryClient,
+  tenantId: string,
+  entityType: TicketLinkEntityType | TicketPortalLinkEntityType,
+  searchText: string | null,
+  actorAuthUserId: string,
+  limit?: number,
+): Promise<TicketPortalLinkCandidateRow[]> {
+  const { data, error } = await client.rpc("search_customer_ticket_link_candidates_precreate", {
+    p_tenant_id: tenantId,
+    p_entity_type: entityType,
+    p_search_text: searchText,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: limit ?? 20,
+  });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketPortalLinkCandidateRow);
+}
+
+export async function listTicketPortalLinks(client: TicketQueryClient, ticketId: string, actorAuthUserId: string): Promise<TicketPortalLinkRow[]> {
+  const { data, error } = await client.rpc("list_ticket_portal_links", { p_ticket_id: ticketId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new TicketQueryError(error.message);
+  return rows(data).map(parseTicketPortalLinkRow);
 }
 
 export interface ListTicketLinkEventsOptions {

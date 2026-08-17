@@ -222,12 +222,37 @@ begin
   insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
   values (gen_random_uuid(), v_tenant1, v_job_order, v_eval, 'idem-br-lnk-1', '00000000-0000-0000-0000-000000292101', 'admin')
   returning id into v_billing_handoff;
+  -- Tier C review fix (Batch 3 close): status is 'issued', not 'approved' --
+  -- CPL-311 (Phase 8, landed after this fixture was originally authored)
+  -- establishes that only status IN ('issued', 'void') is ever
+  -- customer-portal-visible/customer-linkable; every existing assertion in
+  -- this file that reads this fixture (sections 2, 7) only ever asserts on
+  -- label/detail/successful-link, never on the status value itself, so this
+  -- change does not alter any existing assertion's outcome -- it only makes
+  -- the fixture consistent with a real business rule that did not exist
+  -- when 'approved' was originally chosen.
   insert into app.finance_invoices (
     id, tenant_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id,
     currency, status, subtotal_amount, tax_amount, created_by
   ) values (
     '00000000-0000-0000-0000-000000292198', v_tenant1, 'INV-LNK-0001', v_account_a, v_job_order, v_billing_handoff,
-    'USD', 'approved', 1000, 100, 'tester'
+    'USD', 'issued', 1000, 100, 'tester'
+  );
+  -- A SECOND, pre-issuance invoice off the SAME job_order (a second handoff
+  -- row, its own idempotency_key -- billing_readiness_handoffs' own unique
+  -- constraint is (tenant_id, job_order_id, idempotency_key), not
+  -- per-job_order-singleton) -- new fixture, added by this same Tier C
+  -- review fix, to prove the negative: a customer_user must NOT be able to
+  -- see or link this one (section 7 below).
+  insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
+  values (gen_random_uuid(), v_tenant1, v_job_order, v_eval, 'idem-br-lnk-2-draft', '00000000-0000-0000-0000-000000292101', 'admin')
+  returning id into v_billing_handoff;
+  insert into app.finance_invoices (
+    id, tenant_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id,
+    currency, status, subtotal_amount, tax_amount, created_by
+  ) values (
+    '00000000-0000-0000-0000-000000292197', v_tenant1, null, v_account_a, v_job_order, v_billing_handoff,
+    'USD', 'draft', 500, 0, 'tester'
   );
 
   -- Two warehouses: WH-LNK1 (the real, kept-alive candidate) and
@@ -536,6 +561,7 @@ declare
   v_invoice_id uuid := '00000000-0000-0000-0000-000000292198';
   v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-LNK1');
   v_vendor_id uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'Lnk Vendor One');
+  v_draft_invoice_id uuid := '00000000-0000-0000-0000-000000292197';
   v_ticket app.tickets;
   v_ticket_b app.tickets;
   v_link app.ticket_links;
@@ -584,7 +610,28 @@ begin
     raise exception 'CRITICAL: customer2''s candidate search surfaced account_a''s shipment';
   end if;
 
-  raise notice 'PASS: customer channel is bounded to shipment/invoice/warehouse/customer (never vendor/user), and further narrowed to the caller''s OWN account-owner scope';
+  -- Tier C review fix (Batch 3 close, 20260801160000): customer1 genuinely
+  -- OWNS the account this draft invoice belongs to (unlike the account-scope
+  -- narrowing case above), yet must still be denied -- CPL-311's own
+  -- business rule (draft/submitted/approved invoices "must never leak to a
+  -- customer") applies through THIS surface too, not only through CPL-311's
+  -- own RPCs. A live security review reproduced a customer_user searching
+  -- and then durably linking their own account's draft invoice through
+  -- exactly this path before this fix; both the search and the link-time
+  -- gate are re-proven denied here, and the SAME caller's own already-issued
+  -- invoice (linked successfully just above) is unaffected -- proving the
+  -- fix is a status-scoped narrowing, not a blanket regression.
+  if exists (select 1 from app.search_ticket_link_candidates(v_ticket.id, 'invoice', null, v_customer1, 20) where entity_id = v_draft_invoice_id) then
+    raise exception 'CRITICAL: customer1''s own draft (pre-issuance) invoice was surfaced by app.search_ticket_link_candidates -- CPL-311''s invoice-visibility rule must hold through this surface too';
+  end if;
+  begin
+    perform app.link_ticket_record(v_ticket.id, 'invoice', v_draft_invoice_id, 'related', v_customer1, 'customer1');
+    raise exception 'CRITICAL: customer1 was able to durably link their own account''s draft (pre-issuance) invoice via app.link_ticket_record';
+  exception when others then
+    if sqlerrm not like 'record_not_eligible%' then raise exception 'FAIL: expected record_not_eligible for a pre-issuance invoice, got: %', sqlerrm; end if;
+  end;
+
+  raise notice 'PASS: customer channel is bounded to shipment/invoice/warehouse/customer (never vendor/user), further narrowed to the caller''s OWN account-owner scope, AND (Tier C fix) a customer''s own pre-issuance invoice is denied identically to an out-of-scope one';
 end;
 $$;
 

@@ -129,6 +129,10 @@ import {
   type UnlinkTicketRecordInput,
   type RecordTicketLinkAccessDenialInput,
   type RecordTicketLinkSummaryAccessInput,
+  LinkTicketPortalRecordInputSchema,
+  UnlinkTicketPortalRecordInputSchema,
+  type LinkTicketPortalRecordInput,
+  type UnlinkTicketPortalRecordInput,
 } from "../contracts/ticketing/ticketing.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -1001,5 +1005,37 @@ export async function recordTicketLinkSummaryAccess(client: TicketMutationRpcCli
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
     p_access_type: v.accessType,
+  });
+}
+
+// ===========================================================================
+// CPL-313 (CG-S13-CPL-015): the SEPARATE, parallel warehouse_order/document
+// portal-link mutations -- see server/contracts/ticketing/ticketing.ts's own
+// header comment for why this is not folded into LinkTicketRecordInput.
+// app.link_ticket_portal_record raises the identical anti-enumerating
+// record_not_eligible app.link_ticket_record does (C-05) -- no separate
+// denial-audit follow-up RPC exists for this new surface (see the
+// migration's own design decision 6: no ticket_id exists yet at
+// pre-creation search time to scope a durable ledger row to).
+export async function linkTicketPortalRecord(client: TicketMutationRpcClient, input: LinkTicketPortalRecordInput) {
+  const v = LinkTicketPortalRecordInputSchema.parse(input);
+  return callRpc(client, "link_ticket_portal_record", {
+    p_ticket_id: v.ticketId,
+    p_entity_type: v.entityType,
+    p_entity_id: v.entityId,
+    p_relationship: v.relationship,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+}
+
+export async function unlinkTicketPortalRecord(client: TicketMutationRpcClient, input: UnlinkTicketPortalRecordInput) {
+  const v = UnlinkTicketPortalRecordInputSchema.parse(input);
+  return callRpc(client, "unlink_ticket_portal_record", {
+    p_link_id: v.linkId,
+    p_expected_version: v.expectedVersion,
+    p_reason: v.reason,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
   });
 }
