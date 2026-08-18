@@ -78,6 +78,18 @@ export default async function TenantAdminLayout({
           <a href={`/${access.tenant.slug}/admin/tracking`} className="text-neutral-700 hover:text-neutral-900">
             Tracking
           </a>
+          <a href={`/${access.tenant.slug}/admin/loyalty`} className="text-neutral-700 hover:text-neutral-900">
+            Loyalty
+          </a>
+          <a href={`/${access.tenant.slug}/admin/loyalty-tiers`} className="text-neutral-700 hover:text-neutral-900">
+            Loyalty tiers
+          </a>
+          <a href={`/${access.tenant.slug}/admin/loyalty-points`} className="text-neutral-700 hover:text-neutral-900">
+            Points ledger
+          </a>
+          <a href={`/${access.tenant.slug}/admin/loyalty-benefits`} className="text-neutral-700 hover:text-neutral-900">
+            Cashback &amp; vouchers
+          </a>
         </nav>
       </header>
       <main className="flex-1 px-6 py-6">{children}</main>

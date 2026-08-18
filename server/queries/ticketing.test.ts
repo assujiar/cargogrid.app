@@ -48,6 +48,9 @@ import {
   searchTicketLinkCandidates,
   listTicketLinks,
   listTicketLinkEvents,
+  searchTicketPortalLinkCandidates,
+  searchCustomerTicketLinkCandidatesPrecreate,
+  listTicketPortalLinks,
   type TicketQueryClient,
 } from "./ticketing.ts";
 
@@ -494,5 +497,68 @@ describe("HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records reads", () => {
     assert.equal(calls[0]?.fn, "list_ticket_link_events");
     assert.deepEqual(calls[0]?.args, { p_ticket_id: ID_1, p_actor_auth_user_id: ACTOR_ID, p_cursor_occurred_at: "2026-08-01T00:00:00Z", p_cursor_id: ID_2, p_limit: 25 });
     assert.equal(result[0]?.eventType, "linked");
+  });
+});
+
+describe("CPL-313 (CG-S13-CPL-015): Portal Ticket-Linked Records (warehouse_order/document) -- a SEPARATE, parallel RPC surface, never merged into the HRT-292 functions above", () => {
+  test("searchTicketPortalLinkCandidates calls the SEPARATE app.search_ticket_portal_link_candidates RPC, never app.search_ticket_link_candidates", async () => {
+    const { client, calls } = fakeClient({ data: [{ entity_id: ID_2, primary_label: "WH-OUT-0001", secondary_label: "Outbound / manual", status_label: "confirmed" }], error: null });
+    const result = await searchTicketPortalLinkCandidates(client, ID_1, "warehouse_order", "WH-OUT", ACTOR_ID, 10);
+    assert.equal(calls[0]?.fn, "search_ticket_portal_link_candidates");
+    assert.deepEqual(calls[0]?.args, { p_ticket_id: ID_1, p_entity_type: "warehouse_order", p_search_text: "WH-OUT", p_actor_auth_user_id: ACTOR_ID, p_limit: 10 });
+    assert.equal(result[0]?.primaryLabel, "WH-OUT-0001");
+  });
+
+  test("searchTicketPortalLinkCandidates defaults limit to 20 when omitted", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await searchTicketPortalLinkCandidates(client, ID_1, "document", null, ACTOR_ID);
+    assert.equal(calls[0]?.args.p_limit, 20);
+  });
+
+  test("searchTicketPortalLinkCandidates throws TicketQueryError on RPC error", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "ticket_not_found: x" } });
+    await assert.rejects(() => searchTicketPortalLinkCandidates(client, ID_1, "warehouse_order", null, ACTOR_ID), TicketQueryError);
+  });
+
+  test("searchCustomerTicketLinkCandidatesPrecreate calls app.search_customer_ticket_link_candidates_precreate with a tenant id, never a ticket id (no ticket exists yet)", async () => {
+    const { client, calls } = fakeClient({ data: [{ entity_id: ID_2, primary_label: "SHP-2026-0001", secondary_label: "Air / express", status_label: "confirmed" }], error: null });
+    const result = await searchCustomerTicketLinkCandidatesPrecreate(client, TENANT_ID, "shipment", "SHP", ACTOR_ID, 10);
+    assert.equal(calls[0]?.fn, "search_customer_ticket_link_candidates_precreate");
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID, p_entity_type: "shipment", p_search_text: "SHP", p_actor_auth_user_id: ACTOR_ID, p_limit: 10 });
+    assert.equal(result[0]?.primaryLabel, "SHP-2026-0001");
+  });
+
+  test("searchCustomerTicketLinkCandidatesPrecreate accepts a warehouse_order/document entity type too (spans both registries)", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await searchCustomerTicketLinkCandidatesPrecreate(client, TENANT_ID, "warehouse_order", null, ACTOR_ID);
+    assert.equal(calls[0]?.args.p_entity_type, "warehouse_order");
+  });
+
+  test("listTicketPortalLinks calls the SEPARATE app.list_ticket_portal_links RPC and parses a live-available and an unavailable row", async () => {
+    const { client, calls } = fakeClient({
+      data: [
+        {
+          id: ID_1, entity_type: "warehouse_order", entity_id: ID_2, relationship: "primary_subject", status: "active",
+          live_available: true, label: "WH-OUT-0001", detail: "Outbound / manual", status_label: "confirmed",
+          linked_at: "2026-08-17T00:00:00Z", created_by: ACTOR_ID, record_version: 1,
+        },
+        {
+          id: ID_2, entity_type: "document", entity_id: ID_1, relationship: "related", status: "active",
+          live_available: false, label: null, detail: null, status_label: "unavailable",
+          linked_at: "2026-08-17T00:00:00Z", created_by: ACTOR_ID, record_version: 1,
+        },
+      ],
+      error: null,
+    });
+    const result = await listTicketPortalLinks(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_ticket_portal_links");
+    assert.equal(result[0]?.liveAvailable, true);
+    assert.equal(result[1]?.liveAvailable, false);
+    assert.equal(result[1]?.label, null);
+  });
+
+  test("listTicketPortalLinks throws TicketQueryError on RPC error (e.g. ticket_not_found)", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "ticket_not_found: x" } });
+    await assert.rejects(() => listTicketPortalLinks(client, ID_1, ACTOR_ID), TicketQueryError);
   });
 });

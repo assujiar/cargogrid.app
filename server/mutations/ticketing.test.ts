@@ -56,6 +56,8 @@ import {
   runTicketEscalationEvaluationBatch,
   linkTicketRecord,
   unlinkTicketRecord,
+  linkTicketPortalRecord,
+  unlinkTicketPortalRecord,
   recordTicketLinkAccessDenial,
   recordTicketLinkSummaryAccess,
   TicketMutationError,
@@ -673,6 +675,43 @@ describe("HRT-292 (CG-S12-HRT-020): Typed Ticket-Linked Records mutations", () =
       (err: unknown) => {
         assert.ok(err instanceof TicketMutationError);
         assert.equal(err.code, "invalid_access_type");
+        return true;
+      },
+    );
+  });
+});
+
+describe("CPL-313 (CG-S13-CPL-015): Portal Ticket-Linked Records (warehouse_order/document) mutations -- a SEPARATE, parallel RPC surface, never merged into the HRT-292 functions above", () => {
+  test("linkTicketPortalRecord forwards entityType/entityId/relationship to the SEPARATE app.link_ticket_portal_record RPC and classifies record_not_eligible", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await linkTicketPortalRecord(client, { ticketId: ID_1, entityType: "warehouse_order", entityId: ID_2, relationship: "primary_subject", actorAuthUserId: ACTOR_ID, actorLabel: "admin" });
+    assert.equal(calls[0]?.fn, "link_ticket_portal_record");
+    assert.equal(calls[0]?.args.p_entity_type, "warehouse_order");
+    assert.equal(calls[0]?.args.p_relationship, "primary_subject");
+
+    const { client: notEligible } = fakeClient({ data: null, error: { message: "record_not_eligible: no eligible document record exists for x" } });
+    await assert.rejects(
+      () => linkTicketPortalRecord(notEligible, { ticketId: ID_1, entityType: "document", entityId: ID_2, relationship: "related", actorAuthUserId: ACTOR_ID, actorLabel: "admin" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "record_not_eligible");
+        return true;
+      },
+    );
+  });
+
+  test("unlinkTicketPortalRecord forwards linkId/expectedVersion/reason to the SEPARATE app.unlink_ticket_portal_record RPC and classifies stale_version", async () => {
+    const { client, calls } = fakeClient({ data: {}, error: null });
+    await unlinkTicketPortalRecord(client, { linkId: ID_1, expectedVersion: 1, reason: "no longer relevant", actorAuthUserId: ACTOR_ID, actorLabel: "admin" });
+    assert.equal(calls[0]?.fn, "unlink_ticket_portal_record");
+    assert.equal(calls[0]?.args.p_reason, "no longer relevant");
+
+    const { client: staleVersion } = fakeClient({ data: null, error: { message: "stale_version: expected version 1 but current version is 2" } });
+    await assert.rejects(
+      () => unlinkTicketPortalRecord(staleVersion, { linkId: ID_1, expectedVersion: 1, reason: "x", actorAuthUserId: ACTOR_ID, actorLabel: "admin" }),
+      (err: unknown) => {
+        assert.ok(err instanceof TicketMutationError);
+        assert.equal(err.code, "stale_version");
         return true;
       },
     );
