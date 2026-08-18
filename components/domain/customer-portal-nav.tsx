@@ -82,6 +82,28 @@
  * FIRST route under this shared nav to carry a genuine customer-initiated
  * write (redeeming one's own voucher), still just a read-plus-action screen
  * like every sibling here.
+ *
+ * CPL-320 (`customer-loyalty-rewards`, Reward Catalogue) widens `current`
+ * again, the identical pure-addition shape -- the reward catalogue (eligible/
+ * locked/out-of-stock/unavailable states) is a natural sibling of
+ * CPL-316..319's own loyalty screens (reads app.loyalty_accounts-scoped tier/
+ * points state to compute eligibility, a distinct capability from earning/
+ * tier/points/benefits), not a standalone route family. Read-only in this
+ * checkpoint -- no redemption action exists yet (CPL-321's own future scope).
+ *
+ * CPL-321 (`customer-loyalty-redemptions`, Redemption Approval and
+ * Fulfillment) widens `current` again, the identical pure-addition shape --
+ * redemption status/history is a natural sibling of CPL-320's own reward
+ * catalogue (the "Redeem" checkout action itself lives on the catalogue's
+ * own reward detail page; this screen is status/history plus cancellation
+ * of a still-pending request), not a standalone route family.
+ *
+ * CPL-323 (`customer-loyalty-summary`, Liability Reconciliation Analytics)
+ * widens `current` again, the identical pure-addition shape -- a single
+ * consolidated summary card COMPOSING (never duplicating) the points/tier/
+ * benefits/redemptions/hold-status figures CPL-317..322's own sibling
+ * routes already expose in full detail, a natural sibling of every loyalty
+ * screen this nav already links between, not a standalone route family.
  */
 
 import { Link } from "../ui/link.tsx";
@@ -91,7 +113,7 @@ export function CustomerPortalNav({
   current,
 }: {
   readonly tenantSlug: string;
-  readonly current: "scope" | "dashboard" | "inventory" | "warehouse-orders" | "invoices" | "receipts" | "tickets" | "profile" | "users" | "loyalty" | "loyalty-tier" | "points" | "benefits";
+  readonly current: "scope" | "dashboard" | "inventory" | "warehouse-orders" | "invoices" | "receipts" | "tickets" | "profile" | "users" | "loyalty" | "loyalty-tier" | "points" | "benefits" | "rewards" | "redemptions" | "summary";
 }) {
   return (
     <nav aria-label="Customer portal" className="flex gap-4 border-b border-neutral-200 pb-2 text-sm">
@@ -178,6 +200,27 @@ export function CustomerPortalNav({
         </span>
       ) : (
         <Link href={`/${tenantSlug}/customer-loyalty-benefits`}>Cashback &amp; vouchers</Link>
+      )}
+      {current === "rewards" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Reward catalogue
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-loyalty-rewards`}>Reward catalogue</Link>
+      )}
+      {current === "redemptions" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Redemptions
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-loyalty-redemptions`}>Redemptions</Link>
+      )}
+      {current === "summary" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          Loyalty summary
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-loyalty-summary`}>Loyalty summary</Link>
       )}
       {current === "scope" ? (
         <span className="font-medium text-text-primary" aria-current="page">
