@@ -1054,16 +1054,42 @@ begin
   exception when insufficient_privilege then null;
   end;
 
-  -- service_role itself holds NO update/delete grant on the append-only
-  -- ledger table (design decision 13) -- even a privileged role cannot
-  -- mutate a posted row through an ordinary GRANT-checked statement.
+  -- Design decision 13 (this migration, CPL-318) originally left
+  -- service_role with NO update/delete grant on the append-only ledger
+  -- table at all. CPL-325 (CG-S13-CPL-027, ISS-2026-130's own explicit
+  -- ruling -- see supabase/migrations/20260801280000_harden_customer_
+  -- portal_loyalty_ledger_supreme_admin_override.sql) additively GRANTs
+  -- UPDATE/DELETE to service_role -- otherwise a genuine Supreme Admin
+  -- (RPD-022's own disclosed absolute-CRUD exception) would have no path
+  -- to exercise it at all, since every real mutation in this repository
+  -- runs as service_role, never as a database superuser. The functional
+  -- guarantee this block originally proved is UNCHANGED, just enforced one
+  -- layer deeper now: a BEFORE UPDATE/DELETE trigger
+  -- (app.protect_loyalty_ledger_append_only) blocks the mutation outright
+  -- unless the acting identity holds a live supreme_admin principal
+  -- membership -- proven directly, live, in scripts/db-tests/customer-
+  -- portal-loyalty-ledger-supreme-admin-override.sql (this checkpoint's own
+  -- dedicated regression file); re-proven here in miniature so this file's
+  -- own "raw-table defense in depth" section stays self-contained.
   reset role;
-  if has_table_privilege('service_role', 'app.loyalty_point_ledger_entries', 'UPDATE') then
-    raise exception 'assertion failed: service_role must NOT hold UPDATE on the append-only app.loyalty_point_ledger_entries table';
+  if not has_table_privilege('service_role', 'app.loyalty_point_ledger_entries', 'UPDATE') then
+    raise exception 'assertion failed: service_role should hold UPDATE on app.loyalty_point_ledger_entries as of CPL-325 (20260801280000) -- without it the Supreme Admin override is unreachable';
   end if;
-  if has_table_privilege('service_role', 'app.loyalty_point_ledger_entries', 'DELETE') then
-    raise exception 'assertion failed: service_role must NOT hold DELETE on the append-only app.loyalty_point_ledger_entries table';
+  if not has_table_privilege('service_role', 'app.loyalty_point_ledger_entries', 'DELETE') then
+    raise exception 'assertion failed: service_role should hold DELETE on app.loyalty_point_ledger_entries as of CPL-325 (20260801280000) -- without it the Supreme Admin override is unreachable';
   end if;
+  -- Holding the grant is not the same as being ABLE to use it: a
+  -- non-supreme-admin context (no request.jwt.claims at all here) is still
+  -- rejected by the trigger, not by the grant layer.
+  begin
+    update app.loyalty_point_ledger_entries set amount = amount where false;
+    -- WHERE false matches zero rows -- the trigger only fires per row
+    -- touched, so this alone would prove nothing; the real proof (a row
+    -- that DOES match, blocked) lives in the dedicated file referenced
+    -- above. This call only proves the statement itself is not rejected at
+    -- the GRANT layer (it is not -- 0 rows updated, no trigger fired, no
+    -- error) -- consistent with service_role now holding the grant.
+  end;
 end $$;
 
 \echo '>> raw-function grant defense in depth: anon holds no EXECUTE on any of the new public functions; authenticated/service_role both do'

@@ -368,6 +368,53 @@ begin
 end;
 $$;
 
+\echo '>> CPL-325 regression (ISS: now()-vs-clock_timestamp() ordering defect class, mirrors CPL-315): two pending change requests for the SAME account submitted inside the SAME transaction get an identical now()-frozen created_at unless the schema uses clock_timestamp() -- app.get_customer_portal_account_profile must still resolve the ACTUAL latest one via its own (created_at, id) tiebreak, never an arbitrary row'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cpp1');
+  v_account_gamma uuid;
+  v_gamma_admin uuid := '00000000-0000-0000-0000-000000330099';
+  r1 app.customer_portal_profile_change_requests;
+  r2 app.customer_portal_profile_change_requests;
+  v_profile record;
+begin
+  -- A fresh account/identity, isolated from Alpha's own already-pending
+  -- trade_name request above, so this block's own assertions are
+  -- unambiguous regardless of execution order.
+  insert into auth.users (id, email) values (v_gamma_admin, 'gamma-admin@cpp1.test')
+    on conflict (id) do nothing;
+  perform app.link_auth_identity(v_gamma_admin, v_tenant1, 'tester', 'active');
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant1, 'Cpp1 Account Gamma Pte Ltd', 'cpp1-gamma-fp', '{}'::jsonb, (select org_unit_id from app.accounts where tenant_id = v_tenant1 limit 1), 'tester')
+  returning id into v_account_gamma;
+  perform app.grant_principal_membership(v_gamma_admin, 'customer_user', v_tenant1, v_account_gamma::text, 'tester');
+
+  -- Two real submissions inside the SAME transaction -- the exact CPL-315
+  -- defect shape (would have shared an identical now()-frozen created_at
+  -- before this checkpoint's own fix, 20260801290000). clock_timestamp()
+  -- advances per-statement regardless of transaction boundaries, so these
+  -- two genuinely distinct PL/pgSQL calls get distinct, correctly-ordered
+  -- timestamps without needing the id tiebreak at all in the ordinary
+  -- case -- the id tiebreak (also added by the same fix) is a last-resort
+  -- determinism guarantee for the pathological case where even
+  -- clock_timestamp() itself ties, not the primary correctness mechanism
+  -- (a random-UUID tiebreak carries no temporal meaning on its own).
+  r1 := app.submit_customer_profile_change_request(v_tenant1, v_account_gamma, 'trade_name', '"Gamma First"'::jsonb, 'cpp1-gamma-race-1', v_gamma_admin, 'gamma-admin');
+  r2 := app.submit_customer_profile_change_request(v_tenant1, v_account_gamma, 'billing_address', '{"line1":"Gamma Second"}'::jsonb, 'cpp1-gamma-race-2', v_gamma_admin, 'gamma-admin');
+  if r2.created_at < r1.created_at then
+    raise exception 'assertion failed: expected r2 (submitted second) to carry a created_at >= r1''s own -- clock_timestamp() must never go backwards, got r1=% r2=%', r1.created_at, r2.created_at;
+  end if;
+
+  select * into v_profile from app.get_customer_portal_account_profile(v_tenant1, v_gamma_admin, v_account_gamma);
+  if v_profile.pending_change_request_count <> 2 then
+    raise exception 'assertion failed: expected 2 pending requests for Account Gamma, got %', v_profile.pending_change_request_count;
+  end if;
+  if v_profile.latest_pending_change_request_id <> r2.id or v_profile.latest_pending_change_request_field <> 'billing_address' then
+    raise exception 'assertion failed: expected the ACTUAL later submission (r2, billing_address, id=%) to resolve as latest_pending_change_request -- got id=% field=% (the now()-collision ordering defect, CPL-325 fix 20260801290000)', r2.id, v_profile.latest_pending_change_request_id, v_profile.latest_pending_change_request_field;
+  end if;
+end;
+$$;
+
 \echo '>> app.list_customer_portal_account_contacts: read-only, only this account''s own contacts, deny-by-default'
 do $$
 declare
