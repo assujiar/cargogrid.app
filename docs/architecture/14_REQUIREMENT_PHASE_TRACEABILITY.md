@@ -109,7 +109,7 @@ All 23 CPDs `COVERED`. Zero CPDs reopened (`02_CONFIRMED_DECISION_REGISTER.md` �
 | RPD-019 | Controlled white-label | Phase 1 | PLT-117..119 | `09_*.md` §10 | `COVERED` |
 | RPD-020 | Tenant merge/split is admin-run migration | Phase 1/9 | PLT-105..106, IEP-360 | `11_*.md` §4 | `COVERED` |
 | RPD-021 | OpenAI multimodal AI/OCR default, human approval gate | Phase 9 | IEP-347..353 | `08_*.md` §8 | `COVERED` |
-| RPD-022 | Supreme Admin absolute CRUD; no tamper-proof claim | Phase 1 (mechanism), all ledger/audit capabilities (exception) | PLT-115..116, FIN-204..208, LYL-316..323 | `06_*.md` §8, §10 test 8/9 | `ACCEPTED_RISK` (§21) |
+| RPD-022 | Supreme Admin absolute CRUD; no tamper-proof claim | Phase 1 (mechanism), all ledger/audit capabilities (exception) | PLT-115..116, FIN-204..208, CPL-316..323 | `06_*.md` §8, §10 test 8/9 | `ACCEPTED_RISK` (§21) |
 | RPD-023 | MFA mandatory for privileged roles | Phase 1 | PLT-107..108 | `06_*.md` §2 | `COVERED` |
 | RPD-024 | WCAG 2.2 AA; two latest stable browser releases | Phase 0/9/15 | PH0-090, HDN-380..381 | `09_*.md` §9, §8 | `COVERED` |
 | RPD-025 | Class-based retention schedule | Phase 0/15 | PH0-095, HDN-382..385 | `02_*.md` §11 | `COVERED` |
@@ -130,6 +130,8 @@ All 23 CPDs `COVERED`. Zero CPDs reopened (`02_CONFIRMED_DECISION_REGISTER.md` �
 | RPD-040 | All non-conflicting Proposed Defaults approved | All phases (interpretive rule) | n/a | `03_ASSUMPTION_REGISTER.md` §8 | `COVERED` |
 
 All 40 RPDs `COVERED` or explicitly `EXTERNAL_VERIFICATION`/`ACCEPTED_RISK` with a named owner and gate (§21–§22). Zero RPDs reopened.
+
+> **Correction (2026-08-20, CPL-326, `CG-S13-CPL-028`):** the `RPD-022` row's own WBS capability ID(s) cell previously read `LYL-316..323` — not a valid WBS capability ID prefix anywhere in this repository (Phase 8's Loyalty capabilities are numbered `CPL-316..323`; `LYL` is the entitlement-module code for those same capabilities' permission actions, not a WBS ID prefix). Corrected to `CPL-316..323`, mirroring `CPL-324`'s own identical-shaped correction of the `CPT-CX-001..004` row in §5.8 below. No other cell in this row, or elsewhere in this document, was touched.
 
 ## 5. Functional requirement family traceability (184 IDs, 46 families)
 
