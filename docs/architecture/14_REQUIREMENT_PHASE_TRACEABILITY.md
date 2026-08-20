@@ -217,7 +217,9 @@ Traced at the family level (`XXX-YYY-001..004`), matching the granularity alread
 | CPT-TRK-001..004 | Tracking, ePOD & Document | OPS-172..173, OPS-176..177 (basic) / CPL-305..308 (full) | `02_*.md` §3.1 | OPS-185..188, CPL-324..327 | Operations (basic) → Customer Portal (full) | `COVERED` |
 | CPT-WHS-001..004 | Warehouse, Inventory & Order Monitoring | CPL-309..310 (after ATW-229..242) | `02_*.md` §3.1 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
 | CPT-BIL-001..004 | Invoice, Billing, Payment & Profile | CPL-311..315 (after FIN-196..214) | `02_*.md` §3.1 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
-| CPT-CX-001..004 | Complaint, Ticket, Loyalty & Rewards | CPL-311..315 | `06_*.md` §11 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
+| CPT-CX-001..004 | Complaint, Ticket, Loyalty & Rewards | CPL-313 (secondary: 314, 315, 320) | `06_*.md` §11 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
+
+> **Correction (2026-08-20, CPL-324, `CG-S13-CPL-026`):** the `CPT-CX-001..004` row's own WBS capability ID(s) cell previously read `CPL-311..315` — a stale copy-paste from the `CPT-BIL-001..004` row directly above it. Corrected to accurately name `CPL-313` (Complaint/Ticket, this anchor family's own primary capability) with `314`/`315`/`320` (Customer Profile, Customer User Management, Reward Catalogue) as secondary contributors — independently re-derived from the actual Phase 8 capability build logs, not merely re-copied. No other cell in this section was touched.
 
 ### 5.9 Loyalty (LYL-*, 4 families, 16 IDs) — Phase 8
 

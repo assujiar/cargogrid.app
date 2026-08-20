@@ -706,3 +706,64 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> CPL-324 Tier C fix regression: optimistic-concurrency NULL-bypass on app.update_customer_quote_request_draft/app.submit_customer_quote_request/app.cancel_customer_quote_request -- a NULL p_expected_version is rejected with stale_version, the row proven byte-for-byte unchanged, then the real version succeeds (20260801260000)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cqr1');
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Cqr1 Account Alpha');
+  v_alpha_admin uuid := '00000000-0000-0000-0000-000000303010';
+  v_draft app.customer_portal_quote_requests;
+  v_after app.customer_portal_quote_requests;
+begin
+  -- update_customer_quote_request_draft
+  v_draft := app.create_customer_quote_request_draft(v_tenant1, v_account_alpha, 'null-bypass probe', '{}'::jsonb, '{}'::jsonb, null, null, null, null, 'null-bypass-cqr-update', v_alpha_admin, 'alpha-admin');
+
+  begin
+    perform app.update_customer_quote_request_draft(v_draft.id, null, 'forged-update', '{}'::jsonb, '{}'::jsonb, null, null, null, null, v_alpha_admin, 'alpha-admin');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on update_customer_quote_request_draft';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  select * into v_after from app.customer_portal_quote_requests where id = v_draft.id;
+  if v_after.cargo_description <> v_draft.cargo_description or v_after.record_version <> v_draft.record_version then
+    raise exception 'assertion failed: expected the quote request to be byte-for-byte unchanged after a rejected NULL-bypass update attempt, got %', v_after;
+  end if;
+
+  v_after := app.update_customer_quote_request_draft(v_draft.id, v_draft.record_version, 'real-version update', '{}'::jsonb, '{}'::jsonb, null, null, null, null, v_alpha_admin, 'alpha-admin');
+  if v_after.cargo_description <> 'real-version update' then
+    raise exception 'assertion failed: expected the real-version update call to succeed, got %', v_after;
+  end if;
+
+  -- submit_customer_quote_request
+  begin
+    perform app.submit_customer_quote_request(v_after.id, null, 'null-bypass-cqr-submit', v_alpha_admin, 'alpha-admin');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on submit_customer_quote_request';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  if not exists (select 1 from app.customer_portal_quote_requests where id = v_after.id and status = 'draft' and record_version = v_after.record_version) then
+    raise exception 'assertion failed: expected the quote request to be byte-for-byte unchanged after a rejected NULL-bypass submit attempt';
+  end if;
+
+  v_after := app.submit_customer_quote_request(v_after.id, v_after.record_version, 'real-version-cqr-submit', v_alpha_admin, 'alpha-admin');
+  if v_after.status <> 'submitted' then
+    raise exception 'assertion failed: expected the real-version submit call to succeed, got %', v_after;
+  end if;
+
+  -- cancel_customer_quote_request
+  begin
+    perform app.cancel_customer_quote_request(v_after.id, null, 'null-bypass probe', v_alpha_admin, 'alpha-admin');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on cancel_customer_quote_request';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  if not exists (select 1 from app.customer_portal_quote_requests where id = v_after.id and status = 'submitted' and record_version = v_after.record_version) then
+    raise exception 'assertion failed: expected the quote request to be byte-for-byte unchanged after a rejected NULL-bypass cancel attempt';
+  end if;
+
+  v_after := app.cancel_customer_quote_request(v_after.id, v_after.record_version, 'real-version cancel', v_alpha_admin, 'alpha-admin');
+  if v_after.status <> 'cancelled' then
+    raise exception 'assertion failed: expected the real-version cancel call to succeed, got %', v_after;
+  end if;
+end $$;

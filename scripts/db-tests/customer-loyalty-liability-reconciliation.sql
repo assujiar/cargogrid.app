@@ -77,6 +77,7 @@ declare
   v_program_id uuid;
   v_program2_id uuid;
   v_reward app.loyalty_rewards;
+  v_locale_draft1 app.tenant_locale_versions;
 begin
   insert into auth.users (id, email) values
     (v_manager1, 'manager1@lra1.test'),
@@ -108,6 +109,26 @@ begin
   perform app.set_role_version_permissions(v_manager_draft1.id, array(select id from app.permissions where resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit', 'Configure')), 'tester');
   perform app.publish_role_version(v_manager_draft1.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_manager_role1 and status = 'published'), v_manager1, v_manager1, 'tester');
+
+  -- CPL-324 hardening fix regression setup (ISS-2026-136 item 1): this
+  -- fixture's own entitlements/reconciliation calls have always been
+  -- denominated in USD (see below), but that was never wired into a real
+  -- app.resolve_tenant_locale() default -- it happened not to matter before
+  -- app.execute_loyalty_liability_reconciliation_run's own reward-
+  -- fulfillment line gained a currency filter. Publish a real USD locale for
+  -- lra1 now (v_manager1 already has a real tenant_user_identities row from
+  -- invite_user above, so a second, tenant_admin-layer principal membership
+  -- may be granted to the SAME actor) so the fixture's own long-standing USD
+  -- assumption becomes real and explicit, matching every currency literal
+  -- already used throughout this file -- zero other line in this file
+  -- changes.
+  perform app.grant_principal_membership(v_manager1, 'tenant_admin', v_tenant1, null, 'tester');
+  v_locale_draft1 := app.create_tenant_locale_draft(v_tenant1, v_manager1, 'tester');
+  perform app.set_tenant_locale_config(v_locale_draft1.id, v_manager1, 'id', 'Asia/Jakarta', 'USD', '{}'::jsonb, 'tester');
+  perform app.publish_tenant_locale_version(v_locale_draft1.id, v_manager1, clock_timestamp(), 'tester');
+  if (select default_currency from app.resolve_tenant_locale(v_tenant1)) <> 'USD' then
+    raise exception 'assertion failed: expected lra1''s own resolved default_currency to be USD after publish';
+  end if;
 
   perform app.invite_user(v_tenant1, v_editor1, 'editor1@lra1.test', 'Lra1 Editor', v_company1, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'editor1@lra1.test'), 'active', 'onboarded', 'tester');
@@ -300,6 +321,25 @@ begin
   select count(*) into v_exception_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run.id;
   if v_exception_count <> 0 then
     raise exception 'assertion failed: expected ZERO exceptions on the clean run, got %', v_exception_count;
+  end if;
+end $$;
+
+\echo '>> CPL-324 hardening regression (ISS-2026-136 item 1, mandatory): a currency-MISMATCHED run must NOT count Delta''s open physical_item redemption -- an IDR-scoped run on this USD-denominated tenant reports zero reward-fulfillment exposure, while a fresh USD-scoped run still correctly reports 75; the old bug reported 75 on BOTH'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lra1');
+  v_editor1 uuid := '00000000-0000-0000-0000-000000346002';
+  v_run_wrong_currency app.loyalty_liability_reconciliation_runs;
+  v_run_right_currency app.loyalty_liability_reconciliation_runs;
+begin
+  v_run_wrong_currency := app.execute_loyalty_liability_reconciliation_run(v_tenant1, clock_timestamp(), 'IDR', v_editor1, 'editor1', 'lra-currency-scope-idr', 1);
+  if v_run_wrong_currency.reward_fulfillment_liability_total <> 0 then
+    raise exception 'assertion failed: ISS-2026-136 item 1 regression -- expected reward_fulfillment_liability_total = 0 on an IDR-scoped run of a USD-denominated tenant (Delta''s open physical_item redemption must not be double-counted across currencies), got %', v_run_wrong_currency.reward_fulfillment_liability_total;
+  end if;
+
+  v_run_right_currency := app.execute_loyalty_liability_reconciliation_run(v_tenant1, clock_timestamp(), 'USD', v_editor1, 'editor1', 'lra-currency-scope-usd', 1);
+  if v_run_right_currency.reward_fulfillment_liability_total <> 75 then
+    raise exception 'assertion failed: expected reward_fulfillment_liability_total = 75 on the matching USD-scoped run (the fix must not also suppress the CORRECT currency), got %', v_run_right_currency.reward_fulfillment_liability_total;
   end if;
 end $$;
 

@@ -737,3 +737,32 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> CPL-324 Tier C fix regression: optimistic-concurrency NULL-bypass on app.respond_to_customer_shipment_order_change_request -- a NULL p_expected_version is rejected with stale_version, the row proven byte-for-byte unchanged, then the real version succeeds (20260801260000)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cso1');
+  v_alpha_admin uuid := '00000000-0000-0000-0000-000000307010';
+  v_staff uuid := '00000000-0000-0000-0000-000000307001';
+  v_shipment_id uuid := (select id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'shipment-cso1-alpha-001');
+  v_request app.customer_portal_shipment_change_requests;
+  v_after app.customer_portal_shipment_change_requests;
+begin
+  v_request := app.request_customer_shipment_order_change(v_tenant1, v_shipment_id, 'other', 'null-bypass probe', 'null-bypass-cso-change', v_alpha_admin, 'alpha-admin');
+
+  begin
+    perform app.respond_to_customer_shipment_order_change_request(v_request.id, null, 'acknowledged', 'forged response', v_staff, 'cso1-staff');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on respond_to_customer_shipment_order_change_request';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  select * into v_after from app.customer_portal_shipment_change_requests where id = v_request.id;
+  if v_after.status <> v_request.status or v_after.record_version <> v_request.record_version then
+    raise exception 'assertion failed: expected the change request to be byte-for-byte unchanged after a rejected NULL-bypass respond attempt, got %', v_after;
+  end if;
+
+  v_after := app.respond_to_customer_shipment_order_change_request(v_request.id, v_request.record_version, 'acknowledged', 'real-version response', v_staff, 'cso1-staff');
+  if v_after.status <> 'acknowledged' then
+    raise exception 'assertion failed: expected the real-version respond call to succeed, got %', v_after;
+  end if;
+end $$;

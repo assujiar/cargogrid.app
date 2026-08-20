@@ -664,3 +664,52 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> CPL-324 Tier C fix regression: optimistic-concurrency NULL-bypass on app.withdraw_customer_profile_change_request/app.decide_customer_profile_change_request -- a NULL p_expected_version is rejected with stale_version, the row proven byte-for-byte unchanged, then the real version succeeds (20260801260000)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cpp1');
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Cpp1 Account Alpha Pte Ltd');
+  v_alpha_admin uuid := '00000000-0000-0000-0000-000000330010';
+  v_staff uuid := '00000000-0000-0000-0000-000000330001';
+  v_req app.customer_portal_profile_change_requests;
+  v_after app.customer_portal_profile_change_requests;
+begin
+  -- withdraw_customer_profile_change_request
+  v_req := app.submit_customer_profile_change_request(v_tenant1, v_account_alpha, 'trade_name', to_jsonb('Null Bypass Withdraw Probe'::text), 'null-bypass-cpp-withdraw', v_alpha_admin, 'alpha-admin');
+
+  begin
+    perform app.withdraw_customer_profile_change_request(v_req.id, null, v_alpha_admin, 'alpha-admin');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on withdraw_customer_profile_change_request';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  select * into v_after from app.customer_portal_profile_change_requests where id = v_req.id;
+  if v_after.status <> v_req.status or v_after.record_version <> v_req.record_version then
+    raise exception 'assertion failed: expected the profile change request to be byte-for-byte unchanged after a rejected NULL-bypass withdraw attempt, got %', v_after;
+  end if;
+
+  v_after := app.withdraw_customer_profile_change_request(v_req.id, v_req.record_version, v_alpha_admin, 'alpha-admin');
+  if v_after.status <> 'withdrawn' then
+    raise exception 'assertion failed: expected the real-version withdraw call to succeed, got %', v_after;
+  end if;
+
+  -- decide_customer_profile_change_request
+  v_req := app.submit_customer_profile_change_request(v_tenant1, v_account_alpha, 'trade_name', to_jsonb('Null Bypass Decide Probe'::text), 'null-bypass-cpp-decide', v_alpha_admin, 'alpha-admin');
+
+  begin
+    perform app.decide_customer_profile_change_request(v_req.id, null, 'approve', 'forged decision', v_staff, 'cpp1-staff');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on decide_customer_profile_change_request';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  select * into v_after from app.customer_portal_profile_change_requests where id = v_req.id;
+  if v_after.status <> v_req.status or v_after.record_version <> v_req.record_version then
+    raise exception 'assertion failed: expected the profile change request to be byte-for-byte unchanged after a rejected NULL-bypass decide attempt, got %', v_after;
+  end if;
+
+  v_after := app.decide_customer_profile_change_request(v_req.id, v_req.record_version, 'approve', 'real-version decision', v_staff, 'cpp1-staff');
+  if v_after.status <> 'approved' then
+    raise exception 'assertion failed: expected the real-version decide call to succeed, got %', v_after;
+  end if;
+end $$;
