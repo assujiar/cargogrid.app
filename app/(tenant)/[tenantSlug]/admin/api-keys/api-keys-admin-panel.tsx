@@ -16,6 +16,7 @@ import type { WebhookEventType } from "../../../../../server/contracts/api-key-w
 import type { ApiLog } from "../../../../../server/contracts/api/api.ts";
 import type { VendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
 import type { WebhookDelivery } from "../../../../../server/contracts/webhook-management/webhook-management.ts";
+import type { N8nConnector, N8nAllowlistedAction } from "../../../../../server/contracts/n8n-integration/n8n-integration.ts";
 import {
   createApiKeyAction,
   rotateApiKeyAction,
@@ -27,15 +28,18 @@ import {
   reenableWebhookEndpointAction,
   sendTestWebhookDeliveryAction,
   replayWebhookDeliveryAction,
+  createN8nConnectorAction,
   type ApiKeyFormState,
   type VendorApiKeyFormState,
   type WebhookEndpointFormState,
   type WebhookDeliveryFormState,
+  type N8nConnectorFormState,
 } from "./actions.ts";
 
 const INITIAL_STATE: ApiKeyFormState = { error: null, createdKey: null };
 const ENDPOINT_INITIAL_STATE: WebhookEndpointFormState = { error: null, createdEndpoint: null };
 const DELIVERY_INITIAL_STATE: WebhookDeliveryFormState = { error: null, delivery: null };
+const N8N_INITIAL_STATE: N8nConnectorFormState = { error: null, createdConnector: null };
 const WEBHOOK_ENDPOINT_STATUS_TONE: Record<WebhookEndpoint["status"], StatusTone> = { active: "success", disabled: "neutral" };
 const WEBHOOK_DELIVERY_STATUS_TONE: Record<WebhookDelivery["status"], StatusTone> = { pending: "warning", delivered: "success", dead_letter: "danger" };
 const VENDOR_INITIAL_STATE: VendorApiKeyFormState = { error: null, createdKey: null };
@@ -421,6 +425,80 @@ export function WebhookDeliveryList({ tenantSlug, deliveries }: { tenantSlug: st
               </td>
               <td className="p-2 text-xs text-text-secondary">{delivery.nextAttemptAt ?? "—"}</td>
               <td className="p-2">{delivery.status === "dead_letter" ? <ReplayWebhookDeliveryForm tenantSlug={tenantSlug} deliveryId={delivery.id} /> : null}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** IAE-013: n8n calls the SAME /api/v1 REST surface and receives events through the SAME webhook delivery mechanism every other consumer already uses -- this form only labels/scopes/links a connector. */
+export function CreateN8nConnectorForm({ tenantSlug, allowlist }: { tenantSlug: string; allowlist: readonly N8nAllowlistedAction[] }) {
+  const [state, formAction, pending] = useActionState(createN8nConnectorAction.bind(null, tenantSlug), N8N_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
+      <h2 className="text-sm font-semibold text-text-primary">Register an n8n connector</h2>
+      <label htmlFor="n8n-name" className="text-xs font-medium text-text-secondary">
+        Connector name
+      </label>
+      <input id="n8n-name" name="name" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <label htmlFor="n8n-scopes" className="text-xs font-medium text-text-secondary">
+        Scopes (comma-separated) -- must be on the n8n safe-action allowlist below, and cannot exceed your own currently-held permissions
+      </label>
+      <input id="n8n-scopes" name="scopes" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <label htmlFor="n8n-webhook-endpoint" className="text-xs font-medium text-text-secondary">
+        Linked webhook endpoint id (optional -- the endpoint you registered above, pointed at your n8n workflow&apos;s own webhook URL)
+      </label>
+      <input id="n8n-webhook-endpoint" name="webhookEndpointId" type="text" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <label htmlFor="n8n-rate-limit" className="text-xs font-medium text-text-secondary">
+        Rate limit per minute (optional -- blank means unlimited)
+      </label>
+      <input id="n8n-rate-limit" name="rateLimitPerMinute" type="number" min={1} max={100000} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <p className="text-xs text-text-secondary">Safe-action allowlist: {allowlist.map((a) => a.scope).join(", ") || "none registered"}. n8n actions can never bypass domain approvals or human governance -- only read-only and low-risk scopes are ever allowlisted.</p>
+      <ErrorBanner error={state.error} />
+      {state.createdConnector ? <RawKeyCallout rawKey={state.createdConnector.rawKey} /> : null}
+      <Button type="submit" loading={pending} loadingLabel="Registering…" className="w-fit">
+        Register connector
+      </Button>
+    </form>
+  );
+}
+
+export function N8nConnectorList({ tenantSlug, connectors }: { tenantSlug: string; connectors: readonly N8nConnector[] }) {
+  if (connectors.length === 0) {
+    return <EmptyState title="No n8n connectors yet" description="Register your tenant's first n8n connector above -- it reuses the SAME API key/webhook endpoint primitives every other integration already uses." />;
+  }
+  return (
+    <div className="overflow-x-auto rounded-md border border-neutral-200">
+      <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">n8n connectors</caption>
+        <thead>
+          <tr className="text-left text-xs font-medium text-text-secondary">
+            <th className="p-2">Name</th>
+            <th className="p-2">Scopes</th>
+            <th className="p-2">Status</th>
+            <th className="p-2">Linked webhook endpoint</th>
+            <th className="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {connectors.map((connector) => (
+            <tr key={connector.connectorId} className="border-t border-neutral-100 align-top">
+              <td className="p-2 font-medium text-text-primary">{connector.name}</td>
+              <td className="p-2 text-xs text-text-secondary">{connector.scopes.join(", ")}</td>
+              <td className="p-2">
+                <StatusBadge tone={API_KEY_STATUS_TONE[connector.status]} label={connector.status} />
+              </td>
+              <td className="p-2 font-mono text-xs text-text-secondary">{connector.webhookEndpointUrl ?? "none linked"}</td>
+              <td className="p-2">
+                {connector.status === "active" ? (
+                  <div className="flex flex-col gap-2">
+                    <RotateApiKeyForm tenantSlug={tenantSlug} keyId={connector.apiKeyId} />
+                    <RevokeApiKeyForm tenantSlug={tenantSlug} keyId={connector.apiKeyId} />
+                  </div>
+                ) : null}
+              </td>
             </tr>
           ))}
         </tbody>

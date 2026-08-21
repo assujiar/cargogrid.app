@@ -5,8 +5,9 @@ import { listApiKeysForTenant, listWebhookEndpointsForTenant, ApiKeyWebhookQuery
 import { listApiVersions, listWebhookEventTypes, listApiLogsForTenant, PublicApiPlatformQueryError, type PublicApiPlatformQueryRpcClient } from "../../../../../server/queries/public-api-platform.ts";
 import { listVendorApiKeysForTenant, VendorApiQueryError, type VendorApiQueryRpcClient } from "../../../../../server/queries/vendor-api.ts";
 import { listWebhookDeliveriesForTenant, WebhookManagementQueryError, type WebhookManagementQueryRpcClient } from "../../../../../server/queries/webhook-management.ts";
+import { listN8nConnectorsForTenant, listN8nActionAllowlist, N8nIntegrationQueryError, type N8nIntegrationQueryRpcClient } from "../../../../../server/queries/n8n-integration.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
-import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, ApiLogList, CreateVendorApiKeyForm, VendorApiKeyList, RegisterWebhookEndpointForm, WebhookEndpointList, WebhookDeliveryList } from "./api-keys-admin-panel.tsx";
+import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, ApiLogList, CreateVendorApiKeyForm, VendorApiKeyList, RegisterWebhookEndpointForm, WebhookEndpointList, WebhookDeliveryList, CreateN8nConnectorForm, N8nConnectorList } from "./api-keys-admin-panel.tsx";
 
 /**
  * `SupabaseClient.rpc()` returns a `PostgrestFilterBuilder` (thenable, but not
@@ -15,8 +16,8 @@ import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, Api
  * `app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts`'s own
  * `toDocumentClient()` already established for this exact class of mismatch.
  */
-function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient & WebhookManagementQueryRpcClient {
-  return client as unknown as ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient & WebhookManagementQueryRpcClient;
+function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient & WebhookManagementQueryRpcClient & N8nIntegrationQueryRpcClient {
+  return client as unknown as ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient & WebhookManagementQueryRpcClient & N8nIntegrationQueryRpcClient;
 }
 
 /**
@@ -43,9 +44,11 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
   let vendorKeys: Awaited<ReturnType<typeof listVendorApiKeysForTenant>> = [];
   let endpoints: Awaited<ReturnType<typeof listWebhookEndpointsForTenant>> = [];
   let deliveries: Awaited<ReturnType<typeof listWebhookDeliveriesForTenant>> = [];
+  let connectors: Awaited<ReturnType<typeof listN8nConnectorsForTenant>> = [];
+  let n8nAllowlist: Awaited<ReturnType<typeof listN8nActionAllowlist>> = [];
 
   try {
-    [keys, versions, eventTypes, logs, vendorKeys, endpoints, deliveries] = await Promise.all([
+    [keys, versions, eventTypes, logs, vendorKeys, endpoints, deliveries, connectors, n8nAllowlist] = await Promise.all([
       listApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
       listApiVersions(supabase),
       listWebhookEventTypes(supabase),
@@ -53,9 +56,11 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
       listVendorApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
       listWebhookEndpointsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
       listWebhookDeliveriesForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
+      listN8nConnectorsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
+      listN8nActionAllowlist(supabase),
     ]);
   } catch (error) {
-    if (!(error instanceof ApiKeyWebhookQueryError) && !(error instanceof PublicApiPlatformQueryError) && !(error instanceof VendorApiQueryError) && !(error instanceof WebhookManagementQueryError)) throw error;
+    if (!(error instanceof ApiKeyWebhookQueryError) && !(error instanceof PublicApiPlatformQueryError) && !(error instanceof VendorApiQueryError) && !(error instanceof WebhookManagementQueryError) && !(error instanceof N8nIntegrationQueryError)) throw error;
     loadFailed = true;
   }
 
@@ -122,6 +127,16 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
         </h2>
         <p className="text-xs text-text-secondary">Most recent deliveries across every endpoint, including dead-lettered ones. A dead-lettered delivery may be replayed once its receiving endpoint is fixed.</p>
         <WebhookDeliveryList tenantSlug={tenantSlug} deliveries={deliveries} />
+      </section>
+
+      <CreateN8nConnectorForm tenantSlug={tenantSlug} allowlist={n8nAllowlist} />
+
+      <section aria-labelledby="n8n-heading" className="flex flex-col gap-2">
+        <h2 id="n8n-heading" className="text-sm font-semibold text-text-primary">
+          n8n connectors
+        </h2>
+        <p className="text-xs text-text-secondary">n8n calls the SAME /api/v1 API and receives events through the SAME webhook endpoints as any other integration -- register an endpoint above pointed at your n8n workflow&apos;s own webhook URL, then link it here. Sample workflows and setup guidance: see docs/build-log/phase-09/IAE-341.md.</p>
+        <N8nConnectorList tenantSlug={tenantSlug} connectors={connectors} />
       </section>
 
       <section aria-labelledby="logs-heading" className="flex flex-col gap-2">

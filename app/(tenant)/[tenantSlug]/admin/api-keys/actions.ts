@@ -20,13 +20,20 @@ import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/re
 import { createApiKey, rotateApiKey, revokeApiKey, registerWebhookEndpoint, rotateWebhookSecret, disableWebhookEndpoint, reenableWebhookEndpoint, ApiKeyWebhookMutationError, type ApiKeyWebhookMutationRpcClient } from "../../../../../server/mutations/api-key-webhook.ts";
 import { createVendorApiKey, VendorApiMutationError, type VendorApiMutationRpcClient } from "../../../../../server/mutations/vendor-api.ts";
 import { sendTestWebhookDelivery, replayWebhookDelivery, WebhookManagementMutationError, type WebhookManagementMutationRpcClient } from "../../../../../server/mutations/webhook-management.ts";
+import { createN8nConnector, N8nIntegrationMutationError, type N8nIntegrationMutationRpcClient } from "../../../../../server/mutations/n8n-integration.ts";
 import type { CreatedApiKey, CreatedWebhookEndpoint } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
 import type { CreatedVendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
 import type { WebhookDeliveryRow } from "../../../../../server/contracts/webhook-management/webhook-management.ts";
+import type { CreatedN8nConnector } from "../../../../../server/contracts/n8n-integration/n8n-integration.ts";
 
 export interface ApiKeyFormState {
   readonly error: string | null;
   readonly createdKey: CreatedApiKey | null;
+}
+
+export interface N8nConnectorFormState {
+  readonly error: string | null;
+  readonly createdConnector: CreatedN8nConnector | null;
 }
 
 export interface VendorApiKeyFormState {
@@ -50,9 +57,14 @@ const VENDOR_NO_ACCESS: VendorApiKeyFormState = { error: "You don't have access 
 const ENDPOINT_OK: WebhookEndpointFormState = { error: null, createdEndpoint: null };
 const ENDPOINT_NO_ACCESS: WebhookEndpointFormState = { error: "You don't have access to this organization's admin workspace.", createdEndpoint: null };
 const DELIVERY_NO_ACCESS: WebhookDeliveryFormState = { error: "You don't have access to this organization's admin workspace.", delivery: null };
+const N8N_NO_ACCESS: N8nConnectorFormState = { error: "You don't have access to this organization's admin workspace.", createdConnector: null };
 
 function toApiKeyWebhookClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): ApiKeyWebhookMutationRpcClient {
   return client as unknown as ApiKeyWebhookMutationRpcClient;
+}
+
+function toN8nIntegrationClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): N8nIntegrationMutationRpcClient {
+  return client as unknown as N8nIntegrationMutationRpcClient;
 }
 
 function toVendorApiClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): VendorApiMutationRpcClient {
@@ -301,4 +313,45 @@ export async function replayWebhookDeliveryAction(tenantSlug: string, deliveryId
 
   revalidatePath(`/${tenantSlug}/admin/api-keys`);
   return { error: null, delivery };
+}
+
+/** IAE-013: staff-only. Every requested scope must be on the n8n safe-action allowlist. Revoke reuses revokeApiKeyAction above unchanged -- app.revoke_n8n_connector delegates entirely to app.revoke_api_key. */
+export async function createN8nConnectorAction(tenantSlug: string, _prevState: N8nConnectorFormState, formData: FormData): Promise<N8nConnectorFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return N8N_NO_ACCESS;
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length === 0) return { error: "A connector name is required.", createdConnector: null };
+
+  const scopes = parseScopes(formData.get("scopes"));
+  if (scopes.length === 0) return { error: "At least one allowlisted scope is required (e.g. OPS:View).", createdConnector: null };
+
+  const webhookEndpointIdRaw = String(formData.get("webhookEndpointId") ?? "").trim();
+  const webhookEndpointId = webhookEndpointIdRaw.length > 0 ? webhookEndpointIdRaw : null;
+
+  const rateLimitRaw = String(formData.get("rateLimitPerMinute") ?? "").trim();
+  const rateLimitPerMinute = rateLimitRaw.length > 0 ? Number(rateLimitRaw) : null;
+  if (rateLimitPerMinute !== null && (!Number.isFinite(rateLimitPerMinute) || rateLimitPerMinute <= 0)) {
+    return { error: "Rate limit per minute must be a positive number, or left blank for unlimited.", createdConnector: null };
+  }
+
+  const client = toN8nIntegrationClient(createSupabaseServiceRoleClient());
+  let createdConnector: CreatedN8nConnector;
+  try {
+    createdConnector = await createN8nConnector(client, {
+      tenantId: access.tenant.id,
+      name,
+      scopes,
+      webhookEndpointId,
+      rateLimitPerMinute,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof N8nIntegrationMutationError) return { error: `Could not create this n8n connector: ${error.message}`, createdConnector: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return { error: null, createdConnector };
 }
