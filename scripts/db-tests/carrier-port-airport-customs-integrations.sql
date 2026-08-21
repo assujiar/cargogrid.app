@@ -271,7 +271,8 @@ $$;
 \echo '>> app.ingest_logistics_partner_webhook_event: 10 invalid attempts within 15 minutes trigger rate_limited on the 11th, scoped per client_key'
 do $$
 declare
-  v_connection_id uuid := (select id from app.integration_connections where adapter_code = 'carrier_status_api');
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaecpac');
+  v_connection_id uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'carrier_status_api');
   v_ts bigint := extract(epoch from now())::bigint;
   v_result record;
   i integer;
@@ -366,7 +367,7 @@ declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaecpac');
   v_rep1 uuid := '00000000-0000-0000-0000-000018000002';
   v_admin2 uuid := '00000000-0000-0000-0000-000018000004';
-  v_connection_id uuid := (select id from app.integration_connections where adapter_code = 'carrier_status_api');
+  v_connection_id uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'carrier_status_api');
   v_job1 app.jobs;
   v_job2 app.jobs;
 begin
@@ -404,7 +405,7 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaecpac');
   v_rep1 uuid := '00000000-0000-0000-0000-000018000002';
-  v_connection_id uuid := (select id from app.integration_connections where adapter_code = 'carrier_status_api');
+  v_connection_id uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'carrier_status_api');
   v_event1 app.logistics_partner_events;
   v_event2 app.logistics_partner_events;
 begin

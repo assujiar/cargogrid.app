@@ -56,9 +56,17 @@ export async function lookupTaxAuthorityRate(client: LookupTaxAuthorityRateRpcCl
   const requestPayload = { taxCode, asOfDate };
 
   const dispatchInfo = await getFinanceProviderDispatchInfo(client, tenantId, actorAuthUserId, "tax_authority_api");
-  if (!dispatchInfo || dispatchInfo.connectionStatus !== "active") {
+  if (!dispatchInfo) {
+    // Tier C fix: there is no real connection_id to attribute evidence to --
+    // app.finance_provider_call_evidence.connection_id is NOT NULL
+    // REFERENCES app.integration_connections(id), so a sentinel UUID here
+    // previously raised a raw foreign-key-violation instead of the
+    // documented clean failure result.
+    return { success: false, evidenceId: null, rateValue: null, errorMessage: "no active tax_authority_api connection configured for this tenant" };
+  }
+  if (dispatchInfo.connectionStatus !== "active") {
     const errorMessage = "no active tax_authority_api connection configured for this tenant";
-    const evidence = await recordTaxAuthorityLookup(client, { tenantId, connectionId: dispatchInfo?.connectionId ?? "00000000-0000-0000-0000-000000000000", taxCode, asOfDate, status: "failed", requestPayload, errorMessage, actorAuthUserId, actorLabel });
+    const evidence = await recordTaxAuthorityLookup(client, { tenantId, connectionId: dispatchInfo.connectionId, taxCode, asOfDate, status: "failed", requestPayload, errorMessage, actorAuthUserId, actorLabel });
     return { success: false, evidenceId: evidence.id, rateValue: null, errorMessage };
   }
 

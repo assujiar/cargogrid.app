@@ -181,13 +181,14 @@ begin
 end;
 $$;
 
-\echo '>> app.record_ai_governed_request_outcome: rejects a non-pending request (idempotency), rejects a negative cost, rejects a secret-shaped output key, otherwise computes billed_amount at the real +20% markup (RPD-028) and completes'
+\echo '>> app.record_ai_governed_request_outcome: rejects a non-pending request (idempotency), rejects a negative cost, REDACTS (never rejects) a secret-shaped output key -- output is untrusted provider content, per the merged Batch 4 Tier C review fix -- otherwise computes billed_amount at the real +20% markup (RPD-028) and completes'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaigov');
   v_rep1 uuid := '00000000-0000-0000-0000-000021000002';
   v_connection_id uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'openai_multimodal');
   v_request app.ai_governed_requests;
+  v_redact_request app.ai_governed_requests;
   v_outcome app.ai_governed_requests;
 begin
   v_request := app.request_ai_governed_action(v_tenant1, v_connection_id, 'quotation_draft', null, null, jsonb_build_object('origin', 'JKT'), v_rep1, 'rep');
@@ -199,12 +200,16 @@ begin
     if sqlerrm !~ 'ai_governed_request_invalid_cost_amount' then raise; end if;
   end;
 
-  begin
-    perform app.record_ai_governed_request_outcome(v_request.id, 'succeeded', jsonb_build_object('api_key', 'leaked'), null, 'openai-multimodal', 0.05, 'USD', null, v_rep1, 'rep');
-    raise exception 'assertion failed: expected ai_governed_request_secret_shaped_key for a secret-shaped output_payload key';
-  exception when check_violation then
-    if sqlerrm !~ 'ai_governed_request_secret_shaped_key' then raise; end if;
-  end;
+  -- Tier C fix: output_payload is provider-controlled, untrusted content --
+  -- a secret-shaped key there is now REDACTED, never rejected (rejecting it
+  -- would permanently strand the governance write itself on an ordinary,
+  -- legitimate AI response). A SEPARATE request is used here since this
+  -- call now genuinely succeeds and transitions its own request.
+  v_redact_request := app.request_ai_governed_action(v_tenant1, v_connection_id, 'quotation_draft', null, null, jsonb_build_object('origin', 'JKT'), v_rep1, 'rep');
+  v_outcome := app.record_ai_governed_request_outcome(v_redact_request.id, 'succeeded', jsonb_build_object('api_key', 'leaked', 'note', 'ok'), null, 'openai-multimodal', 0.05, 'USD', null, v_rep1, 'rep');
+  if v_outcome.status <> 'succeeded' or v_outcome.output_payload ->> 'api_key' <> '[REDACTED]' or v_outcome.output_payload ->> 'note' <> 'ok' then
+    raise exception 'assertion failed: expected a real succeeded outcome with the secret-shaped key REDACTED and its non-secret sibling untouched, got %', to_jsonb(v_outcome);
+  end if;
 
   v_outcome := app.record_ai_governed_request_outcome(v_request.id, 'succeeded', jsonb_build_object('draftLines', jsonb_build_array('Freight')), 'high', 'openai-multimodal', 0.05, 'USD', null, v_rep1, 'rep');
   if v_outcome.status <> 'succeeded' or v_outcome.billed_amount <> 0.06 or v_outcome.completed_at is null then
@@ -218,7 +223,7 @@ begin
     if sqlerrm !~ 'ai_governed_request_not_pending' then raise; end if;
   end;
 
-  raise notice 'PASS: record_ai_governed_request_outcome enforces the pending-only transition, rejects a negative cost and a secret-shaped output key, and computes billed_amount at the real RPD-028 markup';
+  raise notice 'PASS: record_ai_governed_request_outcome enforces the pending-only transition, rejects a negative cost, redacts (never rejects) a secret-shaped output key, and computes billed_amount at the real RPD-028 markup';
 end;
 $$;
 

@@ -93,8 +93,33 @@ describe("dispatchAiGovernedRequest", () => {
       assert.equal(recorded.outcomes.length, 1);
       assert.equal(recorded.outcomes[0]?.p_status, "succeeded");
       assert.ok((recorded.outcomes[0]?.p_provider_unit_cost_amount as number) > 0);
+      assert.equal(recorded.outcomes[0]?.p_model_version, "openai-multimodal");
       assert.equal(received[0]?.headers["authorization"], "Bearer test-credential-value");
       assert.deepEqual(JSON.parse(received[0]!.body), { origin: "JKT" });
+    } finally {
+      server.close();
+    }
+  });
+
+  test("Tier C fix: a real provider-reported model field is recorded verbatim instead of the hardcoded adapter-code literal", async () => {
+    const { server, url } = await startServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ output: { draftLines: [] }, confidenceLabel: "medium", model: "gpt-real-vision-2026-08" }));
+      });
+    });
+    try {
+      const recorded: RecordedCalls = { requested: [], outcomes: [] };
+      const client = mockClient(url, {}, recorded);
+      await dispatchAiGovernedRequest(
+        client,
+        { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, actorLabel: "system", featureCode: "quotation_draft", correlationRecordType: null, correlationRecordId: null, promptPayload: {} },
+        ALLOW_ALL_URLS,
+      );
+
+      assert.equal(recorded.outcomes[0]?.p_model_version, "gpt-real-vision-2026-08");
     } finally {
       server.close();
     }

@@ -127,7 +127,7 @@ export async function dispatchAiGovernedRequest(client: DispatchAiGovernedReques
     return { requestId: request.id, success: false, outputPayload: null, confidenceLabel: null, errorMessage };
   }
 
-  let body: { output?: unknown; confidenceLabel?: unknown };
+  let body: { output?: unknown; confidenceLabel?: unknown; model?: unknown };
   try {
     body = await response.json();
   } catch {
@@ -144,13 +144,17 @@ export async function dispatchAiGovernedRequest(client: DispatchAiGovernedReques
   }
 
   const confidenceLabel: AiConfidenceLabel | null = body.confidenceLabel === "high" || body.confidenceLabel === "medium" || body.confidenceLabel === "low" ? body.confidenceLabel : null;
+  // Tier C fix: record the model the provider actually reports serving, not
+  // a hardcoded adapter-code literal -- falls back to the adapter code only
+  // when the provider's own response omits a model field entirely.
+  const modelVersion = typeof body.model === "string" && body.model.length > 0 ? body.model : "openai-multimodal";
 
   await recordAiGovernedRequestOutcome(client, {
     requestId: request.id,
     status: "succeeded",
     outputPayload,
     confidenceLabel,
-    modelVersion: "openai-multimodal",
+    modelVersion,
     providerUnitCostAmount: placeholderCost(requestPayload.length),
     currency: "USD",
     actorAuthUserId,

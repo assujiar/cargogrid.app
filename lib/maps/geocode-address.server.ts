@@ -55,9 +55,17 @@ export async function geocodeAddress(client: GeocodeAddressRpcClient, options: G
   const queryPayload = { address };
 
   const dispatchInfo = await getMapsProviderDispatchInfo(client, tenantId, actorAuthUserId);
-  if (!dispatchInfo || dispatchInfo.connectionStatus !== "active") {
+  if (!dispatchInfo) {
+    // Tier C fix: there is no real connection_id to attribute evidence to --
+    // app.geocode_requests.connection_id is NOT NULL REFERENCES
+    // app.integration_connections(id), so a sentinel UUID here previously
+    // raised a raw foreign-key-violation instead of the documented clean
+    // failure result.
+    return { success: false, latitude: null, longitude: null, formattedAddress: null, errorMessage: "no active maps_geocoding provider connection configured for this tenant" };
+  }
+  if (dispatchInfo.connectionStatus !== "active") {
     const errorMessage = "no active maps_geocoding provider connection configured for this tenant";
-    await recordGeocodeRequest(client, { tenantId, connectionId: dispatchInfo?.connectionId ?? "00000000-0000-0000-0000-000000000000", requestType: "geocode", queryPayload, status: "failed", errorMessage, actorAuthUserId, actorLabel });
+    await recordGeocodeRequest(client, { tenantId, connectionId: dispatchInfo.connectionId, requestType: "geocode", queryPayload, status: "failed", errorMessage, actorAuthUserId, actorLabel });
     return { success: false, latitude: null, longitude: null, formattedAddress: null, errorMessage };
   }
 

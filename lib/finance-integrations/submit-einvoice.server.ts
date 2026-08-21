@@ -54,9 +54,17 @@ export async function submitEinvoice(client: SubmitEinvoiceRpcClient, options: S
   const { tenantId, actorAuthUserId, actorLabel, financeInvoiceId, invoicePayload } = options;
 
   const dispatchInfo = await getFinanceProviderDispatchInfo(client, tenantId, actorAuthUserId, "einvoice_provider");
-  if (!dispatchInfo || dispatchInfo.connectionStatus !== "active") {
+  if (!dispatchInfo) {
+    // Tier C fix: there is no real connection_id to attribute evidence to --
+    // app.finance_provider_call_evidence.connection_id is NOT NULL
+    // REFERENCES app.integration_connections(id), so a sentinel UUID here
+    // previously raised a raw foreign-key-violation instead of the
+    // documented clean failure result.
+    return { success: false, providerReference: null, errorMessage: "no active einvoice_provider connection configured for this tenant" };
+  }
+  if (dispatchInfo.connectionStatus !== "active") {
     const errorMessage = "no active einvoice_provider connection configured for this tenant";
-    await recordEinvoiceSubmissionAttempt(client, { tenantId, connectionId: dispatchInfo?.connectionId ?? "00000000-0000-0000-0000-000000000000", financeInvoiceId, status: "failed", requestPayload: invoicePayload, errorMessage, actorAuthUserId, actorLabel });
+    await recordEinvoiceSubmissionAttempt(client, { tenantId, connectionId: dispatchInfo.connectionId, financeInvoiceId, status: "failed", requestPayload: invoicePayload, errorMessage, actorAuthUserId, actorLabel });
     return { success: false, providerReference: null, errorMessage };
   }
 

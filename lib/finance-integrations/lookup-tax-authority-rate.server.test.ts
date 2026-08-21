@@ -136,4 +136,23 @@ describe("lookupTaxAuthorityRate", () => {
     assert.equal(result.success, false);
     assert.match(result.errorMessage ?? "", /refusing to dispatch/);
   });
+
+  test("Tier C fix: no connection row AT ALL (a tenant that never configured tax_authority_api) fails cleanly, never a raw foreign-key-violation from a sentinel connection id", async () => {
+    let called = false;
+    const client: LookupTaxAuthorityRateRpcClient = {
+      rpc: async (fn: string) => {
+        if (fn === "get_finance_provider_dispatch_info") {
+          called = true;
+          return { data: null, error: null };
+        }
+        throw new Error(`unexpected rpc call: ${fn} -- no evidence write should ever be attempted with no real connection_id to attribute it to`);
+      },
+    } as unknown as LookupTaxAuthorityRateRpcClient;
+    const result = await lookupTaxAuthorityRate(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, actorLabel: "system", taxCode: "PPN", asOfDate: "2026-08-21" }, ALLOW_ALL_URLS);
+
+    assert.equal(called, true);
+    assert.equal(result.success, false);
+    assert.equal(result.evidenceId, null);
+    assert.match(result.errorMessage ?? "", /no active tax_authority_api/);
+  });
 });

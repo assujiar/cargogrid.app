@@ -226,9 +226,10 @@ $$;
 \echo '>> app.review_external_sync_conflict: entity-dispatched Edit succeeds and is evidence-only; a View-only actor is denied; an invalid decision value is rejected'
 do $$
 declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeexthr');
   v_rep1 uuid := '00000000-0000-0000-0000-000020000002';
   v_viewer1 uuid := '00000000-0000-0000-0000-000020000003';
-  v_record_id uuid := (select id from app.external_sync_records where entity_type = 'gl_account' and conflict_status = 'conflicts_detected');
+  v_record_id uuid := (select id from app.external_sync_records where tenant_id = v_tenant1 and entity_type = 'gl_account' and conflict_status = 'conflicts_detected');
   v_record app.external_sync_records;
 begin
   v_record := app.review_external_sync_conflict(v_record_id, 'reviewed', 'confirmed with the finance team, no action needed', v_rep1, 'rep');

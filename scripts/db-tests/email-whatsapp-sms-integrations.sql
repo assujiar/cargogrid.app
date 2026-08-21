@@ -155,6 +155,7 @@ declare
   v_recipient uuid := '00000000-0000-0000-0000-000016000002';
   v_published_id uuid := (select v.id from app.config_versions v join app.config_objects o on o.id = v.config_object_id where o.config_type_code = 'notification:iaemsg.test_type' and v.status = 'published');
   v_notification app.notifications;
+  v_cost_check_notification app.notifications;
   v_attempt app.notification_delivery_attempts;
 begin
   v_notification := app.queue_notification(v_published_id, v_tenant, 'iaemsg.test_type', v_recipient, 'sms', 'en', jsonb_build_object('name', 'Bob'), 'idem-msg-cost-1', v_admin, 'admin');
@@ -164,14 +165,27 @@ begin
     raise exception 'assertion failed: expected billed_amount = 0.0100 * 1.20 = 0.0120, got %', to_jsonb(v_attempt);
   end if;
 
+  -- A SEPARATE, still-queued notification -- the merged Batch 4 Tier C
+  -- review's own terminal-state guard now rejects ANY further attempt on
+  -- the ALREADY-sent notification above before it would ever reach this
+  -- cost check, so a fresh, non-terminal notification is required to prove
+  -- negative-cost rejection in isolation.
+  v_cost_check_notification := app.queue_notification(v_published_id, v_tenant, 'iaemsg.test_type', v_recipient, 'sms', 'en', jsonb_build_object('name', 'Bob'), 'idem-msg-cost-2', v_admin, 'admin');
   begin
-    perform app.record_notification_delivery_attempt(v_notification.id, 'failed', 'boom', v_admin, 'admin', -1, 'USD');
+    perform app.record_notification_delivery_attempt(v_cost_check_notification.id, 'failed', 'boom', v_admin, 'admin', -1, 'USD');
     raise exception 'assertion failed: expected notification_invalid_cost_amount for a negative cost';
   exception when check_violation then
     if sqlerrm !~ 'notification_invalid_cost_amount' then raise; end if;
   end;
 
-  raise notice 'PASS: record_notification_delivery_attempt computes billed_amount at a real +20%% markup via app.compute_provider_billed_amount; a negative cost is rejected';
+  begin
+    perform app.record_notification_delivery_attempt(v_notification.id, 'success', null, v_admin, 'admin', 0.02, 'USD');
+    raise exception 'assertion failed: expected notification_delivery_attempt_already_terminal -- this notification already reached sent (Tier C review fix)';
+  exception when check_violation then
+    if sqlerrm !~ 'notification_delivery_attempt_already_terminal' then raise; end if;
+  end;
+
+  raise notice 'PASS: record_notification_delivery_attempt computes billed_amount at a real +20%% markup via app.compute_provider_billed_amount; a negative cost is rejected; a further attempt on an already-sent notification is rejected';
 end;
 $$;
 
