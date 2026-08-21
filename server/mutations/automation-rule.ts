@@ -67,6 +67,7 @@ export const AUTOMATION_RULE_KNOWN_MUTATION_ERROR_CODES = [
   "automation_rule_publish_approval_step_not_found",
   "automation_rule_publish_approval_wrong_domain",
   "automation_rule_publish_not_approved",
+  "automation_rule_publish_content_changed",
   "automation_rule_invalid_status",
 ] as const;
 type KnownAutomationRuleMutationErrorCode = (typeof AUTOMATION_RULE_KNOWN_MUTATION_ERROR_CODES)[number];

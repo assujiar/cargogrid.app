@@ -98,6 +98,11 @@ function DryRunTester({ dryRunAction }: { dryRunAction: (prevState: DryRunAction
             <p>
               <strong>Matched:</strong> {state.result.matched ? "Yes" : "No"}
             </p>
+            {!state.result.valid ? (
+              <p role="alert" className="mt-1 text-danger">
+                <strong>This draft is not yet publishable:</strong> {state.result.validationError}
+              </p>
+            ) : null}
             <pre className="mt-1 overflow-x-auto">{JSON.stringify(state.result.wouldFireActions, null, 2)}</pre>
           </div>
         ) : null}

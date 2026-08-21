@@ -35,11 +35,24 @@ import { ConfigVersionSchema, type ConfigVersion } from "../config/config.ts";
  * either type at all, so a `print_label` job could be enqueued and never worked. The drift
  * survived because only `GENERIC_JOB_TYPES` carried a parity assertion; this array now has
  * one too (see import-export.test.ts).
+ *
+ * Batch 2 Tier C fix (20260803030000_harden_intelligence_batch2_tier_c_review_fixes.sql,
+ * finding 7 propagation sweep): this array had drifted the SAME way `GENERIC_JOB_TYPES`
+ * had (both derive from `app.all_job_types()`/`app.generic_job_types()`, and 10 prior
+ * migrations plus IAE-007's own `automation_action_execution` had widened the DB side
+ * without ever touching either TS array) -- caught by import-export.test.ts's own ATW-032
+ * parity assertion the moment `GENERIC_JOB_TYPES` was corrected, since that test computes
+ * its expectation from `GENERIC_JOB_TYPES` directly rather than a second hard-coded
+ * literal. All 11 missing generic values added here alongside `import`/`export`.
  */
 export const IMPORT_EXPORT_JOB_TYPES = [
   "import", "export", "report_generation", "notification_batch", "webhook_retry",
   "document_generation", "dashboard_refresh", "loyalty_expiration", "recurring_billing",
-  "integration_sync", "route_load_planning", "print_label",
+  "integration_sync", "route_load_planning", "print_label", "roster_generation",
+  "leave_accrual", "leave_carry_forward_expiry", "payroll_calculation",
+  "training_certificate_expiry", "training_certificate_expiry_reminder",
+  "ticket_sla_evaluation", "kb_article_expiry", "ticket_escalation_evaluation",
+  "loyalty_expiry_sweep", "automation_action_execution",
 ] as const;
 export const ImportExportJobTypeSchema = z.enum(IMPORT_EXPORT_JOB_TYPES);
 export type ImportExportJobType = z.infer<typeof ImportExportJobTypeSchema>;

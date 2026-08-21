@@ -552,3 +552,30 @@ begin
 
   raise notice 'ATW-031 job_type single-source proof: CHECK constraint and app.all_job_types() are set-equal (% values), generic set is % values, and both previously-locked-out types enqueue', array_length(v_all_types, 1), array_length(v_generic, 1);
 end $$;
+
+\echo '>> Batch 2 Tier C fix (20260803030000_harden_intelligence_batch2_tier_c_review_fixes.sql, finding 7, cross-prompt-integration): TypeScript drift gate -- server/contracts/background-job/background-job.ts''s own GENERIC_JOB_TYPES had silently drifted to 10 of 21 real DB-side values (10 prior migrations plus IAE-007''s own automation_action_execution had each widened app.generic_job_types() without ever touching the TS array, and its own regression test only ever checked it against a second hand-copied literal in the SAME file). This block hardcodes the CURRENT, corrected TS array as a literal and asserts it against the LIVE app.generic_job_types() output -- a FUTURE migration that widens app.generic_job_types() without a matching update to both this literal and the real TS array now fails db:test, not only a same-file tautology.'
+do $$
+declare
+  v_generic text[] := app.generic_job_types();
+  v_ts_mirror text[] := array[
+    'report_generation', 'notification_batch', 'webhook_retry', 'document_generation',
+    'dashboard_refresh', 'loyalty_expiration', 'recurring_billing', 'integration_sync',
+    'route_load_planning', 'print_label', 'roster_generation', 'leave_accrual',
+    'leave_carry_forward_expiry', 'payroll_calculation', 'training_certificate_expiry',
+    'training_certificate_expiry_reminder', 'ticket_sla_evaluation', 'kb_article_expiry',
+    'ticket_escalation_evaluation', 'loyalty_expiry_sweep', 'automation_action_execution'
+  ];
+  v_missing text[];
+  v_extra text[];
+begin
+  select array_agg(t order by t) into v_missing
+    from unnest(v_generic) t where t <> all (v_ts_mirror);
+  select array_agg(t order by t) into v_extra
+    from unnest(v_ts_mirror) t where t <> all (v_generic);
+
+  if v_missing is not null or v_extra is not null then
+    raise exception 'assertion failed: app.generic_job_types() and the TS-mirror literal in this test (kept in lockstep with server/contracts/background-job/background-job.ts''s own GENERIC_JOB_TYPES by hand) have drifted -- in the live DB but not mirrored into TS: %; mirrored into TS but not in the live DB: %. Update BOTH server/contracts/background-job/background-job.ts''s GENERIC_JOB_TYPES and background-job.test.ts''s own literal, then update this block''s v_ts_mirror to match.', v_missing, v_extra;
+  end if;
+
+  raise notice 'TS-mirror drift gate proof: app.generic_job_types() (% values) matches the hardcoded TS-mirror literal exactly -- server/contracts/background-job/background-job.ts''s own GENERIC_JOB_TYPES is confirmed in lockstep with the live database, not merely with a same-file tautology', array_length(v_generic, 1);
+end $$;

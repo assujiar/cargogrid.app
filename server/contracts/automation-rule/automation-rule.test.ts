@@ -97,9 +97,45 @@ describe("parseDryRunAutomationRuleResult", () => {
       matched: true,
       trigger_event_type: "ticket.created",
       would_fire_actions: [{ action_type: "enqueue_job", job_type: "automation_action_execution" }],
+      valid: true,
+      validation_error: null,
     });
     assert.equal(result.matched, true);
     assert.equal(result.wouldFireActions.length, 1);
+    assert.equal(result.valid, true);
+    assert.equal(result.validationError, null);
+  });
+
+  // Batch 2 Tier C fix (20260803030000_harden_intelligence_batch2_tier_c_review_fixes.sql,
+  // finding 6): app.dry_run_automation_rule now reports valid=false with a real
+  // validation_error for a draft carrying a governance-rejected action_type, instead of
+  // silently reporting it as something that "would fire".
+  test("surfaces valid=false and a real validationError for a governance-rejected draft", () => {
+    // wouldFireActions itself stays within AutomationActionsSchema's own allowlist here
+    // (the RPC's own actions column shares that same allowlist for a STORED draft, since
+    // app.set_automation_rule_definition only ever runs structural, not business-rule,
+    // validation on write) -- this test proves the valid/validationError plumbing itself,
+    // the live business-rule-rejection case is proven end to end against a real disposable
+    // database in scripts/db-tests/automation-rule-engine.sql's own Tier C regression.
+    const result = parseDryRunAutomationRuleResult({
+      matched: true,
+      trigger_event_type: "probe.event",
+      would_fire_actions: [{ action_type: "enqueue_job", job_type: "automation_action_execution" }],
+      valid: false,
+      validation_error: "automation_rule_invalid_action_type: delete_customer_ledger_entry is not a supported action_type",
+    });
+    assert.equal(result.valid, false);
+    assert.match(result.validationError ?? "", /automation_rule_invalid_action_type/);
+  });
+
+  test("defaults valid=true/validationError=null when the RPC response predates this fix", () => {
+    const result = parseDryRunAutomationRuleResult({
+      matched: false,
+      trigger_event_type: "ticket.created",
+      would_fire_actions: [],
+    });
+    assert.equal(result.valid, true);
+    assert.equal(result.validationError, null);
   });
 });
 

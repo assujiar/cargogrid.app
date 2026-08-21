@@ -175,6 +175,15 @@ export const DryRunAutomationRuleResultSchema = z.object({
   matched: z.boolean(),
   triggerEventType: z.string().nullable(),
   wouldFireActions: AutomationActionsSchema,
+  // Batch 2 Tier C fix (20260803030000_harden_intelligence_batch2_tier_c_review_fixes.sql,
+  // finding 6): app.dry_run_automation_rule now also runs the draft through
+  // app.validate_automation_rule_definition and reports the result -- previously a draft
+  // carrying a governance-rejected action_type was reported as something that "would fire"
+  // with no indication it could never actually publish. `valid` defaults true and
+  // `validationError` null for a result predating this fix (defensive; every live RPC call
+  // now always sends both).
+  valid: z.boolean().default(true),
+  validationError: z.string().nullable().default(null),
 });
 export type DryRunAutomationRuleResult = z.infer<typeof DryRunAutomationRuleResultSchema>;
 
@@ -183,6 +192,8 @@ export function parseDryRunAutomationRuleResult(row: Record<string, unknown>): D
     matched: row.matched,
     triggerEventType: row.trigger_event_type,
     wouldFireActions: row.would_fire_actions ?? [],
+    valid: row.valid ?? true,
+    validationError: row.validation_error ?? null,
   });
 }
 
