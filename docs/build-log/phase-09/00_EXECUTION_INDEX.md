@@ -188,7 +188,7 @@ Gate commands independently re-run live at this repository this checkpoint (cont
 | `CG-S14-IAE-004` | 332 | Saved View and Configurable Report | `IAE-002`, `IAE-003` | **`VERIFIED`** 2026-08-21 — Tier A/B clean at commit; Batch 1 Tier C review closed same day (2 findings fixed — see `docs/build-log/phase-09/IAE-332.md` §13). `docs/build-log/phase-09/IAE-332.md` |
 | `CG-S14-IAE-005` | 333 | Analytics Materialized Views | `IAE-002` | **`VERIFIED`** 2026-08-21 — Tier A/B clean at commit; Batch 1 Tier C review closed same day (2 findings fixed — see `docs/build-log/phase-09/IAE-333.md` §13). `docs/build-log/phase-09/IAE-333.md` |
 | `CG-S14-IAE-006` | 334 | Scheduled Reports | `IAE-002` | **`VERIFIED`** 2026-08-21 — Tier A/B clean at commit; Batch 1 Tier C review closed same day (6 findings fixed, including the batch's own sole Critical — see `docs/build-log/phase-09/IAE-334.md` §13). `docs/build-log/phase-09/IAE-334.md`. Last prompt of Batch 1 |
-| `CG-S14-IAE-007` | 335 | Automation Rule Engine | `IAE-001` | `READY` (Batch 2; released now that Batch 1 is `VERIFIED` per `AGENTS.md` cross-batch rule) |
+| `CG-S14-IAE-007` | 335 | Automation Rule Engine | `IAE-001` | **`COMPLETED`** 2026-08-21 — Tier A/B clean (0 typecheck/lint errors, full test suite green, db-test suite green); first prompt of Batch 2, awaits Batch 2's own Tier C review to reach `VERIFIED`. `docs/build-log/phase-09/IAE-335.md` |
 | `CG-S14-IAE-008` | 336 | Integration Hub | `IAE-001` | `BLOCKED` (Batch 2) |
 | `CG-S14-IAE-009` | 337 | Public API Platform | `IAE-008` | `BLOCKED` (Batch 3) |
 | `CG-S14-IAE-010` | 338 | Customer API | `IAE-009` | `BLOCKED` (Batch 3) |
