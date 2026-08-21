@@ -89,11 +89,13 @@ begin
       end if;
   end;
 
-  -- notification_invalid_channel
-  perform app.set_config_items(v_draft.id, jsonb_build_array(jsonb_build_object('key', 'channels', 'value', jsonb_build_array('sms'))), '00000000-0000-0000-0000-000000001901', 'tenant admin');
+  -- notification_invalid_channel -- 'sms' is a real, allowlisted channel as
+  -- of IAE-014 (Prompt 342); 'push' remains genuinely outside the allowlist
+  -- (in_app/email/whatsapp/sms only) and is the probe value here instead.
+  perform app.set_config_items(v_draft.id, jsonb_build_array(jsonb_build_object('key', 'channels', 'value', jsonb_build_array('push'))), '00000000-0000-0000-0000-000000001901', 'tenant admin');
   begin
     perform app.publish_notification_template(v_draft.id, '00000000-0000-0000-0000-000000001901', null, 'tenant admin');
-    raise exception 'assertion failed: expected channel=sms (not in the allowlist) to raise notification_invalid_channel';
+    raise exception 'assertion failed: expected channel=push (not in the allowlist) to raise notification_invalid_channel';
   exception
     when check_violation then
       if sqlerrm not like 'notification_invalid_channel%' then

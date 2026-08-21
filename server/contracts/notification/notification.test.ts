@@ -110,7 +110,7 @@ describe("QueueNotificationInputSchema", () => {
         tenantId: TENANT_ID,
         notificationTypeCode: "role_assignment_granted",
         recipientAuthUserId: ACTOR_ID,
-        channel: "sms",
+        channel: "push",
         dedupeKey: "notif-9001",
         actorAuthUserId: ACTOR_ID,
         triggeredBy: "tenant admin",
