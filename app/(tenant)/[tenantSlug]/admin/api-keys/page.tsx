@@ -3,8 +3,9 @@ import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/re
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listApiKeysForTenant, ApiKeyWebhookQueryError, type ApiKeyWebhookQueryRpcClient } from "../../../../../server/queries/api-key-webhook.ts";
 import { listApiVersions, listWebhookEventTypes, listApiLogsForTenant, PublicApiPlatformQueryError, type PublicApiPlatformQueryRpcClient } from "../../../../../server/queries/public-api-platform.ts";
+import { listVendorApiKeysForTenant, VendorApiQueryError, type VendorApiQueryRpcClient } from "../../../../../server/queries/vendor-api.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
-import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, ApiLogList } from "./api-keys-admin-panel.tsx";
+import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, ApiLogList, CreateVendorApiKeyForm, VendorApiKeyList } from "./api-keys-admin-panel.tsx";
 
 /**
  * `SupabaseClient.rpc()` returns a `PostgrestFilterBuilder` (thenable, but not
@@ -13,8 +14,8 @@ import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, Api
  * `app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts`'s own
  * `toDocumentClient()` already established for this exact class of mismatch.
  */
-function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient {
-  return client as unknown as ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient;
+function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient {
+  return client as unknown as ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient;
 }
 
 /**
@@ -38,16 +39,18 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
   let versions: Awaited<ReturnType<typeof listApiVersions>> = [];
   let eventTypes: Awaited<ReturnType<typeof listWebhookEventTypes>> = [];
   let logs: Awaited<ReturnType<typeof listApiLogsForTenant>> = [];
+  let vendorKeys: Awaited<ReturnType<typeof listVendorApiKeysForTenant>> = [];
 
   try {
-    [keys, versions, eventTypes, logs] = await Promise.all([
+    [keys, versions, eventTypes, logs, vendorKeys] = await Promise.all([
       listApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
       listApiVersions(supabase),
       listWebhookEventTypes(supabase),
       listApiLogsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, limit: 20, before: null }),
+      listVendorApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
     ]);
   } catch (error) {
-    if (!(error instanceof ApiKeyWebhookQueryError) && !(error instanceof PublicApiPlatformQueryError)) throw error;
+    if (!(error instanceof ApiKeyWebhookQueryError) && !(error instanceof PublicApiPlatformQueryError) && !(error instanceof VendorApiQueryError)) throw error;
     loadFailed = true;
   }
 
@@ -74,6 +77,15 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
           Your API keys
         </h2>
         <ApiKeyList tenantSlug={tenantSlug} keys={keys} />
+      </section>
+
+      <CreateVendorApiKeyForm tenantSlug={tenantSlug} />
+
+      <section aria-labelledby="vendor-keys-heading" className="flex flex-col gap-2">
+        <h2 id="vendor-keys-heading" className="text-sm font-semibold text-text-primary">
+          Vendor API keys
+        </h2>
+        <VendorApiKeyList tenantSlug={tenantSlug} keys={vendorKeys} />
       </section>
 
       <section aria-labelledby="versions-heading" className="flex flex-col gap-2">

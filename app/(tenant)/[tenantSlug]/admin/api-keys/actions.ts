@@ -18,18 +18,30 @@ import { createSupabaseServerClient } from "../../../../../lib/supabase/server.t
 import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
 import { createApiKey, rotateApiKey, revokeApiKey, ApiKeyWebhookMutationError, type ApiKeyWebhookMutationRpcClient } from "../../../../../server/mutations/api-key-webhook.ts";
+import { createVendorApiKey, VendorApiMutationError, type VendorApiMutationRpcClient } from "../../../../../server/mutations/vendor-api.ts";
 import type { CreatedApiKey } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
+import type { CreatedVendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
 
 export interface ApiKeyFormState {
   readonly error: string | null;
   readonly createdKey: CreatedApiKey | null;
 }
 
+export interface VendorApiKeyFormState {
+  readonly error: string | null;
+  readonly createdKey: CreatedVendorApiKey | null;
+}
+
 const OK: ApiKeyFormState = { error: null, createdKey: null };
 const NO_ACCESS: ApiKeyFormState = { error: "You don't have access to this organization's admin workspace.", createdKey: null };
+const VENDOR_NO_ACCESS: VendorApiKeyFormState = { error: "You don't have access to this organization's admin workspace.", createdKey: null };
 
 function toApiKeyWebhookClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): ApiKeyWebhookMutationRpcClient {
   return client as unknown as ApiKeyWebhookMutationRpcClient;
+}
+
+function toVendorApiClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): VendorApiMutationRpcClient {
+  return client as unknown as VendorApiMutationRpcClient;
 }
 
 function parseScopes(raw: FormDataEntryValue | null): string[] {
@@ -118,4 +130,45 @@ export async function revokeApiKeyAction(tenantSlug: string, keyId: string, _pre
 
   revalidatePath(`/${tenantSlug}/admin/api-keys`);
   return OK;
+}
+
+/** IAE-011: staff-only (Supreme or the tenant's own active tenant_admin) -- a vendor has no login/session and cannot self-service. Rotate/revoke reuse rotateApiKeyAction/revokeApiKeyAction above unchanged -- a vendor key is a plain app.api_keys row, same rotate/revoke authority path. */
+export async function createVendorApiKeyAction(tenantSlug: string, _prevState: VendorApiKeyFormState, formData: FormData): Promise<VendorApiKeyFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return VENDOR_NO_ACCESS;
+
+  const vendorMasterRecordId = String(formData.get("vendorMasterRecordId") ?? "").trim();
+  if (vendorMasterRecordId.length === 0) return { error: "A vendor id is required.", createdKey: null };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length === 0) return { error: "A key name is required.", createdKey: null };
+
+  const rateLimitRaw = String(formData.get("rateLimitPerMinute") ?? "").trim();
+  const rateLimitPerMinute = rateLimitRaw.length > 0 ? Number(rateLimitRaw) : null;
+  if (rateLimitPerMinute !== null && (!Number.isFinite(rateLimitPerMinute) || rateLimitPerMinute <= 0)) {
+    return { error: "Rate limit per minute must be a positive number, or left blank for unlimited.", createdKey: null };
+  }
+
+  const expiresRaw = String(formData.get("expiresAt") ?? "").trim();
+  const expiresAt = expiresRaw.length > 0 ? new Date(expiresRaw).toISOString() : null;
+
+  const client = toVendorApiClient(createSupabaseServiceRoleClient());
+  let createdKey: CreatedVendorApiKey;
+  try {
+    createdKey = await createVendorApiKey(client, {
+      tenantId: access.tenant.id,
+      vendorMasterRecordId,
+      name,
+      expiresAt,
+      rateLimitPerMinute,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof VendorApiMutationError) return { error: `Could not create this vendor key: ${error.message}`, createdKey: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return { error: null, createdKey };
 }

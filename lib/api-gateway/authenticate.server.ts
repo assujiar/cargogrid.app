@@ -42,6 +42,8 @@ export interface AuthorizedApiV1Request {
   readonly createdByAuthUserId: string;
   readonly rateLimitPerMinute: number | null;
   readonly rateLimitRemaining: number | null;
+  /** IAE-011: only non-null for a vendor-scoped key -- a DATA-scope binding to one app.vendor_profiles row, never an actor identity (no vendor auth.users identity exists anywhere in this repository). */
+  readonly vendorMasterRecordId: string | null;
 }
 
 export type ApiV1AuthorizeResult = { readonly ok: true; readonly request: AuthorizedApiV1Request } | { readonly ok: false; readonly response: Response };
@@ -108,6 +110,7 @@ export async function authorizeApiV1Request(request: Request, operation: string,
       createdByAuthUserId: authResult.createdByAuthUserId as string,
       rateLimitPerMinute: authResult.rateLimitPerMinute,
       rateLimitRemaining: authResult.rateLimitRemaining,
+      vendorMasterRecordId: authResult.vendorMasterRecordId,
     },
   };
 }

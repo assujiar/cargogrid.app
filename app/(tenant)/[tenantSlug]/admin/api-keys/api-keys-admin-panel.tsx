@@ -14,9 +14,11 @@ import type { ApiKey } from "../../../../../server/contracts/api-key-webhook/api
 import type { ApiVersion } from "../../../../../server/contracts/public-api-platform/public-api-platform.ts";
 import type { WebhookEventType } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
 import type { ApiLog } from "../../../../../server/contracts/api/api.ts";
-import { createApiKeyAction, rotateApiKeyAction, revokeApiKeyAction, type ApiKeyFormState } from "./actions.ts";
+import type { VendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
+import { createApiKeyAction, rotateApiKeyAction, revokeApiKeyAction, createVendorApiKeyAction, type ApiKeyFormState, type VendorApiKeyFormState } from "./actions.ts";
 
 const INITIAL_STATE: ApiKeyFormState = { error: null, createdKey: null };
+const VENDOR_INITIAL_STATE: VendorApiKeyFormState = { error: null, createdKey: null };
 
 const API_KEY_STATUS_TONE: Record<ApiKey["status"], StatusTone> = { active: "success", revoked: "danger", expired: "neutral" };
 const API_VERSION_STATUS_TONE: Record<ApiVersion["status"], StatusTone> = { active: "success", deprecated: "warning", sunset: "neutral" };
@@ -129,6 +131,84 @@ export function ApiKeyList({ tenantSlug, keys }: { tenantSlug: string; keys: rea
               <td className="p-2 font-medium text-text-primary">{key.name}</td>
               <td className="p-2 font-mono text-xs text-text-secondary">{key.keyPrefix}…</td>
               <td className="p-2 text-xs text-text-secondary">{key.scopes.join(", ")}</td>
+              <td className="p-2">
+                <StatusBadge tone={API_KEY_STATUS_TONE[key.status]} label={key.status} />
+              </td>
+              <td className="p-2 text-xs text-text-secondary">{key.rateLimitPerMinute ?? "unlimited"}/min</td>
+              <td className="p-2 text-xs text-text-secondary">{key.lastUsedAt ?? "never"}</td>
+              <td className="p-2">
+                {key.status === "active" ? (
+                  <div className="flex flex-col gap-2">
+                    <RotateApiKeyForm tenantSlug={tenantSlug} keyId={key.id} />
+                    <RevokeApiKeyForm tenantSlug={tenantSlug} keyId={key.id} />
+                  </div>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** IAE-011: staff-only creation (Supreme/tenant_admin) -- there is no vendor self-service, since no vendor login/session exists anywhere in this repository. The key is handed to the vendor out-of-band, mirroring how vendor intake tokens are already issued. */
+export function CreateVendorApiKeyForm({ tenantSlug }: { tenantSlug: string }) {
+  const [state, formAction, pending] = useActionState(createVendorApiKeyAction.bind(null, tenantSlug), VENDOR_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
+      <h2 className="text-sm font-semibold text-text-primary">Create a Vendor API key</h2>
+      <label htmlFor="vak-vendor-id" className="text-xs font-medium text-text-secondary">
+        Vendor id (app.vendor_profiles.master_record_id) -- must be an active, approved vendor
+      </label>
+      <input id="vak-vendor-id" name="vendorMasterRecordId" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <label htmlFor="vak-name" className="text-xs font-medium text-text-secondary">
+        Key name
+      </label>
+      <input id="vak-name" name="name" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <label htmlFor="vak-rate-limit" className="text-xs font-medium text-text-secondary">
+        Rate limit per minute (optional -- blank means unlimited)
+      </label>
+      <input id="vak-rate-limit" name="rateLimitPerMinute" type="number" min={1} max={100000} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <label htmlFor="vak-expires" className="text-xs font-medium text-text-secondary">
+        Expires at (optional -- blank means no expiry)
+      </label>
+      <input id="vak-expires" name="expiresAt" type="datetime-local" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <p className="text-xs text-text-secondary">This key lets the named vendor&apos;s own systems call the CargoGrid Vendor API (RFQ responses, assignment accept/decline) scoped to exactly this vendor -- never a broader tenant scope. Hand the raw key to the vendor out-of-band; it is never shown again.</p>
+      <ErrorBanner error={state.error} />
+      {state.createdKey ? <RawKeyCallout rawKey={state.createdKey.rawKey} /> : null}
+      <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
+        Create vendor key
+      </Button>
+    </form>
+  );
+}
+
+export function VendorApiKeyList({ tenantSlug, keys }: { tenantSlug: string; keys: readonly VendorApiKey[] }) {
+  if (keys.length === 0) {
+    return <EmptyState title="No Vendor API keys yet" description="Create your tenant's first vendor-scoped key above." />;
+  }
+  return (
+    <div className="overflow-x-auto rounded-md border border-neutral-200">
+      <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">Vendor API keys</caption>
+        <thead>
+          <tr className="text-left text-xs font-medium text-text-secondary">
+            <th className="p-2">Name</th>
+            <th className="p-2">Vendor</th>
+            <th className="p-2">Prefix</th>
+            <th className="p-2">Status</th>
+            <th className="p-2">Rate limit</th>
+            <th className="p-2">Last used</th>
+            <th className="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {keys.map((key) => (
+            <tr key={key.id} className="border-t border-neutral-100 align-top">
+              <td className="p-2 font-medium text-text-primary">{key.name}</td>
+              <td className="p-2 text-xs text-text-secondary">{key.vendorLegalName ?? key.vendorMasterRecordId}</td>
+              <td className="p-2 font-mono text-xs text-text-secondary">{key.keyPrefix}…</td>
               <td className="p-2">
                 <StatusBadge tone={API_KEY_STATUS_TONE[key.status]} label={key.status} />
               </td>

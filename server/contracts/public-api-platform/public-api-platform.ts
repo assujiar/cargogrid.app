@@ -75,6 +75,8 @@ export const AuthenticateAndAuthorizeApiRequestResultSchema = z.object({
   createdByAuthUserId: z.string().uuid().nullable(),
   rateLimitPerMinute: z.number().int().nullable(),
   rateLimitRemaining: z.number().int().nullable(),
+  /** IAE-011: only populated for a vendor-scoped key -- a DATA-scope binding, never an actor identity (no vendor auth.users identity exists). Never coalesced into createdByAuthUserId. */
+  vendorMasterRecordId: z.string().uuid().nullable(),
 });
 export type AuthenticateAndAuthorizeApiRequestResult = z.infer<typeof AuthenticateAndAuthorizeApiRequestResultSchema>;
 
@@ -86,6 +88,7 @@ export function parseAuthenticateAndAuthorizeApiRequestResult(row: Record<string
     createdByAuthUserId: row.created_by_auth_user_id,
     rateLimitPerMinute: row.rate_limit_per_minute,
     rateLimitRemaining: row.rate_limit_remaining,
+    vendorMasterRecordId: row.vendor_master_record_id ?? null,
   });
 }
 
