@@ -104,6 +104,14 @@
  * benefits/redemptions/hold-status figures CPL-317..322's own sibling
  * routes already expose in full detail, a natural sibling of every loyalty
  * screen this nav already links between, not a standalone route family.
+ *
+ * IAE-010 (`customer-portal-api-keys`, Customer API, Prompt 338) widens
+ * `current` again, the identical pure-addition shape -- self-service API key
+ * management (create/list/rotate/revoke, scoped to CPT:CustomerPortal) is
+ * the account_admin-facing counterpart to CPL-315's own `customer-portal-
+ * users` screen (manages a different kind of account access), so it sits
+ * beside it in the same shared shell rather than becoming a standalone route
+ * family.
  */
 
 import { Link } from "../ui/link.tsx";
@@ -113,7 +121,7 @@ export function CustomerPortalNav({
   current,
 }: {
   readonly tenantSlug: string;
-  readonly current: "scope" | "dashboard" | "inventory" | "warehouse-orders" | "invoices" | "receipts" | "tickets" | "profile" | "users" | "loyalty" | "loyalty-tier" | "points" | "benefits" | "rewards" | "redemptions" | "summary";
+  readonly current: "scope" | "dashboard" | "inventory" | "warehouse-orders" | "invoices" | "receipts" | "tickets" | "profile" | "users" | "loyalty" | "loyalty-tier" | "points" | "benefits" | "rewards" | "redemptions" | "summary" | "api-keys";
 }) {
   return (
     <nav aria-label="Customer portal" className="flex gap-4 border-b border-neutral-200 pb-2 text-sm">
@@ -221,6 +229,13 @@ export function CustomerPortalNav({
         </span>
       ) : (
         <Link href={`/${tenantSlug}/customer-loyalty-summary`}>Loyalty summary</Link>
+      )}
+      {current === "api-keys" ? (
+        <span className="font-medium text-text-primary" aria-current="page">
+          API keys
+        </span>
+      ) : (
+        <Link href={`/${tenantSlug}/customer-portal-api-keys`}>API keys</Link>
       )}
       {current === "scope" ? (
         <span className="font-medium text-text-primary" aria-current="page">

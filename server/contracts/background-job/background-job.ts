@@ -22,13 +22,28 @@ import { ImportExportJobTypeSchema, type ImportExportJobType } from "../import-e
  * keep their own dedicated app.create_import_export_job() entrypoint (PLT-131).
  *
  * SOURCE OF TRUTH: `app.generic_job_types()`
- * (supabase/migrations/20260730410000_harden_job_type_single_source_of_truth.sql).
+ * (supabase/migrations/20260730410000_harden_job_type_single_source_of_truth.sql, as
+ * widened by every subsequent migration that adds a generic job type).
  * ATW-031 (ISS-2026-012) widened this list from eight to ten: `route_load_planning`
  * (ATW-224) and `print_label` (ATW-021) were both accepted by the app.jobs CHECK
  * constraint and by app.enqueue_job, but had never been added here or to
  * app.dispatch_event_as_job -- so a caller using either value failed contract parsing
- * before it could reach a database that would have accepted it. Keep this array
- * set-equal to app.generic_job_types(); background-job.test.ts asserts the exact list.
+ * before it could reach a database that would have accepted it.
+ *
+ * Batch 2 Tier C fix (20260803030000_harden_intelligence_batch2_tier_c_review_fixes.sql,
+ * finding 7, cross-prompt-integration): live-verified this array had silently drifted to
+ * 10 of 21 real DB-side values -- 10 prior migrations (roster_generation, leave_accrual,
+ * leave_carry_forward_expiry, payroll_calculation, training_certificate_expiry(+
+ * _reminder), ticket_sla_evaluation, kb_article_expiry, ticket_escalation_evaluation,
+ * loyalty_expiry_sweep) plus IAE-007's own automation_action_execution had each widened
+ * app.generic_job_types() without ever touching this array, and the OWN regression test
+ * (background-job.test.ts) asserted this array against a second hand-copied literal in
+ * the SAME file -- structurally incapable of catching drift against the real database.
+ * All 11 missing values added here; scripts/db-tests/background-job.sql now also asserts
+ * a hardcoded TS-mirror literal against the live app.generic_job_types() output, so a
+ * FUTURE SQL-side addition that is not mirrored into both this array and that literal
+ * fails `pnpm run db:test`, not only a same-file tautology. Keep this array set-equal to
+ * app.generic_job_types(); background-job.test.ts asserts the exact list.
  */
 export const GENERIC_JOB_TYPES = [
   "report_generation",
@@ -41,6 +56,17 @@ export const GENERIC_JOB_TYPES = [
   "integration_sync",
   "route_load_planning",
   "print_label",
+  "roster_generation",
+  "leave_accrual",
+  "leave_carry_forward_expiry",
+  "payroll_calculation",
+  "training_certificate_expiry",
+  "training_certificate_expiry_reminder",
+  "ticket_sla_evaluation",
+  "kb_article_expiry",
+  "ticket_escalation_evaluation",
+  "loyalty_expiry_sweep",
+  "automation_action_execution",
 ] as const;
 export const GenericJobTypeSchema = z.enum(GENERIC_JOB_TYPES);
 export type GenericJobType = z.infer<typeof GenericJobTypeSchema>;

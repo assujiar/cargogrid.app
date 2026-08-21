@@ -1,11 +1,20 @@
 /**
- * Commercial Reports read queries (COM-159, CG-S7-COM-018). Thin, typed wrappers
- * around direct RLS-scoped selects on app.report_types (global catalogue) and
- * app.report_runs (tenant-wide visibility -- see the migration's own header).
+ * Commercial Reports read queries (COM-159, CG-S7-COM-018), extended by
+ * IAE-002 (Reporting Engine, Prompt 330). Thin, typed wrappers around direct
+ * RLS-scoped selects on app.report_types (global catalogue), app.report_runs
+ * (tenant-wide visibility) and app.report_type_versions (append-only
+ * definition-version history) -- see the migrations' own headers.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseReportType, parseReportRun, type ReportType, type ReportRun } from "../contracts/report/report.ts";
+import {
+  parseReportType,
+  parseReportRun,
+  parseReportTypeVersion,
+  type ReportType,
+  type ReportRun,
+  type ReportTypeVersion,
+} from "../contracts/report/report.ts";
 
 export type ReportQueryTableClient = Pick<SupabaseClient, "from">;
 
@@ -64,4 +73,17 @@ export async function listReportRunsForType(client: ReportQueryTableClient, tena
     throw new ReportQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parseReportRun(row));
+}
+
+/** IAE-002: the full append-only definition-version history for one report type, newest first. */
+export async function listReportTypeVersions(client: ReportQueryTableClient, reportTypeCode: string): Promise<ReportTypeVersion[]> {
+  const { data, error } = await client
+    .from("report_type_versions")
+    .select("*")
+    .eq("report_type_code", reportTypeCode)
+    .order("version_number", { ascending: false });
+  if (error) {
+    throw new ReportQueryError(error.message);
+  }
+  return (data ?? []).map((row: Record<string, unknown>) => parseReportTypeVersion(row));
 }

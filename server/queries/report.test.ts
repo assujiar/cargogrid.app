@@ -1,6 +1,14 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { listActiveReportTypes, getReportTypeByCode, listReportRuns, listReportRunsForType, ReportQueryError, type ReportQueryTableClient } from "./report.ts";
+import {
+  listActiveReportTypes,
+  getReportTypeByCode,
+  listReportRuns,
+  listReportRunsForType,
+  listReportTypeVersions,
+  ReportQueryError,
+  type ReportQueryTableClient,
+} from "./report.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "323e4567-e89b-12d3-a456-426614174000";
@@ -98,5 +106,25 @@ describe("listReportRunsForType", () => {
     const runs = await listReportRunsForType(client, TENANT_ID, "lead_aging");
     assert.equal(runs.length, 1);
     assert.equal(runs[0]?.reportTypeCode, "lead_aging");
+  });
+});
+
+describe("listReportTypeVersions", () => {
+  test("maps version-history rows, newest first", async () => {
+    const versionRow = {
+      id: "623e4567-e89b-12d3-a456-426614174000",
+      report_type_code: "lead_aging",
+      version_number: 1,
+      source_function: "get_dashboard_lead_aging",
+      parameter_schema: {},
+      description: "Open lead count bucketed by age.",
+      published_by_auth_user_id: null,
+      published_by: "system",
+      published_at: "2026-07-26T00:00:00.000Z",
+    };
+    const client = fakeTableClient({ data: [versionRow], error: null });
+    const versions = await listReportTypeVersions(client, "lead_aging");
+    assert.equal(versions.length, 1);
+    assert.equal(versions[0]?.versionNumber, 1);
   });
 });

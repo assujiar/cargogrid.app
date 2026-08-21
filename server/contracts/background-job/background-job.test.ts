@@ -96,12 +96,24 @@ describe("DispatchEventAsJobInputSchema", () => {
 
 test("ATW-031 (ISS-2026-012): GENERIC_JOB_TYPES matches app.generic_job_types() exactly", () => {
   // The SQL source of truth is app.generic_job_types()
-  // (supabase/migrations/20260730410000_harden_job_type_single_source_of_truth.sql).
+  // (supabase/migrations/20260730410000_harden_job_type_single_source_of_truth.sql, as
+  // widened by every subsequent migration that adds a generic job type).
+  //
   // This list previously held only the first eight, so `route_load_planning` (ATW-224)
   // and `print_label` (ATW-021) failed contract parsing even though both the app.jobs
-  // CHECK constraint and app.enqueue_job accepted them. Keep the two in lockstep;
-  // scripts/db-tests/background-job-framework.sql asserts the SQL half against the
-  // app.jobs CHECK constraint.
+  // CHECK constraint and app.enqueue_job accepted them.
+  //
+  // Batch 2 Tier C fix (20260803030000_harden_intelligence_batch2_tier_c_review_fixes.sql,
+  // finding 7): this assertion previously checked GENERIC_JOB_TYPES against a SECOND
+  // hand-copied literal in this SAME file -- a same-file tautology structurally incapable
+  // of catching drift against the real, live database. It caught neither the 10 prior
+  // migrations that widened app.generic_job_types() without updating this array, nor
+  // IAE-007's own automation_action_execution. This test still cannot reach a live
+  // database on its own (a plain node:test unit test) -- the genuine cross-language drift
+  // gate now lives in scripts/db-tests/background-job.sql, which asserts a hardcoded
+  // TS-mirror literal against the LIVE app.generic_job_types() output. Keep this literal,
+  // that SQL literal, and GENERIC_JOB_TYPES itself all in lockstep by hand; letting any
+  // one drift fails either this test or `pnpm run db:test`.
   assert.deepEqual(
     [...GENERIC_JOB_TYPES],
     [
@@ -115,6 +127,17 @@ test("ATW-031 (ISS-2026-012): GENERIC_JOB_TYPES matches app.generic_job_types() 
       "integration_sync",
       "route_load_planning",
       "print_label",
+      "roster_generation",
+      "leave_accrual",
+      "leave_carry_forward_expiry",
+      "payroll_calculation",
+      "training_certificate_expiry",
+      "training_certificate_expiry_reminder",
+      "ticket_sla_evaluation",
+      "kb_article_expiry",
+      "ticket_escalation_evaluation",
+      "loyalty_expiry_sweep",
+      "automation_action_execution",
     ],
   );
 });

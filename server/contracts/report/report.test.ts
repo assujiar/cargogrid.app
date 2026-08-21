@@ -79,10 +79,21 @@ describe("parseReportRun", () => {
 });
 
 describe("ReportParametersSchema", () => {
-  test("defaults every field to null", () => {
+  test("accepts an empty parameter bag", () => {
     const parsed = ReportParametersSchema.parse({});
-    assert.equal(parsed.orgUnitId, null);
-    assert.equal(parsed.periodStart, null);
+    assert.deepEqual(parsed, {});
+  });
+
+  test("accepts a flat bag of strings/numbers/booleans/nulls -- the shape a report's own declared parameter_schema uses", () => {
+    const parsed = ReportParametersSchema.parse({ currency: "IDR", limit: 10, includeArchived: false, ownerUserId: null });
+    assert.equal(parsed.currency, "IDR");
+    assert.equal(parsed.limit, 10);
+    assert.equal(parsed.includeArchived, false);
+    assert.equal(parsed.ownerUserId, null);
+  });
+
+  test("rejects a nested object value -- parameters stay flat", () => {
+    assert.throws(() => ReportParametersSchema.parse({ nested: { a: 1 } }));
   });
 });
 

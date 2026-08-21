@@ -256,6 +256,36 @@ begin
 end;
 $$;
 
+\echo '>> app.rotate_api_key (Tier C Batch 3 fix): a SECOND rotation of the SAME already-rotated key is rejected even when the old key stays active (overlap window > 0, so status alone cannot guard this); rotating the NEW successor key is unaffected'
+do $$
+declare
+  v_tenant_id uuid;
+  v_key record;
+  v_rotated1 record;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmekey');
+  select * into v_key from app.create_api_key(v_tenant_id, 'Double Rotate Guard Key', '["HRS:View personal data"]'::jsonb, null, null, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+
+  select * into v_rotated1 from app.rotate_api_key(v_key.id, 60, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+  if (select status from app.api_keys where id = v_key.id) <> 'active' then
+    raise exception 'assertion failed: with a 60-minute overlap, the old key must still be active -- status alone cannot guard against a second rotation';
+  end if;
+
+  begin
+    perform app.rotate_api_key(v_key.id, 60, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+    raise exception 'assertion failed: expected api_key_already_rotated for a second rotation of the SAME already-rotated key';
+  exception when check_violation then
+    if sqlerrm !~ 'api_key_already_rotated' then raise; end if;
+  end;
+
+  -- Rotating the successor key (a DIFFERENT key id) is a normal, expected
+  -- iterative-rotation workflow, unaffected by the guard above.
+  perform app.rotate_api_key(v_rotated1.id, 60, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+
+  raise notice 'PASS: a second rotation of the SAME already-rotated key is rejected (api_key_already_rotated), even with the old key still active; rotating its own successor key still works normally';
+end;
+$$;
+
 \echo '>> app.revoke_api_key: unauthorized/not-found rejected; idempotent double-revoke; a revoked key fails authentication'
 do $$
 declare
