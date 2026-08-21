@@ -455,8 +455,10 @@ begin
   -- Baseline moved from 7 to 8: IAE-016 (Prompt 344) added exactly one further
   -- anon-granted function, app.ingest_logistics_partner_webhook_event.
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
-  if v_count <> 8 then
-    raise exception 'assertion failed: expected exactly 8 distinct anon-granted functions repository-wide (5 pre-login resolvers + ingest_driver_mobile_report + this migration''s own ingest_third_party_provider_webhook_event + IAE-016''s own ingest_logistics_partner_webhook_event), found %', v_count;
+  -- Baseline moved from 8 to 9: IAE-017 added a further anon-granted function,
+  -- app.ingest_finance_payment_gateway_webhook_event.
+  if v_count <> 9 then
+    raise exception 'assertion failed: expected exactly 9 distinct anon-granted functions repository-wide (5 pre-login resolvers + ingest_driver_mobile_report + this migration''s own ingest_third_party_provider_webhook_event + IAE-016''s own ingest_logistics_partner_webhook_event + IAE-017''s own ingest_finance_payment_gateway_webhook_event), found %', v_count;
   end if;
 end $$;
 
