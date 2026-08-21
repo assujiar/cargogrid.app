@@ -4,15 +4,41 @@ import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import type { ShipmentOrderStatus, CustomerShipmentOrder } from "../../../../server/contracts/customer-shipment-order/customer-shipment-order.ts";
 import type { CustomerPortalScopeContextRow } from "../../../../server/contracts/customer-portal-scope/customer-portal-scope.ts";
 
+// CPL-324 Tier C fix (integrated verification): widened to cover
+// app.shipment_orders_status_check's own full canonical lifecycle -- the
+// original 3-value map (draft/confirmed/cancelled) predates OPS-170's own
+// lifecycle broadening and left every mid-lifecycle status unrenderable.
+// Tone/label choices for the 8 new entries mirror components/domain/
+// status-tone-map.ts's own SHIPMENT_ORDER_STATUS_TONE_MAP (the staff-facing
+// shipment-order list's own already-correct, already-shipped mapping for
+// the identical status set) for visual consistency across the two surfaces;
+// the original three entries are left byte-identical to avoid an
+// unnecessary, out-of-scope visual change to already-correct behavior.
 const STATUS_TONE: Record<ShipmentOrderStatus, StatusTone> = {
   draft: "neutral",
   confirmed: "success",
+  planned: "info",
+  assigned: "info",
+  dispatched: "info",
+  in_transit: "warning",
+  delivered: "success",
+  epod: "success",
+  closed: "success",
+  held: "warning",
   cancelled: "danger",
 };
 
 const STATUS_LABEL: Record<ShipmentOrderStatus, string> = {
   draft: "draft",
   confirmed: "confirmed",
+  planned: "planned",
+  assigned: "assigned",
+  dispatched: "dispatched",
+  in_transit: "in transit",
+  delivered: "delivered",
+  epod: "ePOD received",
+  closed: "closed",
+  held: "held",
   cancelled: "cancelled",
 };
 

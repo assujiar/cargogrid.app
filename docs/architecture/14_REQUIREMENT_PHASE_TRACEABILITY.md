@@ -109,7 +109,7 @@ All 23 CPDs `COVERED`. Zero CPDs reopened (`02_CONFIRMED_DECISION_REGISTER.md` �
 | RPD-019 | Controlled white-label | Phase 1 | PLT-117..119 | `09_*.md` §10 | `COVERED` |
 | RPD-020 | Tenant merge/split is admin-run migration | Phase 1/9 | PLT-105..106, IEP-360 | `11_*.md` §4 | `COVERED` |
 | RPD-021 | OpenAI multimodal AI/OCR default, human approval gate | Phase 9 | IEP-347..353 | `08_*.md` §8 | `COVERED` |
-| RPD-022 | Supreme Admin absolute CRUD; no tamper-proof claim | Phase 1 (mechanism), all ledger/audit capabilities (exception) | PLT-115..116, FIN-204..208, LYL-316..323 | `06_*.md` §8, §10 test 8/9 | `ACCEPTED_RISK` (§21) |
+| RPD-022 | Supreme Admin absolute CRUD; no tamper-proof claim | Phase 1 (mechanism), all ledger/audit capabilities (exception) | PLT-115..116, FIN-204..208, CPL-316..323 | `06_*.md` §8, §10 test 8/9 | `ACCEPTED_RISK` (§21) |
 | RPD-023 | MFA mandatory for privileged roles | Phase 1 | PLT-107..108 | `06_*.md` §2 | `COVERED` |
 | RPD-024 | WCAG 2.2 AA; two latest stable browser releases | Phase 0/9/15 | PH0-090, HDN-380..381 | `09_*.md` §9, §8 | `COVERED` |
 | RPD-025 | Class-based retention schedule | Phase 0/15 | PH0-095, HDN-382..385 | `02_*.md` §11 | `COVERED` |
@@ -130,6 +130,8 @@ All 23 CPDs `COVERED`. Zero CPDs reopened (`02_CONFIRMED_DECISION_REGISTER.md` �
 | RPD-040 | All non-conflicting Proposed Defaults approved | All phases (interpretive rule) | n/a | `03_ASSUMPTION_REGISTER.md` §8 | `COVERED` |
 
 All 40 RPDs `COVERED` or explicitly `EXTERNAL_VERIFICATION`/`ACCEPTED_RISK` with a named owner and gate (§21–§22). Zero RPDs reopened.
+
+> **Correction (2026-08-20, CPL-326, `CG-S13-CPL-028`):** the `RPD-022` row's own WBS capability ID(s) cell previously read `LYL-316..323` — not a valid WBS capability ID prefix anywhere in this repository (Phase 8's Loyalty capabilities are numbered `CPL-316..323`; `LYL` is the entitlement-module code for those same capabilities' permission actions, not a WBS ID prefix). Corrected to `CPL-316..323`, mirroring `CPL-324`'s own identical-shaped correction of the `CPT-CX-001..004` row in §5.8 below. No other cell in this row, or elsewhere in this document, was touched.
 
 ## 5. Functional requirement family traceability (184 IDs, 46 families)
 
@@ -217,7 +219,9 @@ Traced at the family level (`XXX-YYY-001..004`), matching the granularity alread
 | CPT-TRK-001..004 | Tracking, ePOD & Document | OPS-172..173, OPS-176..177 (basic) / CPL-305..308 (full) | `02_*.md` §3.1 | OPS-185..188, CPL-324..327 | Operations (basic) → Customer Portal (full) | `COVERED` |
 | CPT-WHS-001..004 | Warehouse, Inventory & Order Monitoring | CPL-309..310 (after ATW-229..242) | `02_*.md` §3.1 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
 | CPT-BIL-001..004 | Invoice, Billing, Payment & Profile | CPL-311..315 (after FIN-196..214) | `02_*.md` §3.1 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
-| CPT-CX-001..004 | Complaint, Ticket, Loyalty & Rewards | CPL-311..315 | `06_*.md` §11 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
+| CPT-CX-001..004 | Complaint, Ticket, Loyalty & Rewards | CPL-313 (secondary: 314, 315, 320) | `06_*.md` §11 | CPL-324..327 | Customer Portal delivery + verification | `COVERED` |
+
+> **Correction (2026-08-20, CPL-324, `CG-S13-CPL-026`):** the `CPT-CX-001..004` row's own WBS capability ID(s) cell previously read `CPL-311..315` — a stale copy-paste from the `CPT-BIL-001..004` row directly above it. Corrected to accurately name `CPL-313` (Complaint/Ticket, this anchor family's own primary capability) with `314`/`315`/`320` (Customer Profile, Customer User Management, Reward Catalogue) as secondary contributors — independently re-derived from the actual Phase 8 capability build logs, not merely re-copied. No other cell in this section was touched.
 
 ### 5.9 Loyalty (LYL-*, 4 families, 16 IDs) — Phase 8
 

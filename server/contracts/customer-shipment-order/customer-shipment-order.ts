@@ -17,7 +17,32 @@
 
 import { z } from "zod";
 
-export const SHIPMENT_ORDER_STATUSES = ["draft", "confirmed", "cancelled"] as const;
+/**
+ * CPL-324 Tier C fix (integrated verification): widened from the original
+ * draft/confirmed/cancelled set to match app.shipment_orders_status_check's
+ * own full canonical lifecycle -- byte-identical to server/contracts/
+ * shipment-order/shipment-order.ts's own already-correct SHIPMENT_ORDER_
+ * STATUSES (broadened there at OPS-170, never mirrored here at CPL-304's own
+ * original authoring). Confirmed live-reproduced before this fix: any real
+ * shipment order past initial booking (planned/assigned/dispatched/
+ * in_transit/delivered/epod/closed/held) threw a ZodError out of
+ * getCustomerShipmentOrder/listCustomerShipmentOrders -- for the list call,
+ * one such row discarded the caller's ENTIRE shipment list (no per-row
+ * try/catch in server/queries/customer-shipment-order.ts).
+ */
+export const SHIPMENT_ORDER_STATUSES = [
+  "draft",
+  "confirmed",
+  "planned",
+  "assigned",
+  "dispatched",
+  "in_transit",
+  "delivered",
+  "epod",
+  "closed",
+  "held",
+  "cancelled",
+] as const;
 export const ShipmentOrderStatusSchema = z.enum(SHIPMENT_ORDER_STATUSES);
 export type ShipmentOrderStatus = z.infer<typeof ShipmentOrderStatusSchema>;
 

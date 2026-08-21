@@ -90,8 +90,18 @@ describe("parseCustomerShipmentOrder", () => {
     assert.throws(() => parseCustomerShipmentOrder({ ...SHIPMENT_ROW, status: "not_a_real_status" }));
   });
 
-  test("every real status is exactly the migration's 3-value set", () => {
-    assert.deepEqual([...SHIPMENT_ORDER_STATUSES], ["draft", "confirmed", "cancelled"]);
+  test("every real status is exactly app.shipment_orders_status_check's own 11-value canonical lifecycle (CPL-324 Tier C fix -- widened from the original stale 3-value set)", () => {
+    assert.deepEqual(
+      [...SHIPMENT_ORDER_STATUSES],
+      ["draft", "confirmed", "planned", "assigned", "dispatched", "in_transit", "delivered", "epod", "closed", "held", "cancelled"],
+    );
+  });
+
+  test("CPL-324 regression: parses a real mid-lifecycle row (in_transit) without throwing -- the exact shape that discarded a customer's entire shipment list before this fix", () => {
+    for (const status of SHIPMENT_ORDER_STATUSES) {
+      const parsed = parseCustomerShipmentOrder({ ...SHIPMENT_ROW, status });
+      assert.equal(parsed.status, status);
+    }
   });
 });
 

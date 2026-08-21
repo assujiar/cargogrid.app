@@ -804,4 +804,51 @@ begin
   raise notice 'customer-portal-scope.sql: structural coverage complete -- scripts/db-tests/rbac-enforcement.sql is the authoritative ATW-032 gate for this migration''s own new functions.';
 end $$;
 
+\echo '>> CPL-324 Tier C fix regression: optimistic-concurrency NULL-bypass on app.accept_customer_portal_invite and app.set_customer_portal_account_membership_status -- a NULL p_expected_version is rejected with stale_version, the row proven byte-for-byte unchanged, then the real version succeeds (20260801260000)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cps1');
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Cps1 Account Alpha');
+  v_invitee uuid := '00000000-0000-0000-0000-000000300090';
+  v_before app.customer_portal_account_memberships;
+  v_after app.customer_portal_account_memberships;
+begin
+  insert into auth.users (id, email) values (v_invitee, 'null-bypass-invitee@cps1.test');
+
+  -- accept_customer_portal_invite: fresh invited row, own identity.
+  select * into v_before from app.invite_customer_portal_user(v_tenant1, v_account_alpha, v_invitee, 'member', '00000000-0000-0000-0000-000000300010', 'alpha-admin');
+
+  begin
+    perform app.accept_customer_portal_invite(v_before.id, null, v_invitee);
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on accept_customer_portal_invite';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  select * into v_after from app.customer_portal_account_memberships where id = v_before.id;
+  if v_after.status <> v_before.status or v_after.record_version <> v_before.record_version then
+    raise exception 'assertion failed: expected the invite row to be byte-for-byte unchanged after a rejected NULL-bypass accept attempt, got %', v_after;
+  end if;
+
+  v_after := app.accept_customer_portal_invite(v_before.id, v_before.record_version, v_invitee);
+  if v_after.status <> 'active' then
+    raise exception 'assertion failed: expected the real-version accept call to succeed, got %', v_after;
+  end if;
+
+  -- set_customer_portal_account_membership_status: suspend the just-accepted row.
+  begin
+    perform app.set_customer_portal_account_membership_status(v_after.id, null, 'suspended', 'null-bypass probe', '00000000-0000-0000-0000-000000300010', 'alpha-admin');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on set_customer_portal_account_membership_status';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  if not exists (select 1 from app.customer_portal_account_memberships where id = v_after.id and status = 'active' and record_version = v_after.record_version) then
+    raise exception 'assertion failed: expected the membership row to be byte-for-byte unchanged after a rejected NULL-bypass status-change attempt';
+  end if;
+
+  v_after := app.set_customer_portal_account_membership_status(v_after.id, v_after.record_version, 'suspended', 'real-version probe', '00000000-0000-0000-0000-000000300010', 'alpha-admin');
+  if v_after.status <> 'suspended' then
+    raise exception 'assertion failed: expected the real-version status-change call to succeed, got %', v_after;
+  end if;
+end $$;
+
 \echo 'customer-portal-scope.sql: ALL PASSED'

@@ -733,6 +733,85 @@ begin
   end if;
 end $$;
 
+\echo '>> CPL-325 hold-race regression (mandatory test): a REAL two-process concurrent race between app.hold_loyalty_account_tier_benefits and app.decide_loyalty_redemption(approve) on the SAME loyalty account -- the live-reproduced TOCTOU this checkpoint fixed (supabase/migrations/20260801300000). Gamma (Gold, 1000 pts, currently released from the earlier held-account test) gets a fresh pending_approval physical_item redemption; process A holds her account, process B approves the SAME redemption, launched via scripts/db-tests/wms-picking-concurrency-helper.sh. Whichever order the two genuinely land in, the post-fix invariant must hold: the redemption may only reach fulfilling if its own decided_at is BEFORE the hold''s own held_at (decide-first, hold-applies-after -- today''s already-correct non-concurrent ordering) -- never a fulfilling redemption whose decided_at is AFTER an already-committed hold (the torn state the fix closes)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'rdm1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000344001';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'rdm1') and name = 'Redemption Program');
+  v_loyalty_account_gamma uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and legal_name = 'Rdm Account Gamma'));
+  v_reward app.loyalty_rewards;
+  v_redemption app.loyalty_redemptions;
+begin
+  -- Confirmed unheld at this point (the earlier held-account test releases
+  -- Gamma's own hold at its own close, line ~590) -- an explicit release
+  -- here too, defensively, so this block's own assertions never depend on
+  -- execution order relative to that earlier block.
+  begin
+    perform app.release_loyalty_account_tier_benefits(v_tenant1, v_loyalty_account_gamma, v_manager1, 'manager1');
+  exception when no_data_found then null;
+  end;
+
+  v_reward := app.create_loyalty_reward_draft(v_tenant1, v_program_id, 'Hold Race Item', 'physical_item', 'CPL-325 hold-vs-redemption race fixture.', null, null, 0, 3, 5, null, null, v_manager1, 'manager1');
+  perform app.publish_loyalty_reward(v_tenant1, v_reward.id, v_reward.record_version, null, v_manager1, 'manager1');
+
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_gamma, v_reward.id, 'hold-race-submit-1', v_manager1, 'manager1');
+  if v_redemption.status <> 'pending_approval' then
+    raise exception 'assertion failed: expected the physical_item redemption to land pending_approval (staff decide required), got %', v_redemption;
+  end if;
+end $$;
+
+select (select id from app.tenants where slug = 'rdm1') as hr_tenant1_id \gset
+select id as hr_loyalty_account_gamma_id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and legal_name = 'Rdm Account Gamma') \gset
+select id as hr_redemption_id, record_version as hr_redemption_version from app.loyalty_redemptions where tenant_id = (select id from app.tenants where slug = 'rdm1') and idempotency_key = 'hold-race-submit-1' \gset
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as hr_bpid \gset
+
+\set race_sql_a 'select app.hold_loyalty_account_tier_benefits(''' :hr_tenant1_id ''', ''' :hr_loyalty_account_gamma_id ''', ''CPL-325 hold-race regression test'', ''00000000-0000-0000-0000-000000344001'', ''manager1'');'
+\set race_sql_b 'select app.decide_loyalty_redemption(''' :hr_tenant1_id ''', ''' :hr_redemption_id ''', ' :hr_redemption_version ', ''approve'', null, ''00000000-0000-0000-0000-000000344001'', ''manager1'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-rdm-hold-race-a-:hr_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-rdm-hold-race-b-:hr_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_loyalty_account_gamma uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and legal_name = 'Rdm Account Gamma'));
+  v_hold app.loyalty_account_tier_holds;
+  v_redemption app.loyalty_redemptions;
+begin
+  select * into v_hold from app.loyalty_account_tier_holds where tenant_id = (select id from app.tenants where slug = 'rdm1') and loyalty_account_id = v_loyalty_account_gamma;
+  select * into v_redemption from app.loyalty_redemptions where tenant_id = (select id from app.tenants where slug = 'rdm1') and idempotency_key = 'hold-race-submit-1';
+
+  -- The hold-open call is independent of the redemption's own outcome --
+  -- it always succeeds, whichever order the race lands in.
+  if not coalesce(v_hold.is_held, false) then
+    raise exception 'assertion failed: expected the hold to have been applied regardless of race ordering, got is_held=%', v_hold.is_held;
+  end if;
+
+  -- The core invariant this fix restores: a fulfilling redemption's own
+  -- decided_at must be BEFORE the hold's own held_at -- i.e. the decide
+  -- call fully completed (and released the shared advisory lock) before
+  -- the hold-open call ever started its own check. The reverse (a hold
+  -- already committed, then a decide that still reaches fulfilling) is
+  -- exactly the live-reproduced torn state this migration closes.
+  if v_redemption.status = 'fulfilling' and v_hold.held_at < v_redemption.decided_at then
+    raise exception 'CRITICAL: fulfilling redemption (decided_at=%) with a hold that committed BEFORE it (held_at=%) -- the hold-vs-redemption TOCTOU race is back', v_redemption.decided_at, v_hold.held_at;
+  end if;
+  if v_redemption.status not in ('fulfilling', 'pending_approval') then
+    raise exception 'assertion failed: expected the raced redemption to land either fulfilling (decide-first) or pending_approval (hold-first, account_on_hold) got status=%', v_redemption.status;
+  end if;
+
+  -- Clean up -- release the hold so it cannot affect any later block in
+  -- this file (defensive; no later block currently touches Gamma, but
+  -- matches this file's own established hygiene).
+  perform app.release_loyalty_account_tier_benefits((select id from app.tenants where slug = 'rdm1'), v_loyalty_account_gamma, '00000000-0000-0000-0000-000000344001', 'manager1');
+end $$;
+
 \echo '>> optimistic-concurrency NULL-bypass regression proof (mandatory test) on app.decide_loyalty_redemption: a NULL p_expected_version is rejected with stale_version, row unchanged, then the real version succeeds'
 do $$
 declare

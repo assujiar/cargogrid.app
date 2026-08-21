@@ -621,4 +621,81 @@ begin
   raise notice 'PASS: anon has zero schema privilege on the new customer ticket functions';
 end $$;
 
+\echo '>> 20. CPL-325 file-privacy hardening: a ticket attachment corrected to infected post-attach (the disclosed RPD-022 exception path) is no longer returned by either app.list_customer_ticket_messages or app.list_ticket_messages, and every exposure (granted and denied) is logged to app.file_access_logs'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'tkc1');
+  v_ticket_id uuid := (select id from app.tickets where tenant_id = v_tenant1 and channel = 'customer' and subject = 'Invoice discrepancy');
+  v_def_version uuid;
+  v_file_clean uuid;
+  v_msg app.ticket_messages;
+  v_customer_row record;
+  v_staff_row record;
+  v_granted_count integer;
+  v_denied_count integer;
+begin
+  -- Publish a document-type definition for 'ticket_attachment' so
+  -- app.initiate_file_upload can resolve it (mirrors scripts/db-tests/
+  -- ticketing-internal.sql's own established fixture pattern exactly).
+  v_def_version := (app.create_config_draft(
+    'document:ticket_attachment', v_tenant1, 'tenant', null, '00000000-0000-0000-0000-000000287001', 'tester'
+  )).id;
+  perform app.set_config_items(v_def_version, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('image/png', 'application/pdf')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', to_jsonb(5000000)),
+    jsonb_build_object('key', 'retention_class', 'value', to_jsonb('operational_contract_plus_90d'::text)),
+    jsonb_build_object('key', 'default_classification', 'value', to_jsonb('internal'::text)),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', to_jsonb(false))
+  ), '00000000-0000-0000-0000-000000287001', 'tester');
+  perform app.publish_document_type_definition(v_def_version, '00000000-0000-0000-0000-000000287001', now(), 'tester');
+
+  v_file_clean := (app.initiate_file_upload(v_tenant1, 'ticket_attachment', 'ticket', v_ticket_id, 'evidence.png', 'image/png', 1024, null, false, null, '{}', null, 'idem-cpl325-file-clean', '00000000-0000-0000-0000-000000287010', 'Customer A1')).id;
+  perform app.record_file_scan_result(v_file_clean, 'clean', 'test-scanner', '00000000-0000-0000-0000-000000287010', 'Customer A1');
+
+  v_msg := app.reply_to_customer_ticket(v_ticket_id, 'here is my evidence photo', array[v_file_clean], 'idem-cpl325-reply-1', '00000000-0000-0000-0000-000000287010', 'Customer A1');
+
+  -- Before correction: attached because clean, visible through both the
+  -- customer and staff projections.
+  select * into v_customer_row from app.list_customer_ticket_messages(v_ticket_id, '00000000-0000-0000-0000-000000287010', 100, null) m where m.id = v_msg.id;
+  if v_customer_row.attachment_file_ids <> array[v_file_clean] then
+    raise exception 'assertion failed: expected the clean file to be visible pre-correction (customer), got %', v_customer_row.attachment_file_ids;
+  end if;
+  select * into v_staff_row from app.list_ticket_messages(v_ticket_id, '00000000-0000-0000-0000-000000287002', 100, null) m where m.id = v_msg.id;
+  if v_staff_row.attachment_file_ids <> array[v_file_clean] then
+    raise exception 'assertion failed: expected the clean file to be visible pre-correction (staff), got %', v_staff_row.attachment_file_ids;
+  end if;
+
+  -- Simulate the exact RPD-022 Supreme-Admin post-completion correction
+  -- scenario CPL-307's own db-test already exercises for ePOD
+  -- (scripts/db-tests/customer-epod-access.sql) -- direct table correction,
+  -- the only way this state is reachable today, matching that migration's
+  -- own disclosed RPD-022 residual-risk reasoning.
+  update app.files set malware_scan_status = 'infected' where id = v_file_clean;
+
+  select * into v_customer_row from app.list_customer_ticket_messages(v_ticket_id, '00000000-0000-0000-0000-000000287010', 100, null) m where m.id = v_msg.id;
+  if v_customer_row.attachment_file_ids <> '{}'::uuid[] then
+    raise exception 'CRITICAL: expected the now-infected file to be filtered out of the customer projection, got %', v_customer_row.attachment_file_ids;
+  end if;
+  if v_customer_row.body <> 'here is my evidence photo' then
+    raise exception 'assertion failed: expected the message itself (body) to remain visible even though its attachment was filtered, got %', v_customer_row.body;
+  end if;
+
+  select * into v_staff_row from app.list_ticket_messages(v_ticket_id, '00000000-0000-0000-0000-000000287002', 100, null) m where m.id = v_msg.id;
+  if v_staff_row.attachment_file_ids <> '{}'::uuid[] then
+    raise exception 'CRITICAL: expected the now-infected file to be filtered out of the staff projection, got %', v_staff_row.attachment_file_ids;
+  end if;
+
+  -- Every exposure (pre- and post-correction, both projections) is logged.
+  select count(*) into v_granted_count from app.file_access_logs where file_id = v_file_clean and result = 'granted';
+  if v_granted_count < 2 then
+    raise exception 'assertion failed: expected at least 2 granted app.file_access_logs rows (customer + staff pre-correction reads), got %', v_granted_count;
+  end if;
+  select count(*) into v_denied_count from app.file_access_logs where file_id = v_file_clean and result = 'denied' and reason = 'document_infected_quarantined';
+  if v_denied_count < 2 then
+    raise exception 'assertion failed: expected at least 2 denied app.file_access_logs rows (customer + staff post-correction reads) with reason=document_infected_quarantined, got %', v_denied_count;
+  end if;
+
+  raise notice 'PASS: a ticket attachment corrected to infected post-attach is filtered out of both list_customer_ticket_messages and list_ticket_messages, and every exposure (granted and denied) is logged to app.file_access_logs';
+end $$;
+
 \echo '>> all ticketing-customer (HRT-287) assertions passed'

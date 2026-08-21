@@ -77,6 +77,7 @@ declare
   v_program_id uuid;
   v_program2_id uuid;
   v_reward app.loyalty_rewards;
+  v_locale_draft1 app.tenant_locale_versions;
 begin
   insert into auth.users (id, email) values
     (v_manager1, 'manager1@lra1.test'),
@@ -108,6 +109,26 @@ begin
   perform app.set_role_version_permissions(v_manager_draft1.id, array(select id from app.permissions where resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit', 'Configure')), 'tester');
   perform app.publish_role_version(v_manager_draft1.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_manager_role1 and status = 'published'), v_manager1, v_manager1, 'tester');
+
+  -- CPL-324 hardening fix regression setup (ISS-2026-136 item 1): this
+  -- fixture's own entitlements/reconciliation calls have always been
+  -- denominated in USD (see below), but that was never wired into a real
+  -- app.resolve_tenant_locale() default -- it happened not to matter before
+  -- app.execute_loyalty_liability_reconciliation_run's own reward-
+  -- fulfillment line gained a currency filter. Publish a real USD locale for
+  -- lra1 now (v_manager1 already has a real tenant_user_identities row from
+  -- invite_user above, so a second, tenant_admin-layer principal membership
+  -- may be granted to the SAME actor) so the fixture's own long-standing USD
+  -- assumption becomes real and explicit, matching every currency literal
+  -- already used throughout this file -- zero other line in this file
+  -- changes.
+  perform app.grant_principal_membership(v_manager1, 'tenant_admin', v_tenant1, null, 'tester');
+  v_locale_draft1 := app.create_tenant_locale_draft(v_tenant1, v_manager1, 'tester');
+  perform app.set_tenant_locale_config(v_locale_draft1.id, v_manager1, 'id', 'Asia/Jakarta', 'USD', '{}'::jsonb, 'tester');
+  perform app.publish_tenant_locale_version(v_locale_draft1.id, v_manager1, clock_timestamp(), 'tester');
+  if (select default_currency from app.resolve_tenant_locale(v_tenant1)) <> 'USD' then
+    raise exception 'assertion failed: expected lra1''s own resolved default_currency to be USD after publish';
+  end if;
 
   perform app.invite_user(v_tenant1, v_editor1, 'editor1@lra1.test', 'Lra1 Editor', v_company1, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'editor1@lra1.test'), 'active', 'onboarded', 'tester');
@@ -301,6 +322,191 @@ begin
   if v_exception_count <> 0 then
     raise exception 'assertion failed: expected ZERO exceptions on the clean run, got %', v_exception_count;
   end if;
+end $$;
+
+\echo '>> CPL-324 hardening regression (ISS-2026-136 item 1, mandatory): a currency-MISMATCHED run must NOT count Delta''s open physical_item redemption -- an IDR-scoped run on this USD-denominated tenant reports zero reward-fulfillment exposure, while a fresh USD-scoped run still correctly reports 75; the old bug reported 75 on BOTH'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lra1');
+  v_editor1 uuid := '00000000-0000-0000-0000-000000346002';
+  v_run_wrong_currency app.loyalty_liability_reconciliation_runs;
+  v_run_right_currency app.loyalty_liability_reconciliation_runs;
+begin
+  v_run_wrong_currency := app.execute_loyalty_liability_reconciliation_run(v_tenant1, clock_timestamp(), 'IDR', v_editor1, 'editor1', 'lra-currency-scope-idr', 1);
+  if v_run_wrong_currency.reward_fulfillment_liability_total <> 0 then
+    raise exception 'assertion failed: ISS-2026-136 item 1 regression -- expected reward_fulfillment_liability_total = 0 on an IDR-scoped run of a USD-denominated tenant (Delta''s open physical_item redemption must not be double-counted across currencies), got %', v_run_wrong_currency.reward_fulfillment_liability_total;
+  end if;
+
+  v_run_right_currency := app.execute_loyalty_liability_reconciliation_run(v_tenant1, clock_timestamp(), 'USD', v_editor1, 'editor1', 'lra-currency-scope-usd', 1);
+  if v_run_right_currency.reward_fulfillment_liability_total <> 75 then
+    raise exception 'assertion failed: expected reward_fulfillment_liability_total = 75 on the matching USD-scoped run (the fix must not also suppress the CORRECT currency), got %', v_run_right_currency.reward_fulfillment_liability_total;
+  end if;
+end $$;
+
+\echo '>> fixture: tenant lra3 (own, fully isolated tenant -- deliberately NOT reusing lra1, so this test''s own account/points/redemption activity can never ripple into any of lra1''s own downstream tenant-wide absolute-count assertions elsewhere in this file), Loyalty Manager, a published USD locale, a published loyalty program, customer account Theta enrolled and earning exactly 40 points, submitted+approved for a NEW physical_item reward (min_points_required=40, internal_cost=30) -- used ONLY by the CPL-325 atomicity-race regression below'
+do $$
+declare
+  v_tenant3 uuid;
+  v_company3 uuid;
+  v_manager3 uuid := '00000000-0000-0000-0000-000000346501';
+  v_customer_theta uuid := '00000000-0000-0000-0000-000000346510';
+  v_manager_role3 uuid;
+  v_manager_draft3 app.role_versions;
+  v_locale_draft3 app.tenant_locale_versions;
+  v_program3_id uuid;
+  v_account_theta uuid;
+  v_reward app.loyalty_rewards;
+  v_event_id uuid;
+  v_redemption app.loyalty_redemptions;
+begin
+  insert into auth.users (id, email) values
+    (v_manager3, 'manager3@lra3.test'),
+    (v_customer_theta, 'customer-theta@lra3.test');
+
+  perform app.provision_tenant('lra3', 'Liability Recon Test Tenant Three (atomicity race, isolated)', 'idem-lra3', 'tester');
+  v_tenant3 := (select id from app.tenants where slug = 'lra3');
+  perform app.transition_tenant_status(v_tenant3, 'active', 'setup', 'tester');
+  perform app.create_org_unit(v_tenant3, 'company', null, 'LRA3-CO', 'Lra3 Co', 'tester');
+  v_company3 := (select id from app.org_units where tenant_id = v_tenant3 and code = 'LRA3-CO');
+
+  perform app.invite_user(v_tenant3, v_manager3, 'manager3@lra3.test', 'Lra3 Manager', v_company3, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'manager3@lra3.test'), 'active', 'onboarded', 'tester');
+  v_manager_role3 := (app.create_role(v_tenant3, 'Loyalty Manager', 'full LYL authority', 'tester')).id;
+  v_manager_draft3 := app.create_role_version(v_manager_role3, 'tester');
+  perform app.set_role_version_permissions(v_manager_draft3.id, array(select id from app.permissions where resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit', 'Configure')), 'tester');
+  perform app.publish_role_version(v_manager_draft3.id, now(), 'tester');
+  perform app.assign_role(v_tenant3, (select id from app.role_versions where role_id = v_manager_role3 and status = 'published'), v_manager3, v_manager3, 'tester');
+
+  -- A real published USD locale (mirrors lra1''s own CPL-324 fixture
+  -- addition exactly) -- app.execute_loyalty_liability_reconciliation_run's
+  -- own reward-fulfillment currency scope resolves against this.
+  perform app.grant_principal_membership(v_manager3, 'tenant_admin', v_tenant3, null, 'tester');
+  v_locale_draft3 := app.create_tenant_locale_draft(v_tenant3, v_manager3, 'tester');
+  perform app.set_tenant_locale_config(v_locale_draft3.id, v_manager3, 'id', 'Asia/Jakarta', 'USD', '{}'::jsonb, 'tester');
+  perform app.publish_tenant_locale_version(v_locale_draft3.id, v_manager3, clock_timestamp(), 'tester');
+
+  perform app.invite_user(v_tenant3, v_customer_theta, 'customer-theta@lra3.test', 'Lra3 Customer Theta', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'customer-theta@lra3.test'), 'active', 'onboarded', 'tester');
+
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant3, 'Lra3 Account Theta', 'lra3-theta-fp', '{}'::jsonb, v_company3, 'tester') returning id into v_account_theta;
+  perform app.grant_principal_membership(v_customer_theta, 'customer_user', v_tenant3, v_account_theta::text, 'tester');
+
+  perform app.create_loyalty_program(v_tenant3, 'Lra3 Program', 'Program used ONLY by the CPL-325 atomicity-race regression.', v_manager3, 'manager3');
+  v_program3_id := (select id from app.loyalty_programs where tenant_id = v_tenant3 and name = 'Lra3 Program');
+  perform app.update_loyalty_program_status(v_tenant3, v_program3_id, 1, 'active', v_manager3, 'manager3');
+  perform app.create_loyalty_program_rule_version(v_tenant3, v_program3_id, 'per_paid_invoice_amount', 'points', 1, '{}'::jsonb, v_manager3, 'manager3');
+  perform app.publish_loyalty_program_rule_version(v_tenant3, (select id from app.loyalty_program_rule_versions where program_id = v_program3_id and status = 'draft'), 1, null, v_manager3, 'manager3');
+
+  perform app.enroll_customer_loyalty_account(v_tenant3, v_account_theta, v_program3_id, v_manager3, 'manager3');
+
+  v_reward := app.create_loyalty_reward_draft(v_tenant3, v_program3_id, 'Lra3 Physical Reward', 'physical_item', 'Atomicity-race fixture only.', 'Terms.', null, 40, 5, 30, 'vendor-recon-3', null, v_manager3, 'manager3');
+  perform app.publish_loyalty_reward(v_tenant3, v_reward.id, v_reward.record_version, null, v_manager3, 'manager3');
+
+  insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by)
+  values ('00000000-0000-0000-0000-000000346600', v_tenant3, v_account_theta, 'invoice', '00000000-0000-0000-0000-000000346601', 'USD', 40, 40, 'paid', false, '2026-08-01', '2026-08-31', 'tester');
+  perform app.evaluate_customer_loyalty_earning_for_paid_invoice(v_tenant3, '00000000-0000-0000-0000-000000346600', v_manager3, 'manager3');
+  v_event_id := (select id from app.loyalty_earning_events where idempotency_key = 'ar-open-item:00000000-0000-0000-0000-000000346600');
+  perform app.post_loyalty_points_earned(v_tenant3, v_event_id, v_manager3, 'manager3', 365);
+
+  v_redemption := app.submit_loyalty_redemption(v_tenant3, (select id from app.loyalty_accounts where tenant_id = v_tenant3 and customer_account_id = v_account_theta), v_reward.id, 'lra3-theta-redeem-1', v_manager3, 'manager3');
+  if v_redemption.status <> 'pending_approval' then
+    raise exception 'assertion failed: expected Theta''s physical_item submission to land pending_approval, got %', v_redemption.status;
+  end if;
+  v_redemption := app.decide_loyalty_redemption(v_tenant3, v_redemption.id, v_redemption.record_version, 'approve', 'approved for atomicity race fixture', v_manager3, 'manager3');
+  if v_redemption.status <> 'fulfilling' or v_redemption.points_consumed <> 40 then
+    raise exception 'assertion failed: expected Theta''s redemption to be fulfilling, consuming exactly 40 points, got status=% points_consumed=%', v_redemption.status, v_redemption.points_consumed;
+  end if;
+end $$;
+
+\echo '>> CPL-325 hardening regression (single-snapshot atomicity, mandatory): a REAL, deterministic lock-gated three-process race -- a "gate" session holds an ACCESS EXCLUSIVE lock on app.loyalty_benefit_entitlements while a "mutator" reverses Theta''s own fulfilling redemption (app.mark_loyalty_redemption_fulfillment_failed -- touches points/redemptions, never entitlements, so it commits freely under the gate) and a "reader" runs app.execute_loyalty_liability_reconciliation_run (blocks on the gate, since its own single combined statement reads app.loyalty_benefit_entitlements too) -- launched via scripts/db-tests/loyalty-liability-reconciliation-atomicity-gate-helper.sh. Two independently-computed reference runs (strictly before and strictly after the reversal) bound the only two valid combined (points+reward) totals; the raced run''s own combined total must equal ONE of them exactly -- never a third, torn value'
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'lra3');
+  v_manager3 uuid := '00000000-0000-0000-0000-000000346501';
+  v_run_before app.loyalty_liability_reconciliation_runs;
+begin
+  v_run_before := app.execute_loyalty_liability_reconciliation_run(v_tenant3, clock_timestamp(), 'USD', v_manager3, 'manager3', 'lra3-atomic-before', 1);
+end $$;
+
+select (select id from app.tenants where slug = 'lra3') as at_tenant3_id \gset
+select id as at_redemption_id, record_version as at_redemption_version from app.loyalty_redemptions where tenant_id = (select id from app.tenants where slug = 'lra3') and idempotency_key = 'lra3-theta-redeem-1' \gset
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as at_bpid \gset
+
+\set gate_sql 'BEGIN; LOCK TABLE app.loyalty_benefit_entitlements IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(2); COMMIT;'
+\set mutator_sql 'select app.mark_loyalty_redemption_fulfillment_failed(''' :at_tenant3_id ''', ''' :at_redemption_id ''', ' :at_redemption_version ', ''CPL-325 atomicity race test reversal'', ''00000000-0000-0000-0000-000000346501'', ''manager3'');'
+\set reader_sql 'select app.execute_loyalty_liability_reconciliation_run(''' :at_tenant3_id ''', clock_timestamp(), ''USD'', ''00000000-0000-0000-0000-000000346501'', ''manager3'', ''lra3-atomic-race'', 1);'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv GATE_SQL :gate_sql
+\setenv MUTATOR_SQL :mutator_sql
+\setenv READER_SQL :reader_sql
+\setenv GATE_OUT /tmp/cargogrid-lra3-atomic-gate-:at_bpid.out
+\setenv MUTATOR_OUT /tmp/cargogrid-lra3-atomic-mutator-:at_bpid.out
+\setenv READER_OUT /tmp/cargogrid-lra3-atomic-reader-:at_bpid.out
+
+\! bash scripts/db-tests/loyalty-liability-reconciliation-atomicity-gate-helper.sh
+
+do $$
+declare
+  v_tenant3 uuid := (select id from app.tenants where slug = 'lra3');
+  v_manager3 uuid := '00000000-0000-0000-0000-000000346501';
+  v_run_before app.loyalty_liability_reconciliation_runs;
+  v_run_after app.loyalty_liability_reconciliation_runs;
+  v_run_race app.loyalty_liability_reconciliation_runs;
+  v_before_combined numeric;
+  v_after_combined numeric;
+  v_race_combined numeric;
+  v_redemption_status text;
+begin
+  -- Re-read the "before" reference run directly from the table (never via a
+  -- psql-level colon-substituted variable -- psql''s own client-side
+  -- substitution does not interpolate a colon-prefixed name inside a
+  -- dollar-quoted PL/pgSQL function body, since dollar-quoting is itself a
+  -- real SQL string-literal quoting mechanism; live-confirmed this
+  -- checkpoint when an earlier draft of this exact test hit a literal
+  -- syntax error at the colon from precisely this).
+  select * into v_run_before from app.loyalty_liability_reconciliation_runs where tenant_id = v_tenant3 and idempotency_key = 'lra3-atomic-before';
+  if v_run_before.id is null then
+    raise exception 'assertion failed: expected the before-run leg to have produced a real run row (lra3-atomic-before)';
+  end if;
+  v_before_combined := v_run_before.points_liability_total + v_run_before.reward_fulfillment_liability_total;
+
+  -- The mutator must have genuinely committed by now (the helper waits on
+  -- all three processes before returning) -- confirm the reversal actually
+  -- happened, so this test cannot silently pass by accident if the mutator
+  -- leg failed for an unrelated reason.
+  select status into v_redemption_status from app.loyalty_redemptions where tenant_id = v_tenant3 and idempotency_key = 'lra3-theta-redeem-1';
+  if v_redemption_status <> 'failed' then
+    raise exception 'assertion failed: expected the mutator leg to have genuinely reversed Theta''s redemption to status=failed, got % -- the race proof below is meaningless if this did not happen', v_redemption_status;
+  end if;
+
+  v_run_after := app.execute_loyalty_liability_reconciliation_run(v_tenant3, clock_timestamp(), 'USD', v_manager3, 'manager3', 'lra3-atomic-after', 1);
+  v_after_combined := v_run_after.points_liability_total + v_run_after.reward_fulfillment_liability_total;
+
+  select * into v_run_race from app.loyalty_liability_reconciliation_runs where tenant_id = v_tenant3 and idempotency_key = 'lra3-atomic-race';
+  if v_run_race.id is null then
+    raise exception 'assertion failed: expected the raced reader leg to have produced a real run row (lra3-atomic-race)';
+  end if;
+  v_race_combined := v_run_race.points_liability_total + v_run_race.reward_fulfillment_liability_total;
+
+  -- Sanity: the reversal must have actually changed the combined total (40
+  -- credited back to points, 30 removed from reward-fulfillment -- a net
+  -- +10) -- otherwise this test would not be exercising anything real.
+  if v_after_combined <> v_before_combined + 10 then
+    raise exception 'assertion failed: expected the reversal to shift the combined total by exactly +10 (40 points credited back - 30 reward-fulfillment removed), got before=% after=% (delta %)', v_before_combined, v_after_combined, v_after_combined - v_before_combined;
+  end if;
+
+  -- The core invariant this fix restores: the raced run's own combined
+  -- total must equal EITHER the fully-before OR the fully-after snapshot --
+  -- never a third, torn value (before-points-with-after-reward, or vice
+  -- versa) that corresponds to no single real instant.
+  if v_race_combined <> v_before_combined and v_race_combined <> v_after_combined then
+    raise exception 'CRITICAL: the raced reconciliation run''s own combined total (%) matches NEITHER the fully-before (%) NOR the fully-after (%) snapshot -- a torn, non-atomic read (the exact defect supabase/migrations/20260801310000 fixes)', v_race_combined, v_before_combined, v_after_combined;
+  end if;
+
+  raise notice 'PASS: the raced reconciliation run''s own combined total (%) exactly matches one of the two valid consistent snapshots (before=%, after=%) -- single-statement snapshot atomicity holds under a genuine, deterministic, lock-gated concurrent write', v_race_combined, v_before_combined, v_after_combined;
 end $$;
 
 \echo '>> fixture: Beta earns 200 points (clean) and is issued a discount entitlement (15 USD, clean); Gamma is issued a cashback entitlement (30 USD) with no points activity at all'
