@@ -186,8 +186,8 @@ Gate commands independently re-run live at this repository this checkpoint (cont
 | `CG-S14-IAE-002` | 330 | Reporting Engine | `IAE-001` `COMPLETED` | **`COMPLETED`** 2026-08-21 — Tier A/B clean (0 typecheck/lint errors, full test suite green, db-test suite green including the repository-wide `rbac-enforcement.sql` sweep); awaits Batch 1's own Tier C review to reach `VERIFIED`. `docs/build-log/phase-09/IAE-330.md` |
 | `CG-S14-IAE-003` | 331 | Dashboard Builder | `IAE-002` | **`COMPLETED`** 2026-08-21 — Tier A/B clean; full detail `docs/build-log/phase-09/IAE-331.md` |
 | `CG-S14-IAE-004` | 332 | Saved View and Configurable Report | `IAE-002`, `IAE-003` | **`COMPLETED`** 2026-08-21 — Tier A/B clean; full detail `docs/build-log/phase-09/IAE-332.md` |
-| `CG-S14-IAE-005` | 333 | Analytics Materialized Views | `IAE-002` | **`READY`** — next eligible prompt, Batch 1 (released on `IAE-004` `COMPLETED` within the same batch, per `AGENTS.md`'s cross-batch rule) |
-| `CG-S14-IAE-006` | 334 | Scheduled Reports | `IAE-002` | `BLOCKED` |
+| `CG-S14-IAE-005` | 333 | Analytics Materialized Views | `IAE-002` | **`COMPLETED`** 2026-08-21 — Tier A/B clean; full detail `docs/build-log/phase-09/IAE-333.md` |
+| `CG-S14-IAE-006` | 334 | Scheduled Reports | `IAE-002` | **`READY`** — next eligible prompt, Batch 1 (released on `IAE-005` `COMPLETED` within the same batch, per `AGENTS.md`'s cross-batch rule); last prompt of Batch 1 -- its own `COMPLETED` status triggers Batch 1's Tier C review |
 | `CG-S14-IAE-007` | 335 | Automation Rule Engine | `IAE-001` | `BLOCKED` (Batch 2; released on Batch 1 `VERIFIED` per `AGENTS.md` cross-batch rule) |
 | `CG-S14-IAE-008` | 336 | Integration Hub | `IAE-001` | `BLOCKED` (Batch 2) |
 | `CG-S14-IAE-009` | 337 | Public API Platform | `IAE-008` | `BLOCKED` (Batch 3) |
@@ -258,4 +258,4 @@ All work this checkpoint is additive-only and reversible: two new files (`ADR-00
 
 ## 14. First eligible prompt
 
-**`CG-S14-IAE-005` (Prompt 333, Analytics and Materialized Views).** `IAE-004` (Prompt 332, Saved View and Configurable Report) reached `COMPLETED` 2026-08-21 (Tier A/B clean; full detail `docs/build-log/phase-09/IAE-332.md`) — released within Batch 1 per `AGENTS.md`'s cross-batch rule (a downstream prompt may begin on its upstream's `COMPLETED` status within the same batch). Batch 1 (`IAE-002..006`) reaches `VERIFIED` only at its own Tier C review close, after `IAE-006` (Prompt 334) also reaches `COMPLETED`.
+**`CG-S14-IAE-006` (Prompt 334, Scheduled Reports).** `IAE-005` (Prompt 333, Analytics and Materialized Views) reached `COMPLETED` 2026-08-21 (Tier A/B clean; full detail `docs/build-log/phase-09/IAE-333.md`) — released within Batch 1 per `AGENTS.md`'s cross-batch rule (a downstream prompt may begin on its upstream's `COMPLETED` status within the same batch). `IAE-006` is Batch 1's own last prompt (`IAE-002..006`); once it also reaches `COMPLETED`, Batch 1 is due its own Tier C review (4 parallel lenses + fix pass + full gate re-run) before any of its 5 capabilities reach `VERIFIED`.
