@@ -183,8 +183,8 @@ Gate commands independently re-run live at this repository this checkpoint (cont
 | Task ID | Prompt | Capability | Dependencies | Status |
 |---|---|---|---|---|
 | `CG-S14-IAE-001` | 329 | Intelligence, Automation and Enterprise WBS Runtime Kickoff | `PHASE_8_VERIFIED` + operator authorization | `COMPLETED` this checkpoint (sets `PHASE_9_IN_PROGRESS`; a kickoff prompt is not itself entered into the `VERIFIED` capability chain, mirroring `CG-S13-CPL-001`'s own final task-state row in `docs/build-log/phase-08/00_EXECUTION_INDEX.md` §10) |
-| `CG-S14-IAE-002` | 330 | Reporting Engine | `IAE-001` `COMPLETED` | **`READY`** — first eligible prompt, Batch 1 |
-| `CG-S14-IAE-003` | 331 | Dashboard Builder | `IAE-002` | `BLOCKED` (pending `IAE-002`) |
+| `CG-S14-IAE-002` | 330 | Reporting Engine | `IAE-001` `COMPLETED` | **`COMPLETED`** 2026-08-21 — Tier A/B clean (0 typecheck/lint errors, full test suite green, db-test suite green including the repository-wide `rbac-enforcement.sql` sweep); awaits Batch 1's own Tier C review to reach `VERIFIED`. `docs/build-log/phase-09/IAE-330.md` |
+| `CG-S14-IAE-003` | 331 | Dashboard Builder | `IAE-002` | **`READY`** — next eligible prompt, Batch 1 (released on `IAE-002` `COMPLETED` within the same batch, per `AGENTS.md`'s cross-batch rule) |
 | `CG-S14-IAE-004` | 332 | Saved View and Configurable Report | `IAE-002`, `IAE-003` | `BLOCKED` |
 | `CG-S14-IAE-005` | 333 | Analytics Materialized Views | `IAE-002` | `BLOCKED` |
 | `CG-S14-IAE-006` | 334 | Scheduled Reports | `IAE-002` | `BLOCKED` |
@@ -258,4 +258,4 @@ All work this checkpoint is additive-only and reversible: two new files (`ADR-00
 
 ## 14. First eligible prompt
 
-**`CG-S14-IAE-002` (Prompt 330, Reporting Engine).** Dependency-clean (`IAE-001` `COMPLETED` this checkpoint), first row of Batch 1, within this session's own operator authorization ("prompt 328-348") — requires no fresh authorization. Per the source spec's own literal "Completion gate" convention (mirrored from `328_*.md`'s own "Exact next command after Step 14 package validation: `LANJUT STEP 15`"): the exact next command within this checkpoint's own runtime scope is to begin Prompt 330.
+**`CG-S14-IAE-003` (Prompt 331, Dashboard Builder).** `IAE-002` (Prompt 330, Reporting Engine) reached `COMPLETED` 2026-08-21 (Tier A/B clean; full detail `docs/build-log/phase-09/IAE-330.md`) — released within Batch 1 per `AGENTS.md`'s cross-batch rule (a downstream prompt may begin on its upstream's `COMPLETED` status within the same batch). Batch 1 (`IAE-002..006`) reaches `VERIFIED` only at its own Tier C review close, after `IAE-006` (Prompt 334) also reaches `COMPLETED`.
