@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listApiKeysForTenant, listWebhookEndpointsForTenant, ApiKeyWebhookQueryError, type ApiKeyWebhookQueryRpcClient } from "../../../../../server/queries/api-key-webhook.ts";
@@ -20,6 +21,46 @@ function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerCli
   return client as unknown as ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient & WebhookManagementQueryRpcClient & N8nIntegrationQueryRpcClient;
 }
 
+function isKnownApiKeysConsoleQueryError(error: unknown): boolean {
+  return (
+    error instanceof ApiKeyWebhookQueryError ||
+    error instanceof PublicApiPlatformQueryError ||
+    error instanceof VendorApiQueryError ||
+    error instanceof WebhookManagementQueryError ||
+    error instanceof N8nIntegrationQueryError
+  );
+}
+
+/**
+ * Tier C Batch 3 fix: this page renders nine independent sections spanning
+ * five capabilities. The original single `Promise.all` + one shared
+ * `loadFailed` boolean meant a transient failure in ANY ONE query (e.g. API
+ * request-log pagination) blanked the entire page, including the eight
+ * sections that loaded fine. Each query is now isolated -- a genuinely
+ * unexpected error still re-throws (Next.js's own error boundary), but a
+ * known `*QueryError` degrades ONLY its own section.
+ */
+async function loadSection<T>(promise: Promise<T>): Promise<{ readonly data: T | null; readonly failed: boolean }> {
+  try {
+    return { data: await promise, failed: false };
+  } catch (error) {
+    if (!isKnownApiKeysConsoleQueryError(error)) throw error;
+    return { data: null, failed: true };
+  }
+}
+
+function Section({ id, title, description, failed, children }: { id: string; title: string; description?: string; failed: boolean; children: ReactNode }) {
+  return (
+    <section aria-labelledby={`${id}-heading`} className="flex flex-col gap-2">
+      <h2 id={`${id}-heading`} className="text-sm font-semibold text-text-primary">
+        {title}
+      </h2>
+      {description ? <p className="text-xs text-text-secondary">{description}</p> : null}
+      {failed ? <ErrorState description="Something went wrong loading this section. Please try again." /> : children}
+    </section>
+  );
+}
+
 /**
  * Public API Platform developer console (IAE-009, Prompt 337): keys/scopes, rate
  * usage/limit, API version/deprecation notices, the webhook event-type catalog, and
@@ -36,42 +77,28 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
   }
 
   const supabase = toQueryClient(await createSupabaseServerClient());
-  let loadFailed = false;
-  let keys: Awaited<ReturnType<typeof listApiKeysForTenant>> = [];
-  let versions: Awaited<ReturnType<typeof listApiVersions>> = [];
-  let eventTypes: Awaited<ReturnType<typeof listWebhookEventTypes>> = [];
-  let logs: Awaited<ReturnType<typeof listApiLogsForTenant>> = [];
-  let vendorKeys: Awaited<ReturnType<typeof listVendorApiKeysForTenant>> = [];
-  let endpoints: Awaited<ReturnType<typeof listWebhookEndpointsForTenant>> = [];
-  let deliveries: Awaited<ReturnType<typeof listWebhookDeliveriesForTenant>> = [];
-  let connectors: Awaited<ReturnType<typeof listN8nConnectorsForTenant>> = [];
-  let n8nAllowlist: Awaited<ReturnType<typeof listN8nActionAllowlist>> = [];
 
-  try {
-    [keys, versions, eventTypes, logs, vendorKeys, endpoints, deliveries, connectors, n8nAllowlist] = await Promise.all([
-      listApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
-      listApiVersions(supabase),
-      listWebhookEventTypes(supabase),
-      listApiLogsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, limit: 20, before: null }),
-      listVendorApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
-      listWebhookEndpointsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
-      listWebhookDeliveriesForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
-      listN8nConnectorsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
-      listN8nActionAllowlist(supabase),
-    ]);
-  } catch (error) {
-    if (!(error instanceof ApiKeyWebhookQueryError) && !(error instanceof PublicApiPlatformQueryError) && !(error instanceof VendorApiQueryError) && !(error instanceof WebhookManagementQueryError) && !(error instanceof N8nIntegrationQueryError)) throw error;
-    loadFailed = true;
-  }
+  const [keysResult, versionsResult, eventTypesResult, logsResult, vendorKeysResult, endpointsResult, deliveriesResult, connectorsResult, n8nAllowlistResult] = await Promise.all([
+    loadSection(listApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId })),
+    loadSection(listApiVersions(supabase)),
+    loadSection(listWebhookEventTypes(supabase)),
+    loadSection(listApiLogsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, limit: 20, before: null })),
+    loadSection(listVendorApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId })),
+    loadSection(listWebhookEndpointsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId })),
+    loadSection(listWebhookDeliveriesForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId })),
+    loadSection(listN8nConnectorsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId })),
+    loadSection(listN8nActionAllowlist(supabase)),
+  ]);
 
-  if (loadFailed) {
-    return (
-      <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold text-text-primary">API Keys</h1>
-        <ErrorState description="Something went wrong loading your API platform data. Please try again." />
-      </div>
-    );
-  }
+  const keys = keysResult.data ?? [];
+  const versions = versionsResult.data ?? [];
+  const eventTypes = eventTypesResult.data ?? [];
+  const logs = logsResult.data ?? [];
+  const vendorKeys = vendorKeysResult.data ?? [];
+  const endpoints = endpointsResult.data ?? [];
+  const deliveries = deliveriesResult.data ?? [];
+  const connectors = connectorsResult.data ?? [];
+  const n8nAllowlist = n8nAllowlistResult.data ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,69 +109,53 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
 
       <CreateApiKeyForm tenantSlug={tenantSlug} />
 
-      <section aria-labelledby="keys-heading" className="flex flex-col gap-2">
-        <h2 id="keys-heading" className="text-sm font-semibold text-text-primary">
-          Your API keys
-        </h2>
+      <Section id="keys" title="Your API keys" failed={keysResult.failed}>
         <ApiKeyList tenantSlug={tenantSlug} keys={keys} />
-      </section>
+      </Section>
 
       <CreateVendorApiKeyForm tenantSlug={tenantSlug} />
 
-      <section aria-labelledby="vendor-keys-heading" className="flex flex-col gap-2">
-        <h2 id="vendor-keys-heading" className="text-sm font-semibold text-text-primary">
-          Vendor API keys
-        </h2>
+      <Section id="vendor-keys" title="Vendor API keys" failed={vendorKeysResult.failed}>
         <VendorApiKeyList tenantSlug={tenantSlug} keys={vendorKeys} />
-      </section>
+      </Section>
 
-      <section aria-labelledby="versions-heading" className="flex flex-col gap-2">
-        <h2 id="versions-heading" className="text-sm font-semibold text-text-primary">
-          API versions
-        </h2>
+      <Section id="versions" title="API versions" failed={versionsResult.failed}>
         <ApiVersionList versions={versions} />
-      </section>
+      </Section>
 
-      <section aria-labelledby="event-types-heading" className="flex flex-col gap-2">
-        <h2 id="event-types-heading" className="text-sm font-semibold text-text-primary">
-          Webhook event types
-        </h2>
+      <Section id="event-types" title="Webhook event types" failed={eventTypesResult.failed}>
         <WebhookEventTypeList eventTypes={eventTypes} />
-      </section>
+      </Section>
 
       <RegisterWebhookEndpointForm tenantSlug={tenantSlug} />
 
-      <section aria-labelledby="endpoints-heading" className="flex flex-col gap-2">
-        <h2 id="endpoints-heading" className="text-sm font-semibold text-text-primary">
-          Webhook endpoints
-        </h2>
+      <Section id="endpoints" title="Webhook endpoints" failed={endpointsResult.failed}>
         <WebhookEndpointList tenantSlug={tenantSlug} endpoints={endpoints} />
-      </section>
+      </Section>
 
-      <section aria-labelledby="deliveries-heading" className="flex flex-col gap-2">
-        <h2 id="deliveries-heading" className="text-sm font-semibold text-text-primary">
-          Webhook deliveries
-        </h2>
-        <p className="text-xs text-text-secondary">Most recent deliveries across every endpoint, including dead-lettered ones. A dead-lettered delivery may be replayed once its receiving endpoint is fixed.</p>
+      <Section
+        id="deliveries"
+        title="Webhook deliveries"
+        description="Most recent deliveries across every endpoint, including dead-lettered ones. A dead-lettered delivery may be replayed once its receiving endpoint is fixed."
+        failed={deliveriesResult.failed}
+      >
         <WebhookDeliveryList tenantSlug={tenantSlug} deliveries={deliveries} />
-      </section>
+      </Section>
 
       <CreateN8nConnectorForm tenantSlug={tenantSlug} allowlist={n8nAllowlist} />
 
-      <section aria-labelledby="n8n-heading" className="flex flex-col gap-2">
-        <h2 id="n8n-heading" className="text-sm font-semibold text-text-primary">
-          n8n connectors
-        </h2>
-        <p className="text-xs text-text-secondary">n8n calls the SAME /api/v1 API and receives events through the SAME webhook endpoints as any other integration -- register an endpoint above pointed at your n8n workflow&apos;s own webhook URL, then link it here. Sample workflows and setup guidance: see docs/build-log/phase-09/IAE-341.md.</p>
+      <Section
+        id="n8n"
+        title="n8n connectors"
+        description="n8n calls the SAME /api/v1 API and receives events through the SAME webhook endpoints as any other integration. Register a webhook endpoint above pointed at your n8n workflow's own webhook trigger URL to receive events, and use this connector's key as a Bearer token in your workflow's HTTP Request node to call /api/v1."
+        failed={connectorsResult.failed}
+      >
         <N8nConnectorList tenantSlug={tenantSlug} connectors={connectors} />
-      </section>
+      </Section>
 
-      <section aria-labelledby="logs-heading" className="flex flex-col gap-2">
-        <h2 id="logs-heading" className="text-sm font-semibold text-text-primary">
-          Recent API requests
-        </h2>
+      <Section id="logs" title="Recent API requests" failed={logsResult.failed}>
         <ApiLogList logs={logs} />
-      </section>
+      </Section>
     </div>
   );
 }

@@ -4,6 +4,15 @@ import { createServer, type Server } from "node:http";
 import { processWebhookDeliveryJob, type ProcessWebhookDeliveryJobRpcClient } from "./process-webhook-delivery-job.server.ts";
 import type { ImportExportJob } from "../../server/contracts/import-export/import-export.ts";
 
+// These tests deliberately dispatch to a real local loopback server -- the
+// production SSRF guard (./ssrf-guard.server.ts) would correctly REFUSE any
+// loopback address, so every test that needs a live HTTP call injects this
+// permissive stub instead of the real, DNS-resolving checker. The guard's
+// own refusal behavior is proven by its own ssrf-guard.server.test.ts, and
+// by the two "refuses to dispatch" tests at the bottom of this file that
+// deliberately use the REAL checker.
+const ALLOW_ALL_URLS = async () => ({ safe: true, reason: null });
+
 const JOB_ID = "223e4567-e89b-12d3-a456-426614174000";
 const DELIVERY_ID = "323e4567-e89b-12d3-a456-426614174000";
 const TENANT_ID = "423e4567-e89b-12d3-a456-426614174000";
@@ -128,7 +137,7 @@ describe("processWebhookDeliveryJob", () => {
     try {
       const recorded: RecordedCalls = { deliveryAttempts: [], completedJobs: [], failedJobs: [] };
       const client = mockClient(url, {}, recorded);
-      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker");
+      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker", ALLOW_ALL_URLS);
 
       assert.equal(outcome.outcome, "delivered");
       assert.equal(outcome.httpStatusCode, 200);
@@ -153,7 +162,7 @@ describe("processWebhookDeliveryJob", () => {
     try {
       const recorded: RecordedCalls = { deliveryAttempts: [], completedJobs: [], failedJobs: [] };
       const client = mockClient(url, {}, recorded);
-      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker");
+      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker", ALLOW_ALL_URLS);
 
       assert.equal(outcome.outcome, "failed");
       assert.equal(outcome.httpStatusCode, 500);
@@ -187,7 +196,7 @@ describe("processWebhookDeliveryJob", () => {
     try {
       const recorded: RecordedCalls = { deliveryAttempts: [], completedJobs: [], failedJobs: [] };
       const client = mockClient(url, { status: "delivered" }, recorded);
-      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker");
+      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker", ALLOW_ALL_URLS);
 
       assert.equal(outcome.outcome, "already_terminal");
       assert.equal(called, false);
@@ -208,7 +217,7 @@ describe("processWebhookDeliveryJob", () => {
     try {
       const recorded: RecordedCalls = { deliveryAttempts: [], completedJobs: [], failedJobs: [] };
       const client = mockClient(url, { endpoint_status: "disabled" }, recorded);
-      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker");
+      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker", ALLOW_ALL_URLS);
 
       assert.equal(outcome.outcome, "failed");
       assert.match(outcome.errorMessage ?? "", /disabled/);
@@ -232,5 +241,42 @@ describe("processWebhookDeliveryJob", () => {
     assert.equal(outcome.outcome, "failed");
     assert.match(outcome.errorMessage ?? "", /delivery_id/);
     assert.equal(recorded.failedJobs.length, 1);
+  });
+
+  test("the REAL (non-injected) SSRF guard refuses a literal private-IP endpoint without attempting a live HTTP call -- proves the wiring, not just the guard's own unit tests", async () => {
+    const recorded: RecordedCalls = { deliveryAttempts: [], completedJobs: [], failedJobs: [] };
+    const client = mockClient("https://169.254.169.254/latest/meta-data/", {}, recorded);
+    const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker");
+
+    assert.equal(outcome.outcome, "failed");
+    assert.match(outcome.errorMessage ?? "", /refusing to dispatch/);
+    assert.equal(recorded.deliveryAttempts[0]?.p_status, "failed");
+    assert.equal(recorded.failedJobs.length, 1);
+  });
+
+  test("a 3xx response is never auto-followed -- the redirect target is never requested", async () => {
+    let redirectTargetCalled = false;
+    const { server: redirectTarget, url: redirectTargetUrl } = await startServer((_req, res) => {
+      redirectTargetCalled = true;
+      res.writeHead(200);
+      res.end();
+    });
+    const { server, url } = await startServer((_req, res) => {
+      res.writeHead(302, { location: redirectTargetUrl });
+      res.end();
+    });
+    try {
+      const recorded: RecordedCalls = { deliveryAttempts: [], completedJobs: [], failedJobs: [] };
+      const client = mockClient(url, {}, recorded);
+      const outcome = await processWebhookDeliveryJob(client, baseJob(), "test-worker", "test-worker", ALLOW_ALL_URLS);
+
+      assert.equal(outcome.outcome, "failed");
+      assert.equal(outcome.httpStatusCode, 302);
+      assert.equal(redirectTargetCalled, false);
+      assert.equal(recorded.failedJobs.length, 1);
+    } finally {
+      server.close();
+      redirectTarget.close();
+    }
   });
 });

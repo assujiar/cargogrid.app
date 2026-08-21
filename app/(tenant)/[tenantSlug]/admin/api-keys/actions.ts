@@ -20,7 +20,7 @@ import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/re
 import { createApiKey, rotateApiKey, revokeApiKey, registerWebhookEndpoint, rotateWebhookSecret, disableWebhookEndpoint, reenableWebhookEndpoint, ApiKeyWebhookMutationError, type ApiKeyWebhookMutationRpcClient } from "../../../../../server/mutations/api-key-webhook.ts";
 import { createVendorApiKey, VendorApiMutationError, type VendorApiMutationRpcClient } from "../../../../../server/mutations/vendor-api.ts";
 import { sendTestWebhookDelivery, replayWebhookDelivery, WebhookManagementMutationError, type WebhookManagementMutationRpcClient } from "../../../../../server/mutations/webhook-management.ts";
-import { createN8nConnector, N8nIntegrationMutationError, type N8nIntegrationMutationRpcClient } from "../../../../../server/mutations/n8n-integration.ts";
+import { createN8nConnector, rotateN8nConnector, N8nIntegrationMutationError, type N8nIntegrationMutationRpcClient } from "../../../../../server/mutations/n8n-integration.ts";
 import type { CreatedApiKey, CreatedWebhookEndpoint } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
 import type { CreatedVendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
 import type { WebhookDeliveryRow } from "../../../../../server/contracts/webhook-management/webhook-management.ts";
@@ -354,4 +354,35 @@ export async function createN8nConnectorAction(tenantSlug: string, _prevState: N
 
   revalidatePath(`/${tenantSlug}/admin/api-keys`);
   return { error: null, createdConnector };
+}
+
+/**
+ * Tier C Batch 3 fix: rotating a connector's underlying key mints a brand-new
+ * app.api_keys row (unlike revoke, which updates the SAME row in place) --
+ * reusing the generic rotateApiKeyAction here would silently orphan
+ * app.n8n_connectors.api_key_id, leaving the console showing a stale/wrong
+ * key status while an unlabeled successor key stayed live. This action calls
+ * app.rotate_n8n_connector instead, which re-points the linkage.
+ */
+export async function rotateN8nConnectorAction(tenantSlug: string, connectorId: string, _prevState: N8nConnectorFormState, formData: FormData): Promise<N8nConnectorFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return N8N_NO_ACCESS;
+
+  const overlapRaw = String(formData.get("overlapMinutes") ?? "0").trim();
+  const overlapMinutes = Number(overlapRaw);
+  if (!Number.isFinite(overlapMinutes) || overlapMinutes < 0 || overlapMinutes > 10080) {
+    return { error: "Overlap window must be between 0 (immediate revoke) and 10080 minutes (7 days).", createdConnector: null };
+  }
+
+  const client = toN8nIntegrationClient(createSupabaseServiceRoleClient());
+  let rotatedConnector: CreatedN8nConnector;
+  try {
+    rotatedConnector = await rotateN8nConnector(client, { connectorId, overlapMinutes, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof N8nIntegrationMutationError) return { error: `Could not rotate this connector: ${error.message}`, createdConnector: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return { error: null, createdConnector: rotatedConnector };
 }

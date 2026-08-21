@@ -175,9 +175,16 @@ begin
   exception when insufficient_privilege then null;
   end;
 
+  -- Tier C Batch 3 fix (Critical finding 1): a replay must NEVER reset the
+  -- append-only `attempts` counter -- app.webhook_delivery_attempts'' own
+  -- unique constraint (webhook_delivery_id, attempt_number) is computed from
+  -- it by the unmodified app.record_webhook_delivery_attempt, so resetting
+  -- to 0 would collide with the already-recorded history on the very next
+  -- attempt. A replay instead grants a fresh BUDGET of max_attempts (the
+  -- delivery's own currently-configured value) MORE real attempts.
   v_replayed := app.replay_webhook_delivery(v_dead_delivery.id, v_admin1, 'admin');
-  if v_replayed.status <> 'pending' or v_replayed.attempts <> 0 then
-    raise exception 'assertion failed: expected replay to reset status=pending, attempts=0, got %', to_jsonb(v_replayed);
+  if v_replayed.status <> 'pending' or v_replayed.attempts <> v_dead_delivery.attempts or v_replayed.max_attempts <> v_dead_delivery.attempts + v_dead_delivery.max_attempts then
+    raise exception 'assertion failed: expected replay to reset status=pending WITHOUT resetting attempts, and to grant a fresh max_attempts budget, got %', to_jsonb(v_replayed);
   end if;
 
   select * into v_new_job from app.jobs where payload->>'delivery_id' = v_dead_delivery.id::text and job_id <> v_original_job.job_id;
@@ -185,7 +192,77 @@ begin
     raise exception 'assertion failed: expected a FRESH job with a NEW idempotency key, distinct from the original job %', v_original_job.job_id;
   end if;
 
-  raise notice 'PASS: replay_webhook_delivery is valid only from dead_letter, resets delivery state, and enqueues a genuinely fresh job (new idempotency key) -- denied for a non-terminal delivery and for a non-admin';
+  -- Tier C Batch 3 REGRESSION PROOF (Critical finding 1): recording a real
+  -- attempt after the replay must NOT collide with app.webhook_delivery_
+  -- attempts_unique -- this is the exact bug the fix closes; a plain
+  -- CREATE OR REPLACE reverting the fix would make this block fail loudly.
+  perform app.record_webhook_delivery_attempt(v_dead_delivery.id, 'failed', 503, 'simulated failure after replay', v_admin1, 'admin');
+
+  -- Drive it back to dead_letter (the replay budget was max_attempts=1
+  -- originally, so ONE more failure exhausts the fresh budget too) and
+  -- replay a SECOND time -- proving the fix holds across multiple replay
+  -- cycles, not just one.
+  select * into v_dead_delivery from app.webhook_deliveries where id = v_pending_delivery.id;
+  if v_dead_delivery.status <> 'dead_letter' then
+    raise exception 'assertion failed: expected dead_letter again after exhausting the replay budget, got %', v_dead_delivery.status;
+  end if;
+  perform app.replay_webhook_delivery(v_dead_delivery.id, v_admin1, 'admin');
+  perform app.record_webhook_delivery_attempt(v_dead_delivery.id, 'success', 200, null, v_admin1, 'admin');
+
+  raise notice 'PASS: replay_webhook_delivery is valid only from dead_letter, resets status WITHOUT resetting the append-only attempts counter (Tier C Batch 3 fix), and enqueues a genuinely fresh job (new idempotency key) -- a real attempt recorded after replay never collides with delivery-attempt history, across two full replay cycles -- denied for a non-terminal delivery and for a non-admin';
+end;
+$$;
+
+\echo '>> app.replay_webhook_delivery: concurrent double-replay of the SAME dead_letter delivery -- the row lock (Tier C Batch 3 fix) must let exactly ONE succeed, never double-enqueue'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaewebhook');
+  v_admin1 uuid := '00000000-0000-0000-0000-000014000001';
+  v_endpoint_a uuid := (select id from app.webhook_endpoints where tenant_id = v_tenant1 and url = 'https://a.iaewebhook.test/hook');
+  v_delivery app.webhook_deliveries;
+  v_original_job app.jobs;
+  v_drained app.jobs;
+  v_job_count integer;
+begin
+  -- Drain any leftover pending webhook_retry jobs from earlier blocks in
+  -- this same file first (the exact cross-block interference class
+  -- self-caught in IAE-012's own build log) -- otherwise claim_next_job
+  -- below could pick up a STALE job instead of the one this block's own
+  -- send_test_webhook_delivery call creates.
+  loop
+    v_drained := app.claim_next_job('tierc3-drain-worker', array['webhook_retry'], 300);
+    exit when v_drained is null;
+    perform app.complete_job(v_drained.job_id, 'tierc3-drain-worker', null, 'tierc3-drain-worker');
+  end loop;
+
+  v_delivery := app.send_test_webhook_delivery(v_endpoint_a, v_admin1, 'admin');
+  v_original_job := app.claim_next_job('tierc3-test-worker', array['webhook_retry'], 300);
+  perform app.record_webhook_delivery_attempt(v_delivery.id, 'failed', 503, 'simulated failure', v_admin1, 'admin');
+  perform app.record_job_failure(v_original_job.job_id, 'simulated failure', v_admin1, 'admin');
+
+  -- A single-connection sequential proxy for the row lock: the SAME delivery
+  -- id replayed twice inside two SEPARATE, sequential transactions is the
+  -- weakest form of this proof available inside a single psql -f session
+  -- (a real two-connection concurrent proof was performed live against a
+  -- scratch database during the Tier C fix pass -- see docs/build-log/
+  -- phase-09/IAE-340.md's own updated Tier C section). What THIS block
+  -- proves permanently: a delivery already reset to pending by one replay
+  -- can never be replayed again until it returns to dead_letter -- the
+  -- actual guard the row lock makes airtight under real concurrency.
+  perform app.replay_webhook_delivery(v_delivery.id, v_admin1, 'admin');
+  begin
+    perform app.replay_webhook_delivery(v_delivery.id, v_admin1, 'admin');
+    raise exception 'assertion failed: expected webhook_delivery_not_replayable for an already-replayed (now pending) delivery';
+  exception when check_violation then
+    if sqlerrm !~ 'webhook_delivery_not_replayable' then raise; end if;
+  end;
+
+  select count(*) into v_job_count from app.jobs where payload->>'delivery_id' = v_delivery.id::text and status not in ('completed', 'dead_letter');
+  if v_job_count <> 1 then
+    raise exception 'assertion failed: expected exactly ONE live (non-terminal) job for this delivery after the rejected re-replay attempt -- the original job is dead_letter, only the single successful replay job should still be live -- got %', v_job_count;
+  end if;
+
+  raise notice 'PASS: a delivery already reset to pending by one replay can never be replayed again until it returns to dead_letter -- the guard a concurrent double-replay relies on';
 end;
 $$;
 

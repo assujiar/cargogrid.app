@@ -145,13 +145,29 @@ begin
     end;
   end;
 
+  -- Tier C Batch 3 fix: a DISABLED endpoint (same tenant) cannot be linked
+  -- either -- it would simply never receive deliveries (app.queue_webhook_
+  -- delivery''s own fan-out only selects status=active endpoints).
+  declare
+    v_disabled_endpoint record;
+  begin
+    select * into v_disabled_endpoint from app.register_webhook_endpoint(v_tenant1, 'https://n8n.iaen8n.test/webhook/disabled', '["webhook.test"]'::jsonb, v_admin1, 'admin');
+    perform app.disable_webhook_endpoint(v_disabled_endpoint.id, 'test disable', v_admin1, 'admin');
+    begin
+      perform app.create_n8n_connector(v_tenant1, 'Disabled Endpoint Link', '["OPS:View"]'::jsonb, v_disabled_endpoint.id, null, v_admin1, 'admin');
+      raise exception 'assertion failed: expected webhook_endpoint_not_active for a disabled endpoint link';
+    exception when check_violation then
+      if sqlerrm !~ 'webhook_endpoint_not_active' then raise; end if;
+    end;
+  end;
+
   begin
     perform app.create_n8n_connector(v_tenant1, 'Denied Attempt', '["OPS:View"]'::jsonb, null, null, v_staff1, 'staff');
     raise exception 'assertion failed: expected insufficient_authority for a non-admin staff member';
   exception when insufficient_privilege then null;
   end;
 
-  raise notice 'PASS: create_n8n_connector requires BOTH allowlist membership AND the creating actor''s own current RBAC for every scope; a cross-tenant webhook endpoint link and a non-admin are both denied';
+  raise notice 'PASS: create_n8n_connector requires BOTH allowlist membership AND the creating actor''s own current RBAC for every scope; a cross-tenant webhook endpoint link, a disabled-endpoint link (Tier C Batch 3 fix), and a non-admin are all denied';
 end;
 $$;
 
@@ -177,6 +193,39 @@ begin
   end if;
 
   raise notice 'PASS: revoke_n8n_connector delegates to app.revoke_api_key -- the connector''s own linking row survives, matching how a revoked app.api_keys row is itself never deleted';
+end;
+$$;
+
+\echo '>> app.rotate_n8n_connector (Tier C Batch 3 fix): composes app.rotate_api_key AND re-points app.n8n_connectors.api_key_id at the newly-minted key row -- the generic rotate must never be used for a connector, it would silently orphan the linkage'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaen8n');
+  v_admin1 uuid := '00000000-0000-0000-0000-000015000001';
+  v_endpoint_a uuid := (select id from app.webhook_endpoints where tenant_id = v_tenant1 limit 1);
+  v_created record;
+  v_rotated record;
+  v_listed record;
+begin
+  select * into v_created from app.create_n8n_connector(v_tenant1, 'Rotate Proof Connector', '["OPS:View"]'::jsonb, v_endpoint_a, null, v_admin1, 'admin');
+
+  v_rotated := app.rotate_n8n_connector(v_created.connector_id, 0, v_admin1, 'admin');
+  if v_rotated.api_key_id = v_created.api_key_id or v_rotated.raw_key is null then
+    raise exception 'assertion failed: expected rotate_n8n_connector to mint a genuinely new key row, got %', to_jsonb(v_rotated);
+  end if;
+
+  -- The REGRESSION this proves: without the fix, app.n8n_connectors.
+  -- api_key_id would still point at v_created.api_key_id -- the OLD,
+  -- immediately-revoked (overlap=0) key -- while the real new key sat
+  -- orphaned and unreachable through this console.
+  select connector_id, api_key_id, status into v_listed from app.list_n8n_connectors_for_tenant(v_tenant1, v_admin1) where connector_id = v_created.connector_id;
+  if v_listed.api_key_id <> v_rotated.api_key_id then
+    raise exception 'assertion failed: expected the connector''s own linkage to follow to the new key %, still points at %', v_rotated.api_key_id, v_listed.api_key_id;
+  end if;
+  if v_listed.status <> 'active' then
+    raise exception 'assertion failed: expected the connector''s own live-joined status to reflect the NEW (active) key, got %', v_listed.status;
+  end if;
+
+  raise notice 'PASS: rotate_n8n_connector keeps app.n8n_connectors.api_key_id pointed at whichever key is genuinely live -- no orphaned successor key, no stale console status';
 end;
 $$;
 
@@ -223,7 +272,7 @@ declare
   v_fn text;
   v_new_functions text[] := array[
     'register_n8n_allowlisted_action', 'list_n8n_action_allowlist', 'create_n8n_connector',
-    'revoke_n8n_connector', 'list_n8n_connectors_for_tenant'
+    'revoke_n8n_connector', 'rotate_n8n_connector', 'list_n8n_connectors_for_tenant'
   ];
 begin
   foreach v_fn in array v_new_functions loop

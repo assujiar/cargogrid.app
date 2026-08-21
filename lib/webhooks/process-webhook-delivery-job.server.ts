@@ -20,6 +20,15 @@
  * job's own real scheduling state -- see the migration's own design decision 2
  * for why these are two independent, deliberately-aligned-not-unified state
  * machines).
+ *
+ * Re-checks the endpoint URL's safety at dispatch time via
+ * `checkWebhookDispatchUrlIsSafe` (./ssrf-guard.server.ts, Tier C Batch 3
+ * fix) -- `app.validate_webhook_url()` only rejects a literal private IP at
+ * registration time and cannot catch a hostname that starts resolving to an
+ * internal/cloud-metadata address only later (DNS rebinding). Redirects are
+ * never auto-followed for the same reason. `checkUrlSafety` is injectable so
+ * tests can dispatch to a real local loopback server without depending on
+ * production DNS/IP-range behavior.
  */
 
 import { getWebhookDeliveryDispatchInfo, type WebhookManagementQueryRpcClient } from "../../server/queries/webhook-management.ts";
@@ -28,8 +37,11 @@ import { recordWebhookDeliveryAttempt, type ApiKeyWebhookMutationRpcClient } fro
 import { completeJob, type BackgroundJobMutationRpcClient } from "../../server/mutations/background-job.ts";
 import { recordJobFailure, type ImportExportMutationRpcClient } from "../../server/mutations/import-export.ts";
 import type { ImportExportJob } from "../../server/contracts/import-export/import-export.ts";
+import { checkWebhookDispatchUrlIsSafe, type SsrfCheckResult } from "./ssrf-guard.server.ts";
 
 const DELIVERY_TIMEOUT_MS = 10_000;
+
+export type WebhookDispatchUrlSafetyChecker = (rawUrl: string) => Promise<SsrfCheckResult>;
 
 export type ProcessWebhookDeliveryJobRpcClient = WebhookManagementQueryRpcClient & ApiKeyWebhookQueryRpcClient & ApiKeyWebhookMutationRpcClient & BackgroundJobMutationRpcClient & ImportExportMutationRpcClient;
 
@@ -59,7 +71,7 @@ function extractDeliveryId(job: ImportExportJob): string | null {
  * is a bug worth surfacing loudly rather than silently fabricating a fake
  * actor identity for the audit trail.
  */
-export async function processWebhookDeliveryJob(client: ProcessWebhookDeliveryJobRpcClient, job: ImportExportJob, workerId: string, actorLabel: string): Promise<WebhookDeliveryJobOutcome> {
+export async function processWebhookDeliveryJob(client: ProcessWebhookDeliveryJobRpcClient, job: ImportExportJob, workerId: string, actorLabel: string, checkUrlSafety: WebhookDispatchUrlSafetyChecker = checkWebhookDispatchUrlIsSafe): Promise<WebhookDeliveryJobOutcome> {
   if (!job.requestedByAuthUserId) {
     throw new Error(`webhook_retry job ${job.jobId} has no requested_by_auth_user_id -- this job was not enqueued by app.queue_webhook_delivery/send_test_webhook_delivery/replay_webhook_delivery`);
   }
@@ -92,6 +104,19 @@ export async function processWebhookDeliveryJob(client: ProcessWebhookDeliveryJo
     return { outcome: "failed", httpStatusCode: null, errorMessage };
   }
 
+  // SSRF (Tier C Batch 3 fix): app.validate_webhook_url() only rejects a
+  // LITERAL private/loopback/link-local host at registration time -- its own
+  // migration header disclosed this as unable to defend against a hostname
+  // that only resolves to an internal/cloud-metadata address at actual
+  // delivery time (DNS rebinding). Re-check here, right before the live call.
+  const urlSafety = await checkUrlSafety(dispatchInfo.endpointUrl);
+  if (!urlSafety.safe) {
+    const errorMessage = `refusing to dispatch: ${urlSafety.reason ?? "endpoint URL failed the delivery-time safety check"}`;
+    await recordWebhookDeliveryAttempt(client, { deliveryId, status: "failed", httpStatusCode: null, errorMessage, actorAuthUserId, actorLabel });
+    await recordJobFailure(client, { jobId: job.jobId, errorMessage, actorAuthUserId, actorLabel });
+    return { outcome: "failed", httpStatusCode: null, errorMessage };
+  }
+
   const timestamp = Math.floor(Date.now() / 1000);
   const payloadText = JSON.stringify(dispatchInfo.payload);
   const signature = await computeWebhookSignature(client, dispatchInfo.webhookEndpointId, payloadText, timestamp);
@@ -114,6 +139,12 @@ export async function processWebhookDeliveryJob(client: ProcessWebhookDeliveryJo
       },
       body: payloadText,
       signal: controller.signal,
+      // Never auto-follow a redirect (Tier C Batch 3 fix): the target of a
+      // redirect is never re-checked by checkUrlSafety, so following one
+      // blindly would reopen the exact SSRF gap that check exists to close.
+      // An un-followed 3xx simply fails the `success` check below like any
+      // other non-2xx response -- no special-casing needed.
+      redirect: "manual",
     });
     httpStatusCode = response.status;
     success = response.status >= 200 && response.status < 300;

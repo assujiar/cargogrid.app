@@ -103,6 +103,23 @@ export const RevokeN8nConnectorInputSchema = z.object({
 });
 export type RevokeN8nConnectorInput = z.input<typeof RevokeN8nConnectorInputSchema>;
 
+/**
+ * Tier C Batch 3 fix: unlike revoke (which updates the SAME app.api_keys row
+ * in place, so the connector's own fixed api_key_id FK never goes stale),
+ * rotate mints a brand-new app.api_keys row -- app.rotate_n8n_connector
+ * composes app.rotate_api_key AND re-points app.n8n_connectors.api_key_id at
+ * the new row, so the console's own generic RotateApiKeyForm must never be
+ * reused here (it would silently orphan the connector's own governance
+ * linkage).
+ */
+export const RotateN8nConnectorInputSchema = z.object({
+  connectorId: z.string().uuid(),
+  overlapMinutes: z.number().int().min(0).max(10080),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+});
+export type RotateN8nConnectorInput = z.input<typeof RotateN8nConnectorInputSchema>;
+
 export const ListN8nConnectorsForTenantInputSchema = z.object({
   tenantId: z.string().uuid(),
   actorAuthUserId: z.string().uuid(),

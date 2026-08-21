@@ -29,6 +29,7 @@ import {
   sendTestWebhookDeliveryAction,
   replayWebhookDeliveryAction,
   createN8nConnectorAction,
+  rotateN8nConnectorAction,
   type ApiKeyFormState,
   type VendorApiKeyFormState,
   type WebhookEndpointFormState,
@@ -465,6 +466,33 @@ export function CreateN8nConnectorForm({ tenantSlug, allowlist }: { tenantSlug: 
   );
 }
 
+/**
+ * Tier C Batch 3 fix: unlike a plain API key, rotating a connector must ALSO
+ * re-point app.n8n_connectors.api_key_id at the newly-minted key row --
+ * reusing the generic RotateApiKeyForm here would leave the connector's own
+ * governance record silently pointed at the superseded key. Revoke has no
+ * such issue (it updates the SAME row in place), so RevokeApiKeyForm is
+ * still reused unchanged below.
+ */
+function RotateN8nConnectorForm({ tenantSlug, connectorId }: { tenantSlug: string; connectorId: string }) {
+  const [state, formAction, pending] = useActionState(rotateN8nConnectorAction.bind(null, tenantSlug, connectorId), N8N_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <label htmlFor={`n8n-rotate-overlap-${connectorId}`} className="text-xs text-text-secondary">
+          Overlap (min)
+        </label>
+        <input id={`n8n-rotate-overlap-${connectorId}`} name="overlapMinutes" type="number" min={0} max={10080} defaultValue={0} className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rotating…">
+          Rotate
+        </Button>
+      </div>
+      <ErrorBanner error={state.error} />
+      {state.createdConnector ? <RawKeyCallout rawKey={state.createdConnector.rawKey} /> : null}
+    </form>
+  );
+}
+
 export function N8nConnectorList({ tenantSlug, connectors }: { tenantSlug: string; connectors: readonly N8nConnector[] }) {
   if (connectors.length === 0) {
     return <EmptyState title="No n8n connectors yet" description="Register your tenant's first n8n connector above -- it reuses the SAME API key/webhook endpoint primitives every other integration already uses." />;
@@ -494,7 +522,7 @@ export function N8nConnectorList({ tenantSlug, connectors }: { tenantSlug: strin
               <td className="p-2">
                 {connector.status === "active" ? (
                   <div className="flex flex-col gap-2">
-                    <RotateApiKeyForm tenantSlug={tenantSlug} keyId={connector.apiKeyId} />
+                    <RotateN8nConnectorForm tenantSlug={tenantSlug} connectorId={connector.connectorId} />
                     <RevokeApiKeyForm tenantSlug={tenantSlug} keyId={connector.apiKeyId} />
                   </div>
                 ) : null}

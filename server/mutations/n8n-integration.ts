@@ -7,10 +7,10 @@
  * (PLT-129), unchanged.
  */
 
-import { CreateN8nConnectorInputSchema, parseCreatedN8nConnector, type CreateN8nConnectorInput, type CreatedN8nConnector } from "../contracts/n8n-integration/n8n-integration.ts";
+import { CreateN8nConnectorInputSchema, RotateN8nConnectorInputSchema, parseCreatedN8nConnector, type CreateN8nConnectorInput, type RotateN8nConnectorInput, type CreatedN8nConnector } from "../contracts/n8n-integration/n8n-integration.ts";
 
 export interface N8nIntegrationMutationRpcClient {
-  rpc(fn: "create_n8n_connector", args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
+  rpc(fn: "create_n8n_connector" | "rotate_n8n_connector", args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
 export const N8N_INTEGRATION_KNOWN_MUTATION_ERROR_CODES = [
@@ -19,7 +19,13 @@ export const N8N_INTEGRATION_KNOWN_MUTATION_ERROR_CODES = [
   "api_key_missing_scopes",
   "n8n_scope_not_allowlisted",
   "webhook_endpoint_not_found",
+  "webhook_endpoint_not_active",
   "api_key_invalid_rate_limit",
+  "n8n_connector_not_found",
+  "api_key_not_found",
+  "api_key_not_active",
+  "api_key_already_rotated",
+  "api_key_invalid_overlap_minutes",
 ] as const;
 type KnownN8nIntegrationMutationErrorCode = (typeof N8N_INTEGRATION_KNOWN_MUTATION_ERROR_CODES)[number];
 export type N8nIntegrationMutationErrorCode = KnownN8nIntegrationMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -59,6 +65,31 @@ export async function createN8nConnector(client: N8nIntegrationMutationRpcClient
   const row = Array.isArray(data) ? data[0] : data;
   if (!row || typeof row !== "object") {
     throw new N8nIntegrationMutationError("invalid_response", "create_n8n_connector returned no row");
+  }
+  return parseCreatedN8nConnector(row as Record<string, unknown>);
+}
+
+/**
+ * Tier C Batch 3 fix: app.rotate_n8n_connector composes app.rotate_api_key
+ * (the connector's own underlying credential) AND re-points
+ * app.n8n_connectors.api_key_id at the newly-minted key row -- never call
+ * the generic rotateApiKey directly for a connector, it would leave the
+ * connector's own governance linkage pointed at the superseded key.
+ */
+export async function rotateN8nConnector(client: N8nIntegrationMutationRpcClient, input: RotateN8nConnectorInput): Promise<CreatedN8nConnector> {
+  const parsedInput = RotateN8nConnectorInputSchema.parse(input);
+  const { data, error } = await client.rpc("rotate_n8n_connector", {
+    p_connector_id: parsedInput.connectorId,
+    p_overlap_minutes: parsedInput.overlapMinutes,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_actor_label: parsedInput.actorLabel,
+  });
+  if (error) {
+    throw new N8nIntegrationMutationError(classifyError(error.message), error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") {
+    throw new N8nIntegrationMutationError("invalid_response", "rotate_n8n_connector returned no row");
   }
   return parseCreatedN8nConnector(row as Record<string, unknown>);
 }
