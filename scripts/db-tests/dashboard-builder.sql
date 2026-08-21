@@ -248,11 +248,16 @@ begin
       null; -- expected
   end;
 
+  -- Tier C fix (C-05 discipline): a tenant-2 actor has ZERO relationship to
+  -- tenant-1's own dashboard, so this now raises the SAME dashboard_not_found
+  -- a genuinely missing id would produce, never a tenant-id-disclosing
+  -- insufficient_authority. (Before the Tier C fix this raised
+  -- insufficient_privilege, which is exactly the oracle the fix closes.)
   begin
     perform app.rollback_tenant_dashboard(v_dashboard.id, v_v1_id, '00000000-0000-0000-0000-000005000004', 'tester');
-    raise exception 'assertion failed: expected insufficient_privilege -- a tenant-2 actor may not rollback a tenant-1 dashboard';
+    raise exception 'assertion failed: expected no_data_found -- a tenant-2 actor with zero relationship to tenant-1 must see the same not_found a missing id would produce, never a disclosing insufficient_authority';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null; -- expected
   end;
 
@@ -269,6 +274,50 @@ begin
   if v_dashboard.current_version_id <> v_v1_id then
     raise exception 'assertion failed: expected rollback to point current_version_id back at version 1';
   end if;
+end;
+$$;
+
+\echo '>> Tier C fix regression (C-05 discipline): app.add_dashboard_widget/app.remove_dashboard_widget/app.publish_tenant_dashboard_version all now fold a cross-tenant caller into the SAME not_found a genuinely missing id would produce, never a tenant-id-disclosing insufficient_authority (mirrors app.rollback_tenant_dashboard, fixed above)'
+do $$
+declare
+  v_tenant1 uuid;
+  v_dashboard app.tenant_dashboards;
+  v_draft_version_id uuid;
+  v_widget_id uuid;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'iaedashco');
+  select * into v_dashboard from app.tenant_dashboards where tenant_id = v_tenant1 and name = 'Ops Overview';
+  v_draft_version_id := (select id from app.tenant_dashboard_versions where dashboard_id = v_dashboard.id and version_number = 2);
+  select w.id into v_widget_id from app.tenant_dashboard_widgets w where w.dashboard_version_id = v_draft_version_id limit 1;
+
+  begin
+    perform app.add_dashboard_widget(v_draft_version_id, 'finance_billing_summary', 'x', '{}'::jsonb, '{}'::jsonb, '00000000-0000-0000-0000-000005000004', 'tester');
+    raise exception 'assertion failed: expected no_data_found -- a tenant-2 actor with zero relationship to tenant-1''s own dashboard version must see the same not_found a missing id would produce';
+  exception
+    when no_data_found then null;
+  end;
+
+  begin
+    perform app.remove_dashboard_widget(v_widget_id, '00000000-0000-0000-0000-000005000004', 'tester');
+    raise exception 'assertion failed: expected no_data_found -- a tenant-2 actor with zero relationship to tenant-1''s own widget must see the same not_found a missing id would produce';
+  exception
+    when no_data_found then null;
+  end;
+
+  begin
+    perform app.publish_tenant_dashboard_version(v_dashboard.id, '00000000-0000-0000-0000-000005000004', 'tester');
+    raise exception 'assertion failed: expected no_data_found -- a tenant-2 actor with zero relationship to tenant-1''s own dashboard must see the same not_found a missing id would produce';
+  exception
+    when no_data_found then null;
+  end;
+
+  -- a genuinely missing id produces the IDENTICAL error class for all four functions -- the oracle is closed, not merely relabelled
+  begin
+    perform app.add_dashboard_widget('00000000-0000-0000-0000-0000000000ff', 'finance_billing_summary', 'x', '{}'::jsonb, '{}'::jsonb, '00000000-0000-0000-0000-000005000002', 'tester');
+    raise exception 'assertion failed: expected no_data_found for a genuinely nonexistent dashboard_version_id';
+  exception
+    when no_data_found then null;
+  end;
 end;
 $$;
 

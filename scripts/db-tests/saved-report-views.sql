@@ -2,7 +2,11 @@
 -- Report, Prompt 332, CG-S14-IAE-004) -- run via `pnpm run db:test` against a
 -- real, disposable Postgres database.
 --
--- Fixture identifier range: 00000000-0000-0000-0000-000006000001..004.
+-- Fixture identifier range: 00000000-0000-0000-0000-000006000001..005.
+-- Tier C fix pass (Batch 1 IAE-002..006 review): 000006000005 added -- a
+-- customer_user-layer portal actor in iaesavedco, feeding the two new
+-- regression blocks this Tier C pass added after the original
+-- list_saved_report_views test.
 -- Grep-verified unclaimed against every other *.sql fixture in this directory
 -- before use. Registers its own distinct test report type
 -- (`iae_saved_view_test_report`) rather than depending on
@@ -30,7 +34,8 @@ begin
     ('00000000-0000-0000-0000-000006000001', 'supreme@iaesavedco.test'),
     ('00000000-0000-0000-0000-000006000002', 'configurer@iaesavedco.test'),
     ('00000000-0000-0000-0000-000006000003', 'viewer@iaesavedco.test'),
-    ('00000000-0000-0000-0000-000006000004', 'member@iaesavedco2.test');
+    ('00000000-0000-0000-0000-000006000004', 'member@iaesavedco2.test'),
+    ('00000000-0000-0000-0000-000006000005', 'portal@iaesavedco.test');
 
   perform app.grant_principal_membership('00000000-0000-0000-0000-000006000001', 'supreme_admin', null, null, 'tester');
 
@@ -49,6 +54,14 @@ begin
 
   perform app.invite_user(v_tenant2, '00000000-0000-0000-0000-000006000004', 'member@iaesavedco2.test', 'Beta Member', null, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'member@iaesavedco2.test'), 'active', 'onboarded', 'tester');
+
+  -- Tier C fix regression fixture: a genuine customer_user-layer (portal)
+  -- principal in tenant1, with real active tenant membership -- used to
+  -- prove app.create_saved_report_view/app.list_saved_report_views both now
+  -- exclude this layer.
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000006000005', 'portal@iaesavedco.test', 'Portal Customer', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'portal@iaesavedco.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000006000005', 'customer_user', v_tenant1, 'iae-saved-portal-ref', 'tester');
 
   v_configurer_role := (app.create_role(v_tenant1, 'View Configurer', 'REP:Configure', 'tester')).id;
   v_configurer_draft := app.create_role_version(v_configurer_role, 'tester');
@@ -351,6 +364,32 @@ begin
   if v_names is not null and (v_names @> array['My Billing View'] or v_names @> array['Team Billing View (renamed)']) then
     raise exception 'assertion failed: tenant-2''s own list must never contain tenant-1''s rows';
   end if;
+
+  -- Tier C fix regression (finding 8, spec-compliance): a customer_user-layer
+  -- (portal) principal, with real active tenant1 membership, must NOT
+  -- receive tenant1's own tenant-shared saved view configuration through
+  -- this RPC -- mirrors the table's own RLS policy, which already denied
+  -- this on a direct SELECT.
+  select array_agg(name) into v_names from app.list_saved_report_views(v_tenant1, null, '00000000-0000-0000-0000-000006000005', 25, null);
+  if v_names is not null and v_names @> array['Team Billing View (renamed)'] then
+    raise exception 'assertion failed: a customer_user-layer principal must never receive a tenant-shared saved view through app.list_saved_report_views -- the Tier C fix has regressed';
+  end if;
+end;
+$$;
+
+\echo '>> Tier C fix regression (finding 9, spec-compliance): app.create_saved_report_view''s own private-view branch now actually enforces its own always-documented "active, non-customer_user-layer tenant membership" contract'
+do $$
+begin
+  begin
+    perform app.create_saved_report_view(
+      (select id from app.tenants where slug = 'iaesavedco'), 'finance_billing_summary', 'Portal Should Be Denied', null,
+      '["invoiceNumber"]'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, 'private', null,
+      '00000000-0000-0000-0000-000006000005', 'tester'
+    );
+    raise exception 'assertion failed: expected insufficient_privilege -- a customer_user-layer principal has real active tenant membership but this function''s own comment always documented that a private view requires the NON-customer_user-layer half too';
+  exception
+    when insufficient_privilege then null;
+  end;
 end;
 $$;
 

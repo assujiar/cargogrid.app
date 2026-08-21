@@ -7,7 +7,11 @@
 -- finance-dashboard.sql, procurement-vendor-dashboard-reports.sql) already
 -- cover for the original catalogue behavior -- not re-tested here.
 --
--- Fixture identifier range: 00000000-0000-0000-0000-000004000001..005.
+-- Fixture identifier range: 00000000-0000-0000-0000-000004000001..006.
+-- Tier C fix pass (Batch 1 IAE-002..006 review): 000004000006 added -- a
+-- REP:Export-only (no COM:Export) holder in iaereportco, feeding the new
+-- regression block this Tier C pass added after the original
+-- cancel_report_run test.
 -- A first draft picked 00000000-0000-0000-0000-000000033001..005, which
 -- collided with the already-claimed range scripts/db-tests/finance-idempotent-posting.sql
 -- uses -- caught only by a full cumulative `db:test` run (every file shares one
@@ -27,13 +31,16 @@ declare
   v_exporter_draft app.role_versions;
   v_t2_role uuid;
   v_t2_draft app.role_versions;
+  v_rep_exporter_role uuid;
+  v_rep_exporter_draft app.role_versions;
 begin
   insert into auth.users (id, email) values
     ('00000000-0000-0000-0000-000004000001', 'supreme@iaereportco.test'),
     ('00000000-0000-0000-0000-000004000002', 'tenantadmin@iaereportco.test'),
     ('00000000-0000-0000-0000-000004000003', 'member@iaereportco.test'),
     ('00000000-0000-0000-0000-000004000004', 'exporter@iaereportco.test'),
-    ('00000000-0000-0000-0000-000004000005', 'member@iaereportco2.test');
+    ('00000000-0000-0000-0000-000004000005', 'member@iaereportco2.test'),
+    ('00000000-0000-0000-0000-000004000006', 'repexporter@iaereportco.test');
 
   perform app.grant_principal_membership('00000000-0000-0000-0000-000004000001', 'supreme_admin', null, null, 'tester');
 
@@ -57,6 +64,12 @@ begin
   perform app.invite_user(v_tenant2, '00000000-0000-0000-0000-000004000005', 'member@iaereportco2.test', 'Beta Member', null, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'member@iaereportco2.test'), 'active', 'onboarded', 'tester');
 
+  -- Tier C fix regression fixture: REP:Export-only, deliberately NO
+  -- COM:Export -- proves app.cancel_report_run's widened override authority
+  -- (finding 12) without depending on the legacy COM:Export path at all.
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000004000006', 'repexporter@iaereportco.test', 'REP Exporter', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'repexporter@iaereportco.test'), 'active', 'onboarded', 'tester');
+
   v_member_role := (app.create_role(v_tenant1, 'Report Member', 'view only, no export', 'tester')).id;
   v_member_draft := app.create_role_version(v_member_role, 'tester');
   perform app.set_role_version_permissions(
@@ -78,6 +91,21 @@ begin
   perform app.publish_role_version(v_exporter_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_exporter_role and status = 'published'),
     '00000000-0000-0000-0000-000004000004', '00000000-0000-0000-0000-000004000002', 'tester');
+
+  -- Tier C fix regression fixture role: REP:Export only, deliberately NO
+  -- COM:Export at all -- proves app.cancel_report_run's widened OR-fallback
+  -- (finding 12) actually reaches the new REP:Export branch, not merely a
+  -- re-exercise of the pre-existing COM:Export path.
+  v_rep_exporter_role := (app.create_role(v_tenant1, 'REP Exporter', 'REP:Export only, no COM:Export -- Tier C regression fixture', 'tester')).id;
+  v_rep_exporter_draft := app.create_role_version(v_rep_exporter_role, 'tester');
+  perform app.set_role_version_permissions(
+    v_rep_exporter_draft.id,
+    array(select id from app.permissions where resource_module_code = 'REP' and action = 'Export'),
+    'tester'
+  );
+  perform app.publish_role_version(v_rep_exporter_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_rep_exporter_role and status = 'published'),
+    '00000000-0000-0000-0000-000004000006', '00000000-0000-0000-0000-000004000002', 'tester');
 
   v_t2_role := (app.create_role(v_tenant2, 'Beta Role', 'cross-tenant isolation fixture', 'tester')).id;
   v_t2_draft := app.create_role_version(v_t2_role, 'tester');
@@ -263,6 +291,7 @@ declare
   v_tenant2 uuid;
   v_export_run app.report_runs;
   v_second_export app.report_runs;
+  v_third_export app.report_runs;
   v_cancelled app.report_runs;
 begin
   v_tenant1 := (select id from app.tenants where slug = 'iaereportco');
@@ -317,6 +346,19 @@ begin
   select * into v_cancelled from app.cancel_report_run(v_second_export.id, '00000000-0000-0000-0000-000004000001', 'tester');
   if v_cancelled.status <> 'failed' then
     raise exception 'assertion failed: expected Supreme Admin to cancel any tenant''s run regardless of requester';
+  end if;
+
+  -- Tier C fix regression (finding 12, cross-prompt-integration): a REP:Export
+  -- holder with NO COM:Export at all may also cancel a run it did not
+  -- request -- proves the widened COM:Export-OR-REP:Export fallback actually
+  -- reaches the new REP:Export branch, not merely a re-exercise of the
+  -- pre-existing COM:Export path already covered above.
+  select * into v_third_export from app.enqueue_report_export(
+    v_tenant1, 'iae_test_report', jsonb_build_object('currency', 'IDR'), '00000000-0000-0000-0000-000004000004', 'tester'
+  );
+  select * into v_cancelled from app.cancel_report_run(v_third_export.id, '00000000-0000-0000-0000-000004000006', 'tester');
+  if v_cancelled.status <> 'failed' or v_cancelled.error_reason <> 'cancelled_by_requester' then
+    raise exception 'assertion failed: expected a REP:Export holder (no COM:Export at all, not the requester) to cancel a still-queued run via the widened override authority';
   end if;
 end;
 $$;

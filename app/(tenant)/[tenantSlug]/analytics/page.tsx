@@ -53,7 +53,11 @@ export default async function AnalyticsPage({ params }: { params: Promise<{ tena
     { key: "usageDate", header: "Date", render: (row) => row.usageDate },
     { key: "previewCount", header: "Previews", render: (row) => row.previewCount },
     { key: "exportCount", header: "Exports", render: (row) => row.exportCount },
-    { key: "failedCount", header: "Failed", render: (row) => row.failedCount },
+    // Counts every non-completed run, including a requester's own
+    // cancellation alongside a genuine failure (app.report_runs has no
+    // separate "cancelled" status) -- disclosed in the header rather than
+    // claiming a precision the underlying data doesn't have.
+    { key: "failedCount", header: "Failed / Cancelled", render: (row) => row.failedCount },
   ];
 
   const nowMs = new Date().getTime();

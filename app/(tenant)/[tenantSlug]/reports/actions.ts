@@ -37,7 +37,10 @@ export async function cancelReportRunAction(
     });
   } catch (error) {
     if (error instanceof ReportMutationError && error.code === "insufficient_authority") {
-      return { error: "You may only cancel a report you requested yourself.", success: false };
+      return {
+        error: "You may only cancel a report you requested yourself, unless you hold report export authority.",
+        success: false,
+      };
     }
     if (error instanceof ReportMutationError && error.code === "report_run_not_cancellable") {
       return { error: "This run is no longer queued and can't be cancelled.", success: false };

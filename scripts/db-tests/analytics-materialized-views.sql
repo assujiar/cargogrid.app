@@ -2,11 +2,16 @@
 -- Views, Prompt 333, CG-S14-IAE-005) -- run via `pnpm run db:test` against a
 -- real, disposable Postgres database.
 --
--- Fixture identifier range: 00000000-0000-0000-0000-000007000001..003.
+-- Fixture identifier range: 00000000-0000-0000-0000-000007000001..004.
 -- Grep-verified unclaimed against every other *.sql fixture in this
 -- directory before use. Uses finance_billing_summary (empty parameter
 -- schema, never retired by any fixture -- grep-verified) as the report code
 -- behind real app.record_report_run calls that feed app.mv_report_usage_daily.
+--
+-- Tier C fix pass (Batch 1 IAE-002..006 review): 000007000004 added -- a
+-- customer_user-layer portal actor in iaeanalyco, feeding the new regression
+-- block this Tier C pass added after the original get_report_usage_daily
+-- test.
 
 \set ON_ERROR_STOP on
 
@@ -19,7 +24,8 @@ begin
   insert into auth.users (id, email) values
     ('00000000-0000-0000-0000-000007000001', 'supreme@iaeanalyco.test'),
     ('00000000-0000-0000-0000-000007000002', 'member@iaeanalyco.test'),
-    ('00000000-0000-0000-0000-000007000003', 'member@iaeanalyco2.test');
+    ('00000000-0000-0000-0000-000007000003', 'member@iaeanalyco2.test'),
+    ('00000000-0000-0000-0000-000007000004', 'portal@iaeanalyco.test');
 
   perform app.grant_principal_membership('00000000-0000-0000-0000-000007000001', 'supreme_admin', null, null, 'tester');
 
@@ -36,6 +42,15 @@ begin
 
   perform app.invite_user(v_tenant2, '00000000-0000-0000-0000-000007000003', 'member@iaeanalyco2.test', 'Beta Member', null, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'member@iaeanalyco2.test'), 'active', 'onboarded', 'tester');
+
+  -- Tier C fix regression fixture: a genuine customer_user-layer (portal)
+  -- principal in tenant1, with real active tenant membership -- used to
+  -- prove app.get_report_usage_daily now excludes this layer, the ONLY real
+  -- tenant-isolation mechanism for app.mv_report_usage_daily (Postgres has
+  -- no RLS on a materialized view).
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000007000004', 'portal@iaeanalyco.test', 'Portal Customer', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'portal@iaeanalyco.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000007000004', 'customer_user', v_tenant1, 'iae-analytics-portal-ref', 'tester');
 
   perform app.record_report_run(v_tenant1, 'finance_billing_summary', '{}'::jsonb, 3, array[]::text[], '00000000-0000-0000-0000-000007000002', 'tester');
   perform app.record_report_run(v_tenant1, 'finance_billing_summary', '{}'::jsonb, 5, array[]::text[], '00000000-0000-0000-0000-000007000002', 'tester');
@@ -127,6 +142,18 @@ begin
   begin
     perform app.get_report_usage_daily((select id from app.tenants where slug = 'iaeanalyco'), '00000000-0000-0000-0000-000007000003', null, null, null);
     raise exception 'assertion failed: expected insufficient_privilege for a cross-tenant read attempt';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  -- Tier C fix regression (finding 10, security-rls-tenant): a
+  -- customer_user-layer (portal) principal, with real active tenant1
+  -- membership, must NOT read tenant1's own internal report-usage
+  -- analytics through the SOLE tenant-isolation mechanism for this
+  -- materialized view.
+  begin
+    perform app.get_report_usage_daily((select id from app.tenants where slug = 'iaeanalyco'), '00000000-0000-0000-0000-000007000004', null, null, null);
+    raise exception 'assertion failed: expected insufficient_privilege -- a customer_user-layer principal has real active tenant membership but must never read internal report-usage analytics -- the Tier C fix has regressed';
   exception
     when insufficient_privilege then null;
   end;

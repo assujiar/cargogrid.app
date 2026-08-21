@@ -83,6 +83,13 @@ export const ReportUsageDailyRowSchema = z.object({
   usageDate: z.string(),
   previewCount: z.coerce.number().int().nonnegative(),
   exportCount: z.coerce.number().int().nonnegative(),
+  /**
+   * Counts every non-completed export run, including a requester's own
+   * cancellation (app.cancel_report_run) alongside a genuine failure -- the
+   * underlying app.report_runs.status has no separate "cancelled" state.
+   * Not narrowed here (a schema/status change is out of this fix's own
+   * scope); the presentation layer discloses this instead.
+   */
   failedCount: z.coerce.number().int().nonnegative(),
   lastRunAt: z.string(),
 });

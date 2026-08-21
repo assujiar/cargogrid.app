@@ -2,12 +2,18 @@
 -- CG-S14-IAE-006) -- run via `pnpm run db:test` against a real, disposable
 -- Postgres database.
 --
--- Fixture identifier range: 00000000-0000-0000-0000-000008000001..005.
+-- Fixture identifier range: 00000000-0000-0000-0000-000008000001..006.
 -- Grep-verified unclaimed against every other *.sql fixture in this
 -- directory before use. Uses finance_billing_summary (empty schema, never
 -- retired by any fixture) plus a self-registered/self-retired test report
 -- type, mirroring the lesson IAE-004's own fixture already applied: never
 -- depend on another file's own incidental report-type state.
+--
+-- Tier C fix pass (Batch 1 IAE-002..006 review): 000008000006 added below
+-- (a customer_user-layer portal actor in iaeschedco) plus a tenant_admin
+-- grant reused on the existing 000008000005 fixture user, both feeding the
+-- new regression blocks this Tier C pass added -- see the two new \echo
+-- sections after the original re-trigger/duplicate-delivery block.
 
 \set ON_ERROR_STOP on
 
@@ -24,7 +30,8 @@ begin
     ('00000000-0000-0000-0000-000008000002', 'configurer@iaeschedco.test'),
     ('00000000-0000-0000-0000-000008000003', 'recipienta@iaeschedco.test'),
     ('00000000-0000-0000-0000-000008000004', 'recipientb@iaeschedco.test'),
-    ('00000000-0000-0000-0000-000008000005', 'member@iaeschedco2.test');
+    ('00000000-0000-0000-0000-000008000005', 'member@iaeschedco2.test'),
+    ('00000000-0000-0000-0000-000008000006', 'portal@iaeschedco.test');
 
   perform app.grant_principal_membership('00000000-0000-0000-0000-000008000001', 'supreme_admin', null, null, 'tester');
 
@@ -45,6 +52,21 @@ begin
 
   perform app.invite_user(v_tenant2, '00000000-0000-0000-0000-000008000005', 'member@iaeschedco2.test', 'Beta Member', null, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'member@iaeschedco2.test'), 'active', 'onboarded', 'tester');
+  -- Tier C fix regression fixture: this SAME tenant2 member is ALSO granted
+  -- tenant_admin support-grant authority -- exactly the ordinary,
+  -- already-shipped authority (app.is_support_grant_authority) the Critical
+  -- config_version-scoping finding used to publish a rogue cross-tenant
+  -- override via the already-shipped, generic Configuration Engine RPCs, no
+  -- special privilege needed.
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000008000005', 'tenant_admin', v_tenant2, null, 'tester');
+
+  -- Tier C fix regression fixture: a genuine customer_user-layer (portal)
+  -- principal in tenant1, with real active tenant membership -- used to
+  -- prove app.add_scheduled_report_recipient/app.run_scheduled_report now
+  -- both exclude this layer from "internal tenant member" recipient status.
+  perform app.invite_user(v_tenant1, '00000000-0000-0000-0000-000008000006', 'portal@iaeschedco.test', 'Portal Customer', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'portal@iaeschedco.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000008000006', 'customer_user', v_tenant1, 'iae-sched-portal-ref', 'tester');
 
   v_configurer_role := (app.create_role(v_tenant1, 'Report Scheduler', 'REP:Configure', 'tester')).id;
   v_configurer_draft := app.create_role_version(v_configurer_role, 'tester');
@@ -212,6 +234,183 @@ begin
   if v_job_count <> 1 then
     raise exception 'assertion failed: expected exactly ONE app.jobs row across both triggers of the same due occurrence, got %', v_job_count;
   end if;
+
+  -- Tier C fix regression (finding 2, spec-compliance): the re-triggered
+  -- call for the SAME occurrence must reuse the SAME scheduled_report_runs
+  -- row (occurrence-scoped upsert), not create a second run-history row.
+  if v_run2.id <> v_run.id then
+    raise exception 'assertion failed: expected the SAME scheduled_report_runs row (occurrence-scoped upsert) on a re-trigger of the identical due occurrence, got a different run id (% vs %)', v_run2.id, v_run.id;
+  end if;
+  select count(*) into v_job_count from app.scheduled_report_runs where scheduled_report_id = v_schedule_id and job_id = v_run.job_id;
+  if v_job_count <> 1 then
+    raise exception 'assertion failed: expected exactly ONE scheduled_report_runs row across both triggers of the same due occurrence, got %', v_job_count;
+  end if;
+
+  -- Tier C fix regression (finding 2, spec-compliance): the re-triggered
+  -- call must NOT re-notify the already-notified recipient -- the dedupe key
+  -- is now occurrence-scoped, not keyed off the (previously ephemeral)
+  -- v_run.id.
+  select count(*) into v_notification_count from app.notifications
+  where recipient_auth_user_id = '00000000-0000-0000-0000-000008000003' and notification_type_code = 'scheduled_report_ready';
+  if v_notification_count <> 1 then
+    raise exception 'assertion failed: expected STILL exactly one real notification for the reauthorized recipient after a re-triggered call for the SAME occurrence (no duplicate delivery), got %', v_notification_count;
+  end if;
+
+  -- Tier C fix regression (finding 6, cross-prompt-integration): the run is
+  -- now linked into the SAME app.report_runs evidence trail IAE-002's
+  -- Report Library and IAE-005's mv_report_usage_daily already read --
+  -- exactly one row, idempotent on job_id across both triggers.
+  select count(*) into v_job_count from app.report_runs where job_id = v_run.job_id and tenant_id = v_tenant1 and report_type_code = 'finance_billing_summary';
+  if v_job_count <> 1 then
+    raise exception 'assertion failed: expected exactly ONE app.report_runs row linked to this schedule''s own job_id (idempotent across both triggers), got %', v_job_count;
+  end if;
+end;
+$$;
+
+\echo '>> Tier C fix regression (finding 4, security-rls-tenant): a customer_user-layer (portal) principal is never a valid scheduled-report recipient -- rejected at add-time, and excluded even if present at run-time (defense in depth for pre-existing rows)'
+do $$
+declare
+  v_tenant1 uuid;
+  v_schedule_id uuid;
+  v_run app.scheduled_report_runs;
+  v_notification_count integer;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'iaeschedco');
+  v_schedule_id := (select id from app.scheduled_reports where tenant_id = v_tenant1 and name = 'Daily Billing Summary');
+
+  begin
+    perform app.add_scheduled_report_recipient(v_schedule_id, '00000000-0000-0000-0000-000008000006', '00000000-0000-0000-0000-000008000002', 'tester');
+    raise exception 'assertion failed: expected scheduled_report_recipient_not_member -- a customer_user-layer (portal) principal has real active tenant membership but must never be added as an internal-report recipient';
+  exception
+    when check_violation then null;
+  end;
+
+  -- Defense in depth: even if a portal-layer recipient row already exists
+  -- (e.g. pre-dating this fix, or a layer change after add-time), the LIVE
+  -- reauthorization loop in app.run_scheduled_report must exclude them at
+  -- EVERY run, never just at add time -- direct fixture insert, bypassing
+  -- the (now correctly rejecting) RPC, mirrors this repository's own
+  -- "Direct fixture inserts" precedent for simulating pre-existing state.
+  insert into app.scheduled_report_recipients (scheduled_report_id, recipient_auth_user_id, added_by_auth_user_id)
+  values (v_schedule_id, '00000000-0000-0000-0000-000008000006', '00000000-0000-0000-0000-000008000002');
+
+  select * into v_run from app.run_scheduled_report(v_schedule_id, '00000000-0000-0000-0000-000008000002', 'tester');
+  -- recipients: A (active, real member), B (revoked earlier in this file), portal (customer_user-layer)
+  if v_run.recipients_total <> 3 or v_run.recipients_reauthorized <> 1 or v_run.recipients_denied <> 2 then
+    raise exception 'assertion failed: expected total=3/reauth=1/denied=2 (B revoked + portal customer_user-layer both denied), got total=% reauth=% denied=%', v_run.recipients_total, v_run.recipients_reauthorized, v_run.recipients_denied;
+  end if;
+
+  select count(*) into v_notification_count from app.notifications
+  where recipient_auth_user_id = '00000000-0000-0000-0000-000008000006' and notification_type_code = 'scheduled_report_ready';
+  if v_notification_count <> 0 then
+    raise exception 'assertion failed: expected ZERO notifications ever queued to a customer_user-layer recipient, got %', v_notification_count;
+  end if;
+
+  delete from app.scheduled_report_recipients where scheduled_report_id = v_schedule_id and recipient_auth_user_id = '00000000-0000-0000-0000-000008000006';
+end;
+$$;
+
+\echo '>> Tier C fix regression (Critical, finding 1, security-rls-tenant): app.run_scheduled_report resolves the notification config_version via the tenant-scoped app.resolve_config -- a rogue tenant-scoped override published by an ORDINARY tenant_admin in a completely unrelated tenant (iaeschedco2, using already-shipped, generic Configuration Engine RPCs, no special privilege needed) must NEVER be picked up by iaeschedco''s own schedule'
+do $$
+declare
+  v_tenant1 uuid;
+  v_tenant2 uuid;
+  v_draft app.config_versions;
+  v_schedule_id uuid;
+  v_run app.scheduled_report_runs;
+  v_notif app.notifications;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'iaeschedco');
+  v_tenant2 := (select id from app.tenants where slug = 'iaeschedco2');
+
+  select * into v_draft from app.create_config_draft(
+    'notification:scheduled_report_ready', v_tenant2, 'tenant', null,
+    '00000000-0000-0000-0000-000008000005', 'tester'
+  );
+  perform app.set_config_items(
+    v_draft.id,
+    jsonb_build_array(
+      jsonb_build_object('key', 'channels', 'value', '["in_app"]'::jsonb),
+      jsonb_build_object('key', 'default_locale', 'value', '"en"'::jsonb),
+      jsonb_build_object('key', 'templates', 'value', jsonb_build_object('en', jsonb_build_object('subject', 'TIER-C-LEAK-MARKER-TENANT2', 'body', 'this must never reach tenant1')))
+    ),
+    '00000000-0000-0000-0000-000008000005', 'tester'
+  );
+  perform app.publish_config_version(v_draft.id, '00000000-0000-0000-0000-000008000005', now(), 'tester');
+
+  v_schedule_id := (select id from app.scheduled_reports where tenant_id = v_tenant1 and name = 'Daily Billing Summary');
+  select * into v_run from app.run_scheduled_report(v_schedule_id, '00000000-0000-0000-0000-000008000002', 'tester');
+
+  select * into v_notif from app.notifications
+  where recipient_auth_user_id = '00000000-0000-0000-0000-000008000003' and notification_type_code = 'scheduled_report_ready'
+  order by created_at desc limit 1;
+  if v_notif.subject = 'TIER-C-LEAK-MARKER-TENANT2' then
+    raise exception 'assertion failed: tenant1''s own recipient received tenant2''s own rogue, unscoped config_version override -- the Critical config-scoping fix has regressed';
+  end if;
+  if v_notif.subject <> 'Your scheduled report is ready' then
+    raise exception 'assertion failed: expected tenant1''s own recipient to still receive the real, global template subject, got %', v_notif.subject;
+  end if;
+end;
+$$;
+
+\echo '>> Tier C fix regression (finding 3, correctness-concurrency): real, genuinely concurrent OS-process run race for the SAME due occurrence -- exactly one occurrence is ever processed (never a silent double-advance that skips the real next due date, as a live two-session reproduction against the pre-fix function once showed)'
+select id as sched_race_schedule_id, next_run_at as sched_race_before_next_run_at
+from app.scheduled_reports
+where tenant_id = (select id from app.tenants where slug = 'iaeschedco') and name = 'Daily Billing Summary'
+\gset
+
+select current_database() as pg_test_db \gset
+
+\set sched_race_sql_a 'select (app.run_scheduled_report(''' :sched_race_schedule_id ''', ''00000000-0000-0000-0000-000008000002'', ''tester'')).id;'
+\set sched_race_sql_b 'select (app.run_scheduled_report(''' :sched_race_schedule_id ''', ''00000000-0000-0000-0000-000008000002'', ''tester'')).id;'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :sched_race_sql_a
+\setenv RACE_SQL_B :sched_race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-scheduled-report-run-race-a.out
+\setenv RACE_OUT_B /tmp/cargogrid-scheduled-report-run-race-b.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+-- psql does not interpolate :variables inside a do $$ ... $$ body (confirmed
+-- empirically, matches advanced-tms-wms-picking.sql's own identical
+-- disclosure) -- stash the pre-race next_run_at into a session GUC via
+-- set_config (a plain, non-do-block statement, where :'var' interpolation
+-- does apply), then read it back with current_setting inside the do block.
+select set_config('cargogrid.sched_race_before_next_run_at', :'sched_race_before_next_run_at', false);
+
+do $$
+declare
+  v_schedule_id uuid := (select id from app.scheduled_reports where tenant_id = (select id from app.tenants where slug = 'iaeschedco') and name = 'Daily Billing Summary');
+  v_before_next_run_at timestamptz := current_setting('cargogrid.sched_race_before_next_run_at')::timestamptz;
+  v_schedule app.scheduled_reports;
+  v_run_count_for_occurrence integer;
+  v_job_count_for_occurrence integer;
+  v_expected_next_run_at timestamptz;
+begin
+  select * into v_schedule from app.scheduled_reports where id = v_schedule_id;
+
+  select count(*) into v_run_count_for_occurrence from app.scheduled_report_runs
+  where scheduled_report_id = v_schedule_id and occurrence_at = v_before_next_run_at;
+  if v_run_count_for_occurrence <> 1 then
+    raise exception 'CRITICAL: two genuinely concurrent OS psql processes racing to run the SAME due occurrence (%) produced % scheduled_report_runs rows for it, expected exactly 1 -- see the helper''s own printed output above for both processes'' own captured outcome', v_before_next_run_at, v_run_count_for_occurrence;
+  end if;
+
+  select count(*) into v_job_count_for_occurrence from app.jobs
+  where job_type = 'report_generation'
+    and idempotency_key = 'scheduled-report-' || v_schedule_id || '-' || to_char(v_before_next_run_at, 'YYYYMMDDHH24MI');
+  if v_job_count_for_occurrence <> 1 then
+    raise exception 'CRITICAL: two genuinely concurrent OS psql processes racing to run the SAME due occurrence (%) produced % app.jobs rows for it, expected exactly 1', v_before_next_run_at, v_job_count_for_occurrence;
+  end if;
+
+  v_expected_next_run_at := app.compute_scheduled_report_next_run(
+    v_schedule.cron_minute, v_schedule.cron_hour, v_schedule.cron_day_of_month, v_schedule.cron_day_of_week, v_schedule.timezone, v_before_next_run_at
+  );
+  if v_schedule.next_run_at <> v_expected_next_run_at then
+    raise exception 'CRITICAL: two genuinely concurrent OS psql processes racing to run the SAME due occurrence (%) advanced next_run_at to % instead of exactly one real step forward (%) -- a silent double-advance would skip a real due occurrence entirely', v_before_next_run_at, v_schedule.next_run_at, v_expected_next_run_at;
+  end if;
+
+  raise notice 'PASS: two genuinely concurrent OS psql processes raced to trigger app.run_scheduled_report for the SAME due occurrence (%) -- exactly one scheduled_report_runs row, exactly one app.jobs row, next_run_at advanced by exactly one real step (never silently double-advanced/skipped); see the helper''s own printed output above for both processes'' own captured output', v_before_next_run_at;
 end;
 $$;
 
@@ -249,11 +448,15 @@ begin
   v_tenant1 := (select id from app.tenants where slug = 'iaeschedco');
   v_schedule_id := (select id from app.scheduled_reports where tenant_id = v_tenant1 and name = 'Daily Billing Summary');
 
+  -- Tier C fix (C-05 discipline): tenant2's own actor has ZERO relationship
+  -- to tenant1's own schedule, so this now raises the SAME
+  -- scheduled_report_not_found a genuinely missing id would produce, never
+  -- a tenant-id-disclosing insufficient_authority.
   begin
     perform app.set_scheduled_report_status(v_schedule_id, 'paused', '00000000-0000-0000-0000-000008000005', 'tester');
-    raise exception 'assertion failed: expected insufficient_privilege for a cross-tenant status change attempt';
+    raise exception 'assertion failed: expected no_data_found -- a tenant-2 actor with zero relationship to tenant-1 must see the same not_found a missing id would produce, never a disclosing insufficient_authority';
   exception
-    when insufficient_privilege then null;
+    when no_data_found then null;
   end;
 end;
 $$;
