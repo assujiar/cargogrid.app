@@ -52,7 +52,7 @@ export const IMPORT_EXPORT_JOB_TYPES = [
   "leave_accrual", "leave_carry_forward_expiry", "payroll_calculation",
   "training_certificate_expiry", "training_certificate_expiry_reminder",
   "ticket_sla_evaluation", "kb_article_expiry", "ticket_escalation_evaluation",
-  "loyalty_expiry_sweep", "automation_action_execution",
+  "loyalty_expiry_sweep", "automation_action_execution", "logistics_partner_sync",
 ] as const;
 export const ImportExportJobTypeSchema = z.enum(IMPORT_EXPORT_JOB_TYPES);
 export type ImportExportJobType = z.infer<typeof ImportExportJobTypeSchema>;

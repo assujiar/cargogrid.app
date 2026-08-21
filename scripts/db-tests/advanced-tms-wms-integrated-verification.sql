@@ -1530,9 +1530,12 @@ do $$
 declare
   v_count integer;
 begin
+  -- Baseline moved from 7 to 8: IAE-016 (Prompt 344) added exactly one new
+  -- anon-granted function, app.ingest_logistics_partner_webhook_event
+  -- (this file itself still adds no schema/grant of its own).
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
-  if v_count <> 7 then
-    raise exception 'assertion failed: expected the anon-grant count to remain exactly 7 (unchanged by this file, which adds no schema/grant of its own), found %', v_count;
+  if v_count <> 8 then
+    raise exception 'assertion failed: expected the anon-grant count to remain exactly 8, found %', v_count;
   end if;
 end $$;
 

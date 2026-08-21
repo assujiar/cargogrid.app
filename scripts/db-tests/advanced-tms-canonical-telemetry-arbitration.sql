@@ -616,11 +616,15 @@ begin
     raise exception 'assertion failed: expected all 4 read projections to be authenticated-callable, found %', v_count;
   end if;
 
-  -- The anon-grant count repository-wide is unchanged by this migration (design note 1:
-  -- widening preserves the exact anon grant each of 226C/226E already carried).
+  -- The anon-grant count repository-wide is unchanged BY THIS MIGRATION (design note 1:
+  -- widening preserves the exact anon grant each of 226C/226E already carried). The
+  -- baseline itself has since moved from 7 to 8 -- IAE-016 (Prompt 344) legitimately adds
+  -- exactly one new anon-granted function, app.ingest_logistics_partner_webhook_event, the
+  -- sole provider-facing inbound webhook entrypoint for that capability (mirrors this same
+  -- migration's own app.ingest_third_party_provider_webhook_event in shape and rationale).
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
-  if v_count <> 7 then
-    raise exception 'assertion failed: expected the anon-grant count to remain exactly 7 after this migration''s own widening, found %', v_count;
+  if v_count <> 8 then
+    raise exception 'assertion failed: expected the anon-grant count to be exactly 8 (7 pre-existing + IAE-016''s own one new provider-facing entrypoint), found %', v_count;
   end if;
 end $$;
 

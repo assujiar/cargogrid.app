@@ -571,9 +571,12 @@ do $$
 declare
   v_count integer;
 begin
+  -- Baseline moved from 7 to 8 after this file's own 226-family close: IAE-016
+  -- (Prompt 344) added exactly one further anon-granted function,
+  -- app.ingest_logistics_partner_webhook_event.
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
-  if v_count <> 7 then
-    raise exception 'assertion failed: expected exactly 7 distinct anon-granted functions repository-wide at the close of the 226 family, found %', v_count;
+  if v_count <> 8 then
+    raise exception 'assertion failed: expected exactly 8 distinct anon-granted functions repository-wide, found %', v_count;
   end if;
 end $$;
 

@@ -810,11 +810,13 @@ begin
     raise exception 'assertion failed: expected app.ingest_milestone_event to remain granted to both authenticated and service_role, found %', v_count;
   end if;
 
-  -- The anon-grant count repository-wide is unchanged by this migration (this checkpoint
-  -- adds zero new anon-facing surface).
+  -- The anon-grant count repository-wide is unchanged BY THIS migration (this checkpoint
+  -- adds zero new anon-facing surface). Baseline itself has since moved from 7 to 8:
+  -- IAE-016 (Prompt 344) added exactly one new anon-granted function,
+  -- app.ingest_logistics_partner_webhook_event.
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
-  if v_count <> 7 then
-    raise exception 'assertion failed: expected the anon-grant count to remain exactly 7 after this migration, found %', v_count;
+  if v_count <> 8 then
+    raise exception 'assertion failed: expected the anon-grant count to remain exactly 8, found %', v_count;
   end if;
 end $$;
 
