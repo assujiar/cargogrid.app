@@ -157,6 +157,7 @@ declare
   v_reclaimed app.jobs;
   v_live_job app.jobs;
   v_not_reclaimed app.jobs;
+  v_drained app.jobs;
 begin
   v_tenant_id := (select id from app.tenants where slug = 'acmejob');
 
@@ -195,6 +196,22 @@ begin
   end if;
 
   -- next_attempt_at gating: a job scheduled in the future is not claimable yet.
+  -- IAE-012 (Webhook Management) gave webhook_retry a real producer
+  -- (app.queue_webhook_delivery) for the first time -- another db-test file
+  -- earlier in this shared-database run (scripts/db-tests/api-key-webhook.sql,
+  -- which calls app.queue_webhook_delivery for ITS OWN unrelated deliveries)
+  -- may have left real, immediately-claimable webhook_retry jobs behind that
+  -- this block's own two claim_next_job(['webhook_retry']) assertions below
+  -- would otherwise pick up instead of the specific job this block itself
+  -- creates. Drained first so this block starts from a genuinely empty
+  -- webhook_retry queue, mirroring scripts/db-tests/webhook-management.sql's
+  -- own identical fix for the identical class of cross-file interference.
+  loop
+    v_drained := app.claim_next_job('worker-drain', array['webhook_retry'], 300);
+    exit when v_drained is null;
+    perform app.complete_job(v_drained.job_id, 'worker-drain', null, 'worker-drain');
+  end loop;
+
   v_future_job := app.enqueue_job(v_tenant_id, 'webhook_retry', '{}'::jsonb, 0, 'idem-claim-future', 3, '00000000-0000-0000-0000-000000004001', 'requester');
   update app.jobs set next_attempt_at = now() + interval '1 hour' where job_id = v_future_job.job_id;
   v_not_reclaimed := app.claim_next_job('worker-d', array['webhook_retry'], 300);

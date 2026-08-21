@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
-import { listApiKeysForTenant, ApiKeyWebhookQueryError, type ApiKeyWebhookQueryRpcClient } from "../../../../../server/queries/api-key-webhook.ts";
+import { listApiKeysForTenant, listWebhookEndpointsForTenant, ApiKeyWebhookQueryError, type ApiKeyWebhookQueryRpcClient } from "../../../../../server/queries/api-key-webhook.ts";
 import { listApiVersions, listWebhookEventTypes, listApiLogsForTenant, PublicApiPlatformQueryError, type PublicApiPlatformQueryRpcClient } from "../../../../../server/queries/public-api-platform.ts";
 import { listVendorApiKeysForTenant, VendorApiQueryError, type VendorApiQueryRpcClient } from "../../../../../server/queries/vendor-api.ts";
+import { listWebhookDeliveriesForTenant, WebhookManagementQueryError, type WebhookManagementQueryRpcClient } from "../../../../../server/queries/webhook-management.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
-import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, ApiLogList, CreateVendorApiKeyForm, VendorApiKeyList } from "./api-keys-admin-panel.tsx";
+import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, ApiLogList, CreateVendorApiKeyForm, VendorApiKeyList, RegisterWebhookEndpointForm, WebhookEndpointList, WebhookDeliveryList } from "./api-keys-admin-panel.tsx";
 
 /**
  * `SupabaseClient.rpc()` returns a `PostgrestFilterBuilder` (thenable, but not
@@ -14,8 +15,8 @@ import { CreateApiKeyForm, ApiKeyList, ApiVersionList, WebhookEventTypeList, Api
  * `app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts`'s own
  * `toDocumentClient()` already established for this exact class of mismatch.
  */
-function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient {
-  return client as unknown as ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient;
+function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient & WebhookManagementQueryRpcClient {
+  return client as unknown as ApiKeyWebhookQueryRpcClient & PublicApiPlatformQueryRpcClient & VendorApiQueryRpcClient & WebhookManagementQueryRpcClient;
 }
 
 /**
@@ -40,17 +41,21 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
   let eventTypes: Awaited<ReturnType<typeof listWebhookEventTypes>> = [];
   let logs: Awaited<ReturnType<typeof listApiLogsForTenant>> = [];
   let vendorKeys: Awaited<ReturnType<typeof listVendorApiKeysForTenant>> = [];
+  let endpoints: Awaited<ReturnType<typeof listWebhookEndpointsForTenant>> = [];
+  let deliveries: Awaited<ReturnType<typeof listWebhookDeliveriesForTenant>> = [];
 
   try {
-    [keys, versions, eventTypes, logs, vendorKeys] = await Promise.all([
+    [keys, versions, eventTypes, logs, vendorKeys, endpoints, deliveries] = await Promise.all([
       listApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
       listApiVersions(supabase),
       listWebhookEventTypes(supabase),
       listApiLogsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, limit: 20, before: null }),
       listVendorApiKeysForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
+      listWebhookEndpointsForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
+      listWebhookDeliveriesForTenant(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId }),
     ]);
   } catch (error) {
-    if (!(error instanceof ApiKeyWebhookQueryError) && !(error instanceof PublicApiPlatformQueryError) && !(error instanceof VendorApiQueryError)) throw error;
+    if (!(error instanceof ApiKeyWebhookQueryError) && !(error instanceof PublicApiPlatformQueryError) && !(error instanceof VendorApiQueryError) && !(error instanceof WebhookManagementQueryError)) throw error;
     loadFailed = true;
   }
 
@@ -100,6 +105,23 @@ export default async function ApiKeysAdminPage({ params }: { params: Promise<{ t
           Webhook event types
         </h2>
         <WebhookEventTypeList eventTypes={eventTypes} />
+      </section>
+
+      <RegisterWebhookEndpointForm tenantSlug={tenantSlug} />
+
+      <section aria-labelledby="endpoints-heading" className="flex flex-col gap-2">
+        <h2 id="endpoints-heading" className="text-sm font-semibold text-text-primary">
+          Webhook endpoints
+        </h2>
+        <WebhookEndpointList tenantSlug={tenantSlug} endpoints={endpoints} />
+      </section>
+
+      <section aria-labelledby="deliveries-heading" className="flex flex-col gap-2">
+        <h2 id="deliveries-heading" className="text-sm font-semibold text-text-primary">
+          Webhook deliveries
+        </h2>
+        <p className="text-xs text-text-secondary">Most recent deliveries across every endpoint, including dead-lettered ones. A dead-lettered delivery may be replayed once its receiving endpoint is fixed.</p>
+        <WebhookDeliveryList tenantSlug={tenantSlug} deliveries={deliveries} />
       </section>
 
       <section aria-labelledby="logs-heading" className="flex flex-col gap-2">

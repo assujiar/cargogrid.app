@@ -17,10 +17,12 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
-import { createApiKey, rotateApiKey, revokeApiKey, ApiKeyWebhookMutationError, type ApiKeyWebhookMutationRpcClient } from "../../../../../server/mutations/api-key-webhook.ts";
+import { createApiKey, rotateApiKey, revokeApiKey, registerWebhookEndpoint, rotateWebhookSecret, disableWebhookEndpoint, reenableWebhookEndpoint, ApiKeyWebhookMutationError, type ApiKeyWebhookMutationRpcClient } from "../../../../../server/mutations/api-key-webhook.ts";
 import { createVendorApiKey, VendorApiMutationError, type VendorApiMutationRpcClient } from "../../../../../server/mutations/vendor-api.ts";
-import type { CreatedApiKey } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
+import { sendTestWebhookDelivery, replayWebhookDelivery, WebhookManagementMutationError, type WebhookManagementMutationRpcClient } from "../../../../../server/mutations/webhook-management.ts";
+import type { CreatedApiKey, CreatedWebhookEndpoint } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
 import type { CreatedVendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
+import type { WebhookDeliveryRow } from "../../../../../server/contracts/webhook-management/webhook-management.ts";
 
 export interface ApiKeyFormState {
   readonly error: string | null;
@@ -32,9 +34,22 @@ export interface VendorApiKeyFormState {
   readonly createdKey: CreatedVendorApiKey | null;
 }
 
+export interface WebhookEndpointFormState {
+  readonly error: string | null;
+  readonly createdEndpoint: CreatedWebhookEndpoint | null;
+}
+
+export interface WebhookDeliveryFormState {
+  readonly error: string | null;
+  readonly delivery: WebhookDeliveryRow | null;
+}
+
 const OK: ApiKeyFormState = { error: null, createdKey: null };
 const NO_ACCESS: ApiKeyFormState = { error: "You don't have access to this organization's admin workspace.", createdKey: null };
 const VENDOR_NO_ACCESS: VendorApiKeyFormState = { error: "You don't have access to this organization's admin workspace.", createdKey: null };
+const ENDPOINT_OK: WebhookEndpointFormState = { error: null, createdEndpoint: null };
+const ENDPOINT_NO_ACCESS: WebhookEndpointFormState = { error: "You don't have access to this organization's admin workspace.", createdEndpoint: null };
+const DELIVERY_NO_ACCESS: WebhookDeliveryFormState = { error: "You don't have access to this organization's admin workspace.", delivery: null };
 
 function toApiKeyWebhookClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): ApiKeyWebhookMutationRpcClient {
   return client as unknown as ApiKeyWebhookMutationRpcClient;
@@ -42,6 +57,10 @@ function toApiKeyWebhookClient(client: ReturnType<typeof createSupabaseServiceRo
 
 function toVendorApiClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): VendorApiMutationRpcClient {
   return client as unknown as VendorApiMutationRpcClient;
+}
+
+function toWebhookManagementClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): WebhookManagementMutationRpcClient {
+  return client as unknown as WebhookManagementMutationRpcClient;
 }
 
 function parseScopes(raw: FormDataEntryValue | null): string[] {
@@ -171,4 +190,115 @@ export async function createVendorApiKeyAction(tenantSlug: string, _prevState: V
 
   revalidatePath(`/${tenantSlug}/admin/api-keys`);
   return { error: null, createdKey };
+}
+
+/** IAE-012: staff-only (Supreme or the tenant's own active tenant_admin). Registers an endpoint against one or more already-seeded event types (comma-separated). Returns the raw signing secret exactly once. */
+export async function registerWebhookEndpointAction(tenantSlug: string, _prevState: WebhookEndpointFormState, formData: FormData): Promise<WebhookEndpointFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return ENDPOINT_NO_ACCESS;
+
+  const url = String(formData.get("url") ?? "").trim();
+  if (url.length === 0) return { error: "A URL is required.", createdEndpoint: null };
+
+  const eventTypeCodes = parseScopes(formData.get("eventTypeCodes"));
+  if (eventTypeCodes.length === 0) return { error: "At least one event type is required (e.g. shipment.status_changed).", createdEndpoint: null };
+
+  const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
+  let createdEndpoint: CreatedWebhookEndpoint;
+  try {
+    createdEndpoint = await registerWebhookEndpoint(client, { tenantId: access.tenant.id, url, eventTypeCodes, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not register this endpoint: ${error.message}`, createdEndpoint: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return { error: null, createdEndpoint };
+}
+
+export async function rotateWebhookSecretAction(tenantSlug: string, endpointId: string, _prevState: WebhookEndpointFormState): Promise<WebhookEndpointFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return ENDPOINT_NO_ACCESS;
+
+  const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
+  let createdEndpoint: CreatedWebhookEndpoint;
+  try {
+    createdEndpoint = await rotateWebhookSecret(client, { endpointId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not rotate this endpoint's secret: ${error.message}`, createdEndpoint: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return { error: null, createdEndpoint };
+}
+
+export async function disableWebhookEndpointAction(tenantSlug: string, endpointId: string, _prevState: WebhookEndpointFormState, formData: FormData): Promise<WebhookEndpointFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return ENDPOINT_NO_ACCESS;
+
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
+  try {
+    await disableWebhookEndpoint(client, { endpointId, reason: reason.length > 0 ? reason : null, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not disable this endpoint: ${error.message}`, createdEndpoint: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return ENDPOINT_OK;
+}
+
+export async function reenableWebhookEndpointAction(tenantSlug: string, endpointId: string, _prevState: WebhookEndpointFormState): Promise<WebhookEndpointFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return ENDPOINT_NO_ACCESS;
+
+  const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
+  try {
+    await reenableWebhookEndpoint(client, { endpointId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not re-enable this endpoint: ${error.message}`, createdEndpoint: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return ENDPOINT_OK;
+}
+
+/** IAE-012: scoped to exactly ONE named endpoint -- enqueues a real app.jobs job so this genuinely exercises the real delivery worker end to end. */
+export async function sendTestWebhookDeliveryAction(tenantSlug: string, endpointId: string, _prevState: WebhookDeliveryFormState): Promise<WebhookDeliveryFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return DELIVERY_NO_ACCESS;
+
+  const client = toWebhookManagementClient(createSupabaseServiceRoleClient());
+  let delivery: WebhookDeliveryRow;
+  try {
+    delivery = await sendTestWebhookDelivery(client, { endpointId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof WebhookManagementMutationError) return { error: `Could not send a test delivery: ${error.message}`, delivery: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return { error: null, delivery };
+}
+
+/** IAE-012: valid ONLY for a dead_letter delivery -- enqueues a fresh app.jobs job. */
+export async function replayWebhookDeliveryAction(tenantSlug: string, deliveryId: string, _prevState: WebhookDeliveryFormState): Promise<WebhookDeliveryFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return DELIVERY_NO_ACCESS;
+
+  const client = toWebhookManagementClient(createSupabaseServiceRoleClient());
+  let delivery: WebhookDeliveryRow;
+  try {
+    delivery = await replayWebhookDelivery(client, { deliveryId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof WebhookManagementMutationError) return { error: `Could not replay this delivery: ${error.message}`, delivery: null };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/api-keys`);
+  return { error: null, delivery };
 }

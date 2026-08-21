@@ -10,14 +10,34 @@ import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
-import type { ApiKey } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
+import type { ApiKey, WebhookEndpoint } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
 import type { ApiVersion } from "../../../../../server/contracts/public-api-platform/public-api-platform.ts";
 import type { WebhookEventType } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
 import type { ApiLog } from "../../../../../server/contracts/api/api.ts";
 import type { VendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
-import { createApiKeyAction, rotateApiKeyAction, revokeApiKeyAction, createVendorApiKeyAction, type ApiKeyFormState, type VendorApiKeyFormState } from "./actions.ts";
+import type { WebhookDelivery } from "../../../../../server/contracts/webhook-management/webhook-management.ts";
+import {
+  createApiKeyAction,
+  rotateApiKeyAction,
+  revokeApiKeyAction,
+  createVendorApiKeyAction,
+  registerWebhookEndpointAction,
+  rotateWebhookSecretAction,
+  disableWebhookEndpointAction,
+  reenableWebhookEndpointAction,
+  sendTestWebhookDeliveryAction,
+  replayWebhookDeliveryAction,
+  type ApiKeyFormState,
+  type VendorApiKeyFormState,
+  type WebhookEndpointFormState,
+  type WebhookDeliveryFormState,
+} from "./actions.ts";
 
 const INITIAL_STATE: ApiKeyFormState = { error: null, createdKey: null };
+const ENDPOINT_INITIAL_STATE: WebhookEndpointFormState = { error: null, createdEndpoint: null };
+const DELIVERY_INITIAL_STATE: WebhookDeliveryFormState = { error: null, delivery: null };
+const WEBHOOK_ENDPOINT_STATUS_TONE: Record<WebhookEndpoint["status"], StatusTone> = { active: "success", disabled: "neutral" };
+const WEBHOOK_DELIVERY_STATUS_TONE: Record<WebhookDelivery["status"], StatusTone> = { pending: "warning", delivered: "success", dead_letter: "danger" };
 const VENDOR_INITIAL_STATE: VendorApiKeyFormState = { error: null, createdKey: null };
 
 const API_KEY_STATUS_TONE: Record<ApiKey["status"], StatusTone> = { active: "success", revoked: "danger", expired: "neutral" };
@@ -222,6 +242,185 @@ export function VendorApiKeyList({ tenantSlug, keys }: { tenantSlug: string; key
                   </div>
                 ) : null}
               </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** A raw webhook signing secret is shown here exactly once -- app.register_webhook_endpoint/app.rotate_webhook_secret structurally never return it again. */
+function RawSecretCallout({ rawSecret }: { rawSecret: string }) {
+  return (
+    <div role="status" className="flex flex-col gap-1 rounded-md border border-warning bg-warning/10 p-3">
+      <p className="text-sm font-semibold text-text-primary">Copy this signing secret now -- it will not be shown again</p>
+      <code className="break-all rounded bg-neutral-900 px-2 py-1 text-xs text-white">{rawSecret}</code>
+    </div>
+  );
+}
+
+/** IAE-012: registers an endpoint against one or more already-seeded event types in one step (app.register_webhook_endpoint itself takes the subscription list at creation time -- there is no separate "add subscription" step to build). */
+export function RegisterWebhookEndpointForm({ tenantSlug }: { tenantSlug: string }) {
+  const [state, formAction, pending] = useActionState(registerWebhookEndpointAction.bind(null, tenantSlug), ENDPOINT_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
+      <h2 className="text-sm font-semibold text-text-primary">Register a webhook endpoint</h2>
+      <label htmlFor="we-url" className="text-xs font-medium text-text-secondary">
+        Endpoint URL (https only)
+      </label>
+      <input id="we-url" name="url" type="url" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <label htmlFor="we-event-types" className="text-xs font-medium text-text-secondary">
+        Event types (comma-separated, e.g. shipment.status_changed, ticket.created)
+      </label>
+      <input id="we-event-types" name="eventTypeCodes" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <ErrorBanner error={state.error} />
+      {state.createdEndpoint ? <RawSecretCallout rawSecret={state.createdEndpoint.rawSecret} /> : null}
+      <Button type="submit" loading={pending} loadingLabel="Registering…" className="w-fit">
+        Register endpoint
+      </Button>
+    </form>
+  );
+}
+
+function RotateWebhookSecretForm({ tenantSlug, endpointId }: { tenantSlug: string; endpointId: string }) {
+  const [state, formAction, pending] = useActionState(rotateWebhookSecretAction.bind(null, tenantSlug, endpointId), ENDPOINT_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-1">
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rotating…">
+        Rotate secret
+      </Button>
+      <ErrorBanner error={state.error} />
+      {state.createdEndpoint ? <RawSecretCallout rawSecret={state.createdEndpoint.rawSecret} /> : null}
+    </form>
+  );
+}
+
+function DisableWebhookEndpointForm({ tenantSlug, endpointId }: { tenantSlug: string; endpointId: string }) {
+  const [state, formAction, pending] = useActionState(disableWebhookEndpointAction.bind(null, tenantSlug, endpointId), ENDPOINT_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <input name="reason" type="text" placeholder="Reason (optional)" className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <Button type="submit" variant="destructive" loading={pending} loadingLabel="Disabling…">
+          Disable
+        </Button>
+      </div>
+      <ErrorBanner error={state.error} />
+    </form>
+  );
+}
+
+function ReenableWebhookEndpointForm({ tenantSlug, endpointId }: { tenantSlug: string; endpointId: string }) {
+  const [state, formAction, pending] = useActionState(reenableWebhookEndpointAction.bind(null, tenantSlug, endpointId), ENDPOINT_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-1">
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Re-enabling…">
+        Re-enable
+      </Button>
+      <ErrorBanner error={state.error} />
+    </form>
+  );
+}
+
+/** IAE-012: enqueues a real app.jobs job -- this genuinely exercises the real delivery worker, never a UI-only stub. */
+function SendTestWebhookDeliveryForm({ tenantSlug, endpointId }: { tenantSlug: string; endpointId: string }) {
+  const [state, formAction, pending] = useActionState(sendTestWebhookDeliveryAction.bind(null, tenantSlug, endpointId), DELIVERY_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-1">
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Sending…">
+        Send test
+      </Button>
+      <ErrorBanner error={state.error} />
+      {state.delivery ? <p className="text-xs text-text-secondary">Test delivery queued -- see it in the delivery log below shortly.</p> : null}
+    </form>
+  );
+}
+
+export function WebhookEndpointList({ tenantSlug, endpoints }: { tenantSlug: string; endpoints: readonly WebhookEndpoint[] }) {
+  if (endpoints.length === 0) {
+    return <EmptyState title="No webhook endpoints yet" description="Register your tenant's first webhook endpoint above." />;
+  }
+  return (
+    <div className="overflow-x-auto rounded-md border border-neutral-200">
+      <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">Webhook endpoints</caption>
+        <thead>
+          <tr className="text-left text-xs font-medium text-text-secondary">
+            <th className="p-2">URL</th>
+            <th className="p-2">Status</th>
+            <th className="p-2">Consecutive failures</th>
+            <th className="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {endpoints.map((endpoint) => (
+            <tr key={endpoint.id} className="border-t border-neutral-100 align-top">
+              <td className="p-2 font-mono text-xs text-text-primary">{endpoint.url}</td>
+              <td className="p-2">
+                <StatusBadge tone={WEBHOOK_ENDPOINT_STATUS_TONE[endpoint.status]} label={endpoint.status} />
+                {endpoint.disabledReason ? <p className="text-xs text-text-secondary">{endpoint.disabledReason}</p> : null}
+              </td>
+              <td className="p-2 text-xs text-text-secondary">{endpoint.consecutiveFailureCount}</td>
+              <td className="p-2">
+                <div className="flex flex-col gap-2">
+                  <SendTestWebhookDeliveryForm tenantSlug={tenantSlug} endpointId={endpoint.id} />
+                  <RotateWebhookSecretForm tenantSlug={tenantSlug} endpointId={endpoint.id} />
+                  {endpoint.status === "active" ? <DisableWebhookEndpointForm tenantSlug={tenantSlug} endpointId={endpoint.id} /> : <ReenableWebhookEndpointForm tenantSlug={tenantSlug} endpointId={endpoint.id} />}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** IAE-012: valid ONLY for a dead_letter delivery (the RPC itself enforces this -- the button is still shown only for that status as a UX affordance, not the real gate). */
+function ReplayWebhookDeliveryForm({ tenantSlug, deliveryId }: { tenantSlug: string; deliveryId: string }) {
+  const [state, formAction, pending] = useActionState(replayWebhookDeliveryAction.bind(null, tenantSlug, deliveryId), DELIVERY_INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col gap-1">
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Replaying…">
+        Replay
+      </Button>
+      <ErrorBanner error={state.error} />
+    </form>
+  );
+}
+
+export function WebhookDeliveryList({ tenantSlug, deliveries }: { tenantSlug: string; deliveries: readonly WebhookDelivery[] }) {
+  if (deliveries.length === 0) {
+    return <EmptyState title="No webhook deliveries yet" description="Deliveries queued via app.queue_webhook_delivery or a test send will appear here." />;
+  }
+  return (
+    <div className="overflow-x-auto rounded-md border border-neutral-200">
+      <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">Webhook deliveries</caption>
+        <thead>
+          <tr className="text-left text-xs font-medium text-text-secondary">
+            <th className="p-2">Event</th>
+            <th className="p-2">Endpoint</th>
+            <th className="p-2">Status</th>
+            <th className="p-2">Attempts</th>
+            <th className="p-2">Next attempt</th>
+            <th className="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {deliveries.map((delivery) => (
+            <tr key={delivery.id} className="border-t border-neutral-100 align-top">
+              <td className="p-2 font-mono text-xs text-text-primary">{delivery.eventTypeCode}</td>
+              <td className="p-2 font-mono text-xs text-text-secondary">{delivery.endpointUrl}</td>
+              <td className="p-2">
+                <StatusBadge tone={WEBHOOK_DELIVERY_STATUS_TONE[delivery.status]} label={delivery.status} />
+              </td>
+              <td className="p-2 text-xs text-text-secondary">
+                {delivery.attempts}/{delivery.maxAttempts}
+              </td>
+              <td className="p-2 text-xs text-text-secondary">{delivery.nextAttemptAt ?? "—"}</td>
+              <td className="p-2">{delivery.status === "dead_letter" ? <ReplayWebhookDeliveryForm tenantSlug={tenantSlug} deliveryId={delivery.id} /> : null}</td>
             </tr>
           ))}
         </tbody>
