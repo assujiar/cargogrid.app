@@ -467,3 +467,5 @@ begin
   reset role;
 end;
 $$;
+
+\echo 'ALL IAE-023 (Optimization Assistance) ASSERTIONS PASSED'

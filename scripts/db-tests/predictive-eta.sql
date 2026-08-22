@@ -619,3 +619,23 @@ begin
   end;
   raise notice 'PASS: request_eta_prediction refuses a shipment that has already reached a terminal milestone';
 end $$;
+
+\echo '>> IAE-036 Tier C fix (Integrated Verification, security/tenant/access-matrix lens): app.is_eta_prediction_enabled_for_tenant is now service_role-only, matching the bare-tenant-id-authority pattern every sibling resolver already follows -- authenticated holds zero EXECUTE while service_role does'
+do $$
+declare
+  v_authenticated_on_resolve boolean;
+  v_service_role_on_resolve boolean;
+begin
+  select has_function_privilege('authenticated', 'app.is_eta_prediction_enabled_for_tenant(uuid)', 'EXECUTE') into v_authenticated_on_resolve;
+  if v_authenticated_on_resolve then
+    raise exception 'assertion failed: expected authenticated to hold ZERO EXECUTE on app.is_eta_prediction_enabled_for_tenant (bare p_tenant_id, no actor param -- service_role-only), found a grant';
+  end if;
+
+  select has_function_privilege('service_role', 'app.is_eta_prediction_enabled_for_tenant(uuid)', 'EXECUTE') into v_service_role_on_resolve;
+  if not v_service_role_on_resolve then
+    raise exception 'assertion failed: expected service_role to hold EXECUTE on app.is_eta_prediction_enabled_for_tenant, found none';
+  end if;
+end;
+$$;
+
+\echo 'ALL IAE-022 (Predictive ETA) ASSERTIONS PASSED'

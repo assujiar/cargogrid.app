@@ -475,3 +475,5 @@ begin
   reset role;
 end;
 $$;
+
+\echo 'ALL IAE-024 (Fraud/Risk Assistance) ASSERTIONS PASSED'

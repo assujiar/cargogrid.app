@@ -482,6 +482,123 @@ begin
 end;
 $$;
 
+\echo '>> IAE-036 Tier C fix (Integrated Verification, cross-capability flow lens): app.get_enterprise_onboarding_checklist is no longer a one-way ratchet -- sso_verified/integrations_verified/dr_evidence_verified are re-derived LIVE on every read from the composed capabilities'' own CURRENT state, never trusted from the stored row alone; revoking an already-verified SSO connection/integration, or decommissioning the dedicated deployment behind a passed DR test, is reflected immediately on the very next read, with zero explicit re-verify call and zero row ever falsified'
+do $$
+declare
+  v_tenant1 uuid;
+  v_supreme uuid := '00000000-0000-0000-0000-000038000000';
+  v_admin4 uuid := '00000000-0000-0000-0000-000038000007';
+  v_admin4_role uuid;
+  v_admin4_draft app.role_versions;
+  v_sso_connection_id uuid;
+  v_other_connection_id uuid;
+  v_deployment_id uuid;
+  v_checklist app.enterprise_onboarding_checklists;
+  v_raw_sso_verified boolean;
+begin
+  insert into auth.users (id, email) values (v_admin4, 'admin4@iaedr.test');
+
+  perform app.provision_tenant('iaedr4', 'IaeDr4 Co', 'idem-iaedr4', 'tester');
+  v_tenant1 := (select id from app.tenants where slug = 'iaedr4');
+  perform app.transition_tenant_status(v_tenant1, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant1, v_admin4, 'admin4@iaedr.test', 'Admin Four', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin4@iaedr.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin4, 'tenant_admin', v_tenant1, null, 'tester');
+
+  v_admin4_role := (app.create_role(v_tenant1, 'IaeDr4 Admin', 'SUP:Configure/View + DEPLOY:Configure/View/Approve + INTHUB:Configure/View -- onboarding-checklist staleness regression probe actor', 'tester')).id;
+  v_admin4_draft := app.create_role_version(v_admin4_role, 'tester');
+  perform app.set_role_version_permissions(v_admin4_draft.id, array(
+    select id from app.permissions
+    where (resource_module_code = 'SUP' and action in ('Configure', 'View'))
+       or (resource_module_code = 'DEPLOY' and action in ('Configure', 'View', 'Approve'))
+       or (resource_module_code = 'INTHUB' and action in ('Configure', 'View'))
+  ), 'tester');
+  perform app.publish_role_version(v_admin4_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin4_role and status = 'published'), v_admin4, v_supreme, 'supreme');
+
+  -- Build a real, active dedicated deployment + a passed dedicated-scoped DR
+  -- test so dr_evidence_verified starts genuinely true (composing IAE-032).
+  perform app.request_dedicated_deployment_qualification(v_tenant1, 'dedicated instance for onboarding-checklist staleness regression', 'MSA-2026-009', v_admin4, 'admin4');
+  select id into v_deployment_id from app.tenant_deployment_records where tenant_id = v_tenant1;
+  perform app.approve_dedicated_deployment_qualification(v_deployment_id, v_supreme, 'supreme');
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'provisioning', v_admin4, 'admin4');
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'active', v_admin4, 'admin4');
+
+  perform app.record_dr_restore_test(v_tenant1, 'dedicated', 'database', 'passed', 5, 10, null, null, null, null, null, v_admin4, 'admin4');
+  perform app.record_dr_restore_test(v_tenant1, 'dedicated', 'secrets', 'passed', 5, 10, null, null, null, null, null, v_admin4, 'admin4');
+  perform app.record_dr_restore_test(v_tenant1, 'dedicated', 'backup', 'passed', 5, 10, null, null, null, null, null, v_admin4, 'admin4');
+  perform app.record_dr_restore_test(v_tenant1, 'dedicated', 'observability', 'passed', 5, 10, null, null, null, null, null, v_admin4, 'admin4');
+  perform app.record_dr_restore_test(v_tenant1, 'dedicated', 'jobs_integrations', 'passed', 5, 10, null, null, null, null, null, v_admin4, 'admin4');
+
+  -- Build a real, active SSO connection (composing IAE-008) and verify it.
+  v_sso_connection_id := (app.create_integration_connection(
+    v_tenant1, 'enterprise_sso_oidc', 'Iaedr4 Okta OIDC', 'production', 'Platform Team', 'platform@iaedr4.test',
+    null, '{}'::jsonb, 'client-secret-value', v_admin4, 'admin4'
+  )).id;
+  perform app.set_integration_connection_status(v_sso_connection_id, 'active', null, v_admin4, 'admin4');
+  v_checklist := app.verify_onboarding_checklist_item(v_tenant1, 'sso_verified', null, v_admin4, 'admin4');
+  if v_checklist.sso_verified <> true then
+    raise exception 'assertion failed: expected sso_verified=true once the SSO connection is genuinely active, got %', v_checklist.sso_verified;
+  end if;
+
+  -- Build a real, active non-SSO integration connection and verify it.
+  v_other_connection_id := (app.create_integration_connection(
+    v_tenant1, 'email_smtp', 'Iaedr4 Notification Email', 'production', 'Platform Team', 'platform@iaedr4.test',
+    null, '{}'::jsonb, 'smtp-secret-value', v_admin4, 'admin4'
+  )).id;
+  perform app.set_integration_connection_status(v_other_connection_id, 'active', null, v_admin4, 'admin4');
+  v_checklist := app.verify_onboarding_checklist_item(v_tenant1, 'integrations_verified', null, v_admin4, 'admin4');
+  if v_checklist.integrations_verified <> true then
+    raise exception 'assertion failed: expected integrations_verified=true once a non-SSO integration connection is genuinely active, got %', v_checklist.integrations_verified;
+  end if;
+
+  v_checklist := app.verify_onboarding_checklist_item(v_tenant1, 'dr_evidence_verified', null, v_admin4, 'admin4');
+  if v_checklist.dr_evidence_verified <> true then
+    raise exception 'assertion failed: expected dr_evidence_verified=true with all five categories genuinely passed on the active dedicated deployment, got %', v_checklist.dr_evidence_verified;
+  end if;
+
+  -- Confirm the read path agrees with the write path right after a genuine
+  -- explicit verify: all three items true via the READ function, not just
+  -- the WRITE function's own return value.
+  v_checklist := app.get_enterprise_onboarding_checklist(v_tenant1, v_admin4);
+  if not (v_checklist.sso_verified and v_checklist.integrations_verified and v_checklist.dr_evidence_verified) then
+    raise exception 'assertion failed: expected get_enterprise_onboarding_checklist to report sso_verified=true, integrations_verified=true, dr_evidence_verified=true immediately after a genuine verify, got sso=% integrations=% dr=%', v_checklist.sso_verified, v_checklist.integrations_verified, v_checklist.dr_evidence_verified;
+  end if;
+
+  -- Now corrupt all three underlying composed states WITHOUT ever calling
+  -- verify_onboarding_checklist_item again.
+  perform app.set_integration_connection_status(v_sso_connection_id, 'disabled', 'staleness regression probe', v_admin4, 'admin4');
+  perform app.set_integration_connection_status(v_other_connection_id, 'disabled', 'staleness regression probe', v_admin4, 'admin4');
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'decommissioned', v_admin4, 'admin4');
+
+  -- The STORED row itself must remain exactly what it was -- real
+  -- historical evidence of a real, once-true confirmation, never
+  -- retroactively falsified.
+  select sso_verified into v_raw_sso_verified from app.enterprise_onboarding_checklists where tenant_id = v_tenant1;
+  if v_raw_sso_verified <> true then
+    raise exception 'assertion failed: expected the STORED sso_verified column to remain true (historical evidence, never retroactively falsified), got %', v_raw_sso_verified;
+  end if;
+
+  -- But the READ path must now reflect live reality: zero active SSO
+  -- connection, zero active non-SSO integration, and the dedicated DR
+  -- evidence no longer eligible since its own deployment is decommissioned.
+  v_checklist := app.get_enterprise_onboarding_checklist(v_tenant1, v_admin4);
+  if v_checklist.sso_verified <> false then
+    raise exception 'assertion failed: expected get_enterprise_onboarding_checklist to report sso_verified=false live after the SSO connection was disabled with zero explicit re-verify call (one-way-ratchet bug), got %', v_checklist.sso_verified;
+  end if;
+  if v_checklist.integrations_verified <> false then
+    raise exception 'assertion failed: expected get_enterprise_onboarding_checklist to report integrations_verified=false live after the integration connection was disabled with zero explicit re-verify call, got %', v_checklist.integrations_verified;
+  end if;
+  if v_checklist.dr_evidence_verified <> false then
+    raise exception 'assertion failed: expected get_enterprise_onboarding_checklist to report dr_evidence_verified=false live once the dedicated deployment behind the passed evidence was decommissioned, got %', v_checklist.dr_evidence_verified;
+  end if;
+  if v_checklist.status <> 'in_progress' then
+    raise exception 'assertion failed: expected status=in_progress once the read path correctly reflects live reality, got %', v_checklist.status;
+  end if;
+end;
+$$;
+
 \echo '>> cross-tenant isolation: admin2 (tenant iaedr2, its own SUP:Configure/View) cannot record a DR test/set the entitlement/verify a checklist item/read tenant1''s own DR tests/entitlement/checklist'
 do $$
 declare

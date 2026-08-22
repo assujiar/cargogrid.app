@@ -718,3 +718,5 @@ begin
   v_job := app.record_ocr_document_job_outcome(v_job.id, v_request.id, v_reviewer1, 'reviewer');
   raise notice 'RACE_JOB_ID:%', v_job.id;
 end $$;
+
+\echo 'ALL IAE-021 (OCR Document Processing) ASSERTIONS PASSED'

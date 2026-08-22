@@ -468,3 +468,5 @@ begin
   reset role;
 end;
 $$;
+
+\echo 'ALL IAE-025 (Forecasting/Recommendation Assistance) ASSERTIONS PASSED'
