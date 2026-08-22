@@ -16,21 +16,25 @@ import {
   QueueNotificationInputSchema,
   RecordNotificationDeliveryAttemptInputSchema,
   MarkNotificationReadInputSchema,
+  SetNotificationContactAddressInputSchema,
   ConfigVersionSchema,
   parseNotificationType,
   parseNotificationPreference,
   parseNotification,
   parseNotificationDeliveryAttempt,
+  parseNotificationContactAddress,
   type RegisterNotificationTypeInput,
   type PublishNotificationTemplateInput,
   type SetNotificationPreferenceInput,
   type QueueNotificationInput,
   type RecordNotificationDeliveryAttemptInput,
   type MarkNotificationReadInput,
+  type SetNotificationContactAddressInput,
   type NotificationType,
   type NotificationPreference,
   type Notification,
   type NotificationDeliveryAttempt,
+  type NotificationContactAddress,
   type ConfigVersion,
 } from "../contracts/notification/notification.ts";
 import { parseConfigVersion } from "../contracts/config/config.ts";
@@ -43,7 +47,8 @@ export interface NotificationMutationRpcClient {
       | "set_notification_preference"
       | "queue_notification"
       | "record_notification_delivery_attempt"
-      | "mark_notification_read",
+      | "mark_notification_read"
+      | "set_notification_contact_address",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
 }
@@ -65,6 +70,9 @@ export const NOTIFICATION_KNOWN_MUTATION_ERROR_CODES = [
   "notification_invalid_attempt_status",
   "notification_unsafe_context_value",
   "notification_unsafe_link",
+  "notification_invalid_cost_amount",
+  "notification_contact_invalid_channel",
+  "notification_contact_missing_address",
 ] as const;
 type KnownNotificationMutationErrorCode = (typeof NOTIFICATION_KNOWN_MUTATION_ERROR_CODES)[number];
 export type NotificationMutationErrorCode = KnownNotificationMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -177,6 +185,8 @@ export async function recordNotificationDeliveryAttempt(client: NotificationMuta
     p_error_message: parsedInput.errorMessage,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    p_provider_unit_cost_amount: parsedInput.providerUnitCostAmount,
+    p_currency: parsedInput.currency,
   });
   if (error) {
     throw new NotificationMutationError(classifyError(error.message), error.message);
@@ -202,4 +212,24 @@ export async function markNotificationRead(client: NotificationMutationRpcClient
     throw new NotificationMutationError("invalid_response", "mark_notification_read returned no row");
   }
   return parseNotification(data as Record<string, unknown>);
+}
+
+/** IAE-014: self-service by default; a tenant's own support-grant authority may set it on a user's behalf. Re-setting the address clears verification (no verification flow exists yet). */
+export async function setNotificationContactAddress(client: NotificationMutationRpcClient, input: SetNotificationContactAddressInput): Promise<NotificationContactAddress> {
+  const parsedInput = SetNotificationContactAddressInputSchema.parse(input);
+  const { data, error } = await client.rpc("set_notification_contact_address", {
+    p_tenant_id: parsedInput.tenantId,
+    p_auth_user_id: parsedInput.authUserId,
+    p_channel: parsedInput.channel,
+    p_address: parsedInput.address,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+    p_actor_label: parsedInput.actorLabel,
+  });
+  if (error) {
+    throw new NotificationMutationError(classifyError(error.message), error.message);
+  }
+  if (!data || typeof data !== "object") {
+    throw new NotificationMutationError("invalid_response", "set_notification_contact_address returned no row");
+  }
+  return parseNotificationContactAddress(data as Record<string, unknown>);
 }

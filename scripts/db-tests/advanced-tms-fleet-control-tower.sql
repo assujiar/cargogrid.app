@@ -354,9 +354,12 @@ begin
     raise exception 'assertion failed: expected app.lookup_public_shipment_tracking to keep its exact 3-grantee (anon/authenticated/service_role) shape after the DROP+CREATE widening, found %', v_count;
   end if;
 
+  -- Baseline moved from 7 to 8: IAE-016 (Prompt 344) added exactly one new
+  -- anon-granted function, app.ingest_logistics_partner_webhook_event.
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
-  if v_count <> 7 then
-    raise exception 'assertion failed: expected the anon-grant count to remain exactly 7 after this migration, found %', v_count;
+  -- Baseline moved from 8 to 9: IAE-017 added app.ingest_finance_payment_gateway_webhook_event.
+  if v_count <> 9 then
+    raise exception 'assertion failed: expected the anon-grant count to remain exactly 9, found %', v_count;
   end if;
 end $$;
 

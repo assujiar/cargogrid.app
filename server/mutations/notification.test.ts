@@ -237,6 +237,8 @@ describe("recordNotificationDeliveryAttempt", () => {
       p_error_message: "provider timeout",
       p_actor_auth_user_id: ACTOR_ID,
       p_actor_label: "system",
+      p_provider_unit_cost_amount: null,
+      p_currency: null,
     });
     assert.equal(attempt.status, "failed");
   });

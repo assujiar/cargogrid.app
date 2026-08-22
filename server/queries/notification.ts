@@ -13,6 +13,7 @@ import {
   RenderNotificationTemplatePreviewInputSchema,
   parseNotification,
   parseNotificationPreference,
+  parseNotificationDispatchInfo,
   RenderedNotificationTemplateSchema,
   type ListNotificationsForRecipientInput,
   type CountUnreadNotificationsInput,
@@ -20,12 +21,19 @@ import {
   type RenderNotificationTemplatePreviewInput,
   type Notification,
   type NotificationPreference,
+  type NotificationDispatchInfo,
   type RenderedNotificationTemplate,
 } from "../contracts/notification/notification.ts";
 
 export interface NotificationQueryRpcClient {
   rpc(
-    fn: "list_notifications_for_recipient" | "count_unread_notifications" | "get_notification_preferences" | "render_notification_template",
+    fn:
+      | "list_notifications_for_recipient"
+      | "count_unread_notifications"
+      | "get_notification_preferences"
+      | "render_notification_template"
+      | "get_notification_dispatch_info"
+      | "get_notification_provider_credential",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
 }
@@ -105,4 +113,26 @@ export async function renderNotificationTemplatePreview(client: NotificationQuer
     throw new NotificationQueryError("render_notification_template returned no row");
   }
   return RenderedNotificationTemplateSchema.parse(row);
+}
+
+/** IAE-014: the real delivery worker's own minimal read -- never the raw provider credential (getNotificationProviderCredential is the separate, dedicated read for that). Returns null if the notification does not exist. */
+export async function getNotificationDispatchInfo(client: NotificationQueryRpcClient, notificationId: string): Promise<NotificationDispatchInfo | null> {
+  const { data, error } = await client.rpc("get_notification_dispatch_info", { p_notification_id: notificationId });
+  if (error) {
+    throw new NotificationQueryError(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  return parseNotificationDispatchInfo(row as Record<string, unknown>);
+}
+
+/** IAE-014: service_role-only. Returns null if the connection has no stored credential. */
+export async function getNotificationProviderCredential(client: NotificationQueryRpcClient, connectionId: string): Promise<string | null> {
+  const { data, error } = await client.rpc("get_notification_provider_credential", { p_connection_id: connectionId });
+  if (error) {
+    throw new NotificationQueryError(error.message);
+  }
+  return typeof data === "string" ? data : null;
 }

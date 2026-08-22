@@ -67,6 +67,9 @@ export const GENERIC_JOB_TYPES = [
   "ticket_escalation_evaluation",
   "loyalty_expiry_sweep",
   "automation_action_execution",
+  "logistics_partner_sync",
+  "finance_bank_feed_sync",
+  "external_sync",
 ] as const;
 export const GenericJobTypeSchema = z.enum(GENERIC_JOB_TYPES);
 export type GenericJobType = z.infer<typeof GenericJobTypeSchema>;
