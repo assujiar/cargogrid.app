@@ -29,9 +29,14 @@
 --    -> active -> decommissioned`) -- "Provisioning requires contract/
 --    security/CTO approval" (Prompt 360 §24) is enforced by requiring a real
 --    `qualified` status (itself requiring a separate `DEPLOY:Approve`
---    action, self-approval forbidden at the CHECK-constraint level,
---    mirroring `IAE-031`'s own `legal_holds_no_self_release` precedent)
---    before `provisioning`/`active` can ever be reached.
+--    action). Self-approval is forbidden at BOTH the CHECK-constraint level
+--    (`tenant_deployment_records_no_self_approval`) AND an explicit,
+--    cleanly-named application check inside `app.
+--    approve_dedicated_deployment_qualification` itself -- the identical
+--    two-layer guard `IAE-031`'s own `legal_holds_no_self_release`
+--    precedent established, applied correctly from the first draft here
+--    (requires the table to actually track `created_by_auth_user_id`,
+--    which it does) before `provisioning`/`active` can ever be reached.
 -- 5. `app.tenant_deployment_environment_refs` stores only a real REFERENCE
 --    string (a pointer/label to an external secrets manager entry, backup
 --    location, or observability workspace) -- never a real secret value --
@@ -82,13 +87,15 @@ create table app.tenant_deployment_records (
   approved_at timestamptz,
   provisioned_at timestamptz,
   decommissioned_at timestamptz,
+  created_by_auth_user_id uuid references auth.users (id),
   created_by text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   record_version integer not null default 1,
   constraint tenant_deployment_records_type_check check (deployment_type in ('dedicated')),
   constraint tenant_deployment_records_status_check check (status in ('pending_qualification', 'qualified', 'provisioning', 'active', 'decommissioned')),
-  constraint tenant_deployment_records_tenant_unique unique (tenant_id)
+  constraint tenant_deployment_records_tenant_unique unique (tenant_id),
+  constraint tenant_deployment_records_no_self_approval check (approved_by_auth_user_id is null or approved_by_auth_user_id <> created_by_auth_user_id)
 );
 
 comment on table app.tenant_deployment_records is
@@ -138,8 +145,8 @@ begin
     raise exception 'deployment_qualification_reason_required: a real qualification reason must be stated' using errcode = 'check_violation';
   end if;
 
-  insert into app.tenant_deployment_records (tenant_id, qualification_reason, contract_reference, created_by)
-  values (p_tenant_id, p_qualification_reason, p_contract_reference, p_actor_label)
+  insert into app.tenant_deployment_records (tenant_id, qualification_reason, contract_reference, created_by_auth_user_id, created_by)
+  values (p_tenant_id, p_qualification_reason, p_contract_reference, p_actor_auth_user_id, p_actor_label)
   returning * into v_record;
 
   perform app.capture_audit_event(
@@ -181,6 +188,11 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
+  if v_record.created_by_auth_user_id = p_actor_auth_user_id then
+    raise exception 'deployment_self_approval_forbidden: identity % cannot approve a dedicated deployment qualification they themselves requested', p_actor_auth_user_id
+      using errcode = 'insufficient_privilege';
+  end if;
+
   update app.tenant_deployment_records
   set status = 'qualified', approved_by_auth_user_id = p_actor_auth_user_id, approved_by = p_actor_label, approved_at = now()
   where id = p_deployment_record_id
@@ -196,7 +208,7 @@ end;
 $$;
 
 comment on function app.approve_dedicated_deployment_qualification is
-  'IAE-032: "Provisioning requires contract/security/CTO approval" (Prompt 360 §24) -- DEPLOY:Approve is a real, separate authority tier from DEPLOY:Configure (which merely requested the qualification); the underlying app.principal_memberships/app.role_assignments authority model does not by itself prevent one identity from holding both, so this is enforced by a real, distinct grant requirement, not merely a UI convention.';
+  'IAE-032: "Provisioning requires contract/security/CTO approval" (Prompt 360 §24) -- DEPLOY:Approve is a real, separate authority tier from DEPLOY:Configure (which merely requested the qualification); the underlying app.principal_memberships/app.role_assignments authority model does not by itself prevent one identity from holding both, so self-approval is additionally forbidden explicitly here (deployment_self_approval_forbidden) AND at the tenant_deployment_records_no_self_approval CHECK-constraint level, mirroring IAE-031''s own legal_holds_no_self_release precedent.';
 
 create function app.set_deployment_provisioning_status(
   p_deployment_record_id uuid,

@@ -40,7 +40,13 @@
 --    identical "absence means default" structural pattern `IAE-032`'s own
 --    `app.tenant_deployment_records` already established for `deployment_type
 --    = 'dedicated'`; requesting the already-default `apac` explicitly would
---    be a meaningless row.
+--    be a meaningless row. Self-approval is forbidden at BOTH the CHECK-
+--    constraint level (`tenant_region_assignments_no_self_approval`) AND an
+--    explicit, cleanly-named application check inside `app.
+--    approve_region_assignment` itself, the identical two-layer guard
+--    `IAE-032`'s own `app.approve_dedicated_deployment_qualification` uses,
+--    which in turn mirrors `IAE-031`'s own `legal_holds_no_self_release`
+--    precedent.
 -- 6. `app.region_capability_exceptions` is the real, structural "register an
 --    exception" alternative-flow primitive (Prompt 361 §22) -- one row per
 --    `(region_assignment_id, service_category)`, `DEPLOY:Approve`-gated (the
@@ -164,13 +170,15 @@ create table app.tenant_region_assignments (
   decommissioned_at timestamptz,
   rejected_at timestamptz,
   rejection_reason text,
+  created_by_auth_user_id uuid references auth.users (id),
   created_by text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   record_version integer not null default 1,
   constraint tenant_region_assignments_region_check check (region_code in ('americas', 'emea')),
   constraint tenant_region_assignments_status_check check (status in ('pending_review', 'approved', 'active', 'rejected', 'decommissioned')),
-  constraint tenant_region_assignments_tenant_unique unique (tenant_id)
+  constraint tenant_region_assignments_tenant_unique unique (tenant_id),
+  constraint tenant_region_assignments_no_self_approval check (approved_by_auth_user_id is null or approved_by_auth_user_id <> created_by_auth_user_id)
 );
 
 comment on table app.tenant_region_assignments is
@@ -247,8 +255,8 @@ begin
     raise exception 'region_qualification_reason_required: a real qualification reason must be stated' using errcode = 'check_violation';
   end if;
 
-  insert into app.tenant_region_assignments (tenant_id, region_code, qualification_reason, contract_reference, created_by)
-  values (p_tenant_id, p_region_code, p_qualification_reason, p_contract_reference, p_actor_label)
+  insert into app.tenant_region_assignments (tenant_id, region_code, qualification_reason, contract_reference, created_by_auth_user_id, created_by)
+  values (p_tenant_id, p_region_code, p_qualification_reason, p_contract_reference, p_actor_auth_user_id, p_actor_label)
   returning * into v_record;
 
   perform app.capture_audit_event(
@@ -290,6 +298,11 @@ begin
   v_decision := app.evaluate_permission(p_actor_auth_user_id, v_record.tenant_id, 'DEPLOY', 'Approve');
   if not v_decision.allowed then
     raise exception 'insufficient_authority: identity % lacks DEPLOY:Approve (%) for tenant %', p_actor_auth_user_id, v_decision.reason, v_record.tenant_id
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  if v_record.created_by_auth_user_id = p_actor_auth_user_id then
+    raise exception 'region_self_approval_forbidden: identity % cannot approve a region assignment they themselves requested', p_actor_auth_user_id
       using errcode = 'insufficient_privilege';
   end if;
 

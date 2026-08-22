@@ -20,7 +20,7 @@ describe("parseTenantRegionAssignment", () => {
       qualification_reason: "expansion into the Americas market", contract_reference: "MSA-2026-002",
       approved_by_auth_user_id: null, approved_by: null, approved_at: null, activated_at: null,
       decommissioned_at: null, rejected_at: null, rejection_reason: null,
-      created_by: "admin1", created_at: "2026-08-22T00:00:00.000Z", updated_at: "2026-08-22T00:00:00.000Z", record_version: 1,
+      created_by_auth_user_id: ACTOR_ID, created_by: "admin1", created_at: "2026-08-22T00:00:00.000Z", updated_at: "2026-08-22T00:00:00.000Z", record_version: 1,
     });
     assert.equal(record.status, "pending_review");
     assert.equal(record.regionCode, "americas");

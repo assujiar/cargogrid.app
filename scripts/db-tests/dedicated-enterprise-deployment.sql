@@ -192,6 +192,33 @@ begin
 end;
 $$;
 
+\echo '>> self-approval regression: admin2 (tenant iaedep2''s own DEPLOY:Configure/View/Approve -- holds BOTH tiers) cannot approve a deployment qualification they themselves requested, live-reproduced against a genuinely pending_qualification record; a different actor holding Approve can'
+do $$
+declare
+  v_tenant2 uuid := (select id from app.tenants where slug = 'iaedep2');
+  v_admin2 uuid := '00000000-0000-0000-0000-000035000004';
+  v_record2_id uuid;
+begin
+  perform app.request_dedicated_deployment_qualification(v_tenant2, 'expansion into APAC for tenant2', 'MSA-2026-003', v_admin2, 'admin2');
+  select id into v_record2_id from app.tenant_deployment_records where tenant_id = v_tenant2;
+
+  begin
+    perform app.approve_dedicated_deployment_qualification(v_record2_id, v_admin2, 'admin2');
+    raise exception 'assertion failed: expected deployment_self_approval_forbidden for admin2 approving their own request (despite holding a real DEPLOY:Approve grant), the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- A raw-SQL bypass attempt is independently blocked by the CHECK constraint itself.
+  begin
+    update app.tenant_deployment_records set approved_by_auth_user_id = created_by_auth_user_id where id = v_record2_id;
+    raise exception 'assertion failed: expected tenant_deployment_records_no_self_approval CHECK violation on a raw-SQL bypass attempt, the update unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+end;
+$$;
+
 \echo '>> app.set_deployment_provisioning_status: the real, ordered transition graph -- qualified cannot skip straight to active; provisioning cannot skip straight to decommissioned; viewer1 (no Configure) rejected; admin1 (Configure) drives qualified->provisioning->active->decommissioned; app.resolve_tenant_deployment_type flips to dedicated ONLY at active, and back to shared once decommissioned'
 do $$
 declare

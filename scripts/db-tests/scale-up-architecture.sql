@@ -304,11 +304,15 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaescale');
   v_admin1 uuid := '00000000-0000-0000-0000-000037000001';
+  v_supreme uuid := '00000000-0000-0000-0000-000037000000';
   v_deployment_id uuid;
 begin
   perform app.request_dedicated_deployment_qualification(v_tenant1, 'dedicated instance required for sustained analytics load', 'MSA-2026-005', v_admin1, 'admin1');
   select id into v_deployment_id from app.tenant_deployment_records where tenant_id = v_tenant1;
-  perform app.approve_dedicated_deployment_qualification(v_deployment_id, v_admin1, 'admin1');
+  -- Approved by supreme (a different actor from admin1, the requester) -- admin1 also
+  -- holds DEPLOY:Approve in this fixture, but self-approval is now correctly forbidden
+  -- (IAE-032's own self-approval regression fix), so the requester cannot double as approver.
+  perform app.approve_dedicated_deployment_qualification(v_deployment_id, v_supreme, 'supreme');
   perform app.set_deployment_provisioning_status(v_deployment_id, 'provisioning', v_admin1, 'admin1');
   perform app.set_deployment_provisioning_status(v_deployment_id, 'active', v_admin1, 'admin1');
 

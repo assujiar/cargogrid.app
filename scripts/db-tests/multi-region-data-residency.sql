@@ -370,7 +370,7 @@ begin
 end;
 $$;
 
-\echo '>> app.set_region_assignment_status rejection path (a fresh, second tenant''s own request): empty rejection reason rejected; admin2 (Configure) rejects tenant2''s own request with a real reason; rejected is terminal'
+\echo '>> self-approval regression (a fresh, second tenant''s own request): admin2 (tenant iaeres2''s own DEPLOY:Configure/View/Approve -- holds BOTH tiers) cannot approve a region assignment they themselves requested, live-reproduced and also blocked at the raw-SQL CHECK-constraint level; app.set_region_assignment_status rejection path: empty rejection reason rejected; admin2 (Configure) rejects tenant2''s own request with a real reason; rejected is terminal'
 do $$
 declare
   v_tenant2 uuid := (select id from app.tenants where slug = 'iaeres2');
@@ -380,6 +380,20 @@ declare
 begin
   perform app.request_region_assignment(v_tenant2, 'emea', 'exploring EMEA expansion', 'MSA-2026-004', v_admin2, 'admin2');
   select id into v_assignment_id from app.tenant_region_assignments where tenant_id = v_tenant2;
+
+  begin
+    perform app.approve_region_assignment(v_assignment_id, v_admin2, 'admin2');
+    raise exception 'assertion failed: expected region_self_approval_forbidden for admin2 approving their own request (despite holding a real DEPLOY:Approve grant), the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  begin
+    update app.tenant_region_assignments set approved_by_auth_user_id = created_by_auth_user_id where id = v_assignment_id;
+    raise exception 'assertion failed: expected tenant_region_assignments_no_self_approval CHECK violation on a raw-SQL bypass attempt, the update unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
 
   begin
     perform app.set_region_assignment_status(v_assignment_id, 'rejected', null, v_admin2, 'admin2');

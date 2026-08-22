@@ -18,7 +18,7 @@ describe("parseTenantDeploymentRecord", () => {
       id: ROW_ID, tenant_id: TENANT_ID, deployment_type: "dedicated", status: "pending_qualification",
       qualification_reason: "expansion into APAC", contract_reference: "MSA-2026-001",
       approved_by_auth_user_id: null, approved_by: null, approved_at: null, provisioned_at: null, decommissioned_at: null,
-      created_by: "admin1", created_at: "2026-08-22T00:00:00.000Z", updated_at: "2026-08-22T00:00:00.000Z", record_version: 1,
+      created_by_auth_user_id: ACTOR_ID, created_by: "admin1", created_at: "2026-08-22T00:00:00.000Z", updated_at: "2026-08-22T00:00:00.000Z", record_version: 1,
     });
     assert.equal(record.status, "pending_qualification");
     assert.equal(record.deploymentType, "dedicated");

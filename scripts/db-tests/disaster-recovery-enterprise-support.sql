@@ -99,7 +99,7 @@ begin
 end;
 $$;
 
-\echo '>> app.record_dr_restore_test: rep1 (no SUP:Configure) rejected; invalid deployment_type/component_scope/status rejected; a passed result with no rpo/rto rejected; a failed result with no failure_reason/recovery_steps/retest_scheduled_at rejected; admin1 (Configure) succeeds for a real shared/database passed test and a real shared/jobs_integrations FAILED test'
+\echo '>> app.record_dr_restore_test: rep1 (no SUP:Configure) rejected; invalid deployment_type/component_scope/status rejected; a passed result with no rpo/rto rejected; a failed result with no failure_reason/recovery_steps/retest_scheduled_at rejected; a failed result with a hollow EMPTY-STRING (not null) failure_reason/recovery_steps also rejected; admin1 (Configure) succeeds for a real shared/database passed test and a real shared/jobs_integrations FAILED test'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaedr');
@@ -150,6 +150,13 @@ begin
     null;
   end;
 
+  begin
+    perform app.record_dr_restore_test(v_tenant1, 'shared', 'jobs_integrations', 'failed', null, null, '', '', now() + interval '3 days', null, null, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected dr_test_failure_evidence_required for a hollow EMPTY-STRING (not null) failure_reason/recovery_steps, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+
   v_passed := app.record_dr_restore_test(v_tenant1, 'shared', 'database', 'passed', 30, 60, null, null, null, null, null, v_admin1, 'admin1');
   if v_passed.status <> 'passed' or v_passed.observed_rpo_minutes <> 30 or v_passed.observed_rto_minutes <> 60 then
     raise exception 'assertion failed: expected a real passed row with rpo=30 rto=60, got status=% rpo=% rto=%', v_passed.status, v_passed.observed_rpo_minutes, v_passed.observed_rto_minutes;
@@ -184,7 +191,10 @@ begin
 
   perform app.request_dedicated_deployment_qualification(v_tenant1, 'dedicated instance required for DR isolation testing', 'MSA-2026-006', v_admin1, 'admin1');
   select id into v_deployment_id from app.tenant_deployment_records where tenant_id = v_tenant1;
-  perform app.approve_dedicated_deployment_qualification(v_deployment_id, v_admin1, 'admin1');
+  -- Approved by supreme (a different actor from admin1, the requester) -- admin1 also
+  -- holds DEPLOY:Approve in this fixture, but self-approval is now correctly forbidden
+  -- (IAE-032's own self-approval regression fix), so the requester cannot double as approver.
+  perform app.approve_dedicated_deployment_qualification(v_deployment_id, v_supreme, 'supreme');
   perform app.set_deployment_provisioning_status(v_deployment_id, 'provisioning', v_admin1, 'admin1');
   perform app.set_deployment_provisioning_status(v_deployment_id, 'active', v_admin1, 'admin1');
 

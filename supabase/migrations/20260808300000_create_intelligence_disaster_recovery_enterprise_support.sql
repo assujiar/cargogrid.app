@@ -163,6 +163,11 @@ begin
     raise exception 'dr_test_invalid_status: %', p_status using errcode = 'check_violation';
   end if;
 
+  if p_status = 'failed' and (coalesce(trim(p_failure_reason), '') = '' or coalesce(trim(p_recovery_steps), '') = '') then
+    raise exception 'dr_test_failure_evidence_required: a real, non-empty failure_reason and recovery_steps must be stated for a failed result'
+      using errcode = 'check_violation';
+  end if;
+
   if p_deployment_type = 'dedicated' and app.resolve_tenant_deployment_type(p_tenant_id) <> 'dedicated' then
     raise exception 'dr_test_deployment_mismatch: tenant % does not have an active dedicated deployment', p_tenant_id
       using errcode = 'check_violation';
