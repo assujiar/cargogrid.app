@@ -60,6 +60,8 @@ export const AiQuotationSuggestionDetailSchema = z.object({
   reviewedAt: z.string().nullable(),
   createdAt: z.string(),
   outputPayload: z.record(z.string(), z.unknown()).nullable(),
+  /** Tier C fix (IAE-020's own review): true when outputPayload was nulled out because this actor lacks COM:View cost -- mirrors app.quotation_lines_directory's own sellMasked/costMasked naming convention. */
+  outputPayloadMasked: z.boolean(),
   confidenceLabel: z.enum(["high", "medium", "low"]).nullable(),
   modelVersion: z.string().nullable(),
   billedAmount: z.number().nullable(),
@@ -81,6 +83,7 @@ export function parseAiQuotationSuggestionDetail(row: Record<string, unknown>): 
     reviewedAt: row.reviewed_at,
     createdAt: row.created_at,
     outputPayload: row.output_payload,
+    outputPayloadMasked: row.output_payload_masked,
     confidenceLabel: row.confidence_label,
     modelVersion: row.model_version,
     billedAmount: row.billed_amount,
@@ -143,3 +146,57 @@ export const AcceptAiQuotationSuggestionAsDraftInputSchema = z.object({
   actorLabel: z.string().min(1),
 });
 export type AcceptAiQuotationSuggestionAsDraftInput = z.input<typeof AcceptAiQuotationSuggestionAsDraftInputSchema>;
+
+export const GetAiQuotationPromptContextInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  opportunityId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+});
+export type GetAiQuotationPromptContextInput = z.input<typeof GetAiQuotationPromptContextInputSchema>;
+
+/** One row per current margin calculation for the opportunity's own latest costing request -- the real, versioned source evidence handed to the AI provider. Tier C fix (IAE-020's own review): reads via an explicit actor, never auth.uid() (NULL for the service-role client this capability's own dispatch must use). */
+export const AiQuotationMarginSourceSchema = z.object({
+  marginCalculationId: z.string().uuid(),
+  rateSelectionId: z.string().uuid(),
+  ruleVersionId: z.string().uuid(),
+  sellAmount: z.coerce.number().nullable(),
+  sellCurrency: z.string().nullable(),
+  marginPct: z.coerce.number().nullable(),
+});
+export type AiQuotationMarginSource = z.infer<typeof AiQuotationMarginSourceSchema>;
+
+export const AiQuotationPromptContextSchema = z.object({
+  opportunityName: z.string(),
+  opportunityStage: z.string(),
+  opportunityValueAmount: z.coerce.number().nullable(),
+  opportunityValueCurrency: z.string().nullable(),
+  opportunityRequirements: z.record(z.string(), z.unknown()),
+  costingRequestId: z.string().uuid().nullable(),
+  marginSources: z.array(AiQuotationMarginSourceSchema),
+});
+export type AiQuotationPromptContext = z.infer<typeof AiQuotationPromptContextSchema>;
+
+export function parseAiQuotationPromptContext(rows: Record<string, unknown>[]): AiQuotationPromptContext | null {
+  if (rows.length === 0) {
+    return null;
+  }
+  const [header] = rows;
+  return AiQuotationPromptContextSchema.parse({
+    opportunityName: header!.opportunity_name,
+    opportunityStage: header!.opportunity_stage,
+    opportunityValueAmount: header!.opportunity_value_amount,
+    opportunityValueCurrency: header!.opportunity_value_currency,
+    opportunityRequirements: header!.opportunity_requirements ?? {},
+    costingRequestId: header!.costing_request_id,
+    marginSources: rows
+      .filter((row) => row.margin_calculation_id !== null)
+      .map((row) => ({
+        marginCalculationId: row.margin_calculation_id,
+        rateSelectionId: row.rate_selection_id,
+        ruleVersionId: row.rule_version_id,
+        sellAmount: row.sell_amount,
+        sellCurrency: row.sell_currency,
+        marginPct: row.margin_pct,
+      })),
+  });
+}

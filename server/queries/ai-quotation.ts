@@ -7,14 +7,21 @@
 import {
   GetAiQuotationSuggestionInputSchema,
   ListAiQuotationSuggestionsForOpportunityInputSchema,
+  GetAiQuotationPromptContextInputSchema,
   parseAiQuotationSuggestionDetail,
+  parseAiQuotationPromptContext,
   type GetAiQuotationSuggestionInput,
   type ListAiQuotationSuggestionsForOpportunityInput,
+  type GetAiQuotationPromptContextInput,
   type AiQuotationSuggestionDetail,
+  type AiQuotationPromptContext,
 } from "../contracts/ai-quotation/ai-quotation.ts";
 
 export interface AiQuotationQueryRpcClient {
-  rpc(fn: "get_ai_quotation_suggestion" | "list_ai_quotation_suggestions_for_opportunity", args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
+  rpc(
+    fn: "get_ai_quotation_suggestion" | "list_ai_quotation_suggestions_for_opportunity" | "get_ai_quotation_prompt_context",
+    args: Record<string, unknown>,
+  ): Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
 export class AiQuotationQueryError extends Error {
@@ -57,4 +64,27 @@ export async function listAiQuotationSuggestionsForOpportunity(client: AiQuotati
     throw new AiQuotationQueryError("list_ai_quotation_suggestions_for_opportunity returned a non-array result");
   }
   return data.map((row) => parseAiQuotationSuggestionDetail(row as Record<string, unknown>));
+}
+
+/**
+ * Tier C fix (IAE-020's own review): the AI-dispatch orchestration client's own explicit-actor
+ * read of opportunity/costing/margin context -- never relies on auth.uid() (NULL for the
+ * service-role client that call must use per IAE-019). Authority: COM:Create (the same gate
+ * recordAiQuotationSuggestion itself requires). Cost/margin fields are null unless the actor
+ * holds COM:View cost. Returns null only if the opportunity does not exist/belong to the tenant.
+ */
+export async function getAiQuotationPromptContext(client: AiQuotationQueryRpcClient, input: GetAiQuotationPromptContextInput): Promise<AiQuotationPromptContext | null> {
+  const parsedInput = GetAiQuotationPromptContextInputSchema.parse(input);
+  const { data, error } = await client.rpc("get_ai_quotation_prompt_context", {
+    p_tenant_id: parsedInput.tenantId,
+    p_opportunity_id: parsedInput.opportunityId,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+  });
+  if (error) {
+    throw new AiQuotationQueryError(error.message);
+  }
+  if (!Array.isArray(data)) {
+    throw new AiQuotationQueryError("get_ai_quotation_prompt_context returned a non-array result");
+  }
+  return parseAiQuotationPromptContext(data as Record<string, unknown>[]);
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseAiQuotationSuggestion,
   parseAiQuotationSuggestionDetail,
+  parseAiQuotationPromptContext,
   RecordAiQuotationSuggestionInputSchema,
   DismissAiQuotationSuggestionInputSchema,
   AcceptAiQuotationSuggestionAsDraftInputSchema,
@@ -73,6 +74,7 @@ describe("parseAiQuotationSuggestionDetail", () => {
       reviewed_at: "2026-08-21T01:00:00.000Z",
       created_at: "2026-08-21T00:00:00.000Z",
       output_payload: { draftLines: [] },
+      output_payload_masked: false,
       confidence_label: "high",
       model_version: "gpt-real-vision-2026-08",
       billed_amount: 0.021,
@@ -80,6 +82,31 @@ describe("parseAiQuotationSuggestionDetail", () => {
     });
     assert.equal(detail.confidenceLabel, "high");
     assert.equal(detail.requestStatus, "succeeded");
+    assert.equal(detail.outputPayloadMasked, false);
+  });
+
+  test("Tier C fix: a masked row (actor lacks COM:View cost) nulls output_payload and flags output_payload_masked", () => {
+    const detail = parseAiQuotationSuggestionDetail({
+      id: SUGGESTION_ID,
+      tenant_id: TENANT_ID,
+      opportunity_id: OPPORTUNITY_ID,
+      ai_governed_request_id: REQUEST_ID,
+      status: "pending",
+      accepted_quotation_id: null,
+      dismiss_reason: null,
+      requested_by: "sales rep",
+      reviewed_by: null,
+      reviewed_at: null,
+      created_at: "2026-08-21T00:00:00.000Z",
+      output_payload: null,
+      output_payload_masked: true,
+      confidence_label: "high",
+      model_version: "gpt-real-vision-2026-08",
+      billed_amount: 0.021,
+      request_status: "succeeded",
+    });
+    assert.equal(detail.outputPayload, null);
+    assert.equal(detail.outputPayloadMasked, true);
   });
 });
 
@@ -160,5 +187,72 @@ describe("AcceptAiQuotationSuggestionAsDraftInputSchema", () => {
         actorLabel: "sales manager",
       }),
     );
+  });
+});
+
+describe("parseAiQuotationPromptContext", () => {
+  test("Tier C fix: returns null for zero rows (opportunity not found/not accessible)", () => {
+    assert.equal(parseAiQuotationPromptContext([]), null);
+  });
+
+  test("a header row with no margin calculations yet produces an empty marginSources array, not a fabricated one", () => {
+    const context = parseAiQuotationPromptContext([
+      {
+        opportunity_name: "Contoso freight lane",
+        opportunity_stage: "ready_for_costing",
+        opportunity_value_amount: 5000,
+        opportunity_value_currency: "USD",
+        opportunity_requirements: { origin: "JKT" },
+        costing_request_id: null,
+        margin_calculation_id: null,
+        rate_selection_id: null,
+        rule_version_id: null,
+        sell_amount: null,
+        sell_currency: null,
+        margin_pct: null,
+      },
+    ]);
+    assert.equal(context?.costingRequestId, null);
+    assert.deepEqual(context?.marginSources, []);
+  });
+
+  test("real, current margin sources round-trip with numeric coercion (Postgres numeric arrives as a string over the wire)", () => {
+    const context = parseAiQuotationPromptContext([
+      {
+        opportunity_name: "Contoso freight lane",
+        opportunity_stage: "ready_for_costing",
+        opportunity_value_amount: "5000.00",
+        opportunity_value_currency: "USD",
+        opportunity_requirements: {},
+        costing_request_id: "823e4567-e89b-12d3-a456-426614174000",
+        margin_calculation_id: MARGIN_CALCULATION_ID,
+        rate_selection_id: "923e4567-e89b-12d3-a456-426614174000",
+        rule_version_id: "a23e4567-e89b-12d3-a456-426614174000",
+        sell_amount: "19999999.99",
+        sell_currency: "IDR",
+        margin_pct: "38.27",
+      },
+    ]);
+    assert.equal(context?.opportunityValueAmount, 5000);
+    assert.equal(context?.marginSources.length, 1);
+    assert.equal(context?.marginSources[0]?.sellAmount, 19999999.99);
+    assert.equal(context?.marginSources[0]?.marginPct, 38.27);
+  });
+
+  test("multiple current margin calculations for the same opportunity all round-trip", () => {
+    const rowBase = {
+      opportunity_name: "Contoso freight lane",
+      opportunity_stage: "ready_for_costing",
+      opportunity_value_amount: 5000,
+      opportunity_value_currency: "USD",
+      opportunity_requirements: {},
+      costing_request_id: "823e4567-e89b-12d3-a456-426614174000",
+      sell_currency: "USD",
+    };
+    const context = parseAiQuotationPromptContext([
+      { ...rowBase, margin_calculation_id: MARGIN_CALCULATION_ID, rate_selection_id: "923e4567-e89b-12d3-a456-426614174000", rule_version_id: "a23e4567-e89b-12d3-a456-426614174000", sell_amount: 500, margin_pct: 20 },
+      { ...rowBase, margin_calculation_id: "b23e4567-e89b-12d3-a456-426614174000", rate_selection_id: "c23e4567-e89b-12d3-a456-426614174000", rule_version_id: "d23e4567-e89b-12d3-a456-426614174000", sell_amount: 800, margin_pct: 25 },
+    ]);
+    assert.equal(context?.marginSources.length, 2);
   });
 });

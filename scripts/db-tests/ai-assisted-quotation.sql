@@ -7,7 +7,7 @@
 
 \set ON_ERROR_STOP on
 
-\echo '>> setup: tenant iaeaiq with a real openai_multimodal integration connection, a real opportunity->costing->rate->margin chain (mirroring the established costing golden path); rep1 (COM full set + AI:Create/View), viewer1 (COM:View only); a second tenant (iaeaiq2) for cross-tenant isolation'
+\echo '>> setup: tenant iaeaiq with a real openai_multimodal integration connection, a real opportunity->costing->rate->margin chain (mirroring the established costing golden path); rep1 (COM full set + AI:Create/View), viewer1 (COM:View only), juniorrep1 (COM:Create/Edit/View but no View cost/selling price/margin -- can draft a quotation but not see wholesale figures); a second tenant (iaeaiq2) for cross-tenant isolation'
 do $$
 declare
   v_tenant1 uuid;
@@ -15,11 +15,14 @@ declare
   v_admin1 uuid := '00000000-0000-0000-0000-000023000001';
   v_rep1 uuid := '00000000-0000-0000-0000-000023000002';
   v_viewer1 uuid := '00000000-0000-0000-0000-000023000003';
+  v_junior_rep1 uuid := '00000000-0000-0000-0000-000023000004';
   v_admin2 uuid := '00000000-0000-0000-0000-000023000005';
   v_rep_role uuid;
   v_rep_draft app.role_versions;
   v_viewer_role uuid;
   v_viewer_draft app.role_versions;
+  v_junior_rep_role uuid;
+  v_junior_rep_draft app.role_versions;
   v_admin2_role uuid;
   v_admin2_draft app.role_versions;
   v_lead app.leads;
@@ -30,11 +33,13 @@ declare
   v_selection app.rate_selections;
   v_rule app.margin_rule_versions;
   v_calc app.margin_calculations;
+  v_team_org_unit uuid;
 begin
   insert into auth.users (id, email) values
     (v_admin1, 'admin@iaeaiq.test'),
     (v_rep1, 'rep@iaeaiq.test'),
     (v_viewer1, 'viewer@iaeaiq.test'),
+    (v_junior_rep1, 'juniorrep@iaeaiq.test'),
     (v_admin2, 'admin@iaeaiq2.test');
 
   perform app.provision_tenant('iaeaiq', 'IaeAiQ Co', 'idem-iaeaiq', 'tester');
@@ -48,10 +53,20 @@ begin
   perform app.transition_user_status((select id from app.users where email = 'admin@iaeaiq.test'), 'active', 'onboarded', 'tester');
   perform app.grant_principal_membership(v_admin1, 'tenant_admin', v_tenant1, null, 'tester');
 
-  perform app.invite_user(v_tenant1, v_rep1, 'rep@iaeaiq.test', 'IaeAiQ Rep', null, 'tester', now() + interval '7 days');
+  -- A shared team org unit -- rep1 (the opportunity's own owner) and
+  -- juniorrep1 both sit in it, so juniorrep1 passes app.can_access_record's
+  -- own shared-org-unit path on rep1's opportunity (record-scope access,
+  -- entirely orthogonal to the COM:View cost masking dimension this fixture
+  -- exists to prove below).
+  perform app.create_org_unit(v_tenant1, 'company', null, 'IAEAIQ-CO', 'IaeAiQ Co', 'tester');
+  v_team_org_unit := (select id from app.org_units where tenant_id = v_tenant1 and code = 'IAEAIQ-CO');
+
+  perform app.invite_user(v_tenant1, v_rep1, 'rep@iaeaiq.test', 'IaeAiQ Rep', v_team_org_unit, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'rep@iaeaiq.test'), 'active', 'onboarded', 'tester');
   perform app.invite_user(v_tenant1, v_viewer1, 'viewer@iaeaiq.test', 'IaeAiQ Viewer', null, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'viewer@iaeaiq.test'), 'active', 'onboarded', 'tester');
+  perform app.invite_user(v_tenant1, v_junior_rep1, 'juniorrep@iaeaiq.test', 'IaeAiQ Junior Rep', v_team_org_unit, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'juniorrep@iaeaiq.test'), 'active', 'onboarded', 'tester');
 
   v_rep_role := (app.create_role(v_tenant1, 'AiQ Rep', 'COM full set + AI:Create/View + INTHUB:Configure', 'tester')).id;
   v_rep_draft := app.create_role_version(v_rep_role, 'tester');
@@ -68,6 +83,18 @@ begin
   perform app.set_role_version_permissions(v_viewer_draft.id, array(select id from app.permissions where resource_module_code = 'COM' and action = 'View'), 'tester');
   perform app.publish_role_version(v_viewer_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_viewer_role and status = 'published'), v_viewer1, v_admin1, 'admin');
+
+  -- COM:Create/Edit/View + AI:Create/View -- deliberately NO View cost/View selling price/View margin.
+  -- Can draft/request an AI suggestion but must never see wholesale cost/margin figures (Prompt 348 §24).
+  v_junior_rep_role := (app.create_role(v_tenant1, 'AiQ Junior Rep', 'COM:Create/Edit/View + AI:Create/View -- no cost/margin visibility', 'tester')).id;
+  v_junior_rep_draft := app.create_role_version(v_junior_rep_role, 'tester');
+  perform app.set_role_version_permissions(
+    v_junior_rep_draft.id,
+    array(select id from app.permissions where (resource_module_code = 'COM' and action in ('Create', 'Edit', 'View')) or (resource_module_code = 'AI' and action in ('Create', 'View'))),
+    'tester'
+  );
+  perform app.publish_role_version(v_junior_rep_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_junior_rep_role and status = 'published'), v_junior_rep1, v_admin1, 'admin');
 
   perform app.invite_user(v_tenant2, v_admin2, 'admin@iaeaiq2.test', 'IaeAiQ2 Admin', null, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'admin@iaeaiq2.test'), 'active', 'onboarded', 'tester');
@@ -96,7 +123,7 @@ begin
   select * into v_opportunity from app.create_opportunity(
     v_tenant1, v_prospect.id, 'IaeAiQ ocean lane',
     jsonb_build_object('service_type', 'ocean_freight', 'cargo_description', 'General cargo', 'origin', 'Jakarta', 'destination', 'Surabaya', 'target_ready_date', '2026-09-01'),
-    v_rep1, null, v_rep1, 'tester'
+    v_rep1, v_team_org_unit, v_rep1, 'tester'
   );
   select * into v_request from app.request_costing(v_opportunity.id, '[]'::jsonb, null, v_rep1, 'tester');
   select * into v_rate from app.create_rate_version(
@@ -209,7 +236,7 @@ begin
   raise notice 'PASS: record_ai_quotation_suggestion enforces authority, opportunity existence, tenant/feature/correlation/status cross-checks (including the null-correlation regression fix), and is idempotent';
 end $$;
 
-\echo '>> read paths: app.get_ai_quotation_suggestion/app.list_ai_quotation_suggestions_for_opportunity are COM:View-gated and surface the underlying governed request''s own real evidence (output_payload/confidence_label); a tenant2 actor with zero tenant1 permissions is denied, never merely returns an empty/masked row'
+\echo '>> read paths: app.get_ai_quotation_suggestion/app.list_ai_quotation_suggestions_for_opportunity are COM:View-gated and surface the underlying governed request''s own real evidence (confidence_label/request_status always visible; output_payload masked behind COM:View cost -- see the dedicated Tier C fix regression block below for the full masking proof); a tenant2 actor with zero tenant1 permissions is denied, never merely returns an empty/masked row'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaiq');
@@ -223,9 +250,12 @@ declare
 begin
   select id into v_suggestion_id from app.ai_quotation_suggestions where tenant_id = v_tenant1 and opportunity_id = v_opportunity_id and status = 'pending' order by created_at asc limit 1;
 
+  -- viewer1 lacks COM:View cost -- output_payload is correctly masked here
+  -- (Tier C fix, spec-compliance lens); confidence_label/request_status are
+  -- never masked, since they carry no pricing/margin data.
   select * into v_detail from app.get_ai_quotation_suggestion(v_suggestion_id, v_viewer1);
-  if v_detail.output_payload is null or v_detail.confidence_label <> 'high' or v_detail.request_status <> 'succeeded' then
-    raise exception 'assertion failed: expected the viewer to see the real governed request evidence, got %', to_jsonb(v_detail);
+  if v_detail.output_payload is not null or not v_detail.output_payload_masked or v_detail.confidence_label <> 'high' or v_detail.request_status <> 'succeeded' then
+    raise exception 'assertion failed: expected the viewer to see real confidence_label/request_status but a masked (null) output_payload, got %', to_jsonb(v_detail);
   end if;
 
   select count(*) into v_list_count from app.list_ai_quotation_suggestions_for_opportunity(v_tenant1, v_opportunity_id, v_rep1, 50);
@@ -455,5 +485,127 @@ begin
   end if;
 end;
 $$;
+
+-- ===========================================================================
+-- IAE-020's own trailing Tier C review fix regressions
+-- (supabase/migrations/20260805090000_harden_iae020_tier_c_review_fixes.sql)
+-- ===========================================================================
+
+\echo '>> Tier C fix (security lens, High): app.create_quotation_draft now rejects a p_owner_user_id/p_org_unit_id belonging to a DIFFERENT tenant -- live-reproduced as a real, committed cross-tenant write before this fix; a real tenant1 org unit + tenant1-member owner still succeeds'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaiq');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'iaeaiq2');
+  v_rep1 uuid := '00000000-0000-0000-0000-000023000002';
+  v_admin2 uuid := '00000000-0000-0000-0000-000023000005';
+  v_opportunity_id uuid := (select id from app.opportunities where tenant_id = v_tenant1 and name = 'IaeAiQ ocean lane');
+  v_tenant1_org_unit uuid;
+  v_tenant2_org_unit uuid;
+  v_quotation app.quotations;
+begin
+  -- v_team_org_unit (code IAEAIQ-CO) already exists -- created in the setup
+  -- block above, shared by rep1/juniorrep1 and already the opportunity's own org_unit_id.
+  v_tenant1_org_unit := (select id from app.org_units where tenant_id = v_tenant1 and code = 'IAEAIQ-CO');
+  perform app.create_org_unit(v_tenant2, 'company', null, 'IAEAIQ2-CO', 'IaeAiQ2 Co', 'tester');
+  v_tenant2_org_unit := (select id from app.org_units where tenant_id = v_tenant2 and code = 'IAEAIQ2-CO');
+
+  -- Foreign-tenant owner_user_id (v_admin2 holds zero membership in tenant1).
+  begin
+    perform app.create_quotation_draft(v_tenant1, v_opportunity_id, 'IDR', now() + interval '14 days', null, v_admin2, null, v_rep1, 'rep');
+    raise exception 'assertion failed: expected quotation_owner_not_tenant_member for a foreign-tenant owner_user_id';
+  exception when others then
+    if sqlerrm not like 'quotation_owner_not_tenant_member%' then raise; end if;
+  end;
+
+  -- Foreign-tenant org_unit_id.
+  begin
+    perform app.create_quotation_draft(v_tenant1, v_opportunity_id, 'IDR', now() + interval '14 days', null, v_rep1, v_tenant2_org_unit, v_rep1, 'rep');
+    raise exception 'assertion failed: expected quotation_org_unit_not_found for a foreign-tenant org_unit_id';
+  exception when others then
+    if sqlerrm not like 'quotation_org_unit_not_found%' then raise; end if;
+  end;
+
+  -- A genuine, real tenant1 owner + org unit still succeeds (the fix is scoped, not overbroad).
+  v_quotation := app.create_quotation_draft(v_tenant1, v_opportunity_id, 'IDR', now() + interval '14 days', null, v_rep1, v_tenant1_org_unit, v_rep1, 'rep');
+  if v_quotation.owner_user_id <> v_rep1 or v_quotation.org_unit_id <> v_tenant1_org_unit then
+    raise exception 'assertion failed: expected the real tenant1 owner/org_unit to be accepted, got owner=% org_unit=%', v_quotation.owner_user_id, v_quotation.org_unit_id;
+  end if;
+
+  raise notice 'PASS: create_quotation_draft now validates p_owner_user_id/p_org_unit_id against the tenant';
+end $$;
+
+\echo '>> Tier C fix (spec-compliance lens, High): app.get_ai_quotation_prompt_context reads via an EXPLICIT actor, never auth.uid() -- called here exactly as the service-role orchestration client calls it (no session/JWT claims set at all), still resolves real opportunity/costing/margin data; cost/margin fields are null for an actor holding COM:Create but lacking COM:View cost, populated for one who holds both; an actor lacking COM:Create entirely is denied; a non-existent/inaccessible opportunity returns zero rows'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaiq');
+  v_rep1 uuid := '00000000-0000-0000-0000-000023000002';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000023000003';
+  v_junior_rep1 uuid := '00000000-0000-0000-0000-000023000004';
+  v_opportunity_id uuid := (select id from app.opportunities where tenant_id = v_tenant1 and name = 'IaeAiQ ocean lane');
+  v_row record;
+  v_row_count integer;
+begin
+  -- No session/role change at all -- this IS what a real service-role client
+  -- call looks like from the database's own point of view (auth.uid() would
+  -- be NULL here too; the function must not depend on it).
+  select * into v_row from app.get_ai_quotation_prompt_context(v_tenant1, v_opportunity_id, v_rep1) limit 1;
+  if v_row.opportunity_name <> 'IaeAiQ ocean lane' or v_row.sell_amount is null or v_row.margin_pct is null then
+    raise exception 'assertion failed: expected rep1 (holds COM:View cost) to see real opportunity name and unmasked cost/margin fields, got %', to_jsonb(v_row);
+  end if;
+
+  -- juniorrep1 holds COM:Create (so CAN request an AI suggestion) but lacks
+  -- COM:View cost -- cost/margin fields must be null, never surfaced to an
+  -- external AI provider on this actor's behalf.
+  select * into v_row from app.get_ai_quotation_prompt_context(v_tenant1, v_opportunity_id, v_junior_rep1) limit 1;
+  if v_row.opportunity_name <> 'IaeAiQ ocean lane' or v_row.sell_amount is not null or v_row.margin_pct is not null then
+    raise exception 'assertion failed: expected juniorrep1 (lacks COM:View cost) to see the real opportunity name but null cost/margin fields, got %', to_jsonb(v_row);
+  end if;
+
+  -- viewer1 lacks COM:Create entirely -- denied outright, never reaches the masking logic.
+  begin
+    perform app.get_ai_quotation_prompt_context(v_tenant1, v_opportunity_id, v_viewer1);
+    raise exception 'assertion failed: expected insufficient_authority for viewer1 (lacks COM:Create)';
+  exception when others then
+    if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  select count(*) into v_row_count from app.get_ai_quotation_prompt_context(v_tenant1, '00000000-0000-0000-0000-999999999999', v_rep1);
+  if v_row_count <> 0 then
+    raise exception 'assertion failed: expected zero rows for a non-existent opportunity, got %', v_row_count;
+  end if;
+
+  raise notice 'PASS: get_ai_quotation_prompt_context resolves real data via an explicit actor, masks cost/margin correctly, and returns zero rows for a non-existent opportunity';
+end $$;
+
+\echo '>> Tier C fix (spec-compliance lens, Medium): app.get_ai_quotation_suggestion/app.list_ai_quotation_suggestions_for_opportunity now mask output_payload behind COM:View cost -- viewer1 (COM:View only) sees output_payload=null/output_payload_masked=true on the SAME row rep1 (holds COM:View cost) sees the real payload for'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaiq');
+  v_rep1 uuid := '00000000-0000-0000-0000-000023000002';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000023000003';
+  v_opportunity_id uuid := (select id from app.opportunities where tenant_id = v_tenant1 and name = 'IaeAiQ ocean lane');
+  v_suggestion_id uuid;
+  v_detail record;
+begin
+  select id into v_suggestion_id from app.ai_quotation_suggestions where tenant_id = v_tenant1 and opportunity_id = v_opportunity_id and status = 'pending' order by created_at asc limit 1;
+
+  select * into v_detail from app.get_ai_quotation_suggestion(v_suggestion_id, v_rep1);
+  if v_detail.output_payload is null or v_detail.output_payload_masked <> false then
+    raise exception 'assertion failed: expected rep1 (holds COM:View cost) to see the real, unmasked output_payload, got %', to_jsonb(v_detail);
+  end if;
+
+  select * into v_detail from app.get_ai_quotation_suggestion(v_suggestion_id, v_viewer1);
+  if v_detail.output_payload is not null or v_detail.output_payload_masked <> true then
+    raise exception 'assertion failed: expected viewer1 (lacks COM:View cost) to see a null, masked output_payload, got %', to_jsonb(v_detail);
+  end if;
+
+  -- Same masking dimension through the list path.
+  select * into v_detail from app.list_ai_quotation_suggestions_for_opportunity(v_tenant1, v_opportunity_id, v_viewer1, 50) where id = v_suggestion_id;
+  if v_detail.output_payload is not null or v_detail.output_payload_masked <> true then
+    raise exception 'assertion failed: expected the list path to mask output_payload identically for viewer1, got %', to_jsonb(v_detail);
+  end if;
+
+  raise notice 'PASS: output_payload is masked behind COM:View cost on both read paths, consistently';
+end $$;
 
 \echo '>> ai-assisted-quotation.sql: ALL PASSED'
