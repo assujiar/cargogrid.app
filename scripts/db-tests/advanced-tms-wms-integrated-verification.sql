@@ -1535,8 +1535,10 @@ begin
   -- (this file itself still adds no schema/grant of its own).
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
   -- Baseline moved from 8 to 9: IAE-017 added app.ingest_finance_payment_gateway_webhook_event.
-  if v_count <> 9 then
-    raise exception 'assertion failed: expected the anon-grant count to remain exactly 9, found %', v_count;
+  -- Baseline moved from 9 to 10: IAE-026 added app.resolve_enterprise_idp_by_email_domain
+  -- (a deliberately public resolver, mirrors app.resolve_tenant_by_domain's own shape).
+  if v_count <> 10 then
+    raise exception 'assertion failed: expected the anon-grant count to remain exactly 10, found %', v_count;
   end if;
 end $$;
 

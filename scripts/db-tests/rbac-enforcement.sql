@@ -481,7 +481,28 @@ declare
     -- against the ONE row it names, never used to reach a third party's
     -- data). Genuinely correct-by-design, not a live gap -- added here per
     -- this test's own documented escape hatch.
-    'accept_customer_portal_invite'
+    'accept_customer_portal_invite',
+    -- IAE-026 (Prompt 354, Enterprise IAM SSO/SAML/SCIM): app.resolve_
+    -- enterprise_idp_by_email_domain is deliberately anon-facing by design --
+    -- the identical class app.resolve_tenant_by_domain above already
+    -- documents (a safe public resolver returning only connection_id/
+    -- protocol/display_name for an ACTIVE domain claim + ACTIVE connection,
+    -- never a config/credential/authorization decision). Genuinely
+    -- correct-by-design, not a live gap.
+    'resolve_enterprise_idp_by_email_domain',
+    -- IAE-027 (Prompt 355, Enterprise MFA and Session Controls): app.verify_
+    -- mfa_step_up_challenge (`where id = p_challenge_id and auth_user_id =
+    -- p_actor_auth_user_id`), app.consume_mfa_exception (`where id =
+    -- p_exception_id and target_auth_user_id = p_actor_auth_user_id`), and
+    -- app.assert_current_step_up_authorization (its own step-up-verified
+    -- lookup is scoped `where auth_user_id = p_actor_auth_user_id`) are each
+    -- the identical raw self-row-identity equality shape app.get_self_
+    -- employee/app.is_ticket_queue_member/app.accept_customer_portal_invite
+    -- above already document and are exempted for -- a caller-supplied
+    -- identity can only ever act on or read the ONE row/challenge/exception
+    -- that names it, never reach another identity's own. Genuinely
+    -- correct-by-design, not a live gap.
+    'verify_mfa_step_up_challenge', 'consume_mfa_exception', 'assert_current_step_up_authorization'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor

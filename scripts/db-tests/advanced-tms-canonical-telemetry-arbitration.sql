@@ -625,8 +625,11 @@ begin
   select count(distinct routine_name) into v_count from information_schema.routine_privileges where routine_schema = 'app' and grantee = 'anon';
   -- Baseline moved from 8 to 9: IAE-017 (Prompt 345) added exactly one further
   -- anon-granted function, app.ingest_finance_payment_gateway_webhook_event.
-  if v_count <> 9 then
-    raise exception 'assertion failed: expected the anon-grant count to be exactly 9 (7 pre-existing + IAE-016''s own ingest_logistics_partner_webhook_event + IAE-017''s own ingest_finance_payment_gateway_webhook_event), found %', v_count;
+  -- Baseline moved from 9 to 10: IAE-026 (Prompt 354) added exactly one further
+  -- deliberately public function, app.resolve_enterprise_idp_by_email_domain
+  -- (mirrors app.resolve_tenant_by_domain's own established public-resolver shape).
+  if v_count <> 10 then
+    raise exception 'assertion failed: expected the anon-grant count to be exactly 10 (7 pre-existing + IAE-016''s own ingest_logistics_partner_webhook_event + IAE-017''s own ingest_finance_payment_gateway_webhook_event + IAE-026''s own resolve_enterprise_idp_by_email_domain), found %', v_count;
   end if;
 end $$;
 

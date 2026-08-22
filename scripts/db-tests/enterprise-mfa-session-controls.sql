@@ -1,0 +1,458 @@
+-- Real, executable test evidence for IAE-027 (Enterprise MFA and Session
+-- Controls, Prompt 355) -- run via `pnpm run db:test` against a real,
+-- disposable Postgres database. Scoped to this checkpoint's own additive
+-- migration (supabase/migrations/20260807100000_create_intelligence_enterprise_mfa_session_controls.sql).
+-- Fresh, distinctive tenant fixture (iaemfa), fixture id range
+-- 00000000-0000-0000-0000-000031xxxxxx.
+
+\set ON_ERROR_STOP on
+
+\echo '>> setup: tenant iaemfa with admin1 (tenant_admin + SEC:Configure/View/Approve), viewer1 (SEC:View only), rep1 (plain org_user, no SEC grants); a second tenant iaemfa2 for cross-tenant isolation'
+do $$
+declare
+  v_tenant1 uuid;
+  v_tenant2 uuid;
+  v_supreme uuid := '00000000-0000-0000-0000-000031000000';
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000031000002';
+  v_rep1 uuid := '00000000-0000-0000-0000-000031000003';
+  v_admin2 uuid := '00000000-0000-0000-0000-000031000004';
+  v_admin1_role uuid;
+  v_admin1_draft app.role_versions;
+  v_viewer_role uuid;
+  v_viewer_draft app.role_versions;
+  v_admin2_role uuid;
+  v_admin2_draft app.role_versions;
+begin
+  insert into auth.users (id, email) values
+    (v_supreme, 'supreme@iaemfa.test'),
+    (v_admin1, 'admin@iaemfa.test'),
+    (v_viewer1, 'viewer@iaemfa.test'),
+    (v_rep1, 'rep@iaemfa.test'),
+    (v_admin2, 'admin@iaemfa2.test');
+
+  perform app.grant_principal_membership(v_supreme, 'supreme_admin', null, null, 'tester');
+
+  perform app.provision_tenant('iaemfa', 'IaeMfa Co', 'idem-iaemfa', 'tester');
+  v_tenant1 := (select id from app.tenants where slug = 'iaemfa');
+  perform app.transition_tenant_status(v_tenant1, 'active', 'setup', 'tester');
+
+  perform app.provision_tenant('iaemfa2', 'IaeMfa2 Co', 'idem-iaemfa2', 'tester');
+  v_tenant2 := (select id from app.tenants where slug = 'iaemfa2');
+  perform app.transition_tenant_status(v_tenant2, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant1, v_admin1, 'admin@iaemfa.test', 'Admin One', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin@iaemfa.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin1, 'tenant_admin', v_tenant1, null, 'tester');
+
+  perform app.invite_user(v_tenant1, v_viewer1, 'viewer@iaemfa.test', 'Viewer One', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'viewer@iaemfa.test'), 'active', 'onboarded', 'tester');
+
+  perform app.invite_user(v_tenant1, v_rep1, 'rep@iaemfa.test', 'Rep One', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'rep@iaemfa.test'), 'active', 'onboarded', 'tester');
+
+  perform app.invite_user(v_tenant2, v_admin2, 'admin@iaemfa2.test', 'Admin Two', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin@iaemfa2.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin2, 'tenant_admin', v_tenant2, null, 'tester');
+
+  v_admin1_role := (app.create_role(v_tenant1, 'IaeMfa Admin', 'SEC:Configure/View/Approve', 'tester')).id;
+  v_admin1_draft := app.create_role_version(v_admin1_role, 'tester');
+  perform app.set_role_version_permissions(v_admin1_draft.id, array(select id from app.permissions where resource_module_code = 'SEC' and action in ('Configure', 'View', 'Approve')), 'tester');
+  perform app.publish_role_version(v_admin1_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin1_role and status = 'published'), v_admin1, v_supreme, 'supreme');
+
+  v_viewer_role := (app.create_role(v_tenant1, 'IaeMfa Viewer', 'SEC:View only', 'tester')).id;
+  v_viewer_draft := app.create_role_version(v_viewer_role, 'tester');
+  perform app.set_role_version_permissions(v_viewer_draft.id, array(select id from app.permissions where resource_module_code = 'SEC' and action = 'View'), 'tester');
+  perform app.publish_role_version(v_viewer_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_viewer_role and status = 'published'), v_viewer1, v_supreme, 'supreme');
+
+  v_admin2_role := (app.create_role(v_tenant2, 'IaeMfa2 Admin', 'SEC:Configure/View/Approve -- tenant2 cross-check probe actor', 'tester')).id;
+  v_admin2_draft := app.create_role_version(v_admin2_role, 'tester');
+  perform app.set_role_version_permissions(v_admin2_draft.id, array(select id from app.permissions where resource_module_code = 'SEC' and action in ('Configure', 'View', 'Approve')), 'tester');
+  perform app.publish_role_version(v_admin2_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant2, (select id from app.role_versions where role_id = v_admin2_role and status = 'published'), v_admin2, v_supreme, 'supreme');
+
+  raise notice 'FIXTURE OK tenant1=%, tenant2=%', v_tenant1, v_tenant2;
+end;
+$$;
+
+\echo '>> app.get_or_create_mfa_tenant_policy: SEC:View-gated (rep1, no SEC grant, rejected; admin1/viewer1 succeed); idempotent default-row bootstrap; a different tenant''s admin cannot read this tenant''s own policy; app.set_mfa_tenant_policy: viewer1 (SEC:View only) rejected, admin1 succeeds'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000031000002';
+  v_rep1 uuid := '00000000-0000-0000-0000-000031000003';
+  v_admin2 uuid := '00000000-0000-0000-0000-000031000004';
+  v_first app.mfa_tenant_policies;
+  v_second app.mfa_tenant_policies;
+  v_policy app.mfa_tenant_policies;
+begin
+  begin
+    perform app.get_or_create_mfa_tenant_policy(v_tenant1, v_rep1);
+    raise exception 'assertion failed: expected insufficient_authority for rep1 (no SEC grant), the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  begin
+    perform app.get_or_create_mfa_tenant_policy(v_tenant1, v_admin2);
+    raise exception 'assertion failed: expected insufficient_authority for admin2 (a different tenant''s own admin) reading tenant1''s own MFA policy, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  v_first := app.get_or_create_mfa_tenant_policy(v_tenant1, v_admin1);
+  v_second := app.get_or_create_mfa_tenant_policy(v_tenant1, v_viewer1);
+  if v_first.tenant_id <> v_second.tenant_id or v_first.step_up_max_age_minutes <> 15 then
+    raise exception 'assertion failed: expected the same idempotent default row (step_up_max_age_minutes=15), got % / %', v_first, v_second;
+  end if;
+
+  begin
+    perform app.set_mfa_tenant_policy(v_tenant1, true, '["supreme_admin"]'::jsonb, 30, '[]'::jsonb, v_viewer1, 'viewer1');
+    raise exception 'assertion failed: expected insufficient_authority for viewer1 (SEC:View only), the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  begin
+    perform app.set_mfa_tenant_policy(v_tenant1, true, '["supreme_admin"]'::jsonb, 9999, '[]'::jsonb, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_invalid_step_up_max_age for 9999 minutes, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+
+  v_policy := app.set_mfa_tenant_policy(v_tenant1, true, '["supreme_admin", "tenant_admin"]'::jsonb, 20, '[{"moduleCode": "OPS", "action": "Approve"}]'::jsonb, v_admin1, 'admin1');
+  if v_policy.step_up_max_age_minutes <> 20 or v_policy.tenant_wide_required <> true then
+    raise exception 'assertion failed: expected step_up_max_age_minutes=20/tenant_wide_required=true, got %', v_policy;
+  end if;
+end;
+$$;
+
+\echo '>> app.is_high_risk_action: platform-default set always true regardless of tenant; tenant-additive list only ADDS, an unrelated tenant does not inherit another tenant''s own additions'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'iaemfa2');
+begin
+  if not app.is_high_risk_action(v_tenant1, 'FIN', 'Approve') then
+    raise exception 'assertion failed: expected FIN:Approve to be platform-default high-risk';
+  end if;
+  if not app.is_high_risk_action(v_tenant2, 'IAM', 'Configure') then
+    raise exception 'assertion failed: expected IAM:Configure to be platform-default high-risk for ANY tenant, including one with no explicit policy row';
+  end if;
+  if app.is_high_risk_action(v_tenant1, 'OPS', 'View') then
+    raise exception 'assertion failed: expected OPS:View to NOT be high-risk';
+  end if;
+  if not app.is_high_risk_action(v_tenant1, 'OPS', 'Approve') then
+    raise exception 'assertion failed: expected OPS:Approve to be high-risk for iaemfa (tenant-additive, set above)';
+  end if;
+  if app.is_high_risk_action(v_tenant2, 'OPS', 'Approve') then
+    raise exception 'assertion failed: expected OPS:Approve to NOT be high-risk for iaemfa2 -- tenant-additive lists must not leak across tenants';
+  end if;
+end;
+$$;
+
+\echo '>> app.request_mfa_step_up_challenge: rejected for a non-high-risk action; a genuinely different actor cannot request on behalf of another (assert_actor_is_session_identity is a no-op here since no session is forged yet -- the real cross-actor defense is proven in the RLS block below); app.verify_mfa_step_up_challenge: wrong actor rejected, correct actor verifies; app.assert_current_step_up_authorization: no-op for a non-high-risk action, blocks a high-risk one with no verified challenge, passes once verified, blocks again once the max-age window elapses'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_rep1 uuid := '00000000-0000-0000-0000-000031000003';
+  v_challenge app.mfa_step_up_challenges;
+begin
+  begin
+    perform app.request_mfa_step_up_challenge(v_tenant1, 'OPS', 'View', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_step_up_not_required for a non-high-risk action, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    perform app.assert_current_step_up_authorization(v_tenant1, v_admin1, 'FIN', 'Approve');
+    raise exception 'assertion failed: expected mfa_step_up_required with no verified challenge yet, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- A non-high-risk action never requires step-up -- true no-op, no exception.
+  perform app.assert_current_step_up_authorization(v_tenant1, v_admin1, 'OPS', 'View');
+
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'FIN', 'Approve', v_admin1, 'admin1');
+  if v_challenge.status <> 'pending' then
+    raise exception 'assertion failed: expected status pending, got %', v_challenge.status;
+  end if;
+
+  begin
+    perform app.verify_mfa_step_up_challenge(v_challenge.id, v_rep1, 'rep1');
+    raise exception 'assertion failed: expected mfa_step_up_challenge_not_pending for a different actor''s own challenge, the call unexpectedly succeeded';
+  exception when no_data_found then
+    null;
+  end;
+
+  v_challenge := app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+  if v_challenge.status <> 'verified' then
+    raise exception 'assertion failed: expected status verified, got %', v_challenge.status;
+  end if;
+
+  -- A second verify attempt on the same, already-verified challenge is rejected.
+  begin
+    perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_step_up_challenge_not_pending on a second verify attempt, the call unexpectedly succeeded';
+  exception when no_data_found then
+    null;
+  end;
+
+  -- Now authorized: a real, current, verified challenge exists for this exact actor/tenant/module/action.
+  perform app.assert_current_step_up_authorization(v_tenant1, v_admin1, 'FIN', 'Approve');
+
+  -- Simulate the max-age window elapsing by backdating verified_at past the tenant's own 20-minute policy.
+  update app.mfa_step_up_challenges set verified_at = now() - interval '25 minutes' where id = v_challenge.id;
+  begin
+    perform app.assert_current_step_up_authorization(v_tenant1, v_admin1, 'FIN', 'Approve');
+    raise exception 'assertion failed: expected mfa_step_up_required once the verified challenge is stale (25min > 20min policy), the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+end;
+$$;
+
+\echo '>> app.mfa_step_up_challenges expiry: a challenge past its own 10-minute challenge_expires_at cannot be verified'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_challenge app.mfa_step_up_challenges;
+begin
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'IAM', 'Configure', v_admin1, 'admin1');
+  update app.mfa_step_up_challenges set challenge_expires_at = now() - interval '1 minute' where id = v_challenge.id;
+  begin
+    perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_step_up_challenge_expired, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+  -- Deliberately still 'pending', not 'expired': persisting a status flip inside a
+  -- call that then raises would be rolled back by this very exception handler's own
+  -- implicit savepoint (the real bug this migration's own header now discloses).
+  if (select status from app.mfa_step_up_challenges where id = v_challenge.id) <> 'pending' then
+    raise exception 'assertion failed: expected the challenge to remain pending (no side-effect update survives a caught raise)';
+  end if;
+end;
+$$;
+
+\echo '>> app.user_sessions: self-revoke always allowed; a different actor with no SEC:Configure grant is rejected; a different actor WITH SEC:Configure (admin1) succeeds; app.revoke_all_actor_sessions revokes every active session AND every active app.api_keys row the target actor created (real propagation, not merely disclosed)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000031000002';
+  v_rep1 uuid := '00000000-0000-0000-0000-000031000003';
+  v_session1 app.user_sessions;
+  v_session2 app.user_sessions;
+  v_session3 app.user_sessions;
+  v_rep1_ops_role uuid;
+  v_rep1_ops_draft app.role_versions;
+  v_session_count integer;
+  v_key_status text;
+begin
+  v_session1 := app.register_user_session(v_tenant1, 'reps laptop', '203.0.113.10', v_rep1, 'rep1');
+  if v_session1.status <> 'active' then
+    raise exception 'assertion failed: expected a new session status active, got %', v_session1.status;
+  end if;
+
+  begin
+    perform app.revoke_user_session(v_session1.id, 'unauthorized attempt', v_viewer1, 'viewer1');
+    raise exception 'assertion failed: expected insufficient_authority for viewer1 (SEC:View only, no Configure) revoking a DIFFERENT identity''s session, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- admin1 genuinely holds SEC:Configure -- a different-identity revoke correctly succeeds.
+  v_session1 := app.revoke_user_session(v_session1.id, 'admin-initiated revoke', v_admin1, 'admin1');
+  if v_session1.status <> 'revoked' then
+    raise exception 'assertion failed: expected admin1''s own SEC:Configure-authorized revoke to succeed, got status %', v_session1.status;
+  end if;
+
+  -- Self-revoke by rep1 always works, regardless of any module grant.
+  v_session2 := app.register_user_session(v_tenant1, 'reps phone', '203.0.113.11', v_rep1, 'rep1');
+  v_session2 := app.revoke_user_session(v_session2.id, 'lost device', v_rep1, 'rep1');
+  if v_session2.status <> 'revoked' then
+    raise exception 'assertion failed: expected self-revoke to succeed, got status %', v_session2.status;
+  end if;
+
+  -- A fresh, still-active session for the mass-revoke call below to genuinely act on
+  -- (v_session1/v_session2 above are both already revoked at this point).
+  v_session3 := app.register_user_session(v_tenant1, 'reps tablet', '203.0.113.12', v_rep1, 'rep1');
+
+  -- Give rep1 a real, active API key to prove the propagation is genuine, not merely
+  -- claimed. app.create_api_key requires BOTH app.is_support_grant_authority (Supreme
+  -- or tenant_admin LAYER, not a module permission) to mint a key at all, AND the
+  -- issuing actor to already hold every scope requested (scope can only narrow, never
+  -- widen) -- both granted here purely as a fixture device to let rep1 legitimately
+  -- mint their own OPS:View-scoped key.
+  perform app.grant_principal_membership(v_rep1, 'tenant_admin', v_tenant1, null, 'tester');
+  v_rep1_ops_role := (app.create_role(v_tenant1, 'IaeMfa Rep OPS Viewer', 'OPS:View -- fixture device so rep1 can legitimately mint an OPS:View-scoped key', 'tester')).id;
+  v_rep1_ops_draft := app.create_role_version(v_rep1_ops_role, 'tester');
+  perform app.set_role_version_permissions(v_rep1_ops_draft.id, array(select id from app.permissions where resource_module_code = 'OPS' and action = 'View'), 'tester');
+  perform app.publish_role_version(v_rep1_ops_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_rep1_ops_role and status = 'published'), v_rep1, v_admin1, 'admin1');
+  perform app.create_api_key(v_tenant1, 'rep1 own key', '["OPS:View"]'::jsonb, null, null, v_rep1, 'rep1');
+
+  select status into v_key_status from app.api_keys where tenant_id = v_tenant1 and created_by_auth_user_id = v_rep1;
+  if v_key_status <> 'active' then
+    raise exception 'assertion failed: expected the fixture api key to start active, got %', v_key_status;
+  end if;
+
+  v_session_count := app.revoke_all_actor_sessions(v_tenant1, v_rep1, 'account compromise', v_admin1, 'admin1');
+  if v_session_count < 1 then
+    raise exception 'assertion failed: expected at least 1 session revoked (v_session3, still active), got %', v_session_count;
+  end if;
+
+  select status into v_key_status from app.api_keys where tenant_id = v_tenant1 and created_by_auth_user_id = v_rep1;
+  if v_key_status <> 'revoked' then
+    raise exception 'assertion failed: expected rep1''s own api key to be genuinely revoked by app.revoke_all_actor_sessions, got status %', v_key_status;
+  end if;
+
+  if (select status from app.user_sessions where id = v_session3.id) <> 'revoked' then
+    raise exception 'assertion failed: expected v_session3 to be revoked by the mass-revoke call';
+  end if;
+end;
+$$;
+
+\echo '>> app.mfa_exceptions: self-approval forbidden at the CHECK-constraint level; a different SEC:Approve holder can approve; approval requires SEC:Approve specifically (SEC:Configure alone is not enough); a used exception cannot be consumed twice; an expired-but-approved exception cannot be consumed'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_rep1 uuid := '00000000-0000-0000-0000-000031000003';
+  v_supreme uuid := '00000000-0000-0000-0000-000031000000';
+  v_exception app.mfa_exceptions;
+begin
+  v_exception := app.request_mfa_exception(v_tenant1, v_rep1, 'lost phone, lost recovery codes', v_admin1, 'admin1');
+  if v_exception.status <> 'pending' then
+    raise exception 'assertion failed: expected status pending, got %', v_exception.status;
+  end if;
+
+  begin
+    perform app.approve_mfa_exception(v_exception.id, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_exception_self_approval_forbidden (admin1 both requested and is trying to approve), the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- Supreme Admin holds SEC:Approve everywhere via the supreme_admin_exception path in evaluate_permission.
+  v_exception := app.approve_mfa_exception(v_exception.id, v_supreme, 'supreme');
+  if v_exception.status <> 'approved' then
+    raise exception 'assertion failed: expected status approved, got %', v_exception.status;
+  end if;
+
+  perform app.consume_mfa_exception(v_exception.id, v_rep1, 'rep1');
+  begin
+    perform app.consume_mfa_exception(v_exception.id, v_rep1, 'rep1');
+    raise exception 'assertion failed: expected mfa_exception_not_approved on a second consume attempt (already used), the call unexpectedly succeeded';
+  exception when no_data_found then
+    null;
+  end;
+
+  -- A separately-requested, approved-but-now-expired exception cannot be consumed.
+  v_exception := app.request_mfa_exception(v_tenant1, v_rep1, 'second lost-factor incident', v_admin1, 'admin1');
+  v_exception := app.approve_mfa_exception(v_exception.id, v_supreme, 'supreme');
+  update app.mfa_exceptions set expires_at = now() - interval '1 minute' where id = v_exception.id;
+  begin
+    perform app.consume_mfa_exception(v_exception.id, v_rep1, 'rep1');
+    raise exception 'assertion failed: expected mfa_exception_expired, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+end;
+$$;
+
+\echo '>> cross-tenant isolation: admin2 (tenant iaemfa2) cannot read/act on iaemfa''s own MFA policy/sessions/exceptions'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin2 uuid := '00000000-0000-0000-0000-000031000004';
+  v_count integer;
+begin
+  select count(*) into v_count from app.list_user_sessions_for_tenant(v_tenant1, v_admin2);
+  raise exception 'assertion failed: expected insufficient_authority for admin2 listing tenant1''s own sessions, the call unexpectedly returned % rows', v_count;
+exception
+  when insufficient_privilege then
+    null;
+end;
+$$;
+
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin2 uuid := '00000000-0000-0000-0000-000031000004';
+begin
+  begin
+    perform app.set_mfa_tenant_policy(v_tenant1, true, '["supreme_admin"]'::jsonb, 5, '[]'::jsonb, v_admin2, 'admin2');
+    raise exception 'assertion failed: expected insufficient_authority for admin2 configuring tenant1''s own MFA policy, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+end;
+$$;
+
+\echo '>> RLS default-deny: a direct authenticated select on every new table is denied at the raw-RLS level'
+do $$
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000031000001", "role": "authenticated"}';
+  begin
+    perform count(*) from app.mfa_tenant_policies;
+    raise exception 'assertion failed: expected permission denied for a direct authenticated select on app.mfa_tenant_policies, the select unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform count(*) from app.mfa_step_up_challenges;
+    raise exception 'assertion failed: expected permission denied for a direct authenticated select on app.mfa_step_up_challenges, the select unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform count(*) from app.user_sessions;
+    raise exception 'assertion failed: expected permission denied for a direct authenticated select on app.user_sessions, the select unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform count(*) from app.mfa_exceptions;
+    raise exception 'assertion failed: expected permission denied for a direct authenticated select on app.mfa_exceptions, the select unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+  reset role;
+end;
+$$;
+
+\echo '>> defense in depth: anon holds zero EXECUTE grants across every new function'
+do $$
+declare
+  v_anon_grant_count integer;
+begin
+  select count(*) into v_anon_grant_count
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app'
+    and p.proname in (
+      'get_or_create_mfa_tenant_policy', 'set_mfa_tenant_policy', 'is_high_risk_action',
+      'request_mfa_step_up_challenge', 'verify_mfa_step_up_challenge', 'assert_current_step_up_authorization',
+      'register_user_session', 'revoke_user_session', 'revoke_all_actor_sessions',
+      'request_mfa_exception', 'approve_mfa_exception', 'consume_mfa_exception',
+      'list_user_sessions_for_tenant', 'list_mfa_exceptions_for_tenant', 'list_mfa_step_up_challenges_for_tenant'
+    )
+    and has_function_privilege('anon', p.oid, 'EXECUTE');
+
+  if v_anon_grant_count <> 0 then
+    raise exception 'assertion failed: expected zero anon EXECUTE grants across this checkpoint''s 15 functions, found %', v_anon_grant_count;
+  end if;
+end;
+$$;
+
+\echo 'ALL IAE-027 (Enterprise MFA and Session Controls) ASSERTIONS PASSED'
