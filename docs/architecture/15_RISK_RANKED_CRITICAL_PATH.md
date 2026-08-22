@@ -79,7 +79,7 @@ The binding phase-level graph is `12_RELEASE_TRAIN.md` §9's mermaid diagram, it
 | 5 | Phase 5 — Operations (advanced TMS/WMS) **and** Phase 6 — Procurement/Vendor | `PHASE_4_VERIFIED` (both) | Yes — genuinely independent internal workstreams (`12_*.md` §9's note) | `ATW-219..248`, `PRC-249..271` |
 | 6 | Phase 7 — HRIS + Ticketing | `PHASE_5_VERIFIED` **and** `PHASE_6_VERIFIED` (both must close) | — | `HRT-272..297` |
 | 7 | Phase 8 — Customer Portal (full) + Loyalty | `PHASE_7_VERIFIED` | — | `CPL-298..327` |
-| 8 | Phase 9 — Intelligence/Automation/Enterprise | `PHASE_8_VERIFIED` | — | `IEP-328..367` |
+| 8 | Phase 9 — Intelligence/Automation/Enterprise | `PHASE_8_VERIFIED` | — | `IAE-328..367` |
 | 9 | Phase 15 — Full-system hardening | `PHASE_9_VERIFIED` | — | `HDN-368..389` |
 | 10 | Phase 16 — Release Candidate and Go-Live | `FULL_SYSTEM_HARDENING_VERIFIED` | — | `RGL-390..412` |
 | 11 | Direct GA (RPD-034/036) | Phase 16 Go/No-Go | — | (no further WBS phase; first external tenant is production) |
@@ -92,7 +92,7 @@ Within Phase 0 and Phase 1 specifically, the ten cross-cutting workstreams this 
 
 ### 3.3 Cross-phase links carried forward (source: `14_*.md` §20, not re-derived)
 
-Ten cross-phase items each have exactly one primary owner and prerequisite/extension edges already fixed by `14_*.md` §20 (vendor rate `PRC-254..255`←`COM-149..150`; job/shipment lineage `OPS-168..169`←Phase 2; tracking/ePOD `OPS-172..177`→`ATW-226..228`/`CPL-305..308`; WMS `ATW-229..242`→`CPL-309..310`; cost/job-closing `OPS-178..181`→`FIN-196..214`→`ATW-239..242`; vendor billing `FIN-199..201`→`PRC-265..266`; billing readiness `FIN-196..214`→`CPL-311..315`; ticketing `HRT-286..288`→`CPL-311..315` and →`RGL-411`; white-label `PLT-117..119`→`IEP-354..359`; reporting `IEP-330..334` aggregating every domain phase). These edges are the concrete mechanism behind two of §7's highest-ranked items (Finance's centrality, §7 rank 5; the `TKT-HLP` partial-blocked tail, §7 rank 16) — restated here as graph input, not reopened.
+Ten cross-phase items each have exactly one primary owner and prerequisite/extension edges already fixed by `14_*.md` §20 (vendor rate `PRC-254..255`←`COM-149..150`; job/shipment lineage `OPS-168..169`←Phase 2; tracking/ePOD `OPS-172..177`→`ATW-226..228`/`CPL-305..308`; WMS `ATW-229..242`→`CPL-309..310`; cost/job-closing `OPS-178..181`→`FIN-196..214`→`ATW-239..242`; vendor billing `FIN-199..201`→`PRC-265..266`; billing readiness `FIN-196..214`→`CPL-311..315`; ticketing `HRT-286..288`→`CPL-311..315` and →`RGL-411`; white-label `PLT-117..119`→`IAE-354..359`; reporting `IAE-330..334` aggregating every domain phase). These edges are the concrete mechanism behind two of §7's highest-ranked items (Finance's centrality, §7 rank 5; the `TKT-HLP` partial-blocked tail, §7 rank 16) — restated here as graph input, not reopened.
 
 ## 4. Foundation blockers (prompt task #4)
 
@@ -143,7 +143,7 @@ Branches that do not sit on the depth-ladder's spine but can become critical if 
 | GraphQL depth/complexity + webhook/rate-limit numeric ADRs (`ADR-CAND-ARCH-017/018`, `08_*.md` §14) | Deferred to Phase 1 `API-WH` implementation with a recommended default already given — low residual risk while the default holds | A measured Phase-1/2 traffic pattern invalidates the recommended default |
 | Deprecation overlap-window duration (`ADR-CAND-ARCH-019`) | Only matters once a breaking API change is proposed — no breaking change is scheduled before Phase 9 at the earliest | First breaking REST/GraphQL change proposal |
 | `TKT-HLP` release-depth item (`14_*.md` §20/§25, `RGL-411`) | `PARTIAL_BLOCKED` but explicitly non-blocking, closes at Phase 16 documentation | Any attempt to treat it as a Phase-7-blocking item (would be a process error, not a real escalation) |
-| Reporting/dashboard cross-domain aggregation (`IEP-330..334`) | Depends on every prior domain phase's data maturity but is itself additive (no domain phase depends on it) | A Phase-9 dashboard defect traced back to a stale schema assumption from an earlier phase |
+| Reporting/dashboard cross-domain aggregation (`IAE-330..334`) | Depends on every prior domain phase's data maturity but is itself additive (no domain phase depends on it) | A Phase-9 dashboard defect traced back to a stale schema assumption from an earlier phase |
 
 None of these branches currently sits on the critical path (§5) — each is one condition away from doing so, which is why each carries an explicit trigger rather than being silently dropped.
 
@@ -161,7 +161,7 @@ Top 16 items by composite score (§2.2), covering every foundation blocker (§4)
 | 6 | Environment/CI/secret/observability/backup foundation | `11_*.md` §11, `ADR-CAND-ARCH-024..027` | 3 | 2 | 4 | 2 | 4 | 1 | 1 | 4 | 2 | **23** |
 | 7 | `FIN-195` tax/legal SME external verification | `14_*.md` §22/§25, RPD-016 | 3 | 3 | 2 | 3 | 3 | 1 | 1 | 4 | 2 | **22** |
 | 7 | `HRT-282` payroll/tax SME external verification | `14_*.md` §22/§25, RPD-016 | 3 | 3 | 2 | 3 | 3 | 1 | 1 | 4 | 2 | **22** |
-| 7 | RPD-038 custom-integration fan-out (17 categories, no shared abstraction) | `IEP-342..346`, `08_*.md` §8.2 | 2 | 3 | 2 | 2 | 2 | 2 | 2 | 3 | 4 | **22** |
+| 7 | RPD-038 custom-integration fan-out (17 categories, no shared abstraction) | `IAE-342..346`, `08_*.md` §8.2 | 2 | 3 | 2 | 2 | 2 | 2 | 2 | 3 | 4 | **22** |
 | 7 | Penetration test gate | `RGL-402`, `14_*.md` §22 | 4 | 2 | 2 | 3 | 2 | 2 | 1 | 3 | 3 | **22** |
 | 7 | WMS inventory-ledger correctness | `ATW-229..242`, `05_*.md` §3 | 3 | 3 | 2 | 3 | 2 | 2 | 2 | 2 | 3 | **22** |
 | 7 | Schema/migration expand-migrate-contract discipline | `05_*.md` §8, financial-table extra review | 3 | 2 | 3 | 3 | 3 | 2 | 2 | 2 | 2 | **22** |
