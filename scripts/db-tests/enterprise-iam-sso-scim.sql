@@ -350,6 +350,7 @@ begin
     v_admin1, 'admin1'
   );
   perform app.resolve_enterprise_sso_claims(v_saml_conn_id, 'adfs|subject-target', 'scim.target@iaeiam-corp.test', v_admin1, 'admin1');
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant1, 'IAM', 'Configure', v_admin1, 'admin1')).id, v_admin1, 'admin1');
   perform app.activate_enterprise_idp_connection(v_saml_conn_id, v_admin1, 'admin1');
 
   select * into v_row from app.resolve_enterprise_idp_by_email_domain('iaeiam-corp.test');

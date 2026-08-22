@@ -433,6 +433,7 @@ begin
   exception when insufficient_privilege then null;
   end;
 
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant1, 'AI', 'Approve', v_approver1, 'approver')).id, v_approver1, 'approver');
   v_step := app.decide_ai_output_approval(v_step_id, 'approved', v_approver1, 'approver', 'looks correct');
   if v_step.status <> 'approved' then
     raise exception 'assertion failed: expected the real step to transition to approved, got %', to_jsonb(v_step);

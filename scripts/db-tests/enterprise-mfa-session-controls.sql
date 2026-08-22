@@ -343,6 +343,7 @@ begin
   end;
 
   -- Supreme Admin holds SEC:Approve everywhere via the supreme_admin_exception path in evaluate_permission.
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant1, 'SEC', 'Approve', v_supreme, 'supreme')).id, v_supreme, 'supreme');
   v_exception := app.approve_mfa_exception(v_exception.id, v_supreme, 'supreme');
   if v_exception.status <> 'approved' then
     raise exception 'assertion failed: expected status approved, got %', v_exception.status;
@@ -366,6 +367,39 @@ begin
   exception when check_violation then
     null;
   end;
+end;
+$$;
+
+\echo '>> app.approve_mfa_exception (IAE-039 closure fix): SEC:Approve is a platform-default high-risk action -- a genuine SEC:Approve holder with zero current MFA step-up verification is rejected with mfa_step_up_required, never allowed to approve on authority alone; the identical actor succeeds once a real step-up challenge is requested and verified'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_rep1 uuid := '00000000-0000-0000-0000-000031000003';
+  v_approver2 uuid := '00000000-0000-0000-0000-000031000005';
+  v_exception app.mfa_exceptions;
+begin
+  insert into auth.users (id, email) values (v_approver2, 'approver2@iaemfa.test');
+  perform app.invite_user(v_tenant1, v_approver2, 'approver2@iaemfa.test', 'Approver Two', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'approver2@iaemfa.test'), 'active', 'onboarded', 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = (select id from app.roles where tenant_id = v_tenant1 and name = 'IaeMfa Admin') and status = 'published'), v_approver2, v_admin1, 'admin1');
+
+  v_exception := app.request_mfa_exception(v_tenant1, v_rep1, 'third lost-factor incident, step-up regression', v_admin1, 'admin1');
+
+  begin
+    perform app.approve_mfa_exception(v_exception.id, v_approver2, 'approver2');
+    raise exception 'assertion failed: expected mfa_step_up_required -- approver2 holds real SEC:Approve but has zero current step-up verification, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    if sqlerrm !~ 'mfa_step_up_required' then raise; end if;
+  end;
+
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant1, 'SEC', 'Approve', v_approver2, 'approver2')).id, v_approver2, 'approver2');
+  v_exception := app.approve_mfa_exception(v_exception.id, v_approver2, 'approver2');
+  if v_exception.status <> 'approved' then
+    raise exception 'assertion failed: expected status approved once a real step-up challenge is verified, got %', v_exception.status;
+  end if;
+
+  raise notice 'PASS: approve_mfa_exception now genuinely requires a current MFA step-up verification (RPD-023) on top of SEC:Approve authority, closing ISS-2026-151 for this function';
 end;
 $$;
 
