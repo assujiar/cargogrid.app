@@ -105,14 +105,19 @@ create table app.dr_restore_tests (
   constraint dr_restore_tests_scope_check check (tenant_id is not null or deployment_type = 'shared'),
   constraint dr_restore_tests_component_scope_check check (component_scope in ('database', 'secrets', 'backup', 'observability', 'jobs_integrations')),
   constraint dr_restore_tests_status_check check (status in ('passed', 'failed')),
-  constraint dr_restore_tests_passed_evidence_check check (status <> 'passed' or (observed_rpo_minutes is not null and observed_rto_minutes is not null)),
+  constraint dr_restore_tests_passed_evidence_check check (
+    status <> 'passed' or (
+      observed_rpo_minutes is not null and observed_rpo_minutes >= 0 and observed_rpo_minutes < 'Infinity'::numeric
+      and observed_rto_minutes is not null and observed_rto_minutes >= 0 and observed_rto_minutes < 'Infinity'::numeric
+    )
+  ),
   constraint dr_restore_tests_failed_evidence_check check (status <> 'failed' or (failure_reason is not null and recovery_steps is not null and retest_scheduled_at is not null))
 );
 
 create index dr_restore_tests_tenant_lookup_idx on app.dr_restore_tests (tenant_id, component_scope, tested_at desc);
 
 comment on table app.dr_restore_tests is
-  'IAE-035: tenant_id null means a platform-wide (shared-deployment) restore test; non-null means a tenant''s own dedicated-instance test. A passed row REQUIRES real observed_rpo_minutes/observed_rto_minutes; a failed row REQUIRES a real failure_reason/recovery_steps/retest_scheduled_at (Prompt 363 ''do not promise RPO/RTO beyond actual tested evidence'').';
+  'IAE-035: tenant_id null means a platform-wide (shared-deployment) restore test; non-null means a tenant''s own dedicated-instance test. A passed row REQUIRES real observed_rpo_minutes/observed_rto_minutes, each a genuine, non-negative, finite measurement (Tier C review fix, correctness/concurrency lens: the original CHECK only required non-NULL, so a negative value or Postgres''s own numeric NaN/Infinity -- which are NOT NULL -- could satisfy it without being a real measurement; `< ''Infinity''::numeric` also excludes NaN, since Postgres numeric ordering sorts NaN as greater than Infinity). A failed row REQUIRES a real failure_reason/recovery_steps/retest_scheduled_at (Prompt 363 ''do not promise RPO/RTO beyond actual tested evidence'').';
 
 create function app.record_dr_restore_test(
   p_tenant_id uuid,
@@ -168,6 +173,15 @@ begin
       using errcode = 'check_violation';
   end if;
 
+  -- Tier C review fix (correctness/concurrency lens): a retest_scheduled_at
+  -- in the past provided no real remediation timeline (Prompt 363 §22's own
+  -- alternative flow: "release remains blocked with owner, recovery steps
+  -- and retest schedule" implies a genuine forward-looking commitment).
+  if p_status = 'failed' and p_retest_scheduled_at <= now() then
+    raise exception 'dr_test_retest_schedule_must_be_future: retest_scheduled_at % must be after the current time' , p_retest_scheduled_at
+      using errcode = 'check_violation';
+  end if;
+
   if p_deployment_type = 'dedicated' and app.resolve_tenant_deployment_type(p_tenant_id) <> 'dedicated' then
     raise exception 'dr_test_deployment_mismatch: tenant % does not have an active dedicated deployment', p_tenant_id
       using errcode = 'check_violation';
@@ -205,13 +219,18 @@ security definer
 set search_path = app, pg_temp
 as $$
   select coalesce(
-    (select status from app.dr_restore_tests where tenant_id = p_tenant_id and component_scope = p_component_scope order by tested_at desc limit 1),
+    (
+      select status from app.dr_restore_tests
+      where tenant_id = p_tenant_id and component_scope = p_component_scope
+        and (deployment_type = 'shared' or app.resolve_tenant_deployment_type(p_tenant_id) = 'dedicated')
+      order by tested_at desc limit 1
+    ),
     (select status from app.dr_restore_tests where tenant_id is null and component_scope = p_component_scope order by tested_at desc limit 1)
   );
 $$;
 
 comment on function app.resolve_latest_dr_restore_status is
-  'IAE-035: the tenant''s own most recent test for this component_scope always wins; falls back to the most recent platform-wide (shared-deployment) test; returns NULL (never an error) when neither exists. service_role-only by design (design decision 9) -- the identical bare-tenant-id shape app.resolve_tenant_deployment_type/app.resolve_tenant_region/app.resolve_workload_budget already established, applied correctly from the first draft.';
+  'IAE-035: the tenant''s own most recent SHARED-scoped test for this component_scope always wins over the platform-wide fallback; a DEDICATED-scoped test only counts while the tenant genuinely still has an active dedicated deployment (Tier C review fix, cross-prompt integration lens: a dedicated-scoped test recorded while the deployment was active previously stayed selectable forever, even after the deployment was later decommissioned -- silently feeding stale, false-positive evidence into app.verify_onboarding_checklist_item''s own dr_evidence_verified computation; the underlying row itself is left unchanged as real historical evidence, only the LIVE-resolved status excludes it once its own precondition no longer holds) -- falls back to the most recent platform-wide (shared-deployment) test; returns NULL (never an error) when neither exists. service_role-only by design (design decision 9) -- the identical bare-tenant-id shape app.resolve_tenant_deployment_type/app.resolve_tenant_region/app.resolve_workload_budget already established, applied correctly from the first draft.';
 
 -- ===========================================================================
 -- 3. app.support_entitlements -- real, contractual support tiers

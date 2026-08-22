@@ -16,7 +16,7 @@ export const NON_DEFAULT_REGION_CODES = ["americas", "emea"] as const;
 export const NonDefaultRegionCodeSchema = z.enum(NON_DEFAULT_REGION_CODES);
 export type NonDefaultRegionCode = z.infer<typeof NonDefaultRegionCodeSchema>;
 
-export const REGION_SERVICE_CATEGORIES = ["database", "secrets", "backup", "observability", "ai_provider"] as const;
+export const REGION_SERVICE_CATEGORIES = ["database", "secrets", "backup", "files", "observability", "ai_provider"] as const;
 export const RegionServiceCategorySchema = z.enum(REGION_SERVICE_CATEGORIES);
 export type RegionServiceCategory = z.infer<typeof RegionServiceCategorySchema>;
 

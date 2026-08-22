@@ -253,7 +253,7 @@ begin
 end;
 $$;
 
-\echo '>> app.register_region_capability_exception: rep1 (no DEPLOY:Approve) rejected; ai_provider now rejected as region_capability_exception_not_needed (already supported); the remaining 4 genuinely-unsupported categories registered successfully by approver1; a second call for the SAME category upserts the SAME row'
+\echo '>> app.register_region_capability_exception: rep1 (no DEPLOY:Approve) rejected; ai_provider now rejected as region_capability_exception_not_needed (already supported); the remaining 5 genuinely-unsupported categories (including files, a Tier C review addition -- Prompt 361 §24 names ''files'' distinctly from ''backup'') registered successfully by approver1; a second call for the SAME category upserts the SAME row'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaeres');
@@ -283,6 +283,7 @@ begin
   v_first := app.register_region_capability_exception(v_assignment_id, 'database', 'contractually accepted risk pending regional buildout', v_approver1, 'approver1');
   perform app.register_region_capability_exception(v_assignment_id, 'secrets', 'contractually accepted risk pending regional buildout', v_approver1, 'approver1');
   perform app.register_region_capability_exception(v_assignment_id, 'backup', 'contractually accepted risk pending regional buildout', v_approver1, 'approver1');
+  perform app.register_region_capability_exception(v_assignment_id, 'files', 'contractually accepted risk pending regional buildout', v_approver1, 'approver1');
   perform app.register_region_capability_exception(v_assignment_id, 'observability', 'contractually accepted risk pending regional buildout', v_approver1, 'approver1');
 
   v_second := app.register_region_capability_exception(v_assignment_id, 'database', 'updated accepted-risk reason', v_approver1, 'approver1');
@@ -291,13 +292,13 @@ begin
   end if;
 
   select count(*) into v_count from app.region_capability_exceptions where region_assignment_id = v_assignment_id;
-  if v_count <> 4 then
-    raise exception 'assertion failed: expected exactly 4 exception rows (database/secrets/backup/observability, never a duplicate), got %', v_count;
+  if v_count <> 5 then
+    raise exception 'assertion failed: expected exactly 5 exception rows (database/secrets/backup/files/observability, never a duplicate), got %', v_count;
   end if;
 end;
 $$;
 
-\echo '>> app.approve_region_assignment now succeeds: dedicated deployment active, ai_provider genuinely supported, all 4 remaining gaps covered by real exceptions; a second approval attempt on the now-approved record is rejected (region_assignment_not_pending_review)'
+\echo '>> app.approve_region_assignment now succeeds: dedicated deployment active, ai_provider genuinely supported, all 5 remaining gaps covered by real exceptions; a second approval attempt on the now-approved record is rejected (region_assignment_not_pending_review)'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaeres');
@@ -366,6 +367,71 @@ begin
 
   if app.resolve_tenant_region(v_tenant1) <> 'apac' then
     raise exception 'assertion failed: expected apac again once decommissioned, got %', app.resolve_tenant_region(v_tenant1);
+  end if;
+end;
+$$;
+
+\echo '>> Tier C review fix (cross-prompt integration lens): app.resolve_tenant_region goes stale no longer -- a fresh, third tenant''s own region assignment stays active while its underlying dedicated deployment is separately decommissioned; resolve_tenant_region correctly reverts to apac immediately even though the region assignment row itself is still, on its own, status=active'
+do $$
+declare
+  v_tenant1 uuid;
+  v_supreme uuid := '00000000-0000-0000-0000-000036000000';
+  v_admin3 uuid := '00000000-0000-0000-0000-000036000006';
+  v_deployment_id uuid;
+  v_assignment_id uuid;
+  v_admin3_role uuid;
+  v_admin3_draft app.role_versions;
+  v_raw_status text;
+begin
+  insert into auth.users (id, email) values (v_admin3, 'admin3@iaeres.test');
+
+  perform app.provision_tenant('iaeres3', 'IaeRes3 Co', 'idem-iaeres3', 'tester');
+  v_tenant1 := (select id from app.tenants where slug = 'iaeres3');
+  perform app.transition_tenant_status(v_tenant1, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant1, v_admin3, 'admin3@iaeres.test', 'Admin Three', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin3@iaeres.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin3, 'tenant_admin', v_tenant1, null, 'tester');
+
+  v_admin3_role := (app.create_role(v_tenant1, 'IaeRes3 Admin', 'DEPLOY:Configure/View/Approve -- staleness-regression probe actor', 'tester')).id;
+  v_admin3_draft := app.create_role_version(v_admin3_role, 'tester');
+  perform app.set_role_version_permissions(v_admin3_draft.id, array(select id from app.permissions where resource_module_code = 'DEPLOY' and action in ('Configure', 'View', 'Approve')), 'tester');
+  perform app.publish_role_version(v_admin3_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin3_role and status = 'published'), v_admin3, v_supreme, 'supreme');
+
+  perform app.request_dedicated_deployment_qualification(v_tenant1, 'dedicated instance for staleness regression', 'MSA-2026-007', v_admin3, 'admin3');
+  select id into v_deployment_id from app.tenant_deployment_records where tenant_id = v_tenant1;
+  perform app.approve_dedicated_deployment_qualification(v_deployment_id, v_supreme, 'supreme');
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'provisioning', v_admin3, 'admin3');
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'active', v_admin3, 'admin3');
+
+  perform app.request_region_assignment(v_tenant1, 'americas', 'staleness regression', 'MSA-2026-007', v_admin3, 'admin3');
+  select id into v_assignment_id from app.tenant_region_assignments where tenant_id = v_tenant1;
+
+  perform app.register_region_capability_exception(v_assignment_id, 'database', 'accepted risk', v_admin3, 'admin3');
+  perform app.register_region_capability_exception(v_assignment_id, 'secrets', 'accepted risk', v_admin3, 'admin3');
+  perform app.register_region_capability_exception(v_assignment_id, 'backup', 'accepted risk', v_admin3, 'admin3');
+  perform app.register_region_capability_exception(v_assignment_id, 'files', 'accepted risk', v_admin3, 'admin3');
+  perform app.register_region_capability_exception(v_assignment_id, 'observability', 'accepted risk', v_admin3, 'admin3');
+  -- ai_provider needs no exception here: an earlier test block in this same
+  -- file already flipped americas/ai_provider to genuinely supported=true
+  -- (a platform-wide row, not per-tenant), so it is already satisfied.
+  perform app.approve_region_assignment(v_assignment_id, v_supreme, 'supreme');
+  perform app.set_region_assignment_status(v_assignment_id, 'active', null, v_admin3, 'admin3');
+
+  if app.resolve_tenant_region(v_tenant1) <> 'americas' then
+    raise exception 'assertion failed: expected americas while the region assignment AND the dedicated deployment are both genuinely active, got %', app.resolve_tenant_region(v_tenant1);
+  end if;
+
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'decommissioned', v_admin3, 'admin3');
+
+  select status into v_raw_status from app.tenant_region_assignments where id = v_assignment_id;
+  if v_raw_status <> 'active' then
+    raise exception 'assertion failed: expected the region assignment ROW ITSELF to remain status=active (real historical evidence, never retroactively falsified), got %', v_raw_status;
+  end if;
+
+  if app.resolve_tenant_region(v_tenant1) <> 'apac' then
+    raise exception 'assertion failed: expected resolve_tenant_region to immediately and correctly revert to apac once the underlying dedicated deployment was decommissioned, even though the region assignment row itself is still status=active, got %', app.resolve_tenant_region(v_tenant1);
   end if;
 end;
 $$;
@@ -462,7 +528,7 @@ begin
 end;
 $$;
 
-\echo '>> app.list_region_service_capabilities: platform-wide data, identical regardless of tenant -- rep1 (no DEPLOY:View anywhere) rejected; viewer1 and admin2 (each gated only against their OWN tenant) both see the SAME full 15-row matrix'
+\echo '>> app.list_region_service_capabilities: platform-wide data, identical regardless of tenant -- rep1 (no DEPLOY:View anywhere) rejected; viewer1 and admin2 (each gated only against their OWN tenant) both see the SAME full 18-row matrix'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaeres');
@@ -482,8 +548,8 @@ begin
 
   select count(*) into v_count1 from app.list_region_service_capabilities(v_tenant1, v_viewer1);
   select count(*) into v_count2 from app.list_region_service_capabilities(v_tenant2, v_admin2);
-  if v_count1 <> 15 or v_count2 <> 15 then
-    raise exception 'assertion failed: expected both actors to see the SAME 15-row platform-wide matrix regardless of their own tenant, got %/%', v_count1, v_count2;
+  if v_count1 <> 18 or v_count2 <> 18 then
+    raise exception 'assertion failed: expected both actors to see the SAME 18-row platform-wide matrix regardless of their own tenant, got %/%', v_count1, v_count2;
   end if;
 end;
 $$;

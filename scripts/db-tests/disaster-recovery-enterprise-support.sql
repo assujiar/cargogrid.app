@@ -99,7 +99,7 @@ begin
 end;
 $$;
 
-\echo '>> app.record_dr_restore_test: rep1 (no SUP:Configure) rejected; invalid deployment_type/component_scope/status rejected; a passed result with no rpo/rto rejected; a failed result with no failure_reason/recovery_steps/retest_scheduled_at rejected; a failed result with a hollow EMPTY-STRING (not null) failure_reason/recovery_steps also rejected; admin1 (Configure) succeeds for a real shared/database passed test and a real shared/jobs_integrations FAILED test'
+\echo '>> app.record_dr_restore_test: rep1 (no SUP:Configure) rejected; invalid deployment_type/component_scope/status rejected; a passed result with no rpo/rto rejected; a failed result with no failure_reason/recovery_steps/retest_scheduled_at rejected; a failed result with a hollow EMPTY-STRING (not null) failure_reason/recovery_steps also rejected; a passed result with NEGATIVE or NaN rpo/rto rejected; a failed result with a PAST retest_scheduled_at rejected; admin1 (Configure) succeeds for a real shared/database passed test and a real shared/jobs_integrations FAILED test'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaedr');
@@ -153,6 +153,34 @@ begin
   begin
     perform app.record_dr_restore_test(v_tenant1, 'shared', 'jobs_integrations', 'failed', null, null, '', '', now() + interval '3 days', null, null, v_admin1, 'admin1');
     raise exception 'assertion failed: expected dr_test_failure_evidence_required for a hollow EMPTY-STRING (not null) failure_reason/recovery_steps, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+
+  -- Tier C review fix (correctness/concurrency lens): a passed result must
+  -- report a genuine, non-negative, finite RPO/RTO -- neither a negative
+  -- value nor Postgres's own numeric NaN (which is NOT NULL and previously
+  -- satisfied the passed-evidence CHECK undetected) is real evidence.
+  begin
+    perform app.record_dr_restore_test(v_tenant1, 'shared', 'database', 'passed', -10, -20, null, null, null, null, null, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected the passed-evidence CHECK constraint to reject a NEGATIVE rpo/rto, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    perform app.record_dr_restore_test(v_tenant1, 'shared', 'database', 'passed', 'NaN'::numeric, 'NaN'::numeric, null, null, null, null, null, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected the passed-evidence CHECK constraint to reject NaN rpo/rto, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+
+  -- Tier C review fix (correctness/concurrency lens): a failed result's own
+  -- retest_scheduled_at must be a genuine, forward-looking commitment, not a
+  -- date already in the past.
+  begin
+    perform app.record_dr_restore_test(v_tenant1, 'shared', 'database', 'failed', null, null, 'genuine failure', 'genuine recovery steps', now() - interval '10 days', null, null, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected dr_test_retest_schedule_must_be_future for a retest_scheduled_at already in the past, the call unexpectedly succeeded';
   exception when check_violation then
     null;
   end;
@@ -393,6 +421,63 @@ begin
   v_checklist := app.verify_onboarding_checklist_item(v_tenant1, 'hypercare_plan_acknowledged', false, v_approver1, 'approver1');
   if v_checklist.hypercare_plan_acknowledged <> false or v_checklist.status <> 'in_progress' then
     raise exception 'assertion failed: expected a real, live recompute back to hypercare_plan_acknowledged=false status=in_progress, got ack=% status=%', v_checklist.hypercare_plan_acknowledged, v_checklist.status;
+  end if;
+end;
+$$;
+
+\echo '>> Tier C review fix (cross-prompt integration lens): app.resolve_latest_dr_restore_status goes stale no longer -- a fresh, third tenant''s own DEDICATED-scoped passed test stops counting the instant its underlying dedicated deployment is separately decommissioned, correctly falling back to the platform-wide SHARED test instead; the row itself is left unchanged as real historical evidence'
+do $$
+declare
+  v_tenant1 uuid;
+  v_supreme uuid := '00000000-0000-0000-0000-000038000000';
+  v_admin3 uuid := '00000000-0000-0000-0000-000038000006';
+  v_deployment_id uuid;
+  v_admin3_role uuid;
+  v_admin3_draft app.role_versions;
+  v_raw_status text;
+begin
+  insert into auth.users (id, email) values (v_admin3, 'admin3@iaedr.test');
+
+  perform app.provision_tenant('iaedr3', 'IaeDr3 Co', 'idem-iaedr3', 'tester');
+  v_tenant1 := (select id from app.tenants where slug = 'iaedr3');
+  perform app.transition_tenant_status(v_tenant1, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant1, v_admin3, 'admin3@iaedr.test', 'Admin Three', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin3@iaedr.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin3, 'tenant_admin', v_tenant1, null, 'tester');
+
+  v_admin3_role := (app.create_role(v_tenant1, 'IaeDr3 Admin', 'SUP:Configure/View + DEPLOY:Configure/Approve/View -- staleness-regression probe actor', 'tester')).id;
+  v_admin3_draft := app.create_role_version(v_admin3_role, 'tester');
+  perform app.set_role_version_permissions(v_admin3_draft.id, array(
+    select id from app.permissions
+    where (resource_module_code = 'SUP' and action in ('Configure', 'View'))
+       or (resource_module_code = 'DEPLOY' and action in ('Configure', 'View', 'Approve'))
+  ), 'tester');
+  perform app.publish_role_version(v_admin3_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin3_role and status = 'published'), v_admin3, v_supreme, 'supreme');
+
+  perform app.request_dedicated_deployment_qualification(v_tenant1, 'dedicated instance for staleness regression', 'MSA-2026-008', v_admin3, 'admin3');
+  select id into v_deployment_id from app.tenant_deployment_records where tenant_id = v_tenant1;
+  perform app.approve_dedicated_deployment_qualification(v_deployment_id, v_supreme, 'supreme');
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'provisioning', v_admin3, 'admin3');
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'active', v_admin3, 'admin3');
+
+  perform app.record_dr_restore_test(v_tenant1, 'dedicated', 'database', 'passed', 5, 10, null, null, null, null, null, v_admin3, 'admin3');
+  if app.resolve_latest_dr_restore_status(v_tenant1, 'database') <> 'passed' then
+    raise exception 'assertion failed: expected passed while the dedicated deployment is genuinely active, got %', app.resolve_latest_dr_restore_status(v_tenant1, 'database');
+  end if;
+
+  perform app.record_dr_restore_test(null, 'shared', 'database', 'failed', null, null, 'shared baseline not yet re-verified', 'schedule a real shared restore test', now() + interval '5 days', null, null, v_supreme, 'supreme');
+
+  perform app.set_deployment_provisioning_status(v_deployment_id, 'decommissioned', v_admin3, 'admin3');
+
+  select status into v_raw_status from app.dr_restore_tests where tenant_id = v_tenant1 and component_scope = 'database' order by tested_at desc limit 1;
+  if v_raw_status <> 'passed' then
+    raise exception 'assertion failed: expected the dedicated-scoped test ROW ITSELF to remain status=passed (real historical evidence, never retroactively falsified), got %', v_raw_status;
+  end if;
+
+  if app.resolve_latest_dr_restore_status(v_tenant1, 'database') <> 'failed' then
+    raise exception 'assertion failed: expected resolve_latest_dr_restore_status to stop counting the now-stale dedicated-scoped passed test and fall back to the platform-wide shared test (failed) instead, got %', app.resolve_latest_dr_restore_status(v_tenant1, 'database');
   end if;
 end;
 $$;

@@ -32,7 +32,7 @@
 --    real infrastructure is deployed to either region anywhere in this
 --    repository. A tenant's own region assignment can still reach `approved`
 --    only by a real, separately-authorized `DEPLOY:Approve` exception being
---    registered for every one of the five service categories first (design
+--    registered for every one of the six service categories first (design
 --    decision 6) -- there is no path to a false "multi-region available"
 --    claim without an explicit, audited, per-category accepted-risk record.
 -- 5. `app.tenant_region_assignments` only ever holds a row for a NON-default
@@ -84,27 +84,30 @@ create table app.region_service_capabilities (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint region_service_capabilities_region_check check (region_code in ('apac', 'americas', 'emea')),
-  constraint region_service_capabilities_category_check check (service_category in ('database', 'secrets', 'backup', 'observability', 'ai_provider')),
+  constraint region_service_capabilities_category_check check (service_category in ('database', 'secrets', 'backup', 'files', 'observability', 'ai_provider')),
   constraint region_service_capabilities_unique unique (region_code, service_category)
 );
 
 comment on table app.region_service_capabilities is
-  'IAE-033: real region x service-category capability matrix. apac (the RPD-013 default) is seeded fully supported; americas/emea are seeded UNSUPPORTED for every category -- honestly, no real deployed architecture exists in either region anywhere in this repository (Prompt 361 ''do not claim multi-region availability without deployed architecture and test evidence'').';
+  'IAE-033: real region x service-category capability matrix. apac (the RPD-013 default) is seeded fully supported; americas/emea are seeded UNSUPPORTED for every category -- honestly, no real deployed architecture exists in either region anywhere in this repository (Prompt 361 ''do not claim multi-region availability without deployed architecture and test evidence''). Tier C review fix (spec-compliance lens): ''files'' added as its own category, distinct from ''backup'' -- Prompt 361 §24 names ''backups... files... telemetry'' as three of its five residency-scoped items, and the original five categories collapsed files into backup, silently narrowing that requirement. ''support access'' (the fifth §24 item) is NOT modeled here -- it is governed by the Platform''s own pre-existing app.support_access_grants/app.support_access_sessions (PLT-1xx), which has no region concept anywhere in this repository; making support access region-aware would mean editing an already-VERIFIED, different phase''s own migration, out of this checkpoint''s own scope -- disclosed honestly rather than silently modeled as a no-op category (see IAE-361.md §8).';
 
 insert into app.region_service_capabilities (region_code, service_category, supported, notes, updated_by) values
   ('apac', 'database', true, 'Default, currently deployed region.', 'system'),
   ('apac', 'secrets', true, 'Default, currently deployed region.', 'system'),
   ('apac', 'backup', true, 'Default, currently deployed region.', 'system'),
+  ('apac', 'files', true, 'Default, currently deployed region.', 'system'),
   ('apac', 'observability', true, 'Default, currently deployed region.', 'system'),
   ('apac', 'ai_provider', true, 'Default, currently deployed region.', 'system'),
   ('americas', 'database', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('americas', 'secrets', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('americas', 'backup', false, 'No dedicated architecture deployed in this region yet.', 'system'),
+  ('americas', 'files', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('americas', 'observability', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('americas', 'ai_provider', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('emea', 'database', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('emea', 'secrets', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('emea', 'backup', false, 'No dedicated architecture deployed in this region yet.', 'system'),
+  ('emea', 'files', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('emea', 'observability', false, 'No dedicated architecture deployed in this region yet.', 'system'),
   ('emea', 'ai_provider', false, 'No dedicated architecture deployed in this region yet.', 'system');
 
@@ -134,7 +137,7 @@ begin
   if p_region_code not in ('apac', 'americas', 'emea') then
     raise exception 'region_invalid_code: %', p_region_code using errcode = 'check_violation';
   end if;
-  if p_service_category not in ('database', 'secrets', 'backup', 'observability', 'ai_provider') then
+  if p_service_category not in ('database', 'secrets', 'backup', 'files', 'observability', 'ai_provider') then
     raise exception 'region_invalid_service_category: %', p_service_category using errcode = 'check_violation';
   end if;
 
@@ -216,7 +219,7 @@ create table app.region_capability_exceptions (
   approved_by text,
   approved_at timestamptz,
   created_at timestamptz not null default now(),
-  constraint region_capability_exceptions_category_check check (service_category in ('database', 'secrets', 'backup', 'observability', 'ai_provider')),
+  constraint region_capability_exceptions_category_check check (service_category in ('database', 'secrets', 'backup', 'files', 'observability', 'ai_provider')),
   constraint region_capability_exceptions_unique unique (region_assignment_id, service_category)
 );
 
@@ -311,7 +314,7 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  foreach v_category in array array['database', 'secrets', 'backup', 'observability', 'ai_provider']
+  foreach v_category in array array['database', 'secrets', 'backup', 'files', 'observability', 'ai_provider']
   loop
     select supported into v_supported from app.region_service_capabilities where region_code = v_record.region_code and service_category = v_category;
     if not coalesce(v_supported, false) then
@@ -341,7 +344,7 @@ end;
 $$;
 
 comment on function app.approve_region_assignment is
-  'IAE-033: real, structural enforcement of RPD-013 (dedicated region requires dedicated deployment, design decision 3) and Prompt 361''s own "do not claim multi-region availability without deployed architecture" rule (design decision 4) -- approval is impossible until every one of the five fixed service categories is either genuinely supported in the target region or has a real, separately-registered DEPLOY:Approve exception.';
+  'IAE-033: real, structural enforcement of RPD-013 (dedicated region requires dedicated deployment, design decision 3) and Prompt 361''s own "do not claim multi-region availability without deployed architecture" rule (design decision 4) -- approval is impossible until every one of the six fixed service categories is either genuinely supported in the target region or has a real, separately-registered DEPLOY:Approve exception.';
 
 create function app.register_region_capability_exception(
   p_region_assignment_id uuid,
@@ -374,7 +377,7 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
-  if p_service_category not in ('database', 'secrets', 'backup', 'observability', 'ai_provider') then
+  if p_service_category not in ('database', 'secrets', 'backup', 'files', 'observability', 'ai_provider') then
     raise exception 'region_invalid_service_category: %', p_service_category using errcode = 'check_violation';
   end if;
   if coalesce(trim(p_reason), '') = '' then
@@ -478,13 +481,17 @@ security definer
 set search_path = app, pg_temp
 as $$
   select coalesce(
-    (select region_code from app.tenant_region_assignments where tenant_id = p_tenant_id and status = 'active'),
+    (
+      select region_code from app.tenant_region_assignments
+      where tenant_id = p_tenant_id and status = 'active'
+        and app.resolve_tenant_deployment_type(p_tenant_id) = 'dedicated'
+    ),
     'apac'
   );
 $$;
 
 comment on function app.resolve_tenant_region is
-  'IAE-033: RPD-013''s own real default -- returns ''apac'' for every tenant unless a real region assignment has actually reached status=active. service_role-only by design (design decision 7) -- the identical bare-tenant-id shape app.resolve_tenant_deployment_type/app.resolve_retention_days/app.is_high_risk_action already established, applied correctly from the first draft this time.';
+  'IAE-033: RPD-013''s own real default -- returns ''apac'' for every tenant unless a real region assignment has actually reached status=active. service_role-only by design (design decision 7) -- the identical bare-tenant-id shape app.resolve_tenant_deployment_type/app.resolve_retention_days/app.is_high_risk_action already established, applied correctly from the first draft this time. Tier C review fix (cross-prompt integration lens): re-checks app.resolve_tenant_deployment_type LIVE on every call, rather than trusting the assignment''s own stored status alone -- an approval''s own "dedicated region requires dedicated deployment" precondition (design decision 3) is enforced continuously, not merely at the moment of approval, so a tenant whose dedicated deployment is later decommissioned correctly and immediately reverts to apac even though its own region assignment row is still nominally status=active (that row itself is left unchanged -- it is real historical evidence of a real approval that once held true, not retroactively falsified -- only the LIVE-resolved effective region changes).';
 
 -- ===========================================================================
 -- 4. Read paths.

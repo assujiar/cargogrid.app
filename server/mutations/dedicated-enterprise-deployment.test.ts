@@ -74,6 +74,14 @@ describe("approveDedicatedDeploymentQualification", () => {
       (err: unknown) => err instanceof DedicatedEnterpriseDeploymentMutationError && err.code === "deployment_record_not_pending_qualification",
     );
   });
+
+  test("classifies deployment_self_approval_forbidden", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "deployment_self_approval_forbidden: identity cannot approve a dedicated deployment qualification they themselves requested" } });
+    await assert.rejects(
+      approveDedicatedDeploymentQualification(client, { deploymentRecordId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "admin1" }),
+      (err: unknown) => err instanceof DedicatedEnterpriseDeploymentMutationError && err.code === "deployment_self_approval_forbidden",
+    );
+  });
 });
 
 describe("setDeploymentProvisioningStatus", () => {

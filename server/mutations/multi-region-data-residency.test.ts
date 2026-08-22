@@ -73,6 +73,14 @@ describe("requestRegionAssignment", () => {
 });
 
 describe("approveRegionAssignment", () => {
+  test("classifies region_self_approval_forbidden", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "region_self_approval_forbidden: identity cannot approve a region assignment they themselves requested" } });
+    await assert.rejects(
+      approveRegionAssignment(client, { regionAssignmentId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "admin1" }),
+      (err: unknown) => err instanceof MultiRegionDataResidencyMutationError && err.code === "region_self_approval_forbidden",
+    );
+  });
+
   test("classifies region_requires_dedicated_deployment", async () => {
     const { client } = fakeRpcClient({ data: null, error: { message: "region_requires_dedicated_deployment: tenant has no active dedicated deployment" } });
     await assert.rejects(

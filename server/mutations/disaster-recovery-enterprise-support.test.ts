@@ -70,6 +70,30 @@ describe("recordDrRestoreTest", () => {
       (err: unknown) => err instanceof DisasterRecoveryEnterpriseSupportMutationError && err.code === "dr_test_deployment_mismatch",
     );
   });
+
+  test("classifies dr_test_failure_evidence_required", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "dr_test_failure_evidence_required: a real, non-empty failure_reason and recovery_steps must be stated for a failed result" } });
+    await assert.rejects(
+      recordDrRestoreTest(client, {
+        tenantId: TENANT_ID, deploymentType: "shared", componentScope: "database", status: "failed",
+        observedRpoMinutes: null, observedRtoMinutes: null, failureReason: "", recoverySteps: "", retestScheduledAt: "2026-09-01T00:00:00.000Z",
+        ownerAuthUserId: null, ownerLabel: null, actorAuthUserId: ACTOR_ID, actorLabel: "admin1",
+      }),
+      (err: unknown) => err instanceof DisasterRecoveryEnterpriseSupportMutationError && err.code === "dr_test_failure_evidence_required",
+    );
+  });
+
+  test("classifies dr_test_retest_schedule_must_be_future", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "dr_test_retest_schedule_must_be_future: retest_scheduled_at must be after the current time" } });
+    await assert.rejects(
+      recordDrRestoreTest(client, {
+        tenantId: TENANT_ID, deploymentType: "shared", componentScope: "database", status: "failed",
+        observedRpoMinutes: null, observedRtoMinutes: null, failureReason: "genuine failure", recoverySteps: "genuine steps", retestScheduledAt: "2020-01-01T00:00:00.000Z",
+        ownerAuthUserId: null, ownerLabel: null, actorAuthUserId: ACTOR_ID, actorLabel: "admin1",
+      }),
+      (err: unknown) => err instanceof DisasterRecoveryEnterpriseSupportMutationError && err.code === "dr_test_retest_schedule_must_be_future",
+    );
+  });
 });
 
 describe("setSupportEntitlement", () => {

@@ -33,6 +33,7 @@ export const MULTI_REGION_DATA_RESIDENCY_KNOWN_MUTATION_ERROR_CODES = [
   "region_invalid_code",
   "region_invalid_service_category",
   "region_qualification_reason_required",
+  "region_self_approval_forbidden",
   "region_requires_dedicated_deployment",
   "region_capability_gap_unresolved",
   "region_capability_exception_not_needed",

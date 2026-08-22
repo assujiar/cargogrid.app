@@ -28,6 +28,8 @@ export const DISASTER_RECOVERY_ENTERPRISE_SUPPORT_KNOWN_MUTATION_ERROR_CODES = [
   "dr_test_invalid_deployment_type",
   "dr_test_invalid_component_scope",
   "dr_test_invalid_status",
+  "dr_test_failure_evidence_required",
+  "dr_test_retest_schedule_must_be_future",
   "dr_test_deployment_mismatch",
   "support_entitlement_invalid_tier",
   "support_entitlement_24_7_requires_escalation",

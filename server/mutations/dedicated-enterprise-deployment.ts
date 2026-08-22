@@ -28,6 +28,7 @@ export const DEDICATED_ENTERPRISE_DEPLOYMENT_KNOWN_MUTATION_ERROR_CODES = [
   "insufficient_authority",
   "deployment_qualification_reason_required",
   "deployment_record_not_pending_qualification",
+  "deployment_self_approval_forbidden",
   "deployment_record_not_found",
   "deployment_invalid_transition",
   "deployment_invalid_environment_category",
