@@ -272,7 +272,7 @@ begin
 end;
 $$;
 
-\echo '>> app.set_support_entitlement: rep1 (no SUP:Configure) rejected; invalid tier rejected; enterprise_24_7 without a real escalation_contact_email/p1_response_minutes rejected; admin1 succeeds for standard, then upserts to enterprise_24_7 with a real escalation contact (record_version increments)'
+\echo '>> app.set_support_entitlement: rep1 (no SUP:Configure) rejected; invalid tier rejected; enterprise_24_7 without a real escalation_contact_email/p1_response_minutes rejected; IAE-037 Tier C fix: enterprise_24_7 without a real contract_reference also rejected (app layer and a raw-SQL CHECK-constraint bypass attempt); admin1 succeeds for standard, then upserts to enterprise_24_7 with a real escalation contact and contract reference (record_version increments)'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaedr');
@@ -298,6 +298,34 @@ begin
   begin
     perform app.set_support_entitlement(v_tenant1, 'enterprise_24_7', 'MSA-2026-006', 'NOC Team', null, null, v_admin1, 'admin1');
     raise exception 'assertion failed: expected support_entitlement_24_7_requires_escalation with no email/response minutes, the call unexpectedly succeeded';
+  exception when check_violation then
+    null;
+  end;
+
+  -- IAE-037 Tier C fix, live-reproduced: enterprise_24_7 with a REAL
+  -- escalation contact and p1_response_minutes but NO contract_reference
+  -- must now also be rejected -- previously an ordinary tenant-side
+  -- SUP:Configure actor could self-declare the premium tier with zero
+  -- contract evidence.
+  begin
+    perform app.set_support_entitlement(v_tenant1, 'enterprise_24_7', null, 'NOC Team', 'noc@iaedr-support.test', 15, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected support_entitlement_24_7_requires_contract_reference with a null contract_reference, the call unexpectedly succeeded';
+  exception when check_violation then
+    if sqlerrm !~ 'support_entitlement_24_7_requires_contract_reference' then raise; end if;
+  end;
+  begin
+    perform app.set_support_entitlement(v_tenant1, 'enterprise_24_7', '   ', 'NOC Team', 'noc@iaedr-support.test', 15, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected support_entitlement_24_7_requires_contract_reference with a hollow whitespace-only contract_reference, the call unexpectedly succeeded';
+  exception when check_violation then
+    if sqlerrm !~ 'support_entitlement_24_7_requires_contract_reference' then raise; end if;
+  end;
+  -- Also enforced structurally, at the table CHECK-constraint level (a raw
+  -- SQL bypass attempt, not merely the app-layer guard above).
+  begin
+    insert into app.support_entitlements (tenant_id, tier, contract_reference, escalation_contact_name, escalation_contact_email, p1_response_minutes, created_by)
+    values (v_tenant1, 'enterprise_24_7', null, 'NOC Team', 'noc@iaedr-support.test', 15, 'raw-bypass-attempt')
+    on conflict (tenant_id) do nothing;
+    raise exception 'assertion failed: expected the support_entitlements_24_7_requires_contract_check CHECK constraint to reject a raw-SQL insert with no contract_reference';
   exception when check_violation then
     null;
   end;

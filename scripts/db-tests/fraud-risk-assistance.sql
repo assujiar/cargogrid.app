@@ -296,12 +296,14 @@ begin
   raise notice 'PASS: decide_risk_signal enforces authority/state, validates the decision enum, and reviews at most once';
 end $$;
 
-\echo '>> app.hold_risk_signal_entity/app.release_risk_signal_entity: a hold requires a CONFIRMED review (not merely a succeeded signal); AI:Approve required (agent1 lacking it is refused); reason and a customer_safe_reason DISTINCT from the internal reason are both required; a real hold succeeds and blocks a second concurrent hold; release requires a reason, is a real state transition, and a second release is rejected'
+\echo '>> app.hold_risk_signal_entity/app.release_risk_signal_entity: a hold requires a CONFIRMED review (not merely a succeeded signal); AI:Approve required (agent1 lacking it is refused); IAE-037 Tier C fix: the confirming reviewer may not also be the holding actor (risk_signal_hold_self_review_forbidden); reason and a customer_safe_reason DISTINCT from the internal reason are both required; a real hold succeeds (by a DIFFERENT AI:Approve holder than the confirming reviewer) and blocks a second concurrent hold; release requires a reason, is a real state transition, and a second release is rejected'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaerisk');
   v_rep1 uuid := '00000000-0000-0000-0000-000027000002';
   v_agent1 uuid := '00000000-0000-0000-0000-000027000003';
+  v_approver1 uuid := '00000000-0000-0000-0000-000027000006';
+  v_admin1 uuid := '00000000-0000-0000-0000-000027000001';
   v_confirmed_signal_id uuid := (select rv.risk_signal_id from app.risk_signal_reviews rv where rv.tenant_id = v_tenant1 and rv.decision = 'confirmed' limit 1);
   v_unconfirmed_signal app.risk_signals;
   v_connection1 uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'openai_multimodal');
@@ -309,6 +311,19 @@ declare
   v_action app.risk_signal_actions;
   v_released app.risk_signal_actions;
 begin
+  -- A second, genuinely distinct AI:Approve holder, mirroring v_rep1's own
+  -- role exactly -- needed so the hold/release flow below can be driven by
+  -- an actor DIFFERENT from whoever confirmed the review (IAE-037 Tier C
+  -- fix: risk_signal_hold_self_review_forbidden).
+  insert into auth.users (id, email) values (v_approver1, 'approver@iaerisk.test');
+  perform app.invite_user(v_tenant1, v_approver1, 'approver@iaerisk.test', 'IaeRisk Approver', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'approver@iaerisk.test'), 'active', 'onboarded', 'tester');
+  perform app.assign_role(
+    v_tenant1,
+    (select rv.id from app.role_versions rv join app.roles r on r.id = rv.role_id where r.tenant_id = v_tenant1 and r.name = 'IaeRisk Rep' and rv.status = 'published'),
+    v_approver1, v_admin1, 'admin'
+  );
+
   -- A succeeded-but-not-yet-reviewed signal cannot be held (design decision 2).
   v_unconfirmed_signal := app.request_risk_signal(v_tenant1, 'vendor', 'vendor_master', gen_random_uuid(), jsonb_build_object('invoice_variance_pct', 40), 'idem-risk-unconfirmed', v_rep1, 'rep');
   v_unconfirmed_request := app.request_ai_governed_action(v_tenant1, v_connection1, 'fraud_risk_assistance', v_unconfirmed_signal.entity_type, v_unconfirmed_signal.entity_id, jsonb_build_object('invoice_variance_pct', 40), v_rep1, 'rep');
@@ -328,34 +343,48 @@ begin
     if sqlerrm not like 'insufficient_authority%' then raise; end if;
   end;
 
+  -- IAE-037 Tier C fix, live-reproduced regression: v_rep1 is the SAME
+  -- identity who confirmed v_confirmed_signal_id's own review (decide_risk_
+  -- signal above) -- a hold attempt by that same identity must now be
+  -- rejected, even though v_rep1 genuinely holds AI:Approve.
   begin
-    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, '', 'we are reviewing your account', v_rep1, 'rep');
+    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'redemption velocity far exceeds history', 'we are reviewing your account for unusual activity', v_rep1, 'rep');
+    raise exception 'assertion failed: expected risk_signal_hold_self_review_forbidden for the SAME actor who confirmed the review';
+  exception when others then
+    if sqlerrm not like 'risk_signal_hold_self_review_forbidden%' then raise; end if;
+  end;
+
+  -- The remaining hold/release assertions below are driven by v_approver1
+  -- (a genuinely different AI:Approve holder from v_rep1, the confirmer)
+  -- so each one still reaches the specific validation it targets.
+  begin
+    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, '', 'we are reviewing your account', v_approver1, 'approver');
     raise exception 'assertion failed: expected risk_signal_hold_reason_required for an empty reason';
   exception when others then
     if sqlerrm not like 'risk_signal_hold_reason_required%' then raise; end if;
   end;
 
   begin
-    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'redemption velocity far exceeds history', '', v_rep1, 'rep');
+    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'redemption velocity far exceeds history', '', v_approver1, 'approver');
     raise exception 'assertion failed: expected risk_signal_customer_safe_reason_required for an empty customer-safe reason';
   exception when others then
     if sqlerrm not like 'risk_signal_customer_safe_reason_required%' then raise; end if;
   end;
 
   begin
-    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'redemption velocity far exceeds history', 'redemption velocity far exceeds history', v_rep1, 'rep');
+    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'redemption velocity far exceeds history', 'redemption velocity far exceeds history', v_approver1, 'approver');
     raise exception 'assertion failed: expected risk_signal_customer_safe_reason_not_distinct when both reasons are identical (design decision 3)';
   exception when others then
     if sqlerrm not like 'risk_signal_customer_safe_reason_not_distinct%' then raise; end if;
   end;
 
-  v_action := app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'redemption velocity far exceeds this account''s own history, 12 in 24h vs baseline 2', 'we are reviewing your account for unusual activity', v_rep1, 'rep');
+  v_action := app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'redemption velocity far exceeds this account''s own history, 12 in 24h vs baseline 2', 'we are reviewing your account for unusual activity', v_approver1, 'approver');
   if v_action.status <> 'active' or v_action.customer_safe_reason = v_action.reason then
     raise exception 'assertion failed: expected a real active hold with distinct reasons, got %', to_jsonb(v_action);
   end if;
 
   begin
-    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'again', 'we are still reviewing', v_rep1, 'rep');
+    perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 'again', 'we are still reviewing', v_approver1, 'approver');
     raise exception 'assertion failed: expected risk_signal_already_held for a signal that already has an active hold';
   exception when others then
     if sqlerrm not like 'risk_signal_already_held%' then raise; end if;
@@ -381,9 +410,9 @@ begin
   end;
 
   -- A fresh hold on the SAME signal is allowed once the prior one is released (not a permanent block).
-  perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 're-flagged after a new pattern observed', 'we are reviewing your account again', v_rep1, 'rep');
+  perform app.hold_risk_signal_entity(v_confirmed_signal_id, v_tenant1, 're-flagged after a new pattern observed', 'we are reviewing your account again', v_approver1, 'approver');
 
-  raise notice 'PASS: hold_risk_signal_entity/release_risk_signal_entity require a confirmed review, AI:Approve, distinct customer-safe/internal reasons, and enforce a real one-active-hold-at-a-time lifecycle';
+  raise notice 'PASS: hold_risk_signal_entity/release_risk_signal_entity require a confirmed review, AI:Approve, a hold actor DIFFERENT from the confirming reviewer (IAE-037 Tier C fix), distinct customer-safe/internal reasons, and enforce a real one-active-hold-at-a-time lifecycle';
 end $$;
 
 \echo '>> read paths: app.get_risk_signal/app.list_risk_signals_for_tenant are AI:View-gated and surface the linked governed request''s own evidence, review and active hold; a wrong tenant_id on a real signal id returns nothing; list respects domain/status/band filters and limit bounds'

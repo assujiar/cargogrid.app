@@ -300,4 +300,54 @@ begin
 end;
 $$;
 
+\echo '>> app.capture_audit_event (IAE-037 Tier C fix, live-reproduced): when the caller omits support_access_grant_id explicitly, it is now DEFAULTED from the actor''s own currently-open support session -- closing a real gap where the linkage column was correct but never populated by any real business mutation'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaud');
+  v_admin1 uuid := '00000000-0000-0000-0000-000029000001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000029000002';
+  v_grant app.support_access_grants;
+  v_session app.support_access_sessions;
+  v_row app.audit_logs;
+  v_unrelated_row app.audit_logs;
+begin
+  -- A fresh, dedicated grant for this regression -- run at the very end of
+  -- this file (after every earlier block that relies on "the most recent
+  -- grant" ordering) so it disturbs no other test's own assumptions.
+  v_grant := app.request_support_access(v_tenant1, v_viewer1, 'auto-linkage regression', 'case-iaeaud-003', 60, 'admin1');
+  v_grant := app.approve_support_access(v_grant.id, v_admin1, 'admin1');
+  v_session := app.start_support_session(v_grant.id, now(), 'admin1');
+
+  -- v_viewer1 IS the grantee with a genuinely open session -- a plain,
+  -- ordinary 11-arg call (the shape every real mutation in this repository
+  -- actually uses) must now auto-populate support_access_grant_id.
+  v_row := app.capture_audit_event(v_tenant1, v_viewer1, 'viewer1', 'test_auto_linked_call', 'app.some_table', null, 'success');
+  if v_row.support_access_grant_id is distinct from v_grant.id then
+    raise exception 'assertion failed: expected support_access_grant_id auto-defaulted to the open session''s own grant %, got %', v_grant.id, v_row.support_access_grant_id;
+  end if;
+  if not exists (select 1 from app.list_audit_logs_for_support_session(v_admin1, v_grant.id) where action = 'test_auto_linked_call') then
+    raise exception 'assertion failed: expected the auto-linked event to be visible via list_audit_logs_for_support_session';
+  end if;
+
+  -- v_admin1 has NO open support session -- an ordinary call by them stays
+  -- null, exactly as before this fix (the overwhelming majority case).
+  v_unrelated_row := app.capture_audit_event(v_tenant1, v_admin1, 'admin1', 'test_still_null_call', 'app.some_table', null, 'success');
+  if v_unrelated_row.support_access_grant_id is not null then
+    raise exception 'assertion failed: expected support_access_grant_id to remain null for an actor with no open support session, got %', v_unrelated_row.support_access_grant_id;
+  end if;
+
+  -- An explicit, real grant id still wins over the live lookup (the
+  -- existing pre-fix 12-arg test earlier in this file already proves this
+  -- for v_admin1; proving it again here for v_viewer1, who now ALSO has a
+  -- live session the lookup could otherwise find, confirms the explicit
+  -- value is used as-is rather than re-derived).
+  v_unrelated_row := app.capture_audit_event(v_tenant1, v_viewer1, 'viewer1', 'test_explicit_value_wins', 'app.some_table', null, 'success', null, null, null, null, v_grant.id);
+  if v_unrelated_row.support_access_grant_id <> v_grant.id then
+    raise exception 'assertion failed: expected the explicitly-passed grant id % to be used as-is, got %', v_grant.id, v_unrelated_row.support_access_grant_id;
+  end if;
+
+  raise notice 'PASS: capture_audit_event auto-defaults support_access_grant_id from the actor''s own open support session when omitted, leaves it null with no open session, and still accepts an explicit value as-is';
+end;
+$$;
+
 \echo 'ALL IAE-029 (Advanced Audit and Impersonation) ASSERTIONS PASSED'
