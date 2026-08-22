@@ -107,8 +107,20 @@ begin
   if found then
     return v_policy;
   end if;
+
+  -- Tier C review fix (correctness/concurrency lens): two concurrent
+  -- bootstrap calls for the same brand-new tenant both pass the SELECT
+  -- above, then the loser's own plain INSERT raised a raw, unhandled
+  -- duplicate-key error on the primary key -- live-reproduced through the
+  -- real app.set_mfa_tenant_policy entrypoint, not merely this internal
+  -- helper. `on conflict do nothing` + re-select makes the loser fall
+  -- through to the winner's own row instead.
   insert into app.mfa_tenant_policies (tenant_id) values (p_tenant_id)
+  on conflict (tenant_id) do nothing
   returning * into v_policy;
+  if not found then
+    select * into v_policy from app.mfa_tenant_policies where tenant_id = p_tenant_id;
+  end if;
   return v_policy;
 end;
 $$;
@@ -593,6 +605,17 @@ begin
 
   if coalesce(length(trim(p_reason)), 0) = 0 then
     raise exception 'mfa_exception_reason_required: a non-empty reason is required' using errcode = 'check_violation';
+  end if;
+
+  -- Tier C review fix (security/RLS/tenant lens, Low): p_target_auth_user_id
+  -- was accepted with no check that it actually belongs to p_tenant_id --
+  -- referential-integrity gap, not itself a live bypass (this row is only
+  -- ever consulted by tenant-scoped enforcement that separately re-checks
+  -- the actor's own tenant standing), but worth closing rather than leaving
+  -- an orphaned/meaningless row reachable.
+  if not app.has_active_tenant_membership(p_tenant_id, p_target_auth_user_id) then
+    raise exception 'mfa_exception_target_not_tenant_member: % is not an active member of tenant %', p_target_auth_user_id, p_tenant_id
+      using errcode = 'check_violation';
   end if;
 
   insert into app.mfa_exceptions (tenant_id, target_auth_user_id, reason, requested_by_auth_user_id, requested_by)

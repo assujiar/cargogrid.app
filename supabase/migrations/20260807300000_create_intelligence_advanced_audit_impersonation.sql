@@ -310,6 +310,26 @@ begin
     raise exception 'audit_export_unsafe_filters: filters failed structural validation' using errcode = 'check_violation';
   end if;
 
+  -- Tier C review fix (security/RLS/tenant lens, Medium, flagged as the
+  -- same shape as IAE-031's own confirmed request_retention_archive
+  -- double-enqueue bug): the idempotency key passed to app.enqueue_job
+  -- below was 'audit-export:' || v_request.id -- the id of the row THIS
+  -- call just inserted, which can never collide, so it never actually
+  -- deduplicated. An advisory transaction lock keyed on (tenant, filters)
+  -- serializes concurrent identical requests; an already-pending/processing
+  -- request with the exact same filters is returned unchanged rather than
+  -- creating a second row and a second job.
+  perform pg_advisory_xact_lock(hashtextextended(p_tenant_id::text || ':' || coalesce(p_filters, '{}'::jsonb)::text, 0));
+
+  select * into v_request
+  from app.audit_export_requests
+  where tenant_id = p_tenant_id and filters = coalesce(p_filters, '{}'::jsonb) and status in ('pending', 'processing')
+  order by requested_at desc
+  limit 1;
+  if found then
+    return v_request;
+  end if;
+
   insert into app.audit_export_requests (tenant_id, requested_by_auth_user_id, requested_by, filters)
   values (p_tenant_id, p_actor_auth_user_id, p_actor_label, coalesce(p_filters, '{}'::jsonb))
   returning * into v_request;

@@ -535,6 +535,7 @@ set search_path = app, pg_temp
 as $$
 declare
   v_connection app.integration_connections;
+  v_decision app.rbac_decision;
 begin
   perform app.assert_actor_is_session_identity(p_actor_auth_user_id);
 
@@ -545,6 +546,27 @@ begin
   if v_connection.adapter_code not in ('enterprise_sso_oidc', 'enterprise_sso_saml') then
     raise exception 'iam_connection_wrong_adapter: % is not an enterprise SSO connection', p_connection_id
       using errcode = 'check_violation';
+  end if;
+
+  -- Tier C review fix (security/RLS/tenant lens, HIGH): this function never
+  -- checked IAM:Configure itself -- it delegated the actual status flip
+  -- entirely to app.set_integration_connection_status (IAE-008), which
+  -- checks INTHUB:Configure instead. Live-reproduced: an actor holding ONLY
+  -- INTHUB:Configure (a broadly-held, generic integration-admin permission,
+  -- zero IAM grant of any kind) could activate enterprise SSO login for the
+  -- whole tenant -- a real segregation-of-duties bypass, since enabling
+  -- live SSO is squarely an identity/IAM decision. Every other IAM-module
+  -- function in this migration correctly gates on IAM:Configure/IAM:View;
+  -- this is the one that silently fell through to a shared primitive's own,
+  -- different, permission. Fixed by requiring IAM:Configure explicitly,
+  -- IN ADDITION to whatever app.set_integration_connection_status itself
+  -- separately requires (INTHUB:Configure) -- IAE-008's own function is not
+  -- modified (out of this migration's own scope), so the caller now needs
+  -- both grants rather than either one alone.
+  v_decision := app.evaluate_permission(p_actor_auth_user_id, v_connection.tenant_id, 'IAM', 'Configure');
+  if not v_decision.allowed then
+    raise exception 'insufficient_authority: identity % lacks IAM:Configure (%) for tenant %', p_actor_auth_user_id, v_decision.reason, v_connection.tenant_id
+      using errcode = 'insufficient_privilege';
   end if;
 
   if not exists (

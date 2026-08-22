@@ -70,7 +70,7 @@ create table app.slo_definitions (
   record_version integer not null default 1,
   constraint slo_definitions_metric_type_check check (metric_type in ('availability', 'latency_p95', 'error_rate', 'queue_backlog')),
   constraint slo_definitions_window_check check (evaluation_window_minutes between 1 and 10080),
-  constraint slo_definitions_unique unique (tenant_id, service_name, metric_type)
+  constraint slo_definitions_unique unique nulls not distinct (tenant_id, service_name, metric_type)
 );
 
 comment on table app.slo_definitions is
@@ -247,7 +247,7 @@ create table app.alert_routes (
   constraint alert_routes_source_type_check check (source_type in ('job', 'webhook', 'api', 'integration', 'ai')),
   constraint alert_routes_signal_type_check check (signal_type in ('error', 'latency_ms', 'backlog_depth', 'success')),
   constraint alert_routes_dedupe_window_check check (dedupe_window_minutes between 1 and 1440),
-  constraint alert_routes_unique unique (tenant_id, source_type, signal_type)
+  constraint alert_routes_unique unique nulls not distinct (tenant_id, source_type, signal_type)
 );
 
 create function app.set_alert_route(
@@ -352,6 +352,18 @@ begin
   if p_severity not in ('low', 'medium', 'high', 'critical') then
     raise exception 'incident_invalid_severity: %', p_severity using errcode = 'check_violation';
   end if;
+
+  -- Tier C review fix (correctness/concurrency lens): the dedup check below
+  -- (SELECT an existing open incident, INSERT a new one if none found) is a
+  -- classic check-then-act race with no unique constraint backing it --
+  -- live-reproduced as 2 concurrent signals for the same (tenant, source_
+  -- type, signal_type) both creating their own incident instead of exactly
+  -- 1. A transaction-scoped advisory lock keyed on that same triple
+  -- serializes concurrent callers for the SAME dedup key (never blocks
+  -- callers with a different key), so the second caller's own SELECT always
+  -- observes the first caller's already-committed... already-inserted
+  -- incident before deciding whether to insert its own.
+  perform pg_advisory_xact_lock(hashtextextended(coalesce(p_tenant_id::text, 'platform') || ':' || p_source_type || ':' || p_signal_type, 0));
 
   select * into v_route from app.alert_routes
   where source_type = p_source_type and signal_type = p_signal_type

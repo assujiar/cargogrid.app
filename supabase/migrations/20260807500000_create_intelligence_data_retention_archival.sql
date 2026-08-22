@@ -89,7 +89,7 @@ create table app.retention_policies (
   record_version integer not null default 1,
   constraint retention_policies_record_class_check check (record_class in ('finance_tax', 'audit_security', 'operational')),
   constraint retention_policies_retention_days_check check (retention_days > 0),
-  constraint retention_policies_unique unique (tenant_id, record_class)
+  constraint retention_policies_unique unique nulls not distinct (tenant_id, record_class)
 );
 
 comment on table app.retention_policies is
@@ -222,7 +222,15 @@ create table app.legal_holds (
   release_reason text,
   constraint legal_holds_record_class_check check (record_class in ('finance_tax', 'audit_security', 'operational')),
   constraint legal_holds_status_check check (status in ('active', 'released')),
-  constraint legal_holds_scope_check check ((scope_record_table is null) = (scope_record_id is null))
+  constraint legal_holds_scope_check check ((scope_record_table is null) = (scope_record_id is null)),
+  -- Tier C review fix (correctness/concurrency lens): mirrors the identical,
+  -- already-established self-approval guard on app.mfa_exceptions/app.
+  -- ip_allowlist_bypass_grants in this same batch -- without this, the
+  -- actor who placed a hold could also release it themselves (nothing
+  -- separately prevented it), undercutting this table's own stated
+  -- rationale that releasing is the more consequential, separately-
+  -- authorized action.
+  constraint legal_holds_no_self_release check (released_by_auth_user_id is null or released_by_auth_user_id <> placed_by_auth_user_id)
 );
 
 comment on table app.legal_holds is
@@ -307,6 +315,11 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
+  if v_hold.placed_by_auth_user_id = p_actor_auth_user_id then
+    raise exception 'legal_hold_self_release_forbidden: identity % cannot release a hold they themselves placed', p_actor_auth_user_id
+      using errcode = 'insufficient_privilege';
+  end if;
+
   update app.legal_holds
   set status = 'released', released_by_auth_user_id = p_actor_auth_user_id, released_by = p_actor_label, released_at = now(), release_reason = p_release_reason
   where id = p_hold_id
@@ -328,18 +341,41 @@ stable
 security definer
 set search_path = app, pg_temp
 as $$
-  select exists (
-    select 1 from app.legal_holds
-    where tenant_id = p_tenant_id and record_class = p_record_class and status = 'active'
-      and (
-        (scope_record_table is null and scope_record_id is null)
-        or (scope_record_table = p_source_table and scope_record_id = p_source_record_id)
-      )
-  );
+  select
+    -- Tier C review fix (security/RLS/tenant lens, CRITICAL): a hold scoped
+    -- to ONE SPECIFIC record blocks archival of that EXACT (source_table,
+    -- source_record_id) pair regardless of what tenant_id/record_class the
+    -- CURRENT archive request itself claims. The original version required
+    -- tenant_id AND record_class to match the hold even for a specific-
+    -- record hold -- but this checkpoint has no way to independently verify
+    -- a caller-declared tenant_id/record_class against the real, external
+    -- domain table a record actually belongs to (design decision 4's own
+    -- bounded scope), so trusting those claims for a hold that already
+    -- names the exact record precisely WAS the vulnerability: an already-
+    -- authorized RET:Configure actor could evade an active hold simply by
+    -- mislabeling either value for the SAME physical record. Live-
+    -- reproduced both ways (same tenant/wrong class; and a different
+    -- tenant's own legitimately-authorized actor naming the SAME record id)
+    -- before this fix.
+    exists (
+      select 1 from app.legal_holds
+      where status = 'active' and scope_record_table = p_source_table and scope_record_id = p_source_record_id
+    )
+    or
+    -- A whole-class hold has no specific record to anchor against, so it
+    -- necessarily still trusts the caller's own (tenant_id, record_class)
+    -- declaration -- unavoidable given this checkpoint's own disclosed,
+    -- bounded scope (it never reaches into the real, external domain table
+    -- a record actually belongs to).
+    exists (
+      select 1 from app.legal_holds
+      where tenant_id = p_tenant_id and record_class = p_record_class and status = 'active'
+        and scope_record_table is null and scope_record_id is null
+    );
 $$;
 
 comment on function app._is_under_legal_hold is
-  'IAE-031: internal-only primitive, no actor/authority parameter -- never granted to anon/authenticated. Matches either a whole-class hold or a hold scoped to this exact record.';
+  'IAE-031: internal-only primitive, no actor/authority parameter -- never granted to anon/authenticated. A specific-record hold matches on (source_table, source_record_id) ALONE, independent of the caller''s own tenant_id/record_class claim (Tier C review fix); a whole-class hold necessarily still matches on the caller''s own (tenant_id, record_class) declaration, since there is no specific record to anchor against instead.';
 
 -- ===========================================================================
 -- 4. app.retention_archive_requests -- real dry-run classification and
@@ -407,6 +443,30 @@ begin
   end if;
   if coalesce(trim(p_source_table), '') = '' then
     raise exception 'retention_source_table_required: a real source table must be named' using errcode = 'check_violation';
+  end if;
+
+  -- Tier C review fix (correctness/concurrency lens): the idempotency key
+  -- originally passed to app.enqueue_job below was 'retention-archive:' ||
+  -- v_request.id -- the id of the row THIS call just inserted, which can
+  -- never collide with anything, so it never actually deduplicated.
+  -- Live-reproduced: 2 concurrent real (non-dry-run) requests for the exact
+  -- same record both reached status=pending and both enqueued their own
+  -- job. An advisory transaction lock keyed on the exact (tenant, table,
+  -- record) serializes concurrent callers for that SAME record (never
+  -- blocks a different record), and the check below then makes a second,
+  -- would-be-duplicate request for an ALREADY-pending record a true no-op
+  -- return of the existing request rather than a second insert+enqueue.
+  perform pg_advisory_xact_lock(hashtextextended(p_tenant_id::text || ':' || p_source_table || ':' || p_source_record_id::text, 0));
+
+  if not p_dry_run then
+    select * into v_request
+    from app.retention_archive_requests
+    where tenant_id = p_tenant_id and source_table = p_source_table and source_record_id = p_source_record_id and status = 'pending'
+    order by requested_at desc
+    limit 1;
+    if found then
+      return v_request;
+    end if;
   end if;
 
   v_retention_days := app.resolve_retention_days(p_tenant_id, p_record_class);
