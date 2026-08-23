@@ -38,9 +38,16 @@
 --
 -- Fixed at the root rather than at the assertion: align the session's own idea
 -- of "today" with the timezone the code under test actually resolves work days
--- in, so current_date and work_date can never disagree. Proven by construction
--- across all 24 hours, not by re-running and hoping -- see
--- docs/build-log/full-system-hardening/HDN-370.md.
+-- in, so current_date and work_date can never disagree. The specific comparison
+-- that produced the registered failure (work_date = current_date, the HRT-278
+-- late-exception negative control) is proven by construction across a full
+-- 7-day sweep, not by re-running and hoping -- see
+-- docs/build-log/full-system-hardening/HDN-370.md. This file has ~40 further
+-- current_date/now() sites; the Tier C correctness review checked the rest of
+-- this file for exposure to the same shift (the coverage-requirement seed and
+-- the accrual/carry-forward period labels) and found none live-breaking, but
+-- that check was not itself an exhaustive sweep -- treat only the cited
+-- comparison as swept-proven, the rest as reviewed.
 --
 -- run.sh gives every test file its own psql session, so this setting is scoped
 -- to this file and cannot leak into any other.
