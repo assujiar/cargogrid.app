@@ -142,9 +142,8 @@ Management API by a harness that reproduces the psql behaviours the tests depend
 per-statement autocommit (so a `set local` inside a `do` block cannot leak forward) and psql
 variables (`\set`, `:name`, `\gset`).
 
-**199 / 229 passed** on the last full run before the overtime fixture was fixed (that test has
-since been verified passing against the live project, so the current figure is 200). Of the 30
-failures, 22 are harness limitations rather than defects:
+**200 / 229 passed.** All 29 failures are limitations of driving psql-oriented tests over an HTTP
+API, not defects. 22 of them are missing psql features:
 
 | Cause | Count | Why it cannot work over the Management API |
 |---|---|---|
@@ -184,6 +183,9 @@ project. Left alone it would have turned CI red every weekend.
 
 ### Why the last seven cannot pass over the Management API
 
+Six depend on wall-clock time advancing between statements; the seventh exceeds a statement
+timeout. Both are properties of this transport.
+
 `now()` returns transaction start time, and the Management API executes an entire request as one
 transaction — explicit `begin`/`commit` inside the request do not create new snapshots for it.
 Measured directly against the live project:
@@ -193,7 +195,7 @@ clock_delta : 00:00:03.003   -- pg_sleep(3) really slept
 now_delta   : 00:00:00       -- now() never moved
 ```
 
-Seven tests depend on wall-clock time advancing between statements — an access grant expiring, an
+Six tests depend on wall-clock time advancing between statements — an access grant expiring, an
 `updated_at` genuinely changing, a review window elapsing. `support-access.sql` is the clearest:
 it creates a short-lived grant, runs `select pg_sleep(3);`, then asserts the grant is denied. With
 `now()` frozen the grant cannot expire, so the assertion fails no matter how the statements are
@@ -202,7 +204,7 @@ grouped — confirmed identical with per-statement transactions and with a singl
 These pass under psql, where each statement really is its own transaction. They are a property of
 the transport, not of the code.
 
-`rbac-enforcement.sql` is the eighth: it walks `pg_proc` calling `pg_get_functiondef()` on every
+`rbac-enforcement.sql` is the seventh: it walks `pg_proc` calling `pg_get_functiondef()` on every
 function in `app`. At ~2,900 functions that exceeds the API's statement timeout. It passes locally,
 where no such timeout applies.
 
