@@ -1172,29 +1172,80 @@ Found by the correctness-review lens during `HDN-370`'s Tier C close, while inde
 
 **Not fixed here** — out of `HDN-370`'s own bounded regression-baseline scope, and the affected caller was this review's own throwaway probe-database script, not any committed file. The real mandatory harness (`run.sh`) is unaffected; this is a footgun for ad hoc/future callers, not a live defect in CI or in `pnpm run db:test`. **Status `OPEN`**, Low severity (no security/data-integrity exposure; the one committed caller is safe) — owner: whichever future checkpoint next touches `scripts/db-tests/lib/setup-disposable-db.sh`, add `set -euo pipefail` inside the function itself (idempotent even when a stricter caller already set it) so the safety property does not depend on every caller remembering the documented contract.
 
-### ISS-2026-162 — 7 of 19 cross-module "prepare/convert/create-from" boundary functions share an identical concurrent-idempotency gap this repository's own codebase demonstrates the fix for elsewhere, concentrated in Finance (found at `CG-S15-HDN-003`, Prompt 371 Cross-Module Transactional Integrity, `OPEN`, Medium)
+### ISS-2026-162 — 9 of 20 cross-module "prepare/convert/create-from" boundary functions share an identical concurrent-idempotency gap this repository's own codebase demonstrates the fix for elsewhere, spanning 5 domains, live-forced and confirmed for one (found at `CG-S15-HDN-003`, Prompt 371 Cross-Module Transactional Integrity, `OPEN`, Medium — corrected at the same checkpoint's own Tier C review)
 
-Found by a systematic, code-level sweep of every genuine cross-module boundary function in the repository (`create function app.(prepare_|convert_|link_|create_.*_from_|generate_.*_from_)` across all 306 migrations — 30 functions named, 19 with an idempotent-creation shape actually applicable to check). Each was checked for two things: does it short-circuit on a matching existing row (`if found then return`), and if so, is the subsequent `insert` wrapped in a `begin ... exception when unique_violation then <re-select and return the winner> end` block that makes a genuine two-process race resolve gracefully rather than surface a raw database error?
+**Corrected 2026-08-23, same checkpoint's Tier C review.** The original sweep's regex (`create
+function app.…`) could not see `create or replace function` redefinitions and missed 2 members
+of its own defect class. Four independent review lenses each re-derived the sweep and converged
+on the corrected figures below; the central conclusion (these functions genuinely lack the
+handler) is unchanged and is now **live-proven** for one function rather than resting on code
+inspection alone. Full disposition: `docs/build-log/full-system-hardening/HDN-371.md` §12.1.
 
-**12 of 19 have the safe pattern.** One of them, `app.prepare_wms_outbound_from_shipment` (`supabase/migrations/20260730230000_create_advanced_tms_wms_outbound_order.sql`), documents it explicitly in its own migration comment as "design note 9(a): a nested begin/exception unique_violation recovery -- a genuine race between the select above and this insert ... is resolved by re-selecting and returning the winner, never a raised error on a legitimate concurrent retry." This is a real, working, already-proven pattern in this exact codebase.
+Found by a systematic, code-level sweep of every genuine cross-module boundary function in the repository (`create function app.(prepare_|convert_|link_|create_.*_from_|generate_.*_from_)`, redefinition-aware, across all 306 migrations — **32** functions named, **20** with an idempotent-creation shape actually applicable to check). Each was checked for two things: does it short-circuit on a matching existing row (`if found then return`), and if so, is the subsequent `insert` wrapped in a `begin ... exception when unique_violation then <re-select and return the winner> end` block that makes a genuine two-process race resolve gracefully rather than surface a raw database error?
 
-**7 do not have it — a plain check-then-insert with no exception handler:**
+**11 of 20 have the safe pattern.** One of them, `app.prepare_wms_outbound_from_shipment` (`supabase/migrations/20260730230000_create_advanced_tms_wms_outbound_order.sql`), documents it explicitly in its own migration comment as "design note 9(a): a nested begin/exception unique_violation recovery -- a genuine race between the select above and this insert ... is resolved by re-selecting and returning the winner, never a raised error on a legitimate concurrent retry." This is a real, working, already-proven pattern in this exact codebase. (One of the 11, `app.prepare_job_order`, has a *defective* version of this pattern — registered separately as `ISS-2026-163` below, since it is a different failure mode on a different function, not a member of this check-then-insert class.)
 
-| Function | Migration | Boundary |
+**9 do not have it — a plain check-then-insert with no exception handler** (corrected from an original count of 7; the two additions are marked):
+
+| Function | Effective (current) migration | Boundary |
 |---|---|---|
-| `app.prepare_finance_invoice_from_readiness` | `20260729110000_create_finance_invoice.sql` | Operations/Commercial → Finance |
-| `app.prepare_finance_journal_adjustment` | `20260729200000_create_finance_reversal_adjustment.sql` | Finance internal |
-| `app.prepare_finance_journal_reversal` | `20260729200000_create_finance_reversal_adjustment.sql` | Finance internal |
-| `app.prepare_finance_payroll_disbursement_handoff_from_payroll_run` | `20260731010000_bind_hris_payroll_to_finance_handoff.sql` (redefined, gap unchanged, at `20260731020000_harden_hris_payroll_batch_282_tier_c_review_fixes.sql`) | HRIS → Finance |
-| `app.prepare_finance_settlement` | `20260729150000_create_finance_settlement.sql` | Finance internal (AP/AR settlement) |
-| `app.prepare_finance_vendor_bill_from_actual_cost` | `20260729140000_create_finance_vendor_bill.sql` | Operations → Finance |
-| `app.prepare_job_order_handoff` | `20260724340000_create_commercial_job_order_lineage.sql` | Commercial → Operations |
+| `app.prepare_finance_invoice_from_readiness` | `20260730540000_harden_finance_lifecycle_exits_and_reconciliation_basis.sql` (originally created `20260729110000_create_finance_invoice.sql`, redefined by `ATW-032`) | Operations/Commercial → Finance |
+| `app.prepare_finance_journal_adjustment` | `20260730390000_harden_platform_operations_finance_idempotency_target_mismatch.sql` (originally `20260729200000_create_finance_reversal_adjustment.sql`) | Finance internal |
+| `app.prepare_finance_journal_reversal` | `20260730390000_harden_platform_operations_finance_idempotency_target_mismatch.sql` (originally `20260729200000_create_finance_reversal_adjustment.sql`) | Finance internal |
+| `app.prepare_finance_payroll_disbursement_handoff_from_payroll_run` | `20260731020000_harden_hris_payroll_batch_282_tier_c_review_fixes.sql` (originally `20260731010000_bind_hris_payroll_to_finance_handoff.sql`) | HRIS → Finance |
+| `app.prepare_finance_settlement` | `20260730390000_harden_platform_operations_finance_idempotency_target_mismatch.sql` (originally `20260729150000_create_finance_settlement.sql`) | Finance internal (AP/AR settlement) |
+| `app.prepare_finance_vendor_bill_from_actual_cost` | `20260730540000_harden_finance_lifecycle_exits_and_reconciliation_basis.sql` (originally `20260729140000_create_finance_vendor_bill.sql`) | Operations → Finance |
+| `app.prepare_job_order_handoff` | `20260724340000_create_commercial_job_order_lineage.sql` (never redefined) | Commercial → Operations |
+| **`app.prepare_wms_inbound_from_shipment`** (added at Tier C review) | `20260730180000_create_advanced_tms_wms_inbound.sql` (never redefined) | Shipment → Advanced TMS/WMS inbound |
+| **`app.link_auth_identity`** (added at Tier C review; **live-forced and confirmed**, see below) | `20260716095343_link_auth_identities.sql` (never redefined) | Platform/Auth → tenant membership |
 
-**Notably, 6 of the 7 are Finance-domain boundary functions.** The unsafe pattern predates the safe one only in part — `prepare_wms_outbound_from_shipment` (the function with the documented fix) was created at `20260730230000`, after all six Finance functions (`20260729*`) and `prepare_job_order_handoff` (`20260724340000`); the fix was never retrofitted backward, and was not applied forward either, to the payroll-handoff function created over a month later (`20260731010000/020000`).
+**5 of 9 functions were originally cited at superseded migrations** — every one still genuinely lacks the handler at its *effective* (current) definition, independently re-verified by 3 of 4 Tier C review lenses; only the citations were wrong in the first submission, corrected above. Working from the original citations would cause `HDN-374` to silently revert prior hardening migrations `ATW-031`/`ATW-032`, both of which already touch 4 of these 5 files.
 
-**Severity, bounded by direct verification rather than assumed:** every one of the 7 target tables was checked and **does carry a backing database-level unique constraint** (`finance_invoices_handoff_unique`, `finance_journal_corrections_idempotency_unique`, `finance_settlements_idempotency_unique`, `finance_vendor_bills_actual_cost_vendor_unique`, `payroll_finance_handoff_batches_run_unique`, `job_order_handoffs_tenant_quotation_purpose_unique`). **No duplicate financial or handoff record can be created under this gap** — the database-level constraint still prevents that. The real, live consequence of a genuine concurrent race (e.g. a double-click or a client retry racing its own prior in-flight request) is narrower: the losing caller receives a raw, uncaught `unique_violation` PostgreSQL error instead of the graceful "here is the record that was already created" response the winning caller (and every OTHER caller, including a later sequential retry) gets. Existing db-test coverage (118 call sites across 58 files) proves the sequential-idempotency half of each function works correctly; none of it exercises genuine two-process concurrency for these 7.
+**Domain breakdown, corrected.** "6 of the 7 are Finance-domain" (original text) was imprecise even before the 2 additions: **5 Finance** (invoice, journal adjustment, journal reversal, settlement, vendor bill), **1 HRIS-Payroll** (the payroll-disbursement function is Finance-*named* but its own migration comment states its target table is "still Payroll-owned, never a `app.finance_*` table," authorized via an HRS check not a FIN one), **1 Commercial** (job order handoff), **1 Advanced TMS/WMS** (wms inbound), **1 Platform/Auth** (link auth identity).
 
-**Not fixed here** — `CG-S15-HDN-003` is a regression/integrity **audit** lane; six of the seven affected functions are Finance-domain boundary functions, and `AGENTS.md`'s own "cut the batch short" rule names "any prompt touching finance posting" as exactly the kind of change that needs its own dedicated, careful treatment rather than a bundled fix inside an audit checkpoint. **Owner: `HDN-374`** (`CG-S15-HDN-006`, Financial Integrity Audit) — its own charter is explicitly "exact financial integrity across quotation, costing, actual cost, AR/AP, payments, journals, tax, payroll handoffs," which is precisely this gap's domain, and it is the next Finance-focused lane in the dependency graph. The fix pattern already exists in this repository and does not need to be invented: mirror `prepare_wms_outbound_from_shipment`'s own "design note 9(a)" nested exception-handler shape into each of the 7 functions, each as its own additive migration with a real two-process concurrency regression test proving the race resolves gracefully (the pattern `scripts/db-tests/advanced-tms-wms-outbound.sql`'s own `\!`-based helper already establishes).
+**Severity, bounded by direct verification against the live schema, not assumed and not read only from the original migrations:** every one of the 8 distinct target tables/objects backing these 9 functions was checked and **does carry a backing unique-enforcing object at HEAD** — `finance_invoices_handoff_active_unique` (a **partial unique index**, `where status <> 'void'`; replaces a same-named plain constraint `finance_invoices_handoff_unique` that `ATW-032` dropped — the original text cited the dropped name), `finance_journal_corrections_idempotency_unique`, `finance_settlements_idempotency_unique`, `finance_vendor_bills_actual_cost_vendor_active_unique` (likewise a partial index replacing a dropped constraint of a similar name), `payroll_finance_handoff_batches_run_unique`, `job_order_handoffs_tenant_quotation_purpose_unique`, `wms_inbound_orders_source_shipment_unique`, `tenant_user_identities_identity_tenant_unique`. **No duplicate financial, handoff, WMS-inbound or identity-link record can be created under this gap** — the database-level object still prevents that. The real, live consequence of a genuine concurrent race (e.g. a double-click or a client retry racing its own prior in-flight request) is narrower: the losing caller receives a raw, uncaught `unique_violation` PostgreSQL error instead of the graceful "here is the record that was already created" response the winning caller (and every OTHER caller, including a later sequential retry) gets. **This is no longer only inferred from code.** A genuine two-process race was forced directly against `app.link_auth_identity` — an uncommitted conflicting insert held open in one session, forcing a second session's call to block on the live unique index and then raise on the first session's commit:
+
+```
+ERROR:  duplicate key value violates unique constraint "tenant_user_identities_identity_tenant_unique"
+DETAIL:  Key (auth_user_id, tenant_id)=(11111111-1111-1111-1111-111111111111, 22222222-2222-2222-2222-222222222222) already exists.
+```
+
+Independently reproduced twice (a Tier C review lens, then the orchestrating session on its own fresh probe database), both times with the identical error. Existing db-test coverage (~131 call-site occurrences across ~60 files, re-measured from an original "118/58" that did not reproduce under direct re-count) proves the sequential-idempotency half of each function works correctly; prior to this checkpoint none of it exercised genuine two-process concurrency for these functions.
+
+**Not fixed here** — `CG-S15-HDN-003` is a regression/integrity **audit** lane. **Owner: `HDN-374`** (`CG-S15-HDN-006`, Financial Integrity Audit) for the 6 Finance/HRIS-Payroll functions — its own charter is explicitly "exact financial integrity across quotation, costing, actual cost, AR/AP, payments, journals, tax, payroll handoffs." **The 3 non-Finance functions (Commercial, WMS, Platform/Auth) are an open scope question, disclosed rather than silently assigned**: `HDN-374` may fix all 9 as one batch (mirroring the precedent this finding already set by including a Commercial function from the start) or hand the 3 to their own domain owners — a decision for `HDN-374` or `HDN-386` to make explicitly. The fix pattern already exists in this repository and does not need to be invented: mirror `prepare_wms_outbound_from_shipment`'s own "design note 9(a)" nested exception-handler shape into each of the 9 functions **at its effective migration**, each as its own additive migration with a real two-process concurrency regression test proving the race resolves gracefully — use the **uncommitted-insert-blocking technique** demonstrated above and in `HDN-371.md` §6.2 (simpler, proven on the first attempt, no shell-helper dependency), not the `\!`-based helper pattern originally recommended here. Also add a `tenant_id` predicate to the payroll function's idempotency short-circuit (currently `where payroll_run_id = p_run_id` with no tenant scoping — not currently exploitable since the function's own upstream tenant-ownership check already gates it, but worth closing in the same migration).
+
+### ISS-2026-163 — `app.prepare_job_order`'s exception handler can silently return an all-NULL row on an unrelated constraint violation (found at `CG-S15-HDN-003`, Prompt 371 Tier C review, `OPEN`, Low)
+
+Found while verifying `ISS-2026-162`'s "functions with the safe pattern" list is not
+cherry-picked. `app.prepare_job_order`
+(`supabase/migrations/20260728190000_harden_operations_security_financial.sql:122`) has the
+race-safe `begin...exception when unique_violation` shape, but the handler itself is defective:
+
+```sql
+exception
+  when unique_violation then
+    select * into v_job_order from app.job_orders
+      where tenant_id = v_handoff.tenant_id and source_handoff_id = p_source_handoff_id;
+    return v_job_order;
+end;
+```
+
+Unlike the reference shape (`prepare_wms_outbound_from_shipment`, above), this has **no `if
+found` guard and no `raise;`**. `app.job_orders` carries a *second* unique constraint,
+`job_orders_tenant_number_unique` on `(tenant_id, job_number)`
+(`20260727090000_create_operations_job_order.sql:90`). A `unique_violation` raised by **that**
+constraint — or any case where the re-select genuinely finds no matching row — is silently
+converted into a `return` of an all-NULL `app.job_orders` composite instead of a raised error, a
+silent-data-fabrication shape rather than a fail-loud one.
+
+**Severity: Low.** Reachability is narrow: `app.next_job_order_number` uses an atomic,
+non-recycling upsert, so a `job_number` collision is not currently plausible under normal
+operation — this is a defensive-shape defect, not one observed to fire in practice.
+
+**Not fixed here** — pre-existing production code (`20260728190000`, Phase 3/Operations), not
+this checkpoint's own diff, per `AGENTS.md`'s "fix only task-caused failures." **Owner:
+`HDN-374`** — same function family as `ISS-2026-162`, natural to close in the same fix session:
+add an `if found then return v_job_order; end if; raise;` guard matching the reference shape.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.

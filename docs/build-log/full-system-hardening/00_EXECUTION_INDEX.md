@@ -139,8 +139,8 @@ unrouted.
 |---|---|---|---|---|---|---|---|
 | 1 | `HDN-369` | `CG-S15-HDN-001` | 369 | Full-System Hardening WBS Runtime Kickoff | Hardening Governance | `PHASE_9_VERIFIED` | **`COMPLETED`** (this checkpoint; a kickoff is not entered into the `VERIFIED` capability chain — see §11) |
 | 2 | `HDN-370` | `CG-S15-HDN-002` | 370 | Full Regression | Regression Assurance | `HDN-369` | **`VERIFIED`** — Tier C close complete (4 lenses, 2 live-proven defects fixed and re-verified, 8-file consistency sweep), independent full gate re-run green. `HDN-BLK-002` closed at the root; `HDN-BLK-007/008/009` opened, deferred to `HDN-387` with explicit interim guidance for the 3 lanes they actually touch |
-| 3 | `HDN-371` | `CG-S15-HDN-003` | 371 | Cross-Module Transactional Integrity | Integrity Assurance | `HDN-370` **`VERIFIED`** | **`COMPLETED`** — Tier C review in progress. All named chains reconciled; one systemic finding (`HDN-BLK-010`/`ISS-2026-162`, Medium, 7/19 boundary functions missing a race-safe idempotency pattern, deferred to `HDN-374`). See `HDN-371.md` |
-| 4 | `HDN-372` | `CG-S15-HDN-004` | 372 | Tenant Isolation Audit | Security Assurance | `HDN-370` | `BLOCKED` |
+| 3 | `HDN-371` | `CG-S15-HDN-003` | 371 | Cross-Module Transactional Integrity | Integrity Assurance | `HDN-370` **`VERIFIED`** | **`VERIFIED`** — Tier C closed (4 lenses, 3 High findings fixed — 2 superseded-migration citation errors, 1 false "dependency already satisfied" claim — plus a live-forced-and-confirmed race, corrected function count 9/20 not 7/19, corrected domain breakdown, 1 new Low issue registered). One systemic finding (`HDN-BLK-010`/`ISS-2026-162`, Medium, 9/20 boundary functions missing a race-safe idempotency pattern, deferred to `HDN-374`). See `HDN-371.md` |
+| 4 | `HDN-372` | `CG-S15-HDN-004` | 372 | Tenant Isolation Audit | Security Assurance | `HDN-370` **`VERIFIED`** | **`READY`** ← **next eligible** — dependency-clean since `HDN-370`, held for ascending-order execution while `HDN-371` was in progress |
 | 5 | `HDN-373` | `CG-S15-HDN-005` | 373 | RLS and RBAC Audit | Security Assurance | `HDN-372` **(hard)** | `BLOCKED` |
 | 6 | `HDN-374` | `CG-S15-HDN-006` | 374 | Financial Integrity Audit | Financial Assurance | `HDN-371` **(hard)** | `BLOCKED` |
 | 7 | `HDN-375` | `CG-S15-HDN-007` | 375 | Data Lineage Audit | Integrity Assurance | `HDN-371` **(hard)** | `BLOCKED` |
@@ -159,15 +159,20 @@ unrouted.
 | 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `BLOCKED` |
 | 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `BLOCKED` |
 
-**Tally: 21 rows — 2 `COMPLETED` (kickoff, `HDN-371`), 18 `BLOCKED`, 1 `VERIFIED`. Nothing is
-`READY`** until `HDN-371`'s Tier C review closes.
+**Tally: 21 rows — 1 `COMPLETED` (kickoff), 1 `READY` (`HDN-372`), 18 `BLOCKED`, 2 `VERIFIED`
+(`HDN-370`, `HDN-371`).**
 
-> **`HDN-371` is `COMPLETED`, not `VERIFIED`.** Every chain named in its charter is reconciled
-> against live code and existing passing evidence; one systemic finding (`HDN-BLK-010` / 7 of 19
-> cross-module boundary functions sharing an identical concurrent-idempotency gap, Medium,
-> deferred to `HDN-374`) was registered rather than fixed in-lane, per `AGENTS.md`'s
-> finance-posting rule. **Tier C review (four independent lenses) has not yet run.** Per this
-> range's cadence, nothing may begin until it does and `HDN-371` moves to `VERIFIED`.
+> **`HDN-371` is `VERIFIED`.** Every chain named in its charter is reconciled against live code
+> and existing passing evidence, with one honestly disclosed gap (the loyalty/portal chain was
+> not examined). One systemic finding (`HDN-BLK-010` / 9 of 20 cross-module boundary functions
+> sharing an identical concurrent-idempotency gap, Medium, **live-forced and confirmed** by a
+> real two-process race, deferred to `HDN-374`) was registered rather than fixed in-lane, per
+> `00_EXECUTION_INDEX.md` §11.2's source-domain ownership rule. **Tier C review (four
+> independent lenses) closed clean this same checkpoint** — 3 High findings fixed (two
+> superseded-migration citation errors that would have misdirected `HDN-374`'s eventual fix; one
+> false claim that `HDN-374`'s upstream dependency was "already satisfied" while `HDN-371` was
+> still `COMPLETED`), plus 7 Medium and 9 Low findings fixed or explicitly registered with a
+> named owner. Full disposition: `HDN-371.md` §12.1.
 
 **(hard)** marks the four dependencies stated as hard constraints by the operator
 authorization for this range, over and above each prompt's own §9: *372 must be `VERIFIED`
@@ -188,6 +193,7 @@ because a future session reading only the prompt files would not find them there
                |          |          |          |          |            |
            HDN-371     HDN-372    HDN-379    HDN-380     HDN-382         |
         (txn integ.) (tenant iso) (perf)     (a11y)      (observ.)       |
+         VERIFIED --^   ^-- READY                                       |
           |    |   \       |   \                |            |           |
           |    |    \      |    \               |            |           |
       HDN-374  |     \  HDN-373  \           HDN-381      HDN-383        |
@@ -494,32 +500,41 @@ to `VERIFIED`.
 |---|---|---|---|---|---|
 | 2026-08-23 | `HDN-369` | `CG-S15-HDN-001` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-369.md` §2 | **`COMPLETED`** — sets `FULL_SYSTEM_HARDENING_IN_PROGRESS`. Docs-and-index kickoff; one comment-only source correction (§2.1). Zero migration, zero application code touched |
 | 2026-08-23 | `HDN-370` | `CG-S15-HDN-002` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-370.md` | **`VERIFIED`** — full regression executed and reconciled, then Tier C closed. `HDN-BLK-002` **closed at the root**: three of its four issues were **misclassified** — `ISS-2026-077` is a timezone-boundary mismatch failing **29% of all instants (7 h/day)**, `ISS-2026-135` is a hardcoded calendar date armed on one date (`2026-08-18`, a Tuesday), and only `ISS-2026-103`/`115` was ever day-of-week. All three fixed and **proven by 672/2,016/30-instant sweeps** rather than a green re-run. **Opened `HDN-BLK-007` (High), `008`, `009`: all three CI jobs failed on the most recent push to `main`, and six governance steps — including the secret scan and the dependency vulnerability audit — have therefore never executed there on a push**, deferred to `HDN-387` with explicit interim guidance for the three lanes they actually touch. **Tier C review** (4 independent lenses) found and fixed: 4 of 7 governance gates never run locally (High), a NULL-fail-open in the attendance fixture live-proven by two lenses independently (Medium), `CARGOGRID_BUILD_STATUS.md` never updated (High), plus a consistency sweep across 8 files. Independent full gate re-run green: 229/229 db-tests, all 7 governance gates, 5394/5394 unit tests. Test fixtures only throughout — zero migration, zero application code |
-| 2026-08-23 | `HDN-371` | `CG-S15-HDN-003` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-371.md` | **`COMPLETED`, Tier C pending.** Every named chain (lead→job, shipment→billing, actual cost→AP→settlement, invoice→journal/correction, WMS inbound→outbound, portal/loyalty/tickets, idempotent retry, concurrent submission, source-domain ownership) reconciled against live code and existing passing evidence — no ownership conflict found. **One systemic finding**, from an exhaustive code-level sweep of all 306 migrations for the boundary-function shape: **7 of 19** cross-module `prepare_/convert_/link_/create_from_` functions (6 of them Finance-domain) share an identical concurrent-idempotency gap that a 12th sibling, `prepare_wms_outbound_from_shipment`, already proves the fix for in this codebase ("design note 9(a)"). Bounded to **Medium** by direct verification — all 7 target tables carry a confirmed backing unique constraint, so no duplicate financial or handoff record can be created; the real exposure is a raw `unique_violation` surfaced to a genuinely racing caller instead of the graceful already-created response. Registered as `HDN-BLK-010`/`ISS-2026-162`, **deferred to `HDN-374`** (six of seven functions are Finance-domain; `AGENTS.md` requires dedicated treatment for finance-posting changes). A live two-process forced race was attempted directly and did not converge within available time (jitter-window and FIFO/`pkill` tooling issues, both diagnosed and disclosed) — the finding rests on direct code verification, not an empirically forced race, and is disclosed as such rather than overclaimed. Tier A run fresh: 5394/5394 unit tests, 229/229 db-tests, all 7 governance gates clean. Zero migration, zero application code, zero contract, zero route — documentation and ledger evidence only |
+| 2026-08-23 | `HDN-371` | `CG-S15-HDN-003` | `claude/step-15-hdn-369-kickoff-w6qren` | `23e3490` (initial), Tier C fix commit(s) — see `HDN-371.md` | **`VERIFIED`** — Tier C closed. Every named chain (lead→job, shipment→billing, actual cost→AP→settlement, invoice→journal/correction, WMS inbound→outbound, tickets) reconciled against live code and existing passing evidence — no ownership conflict found; the loyalty/portal chain was honestly disclosed as **not examined** rather than overclaimed. **One systemic finding**, from an exhaustive code-level sweep of all 306 migrations for the boundary-function shape, **corrected at Tier C review**: **9 of 20** (not the original 7/19 — the sweep's regex was blind to `create or replace` redefinitions and missed 2 members of its own class) cross-module `prepare_/convert_/link_/create_from_` functions across **5 domains** (5 Finance, 1 HRIS-Payroll, 1 Commercial, 1 Advanced TMS/WMS, 1 Platform/Auth — corrected from an imprecise "6 of 7 Finance-domain") share an identical concurrent-idempotency gap that a sibling, `prepare_wms_outbound_from_shipment`, already proves the fix for in this codebase ("design note 9(a)"). Bounded to **Medium** by direct verification against the live schema — all 8 distinct backing tables/partial-indexes carry a confirmed unique-enforcing object, so no duplicate record can be created; the real exposure — a raw `unique_violation` surfaced to a genuinely racing caller — is now **live-forced and confirmed** (not merely code-inferred) against `link_auth_identity`, independently reproduced twice with an identical observed error. Registered as `HDN-BLK-010`/`ISS-2026-162`, **deferred to `HDN-374`** as one batch, with the batch's 4-domain scope disclosed as an open question for `HDN-374`/`HDN-386` rather than silently assigned. **Tier C review (4 independent lenses) found and fixed 3 High findings** (5 of 7 originally-registered functions cited at superseded migrations — the conclusion survived, independently re-verified against the live bodies, but citations, file counts and 2 of 6 constraint names were wrong; the 2 missed functions above; a false claim in `BLOCKER_LEDGER.md` that `HDN-374`'s hard upstream dependency was "already satisfied" while `HDN-371` was still `COMPLETED` — the one finding with a direct never-batch-safety consequence), 7 Medium findings (missing Step 16 eligibility statement; blank gate-2 status token; `HARDENING_MATRIX.md` §5 excluding a non-Finance function from any lane's seed; the loyalty/portal overclaim; Prompt 371 §28 tests addressed by demonstrating a simpler, working, reusable concurrency-proof technique rather than by adding a permanent test file; a stale `HANDOFF.md` `READY` claim), and 9 Low findings (all fixed or explicitly registered — including one new, separate, pre-existing production defect, `ISS-2026-163`, found on a function outside `HDN-BLK-010`'s own set). Independent full gate re-run green: 5394/5394 unit tests, 229/229 db-tests, all 7 governance gates. Zero migration, zero application code, zero contract, zero route throughout — documentation and ledger evidence only, plus disposable probe-database use for live verification, all dropped afterward |
 
 ---
 
 ## 16. Next eligible prompt
 
-> ### **`HDN-371` is `COMPLETED` — its own Tier C review is the next required step, not a new prompt**
+> ### **`CG-S15-HDN-004` — Prompt 372, Tenant Isolation Audit (`HDN-372`)**
 >
-> - **Build log:** `docs/build-log/full-system-hardening/HDN-371.md` — written, Tier A and
->   Tier B closed, Tier C section present but not yet executed.
-> - **State:** `COMPLETED`, adversarially unreviewed. Four independent review lenses
->   (spec-compliance; security/tenant; correctness; cross-prompt integration) must run against
->   this checkpoint, findings fixed or explicitly disposed of, and an independent full gate
->   re-run observed green before this row may move to `VERIFIED`.
-> - **Headline finding to review:** `HDN-BLK-010`/`ISS-2026-162` — 7 of 19 cross-module boundary
->   functions (6 Finance-domain) share a concurrent-idempotency gap bounded to Medium and
->   deferred to `HDN-374`. Tier C should scrutinise the severity bound, the deferral decision,
->   and the disclosed-but-inconclusive empirical race attempt (§6 of the build log) with the
->   same rigor `HDN-370`'s Tier C applied to its own live-proven defects.
-> - **Nothing is `READY`** while this is open. `HDN-372` (Tenant Isolation Audit) is the next
->   row after `HDN-371` reaches `VERIFIED`, in its own separate session — it may not share a
->   session with `HDN-371`.
+> - **Prompt file:** `docs/ai-agent-build-prompt-package/15-hardening/372_TENANT_ISOLATION_AUDIT_PROMPT.md`
+> - **Build log to write:** `HDN-372.md`, alongside this file
+> - **State:** `READY` — dependency-clean. `HDN-371` is `VERIFIED` (Tier C closed, four
+>   independent lenses, 3 High + 7 Medium + 9 Low findings fixed or explicitly registered with
+>   a named owner, one systemic finding live-forced and confirmed by a real two-process race,
+>   independent full gate re-run green).
+> - **Carry-forward from `HDN-371`'s own Tier C review, so `HDN-372` does not discover them
+>   cold:**
+>   1. **`HDN-BLK-010`/`ISS-2026-162`** (Medium) — 9 cross-module boundary functions across 5
+>      domains share a concurrent-idempotency gap, deferred to `HDN-374`. Not `HDN-372`'s own
+>      charter, but worth knowing the class exists when auditing tenant isolation on the same
+>      function family — none of the 9 were found to leak across tenants (`HDN-371.md` §12.2
+>      independently confirmed 8 of 9 idempotency short-circuits are properly tenant-scoped),
+>      but `HDN-372` may want to re-confirm this from its own tenant-isolation-specific angle
+>      rather than accept `HDN-371`'s finding secondhand.
+>   2. **`ISS-2026-163`** (Low) — a pre-existing, unrelated defect in `app.prepare_job_order`'s
+>      exception handler (silent all-NULL return on an unrelated constraint violation),
+>      registered but out of scope for tenant isolation.
+>   3. **The loyalty/portal chain was never examined** by `HDN-371` — if `HDN-372`'s own tenant
+>      isolation audit touches Customer Portal/Loyalty, it is starting from zero evidence there,
+>      not from a `HDN-371` baseline.
 > - **Do not cite CI as evidence for anything** — `HDN-BLK-007/008/009` remain open; every
 >   result this lane produces must be a real local execution.
+> - **Cadence:** its own session, its own commit, its own full Tier A + Tier B + Tier C
+>   treatment. It may not share a session with `HDN-371` or `HDN-373`.
 
-**Nothing after `HDN-371` may begin until `HDN-371` is `VERIFIED`.**
+**Nothing after `HDN-372` may begin until `HDN-372` is `VERIFIED`.**
 `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set and may only ever be set by Prompt 389.
 
 > **Standing warning for `HDN-386` and every lane before it:** CI is currently red on `main`
