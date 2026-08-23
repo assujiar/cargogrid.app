@@ -31,7 +31,18 @@ cargogrid_setup_disposable_db() {
 
   CARGOGRID_TEST_DB_URL="${admin_url%/*}/$db_name"
 
-  echo "==> setup-disposable-db: creating the standard anon/authenticated/service_role roles (mirrors a real Supabase project's role model; this repository has no live Supabase project yet)"
+  # Mirror the session search_path a hosted Supabase project ships with. Supabase sets it at
+  # the database level and pgcrypto lives in `extensions`, so an unqualified digest()/hmac()
+  # call resolves there. A bare Postgres defaults to '"$user", public' with no `extensions`,
+  # which made test files that call those functions directly fail locally while passing against
+  # the live project -- the mirror image of the bug that made them pass on CI and fail live
+  # (docs/build-log/phase-09/LIVE_SUPABASE_MIGRATION_REPORT.md). Setting it here keeps the two
+  # environments resolving identically, which is the whole point of this harness.
+  echo "==> setup-disposable-db: mirroring Supabase's database-level search_path"
+  psql "$admin_url" -v ON_ERROR_STOP=1 \
+    -c "ALTER DATABASE $db_name SET search_path TO \"\$user\", public, extensions;"
+
+  echo "==> setup-disposable-db: creating the standard anon/authenticated/service_role roles (mirrors a real Supabase project's role model)"
   psql "$CARGOGRID_TEST_DB_URL" -v ON_ERROR_STOP=1 -c "
 do \$\$
 begin

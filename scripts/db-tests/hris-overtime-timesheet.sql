@@ -190,8 +190,23 @@ select app.record_attendance_clock_event((select id from app.tenants where slug 
 reset role;
 select set_config('request.jwt.claims', 'null', false);
 
-update app.attendance_sessions set raw_clock_in_at = now() - interval '10 hours', raw_clock_out_at = now()
-where tenant_id = (select id from app.tenants where slug = 'ot1') and employee_id = (select master_record_id from app.employees where work_email = 'emp1work@ot1.test');
+-- Pin the session to the most recent weekday, keeping the same 10-hour span. work_date is
+-- stamped from the server clock by app.record_attendance_clock_event (never the caller-reported
+-- time, by design), so on a Saturday or Sunday run the server correctly classifies the overtime
+-- below as `weekend` and this file's `eligible_classification = 'weekday'` assertion fails. That
+-- is a defect in the test, not in the code: the classification logic is right, the fixture just
+-- has to land on a weekday to assert the weekday branch. Verified failing on Sunday 2026-08-23.
+update app.attendance_sessions s
+set work_date = wd.d,
+    raw_clock_in_at = (wd.d + time '08:00')::timestamptz,
+    raw_clock_out_at = (wd.d + time '18:00')::timestamptz
+from (
+  select current_date - (case extract(isodow from current_date)::int
+                           when 6 then 1   -- Saturday -> Friday
+                           when 7 then 2   -- Sunday   -> Friday
+                           else 0 end) as d
+) wd
+where s.tenant_id = (select id from app.tenants where slug = 'ot1') and s.employee_id = (select master_record_id from app.employees where work_email = 'emp1work@ot1.test');
 
 \echo '>> emp1 (self, no p_employee_id parameter exists to spoof) creates and submits a planned overtime request for the SAME work_date -- reconciliation matches the real 10h-minus-8h-baseline = 120 minutes'
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000028104", "role": "authenticated"}', false);
