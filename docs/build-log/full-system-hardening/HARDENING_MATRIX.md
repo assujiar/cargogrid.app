@@ -27,7 +27,7 @@ from zero and no lane rediscovers a known item.
 
 | # | Gate | Lane | Status at kickoff | Seeded evidence |
 |---|---|---|---|---|
-| 1 | Full regression | `HDN-370` | `NOT_RUN` | §1 |
+| 1 | Full regression | `HDN-370` | **`PARTIAL`** — all local gates green; **CI red on all 3 jobs**; `test:e2e` a `TRACKED_GAP` | §1 |
 | 2 | Cross-module transactional integrity | `HDN-371` | `NOT_RUN` | §2 |
 | 3 | Tenant isolation | `HDN-372` | `NOT_RUN` | §3 |
 | 4 | RLS / RBAC | `HDN-373` | `NOT_RUN` | §4 |
@@ -48,6 +48,21 @@ from zero and no lane rediscovers a known item.
 ---
 
 ## 1. Full regression — `HDN-370`
+
+> **Result, 2026-08-23 (`CG-S15-HDN-002`): `PARTIAL` — not a pass.**
+> Local gates are green (`typecheck` 0, `lint` 0 errors, `test` **5394/5394**, `db-tests`
+> **229/229 ALL PASSED**, `next build` **246 routes, 0 errors**, governance gates clean), and
+> this lane's owned repair (`HDN-BLK-002`) is closed at the root and **proven by sweep**.
+> But the gate is **not** a pass, for two reasons recorded rather than smoothed over:
+> **(a)** all three CI jobs are red on `main` and have been for at least five runs
+> (`HDN-BLK-007/008/009`), so **seven governance steps — including the secret scan and the
+> dependency vulnerability audit — have never executed in CI**; **(b)** `test:e2e` could not
+> be executed here and is a `TRACKED_GAP`. Full evidence: `HDN-370.md`.
+>
+> **`next build` is not wired into CI at all** — a Phase 0 (`PH0-88`) decision taken when the
+> repository had no application code, now covering 228 page routes, 13 API routes and 136
+> `"use server"` modules. It passes when run directly, so this is a coverage gap, not a live
+> breakage. Owner: `HDN-387`, with the other three CI repairs.
 
 **Objective.** Execute and reconcile the full regression suite across Platform, Commercial,
 Operations, Finance, Advanced TMS/WMS, Procurement, HRIS/Ticketing, Customer Portal/Loyalty
@@ -94,6 +109,25 @@ evidence of a day-independent gate.
 directly across all seven days and across the shift-day boundary window, not by re-running
 the suite and hoping. A regression baseline green only on some days of the week is not a
 release gate.
+
+> ### Amendment, 2026-08-23 (`CG-S15-HDN-002`) — **the table above is wrong, and is kept for the record**
+>
+> `HDN-370` re-derived every member from live evidence instead of accepting its issue text, and
+> **three of the four were misclassified.** The trigger dimensions recorded above are corrected as:
+>
+> | Issue | Recorded above as | **Actually** | Real exposure |
+> |---|---|---|---|
+> | `ISS-2026-077` | wall-clock and day-of-week | **Timezone-boundary mismatch** — `current_date` resolves in the session timezone (`Etc/UTC`), `work_date` in the tenant policy's (`Asia/Jakarta`) | **196 / 672 swept instants — 29%, exactly 7 h every day** |
+> | `ISS-2026-135` | day-of-week, via a `extract(dow from current_date)` coverage rule | **A hardcoded calendar date.** That coverage rule is in a *different* file; this fixture has no wall-clock coupling at all | **1 / 30 swept dates — `2026-08-18`, a Tuesday** |
+> | `ISS-2026-154` | time-of-day, 04:00 Jakarta boundary | Confirmed exactly as recorded | 84 / 2,016 swept instants — 1 h every day |
+> | `ISS-2026-103`/`115` | day-of-week | Confirmed — the only genuine day-of-week member | already closed at `cdbccc7` |
+>
+> All three open members are **fixed at the root and proven by sweep** (0 failing instants
+> after the fix, all 7 weekdays). `ISS-2026-077`/`135`/`154` → `RESOLVED`. `HDN-BLK-002` is
+> closed. The correct name for this family is **temporal-frame coupling**, not day-of-week
+> flakiness: in every case a date was compared across two different frames of reference —
+> session vs policy timezone, shift-day vs calendar-day, literal vs wall-clock date — without
+> normalizing. Full evidence: `HDN-370.md` §5, §8.
 
 ### 1.2 Other pre-existing test-suite items seeded here
 

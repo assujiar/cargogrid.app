@@ -138,8 +138,8 @@ unrouted.
 | # | Lane | Task ID | Prompt | Capability | Workstream | Depends on | State |
 |---|---|---|---|---|---|---|---|
 | 1 | `HDN-369` | `CG-S15-HDN-001` | 369 | Full-System Hardening WBS Runtime Kickoff | Hardening Governance | `PHASE_9_VERIFIED` | **`COMPLETED`** (this checkpoint; a kickoff is not entered into the `VERIFIED` capability chain — see §11) |
-| 2 | `HDN-370` | `CG-S15-HDN-002` | 370 | Full Regression | Regression Assurance | `HDN-369` | **`READY`** ← **next eligible** |
-| 3 | `HDN-371` | `CG-S15-HDN-003` | 371 | Cross-Module Transactional Integrity | Integrity Assurance | `HDN-370` | `BLOCKED` |
+| 2 | `HDN-370` | `CG-S15-HDN-002` | 370 | Full Regression | Regression Assurance | `HDN-369` | **`COMPLETED`** — adversarially unreviewed; Tier C close pending. `HDN-BLK-002` closed at the root; `HDN-BLK-007/008/009` opened |
+| 3 | `HDN-371` | `CG-S15-HDN-003` | 371 | Cross-Module Transactional Integrity | Integrity Assurance | `HDN-370` **`VERIFIED`** | `BLOCKED` — releases only when `HDN-370` is `VERIFIED`, not `COMPLETED` |
 | 4 | `HDN-372` | `CG-S15-HDN-004` | 372 | Tenant Isolation Audit | Security Assurance | `HDN-370` | `BLOCKED` |
 | 5 | `HDN-373` | `CG-S15-HDN-005` | 373 | RLS and RBAC Audit | Security Assurance | `HDN-372` **(hard)** | `BLOCKED` |
 | 6 | `HDN-374` | `CG-S15-HDN-006` | 374 | Financial Integrity Audit | Financial Assurance | `HDN-371` **(hard)** | `BLOCKED` |
@@ -159,7 +159,12 @@ unrouted.
 | 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `BLOCKED` |
 | 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `BLOCKED` |
 
-**Tally: 21 rows — 1 `COMPLETED`, 1 `READY`, 19 `BLOCKED`, 0 `VERIFIED`.**
+**Tally: 21 rows — 2 `COMPLETED`, 0 `READY`, 19 `BLOCKED`, 0 `VERIFIED`.**
+
+> **Nothing is `READY` right now.** `HDN-370` is `COMPLETED` but adversarially unreviewed. Its
+> Tier C review and an independent full gate re-run must move it to `VERIFIED` before
+> `HDN-371` (or any other lane) may begin — `AGENTS.md` is explicit that a range authorization
+> does not release the next prompt, only a `VERIFIED` upstream does.
 
 **(hard)** marks the four dependencies stated as hard constraints by the operator
 authorization for this range, over and above each prompt's own §9: *372 must be `VERIFIED`
@@ -485,23 +490,36 @@ to `VERIFIED`.
 | Date | Lane | Task ID | Branch | Commit | Result |
 |---|---|---|---|---|---|
 | 2026-08-23 | `HDN-369` | `CG-S15-HDN-001` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-369.md` §2 | **`COMPLETED`** — sets `FULL_SYSTEM_HARDENING_IN_PROGRESS`. Docs-and-index kickoff; one comment-only source correction (§2.1). Zero migration, zero application code touched |
+| 2026-08-23 | `HDN-370` | `CG-S15-HDN-002` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-370.md` | **`COMPLETED`** — full regression executed and reconciled. `HDN-BLK-002` **closed at the root**: three of its four issues were **misclassified** — `ISS-2026-077` is a timezone-boundary mismatch failing **29% of all instants (7 h/day)**, `ISS-2026-135` is a hardcoded calendar date armed on **2026-08-18, a Tuesday**, and only `ISS-2026-103`/`115` was ever day-of-week. All three fixed and **proven by 672/2,016/30-instant sweeps** rather than a green re-run. Test fixtures only — zero migration, zero application code. **Opened `HDN-BLK-007` (High), `008`, `009`: all three CI jobs are red on `main` and have been for at least 5 runs, and seven governance steps — including the secret scan and the dependency vulnerability audit — have therefore never executed in CI** |
 
 ---
 
 ## 16. Next eligible prompt
 
-> ### **`CG-S15-HDN-002` — Prompt 370, Full Regression (`HDN-370`)**
+> ### **Tier C review and close of `CG-S15-HDN-002` (`HDN-370`)**
 >
-> - **Prompt file:** `docs/ai-agent-build-prompt-package/15-hardening/370_FULL_REGRESSION_PROMPT.md`
-> - **Build log to write:** `HDN-370.md` in this directory
-> - **State:** `READY` — dependency-clean. Its only upstream (`HDN-369`) is `COMPLETED` and
->   `PHASE_9_VERIFIED` matches the active checkpoint.
-> - **Charter reminder:** it owns closing the day-of-week fixture-flake class
->   (`ISS-2026-077`, `ISS-2026-135`, `ISS-2026-154`) by reusing the already-proven
->   most-recent-weekday pinning pattern. It must record the day of week it ran on and state
->   whether that class was **exercised** or **merely not triggered**.
-> - **Cadence:** its own session, its own commit, its own full Tier A + Tier B + Tier C
->   treatment. It may not share a session with `HDN-371`.
+> `HDN-370` is `COMPLETED`, which under `AGENTS.md` means **adversarially unreviewed**. No new
+> prompt is eligible. The next session's work is to close it:
+>
+> - Four parallel review lenses over `HDN-370`'s diff and findings: spec-compliance;
+>   security/RLS/tenant (live-tested); correctness/concurrency (live-tested); cross-prompt
+>   integration and data dependency.
+> - A fix pass with a propagation sweep, then a **full gate suite re-run performed
+>   independently by the orchestrating session** — never accepted on a lens's or a fix
+>   agent's self-report.
+> - Particular scrutiny is warranted on two things this lane produced: the three fixture
+>   fixes are **test-only**, so a reviewer should confirm none of them weakened an assertion
+>   (§12 argues two were strengthened — verify that claim); and the CI findings
+>   (`HDN-BLK-007/008/009`) should be independently re-confirmed against the live workflow
+>   runs rather than re-cited from this log.
+> - Only then does `HDN-370` become `VERIFIED`, releasing **`CG-S15-HDN-003` — Prompt 371,
+>   Cross-Module Transactional Integrity**.
 
 **Nothing after `HDN-370` may begin until `HDN-370` is `VERIFIED`.**
 `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set and may only ever be set by Prompt 389.
+
+> **Standing warning for `HDN-386` and every lane before it:** CI is currently red on `main`
+> on all three jobs (`HDN-BLK-007/008/009`). **No Step 15 lane may cite CI as evidence for any
+> gate until those are resolved.** Local runs remain valid evidence and are what this range
+> has been using — but the two are not interchangeable, and this lane proved they can be
+> exact inverses of each other.

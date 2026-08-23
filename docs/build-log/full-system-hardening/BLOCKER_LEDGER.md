@@ -28,7 +28,7 @@
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 | **0** — this kickoff performs no audit work |
+| Blockers opened **by** Step 15 | **3** (`HDN-BLK-007`/`008`/`009`, all opened at `HDN-370`) |
 | Carried-forward entries seeded below | **6** |
 | — of which **High** | **1** (`HDN-BLK-001`) |
 | — of which **Medium** | **4** |
@@ -79,13 +79,39 @@ that none of them can quietly drift out of scope. Each names the single lane tha
 | **Members** | `ISS-2026-103`/`115` — `hris-overtime-timesheet.sql`, day-of-week — **CLOSED** at `cdbccc7` by pinning the fixture to the most recent weekday. `ISS-2026-077` — `hris-leave-permit-business-trip.sql`, wall-clock **and** day-of-week — `OPEN`. `ISS-2026-135` — `hris-shift-roster-scheduling.sql`, day-of-week — `OPEN`. `ISS-2026-154` — `hris-attendance.sql`, a ~1-hour real-UTC window after each day's 21:00 UTC (04:00 Asia/Jakarta) shift-day boundary — `OPEN` |
 | **Reproduction** | Run the suite on the triggering day / in the triggering window. Each issue records its own exact trigger |
 | **Kickoff observation** | All four executed and **passed** on Sunday 2026-08-23, ~11:15–11:45 UTC. **This is not proof the class is closed**: `ISS-2026-135`'s day-of-week dimension was genuinely in play and did not fire; `ISS-2026-154`'s time-of-day dimension was **not exercised at all** (~10 hours outside its window). Status: **`PARTIAL`** |
-| **Disposition** | **`DEFERRED_TO_HDN-370`** |
-| **Required of `HDN-370`** | Reuse the already-proven most-recent-weekday pinning pattern, then **prove day-independence rather than observe it** — drive each fixture's temporal inputs across all seven days and across the shift-day boundary window directly. Re-running the suite and getting green is not evidence |
+| **Disposition** | **`FIXED` at `HDN-370` (2026-08-23).** See the amendment below — the class as registered did not exist |
 | **Regression test** | The pinning itself is the regression guard; a day-parameterised test is the proof |
 | **Rollback** | Test-fixture-only changes; `git revert` |
 | **`KNOWN_ISSUES`** | `ISS-2026-077`, `ISS-2026-135`, `ISS-2026-154` (`OPEN`); `ISS-2026-103`/`115` (closed) |
 
 **A regression baseline green only on some days of the week is not a release gate.**
+
+### Amendment, 2026-08-23 (`CG-S15-HDN-002`, Prompt 370) — the class was misclassified
+
+Each member was re-derived from live evidence against a fully-migrated probe database rather
+than accepted from its issue text. **Three of the four are not day-of-week defects**, and two
+were materially worse than recorded:
+
+| Issue | Registered as | Actually | Real exposure |
+|---|---|---|---|
+| `ISS-2026-077` | day-of-week / wall-clock | **Timezone-boundary mismatch.** `current_date` evaluates in the session timezone (`Etc/UTC`); `work_date` resolves in the tenant policy's timezone (`Asia/Jakarta`). The fixture seeds on one and asserts on the other | **7 hours every day** (17:00–24:00 UTC) — **196 of 672 swept instants, 29%** |
+| `ISS-2026-154` | day-of-week class, time-of-day trigger | Confirmed: shift-day boundary at 04:00 Asia/Jakarta | **1 hour every day** — 84 of 2,016 swept instants |
+| `ISS-2026-135` | day-of-week | **A hardcoded calendar date.** emp3 is given a published roster assignment on the literal `2026-08-18`, then the fixture asserts "no assignment covering today" | **Exactly 1 date in 30 swept — `2026-08-18`, a Tuesday** |
+| `ISS-2026-103`/`115` | day-of-week | Confirmed genuinely day-of-week | Sat/Sun — already fixed at `cdbccc7` |
+
+The registered root cause for `ISS-2026-077` (that the negative-control employee lacks a
+`schedule_assignments` row) is **wrong**: late-exception detection never reads
+`schedule_assignments`. Measured directly, not inferred.
+
+`ISS-2026-135` is not "already past" either — it re-arms the moment anyone refreshes the
+fixture's literal dates forward, which is ordinary maintenance.
+
+**All three fixed at the root**, each proven by exhaustive sweep rather than a green re-run:
+0 failing instants after the fix, across all 7 weekdays. Full evidence and the sweep queries:
+`docs/build-log/full-system-hardening/HDN-370.md` §5, §8. Fixes are test-fixture-only — in all
+three cases the code under test was correct and the fixture's temporal assumption was wrong.
+
+`ISS-2026-077`, `ISS-2026-135`, `ISS-2026-154` → `RESOLVED`.
 
 ---
 
@@ -160,8 +186,61 @@ that none of them can quietly drift out of scope. Each names the single lane tha
 
 ---
 
+## HDN-BLK-007 — CI is red on every run, and 7 governance gates never execute
+
+| Field | Value |
+|---|---|
+| **Title** | `scripts/git/check-worktree-collision.test.ts` asserts the current branch has commits ahead of `origin/main`, which is structurally impossible in CI — so the `quality` job's `Test` step fails on every run, and the seven governance steps ordered after it are **skipped** |
+| **Found by** | `HDN-370` (`CG-S15-HDN-002`), full-regression CI reconciliation |
+| **Severity** | **High** |
+| **Owning phase** | Phase 0 governance tooling |
+| **Owning lane** | **`HDN-387`** (Release Blocker Triage and Remediation) |
+| **Reachability** | Every CI run, `push` and `pull_request` alike. Verified: runs #105–#109 all `failure`; #109 is `main` at `e5da061` |
+| **Reproduction** | `scripts/git/check-worktree-collision.test.ts:36` — `assert.ok(current, 'expected ${branch} to have commits ahead of origin/main')`. A CI checkout of `main` **is** `origin/main`, so `commitsAheadOfMain` is 0. There is no CI guard and no skip in the file |
+| **Blast radius — the real damage** | Because `Test` fails first, these seven steps report `skipped` and **have never run in CI**: suppression-governance check; documentation checks; **secret scan**; **dependency vulnerability audit (fails on critical/high)**; data-classification registry check; threat-model register check; **protected-path check**. Two of those are security controls. `ISS-2026-007`'s own recorded lesson was that a silently-broken audit gate hid 20 real advisories, 11 high, for a whole phase — this is the same failure shape one level up |
+| **Why it went unnoticed** | Every phase's gate evidence in this repository was produced by **local** runs, where the test passes on a feature branch that genuinely is ahead of `origin/main`. The local and CI outcomes are inverses of each other, so a green local run is not evidence about CI |
+| **Disposition** | **`DEFERRED_TO_HDN-387`** — not fixed here. It is a governance test whose intent (catching the `ISS-2026-002` collision class) is real; deciding what it should assert *in CI* is a design call, not a side-edit inside a regression-baseline lane |
+| **Not to do** | Do not delete or skip the test to turn CI green. That would remove the `ISS-2026-002` control this repository added after real content corruption (`ERR-2026-001..003`) |
+| **`KNOWN_ISSUES`** | `ISS-2026-158` |
+
+---
+
+## HDN-BLK-008 — the `db` CI job cannot read the helper files its concurrency tests write
+
+| Field | Value |
+|---|---|
+| **Title** | Concurrency tests write helper output to `/tmp` on the runner and read it back with `pg_read_file()`, which reads the **server's** filesystem — a separate Docker service container in CI |
+| **Found by** | `HDN-370`, CI reconciliation |
+| **Severity** | **Medium** |
+| **Owning phase** | Phase 5 (Advanced TMS/WMS concurrency proofs) |
+| **Owning lane** | **`HDN-387`** |
+| **Reproduction** | CI run #109, `db` job: `ERROR: could not open file "/tmp/cargogrid-wms-outbound-race-a.out" for reading: No such file or directory`, from `select pg_read_file(...) \|\| pg_read_file(...)` |
+| **Why local passes** | Locally Postgres runs on the same host as the harness, so `/tmp` is shared. In CI the `postgis/postgis` service container has its own filesystem |
+| **Blast radius** | The `\! bash …helper.sh` concurrency tests — 15 files by the live-migration report's own count. `run.sh` aborts at the first failure, so **every file sorted after it never runs in CI** |
+| **Disposition** | **`DEFERRED_TO_HDN-387`** |
+| **Note** | The affected assertions are genuine, valuable concurrency proofs (real two-process row-lock races). They must keep working locally; the fix is about transporting the loser's output without `pg_read_file`, not about weakening the proof |
+| **`KNOWN_ISSUES`** | `ISS-2026-159` |
+
+---
+
+## HDN-BLK-009 — the `e2e` CI job has no environment, so guarded routes 500
+
+| Field | Value |
+|---|---|
+| **Title** | The `e2e` job sets no environment variables, so `NEXT_PUBLIC_SUPABASE_URL` is unset and every guarded route throws at env validation, returning 500 where the specs assert `< 500` plus a fail-safe redirect |
+| **Found by** | `HDN-370`, reproduced locally and confirmed against the CI job definition |
+| **Severity** | **Medium** |
+| **Owning phase** | Phase 1 (portal guards) / Phase 0 (CI) |
+| **Owning lane** | **`HDN-387`**, with input from `HDN-380`/`HDN-381` |
+| **Reproduction** | `pnpm run test:e2e` with no `.env`: `Error: NEXT_PUBLIC_SUPABASE_URL is not set -- see .env.example` at `lib/supabase/server.ts:27`, then `GET /supreme 500`. The CI `e2e` job has no `env:` block and no secrets |
+| **The design question** | Several specs are *named* for a "no-live-Supabase-project condition" and assert the guard **redirects** rather than crashing. Today it crashes, because env validation throws before any guard logic. So either the guard should fail safe on missing configuration, or the specs encode an intent the code never had. **That is a real product question, not a CI-wiring detail** |
+| **Disposition** | **`DEFERRED_TO_HDN-387`** |
+| **`KNOWN_ISSUES`** | `ISS-2026-160` |
+
+---
+
 ## Reserved
 
-`HDN-BLK-007` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-010` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.
