@@ -1051,13 +1051,17 @@ begin
   -- on the assumption that emp3 never has a roster assignment "covering today".
   -- That assumption is not the fixture's to make: emp3 is given bulk_generated
   -- assignments on the HARDCODED literal dates 2026-08-17 and 2026-08-18 earlier
-  -- in this same file, while work_date below is the real wall-clock day. So the
-  -- assertion is armed to fail on exactly two calendar dates and pass on every
-  -- other -- which is precisely what a reviewer who saw it fail once read as a
-  -- "day-of-week flake" (ISS-2026-135). It is not day-of-week, and it is not
-  -- fixed by waiting for those dates to pass: it re-arms the moment anyone
-  -- refreshes this file's literal dates forward, which is an ordinary
-  -- maintenance action.
+  -- in this same file, while work_date below is the real wall-clock day. Only the
+  -- 08-18 row reaches app.resolve_effective_schedule_assignment's own
+  -- status='published' filter -- the bulk publish call that runs right after
+  -- 08-17's own generation covers 08-18 only, leaving 08-17 at 'scheduled' -- so
+  -- the assertion is armed on exactly ONE calendar date (Tier C review, 2026-08-23,
+  -- corrected this from an earlier draft that said "two"; both the correctness and
+  -- security/tenant review lenses independently traced the same single date by
+  -- reading the actual bulk_generated/publish call sequence, not by re-deriving it
+  -- from the comment). It is not day-of-week, and it is not fixed by waiting for
+  -- that date to pass: it re-arms the moment anyone refreshes this file's literal
+  -- dates forward, which is an ordinary maintenance action.
   --
   -- Fixed by deriving the expectation from real state instead of assuming it.
   -- The property actually under test -- decision 9: a clock-in never fabricates

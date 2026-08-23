@@ -24,15 +24,26 @@
 
 ---
 
-## Status at kickoff
+## Status at kickoff (`HDN-369`, historical — not updated afterward)
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 | **3** (`HDN-BLK-007`/`008`/`009`, all opened at `HDN-370`) |
+| Blockers opened **by** Step 15 | **0** — the kickoff performs no audit work |
 | Carried-forward entries seeded below | **6** |
 | — of which **High** | **1** (`HDN-BLK-001`) |
-| — of which **Medium** | **4** |
+| — of which **Medium** | **5** (`HDN-BLK-002..006`) |
 | — of which class-level | **1** (`HDN-BLK-002`, four issues in one defect family) |
+| Unresolved **Critical** anywhere | **0** |
+
+## Status as of `HDN-370` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **3** — `HDN-BLK-007` (High), `HDN-BLK-008` (Medium), `HDN-BLK-009` (Medium), all at `HDN-370` |
+| Blockers closed **by** Step 15 to date | **1 class** — `HDN-BLK-002` (all four member issues `RESOLVED`) |
+| Total open entries | **8** — `HDN-BLK-001`, `003..009` (`002` closed) |
+| — of which **High** | **2** (`HDN-BLK-001`, `HDN-BLK-007`) |
+| — of which **Medium** | **6** (`HDN-BLK-003..006`, `008`, `009`) |
 | Unresolved **Critical** anywhere | **0** |
 
 The seeded entries are **not** Step 15 discoveries. They are already-registered items with
@@ -76,13 +87,13 @@ that none of them can quietly drift out of scope. Each names the single lane tha
 | **Owning phase** | Phase 7 (HRIS) for all four fixtures |
 | **Owning lane** | **`HDN-370`** (Full Regression) |
 | **Reachability** | Any run of `bash scripts/db-tests/run.sh`. `set -euo pipefail` means the suite **halts** at the failing file, so every file sorted after it never runs |
-| **Members** | `ISS-2026-103`/`115` — `hris-overtime-timesheet.sql`, day-of-week — **CLOSED** at `cdbccc7` by pinning the fixture to the most recent weekday. `ISS-2026-077` — `hris-leave-permit-business-trip.sql`, wall-clock **and** day-of-week — `OPEN`. `ISS-2026-135` — `hris-shift-roster-scheduling.sql`, day-of-week — `OPEN`. `ISS-2026-154` — `hris-attendance.sql`, a ~1-hour real-UTC window after each day's 21:00 UTC (04:00 Asia/Jakarta) shift-day boundary — `OPEN` |
+| **Members** | `ISS-2026-103`/`115` — `hris-overtime-timesheet.sql`, day-of-week — **CLOSED** at `cdbccc7` by pinning the fixture to the most recent weekday. `ISS-2026-077` — `hris-leave-permit-business-trip.sql`, actually a timezone-boundary mismatch, not day-of-week — **`RESOLVED`** at `HDN-370`. `ISS-2026-135` — `hris-shift-roster-scheduling.sql`, actually a hardcoded calendar date, not day-of-week — **`RESOLVED`** at `HDN-370`. `ISS-2026-154` — `hris-attendance.sql`, a ~1-hour real-UTC window after each day's 21:00 UTC (04:00 Asia/Jakarta) shift-day boundary, confirmed as registered — **`RESOLVED`** at `HDN-370` |
 | **Reproduction** | Run the suite on the triggering day / in the triggering window. Each issue records its own exact trigger |
 | **Kickoff observation** | All four executed and **passed** on Sunday 2026-08-23, ~11:15–11:45 UTC. **This is not proof the class is closed**: `ISS-2026-135`'s day-of-week dimension was genuinely in play and did not fire; `ISS-2026-154`'s time-of-day dimension was **not exercised at all** (~10 hours outside its window). Status: **`PARTIAL`** |
 | **Disposition** | **`FIXED` at `HDN-370` (2026-08-23).** See the amendment below — the class as registered did not exist |
 | **Regression test** | The pinning itself is the regression guard; a day-parameterised test is the proof |
 | **Rollback** | Test-fixture-only changes; `git revert` |
-| **`KNOWN_ISSUES`** | `ISS-2026-077`, `ISS-2026-135`, `ISS-2026-154` (`OPEN`); `ISS-2026-103`/`115` (closed) |
+| **`KNOWN_ISSUES`** | `ISS-2026-077`, `ISS-2026-135`, `ISS-2026-154` (all `RESOLVED` at `HDN-370`); `ISS-2026-103`/`115` (closed earlier at `cdbccc7`) |
 
 **A regression baseline green only on some days of the week is not a release gate.**
 
@@ -186,7 +197,7 @@ three cases the code under test was correct and the fixture's temporal assumptio
 
 ---
 
-## HDN-BLK-007 — CI is red on every run, and 7 governance gates never execute
+## HDN-BLK-007 — CI is red on every push, and 6 governance gates never execute there
 
 | Field | Value |
 |---|---|
@@ -196,8 +207,8 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Owning phase** | Phase 0 governance tooling |
 | **Owning lane** | **`HDN-387`** (Release Blocker Triage and Remediation) |
 | **Reachability** | Every CI run, `push` and `pull_request` alike. Verified: runs #105–#109 all `failure`; #109 is `main` at `e5da061` |
-| **Reproduction** | `scripts/git/check-worktree-collision.test.ts:36` — `assert.ok(current, 'expected ${branch} to have commits ahead of origin/main')`. A CI checkout of `main` **is** `origin/main`, so `commitsAheadOfMain` is 0. There is no CI guard and no skip in the file |
-| **Blast radius — the real damage** | Because `Test` fails first, these seven steps report `skipped` and **have never run in CI**: suppression-governance check; documentation checks; **secret scan**; **dependency vulnerability audit (fails on critical/high)**; data-classification registry check; threat-model register check; **protected-path check**. Two of those are security controls. `ISS-2026-007`'s own recorded lesson was that a silently-broken audit gate hid 20 real advisories, 11 high, for a whole phase — this is the same failure shape one level up |
+| **Reproduction** | `scripts/git/check-worktree-collision.test.ts:40` — `assert.ok(current, 'expected ${branch} to have commits ahead of origin/main')`. A CI checkout of `main` **is** `origin/main`, so `commitsAheadOfMain` is 0. There is no CI guard and no skip in the file |
+| **Blast radius — the real damage** | Because `Test` fails first, these six steps report `skipped` and **have never run in CI on a push**: suppression-governance check; documentation checks; **secret scan**; **dependency vulnerability audit (fails on critical/high)**; data-classification registry check; threat-model register check. Two of those are security controls. `ISS-2026-007`'s own recorded lesson was that a silently-broken audit gate hid 20 real advisories, 11 high, for a whole phase — this is the same failure shape one level up. (A seventh step, protected-path check, is `if: github.event_name == 'pull_request'`-gated and is correctly absent from any push regardless of this failure — corrected at Tier C review, which caught it listed here in error) |
 | **Why it went unnoticed** | Every phase's gate evidence in this repository was produced by **local** runs, where the test passes on a feature branch that genuinely is ahead of `origin/main`. The local and CI outcomes are inverses of each other, so a green local run is not evidence about CI |
 | **Disposition** | **`DEFERRED_TO_HDN-387`** — not fixed here. It is a governance test whose intent (catching the `ISS-2026-002` collision class) is real; deciding what it should assert *in CI* is a design call, not a side-edit inside a regression-baseline lane |
 | **Not to do** | Do not delete or skip the test to turn CI green. That would remove the `ISS-2026-002` control this repository added after real content corruption (`ERR-2026-001..003`) |
@@ -216,7 +227,7 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Owning lane** | **`HDN-387`** |
 | **Reproduction** | CI run #109, `db` job: `ERROR: could not open file "/tmp/cargogrid-wms-outbound-race-a.out" for reading: No such file or directory`, from `select pg_read_file(...) \|\| pg_read_file(...)` |
 | **Why local passes** | Locally Postgres runs on the same host as the harness, so `/tmp` is shared. In CI the `postgis/postgis` service container has its own filesystem |
-| **Blast radius** | The `\! bash …helper.sh` concurrency tests — 15 files by the live-migration report's own count. `run.sh` aborts at the first failure, so **every file sorted after it never runs in CI** |
+| **Blast radius** | **Re-measured fresh at Tier C review, per §14's own "measured, not estimated" requirement — the original entry carried the live-migration report's older figure rather than counting the current tree.** `grep -l '\! bash' scripts/db-tests/*.sql` → **19 files** use the shell-escape helper pattern generally; of those, `grep -l pg_read_file` → **6 files** actually call `pg_read_file()` and are exposed to this specific defect (`advanced-tms-wms-outbound.sql`, `-packing.sql`, `-picking.sql`, `automation-rule-engine.sql`, `procurement-vendor-contract.sql`, `public-api-platform.sql`). The other 13 `\! bash` files use the helper for a different purpose and are not exposed to this class. `run.sh` aborts at the first failure, so **every file sorted after the first exposed one never runs in CI** |
 | **Disposition** | **`DEFERRED_TO_HDN-387`** |
 | **Note** | The affected assertions are genuine, valuable concurrency proofs (real two-process row-lock races). They must keep working locally; the fix is about transporting the loser's output without `pg_read_file`, not about weakening the proof |
 | **`KNOWN_ISSUES`** | `ISS-2026-159` |

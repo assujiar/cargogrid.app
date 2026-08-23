@@ -27,7 +27,7 @@ from zero and no lane rediscovers a known item.
 
 | # | Gate | Lane | Status at kickoff | Seeded evidence |
 |---|---|---|---|---|
-| 1 | Full regression | `HDN-370` | **`PARTIAL`** — all local gates green; **CI red on all 3 jobs**; `test:e2e` a `TRACKED_GAP` | §1 |
+| 1 | Full regression | `HDN-370` **`VERIFIED`** | **`PARTIAL`** — all local gates green; **CI red on all 3 jobs**; `test:e2e` a `TRACKED_GAP` | §1 |
 | 2 | Cross-module transactional integrity | `HDN-371` | `NOT_RUN` | §2 |
 | 3 | Tenant isolation | `HDN-372` | `NOT_RUN` | §3 |
 | 4 | RLS / RBAC | `HDN-373` | `NOT_RUN` | §4 |
@@ -49,14 +49,20 @@ from zero and no lane rediscovers a known item.
 
 ## 1. Full regression — `HDN-370`
 
-> **Result, 2026-08-23 (`CG-S15-HDN-002`): `PARTIAL` — not a pass.**
+> **Result, 2026-08-23 (`CG-S15-HDN-002`, Tier C `VERIFIED`): `PARTIAL` — not a pass.** This is
+> the checkpoint's own final, adversarially-reviewed verdict on the gate itself — `HDN-370`
+> being `VERIFIED` means its review was done correctly, not that the underlying gate is fully
+> green. It is not.
 > Local gates are green (`typecheck` 0, `lint` 0 errors, `test` **5394/5394**, `db-tests`
 > **229/229 ALL PASSED**, `next build` **246 routes, 0 errors**, governance gates clean), and
 > this lane's owned repair (`HDN-BLK-002`) is closed at the root and **proven by sweep**.
 > But the gate is **not** a pass, for two reasons recorded rather than smoothed over:
-> **(a)** all three CI jobs are red on `main` and have been for at least five runs
-> (`HDN-BLK-007/008/009`), so **seven governance steps — including the secret scan and the
-> dependency vulnerability audit — have never executed in CI**; **(b)** `test:e2e` could not
+> **(a)** all three CI jobs failed on the most recent push to `main` (#109, `e5da061`), with
+> two further prior push-to-`main` runs also showing `failure` at the workflow level though not
+> individually root-caused (`HDN-BLK-007/008/009`), so **six governance steps — including the
+> secret scan and the dependency vulnerability audit — have never executed in CI on a push**
+> (a further step, Protected-path check, is PR-only-gated and would be absent from a push
+> regardless); **(b)** `test:e2e` could not
 > be executed here and is a `TRACKED_GAP`. Full evidence: `HDN-370.md`.
 >
 > **`next build` is not wired into CI at all** — a Phase 0 (`PH0-88`) decision taken when the
@@ -258,7 +264,7 @@ release gate.
 | 4 | `ISS-2026-149` — anonymous cross-tenant SSO-config enumeration oracle | Low | Throttle or gate |
 | 5 | `ISS-2026-146` — `tenant_id` disclosure via exception text | Low | Re-assess reachability |
 | 6 | `auth_leaked_password_protection` advisory | Low | **Dashboard setting, not a migration.** Record as a deployment-runbook item |
-| 7 | Dependency scan | — | `pnpm run security:check` / `security:audit`. Note `ISS-2026-007`'s lesson: a broken audit gate hid 20 real advisories, 11 high, for a whole phase. The gate now fails when the advisory service is unreachable — **keep that property** |
+| 7 | Dependency scan | — | `pnpm run security:check` / `security:audit`. Note `ISS-2026-007`'s lesson: a broken audit gate hid 20 real advisories, 11 high, for a whole phase. The gate now fails when the advisory service is unreachable — **keep that property**. **`HDN-BLK-007`/`ISS-2026-158` (High, added at `HDN-370`) means this exact gate does not run in CI on a push right now.** `HDN-378` cannot treat "the gate exists" as evidence it is enforced anywhere but a local run — it must run `security:audit` itself and record the result, the same gap this row's own note warns about one level up. Do not close this item on CI's silence being green; CI is not currently running it. |
 | 8 | OWASP-style abuse: CSRF, XSS, SQLi, IDOR, SSRF, open redirect, file upload, API abuse, webhook spoofing, prompt injection | — | Test per Prompt 389 item 10 |
 | 9 | Service-role / secrets server-only; logs redacted | — | Verify |
 | 10 | Incident response, key rotation, privileged access audit | — | Test |
@@ -288,6 +294,7 @@ release gate.
 | Harness | Real, CI-wired Playwright + `@axe-core/playwright` exists (`e2e/smoke.spec.ts`, `e2e/tenant-admin-portal.spec.ts`, `e2e/vendor-registration.spec.ts`, `e2e/supreme-admin-portal.spec.ts`) | Reuse it |
 | Coverage | **It has never run against any authenticated route.** Only synthetic inline HTML fixtures and two unauthenticated public routes (`/login`, `/vendor-intake/*`) | **`ISS-2026-140`** (~30 Customer Portal + 9 admin Loyalty routes), **`ISS-2026-153`** (~9 Phase 9 admin/reporting/automation/integration routes) |
 | Root cause | No live sign-in flow: every guarded route needs a real authenticated session, which needs a running auth backend | Repository-wide constraint (§10 of the execution index), not this lane's to invent around |
+| CI harness itself | **`HDN-BLK-009`/`ISS-2026-160` (Medium, added at `HDN-370`): the `e2e` CI job sets no environment, so `NEXT_PUBLIC_SUPABASE_URL` is unset and every guarded route 500s before any guard logic runs.** This is a *more specific and more fixable* fact than "no live sign-in flow" — it is a missing CI environment block, and it also raises a real product question (should the guard fail safe on missing config, or do the specs encode an intent the code never had?) that this lane, not `HDN-387` alone, is positioned to answer since it owns the accessibility evidence that question blocks | **Check whether `HDN-BLK-009` is still open when this lane runs.** If it is, this lane cannot get further than `ISS-2026-140`/`153` already are without either (a) provisioning its own local `.env` for the harness (a `HDN-380`-scoped workaround, not a CI fix) or (b) formally widening its own `TRACKED_GAP` to say so explicitly, rather than silently inheriting `HDN-370`'s finding as if it were new |
 | WCAG 2.2 AA | ratified target | Keyboard, focus, labels, contrast, error summaries, denied states, responsive readability |
 | Source-level evidence | `role="alert"`/`role="status"`, `aria-current="page"`, `label`/`htmlFor`, status by text+icon not colour alone | **Evidence of intent, explicitly not a substitute for a run audit** |
 
@@ -304,7 +311,7 @@ release gate.
 | PWA posture | RPD-004: responsive **online-first**. Internal ERP desktop-first; customer/field flows mobile-friendly | **Never claim native or offline-sync behavior** |
 | Auth/session, uploads/downloads, ePOD, dashboards, tables, modals, mobile forms | built | Exercise, or track the gap |
 
-**Upstream:** `HDN-380`.
+**Upstream:** `HDN-380`. Inherits `HDN-380`'s own `HDN-BLK-009` exposure — a harness that cannot reach a guarded route in `HDN-380` cannot reach one here either.
 
 ---
 

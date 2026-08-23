@@ -138,8 +138,8 @@ unrouted.
 | # | Lane | Task ID | Prompt | Capability | Workstream | Depends on | State |
 |---|---|---|---|---|---|---|---|
 | 1 | `HDN-369` | `CG-S15-HDN-001` | 369 | Full-System Hardening WBS Runtime Kickoff | Hardening Governance | `PHASE_9_VERIFIED` | **`COMPLETED`** (this checkpoint; a kickoff is not entered into the `VERIFIED` capability chain — see §11) |
-| 2 | `HDN-370` | `CG-S15-HDN-002` | 370 | Full Regression | Regression Assurance | `HDN-369` | **`COMPLETED`** — adversarially unreviewed; Tier C close pending. `HDN-BLK-002` closed at the root; `HDN-BLK-007/008/009` opened |
-| 3 | `HDN-371` | `CG-S15-HDN-003` | 371 | Cross-Module Transactional Integrity | Integrity Assurance | `HDN-370` **`VERIFIED`** | `BLOCKED` — releases only when `HDN-370` is `VERIFIED`, not `COMPLETED` |
+| 2 | `HDN-370` | `CG-S15-HDN-002` | 370 | Full Regression | Regression Assurance | `HDN-369` | **`VERIFIED`** — Tier C close complete (4 lenses, 2 live-proven defects fixed and re-verified, 8-file consistency sweep), independent full gate re-run green. `HDN-BLK-002` closed at the root; `HDN-BLK-007/008/009` opened, deferred to `HDN-387` with explicit interim guidance for the 3 lanes they actually touch |
+| 3 | `HDN-371` | `CG-S15-HDN-003` | 371 | Cross-Module Transactional Integrity | Integrity Assurance | `HDN-370` **`VERIFIED`** | **`READY`** ← **next eligible** |
 | 4 | `HDN-372` | `CG-S15-HDN-004` | 372 | Tenant Isolation Audit | Security Assurance | `HDN-370` | `BLOCKED` |
 | 5 | `HDN-373` | `CG-S15-HDN-005` | 373 | RLS and RBAC Audit | Security Assurance | `HDN-372` **(hard)** | `BLOCKED` |
 | 6 | `HDN-374` | `CG-S15-HDN-006` | 374 | Financial Integrity Audit | Financial Assurance | `HDN-371` **(hard)** | `BLOCKED` |
@@ -159,12 +159,14 @@ unrouted.
 | 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `BLOCKED` |
 | 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `BLOCKED` |
 
-**Tally: 21 rows — 2 `COMPLETED`, 0 `READY`, 19 `BLOCKED`, 0 `VERIFIED`.**
+**Tally: 21 rows — 1 `COMPLETED` (kickoff), 1 `READY`, 18 `BLOCKED`, 1 `VERIFIED`.**
 
-> **Nothing is `READY` right now.** `HDN-370` is `COMPLETED` but adversarially unreviewed. Its
-> Tier C review and an independent full gate re-run must move it to `VERIFIED` before
-> `HDN-371` (or any other lane) may begin — `AGENTS.md` is explicit that a range authorization
-> does not release the next prompt, only a `VERIFIED` upstream does.
+> **`HDN-371` is `READY`.** `HDN-370`'s Tier C review closed clean — four independent lenses,
+> two live-proven defects fixed and independently re-verified (not accepted on construction),
+> an 8-file consistency sweep, and a fresh independent full gate re-run (229/229 db-tests, all
+> 7 governance gates, 5394/5394 unit tests). `AGENTS.md` is explicit that a range authorization
+> does not release the next prompt on its own — only a `VERIFIED` upstream does, and `HDN-370`
+> now is one.
 
 **(hard)** marks the four dependencies stated as hard constraints by the operator
 authorization for this range, over and above each prompt's own §9: *372 must be `VERIFIED`
@@ -180,7 +182,7 @@ because a future session reading only the prompt files would not find them there
                                           |
                                      HDN-369  (kickoff, COMPLETED)
                                           |
-                                     HDN-370  (full regression baseline)  <-- READY
+                                     HDN-370  (full regression baseline)  <-- VERIFIED
                 _________________________|______________________________
                |          |          |          |          |            |
            HDN-371     HDN-372    HDN-379    HDN-380     HDN-382         |
@@ -490,32 +492,29 @@ to `VERIFIED`.
 | Date | Lane | Task ID | Branch | Commit | Result |
 |---|---|---|---|---|---|
 | 2026-08-23 | `HDN-369` | `CG-S15-HDN-001` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-369.md` §2 | **`COMPLETED`** — sets `FULL_SYSTEM_HARDENING_IN_PROGRESS`. Docs-and-index kickoff; one comment-only source correction (§2.1). Zero migration, zero application code touched |
-| 2026-08-23 | `HDN-370` | `CG-S15-HDN-002` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-370.md` | **`COMPLETED`** — full regression executed and reconciled. `HDN-BLK-002` **closed at the root**: three of its four issues were **misclassified** — `ISS-2026-077` is a timezone-boundary mismatch failing **29% of all instants (7 h/day)**, `ISS-2026-135` is a hardcoded calendar date armed on **2026-08-18, a Tuesday**, and only `ISS-2026-103`/`115` was ever day-of-week. All three fixed and **proven by 672/2,016/30-instant sweeps** rather than a green re-run. Test fixtures only — zero migration, zero application code. **Opened `HDN-BLK-007` (High), `008`, `009`: all three CI jobs are red on `main` and have been for at least 5 runs, and seven governance steps — including the secret scan and the dependency vulnerability audit — have therefore never executed in CI** |
+| 2026-08-23 | `HDN-370` | `CG-S15-HDN-002` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-370.md` | **`VERIFIED`** — full regression executed and reconciled, then Tier C closed. `HDN-BLK-002` **closed at the root**: three of its four issues were **misclassified** — `ISS-2026-077` is a timezone-boundary mismatch failing **29% of all instants (7 h/day)**, `ISS-2026-135` is a hardcoded calendar date armed on one date (`2026-08-18`, a Tuesday), and only `ISS-2026-103`/`115` was ever day-of-week. All three fixed and **proven by 672/2,016/30-instant sweeps** rather than a green re-run. **Opened `HDN-BLK-007` (High), `008`, `009`: all three CI jobs failed on the most recent push to `main`, and six governance steps — including the secret scan and the dependency vulnerability audit — have therefore never executed there on a push**, deferred to `HDN-387` with explicit interim guidance for the three lanes they actually touch. **Tier C review** (4 independent lenses) found and fixed: 4 of 7 governance gates never run locally (High), a NULL-fail-open in the attendance fixture live-proven by two lenses independently (Medium), `CARGOGRID_BUILD_STATUS.md` never updated (High), plus a consistency sweep across 8 files. Independent full gate re-run green: 229/229 db-tests, all 7 governance gates, 5394/5394 unit tests. Test fixtures only throughout — zero migration, zero application code |
 
 ---
 
 ## 16. Next eligible prompt
 
-> ### **Tier C review and close of `CG-S15-HDN-002` (`HDN-370`)**
+> ### **`CG-S15-HDN-003` — Prompt 371, Cross-Module Transactional Integrity (`HDN-371`)**
 >
-> `HDN-370` is `COMPLETED`, which under `AGENTS.md` means **adversarially unreviewed**. No new
-> prompt is eligible. The next session's work is to close it:
->
-> - Four parallel review lenses over `HDN-370`'s diff and findings: spec-compliance;
->   security/RLS/tenant (live-tested); correctness/concurrency (live-tested); cross-prompt
->   integration and data dependency.
-> - A fix pass with a propagation sweep, then a **full gate suite re-run performed
->   independently by the orchestrating session** — never accepted on a lens's or a fix
->   agent's self-report.
-> - Particular scrutiny is warranted on two things this lane produced: the three fixture
->   fixes are **test-only**, so a reviewer should confirm none of them weakened an assertion
->   (§12 argues two were strengthened — verify that claim); and the CI findings
->   (`HDN-BLK-007/008/009`) should be independently re-confirmed against the live workflow
->   runs rather than re-cited from this log.
-> - Only then does `HDN-370` become `VERIFIED`, releasing **`CG-S15-HDN-003` — Prompt 371,
->   Cross-Module Transactional Integrity**.
+> - **Prompt file:** `docs/ai-agent-build-prompt-package/15-hardening/371_CROSS_MODULE_TRANSACTIONAL_INTEGRITY_PROMPT.md`
+> - **Build log to write:** `HDN-371.md`, alongside this file
+> - **State:** `READY` — dependency-clean. `HDN-370` is `VERIFIED` (Tier C closed, four
+>   independent lenses, two live-proven defects fixed and re-verified, independent full gate
+>   re-run green).
+> - **Charter reminder:** verify that lead→job, shipment→invoice, WMS, portal, loyalty and
+>   ticketing chains preserve source ownership, idempotency, state transitions, reconciliation
+>   and no duplicate truth. `HDN-374` (financial integrity), `HDN-375` (lineage) and `HDN-376`
+>   (API compatibility) are hard-gated on this lane reaching `VERIFIED`.
+> - **Do not cite CI as evidence for anything** — `HDN-BLK-007/008/009` remain open; every
+>   result this lane produces must be a real local execution.
+> - **Cadence:** its own session, its own commit, its own full Tier A + Tier B + Tier C
+>   treatment. It may not share a session with `HDN-372`.
 
-**Nothing after `HDN-370` may begin until `HDN-370` is `VERIFIED`.**
+**Nothing after `HDN-371` may begin until `HDN-371` is `VERIFIED`.**
 `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set and may only ever be set by Prompt 389.
 
 > **Standing warning for `HDN-386` and every lane before it:** CI is currently red on `main`
@@ -523,3 +522,35 @@ to `VERIFIED`.
 > gate until those are resolved.** Local runs remain valid evidence and are what this range
 > has been using — but the two are not interchangeable, and this lane proved they can be
 > exact inverses of each other.
+>
+> **Amendment, Tier C review of `HDN-370` — this is more than a standing note, it is a real
+> ordering problem, surfaced by the cross-prompt integration lens and not fully resolved by
+> "defer to `HDN-387`" alone:**
+>
+> - `HDN-BLK-009`'s own record already names `HDN-380`/`HDN-381` (WBS rows 12–13) as needing
+>   its fix, while `HDN-387` — the lane deferred to — is row 19, six rows later. Those two
+>   lanes will run first and must decide for themselves, explicitly, whether they can produce
+>   real evidence without it (§10's Executed / Executed-against-a-substitute / Tracked-gap
+>   framework already gives them the vocabulary; `HARDENING_MATRIX.md` §11/§12 now cross-
+>   reference this directly).
+> - `HDN-386` (Integrated Verification, row 18) runs **before** `HDN-387` (row 19) but is
+>   barred from citing CI by the warning above. Its own charter is confirming that Step 15's
+>   gate evidence is current and not mixed-checkpoint — which now explicitly includes
+>   confirming, per gate, whether that evidence is **Executed** (a real local run this lane
+>   observed) or a **carried assumption that CI covers it**. `HDN-386` must not wave this
+>   through as "not applicable because it's a CI problem" — three of the sixteen mandatory
+>   gates (security hardening, accessibility, browser/device) have a real, load-bearing
+>   dependency on exactly the surface that's blind right now.
+> - `HDN-378` (Security Hardening) inherits `ISS-2026-007`'s original failure shape one level
+>   up: the dependency-audit gate that fixed it does not currently run in CI on a push
+>   (`HARDENING_MATRIX.md` §9 item 7). `HDN-378` must run `security:audit` itself and record
+>   the result — CI's silence is not evidence it passed.
+>
+> **This is not a ruling.** Only `HDN-387`/`389` may set `ACCEPTED_EXCEPTION` under §8.2's five
+> conditions, and this index does not attempt to. What it does: names the three lanes that
+> actually touch this gap (`HDN-378`, `HDN-380`/`381`, `HDN-386`) so none of them discovers it
+> cold, and requires each to produce a real disposition — Executed, Executed-against-a-
+> substitute, or an explicitly widened `TRACKED_GAP` — rather than silently inheriting
+> `HDN-370`'s finding as settled. If any of those three lanes concludes it genuinely cannot
+> proceed without the CI fix, that is the trigger to escalate the repair ahead of `HDN-387`,
+> not to wait for it.

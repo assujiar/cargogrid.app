@@ -580,9 +580,47 @@ begin
   -- shape, but clamp it so it can never fall out of the resolved shift day.
   -- The policy is read rather than hardcoded, so this stays correct if the
   -- fixture's timezone or boundary is ever changed.
-  select p.* into v_policy from app.attendance_policy_versions p
-  where p.tenant_id = (select id from app.tenants where slug='att1') and p.status = 'published'
-  order by p.effective_from desc limit 1;
+  -- Tier C review (2026-08-23, security/tenant + correctness lenses, independently)
+  -- caught a real gap in the first draft: `att1` has TWO published policy versions
+  -- with the identical effective_from '2024-01-01' (tenant-wide and
+  -- branch-geofenced), so `order by effective_from desc limit 1` picked one
+  -- non-deterministically -- and the WRONG one relative to which policy actually
+  -- governs mgr1 (the branch-geofenced one, since mgr1 is on the required-geofence
+  -- branch exercised two blocks above). It was harmless only because both
+  -- versions happen to share one (timezone, day_boundary_local_time) pair today,
+  -- which falsified this fix's own comment claiming it "stays correct if the
+  -- fixture's timezone or boundary is ever changed."
+  --
+  -- Fixed by reading the policy off mgr1's OWN just-created session instead of
+  -- guessing which tenant-level policy applies: this whole block's premise is
+  -- that mgr1 already has a session today from the geofence test immediately
+  -- above, and app.record_attendance_clock_event stamps that session with the
+  -- exact policy_version_id it actually resolved and used -- the same source
+  -- app.evaluate_late_and_early_leave_exceptions itself reads from
+  -- (attendance_policy_versions where id = v_session.policy_version_id). This
+  -- is no longer a lookup that can disagree with production; it is the same
+  -- fact production already recorded.
+  select p.* into v_policy
+  from app.attendance_sessions s
+  join app.attendance_policy_versions p on p.id = s.policy_version_id
+  where s.tenant_id = (select id from app.tenants where slug='att1')
+    and s.employee_id = (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='att1') and work_email = 'mgr1work@att1.test')
+  order by s.raw_clock_in_at desc
+  limit 1;
+
+  -- Tier C correctness review (2026-08-23) caught a further real gap in the first draft:
+  -- `greatest()` ignores NULLs, so if this select ever finds no row, v_policy is
+  -- entirely NULL and v_manual_at below silently collapses back to the exact
+  -- pre-fix `now() - interval '1 hour'` -- reintroducing ISS-2026-154 with no
+  -- error, because the invariant check further down (`<> v_workday`) evaluates
+  -- to NULL, not TRUE, when either side is NULL, so it never fires. Live-proven:
+  -- with the tenant's published policy renamed/unpublished, the block completed
+  -- silently instead of failing loudly. Ordinary fixture maintenance could do
+  -- this by accident, so the precondition is asserted explicitly rather than
+  -- assumed.
+  if v_policy.id is null then
+    raise exception 'fixture invariant broken: no published attendance policy found for tenant att1 -- the manual-entry timestamp clamp below has nothing to clamp against';
+  end if;
 
   v_workday := app.resolve_attendance_workday(now(), v_policy.timezone, v_policy.day_boundary_local_time);
   v_shift_start := (v_workday::text || ' ' || v_policy.day_boundary_local_time::text)::timestamp at time zone v_policy.timezone;
