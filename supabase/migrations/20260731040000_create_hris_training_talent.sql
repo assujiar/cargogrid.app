@@ -3989,23 +3989,23 @@ create policy training_sessions_select_scoped on app.training_sessions
 -- 6) -- "results... are purpose- and field-restricted" (section 16).
 create policy training_enrollments_select_scoped on app.training_enrollments
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy training_assessments_select_scoped on app.training_assessments
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy training_certificates_select_scoped on app.training_certificates
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy training_certificate_expiry_reminders_select_scoped on app.training_certificate_expiry_reminders
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy training_development_plans_select_scoped on app.training_development_plans
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_training_talent_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy training_development_plan_actions_select_scoped on app.training_development_plan_actions
   for select to authenticated
@@ -4013,7 +4013,7 @@ create policy training_development_plan_actions_select_scoped on app.training_de
     app.is_supreme_admin()
     or exists (
       select 1 from app.training_development_plans p
-      where p.id = plan_id and app.can_view_hris_training_talent_row(p.tenant_id, p.employee_id, auth.uid())
+      where p.id = plan_id and app.can_view_hris_training_talent_row(p.tenant_id, p.employee_id, (select auth.uid()))
     )
   );
 
@@ -4024,17 +4024,17 @@ create policy talent_review_cycles_select_scoped on app.talent_review_cycles
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.check_training_authority('Override', tenant_id, auth.uid())
+    or app.check_training_authority('Override', tenant_id, (select auth.uid()))
     or exists (
       select 1 from app.talent_review_assignments a
       where a.cycle_id = talent_review_cycles.id and a.status = 'active'
-        and a.reviewer_employee_id = (app.get_self_employee(tenant_id, auth.uid())).master_record_id
+        and a.reviewer_employee_id = (app.get_self_employee(tenant_id, (select auth.uid()))).master_record_id
     )
   );
 
 create policy talent_review_assignments_select_scoped on app.talent_review_assignments
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_talent_review_row(tenant_id, reviewer_employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_talent_review_row(tenant_id, reviewer_employee_id, (select auth.uid())));
 
 create policy talent_reviews_select_scoped on app.talent_reviews
   for select to authenticated
@@ -4042,21 +4042,21 @@ create policy talent_reviews_select_scoped on app.talent_reviews
     app.is_supreme_admin()
     or exists (
       select 1 from app.talent_review_assignments a
-      where a.id = assignment_id and app.can_view_talent_review_row(a.tenant_id, a.reviewer_employee_id, auth.uid())
+      where a.id = assignment_id and app.can_view_talent_review_row(a.tenant_id, a.reviewer_employee_id, (select auth.uid()))
     )
   );
 
 create policy talent_pools_select_scoped on app.talent_pools
   for select to authenticated
-  using (app.is_supreme_admin() or app.check_training_authority('Override', tenant_id, auth.uid()));
+  using (app.is_supreme_admin() or app.check_training_authority('Override', tenant_id, (select auth.uid())));
 
 create policy talent_pool_members_select_scoped on app.talent_pool_members
   for select to authenticated
-  using (app.is_supreme_admin() or app.check_training_authority('Override', tenant_id, auth.uid()));
+  using (app.is_supreme_admin() or app.check_training_authority('Override', tenant_id, (select auth.uid())));
 
 create policy talent_succession_candidates_select_scoped on app.talent_succession_candidates
   for select to authenticated
-  using (app.is_supreme_admin() or app.check_training_authority('Override', tenant_id, auth.uid()));
+  using (app.is_supreme_admin() or app.check_training_authority('Override', tenant_id, (select auth.uid())));
 
 -- ===========================================================================
 -- 29. Grants. Per ERR-2026-004 / the standing convention established at

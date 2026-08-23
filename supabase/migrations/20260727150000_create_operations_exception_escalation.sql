@@ -912,7 +912,7 @@ create policy operational_exceptions_select_scoped on app.operational_exceptions
     exists (
       select 1 from app.shipment_orders so
       where so.id = operational_exceptions.shipment_order_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -923,7 +923,7 @@ create policy exception_escalations_select_scoped on app.exception_escalations
       select 1 from app.operational_exceptions oe
       join app.shipment_orders so on so.id = oe.shipment_order_id
       where oe.id = exception_escalations.exception_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

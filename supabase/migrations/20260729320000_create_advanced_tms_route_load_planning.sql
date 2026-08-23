@@ -1490,7 +1490,7 @@ create policy route_planning_scenarios_select_scoped on app.route_planning_scena
     exists (
       select 1 from app.shipment_orders so
       where so.id = route_planning_scenarios.shipment_order_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -1501,7 +1501,7 @@ create policy route_planning_stops_select_scoped on app.route_planning_stops
       select 1 from app.route_planning_scenarios sc
       join app.shipment_orders so on so.id = sc.shipment_order_id
       where sc.id = route_planning_stops.scenario_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -1512,7 +1512,7 @@ create policy route_planning_constraints_select_scoped on app.route_planning_con
       select 1 from app.route_planning_scenarios sc
       join app.shipment_orders so on so.id = sc.shipment_order_id
       where sc.id = route_planning_constraints.scenario_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -1523,7 +1523,7 @@ create policy route_planning_candidate_plans_select_scoped on app.route_planning
       select 1 from app.route_planning_scenarios sc
       join app.shipment_orders so on so.id = sc.shipment_order_id
       where sc.id = route_planning_candidate_plans.scenario_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -1535,7 +1535,7 @@ create policy route_planning_score_components_select_scoped on app.route_plannin
       join app.route_planning_scenarios sc on sc.id = cp.scenario_id
       join app.shipment_orders so on so.id = sc.shipment_order_id
       where cp.id = route_planning_score_components.candidate_plan_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -1546,7 +1546,7 @@ create policy route_planning_selected_plans_select_scoped on app.route_planning_
       select 1 from app.route_planning_scenarios sc
       join app.shipment_orders so on so.id = sc.shipment_order_id
       where sc.id = route_planning_selected_plans.scenario_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -1557,7 +1557,7 @@ create policy route_planning_replan_events_select_scoped on app.route_planning_r
       select 1 from app.route_planning_scenarios sc
       join app.shipment_orders so on so.id = sc.shipment_order_id
       where sc.id = route_planning_replan_events.scenario_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

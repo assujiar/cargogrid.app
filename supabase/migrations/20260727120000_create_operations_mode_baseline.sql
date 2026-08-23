@@ -274,7 +274,7 @@ create policy shipment_mode_profiles_select_scoped on app.shipment_mode_profiles
     exists (
       select 1 from app.shipment_orders so
       where so.id = shipment_mode_profiles.shipment_order_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

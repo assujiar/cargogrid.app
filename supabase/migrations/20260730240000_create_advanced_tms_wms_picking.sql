@@ -2246,7 +2246,7 @@ create policy wms_pick_waves_select_scoped on app.wms_pick_waves
     exists (
       select 1 from app.warehouses w
       where w.id = wms_pick_waves.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -2255,8 +2255,8 @@ alter table app.wms_pick_tasks enable row level security;
 create policy wms_pick_tasks_select_scoped on app.wms_pick_tasks
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), wms_pick_tasks.warehouse_id, wms_pick_tasks.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_pick_tasks.tenant_id, wms_pick_tasks.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), wms_pick_tasks.warehouse_id, wms_pick_tasks.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_pick_tasks.tenant_id, wms_pick_tasks.owner_account_id)
   );
 
 alter table app.wms_pick_task_confirmations enable row level security;
@@ -2267,8 +2267,8 @@ create policy wms_pick_task_confirmations_select_scoped on app.wms_pick_task_con
     exists (
       select 1 from app.wms_pick_tasks t
       where t.id = wms_pick_task_confirmations.task_id
-        and app.wms_pick_record_scope_ok(auth.uid(), t.warehouse_id, t.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), t.tenant_id, t.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), t.warehouse_id, t.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), t.tenant_id, t.owner_account_id)
     )
   );
 
@@ -2280,8 +2280,8 @@ create policy wms_pick_task_shorts_select_scoped on app.wms_pick_task_shorts
     exists (
       select 1 from app.wms_pick_tasks t
       where t.id = wms_pick_task_shorts.task_id
-        and app.wms_pick_record_scope_ok(auth.uid(), t.warehouse_id, t.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), t.tenant_id, t.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), t.warehouse_id, t.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), t.tenant_id, t.owner_account_id)
     )
   );
 
@@ -2293,8 +2293,8 @@ create policy wms_pick_substitution_approvals_select_scoped on app.wms_pick_subs
     exists (
       select 1 from app.wms_pick_tasks t
       where t.id = wms_pick_substitution_approvals.task_id
-        and app.wms_pick_record_scope_ok(auth.uid(), t.warehouse_id, t.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), t.tenant_id, t.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), t.warehouse_id, t.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), t.tenant_id, t.owner_account_id)
     )
   );
 
@@ -2347,8 +2347,8 @@ drop policy if exists wms_outbound_orders_select_scoped on app.wms_outbound_orde
 create policy wms_outbound_orders_select_scoped on app.wms_outbound_orders
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), wms_outbound_orders.warehouse_id, wms_outbound_orders.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_outbound_orders.tenant_id, wms_outbound_orders.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), wms_outbound_orders.warehouse_id, wms_outbound_orders.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_outbound_orders.tenant_id, wms_outbound_orders.owner_account_id)
   );
 
 drop policy if exists wms_outbound_order_lines_select_scoped on app.wms_outbound_order_lines;
@@ -2358,7 +2358,7 @@ create policy wms_outbound_order_lines_select_scoped on app.wms_outbound_order_l
     exists (
       select 1 from app.wms_outbound_orders o
       where o.id = wms_outbound_order_lines.outbound_order_id
-        and app.wms_pick_record_scope_ok(auth.uid(), o.warehouse_id, o.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), o.tenant_id, o.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), o.warehouse_id, o.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), o.tenant_id, o.owner_account_id)
     )
   );

@@ -1099,7 +1099,7 @@ create policy wms_receipt_sessions_select_scoped on app.wms_receipt_sessions
     exists (
       select 1 from app.warehouses w
       where w.id = wms_receipt_sessions.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -1112,7 +1112,7 @@ create policy wms_receipt_lines_select_scoped on app.wms_receipt_lines
       select 1 from app.wms_receipt_sessions s
       join app.warehouses w on w.id = s.warehouse_id
       where s.id = wms_receipt_lines.receipt_session_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 

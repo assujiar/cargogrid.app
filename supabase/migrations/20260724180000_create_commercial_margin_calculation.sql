@@ -484,7 +484,7 @@ create policy margin_calculations_select_scoped on app.margin_calculations
     exists (
       select 1 from app.costing_requests cr
       where cr.id = margin_calculations.costing_request_id
-        and app.can_access_record(auth.uid(), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
     )
   );
 

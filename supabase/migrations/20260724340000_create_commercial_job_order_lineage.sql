@@ -299,7 +299,7 @@ alter table app.job_order_handoffs enable row level security;
 
 create policy job_order_handoffs_select_scoped on app.job_order_handoffs
   for select to authenticated
-  using (app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
+  using (app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
 
 -- Per ERR-2026-004 (docs/runtime/ERROR_LEDGER.md): explicit, directly-provable revoke of
 -- PostgreSQL's PUBLIC-execute default, the standing per-migration convention since

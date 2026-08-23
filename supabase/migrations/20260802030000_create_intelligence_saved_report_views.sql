@@ -450,7 +450,7 @@ create policy saved_report_views_select_scoped on app.saved_report_views
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or owner_auth_user_id = auth.uid()
+    or owner_auth_user_id = (select auth.uid())
     or (sharing_scope = 'tenant' and app.has_active_tenant_membership(tenant_id) and not app.actor_holds_customer_user_layer(tenant_id))
   );
 

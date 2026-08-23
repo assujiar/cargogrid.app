@@ -327,6 +327,7 @@ returns table (
   already_decided boolean
 )
 language plpgsql
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_hash text;
@@ -525,7 +526,7 @@ create policy quotation_acceptance_tokens_select_scoped on app.quotation_accepta
   using (exists (
     select 1 from app.quotations q
     where q.id = quotation_acceptance_tokens.quotation_id
-      and app.can_access_record(auth.uid(), q.tenant_id, q.owner_user_id, app.lead_record_scope_org_unit_ids(q.org_unit_id), null)
+      and app.can_access_record((select auth.uid()), q.tenant_id, q.owner_user_id, app.lead_record_scope_org_unit_ids(q.org_unit_id), null)
   ));
 
 create policy quotation_customer_decisions_select_scoped on app.quotation_customer_decisions
@@ -533,7 +534,7 @@ create policy quotation_customer_decisions_select_scoped on app.quotation_custom
   using (exists (
     select 1 from app.quotations q
     where q.id = quotation_customer_decisions.quotation_id
-      and app.can_access_record(auth.uid(), q.tenant_id, q.owner_user_id, app.lead_record_scope_org_unit_ids(q.org_unit_id), null)
+      and app.can_access_record((select auth.uid()), q.tenant_id, q.owner_user_id, app.lead_record_scope_org_unit_ids(q.org_unit_id), null)
   ));
 
 -- Per ERR-2026-004 (docs/runtime/ERROR_LEDGER.md): explicit, directly-provable revoke of

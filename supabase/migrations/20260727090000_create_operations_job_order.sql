@@ -433,7 +433,7 @@ alter table app.job_order_overrides enable row level security;
 
 create policy job_orders_select_scoped on app.job_orders
   for select to authenticated
-  using (app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
+  using (app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
 
 create policy job_order_overrides_select_scoped on app.job_order_overrides
   for select to authenticated
@@ -441,7 +441,7 @@ create policy job_order_overrides_select_scoped on app.job_order_overrides
     exists (
       select 1 from app.job_orders jo
       where jo.id = job_order_overrides.job_order_id
-        and app.can_access_record(auth.uid(), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
     )
   );
 

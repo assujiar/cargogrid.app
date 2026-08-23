@@ -1160,7 +1160,7 @@ create policy kb_article_versions_select_scoped on app.kb_article_versions
   using (
     (
       app.has_active_tenant_membership(tenant_id) and not app.actor_holds_customer_user_layer(tenant_id)
-      and (status = 'published' or author_auth_user_id = auth.uid() or reviewer_auth_user_id = auth.uid() or app.check_ticket_authority('Edit', tenant_id, auth.uid()))
+      and (status = 'published' or author_auth_user_id = (select auth.uid()) or reviewer_auth_user_id = (select auth.uid()) or app.check_ticket_authority('Edit', tenant_id, (select auth.uid())))
     )
     or app.is_supreme_admin()
   );

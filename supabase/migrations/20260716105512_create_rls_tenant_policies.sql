@@ -109,7 +109,7 @@ create policy principal_memberships_select_own_tenant
   on app.principal_memberships for select
   to authenticated
   using (
-    (tenant_id is null and auth_user_id = auth.uid())
+    (tenant_id is null and auth_user_id = (select auth.uid()))
     or (tenant_id is not null and app.has_active_tenant_membership(tenant_id))
   );
 

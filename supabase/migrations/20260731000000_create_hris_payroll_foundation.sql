@@ -2972,7 +2972,7 @@ alter table app.payroll_payslips enable row level security;
 -- extended uniformly), never plain tenant membership.
 create policy payroll_periods_select_scoped on app.payroll_periods
   for select to authenticated
-  using (app.is_supreme_admin() or app.check_payroll_authority('View payroll', tenant_id, auth.uid()));
+  using (app.is_supreme_admin() or app.check_payroll_authority('View payroll', tenant_id, (select auth.uid())));
 
 create policy payroll_components_select_scoped on app.payroll_components
   for select to authenticated
@@ -2983,61 +2983,61 @@ create policy payroll_components_select_scoped on app.payroll_components
     -- visible to any active tenant member. The amount-bearing app.
     -- payroll_component_versions row is separately, more narrowly gated
     -- below on HRS:View payroll per tenant.
-    or (tenant_id is null and exists (select 1 from app.tenant_user_identities m where m.auth_user_id = auth.uid() and m.status = 'active'))
-    or (tenant_id is not null and app.check_payroll_authority('View payroll', tenant_id, auth.uid()))
+    or (tenant_id is null and exists (select 1 from app.tenant_user_identities m where m.auth_user_id = (select auth.uid()) and m.status = 'active'))
+    or (tenant_id is not null and app.check_payroll_authority('View payroll', tenant_id, (select auth.uid())))
   );
 
 create policy payroll_component_versions_select_scoped on app.payroll_component_versions
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or (tenant_id is null and exists (select 1 from app.tenant_user_identities m where m.auth_user_id = auth.uid() and m.status = 'active'))
-    or (tenant_id is not null and app.check_payroll_authority('View payroll', tenant_id, auth.uid()))
+    or (tenant_id is null and exists (select 1 from app.tenant_user_identities m where m.auth_user_id = (select auth.uid()) and m.status = 'active'))
+    or (tenant_id is not null and app.check_payroll_authority('View payroll', tenant_id, (select auth.uid())))
   );
 
 -- Person-scoped -- self OR HRS:View payroll specifically (decision 5).
 create policy payroll_employee_component_assignments_select_scoped on app.payroll_employee_component_assignments
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy payroll_reimbursement_requests_select_scoped on app.payroll_reimbursement_requests
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy payroll_loans_select_scoped on app.payroll_loans
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy payroll_loan_installments_select_scoped on app.payroll_loan_installments
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or exists (select 1 from app.payroll_loans l where l.id = loan_id and app.can_view_hris_payroll_row(l.tenant_id, l.employee_id, auth.uid()))
+    or exists (select 1 from app.payroll_loans l where l.id = loan_id and app.can_view_hris_payroll_row(l.tenant_id, l.employee_id, (select auth.uid())))
   );
 
 create policy payroll_input_snapshots_select_scoped on app.payroll_input_snapshots
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy payroll_runs_select_scoped on app.payroll_runs
   for select to authenticated
-  using (app.is_supreme_admin() or app.check_payroll_authority('View payroll', tenant_id, auth.uid()));
+  using (app.is_supreme_admin() or app.check_payroll_authority('View payroll', tenant_id, (select auth.uid())));
 
 create policy payroll_calculation_lines_select_scoped on app.payroll_calculation_lines
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy payroll_run_employee_results_select_scoped on app.payroll_run_employee_results
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy payroll_exceptions_select_scoped on app.payroll_exceptions
   for select to authenticated
-  using (app.is_supreme_admin() or app.check_payroll_authority('View payroll', tenant_id, auth.uid()));
+  using (app.is_supreme_admin() or app.check_payroll_authority('View payroll', tenant_id, (select auth.uid())));
 
 create policy payroll_payslips_select_scoped on app.payroll_payslips
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid())));
 
 comment on policy payroll_periods_select_scoped on app.payroll_periods is
   'HRT-282 (decision 5): unlike every other HRIS capability''s tenant-membership-only policy on its own non-person-scoped metadata tables, Payroll gates even PERIOD METADATA on HRS:View payroll specifically -- a plain tenant member sees nothing about payroll periods at all, since even their existence/status can disclose whether/when a compensation cycle ran.';

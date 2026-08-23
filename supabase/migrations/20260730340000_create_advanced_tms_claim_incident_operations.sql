@@ -2539,7 +2539,7 @@ alter table app.claim_settlement_readiness_handoffs enable row level security;
 
 create policy claim_case_extensions_select_scoped on app.claim_case_extensions
   for select to authenticated
-  using (app.claim_case_record_scope_ok(auth.uid(), tenant_id, operational_exception_id));
+  using (app.claim_case_record_scope_ok((select auth.uid()), tenant_id, operational_exception_id));
 
 create policy claim_items_select_scoped on app.claim_items
   for select to authenticated
@@ -2547,7 +2547,7 @@ create policy claim_items_select_scoped on app.claim_items
     exists (
       select 1 from app.claim_case_extensions cce
       where cce.id = claim_items.claim_case_id
-        and app.claim_case_record_scope_ok(auth.uid(), cce.tenant_id, cce.operational_exception_id)
+        and app.claim_case_record_scope_ok((select auth.uid()), cce.tenant_id, cce.operational_exception_id)
     )
   );
 
@@ -2557,7 +2557,7 @@ create policy claim_evidence_links_select_scoped on app.claim_evidence_links
     exists (
       select 1 from app.claim_case_extensions cce
       where cce.id = claim_evidence_links.claim_case_id
-        and app.claim_case_record_scope_ok(auth.uid(), cce.tenant_id, cce.operational_exception_id)
+        and app.claim_case_record_scope_ok((select auth.uid()), cce.tenant_id, cce.operational_exception_id)
     )
   );
 
@@ -2567,7 +2567,7 @@ create policy claim_investigation_findings_select_scoped on app.claim_investigat
     exists (
       select 1 from app.claim_case_extensions cce
       where cce.id = claim_investigation_findings.claim_case_id
-        and app.claim_case_record_scope_ok(auth.uid(), cce.tenant_id, cce.operational_exception_id)
+        and app.claim_case_record_scope_ok((select auth.uid()), cce.tenant_id, cce.operational_exception_id)
     )
   );
 
@@ -2577,7 +2577,7 @@ create policy claim_responsibility_reviews_select_scoped on app.claim_responsibi
     exists (
       select 1 from app.claim_case_extensions cce
       where cce.id = claim_responsibility_reviews.claim_case_id
-        and app.claim_case_record_scope_ok(auth.uid(), cce.tenant_id, cce.operational_exception_id)
+        and app.claim_case_record_scope_ok((select auth.uid()), cce.tenant_id, cce.operational_exception_id)
     )
   );
 
@@ -2587,7 +2587,7 @@ create policy claim_recovery_records_select_scoped on app.claim_recovery_records
     exists (
       select 1 from app.claim_case_extensions cce
       where cce.id = claim_recovery_records.claim_case_id
-        and app.claim_case_record_scope_ok(auth.uid(), cce.tenant_id, cce.operational_exception_id)
+        and app.claim_case_record_scope_ok((select auth.uid()), cce.tenant_id, cce.operational_exception_id)
     )
   );
 
@@ -2597,7 +2597,7 @@ create policy claim_settlement_readiness_evaluations_select_scoped on app.claim_
     exists (
       select 1 from app.claim_case_extensions cce
       where cce.id = claim_settlement_readiness_evaluations.claim_case_id
-        and app.claim_case_record_scope_ok(auth.uid(), cce.tenant_id, cce.operational_exception_id)
+        and app.claim_case_record_scope_ok((select auth.uid()), cce.tenant_id, cce.operational_exception_id)
     )
   );
 
@@ -2607,7 +2607,7 @@ create policy claim_settlement_readiness_handoffs_select_scoped on app.claim_set
     exists (
       select 1 from app.claim_case_extensions cce
       where cce.id = claim_settlement_readiness_handoffs.claim_case_id
-        and app.claim_case_record_scope_ok(auth.uid(), cce.tenant_id, cce.operational_exception_id)
+        and app.claim_case_record_scope_ok((select auth.uid()), cce.tenant_id, cce.operational_exception_id)
     )
   );
 

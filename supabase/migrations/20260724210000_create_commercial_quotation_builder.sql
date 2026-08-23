@@ -889,7 +889,7 @@ create policy quotation_number_counters_none on app.quotation_number_counters
 
 create policy quotations_select_scoped on app.quotations
   for select to authenticated
-  using (app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
+  using (app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
 
 create policy quotation_lines_select_scoped on app.quotation_lines
   for select to authenticated
@@ -897,7 +897,7 @@ create policy quotation_lines_select_scoped on app.quotation_lines
     exists (
       select 1 from app.quotations q
       where q.id = quotation_lines.quotation_id
-        and app.can_access_record(auth.uid(), q.tenant_id, q.owner_user_id, app.lead_record_scope_org_unit_ids(q.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), q.tenant_id, q.owner_user_id, app.lead_record_scope_org_unit_ids(q.org_unit_id), null)
     )
   );
 

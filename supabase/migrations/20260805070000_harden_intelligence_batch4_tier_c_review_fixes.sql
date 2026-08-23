@@ -281,8 +281,8 @@ drop policy notification_contact_addresses_select_own on app.notification_contac
 create policy notification_contact_addresses_select_own on app.notification_contact_addresses
   for select to authenticated
   using (
-    (auth_user_id = auth.uid() and app.has_active_tenant_membership(tenant_id, auth.uid()) and not app.actor_holds_customer_user_layer(tenant_id, auth.uid()))
-    or app.is_support_grant_authority(auth.uid(), tenant_id)
+    (auth_user_id = (select auth.uid()) and app.has_active_tenant_membership(tenant_id, (select auth.uid())) and not app.actor_holds_customer_user_layer(tenant_id, (select auth.uid())))
+    or app.is_support_grant_authority((select auth.uid()), tenant_id)
     or app.is_supreme_admin()
   );
 

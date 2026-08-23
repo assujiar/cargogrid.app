@@ -1268,7 +1268,7 @@ create policy item_control_policy_versions_select_scoped on app.item_control_pol
   for select to authenticated
   using (
     (app.has_active_tenant_membership(tenant_id) or app.is_supreme_admin())
-    and app.actor_can_view_owner_scoped_row(auth.uid(), tenant_id, owner_account_id)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), tenant_id, owner_account_id)
   );
 
 alter table app.lot_identities enable row level security;
@@ -1277,7 +1277,7 @@ create policy lot_identities_select_scoped on app.lot_identities
   for select to authenticated
   using (
     (app.has_active_tenant_membership(tenant_id) or app.is_supreme_admin())
-    and app.actor_can_view_owner_scoped_row(auth.uid(), tenant_id, owner_account_id)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), tenant_id, owner_account_id)
   );
 
 alter table app.serial_identities enable row level security;
@@ -1286,7 +1286,7 @@ create policy serial_identities_select_scoped on app.serial_identities
   for select to authenticated
   using (
     (app.has_active_tenant_membership(tenant_id) or app.is_supreme_admin())
-    and app.actor_can_view_owner_scoped_row(auth.uid(), tenant_id, owner_account_id)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), tenant_id, owner_account_id)
   );
 
 -- Per ERR-2026-004 (docs/runtime/ERROR_LEDGER.md): explicit, directly-provable revoke

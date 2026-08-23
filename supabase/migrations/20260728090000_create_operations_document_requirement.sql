@@ -618,7 +618,7 @@ create policy shipment_document_checklist_items_select_scoped on app.shipment_do
     exists (
       select 1 from app.shipment_orders so
       where so.id = shipment_document_checklist_items.shipment_order_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -629,7 +629,7 @@ create policy document_checklist_events_select_scoped on app.document_checklist_
       select 1 from app.shipment_document_checklist_items ci
       join app.shipment_orders so on so.id = ci.shipment_order_id
       where ci.id = document_checklist_events.checklist_item_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

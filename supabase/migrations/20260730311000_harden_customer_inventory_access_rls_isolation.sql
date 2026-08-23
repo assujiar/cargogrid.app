@@ -96,8 +96,8 @@ create policy wms_outbound_orders_select_scoped on app.wms_outbound_orders
   for select to authenticated
   using (
     not app.actor_holds_customer_user_layer(wms_outbound_orders.tenant_id)
-    and app.wms_pick_record_scope_ok(auth.uid(), wms_outbound_orders.warehouse_id, wms_outbound_orders.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_outbound_orders.tenant_id, wms_outbound_orders.owner_account_id)
+    and app.wms_pick_record_scope_ok((select auth.uid()), wms_outbound_orders.warehouse_id, wms_outbound_orders.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_outbound_orders.tenant_id, wms_outbound_orders.owner_account_id)
   );
 
 drop policy if exists wms_outbound_order_lines_select_scoped on app.wms_outbound_order_lines;
@@ -108,8 +108,8 @@ create policy wms_outbound_order_lines_select_scoped on app.wms_outbound_order_l
       select 1 from app.wms_outbound_orders o
       where o.id = wms_outbound_order_lines.outbound_order_id
         and not app.actor_holds_customer_user_layer(o.tenant_id)
-        and app.wms_pick_record_scope_ok(auth.uid(), o.warehouse_id, o.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), o.tenant_id, o.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), o.warehouse_id, o.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), o.tenant_id, o.owner_account_id)
     )
   );
 
@@ -121,7 +121,7 @@ create policy lot_identities_select_scoped on app.lot_identities
   using (
     (app.has_active_tenant_membership(tenant_id) or app.is_supreme_admin())
     and not app.actor_holds_customer_user_layer(tenant_id)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), tenant_id, owner_account_id)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), tenant_id, owner_account_id)
   );
 
 drop policy if exists serial_identities_select_scoped on app.serial_identities;
@@ -130,7 +130,7 @@ create policy serial_identities_select_scoped on app.serial_identities
   using (
     (app.has_active_tenant_membership(tenant_id) or app.is_supreme_admin())
     and not app.actor_holds_customer_user_layer(tenant_id)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), tenant_id, owner_account_id)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), tenant_id, owner_account_id)
   );
 
 -- Per ERR-2026-004 (docs/runtime/ERROR_LEDGER.md): explicit, directly-provable revoke

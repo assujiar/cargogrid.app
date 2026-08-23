@@ -2105,7 +2105,7 @@ create policy label_instances_select_scoped on app.label_instances
   for select to authenticated
   using (
     (app.has_active_tenant_membership(tenant_id) or app.is_supreme_admin())
-    and (owner_account_id is null or app.actor_can_view_owner_scoped_row(auth.uid(), tenant_id, owner_account_id))
+    and (owner_account_id is null or app.actor_can_view_owner_scoped_row((select auth.uid()), tenant_id, owner_account_id))
   );
 
 alter table app.label_print_jobs enable row level security;
@@ -2125,7 +2125,7 @@ create policy label_scan_events_select_scoped on app.label_scan_events
       or exists (
         select 1 from app.label_instances li
         where li.id = label_scan_events.label_instance_id
-          and (li.owner_account_id is null or app.actor_can_view_owner_scoped_row(auth.uid(), label_scan_events.tenant_id, li.owner_account_id))
+          and (li.owner_account_id is null or app.actor_can_view_owner_scoped_row((select auth.uid()), label_scan_events.tenant_id, li.owner_account_id))
       )
     )
   );

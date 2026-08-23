@@ -480,7 +480,7 @@ alter table app.shipment_orders enable row level security;
 
 create policy shipment_orders_select_scoped on app.shipment_orders
   for select to authenticated
-  using (app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
+  using (app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
 
 revoke execute on all functions in schema app from public;
 

@@ -683,7 +683,7 @@ create policy rate_selections_select_scoped on app.rate_selections
     exists (
       select 1 from app.costing_requests cr
       where cr.id = rate_selections.costing_request_id
-        and app.can_access_record(auth.uid(), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
     )
   );
 

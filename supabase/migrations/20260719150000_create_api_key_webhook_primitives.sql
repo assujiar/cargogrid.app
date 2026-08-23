@@ -319,6 +319,7 @@ returns table (
   rate_limit_per_minute integer, expires_at timestamptz, created_at timestamptz, raw_key text
 )
 language plpgsql
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_scope text;
@@ -403,6 +404,7 @@ returns table (
   rate_limit_per_minute integer, expires_at timestamptz, created_at timestamptz, raw_key text
 )
 language plpgsql
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_old app.api_keys;
@@ -510,6 +512,7 @@ $$;
 create function app.authenticate_api_key(p_raw_key text)
 returns table (api_key_id uuid, tenant_id uuid, scopes jsonb, rate_limit_per_minute integer)
 language plpgsql
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_hash text;
@@ -632,6 +635,7 @@ returns table (
   created_at timestamptz, raw_secret text
 )
 language plpgsql
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_code text;
@@ -683,6 +687,7 @@ create function app.rotate_webhook_secret(
 )
 returns table (id uuid, tenant_id uuid, url text, status text, raw_secret text)
 language plpgsql
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_endpoint app.webhook_endpoints;
@@ -969,6 +974,7 @@ $$;
 create function app.compute_webhook_signature(p_endpoint_id uuid, p_payload text, p_timestamp bigint)
 returns text
 language plpgsql
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_secret text;

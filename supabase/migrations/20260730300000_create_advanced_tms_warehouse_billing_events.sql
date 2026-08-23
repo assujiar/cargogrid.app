@@ -2001,8 +2001,8 @@ create policy warehouse_billing_rate_components_select_scoped on app.warehouse_b
 create policy warehouse_billing_events_select_scoped on app.warehouse_billing_events
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), warehouse_billing_events.warehouse_id, warehouse_billing_events.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), warehouse_billing_events.tenant_id, warehouse_billing_events.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), warehouse_billing_events.warehouse_id, warehouse_billing_events.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), warehouse_billing_events.tenant_id, warehouse_billing_events.owner_account_id)
   );
 
 -- A table with no owner_account_id column of its own needs a join-based RLS policy
@@ -2014,8 +2014,8 @@ create policy warehouse_billing_handoffs_select_scoped on app.warehouse_billing_
     exists (
       select 1 from app.warehouse_billing_events e
       where e.id = warehouse_billing_handoffs.billing_event_id
-        and app.wms_pick_record_scope_ok(auth.uid(), e.warehouse_id, e.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), e.tenant_id, e.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), e.warehouse_id, e.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), e.tenant_id, e.owner_account_id)
     )
   );
 

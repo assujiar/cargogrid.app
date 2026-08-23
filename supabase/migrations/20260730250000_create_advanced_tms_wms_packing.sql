@@ -1653,8 +1653,8 @@ alter table app.wms_packing_tasks enable row level security;
 create policy wms_packing_tasks_select_scoped on app.wms_packing_tasks
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), wms_packing_tasks.warehouse_id, wms_packing_tasks.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_packing_tasks.tenant_id, wms_packing_tasks.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), wms_packing_tasks.warehouse_id, wms_packing_tasks.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_packing_tasks.tenant_id, wms_packing_tasks.owner_account_id)
   );
 
 alter table app.wms_packages enable row level security;
@@ -1662,8 +1662,8 @@ alter table app.wms_packages enable row level security;
 create policy wms_packages_select_scoped on app.wms_packages
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), wms_packages.warehouse_id, wms_packages.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_packages.tenant_id, wms_packages.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), wms_packages.warehouse_id, wms_packages.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_packages.tenant_id, wms_packages.owner_account_id)
   );
 
 alter table app.wms_package_lines enable row level security;
@@ -1674,8 +1674,8 @@ create policy wms_package_lines_select_scoped on app.wms_package_lines
     exists (
       select 1 from app.wms_packages p
       where p.id = wms_package_lines.package_id
-        and app.wms_pick_record_scope_ok(auth.uid(), p.warehouse_id, p.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), p.tenant_id, p.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), p.warehouse_id, p.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), p.tenant_id, p.owner_account_id)
     )
   );
 
@@ -1687,8 +1687,8 @@ create policy wms_package_line_scans_select_scoped on app.wms_package_line_scans
     exists (
       select 1 from app.wms_packages p
       where p.id = wms_package_line_scans.package_id
-        and app.wms_pick_record_scope_ok(auth.uid(), p.warehouse_id, p.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), p.tenant_id, p.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), p.warehouse_id, p.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), p.tenant_id, p.owner_account_id)
     )
   );
 
@@ -1700,8 +1700,8 @@ create policy wms_package_confirmations_select_scoped on app.wms_package_confirm
     exists (
       select 1 from app.wms_packages p
       where p.id = wms_package_confirmations.package_id
-        and app.wms_pick_record_scope_ok(auth.uid(), p.warehouse_id, p.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), p.tenant_id, p.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), p.warehouse_id, p.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), p.tenant_id, p.owner_account_id)
     )
   );
 

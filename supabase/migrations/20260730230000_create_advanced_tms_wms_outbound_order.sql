@@ -1014,9 +1014,9 @@ create policy wms_outbound_orders_select_scoped on app.wms_outbound_orders
     exists (
       select 1 from app.warehouses w
       where w.id = wms_outbound_orders.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), wms_outbound_orders.owner_account_id::text)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), wms_outbound_orders.owner_account_id::text)
     )
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_outbound_orders.tenant_id, wms_outbound_orders.owner_account_id)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_outbound_orders.tenant_id, wms_outbound_orders.owner_account_id)
   );
 
 alter table app.wms_outbound_order_lines enable row level security;
@@ -1028,8 +1028,8 @@ create policy wms_outbound_order_lines_select_scoped on app.wms_outbound_order_l
       select 1 from app.wms_outbound_orders o
       join app.warehouses w on w.id = o.warehouse_id
       where o.id = wms_outbound_order_lines.outbound_order_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), o.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), o.tenant_id, o.owner_account_id)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), o.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), o.tenant_id, o.owner_account_id)
     )
   );
 

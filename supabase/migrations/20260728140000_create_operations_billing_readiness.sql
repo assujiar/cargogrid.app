@@ -505,7 +505,7 @@ create policy billing_readiness_evaluations_select_scoped on app.billing_readine
     exists (
       select 1 from app.job_orders jo
       where jo.id = billing_readiness_evaluations.job_order_id
-        and app.can_access_record(auth.uid(), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
     )
   );
 
@@ -515,7 +515,7 @@ create policy billing_readiness_handoffs_select_scoped on app.billing_readiness_
     exists (
       select 1 from app.job_orders jo
       where jo.id = billing_readiness_handoffs.job_order_id
-        and app.can_access_record(auth.uid(), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
     )
   );
 

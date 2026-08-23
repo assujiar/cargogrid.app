@@ -2926,19 +2926,19 @@ create policy performance_cycles_select_scoped on app.performance_cycles
 -- performance (decision 3, 5) -- never plain HRS:View.
 create policy performance_goal_assignments_select_scoped on app.performance_goal_assignments
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_performance_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_performance_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy performance_goal_progress_entries_select_scoped on app.performance_goal_progress_entries
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_hris_performance_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_hris_performance_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy performance_reviewer_assignments_select_scoped on app.performance_reviewer_assignments
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or (app.evaluate_permission(auth.uid(), tenant_id, 'HRS', 'View personal data')).allowed
-    or (app.get_self_employee(tenant_id, auth.uid())).master_record_id = employee_id
-    or (app.get_self_employee(tenant_id, auth.uid())).master_record_id = assigned_to_employee_id
+    or (app.evaluate_permission((select auth.uid()), tenant_id, 'HRS', 'View personal data')).allowed
+    or (app.get_self_employee(tenant_id, (select auth.uid()))).master_record_id = employee_id
+    or (app.get_self_employee(tenant_id, (select auth.uid()))).master_record_id = assigned_to_employee_id
   );
 
 -- Assessment-type-aware, purpose- and stage-bound (decision 4, section
@@ -2946,7 +2946,7 @@ create policy performance_reviewer_assignments_select_scoped on app.performance_
 -- predicate.
 create policy performance_assessments_select_scoped on app.performance_assessments
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_performance_assessment_row(tenant_id, employee_id, assessment_type, assigned_to_employee_id, status, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_performance_assessment_row(tenant_id, employee_id, assessment_type, assigned_to_employee_id, status, (select auth.uid())));
 
 create policy performance_assessment_kpi_scores_select_scoped on app.performance_assessment_kpi_scores
   for select to authenticated
@@ -2955,7 +2955,7 @@ create policy performance_assessment_kpi_scores_select_scoped on app.performance
     or exists (
       select 1 from app.performance_assessments a
       where a.id = assessment_id
-        and app.can_view_performance_assessment_row(a.tenant_id, a.employee_id, a.assessment_type, a.assigned_to_employee_id, a.status, auth.uid())
+        and app.can_view_performance_assessment_row(a.tenant_id, a.employee_id, a.assessment_type, a.assigned_to_employee_id, a.status, (select auth.uid()))
     )
   );
 
@@ -2965,15 +2965,15 @@ create policy performance_assessment_kpi_scores_select_scoped on app.performance
 -- employee or their manager, even though the outcome ITSELF is).
 create policy performance_outcomes_select_scoped on app.performance_outcomes
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_performance_outcome_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_performance_outcome_row(tenant_id, employee_id, (select auth.uid())));
 
 create policy performance_calibration_adjustments_select_scoped on app.performance_calibration_adjustments
   for select to authenticated
-  using (app.is_supreme_admin() or (app.evaluate_permission(auth.uid(), tenant_id, 'HRS', 'View personal data')).allowed);
+  using (app.is_supreme_admin() or (app.evaluate_permission((select auth.uid()), tenant_id, 'HRS', 'View personal data')).allowed);
 
 create policy performance_appeals_select_scoped on app.performance_appeals
   for select to authenticated
-  using (app.is_supreme_admin() or app.can_view_performance_outcome_row(tenant_id, employee_id, auth.uid()));
+  using (app.is_supreme_admin() or app.can_view_performance_outcome_row(tenant_id, employee_id, (select auth.uid())));
 
 -- ===========================================================================
 -- 25. Grants. Per ERR-2026-004 / the standing convention established at
