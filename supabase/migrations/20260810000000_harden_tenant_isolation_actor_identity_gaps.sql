@@ -11,10 +11,10 @@
 -- parameter `p_requester_auth_user_id` were never in the candidate set at all.
 --
 -- `HDN-372`'s own live adversarial testing (four independent parallel lenses, full
--- disposition `docs/build-log/full-system-hardening/HDN-372.md` §7, `HDN-BLK-011`)
+-- disposition `docs/build-log/full-system-hardening/HDN-372.md` §5, `HDN-BLK-011`)
 -- forced and confirmed real cross-tenant reads against this exact class — full PII
 -- (`app.get_self_employee`), customer inventory/warehouse/order data (the ATW-023
--- `app.resolve_customer_owner_account_scope` family, 12 functions), the audit trail
+-- `app.resolve_customer_owner_account_scope` family, 10 functions), the audit trail
 -- (`app.query_audit_logs`/`app.export_audit_logs`), notifications
 -- (`app.list_notifications_for_recipient`/`app.count_unread_notifications`), and
 -- workflow/approval/shipment history (`app.get_workflow_instance_history`/
@@ -24,11 +24,14 @@
 --
 -- This migration fixes the 9 functions below directly. `app.resolve_customer_owner_
 -- account_scope` is one of the 9: it is the single shared root every one of the other
--- 12 `ATW-023` customer-inventory-access functions calls (directly, or transitively via
+-- 10 `ATW-023` customer-inventory-access functions calls (directly, or transitively via
 -- `app.evaluate_customer_inventory_access`/`app.get_customer_outbound_order`) to
--- resolve which customer accounts an actor may see, and none of those 12 callers
+-- resolve which customer accounts an actor may see, and none of those 10 callers
 -- re-derives or mutates the actor before passing it through — so fixing the root closes
--- the whole family without touching 12 separate function bodies, mirroring how
+-- the whole family without touching 10 separate function bodies (`app.export_customer_
+-- inventory_snapshot` and `app.record_customer_inventory_access_denial`, the other two
+-- direct callers of the root in this same family, already carry their own assert from
+-- `ATW-032` and are excluded from this count for that reason, not overlooked), mirroring how
 -- `ATW-031` fixed 416 functions at one choke point (`app.evaluate_permission`) rather
 -- than editing each individually. The fix itself mirrors `CPL-300`'s own successor
 -- primitive, `app.resolve_customer_account_scope`
@@ -42,8 +45,11 @@
 -- is `SECURITY DEFINER` and granted `EXECUTE` directly to `authenticated`, so any
 -- session can call it standalone, bypassing whatever a caller-side wrapper does. This
 -- migration moves the check inside the function itself, closing that gap at its root
--- rather than relying on caller convention, and the exemption is removed from the test
--- file in the same checkpoint.
+-- rather than relying on caller convention. The exemption entry itself legitimately
+-- stays on that list in the same checkpoint, with a corrected reason: it is a SEPARATE
+-- sweep testing for an AUTHORITY check (not an identity check), which this function has
+-- never had and structurally does not need (a self-row lookup needs nothing beyond
+-- identity, now proven at the root by this migration).
 --
 -- Deliberately NOT touched here — registered as `ISS-2026-165`/`HDN-BLK-012` with a
 -- named owner (`HDN-373`, Tenant Isolation's own immediate successor lane, RLS/RBAC
@@ -54,19 +60,29 @@
 --     independent `LANGUAGE sql` entry point with no shared root to fix once, so
 --     closing the class needs 13 separate conversions best done as their own
 --     reviewed, regression-tested pass.
---   * The boolean/status oracle functions already named and reasoned about in
+--   * 6 boolean/status oracle functions already named and reasoned about in
 --     `rbac-enforcement.sql`'s own `v_expected` list (`current_support_session`,
 --     `has_active_support_grant`, `is_ticket_queue_member`,
 --     `pipeline_scope_org_unit_ids`, `evaluate_dispatch_readiness`,
---     `customer_warehouse_eligibility_active`) return a boolean/narrow oracle rather
---     than record content and are Medium, not High, per
---     `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` §7 — real defense-
---     in-depth candidates, not this checkpoint's own bounded-repair scope.
+--     `customer_warehouse_eligibility_active`), plus roughly 24 further candidates this
+--     checkpoint's own Tier C review found by a wider closure sweep (mostly further
+--     boolean/narrow-oracle primitives and CRM readiness/duplicate-detection helpers) —
+--     all return a boolean/narrow oracle rather than record content and are Medium, not
+--     High, per `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` §7,
+--     registered with the full list at `HDN-BLK-014`/`ISS-2026-179`, owner `HDN-373` —
+--     real defense-in-depth candidates, not this checkpoint's own bounded-repair scope,
+--     and NOT individually live-verified the way the 13 functions fixed across both of
+--     this checkpoint's migrations were.
 --
 -- Regression proof: `scripts/db-tests/rbac-enforcement.sql` gains a new named-list
--- check (§ "HDN-372") proving each of the 9 functions below now calls
--- `app.assert_actor_is_session_identity`, plus a live two-session forced-spoof
--- assertion mirroring the one this checkpoint used to find the defect.
+-- check (§ "HDN-372") proving the assert is each of the 9 functions below's first
+-- executable statement (position-aware, not a bare substring match). The same
+-- checkpoint's own Tier C review found 4 more live-forced functions of the identical
+-- shape and fixed them in a second migration
+-- (`20260810100000_harden_tenant_isolation_actor_identity_gaps_round2.sql`), which
+-- extends this same named-list check to all 13 and adds a genuine live two-session
+-- forced-spoof assertion actually exercising 4 of the fixed functions end to end — see
+-- that migration's own header for the corrected disposition.
 
 create or replace function app.get_self_employee(p_tenant_id uuid, p_actor_auth_user_id uuid)
 returns app.employees

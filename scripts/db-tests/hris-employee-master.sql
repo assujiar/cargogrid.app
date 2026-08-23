@@ -1226,8 +1226,13 @@ begin
   -- requires auth.uid() to either match the passed actor or be NULL (the ordinary,
   -- session-less shape every other call in this file already uses). Clearing it here
   -- restores that shape rather than leaving a stale forged-actor session bleeding into
-  -- unrelated assertions below.
-  perform set_config('request.jwt.claims', null, true);
+  -- unrelated assertions below. Must be '{}', not null/''/omitted: a custom-placeholder
+  -- GUC already SET in this transaction does not revert to unset on set_config(...,
+  -- null, true) -- it becomes the empty string, and auth.uid()'s own ::json cast then
+  -- RAISES on '' rather than returning null (the same quirk already root-caused and
+  -- fixed with this exact '{}' idiom at scripts/db-tests/commercial-rate-cost-
+  -- lookup.sql's own DO block, the established precedent this follows).
+  perform set_config('request.jwt.claims', '{}', true);
 
   -- (e) HRT-293 Finding B: app.audit_logs never carries the raw suspend_reason, for this action or any prior action in this same test run, and a plain tenant_admin (zero HRS grant) reading via app.query_audit_logs never sees it either.
   if exists (select 1 from app.audit_logs where reason = v_reason) then

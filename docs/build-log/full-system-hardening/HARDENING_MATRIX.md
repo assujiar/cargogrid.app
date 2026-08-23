@@ -29,7 +29,7 @@ from zero and no lane rediscovers a known item.
 |---|---|---|---|---|
 | 1 | Full regression | `HDN-370` **`VERIFIED`** | **`PARTIAL`** — all local gates green; **CI red on all 3 jobs**; `test:e2e` a `TRACKED_GAP` | §1 |
 | 2 | Cross-module transactional integrity | `HDN-371` **`VERIFIED`** | **`PARTIAL`** — every named chain reconciled except loyalty/portal (not examined, tracked gap); one systemic finding (`HDN-BLK-010`, 9 functions, Medium), live-forced-race proven | §2 |
-| 3 | Tenant isolation | `HDN-372` **`COMPLETED`** | **`PARTIAL`** — not a pass. One High cross-tenant read class found and fixed at the root (`HDN-BLK-011`); a precisely-scoped second, same-shape finding remains genuinely open (`HDN-BLK-012`, deferred to `HDN-373` with the fix pattern already established); 15 further Medium/Low findings registered | §3 |
+| 3 | Tenant isolation | `HDN-372` **`COMPLETED`** | **`PARTIAL`** — not a pass. One High cross-tenant read class found and fixed at the root, twice — first 9 functions, then 4 more found by this checkpoint's own Tier C review and fixed in the same checkpoint (`HDN-BLK-011`, 13 direct + 11 transitive = 24 functions total); two same-shape findings remain genuinely open (`HDN-BLK-012`, 13 dashboard functions; `HDN-BLK-014`, ~24 candidate functions, not individually live-verified — both deferred to `HDN-373`); one High app-layer finding registered late and corrected at Tier C (`HDN-BLK-013`); 13 further Medium/Low findings registered | §3 |
 | 4 | RLS / RBAC | `HDN-373` | `NOT_RUN` | §4 |
 | 5 | Financial integrity | `HDN-374` | `NOT_RUN` | §5 |
 | 6 | Data lineage | `HDN-375` | `NOT_RUN` | §6 |
@@ -190,28 +190,41 @@ release gate.
 
 ## 3. Tenant isolation — `HDN-372`
 
-> **Result, 2026-08-23 (`CG-S15-HDN-004`):** four independent parallel adversarial
-> investigations (DB/RLS/grants; API/service layer; storage/jobs/cache/reports;
-> support/AI/webhooks/audit), each with its own live two-tenant fixture, found and
-> **fixed at the root, same checkpoint**, a real cross-tenant read defect class:
-> **`HDN-BLK-011`/`ISS-2026-164`** — 9 `SECURITY DEFINER` functions (protecting 21 once
-> the `ATW-023` customer-inventory-access family's transitive dependency is counted)
-> evaluated authority against a client-supplied actor UUID rather than the verified
-> session identity, live-forced twice against `app.get_self_employee` (full employee PII)
-> and the `ATW-023` family (customer inventory/warehouse/order data), plus code-verified
-> for the audit trail, notifications and workflow/approval/shipment history. **High**, not
-> Critical — no write path affected, and live-confirmed against the real deployed project
-> that `app` is not currently exposed via the Data API (a pre-deployment state, not a
-> durable control). Fixed at
-> `supabase/migrations/20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`,
-> live re-verified post-fix (both direct and transitive), full 229-file db-test suite
-> re-confirmed green after fixing two genuine pre-existing test-fixture regressions the
-> fix surfaced. **A second, precisely-scoped finding sharing the identical shape**
-> (`HDN-BLK-012`/`ISS-2026-165`, 13 dashboard functions, no common root to fix once) was
-> deliberately **not** fixed here and handed to `HDN-373` with the exact function list and
-> fix pattern already established. **15 further Medium/Low findings** registered with
-> named owners across `HDN-373`/`376`/`377`/`378`/`379`/`382` — see `HDN-372.md` §7-§9.
-> Full evidence: `HDN-372.md`.
+> **Status: `PARTIAL`** — not a pass. See the gate-vocabulary table above.
+>
+> **Result, 2026-08-23 (`CG-S15-HDN-004`), amended at this same checkpoint's own Tier C
+> review:** four independent parallel adversarial investigations (DB/RLS/grants;
+> API/service layer; storage/jobs/cache/reports; support/AI/webhooks/audit), each with
+> its own live two-tenant fixture, found and **fixed at the root, same checkpoint**, a
+> real cross-tenant read defect class: **`HDN-BLK-011`/`ISS-2026-164`** — 13 `SECURITY
+> DEFINER` functions (9 found first, 4 more found by this checkpoint's own Tier C
+> security/tenant review and fixed in a second migration; protecting 24 total once 11
+> further transitively-dependent functions are counted) evaluated authority against a
+> client-supplied actor UUID rather than the verified session identity, live-forced
+> against `app.get_self_employee` (full employee PII), the `ATW-023`/`ATW-016`
+> owner-scope families (customer inventory/warehouse/order data), the audit trail,
+> notifications, custom-field content, and approval steps. **High**, not Critical — no
+> write path affected, and live-confirmed against the real deployed project that `app`
+> is not currently exposed via the Data API (a pre-deployment state, not a durable
+> control). Fixed at
+> `supabase/migrations/20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`
+> and `..._round2.sql`, live re-verified post-fix (both direct and transitive) and now
+> also backed by a genuine committed live two-session forced-spoof regression test (not
+> only pasted console output), full 229-file db-test suite re-confirmed green after
+> fixing two genuine pre-existing test-fixture regressions the fix surfaced. **Two
+> same-shape findings remain genuinely open, both release-blocking for Step 16 per
+> `00_EXECUTION_INDEX.md` §8.1 until fixed or explicitly ruled an accepted exception at
+> `HDN-387`/`HDN-389`:** `HDN-BLK-012`/`ISS-2026-165` (13 dashboard functions, no common
+> root) and `HDN-BLK-014`/`ISS-2026-179` (~24 further candidate functions, only 3
+> individually live-verified) — both handed to `HDN-373` with the exact function
+> lists and fix pattern already established. **One further High app-layer finding**
+> (`HDN-BLK-013`/`ISS-2026-166`, the app layer's sole reliance on the database as a
+> single point of failure on several high-privilege actions) was registered in
+> `KNOWN_ISSUES.md` since this checkpoint's first commit but had no `BLOCKER_LEDGER`
+> entry until this Tier C review corrected it — owner `HDN-378`, also release-blocking.
+> **13 further Medium/Low findings** registered with named owners across
+> `HDN-373`/`376`/`377`/`378`/`379`/`382` — see `HDN-372.md` §7-§9. Full evidence:
+> `HDN-372.md`.
 
 | Surface | Seeded state | Result |
 |---|---|---|
@@ -238,6 +251,8 @@ release gate.
 | Supreme Admin absolute CRUD | **RPD-022 ratified accepted residual risk** | Must be **disclosed**, never weakened silently, and never described as tamper-proof or immutable-for-all |
 | Maker/checker collapse | **`ISS-2026-139`** — `LYL:Edit` alone can submit **and** instantly auto-fulfill a `discount_voucher` redemption for any loyalty account in the tenant | Seeded here. Medium; re-assess under this gate |
 | Supreme-Admin-override gap | **`ISS-2026-137`** — `app.loyalty_account_tier_movements` missed from `ISS-2026-130`'s fix scope | Seeded here |
+| Actor-identity-forgery class, deferred from `HDN-372` | **`HDN-BLK-012`/`ISS-2026-165`** (High) — 13 dashboard functions (`app.get_ops_dashboard_*` ×6, `app.get_dashboard_*` ×7) share `HDN-BLK-011`'s exact defect shape (no `assert_actor_is_session_identity`), no common root to fix once. **`HDN-BLK-014`/`ISS-2026-179`** (Medium) — ~24 further boolean-oracle/narrow-scope candidate functions from a wider closure sweep, only 3 individually live-verified (`resolve_locale_context`, `has_active_tenant_membership`, `actor_holds_customer_user_layer`) | **Release blockers for Step 16 per §8.1.** Fix pattern already established at `supabase/migrations/20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`/`20260810100000_..._round2.sql` — mirror it. For `HDN-BLK-014`, verify each candidate live before fixing; the sweep list is not itself proof. Full detail `HDN-372.md` §5.5, §5.7 |
+| RLS gaps post-revocation, deferred from `HDN-372` | **`ISS-2026-171`** — `app.notifications` RLS has no tenant-membership conjunct, a revoked ex-member retains read access to past notifications. **`ISS-2026-173`** — same shape, `app.saved_report_views`. **`ISS-2026-176`** — 35 `authenticated`-readable views bypass base-table RLS by construction, structurally fragile (no current leak, no mechanical gate to catch a future regression) | Fix the membership conjunct on `171`/`173`; build the mechanical view-predicate sweep for `176` |
 
 ---
 

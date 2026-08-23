@@ -646,7 +646,14 @@ begin
   )
   select array_agg(f.proname order by f.proname) into v_unguarded
   from fn f
-  where f.args ~ 'p_actor_auth_user_id'   -- claims to act as somebody
+  where f.args ~ 'p_(actor|requester)_auth_user_id'   -- claims to act as somebody --
+                                                       -- HDN-372: broadened from
+                                                       -- 'p_actor_auth_user_id' alone,
+                                                       -- which is exactly the gap that
+                                                       -- let app.query_audit_logs/
+                                                       -- app.export_audit_logs (named
+                                                       -- p_requester_auth_user_id) go
+                                                       -- unswept and unfixed until HDN-372
     and f.auth_exec                       -- and a logged-in session can call it
     and f.provolatile = 'v'               -- and it has a side effect (pure reads are exempt)
     and f.proname not in (select proname from covered);
@@ -659,7 +666,7 @@ begin
 end;
 $$;
 
-\echo '>> HDN-372 (Step 15, Prompt 372, Tenant Isolation Audit, ISS-2026-164): the ATW-032 sweep above deliberately exempts `provolatile = ''v''` reads on the premise "a forged actor changes nothing a caller could not already read." That premise is false for a SECURITY DEFINER reader -- it bypasses RLS, so a forged actor is exactly what lets a caller read what they could not otherwise. Nine such functions were live-forced and confirmed exploitable (full disposition docs/build-log/full-system-hardening/HDN-372.md) and fixed at 20260810000000_harden_tenant_isolation_actor_identity_gaps.sql. This is a narrow, named-list regression proof for exactly those nine -- not a widening of the general sweep above, which would also flag the functions HDN-372 explicitly deferred to HDN-373 (ISS-2026-165) rather than silently reopening Tier A for work that lane, not this gate, owns.'
+\echo '>> HDN-372 (Step 15, Prompt 372, Tenant Isolation Audit, ISS-2026-164): the ATW-032 sweep above deliberately exempts `provolatile = ''v''` reads on the premise "a forged actor changes nothing a caller could not already read." That premise is false for a SECURITY DEFINER reader -- it bypasses RLS, so a forged actor is exactly what lets a caller read what they could not otherwise. 13 such functions (9 found and fixed first, 4 more found by this same checkpoint''s own Tier C review and fixed in a second migration) were live-forced and confirmed exploitable (full disposition docs/build-log/full-system-hardening/HDN-372.md) and fixed at 20260810000000_harden_tenant_isolation_actor_identity_gaps.sql / 20260810100000_harden_tenant_isolation_actor_identity_gaps_round2.sql. This is a narrow, named-list regression proof for exactly those 13 -- not a widening of the general sweep above, which would also flag the functions HDN-372 explicitly deferred to HDN-373 (ISS-2026-165, ISS-2026-179) rather than silently reopening Tier A for work that lane, not this gate, owns. Position-aware: the assert must be the function''s first executable statement (optionally after leading comment lines), not merely present anywhere in the body -- a bare substring match would still pass if the call were commented out or moved after a data read.'
 do $$
 declare
   v_fn text;
@@ -669,21 +676,107 @@ begin
                               'query_audit_logs', 'export_audit_logs',
                               'list_notifications_for_recipient', 'count_unread_notifications',
                               'get_workflow_instance_history', 'get_approval_request_history',
-                              'get_shipment_status_history'] loop
+                              'get_shipment_status_history', 'get_notification_preferences',
+                              'get_custom_field_values', 'list_pending_approval_steps_for_actor',
+                              'resolve_actor_owner_account_scope'] loop
     if not exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'app' and p.proname = v_fn
-        and p.prosrc like '%assert_actor_is_session_identity%'
+        and pg_get_functiondef(p.oid) ~ 'begin\s*(--[^\n]*\n\s*)*perform\s+app\.assert_actor_is_session_identity\('
     ) then
       v_missing := array_append(v_missing, v_fn);
     end if;
   end loop;
 
   if v_missing is not null then
-    raise exception 'assertion failed: % of the 9 functions HDN-372 fixed no longer call app.assert_actor_is_session_identity -- the tenant-isolation regression this gate exists to prevent: %', array_length(v_missing, 1), v_missing;
+    raise exception 'assertion failed: % of the 13 functions HDN-372 fixed no longer call app.assert_actor_is_session_identity as their first statement -- the tenant-isolation regression this gate exists to prevent: %', array_length(v_missing, 1), v_missing;
   end if;
 
-  raise notice 'HDN-372 actor-identity regression proof: all 9 fixed functions still call app.assert_actor_is_session_identity';
+  raise notice 'HDN-372 actor-identity regression proof: all 13 fixed functions still call app.assert_actor_is_session_identity as their first statement';
+end;
+$$;
+
+\echo '>> HDN-372 (ISS-2026-164): live two-session forced-spoof regression. A genuine authenticated session -- claimed via request.jwt.claims, not a role switch, since assert_actor_is_session_identity compares auth.uid() (GUC-derived) to the claimed actor regardless of calling role, exactly as the pre-existing ATW-031 proof above already establishes for this file -- must be refused by a representative sample of the 13 fixed functions when it claims to act as a different identity: the same live attack this checkpoint used to find and re-verify the defect, now committed as regression evidence rather than only pasted console output in the build log.'
+do $$
+declare
+  v_self uuid := '00000000-0000-0000-0000-000000000401';
+  v_victim uuid := '00000000-0000-0000-0000-000000000402';
+  v_fake_tenant uuid := gen_random_uuid();
+  v_raised boolean;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text, 'role', 'authenticated')::text, true);
+
+  -- app.get_self_employee: original 9, "add the assert" shape, LANGUAGE sql -> plpgsql.
+  v_raised := false;
+  begin
+    perform app.get_self_employee(v_fake_tenant, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_self_employee did not reject a forged actor from a genuine authenticated session -- HDN-372/ISS-2026-164 has regressed';
+  end if;
+
+  -- app.resolve_customer_owner_account_scope: root of the 10-function ATW-023 family.
+  v_raised := false;
+  begin
+    perform app.resolve_customer_owner_account_scope(v_victim, v_fake_tenant);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.resolve_customer_owner_account_scope did not reject a forged actor -- HDN-372/ISS-2026-164 has regressed, and the whole ATW-023 family is exposed again';
+  end if;
+
+  -- app.query_audit_logs: the p_requester_auth_user_id-named shape ATW-032's own
+  -- candidate regex missed until HDN-372 broadened it, above in this same file.
+  v_raised := false;
+  begin
+    perform app.query_audit_logs(v_victim, v_fake_tenant);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.query_audit_logs did not reject a forged actor -- HDN-372/ISS-2026-164 has regressed';
+  end if;
+
+  -- app.get_notification_preferences: round-2 sibling of app.list_notifications_for_
+  -- recipient/app.count_unread_notifications, found by this checkpoint's own Tier C
+  -- review after the first migration had already landed.
+  v_raised := false;
+  begin
+    perform app.get_notification_preferences(v_fake_tenant, v_victim, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_notification_preferences did not reject a forged actor -- HDN-372 round 2 has regressed';
+  end if;
+
+  -- The same session acting as ITSELF must not be blanket-denied -- v_self holds no
+  -- real tenant membership, so this must fail on a DIFFERENT, later check (or return
+  -- empty), never actor_identity_mismatch, proving the fix is not a blanket deny.
+  begin
+    perform app.resolve_customer_owner_account_scope(v_self, v_fake_tenant);
+  exception
+    when insufficient_privilege then
+      if sqlerrm ~ 'actor_identity_mismatch' then
+        raise exception 'assertion failed: app.resolve_customer_owner_account_scope rejected the caller acting as themselves -- the fix has become a blanket deny, not an identity check';
+      end if;
+    when others then
+      null; -- any non-identity failure past the assert is fine and expected here
+  end;
+
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'HDN-372 live two-session forced-spoof proof: app.get_self_employee, app.resolve_customer_owner_account_scope, app.query_audit_logs and app.get_notification_preferences all reject a forged actor from a genuine authenticated (non-superuser-identity) session; an own-identity call is not blanket-denied';
 end;
 $$;
 
