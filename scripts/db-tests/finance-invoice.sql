@@ -422,3 +422,143 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> HDN-374 (Financial Integrity Audit) finding 1 regression: a quote whose OWN line carries tax_pct (independent of FIN-195''s own p_tax_code) must never be double-taxed at invoicing -- revenue_snapshot.subtotalAmount (genuinely pre-tax) is read, never totalAmount (already tax-inclusive)'
+do $$
+declare
+  v_tenant1 uuid;
+  v_team_a uuid;
+  v_lead app.leads;
+  v_prospect app.prospects;
+  v_contact app.contacts;
+  v_opportunity app.opportunities;
+  v_request app.costing_requests;
+  v_rate app.vendor_rate_versions;
+  v_selection app.rate_selections;
+  v_rule app.margin_rule_versions;
+  v_calc_id uuid;
+  v_quote app.quotations;
+  v_send record;
+  v_account app.accounts;
+  v_handoff app.job_order_handoffs;
+  v_job app.job_orders;
+  v_evaluation app.billing_readiness_evaluations;
+  v_readiness_handoff app.billing_readiness_handoffs;
+  v_invoice app.finance_invoices;
+  v_invoice2 app.finance_invoices;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'acmeinva');
+  v_team_a := (select id from app.org_units where tenant_id = v_tenant1 and code = 'ACMEINVA-CO');
+
+  perform app.capture_lead(v_tenant1, 'manual', null, 'Invoice Tax Test Co', 'Budi Pajak', 'budi@invtaxtest.test', '0812',
+    '00000000-0000-0000-0000-000000027502', v_team_a, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_lead from app.leads where email = 'budi@invtaxtest.test';
+  perform app.qualify_lead(v_lead.id, v_lead.record_version, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_lead from app.leads where id = v_lead.id;
+  perform app.convert_lead_to_prospect(v_lead.id, 'Invoice Tax Test Co', 'ITX', '77.777.777.7-777.000',
+    jsonb_build_object('line1', 'Jl. Thamrin 1', 'city', 'Jakarta', 'country', 'ID'),
+    '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_prospect from app.prospects where lead_id = v_lead.id;
+
+  select * into v_contact from app.create_contact(v_tenant1, 'Budi Pajak', 'Procurement', 'budi@invtaxtest.test', '0812', '00000000-0000-0000-0000-000000027502', v_team_a, '00000000-0000-0000-0000-000000027502', 'tester');
+  perform app.link_contact_to_record(v_contact.id, 'prospect', v_prospect.id, 'primary', true, '00000000-0000-0000-0000-000000027502', 'tester');
+
+  select * into v_opportunity from app.create_opportunity(
+    v_tenant1, v_prospect.id, 'Invoice tax test lane',
+    jsonb_build_object('service_type', 'ocean_freight', 'cargo_description', 'General cargo', 'origin', 'Jakarta', 'destination', 'Surabaya', 'target_ready_date', '2026-08-01'),
+    '00000000-0000-0000-0000-000000027502', v_team_a, '00000000-0000-0000-0000-000000027502', 'tester'
+  );
+  select * into v_request from app.request_costing(v_opportunity.id, '[]'::jsonb, null, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_rate from app.create_rate_version(
+    v_tenant1, 'VENDOR-INV-TAX-1', 'Contoso Ocean Line', 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', '20ft',
+    null, null, null, null, 'IDR', 700000, null, '[]'::jsonb, now(), null, null, '00000000-0000-0000-0000-000000027501', 'tester'
+  );
+  perform app.approve_rate_version(v_rate.id, v_rate.record_version, '00000000-0000-0000-0000-000000027501', 'tester');
+  select * into v_selection from app.select_vendor_rate(v_request.id, v_rate.id, false, null, null, null, '00000000-0000-0000-0000-000000027502', 'tester');
+
+  -- Reuses the tenant's own already-published margin rule (the fixture setup block above
+  -- already created and published one; only one may be published at a time).
+  perform app.calculate_margin(v_selection.id, 1000000, 'IDR', 0, '00000000-0000-0000-0000-000000027502', 'tester');
+  select id into v_calc_id from app.margin_calculations where rate_selection_id = v_selection.id and is_current;
+
+  select * into v_quote from app.create_quotation_draft(v_tenant1, v_opportunity.id, 'IDR', now() + interval '14 days', v_contact.id, null, null, '00000000-0000-0000-0000-000000027502', 'tester');
+  -- The quote's OWN line-level tax_pct=11 -- independent of, and never to be confused
+  -- with, FIN-195's own p_tax_code applied later at invoicing.
+  perform app.add_quotation_line(v_quote.id, v_quote.record_version, 'service', 'Ocean freight invoice tax lane', v_calc_id, 1, 1000000, 0, 11, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_quote from app.quotations where id = v_quote.id;
+  if v_quote.subtotal_amount <> 1000000 or v_quote.tax_amount <> 110000 or v_quote.total_amount <> 1110000 then
+    raise exception 'assertion failed: expected quote subtotal=1,000,000 tax=110,000 total=1,110,000 (its own 11%% line tax), got subtotal=% tax=% total=%', v_quote.subtotal_amount, v_quote.tax_amount, v_quote.total_amount;
+  end if;
+  perform app.submit_quotation(v_quote.id, v_quote.record_version, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_send from app.send_quotation_for_acceptance(v_quote.id, null, 'email', '00000000-0000-0000-0000-000000027502', 'tester');
+  perform app.record_quotation_customer_decision(v_send.raw_token, 'accepted', 'Budi Pajak', null, null, null, null, null);
+
+  select * into v_account from app.convert_quotation_to_account(v_quote.id, null, null, '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_handoff from app.prepare_job_order_handoff(v_quote.id, '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_job from app.prepare_job_order(v_handoff.id, '00000000-0000-0000-0000-000000027502', 'rep');
+
+  if v_job.revenue_snapshot ->> 'subtotalAmount' <> '1000000.00' or v_job.revenue_snapshot ->> 'totalAmount' <> '1110000.00' then
+    raise exception 'assertion failed: expected job revenue_snapshot subtotalAmount=1000000.00 totalAmount=1110000.00, got %', v_job.revenue_snapshot;
+  end if;
+
+  select * into v_evaluation from app.evaluate_billing_readiness(v_job.id, null, '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_evaluation from app.override_billing_readiness(v_job.id, v_evaluation.record_version, 'fixture: HDN-374 finding-1 regression, out of full evidence chain scope', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_readiness_handoff from app.handoff_billing_readiness(v_job.id, 'invoice-tax-fixture-handoff-1', '00000000-0000-0000-0000-000000027502', 'rep');
+
+  -- HDN-374 finding 1 regression: prepare with FIN-195's own p_tax_code (PPN) on top of a
+  -- quote that ALREADY carried its own 11% line tax_pct. The invoice's own subtotal must
+  -- be the quote's genuine pre-tax figure (1,000,000), never its already-tax-inclusive
+  -- total (1,110,000) -- reading the latter would double the tax (122,100 instead of
+  -- 110,000, total 1,232,100 instead of 1,110,000).
+  select * into v_invoice from app.prepare_finance_invoice_from_readiness(v_tenant1, v_readiness_handoff.id, 30, 'PPN', '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  if v_invoice.subtotal_amount <> 1000000 or v_invoice.tax_amount <> 110000 or v_invoice.total_amount <> 1110000 then
+    raise exception 'assertion failed: HDN-374 finding 1 regressed -- expected invoice subtotal=1,000,000 tax=110,000 (PPN 11%% applied ONCE) total=1,110,000, got subtotal=% tax=% total=%', v_invoice.subtotal_amount, v_invoice.tax_amount, v_invoice.total_amount;
+  end if;
+
+  -- Approve and issue invoice 1 -- this job order's own first ISSUED invoice.
+  select * into v_invoice from app.submit_finance_invoice_for_approval(v_invoice.id, v_invoice.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_invoice from app.approve_finance_invoice(v_invoice.id, v_invoice.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_invoice from app.issue_finance_invoice(v_invoice.id, v_invoice.record_version, '2026-03-20'::date, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  if v_invoice.status <> 'issued' then
+    raise exception 'assertion failed: expected invoice 1 to reach issued, got %', v_invoice.status;
+  end if;
+
+  -- HDN-374 finding 2 regression: a SECOND, distinct handoff on the SAME job order (a
+  -- legitimate re-handoff, OPS-181) may still prepare, submit and approve its own draft
+  -- invoice -- that flow is sanctioned (see the discard-boundary fixture above). What must
+  -- now be refused is letting that second invoice reach `issued` while the job already has
+  -- a different issued invoice -- the actual double-billing this finding's own live-forced
+  -- reproduction demonstrated.
+  select * into v_evaluation from app.evaluate_billing_readiness(v_job.id, 'fixture: HDN-374 finding-2 regression, second handoff', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_evaluation from app.override_billing_readiness(v_job.id, v_evaluation.record_version, 'fixture: second override', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_readiness_handoff from app.handoff_billing_readiness(v_job.id, 'invoice-tax-fixture-handoff-2', '00000000-0000-0000-0000-000000027502', 'rep');
+
+  select * into v_invoice2 from app.prepare_finance_invoice_from_readiness(v_tenant1, v_readiness_handoff.id, 30, null, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  if v_invoice2.status <> 'draft' then
+    raise exception 'assertion failed: expected the second, distinct-handoff draft invoice to still be freely creatable (sanctioned re-handoff), got status %', v_invoice2.status;
+  end if;
+
+  select * into v_invoice2 from app.submit_finance_invoice_for_approval(v_invoice2.id, v_invoice2.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_invoice2 from app.approve_finance_invoice(v_invoice2.id, v_invoice2.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  if v_invoice2.status <> 'approved' then
+    raise exception 'assertion failed: expected the second invoice to reach approved (only ISSUING is blocked), got %', v_invoice2.status;
+  end if;
+
+  begin
+    perform app.issue_finance_invoice(v_invoice2.id, v_invoice2.record_version, '2026-03-21'::date, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+    raise exception 'assertion failed: HDN-374 finding 2 regressed -- expected finance_invoice_job_order_already_issued for a second invoice on a job order that already has one issued';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_invoice_job_order_already_issued' then
+        raise exception 'assertion failed: expected finance_invoice_job_order_already_issued, got %', sqlerrm;
+      end if;
+  end;
+
+  -- The blocked second invoice must remain exactly as it was (approved, not issued) --
+  -- the guard denies before any state mutation.
+  select * into v_invoice2 from app.finance_invoices where id = v_invoice2.id;
+  if v_invoice2.status <> 'approved' then
+    raise exception 'assertion failed: expected the denied second invoice to remain approved (no partial-issue side effect), got %', v_invoice2.status;
+  end if;
+end;
+$$;

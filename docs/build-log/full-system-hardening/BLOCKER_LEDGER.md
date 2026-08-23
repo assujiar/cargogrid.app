@@ -285,6 +285,15 @@ finding-by-finding disposition.*
 | **Rollback** | Additive migration only; `git revert` |
 | **`KNOWN_ISSUES`** | `ISS-2026-162` (`OPEN`, Medium); `ISS-2026-163` (`OPEN`, Low, related but separate — a different function, a different failure mode) |
 
+*Amended at `HDN-374` (2026-08-23), same checkpoint. The 6 Finance/HRIS-Payroll functions are
+now `RESOLVED` — see `ISS-2026-162`'s own amendment for the full disposition, including 4 more
+Finance functions this checkpoint's own wider sweep found sharing the identical shape (10 fixed
+total) and 2 live-forced two-process race proofs confirming the fix. The 3 non-Finance functions
+(`app.prepare_job_order_handoff`, `app.prepare_wms_inbound_from_shipment`, `app.link_auth_
+identity`) plus `app.prepare_job_order`'s own `ISS-2026-163` remain `OPEN`, explicitly handed to
+`HDN-387` (Release Blocker Triage and Remediation) rather than silently dropped or force-fit into
+this checkpoint's own Financial Integrity charter.*
+
 ---
 
 ## HDN-BLK-011 — 13 `SECURITY DEFINER` functions evaluated authority against a client-supplied actor UUID — cross-tenant PII/inventory/audit/notification read, live-forced, FIXED same checkpoint
@@ -466,6 +475,21 @@ disclosed another tenant's config data with no tenant check at all). Full dispos
 | Blockers closed **by** Step 15 to date | **1 class + 3 single** — `HDN-BLK-002` (all four member issues `RESOLVED`); `HDN-BLK-011` (fixed at `HDN-372`), `HDN-BLK-012` (its 13 dashboard functions fixed at `HDN-373` via `20260810200000_harden_dashboard_actor_identity_gaps.sql`, `ISS-2026-165`), `HDN-BLK-015` (fixed same checkpoint) |
 | — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013` (3) |
 | — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010`, `014` (8, `014` narrowed to its residual ~14-function scope -- `ISS-2026-186`) |
+| Unresolved **Critical** anywhere | **0** |
+
+`HDN-BLK-013` remains an open release blocker for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until
+fixed by its named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
+
+---
+
+## Status as of `HDN-374` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **9** — unchanged; `HDN-374` opened no new `HDN-BLK-*` entry (its findings registered as `ISS-2026-194..197`, none rising to a release-blocking `HDN-BLK-*` on their own) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — `HDN-BLK-002` (all four member issues `RESOLVED`); `HDN-BLK-011`, `HDN-BLK-012`, `HDN-BLK-015` (fixed); `HDN-BLK-010` **partially** (Finance/HRIS-Payroll portion `RESOLVED` at `HDN-374`, 3 non-Finance functions + `ISS-2026-163` handed to `HDN-387`) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013` (3, unchanged) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged count — `010`'s own scope narrowed rather than closed) |
 | Unresolved **Critical** anywhere | **0** |
 
 `HDN-BLK-013` remains an open release blocker for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until

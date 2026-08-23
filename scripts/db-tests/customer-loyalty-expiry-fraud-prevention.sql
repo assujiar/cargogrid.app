@@ -276,6 +276,50 @@ begin
   end;
 end $$;
 
+\echo '>> HDN-374 (Financial Integrity Audit) finding 4 regression: app.run_loyalty_expiry_sweep''s own p_as_of must actually govern which lots are due -- not silently ignored in favor of the real clock'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'efp1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000345001';
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and legal_name = 'Efp Account Alpha');
+  v_event_id uuid;
+  v_lot app.loyalty_point_lots;
+  v_run record;
+  v_future_as_of timestamptz;
+begin
+  insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by)
+  values ('00000000-0000-0000-0000-000000345203', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000345303', 'USD', 20, 20, 'paid', false, '2026-08-01', '2026-08-31', 'tester');
+  perform app.evaluate_customer_loyalty_earning_for_paid_invoice(v_tenant1, '00000000-0000-0000-0000-000000345203', v_manager1, 'manager1');
+  v_event_id := (select id from app.loyalty_earning_events where idempotency_key = 'ar-open-item:00000000-0000-0000-0000-000000345203');
+  perform app.post_loyalty_points_earned(v_tenant1, v_event_id, v_manager1, 'manager1', 365);
+  select * into v_lot from app.loyalty_point_lots where source_earning_event_id = v_event_id;
+
+  -- Due 2 days from the real clock -- NOT yet due by clock_timestamp().
+  update app.loyalty_point_lots set expires_at = clock_timestamp() + interval '2 days' where id = v_lot.id;
+
+  -- A sweep evaluated as of the REAL current time must not touch it.
+  select * into v_run from app.run_loyalty_expiry_sweep(v_tenant1, now(), v_manager1, 'manager1', 'as-of-regression-real-now');
+  if v_run.lots_expired_count <> 0 then
+    raise exception 'assertion failed: expected 0 lots expired when evaluated as of the real current time (lot is due 2 days from now), got %', v_run.lots_expired_count;
+  end if;
+  if exists (select 1 from app.loyalty_point_lots where id = v_lot.id and status = 'expired') then
+    raise exception 'assertion failed: expected the not-yet-due lot to remain untouched by a real-time sweep';
+  end if;
+
+  -- HDN-374 finding 4 regression: a sweep evaluated as of 3 days from now (AFTER the
+  -- lot's own due date) must expire it, even though the real clock has not reached that
+  -- date -- proving p_as_of is now actually honored, not silently discarded in favor of
+  -- clock_timestamp().
+  v_future_as_of := clock_timestamp() + interval '3 days';
+  select * into v_run from app.run_loyalty_expiry_sweep(v_tenant1, v_future_as_of, v_manager1, 'manager1', 'as-of-regression-future');
+  if v_run.lots_expired_count <> 1 then
+    raise exception 'assertion failed: HDN-374 finding 4 regressed -- expected the p_as_of-future sweep to expire the lot due 2 days from now, got lots_expired_count=%', v_run.lots_expired_count;
+  end if;
+  if not exists (select 1 from app.loyalty_point_lots where id = v_lot.id and status = 'expired') then
+    raise exception 'assertion failed: HDN-374 finding 4 regressed -- expected the lot to now be status=expired after a p_as_of-future sweep';
+  end if;
+end $$;
+
 \echo '>> storm-control (mandatory test): a REAL two-process concurrent race calling app.run_loyalty_expiry_sweep for the SAME tenant+run_label serializes -- exactly ONE real expiry, never double-processed'
 do $$
 declare

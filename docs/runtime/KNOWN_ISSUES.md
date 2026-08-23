@@ -1214,6 +1214,24 @@ Independently reproduced twice (a Tier C review lens, then the orchestrating ses
 
 **Not fixed here** — `CG-S15-HDN-003` is a regression/integrity **audit** lane. **Owner: `HDN-374`** (`CG-S15-HDN-006`, Financial Integrity Audit) for the 6 Finance/HRIS-Payroll functions — its own charter is explicitly "exact financial integrity across quotation, costing, actual cost, AR/AP, payments, journals, tax, payroll handoffs." **The 3 non-Finance functions (Commercial, WMS, Platform/Auth) are an open scope question, disclosed rather than silently assigned**: `HDN-374` may fix all 9 as one batch (mirroring the precedent this finding already set by including a Commercial function from the start) or hand the 3 to their own domain owners — a decision for `HDN-374` or `HDN-386` to make explicitly. The fix pattern already exists in this repository and does not need to be invented: mirror `prepare_wms_outbound_from_shipment`'s own "design note 9(a)" nested exception-handler shape into each of the 9 functions **at its effective migration**, each as its own additive migration with a real two-process concurrency regression test proving the race resolves gracefully — use the **uncommitted-insert-blocking technique** demonstrated above and in `HDN-371.md` §6.2 (simpler, proven on the first attempt, no shell-helper dependency), not the `\!`-based helper pattern originally recommended here. Also add a `tenant_id` predicate to the payroll function's idempotency short-circuit (currently `where payroll_run_id = p_run_id` with no tenant scoping — not currently exploitable since the function's own upstream tenant-ownership check already gates it, but worth closing in the same migration).
 
+**Amended 2026-08-23, `HDN-374`.** The Finance/HRIS-Payroll portion is **`RESOLVED`**:
+`20260811000000_harden_financial_integrity_invoicing_and_idempotency.sql` fixed all 6 named
+functions plus **4 more** this checkpoint's own wider sweep found sharing the identical shape
+(`app.post_finance_subledger_batch`, `app.create_and_post_finance_system_journal`, `app.import_
+finance_bank_statement`, `app.stage_finance_exchange_rate_import` — missed by `HDN-371`'s
+original name-prefix-scoped sweep since they use different verbs), 10 functions total, using the
+exact "design note 9(a)" pattern this entry already named, live-forced against 2 representative
+mechanisms (`app.prepare_finance_journal_reversal`'s tenant+idempotency_key predicate, `app.post_
+finance_subledger_batch`'s tenant+source_type+source_id predicate) with a genuine two-process
+race each, both confirmed to now return the winner's row gracefully instead of a raw
+`unique_violation` — regression tests in `scripts/db-tests/finance-reversal-adjustment.sql` and
+`scripts/db-tests/finance-subledger.sql`. The payroll function's `tenant_id` idempotency-scoping
+narrowing was included in the same migration. **The 3 non-Finance functions (`app.prepare_job_
+order_handoff`, `app.prepare_wms_inbound_from_shipment`, `app.link_auth_identity`) remain `OPEN`**
+— explicitly out of this checkpoint's own Financial Integrity charter, not silently dropped.
+**New owner: `HDN-387`** (Release Blocker Triage and Remediation), mirroring the precedent
+`ISS-2026-179`/`186` already set for handing a residual, cross-domain scope to that checkpoint.
+
 ### ISS-2026-163 — `app.prepare_job_order`'s exception handler can silently return an all-NULL row on an unrelated constraint violation (found at `CG-S15-HDN-003`, Prompt 371 Tier C review, `OPEN`, Low)
 
 Found while verifying `ISS-2026-162`'s "functions with the safe pattern" list is not
@@ -1246,6 +1264,13 @@ operation — this is a defensive-shape defect, not one observed to fire in prac
 this checkpoint's own diff, per `AGENTS.md`'s "fix only task-caused failures." **Owner:
 `HDN-374`** — same function family as `ISS-2026-162`, natural to close in the same fix session:
 add an `if found then return v_job_order; end if; raise;` guard matching the reference shape.
+
+**Amended 2026-08-23, `HDN-374`.** Not fixed in this checkpoint — `app.prepare_job_order` is
+Commercial/Operations domain, outside Financial Integrity's own charter, and this checkpoint's
+own bounded-repair scope was already fully committed to the 10-function idempotency-race fix
+(`ISS-2026-162`) plus 3 revenue-chain/loyalty findings. **New owner: `HDN-387`**, grouped with
+`ISS-2026-162`'s own residual 3 non-Finance functions (same "job order handoff" function family,
+same natural triage session).
 
 ### ISS-2026-164 — 13 `SECURITY DEFINER` functions evaluated authority against a client-supplied actor UUID, live-forced cross-tenant PII/inventory/audit/notification read (found at `CG-S15-HDN-004`, Prompt 372 Tenant Isolation Audit, `RESOLVED` same checkpoint, was High)
 
@@ -1386,6 +1411,115 @@ Found by the same Tier C investigation lens as `ISS-2026-187`/`188`. Not confirm
 Found by this checkpoint's own Tier C review's completeness sweep for `ISS-2026-182` (§ that entry): converting these two (among the 57 additional functions) to `SECURITY DEFINER` surfaced them to `rbac-enforcement.sql`'s own ATW-032 "no unreviewed function with zero authority check" sweep. Neither takes an actor parameter; both resolve a caller-supplied `config_version_id`/`p_config_version_id` UUID straight into `app.config_versions`/`app.config_objects`/`app.config_items` with no check that the resolved object's `tenant_id` has anything to do with the caller. **Live-forced**: a genuine `authenticated` session belonging only to tenant B read tenant A's Finance posting-map validity state, item count and pending chart-of-accounts references via `preview_finance_config_impact`, and would equivalently have read tenant A's custom-form field definitions (codes, types, options, validators) via `validate_custom_field_values`. **Severity: High** — real cross-tenant disclosure of tenant-scoped configuration/business data, reachable by any authenticated member of any tenant who knows or guesses another tenant's config-version UUID, no forged identity required (there is no actor parameter to forge). **Fixed** at `20260810900000_harden_finance_authority_chain_tierc_completeness.sql`: both now require `app.has_active_tenant_membership` against the resolved object's own tenant, checked against the session's real `auth.uid()` (there being no caller-supplied actor to check against); `auth.uid() is not null` guards the check so `service_role`/superuser callers with no session identity remain an intentional no-op, mirroring `app.assert_actor_is_session_identity`'s own established convention. Live-forced re-verification after the fix: the cross-tenant read is denied, the legitimate same-tenant read still succeeds, and the full 229-file `scripts/db-tests` suite passes clean.
 
 `app.list_n8n_action_allowlist` and `app.validate_automation_rule_definition` — the other two functions the same sweep flagged with no authority check — were independently reviewed and found genuinely correct by design (neither touches any tenant-scoped table or takes a tenant/record parameter) and registered on `rbac-enforcement.sql`'s own `v_expected` exemption list with a written reason, rather than fixed.
+
+**Amended 2026-08-23, `HDN-374`, same checkpoint.** The original fix draft gated
+`app.prepare_finance_invoice_from_readiness` itself (deny a second DRAFT invoice for an
+already-invoiced job order). Live-force verifying that draft against
+`scripts/db-tests/finance-invoice.sql`'s own existing discard-boundary fixture showed it broke a
+sanctioned flow: `20260728140000_create_operations_billing_readiness.sql` explicitly discloses
+"Multiple handoffs may exist for one Job Order over time … this migration does not forbid a
+legitimate re-handoff after a later reevaluation" (OPS-181), and the existing fixture exercises
+exactly that (a second handoff → a second draft invoice, later discarded). The guard was moved to
+`app.issue_finance_invoice` instead — the actual AR/GL posting boundary — corrected before commit,
+not left standing. See `ISS-2026-194` below for the corrected fix as shipped.
+
+### ISS-2026-194 — `app.prepare_finance_invoice_from_readiness` doubled a quote's own line-level tax at invoicing (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, High, owner `HDN-374`)
+
+`app.job_orders.revenue_snapshot` (populated once, at job-order creation, from the originating
+quotation's own `'pricing'` object — `20260724340000_create_commercial_job_order_lineage.sql`)
+always carries both `subtotalAmount` (genuinely pre-tax) and `totalAmount` (already
+tax-inclusive, whenever the quotation itself applied a line-level `tax_pct`).
+`app.prepare_finance_invoice_from_readiness` read `totalAmount` and treated it as the invoice's
+own pre-tax subtotal — so when the caller also passed `p_tax_code` (the normal invoicing path;
+every existing db-test fixture exercising this function does), `app.calculate_finance_tax`
+applied the SAME tax rate a second time on top of an amount that already included it once.
+**Live-forced**: a quote (qty=3, unit_price=333333.33, `tax_pct`=11) produced
+`subtotal=999999.99 tax=110000.00 total=1109999.99`; invoicing with `p_tax_code`='PPN' yielded
+`subtotal_amount=1109999.99 tax_amount=122100.00 total_amount=1232099.99` — a real ~11%
+overcharge (122,100.00) versus the correct 1,109,999.99. The resulting journal is internally
+balanced (AR = REV + TAX) so the ledger is self-consistent but wrong — it books and bills a
+fabricated extra tax liability; `app.calculate_finance_job_profitability` faithfully propagates
+the inflated figure into the job's reported margin. **Severity: High** — a real, silent revenue/
+tax overcharge on every taxed invoice prepared through the normal path, no special access
+required. **Fixed** at `20260811000000_harden_financial_integrity_invoicing_and_idempotency.sql`:
+reads `subtotalAmount` instead. Regression test: `scripts/db-tests/finance-invoice.sql`'s own new
+HDN-374 block (a quote with `tax_pct`=11 invoiced with `p_tax_code`='PPN' now yields
+`subtotal=1,000,000 tax=110,000 total=1,110,000`, tax applied exactly once).
+
+### ISS-2026-195 — a job order could reach `issued` on two full-amount invoices from two distinct handoffs, doubling the bill (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, High, owner `HDN-374`)
+
+`app.prepare_finance_invoice_from_readiness`'s own idempotency check only replays the SAME
+`billing_readiness_handoff_id`; nothing checked whether the job order already had an ISSUED
+invoice from a DIFFERENT handoff. `app.handoff_billing_readiness` takes only `job_order_id` and
+`p_idempotency_key` — no portion/amount parameter exists anywhere in this codebase's schema — so
+a second, legitimate re-handoff (OPS-181, see the `ISS-2026-162` amendment above) re-reads the
+job's own FULL `revenue_snapshot` total again. **Live-forced**: a single job with real revenue
+3,000,000 was invoiced twice via two handoffs, both landing `issued`, 3,000,000 each — 6,000,000
+billed for 3,000,000 of work, with no special access and no readiness re-evaluation beyond the
+already-sanctioned re-handoff flow. **Severity: High** — real double billing, reachable via the
+codebase's own documented re-handoff allowance, no forged identity or special access required.
+This codebase has no working partial-invoicing feature to preserve (confirmed: no amount/portion
+parameter on the handoff RPC, no per-invoice remaining-balance tracking on `job_orders`) —
+building one would be a new product feature, outside this audit checkpoint's own charter. **Fixed**
+at `20260811000000_harden_financial_integrity_invoicing_and_idempotency.sql`: the bounded repair
+is a guard, not a feature, placed at the actual posting boundary — `app.issue_finance_invoice` now
+denies issuing an invoice for a job order that already has a DIFFERENT invoice in `issued` status.
+Draft/submitted/approved invoices from a legitimate re-handoff remain freely creatable and
+discardable (the sanctioned flow `finance-invoice.sql`'s own discard-boundary fixture already
+exercises); only the second `issued` — the actual AR/GL posting event — is blocked. Regression
+test: `scripts/db-tests/finance-invoice.sql`'s own new HDN-374 block (a second, distinct-handoff
+invoice reaches `approved` freely, then is denied `finance_invoice_job_order_already_issued` on
+`issue_finance_invoice`, remaining `approved` with no partial-issue side effect).
+
+### ISS-2026-196 — `app.run_loyalty_expiry_sweep`'s own `p_as_of` parameter was silently ignored (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, Medium, owner `HDN-374`)
+
+`app.run_loyalty_expiry_sweep(p_tenant_id, p_as_of, ...)` computed `v_as_of :=
+coalesce(p_as_of, clock_timestamp())` and recorded it in the completed job's own payload/
+run_label for evidence purposes, but never actually passed it to either primitive it composes —
+`app.expire_loyalty_point_lots`/`app.expire_loyalty_benefit_entitlements` each hardcoded their own
+scan predicate to `expires_at <= clock_timestamp()` and accepted no as-of argument at all.
+**Live-forced**: a lot due to expire in 2 days was swept with `p_as_of` set 3 days into the
+future — the sweep silently used the REAL current time instead, leaving the lot untouched, while
+the completed job's own payload nonetheless recorded `as_of` as the requested future timestamp,
+misrepresenting what was actually evaluated. **Severity: Medium** — a caller relying on `p_as_of`
+for a backdated/as-of-a-specific-instant run (the documented purpose of accepting the parameter
+at all) gets silently wrong behavior; no live scheduler exists yet to invoke this on a recurring
+basis (disclosed `NOT_RUN` class, `app.run_loyalty_expiry_sweep`'s own comment), bounding current
+exposure to on-demand/staff-triggered calls. **Fixed** at
+`20260811000000_harden_financial_integrity_invoicing_and_idempotency.sql`: both primitives gain a
+new trailing `p_as_of timestamptz default null` parameter (default preserves every existing
+direct caller's own current-time behavior unchanged — `scripts/db-tests/customer-loyalty-points-
+ledger.sql`/`customer-loyalty-benefits.sql`'s own existing 3-arg calls continue to work
+unchanged); each now scans `expires_at <= coalesce(p_as_of, clock_timestamp())`.
+`app.run_loyalty_expiry_sweep` now passes its own already-computed `v_as_of` through to both.
+Regression test: `scripts/db-tests/customer-loyalty-expiry-fraud-prevention.sql`'s own new
+HDN-374 block (a lot due in 2 days is untouched by a real-time sweep, then expired by a sweep
+evaluated 3 days into the future).
+
+### ISS-2026-197 — no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-time total, never the actual invoiced/billed figure (found at `CG-S15-HDN-006`, `OPEN`, Low, owner `HDN-386`)
+
+Two related, disclosed-not-fixed structural observations from this checkpoint's own revenue-chain
+investigation lens, neither a repair-shaped defect (both are absences/design choices, not
+regressions this checkpoint's own diff caused):
+
+1. **No FX conversion anywhere in the revenue chain.** A quote/job/invoice's own currency is
+   carried through verbatim end to end (`app.validate_currency_code` gates it; nothing converts
+   it). `app.finance_exchange_rates` exists and is populated (`FIN-193`/`stage_finance_exchange_
+   rate_import`, this same checkpoint's own Finding 3 fix), but nothing in the revenue chain reads
+   it — multi-country/multi-currency billing is a structural absence, not observed drift.
+   RPD-016 already scopes this repository as Indonesia-first with multi-country localization
+   deferred; building FX conversion would be a new product feature, outside this audit's charter.
+2. **`app.calculate_job_profitability`** (Operations-side profitability, distinct from the
+   Finance-side "billed basis" function which is correctly formula'd) always uses the static
+   quote-time `revenue_snapshot.totalAmount` as its own revenue figure, never the actual invoiced/
+   issued total — a planned-vs-actual split, not a bug in the formula itself. Nothing in the UI
+   contract layer was audited (out of this database-focused investigation's own scope) to confirm
+   a viewer cannot mistake the Operations-side planned figure for a final, invoiced margin.
+
+**Not fixed here** — both are scope/design questions needing a product ruling, not a bounded
+database repair. **Owner: `HDN-386`** (Full-System Hardening Integrated Verification) — the
+first downstream checkpoint positioned to rule on cross-cutting scope questions before Step 16
+go/no-go; forward to `HDN-387`/`389` if `HDN-386` does not resolve it explicitly.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.

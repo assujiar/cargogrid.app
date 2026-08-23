@@ -483,4 +483,63 @@ begin
 end;
 $$;
 
+\echo '>> HDN-374 (Financial Integrity Audit) finding 3 regression: a REAL two-process concurrent race -- both processes call app.prepare_finance_journal_reversal for the SAME original journal with the IDENTICAL idempotency_key at the same instant. Before the fix, the losing process surfaced a raw duplicate-key error to its caller; after the fix, it must gracefully return the SAME winning correction row -- exactly one correction row must exist, never two, never a raw unique_violation'
+do $$
+declare
+  v_tenant_a uuid;
+  v_cash_id uuid;
+  v_rev_id uuid;
+  v_journal app.finance_journals;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmereva');
+  v_cash_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'CASH-REV');
+  v_rev_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'REV-REV');
+
+  select * into v_journal from app.create_finance_journal_draft(v_tenant_a, null, '2026-04-20'::date, 'USD',
+    jsonb_build_array(
+      jsonb_build_object('accountId', v_cash_id, 'direction', 'debit', 'amount', 500),
+      jsonb_build_object('accountId', v_rev_id, 'direction', 'credit', 'amount', 500)
+    ), 'rev-race-original-1', '00000000-0000-0000-0000-000000031002', 'financemanagera');
+  perform app.submit_finance_journal_for_approval(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031002', 'financemanagera');
+  select * into v_journal from app.finance_journals where id = v_journal.id;
+  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031001', 'admina');
+  select * into v_journal from app.finance_journals where id = v_journal.id;
+  perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031001', 'admina');
+end;
+$$;
+
+select id as race_journal_id from app.finance_journals where tenant_id = (select id from app.tenants where slug = 'acmereva') and idempotency_key = 'rev-race-original-1' \gset
+select id as race_tenant_id from app.tenants where slug = 'acmereva' \gset
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as race_bpid \gset
+
+\set race_sql_a 'select app.prepare_finance_journal_reversal(''' :race_tenant_id ''', null, ''' :race_journal_id ''', ''2026-04-21'', ''concurrent reversal race'', null, ''rev-race-key-1'', ''00000000-0000-0000-0000-000000031002'', ''financemanagera'');'
+\set race_sql_b 'select app.prepare_finance_journal_reversal(''' :race_tenant_id ''', null, ''' :race_journal_id ''', ''2026-04-21'', ''concurrent reversal race'', null, ''rev-race-key-1'', ''00000000-0000-0000-0000-000000031002'', ''financemanagera'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-fin-reversal-race-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-fin-reversal-race-b-:race_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_tenant_a uuid;
+  v_count integer;
+  v_correction_ids uuid[];
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmereva');
+
+  select count(*), array_agg(distinct id) into v_count, v_correction_ids
+    from app.finance_journal_corrections where tenant_id = v_tenant_a and idempotency_key = 'rev-race-key-1';
+  if v_count <> 1 then
+    raise exception 'assertion failed: HDN-374 finding 3 regressed -- expected exactly ONE correction row to survive the concurrent race (never two, never zero -- a raw unique_violation reaching a caller means this fix is not applied), got % (ids=%) -- see the RACE_OUT_A/RACE_OUT_B process output captured above', v_count, v_correction_ids;
+  end if;
+
+  raise notice 'concurrent reversal-prepare race proof: exactly 1 correction row survived two genuinely concurrent psql processes racing the SAME idempotency_key -- the loser was handed the winner''s row gracefully, never a raw unique_violation';
+end;
+$$;
+
 \echo 'ALL FIN-206 (Reversal and Adjustment) db-test assertions passed.'
