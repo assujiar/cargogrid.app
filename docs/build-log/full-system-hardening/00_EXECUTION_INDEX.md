@@ -300,7 +300,7 @@ never a carried-forward figure:
 | `pnpm run typecheck` | **0 errors** | |
 | `pnpm run lint` | **0 errors / 337 warnings** | Same pre-existing `@next/next/no-html-link-for-pages` class and identical count as Phase 9's own closure baseline — unchanged by this checkpoint |
 | `pnpm run test` | **5394 / 5394 pass, 0 fail** | Pre-commit it was 5393/5394; the sole failure was the known checkpoint-state-dependent `checkWorktreeCollision` class, which resolved once this checkpoint's commit existed — the same class the Phase 8 and Phase 9 kickoff baselines disclosed. Detail: `HDN-369.md` §7.1/§7.4 |
-| `bash scripts/db-tests/run.sh` | **`ALL PASSED` — 229 / 229 files** | Full unmodified suite, 306 migrations, fresh disposable database, observed in full. A second belt-and-braces re-run on the committed tree had not finished at commit time and **no result is claimed for it** — `HDN-369.md` §7.6 |
+| `bash scripts/db-tests/run.sh` | **`ALL PASSED` — 229 / 229 files** | Full unmodified suite, 306 migrations, fresh disposable database. Observed green **twice**: pre-commit, and again in full on the committed tree (`running 229 test file(s)` → `ALL PASSED`, exit 0). `HDN-369.md` §7.6 |
 | `pnpm run docs:check` | **passed** | Caught two real forward-reference defects during authoring — citations to build logs that do not exist yet. Both fixed. `HDN-369.md` §7.5 |
 | `pnpm run security:check` | **passed** | No secret-shaped pattern in any tracked file |
 | `pnpm run git:check-paths` | **passed** | 10 files checked, 0 forbidden, 5 CAUTION flags — the five `docs/runtime/` ledgers, expected for an append-only path. No historical row deleted (verified by diff) |
