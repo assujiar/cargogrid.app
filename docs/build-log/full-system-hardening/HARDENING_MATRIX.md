@@ -29,7 +29,7 @@ from zero and no lane rediscovers a known item.
 |---|---|---|---|---|
 | 1 | Full regression | `HDN-370` **`VERIFIED`** | **`PARTIAL`** — all local gates green; **CI red on all 3 jobs**; `test:e2e` a `TRACKED_GAP` | §1 |
 | 2 | Cross-module transactional integrity | `HDN-371` **`VERIFIED`** | **`PARTIAL`** — every named chain reconciled except loyalty/portal (not examined, tracked gap); one systemic finding (`HDN-BLK-010`, 9 functions, Medium), live-forced-race proven | §2 |
-| 3 | Tenant isolation | `HDN-372` | `NOT_RUN` | §3 |
+| 3 | Tenant isolation | `HDN-372` **`COMPLETED`** | **`PARTIAL`** — not a pass. One High cross-tenant read class found and fixed at the root (`HDN-BLK-011`); a precisely-scoped second, same-shape finding remains genuinely open (`HDN-BLK-012`, deferred to `HDN-373` with the fix pattern already established); 15 further Medium/Low findings registered | §3 |
 | 4 | RLS / RBAC | `HDN-373` | `NOT_RUN` | §4 |
 | 5 | Financial integrity | `HDN-374` | `NOT_RUN` | §5 |
 | 6 | Data lineage | `HDN-375` | `NOT_RUN` | §6 |
@@ -190,14 +190,37 @@ release gate.
 
 ## 3. Tenant isolation — `HDN-372`
 
-| Surface | Seeded state | Required |
+> **Result, 2026-08-23 (`CG-S15-HDN-004`):** four independent parallel adversarial
+> investigations (DB/RLS/grants; API/service layer; storage/jobs/cache/reports;
+> support/AI/webhooks/audit), each with its own live two-tenant fixture, found and
+> **fixed at the root, same checkpoint**, a real cross-tenant read defect class:
+> **`HDN-BLK-011`/`ISS-2026-164`** — 9 `SECURITY DEFINER` functions (protecting 21 once
+> the `ATW-023` customer-inventory-access family's transitive dependency is counted)
+> evaluated authority against a client-supplied actor UUID rather than the verified
+> session identity, live-forced twice against `app.get_self_employee` (full employee PII)
+> and the `ATW-023` family (customer inventory/warehouse/order data), plus code-verified
+> for the audit trail, notifications and workflow/approval/shipment history. **High**, not
+> Critical — no write path affected, and live-confirmed against the real deployed project
+> that `app` is not currently exposed via the Data API (a pre-deployment state, not a
+> durable control). Fixed at
+> `supabase/migrations/20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`,
+> live re-verified post-fix (both direct and transitive), full 229-file db-test suite
+> re-confirmed green after fixing two genuine pre-existing test-fixture regressions the
+> fix surfaced. **A second, precisely-scoped finding sharing the identical shape**
+> (`HDN-BLK-012`/`ISS-2026-165`, 13 dashboard functions, no common root to fix once) was
+> deliberately **not** fixed here and handed to `HDN-373` with the exact function list and
+> fix pattern already established. **15 further Medium/Low findings** registered with
+> named owners across `HDN-373`/`376`/`377`/`378`/`379`/`382` — see `HDN-372.md` §7-§9.
+> Full evidence: `HDN-372.md`.
+
+| Surface | Seeded state | Result |
 |---|---|---|
-| Database / RLS | 568 tables RLS-enabled, 448 policies on the live project | Cross-tenant negative tests per surface |
-| PostgREST exposure | `app` is **not** in the Data API's `db_schema` (`public,graphql_public`), so no `app` table is reachable over PostgREST regardless of RLS | Confirm still true; do not treat as a substitute for RLS |
-| Storage, cache, queue, reports, exports, jobs, integrations, AI context | Built across Phases 1–9 | Tenant A/B negative tests each |
-| Support / impersonation | Purpose- and time-bound, logged, revocable | Test revocation propagation |
-| Exception message leakage | **`ISS-2026-146`** — cross-tenant `tenant_id` disclosure via exception text, 2,087+ occurrences since Phase 6, reproduced live | Seeded here. Low, but it *is* a cross-tenant disclosure — re-assess reachability under this gate's own severity policy |
-| SSO config enumeration | **`ISS-2026-149`** — `app.resolve_enterprise_idp_by_email_domain` is an unthrottled, anonymous, cross-tenant enumeration oracle | Seeded here; also relevant to `HDN-378` |
+| Database / RLS | 568 tables RLS-enabled, 448 policies on the live project | **Reconciled.** Whole-schema posture census: `authenticated` holds `SELECT` only on 407 tables, zero write grants anywhere in `app`; exhaustive tautology scan of all 448 policies found zero self-comparison bugs; every write necessarily routes through a `SECURITY DEFINER` function, which is why real risk concentrated in the function surface (`HDN-BLK-011`/`012`), not raw table grants |
+| PostgREST exposure | `app` is **not** in the Data API's `db_schema` (`public,graphql_public`), so no `app` table is reachable over PostgREST regardless of RLS | **Confirmed still true, live, against the real deployed project** (`awdlicmwzdxquopwtcfd`) — `curl` with `Accept-Profile: app` → `PGRST106 Invalid schema: app`. Extended: this also means no `app.*` RPC is directly callable, not only tables — the finding this checkpoint's own note below explains why that is disclosed as a configuration state, not a substitute for RLS/identity checks |
+| Storage, cache, queue, reports, exports, jobs, integrations, AI context | Built across Phases 1–9 | **Reconciled**, with 6 registered Low/Medium findings (`ISS-2026-171..176`) — no signed-URL machinery exists yet (nothing to bypass), no shared caching layer exists yet except one dormant untenanted cache key, job/queue tenant binding confirmed immutable and re-validated at every hop, report/export functions all tenant-filtered with zero `select("*")` C-17 defects found |
+| Support / impersonation | Purpose- and time-bound, logged, revocable | **Reconciled** — live-tested structurally incapable of crossing a tenant boundary (`tenant_id`/`grantee_auth_user_id` both `NOT NULL` FKs); one granularity gap registered (`ISS-2026-177`, session-open events absent from the canonical audit surface) |
+| Exception message leakage | **`ISS-2026-146`** — cross-tenant `tenant_id` disclosure via exception text, 2,087+ occurrences since Phase 6, reproduced live | **Re-confirmed and extended.** This checkpoint's own `ISS-2026-167` is the same defect class, live-proven end to end (`create_quotation_draft`) with an exact reproduction and the correct in-repo counter-pattern to copy (`app.get_customer_shipment_tracking`'s merged anti-enumerating error). Both issues describe the same root cause; `HDN-376` (API Compatibility Audit, `ISS-2026-167`'s named owner) should treat them as one remediation, not two |
+| SSO config enumeration | **`ISS-2026-149`** — `app.resolve_enterprise_idp_by_email_domain` is an unthrottled, anonymous, cross-tenant enumeration oracle | Not re-examined this checkpoint (out of this lane's four investigation lenses' scope); remains seeded for `HDN-378` |
 
 **Hard gate:** `HDN-372` must be `VERIFIED` before `HDN-373` and `HDN-378` begin.
 

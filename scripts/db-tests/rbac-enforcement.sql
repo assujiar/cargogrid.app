@@ -353,23 +353,25 @@ declare
     'current_support_session', 'has_active_support_grant',
     'customer_warehouse_eligibility_active', 'resolve_customer_owner_account_scope',
     'evaluate_dispatch_readiness',
-    -- HRT-278 (pre-existing, PRE-DATES HRT-280 -- proven via a captured baseline:
-    -- `TEST_DB_NAME=cargogrid_db_test_impl280_baseline pnpm run db:test` re-run
-    -- with HRT-280's own two migrations temporarily removed reproduces this SAME
-    -- single-entry {get_self_employee} failure byte-for-byte, confirming HRT-280
-    -- did not cause it -- docs/runtime/ERROR_LEDGER.md). app.get_self_employee
-    -- takes p_actor_auth_user_id as an ordinary parameter but is correct by
-    -- design: its own WHERE clause (`u.auth_user_id = p_actor_auth_user_id`) can
-    -- only ever return the CALLING actor''s own linked employee row, never
-    -- another actor''s -- there is no p_target_employee_id-shaped parameter for
-    -- it to leak through. Every one of its own call sites (HRT-278/279/280)
-    -- additionally calls app.assert_actor_is_session_identity before invoking it,
-    -- which this call-graph sweep does not credit (assert_actor_is_session_identity
-    -- itself carries no closure-qualifying keyword in its own body -- it is a
-    -- session/claim primitive, not a tenant/authority lookup). Genuinely
-    -- correct-by-design, not a live gap -- added here per this test''s own
-    -- documented escape hatch rather than left as a permanently-red Tier A gate
-    -- for every future checkpoint.
+    -- app.get_self_employee's own exemption reason CORRECTED at HDN-372 (Step 15,
+    -- Prompt 372, Tenant Isolation Audit) -- this sweep's own closure genuinely requires
+    -- it to stay named here, since it has no AUTHORITY check (evaluate_permission/
+    -- can_access_record/etc.) and structurally needs none: once identity is proven, the
+    -- query is inherently self-scoped (`u.auth_user_id = p_actor_auth_user_id`) and can
+    -- only ever return the CALLING actor's own linked employee row. What was WRONG in
+    -- the original reasoning is the IDENTITY half: it claimed "every one of its own call
+    -- sites additionally calls app.assert_actor_is_session_identity before invoking it"
+    -- as the reason the gap was safe -- true for its intended callers, but it is
+    -- SECURITY DEFINER and granted EXECUTE directly to authenticated, so any session
+    -- could call it standalone, bypassing whatever a caller-side wrapper does. HDN-372
+    -- live-forced exactly this and confirmed a real cross-tenant PII read
+    -- (docs/build-log/full-system-hardening/HDN-372.md). Fixed at the root: the assert
+    -- now lives inside app.get_self_employee itself
+    -- (20260810000000_harden_tenant_isolation_actor_identity_gaps.sql) rather than being
+    -- assumed from caller convention -- verified by the separate, dedicated HDN-372
+    -- regression check further down this file, which this authority-surface sweep does
+    -- not replace (identity and authority remain two different checks in this codebase's
+    -- own vocabulary, and this function only ever needed the former).
     'get_self_employee',
     -- HRT-287 (Prompt 287, Customer-to-Tenant Ticket, CG-S12-HRT-015): this
     -- migration is the first to use app.actor_holds_customer_user_layer as a
@@ -654,6 +656,34 @@ begin
   end if;
 
   raise notice 'ATW-032 actor-authority proof: no side-effecting client-callable function accepts a p_actor_auth_user_id it never proves belongs to the caller';
+end;
+$$;
+
+\echo '>> HDN-372 (Step 15, Prompt 372, Tenant Isolation Audit, ISS-2026-164): the ATW-032 sweep above deliberately exempts `provolatile = ''v''` reads on the premise "a forged actor changes nothing a caller could not already read." That premise is false for a SECURITY DEFINER reader -- it bypasses RLS, so a forged actor is exactly what lets a caller read what they could not otherwise. Nine such functions were live-forced and confirmed exploitable (full disposition docs/build-log/full-system-hardening/HDN-372.md) and fixed at 20260810000000_harden_tenant_isolation_actor_identity_gaps.sql. This is a narrow, named-list regression proof for exactly those nine -- not a widening of the general sweep above, which would also flag the functions HDN-372 explicitly deferred to HDN-373 (ISS-2026-165) rather than silently reopening Tier A for work that lane, not this gate, owns.'
+do $$
+declare
+  v_fn text;
+  v_missing text[];
+begin
+  foreach v_fn in array array['get_self_employee', 'resolve_customer_owner_account_scope',
+                              'query_audit_logs', 'export_audit_logs',
+                              'list_notifications_for_recipient', 'count_unread_notifications',
+                              'get_workflow_instance_history', 'get_approval_request_history',
+                              'get_shipment_status_history'] loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = v_fn
+        and p.prosrc like '%assert_actor_is_session_identity%'
+    ) then
+      v_missing := array_append(v_missing, v_fn);
+    end if;
+  end loop;
+
+  if v_missing is not null then
+    raise exception 'assertion failed: % of the 9 functions HDN-372 fixed no longer call app.assert_actor_is_session_identity -- the tenant-isolation regression this gate exists to prevent: %', array_length(v_missing, 1), v_missing;
+  end if;
+
+  raise notice 'HDN-372 actor-identity regression proof: all 9 fixed functions still call app.assert_actor_is_session_identity';
 end;
 $$;
 

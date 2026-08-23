@@ -1217,6 +1217,17 @@ begin
     end;
     reset role;
   end;
+  -- HDN-372 (Step 15, Prompt 372, Tenant Isolation Audit): `reset role` above restores
+  -- the calling superuser role, but `request.jwt.claims` was set with `set_config(...,
+  -- true)` -- LOCAL to this transaction, not tied to the role -- so it would otherwise
+  -- keep resolving auth.uid() to v_viewer for the rest of this block. app.query_audit_logs
+  -- below is called with a different, hardcoded actor (the tenant_admin); since
+  -- HDN-372 wired app.assert_actor_is_session_identity into it, that call now correctly
+  -- requires auth.uid() to either match the passed actor or be NULL (the ordinary,
+  -- session-less shape every other call in this file already uses). Clearing it here
+  -- restores that shape rather than leaving a stale forged-actor session bleeding into
+  -- unrelated assertions below.
+  perform set_config('request.jwt.claims', null, true);
 
   -- (e) HRT-293 Finding B: app.audit_logs never carries the raw suspend_reason, for this action or any prior action in this same test run, and a plain tenant_admin (zero HRS grant) reading via app.query_audit_logs never sees it either.
   if exists (select 1 from app.audit_logs where reason = v_reason) then

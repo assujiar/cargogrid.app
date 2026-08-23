@@ -287,8 +287,60 @@ finding-by-finding disposition.*
 
 ---
 
+## HDN-BLK-011 — 9 `SECURITY DEFINER` functions evaluated authority against a client-supplied actor UUID — cross-tenant PII/inventory/audit/notification read, live-forced, FIXED same checkpoint
+
+| Field | Value |
+|---|---|
+| **Title** | The `ATW-032` sweep's own "STABLE/IMMUTABLE reads are exempt" premise is false for a `SECURITY DEFINER` function — it bypasses RLS, so a forged actor is exactly what lets a caller read what they could not otherwise. 9 functions (1 direct root of a 12-function family, plus 8 independent) evaluated authority against a claimed actor with no `assert_actor_is_session_identity` check anywhere in their call graph |
+| **Found by** | `HDN-372` (`CG-S15-HDN-004`), Tenant Isolation Audit, via four independent parallel adversarial investigations (DB/RLS/grants; API/service layer; storage/jobs/cache/reports; support/AI/webhooks/audit), each building its own live two-tenant fixture |
+| **Severity** | **High.** Cross-tenant read (per `00_EXECUTION_INDEX.md` §7), live-forced twice independently. Not Critical: no write path affected; live-confirmed against the real deployed project (`awdlicmwzdxquopwtcfd`) that `app` is not currently exposed via the Data API (`PGRST106`), so the class is not reachable at this exact checkpoint — disclosed as a pre-deployment configuration state, not accepted as a durable compensating control, since the application's own shipped code requires `app` exposed to function |
+| **Owning phase** | Cross-cutting — Phase 1 (Platform, `resolve_customer_owner_account_scope`'s own root class mirrors `CPL-300`), Phase 3 (HRIS, `get_self_employee`), Phase 4 (Finance-adjacent, audit trail), Phase 5 (WMS, customer inventory family), Phase 9 (workflow/approval history) |
+| **Owning lane** | **`HDN-372`(this lane) — fixed, not deferred.** Squarely this lane's own charter (tenant isolation, cross-tenant read), the fix pattern is mechanical and already proven twice in this exact codebase (`ATW-031`/`ATW-032`/`CPL-300`), and Prompt 372's own business rules require blocking release on Critical/High isolation failures |
+| **Reachability** | Any `authenticated` session that knows a victim tenant's own real member's `auth_user_id` (trivially obtainable intra-tenant via `app.users`; cross-tenant requires the victim's own tenant_id and a real member's UUID, e.g. from a prior interaction, a support ticket, a data breach elsewhere) |
+| **Reproduction** | **Live-forced twice**, independently, by two different investigation lenses plus re-verified by the orchestrating session post-fix. Exact technique and output: `HDN-372.md` §5.1-§5.4 |
+| **Blast radius — measured, not estimated** | 9 functions fixed directly, 12 more (the `ATW-023` family) protected transitively through 1 of the 9 (`resolve_customer_owner_account_scope`) — **21 functions total**. Full list: `HDN-372.md` §5.2 |
+| **Disposition** | **`FIXED`** — `supabase/migrations/20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`, same checkpoint |
+| **Regression test** | `scripts/db-tests/rbac-enforcement.sql`'s new named-list check (§ "HDN-372") proving all 9 fixed functions still call `app.assert_actor_is_session_identity`; live-forced attack re-run post-fix confirming `actor_identity_mismatch` on all tested paths, both direct and transitive; full 229-file db-test suite re-confirmed green (third run, after two genuine pre-existing test-fixture regressions this fix surfaced were also fixed, `HDN-372.md` §6.3) |
+| **Rollback** | Additive migration only (`create or replace function`, no schema change); `git revert` |
+| **`KNOWN_ISSUES`** | `ISS-2026-164` (`RESOLVED` same checkpoint, was High) |
+
+---
+
+## HDN-BLK-012 — 13 dashboard read functions share the identical actor-forgery shape as `HDN-BLK-011`, no common root, deferred to `HDN-373`
+
+| Field | Value |
+|---|---|
+| **Title** | `app.get_ops_dashboard_*` (6) and `app.get_dashboard_*` (7) each independently call `app.can_access_record(p_actor_auth_user_id, ...)` inline with no identity check anywhere in the chain — the same root cause as `HDN-BLK-011`, but with no shared primitive to fix once |
+| **Found by** | `HDN-372` (`CG-S15-HDN-004`), Tenant Isolation Audit — investigation lens 3, confirmed directly by the orchestrating session against the live catalogue |
+| **Severity** | **High** (same reachability/blast-radius reasoning as `HDN-BLK-011` — cross-tenant read, not currently reachable via the Data API per the same disclosed caveat) |
+| **Owning phase** | Phase 3 (Operations dashboard), Phase 2 (Commercial dashboard) |
+| **Owning lane** | **`HDN-373`** (RLS/RBAC Audit) — the very next lane in this range, the closest charter match; `HDN-372` (this lane) is not deferring this to hide it but because 13 independent `language sql` → `language plpgsql` conversions is a larger, separately-reviewable unit of work than bundling into an already-large 9-function migration |
+| **Reachability** | Same as `HDN-BLK-011` |
+| **Reproduction** | Code-verified directly against the live catalogue for all 13: `p_actor_auth_user_id uuid default auth.uid()`, `has_assert=false`, `has_can_access=true` — full query and output `HDN-372.md` §5.5 |
+| **Blast radius — measured, not estimated** | 13 functions, 2 migration files (`20260728150000_create_operations_dashboard.sql`, `20260724320000_create_commercial_dashboard.sql`), exact function list in `HDN-372.md` §5.5 |
+| **Disposition** | **`DEFERRED_TO_HDN-373`** |
+| **Required of `HDN-373`** | Convert each of the 13 from `language sql` to `language plpgsql`, adding `perform app.assert_actor_is_session_identity(p_actor_auth_user_id);` as the first statement — identical fix pattern to `HDN-BLK-011`'s own migration (`20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`), which is the reference to mirror |
+| **Regression test** | Required with the fix: a live-forced spoof attempt per function (or a representative sample plus a named-list check mirroring `HDN-372`'s own regression test), proving `actor_identity_mismatch` on a forged actor |
+| **Rollback** | Additive migration only; `git revert` |
+| **`KNOWN_ISSUES`** | `ISS-2026-165` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-372` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **6** — `HDN-BLK-007` (High), `008` (Medium), `009` (Medium) at `HDN-370`; `HDN-BLK-010` (Medium) at `HDN-371`; `HDN-BLK-011` (High, closed same checkpoint) and `HDN-BLK-012` (High) at `HDN-372` |
+| Blockers closed **by** Step 15 to date | **1 class + 1 single** — `HDN-BLK-002` (all four member issues `RESOLVED`); `HDN-BLK-011` (fixed same checkpoint) |
+| Total open entries | **10** — `HDN-BLK-001`, `003..010`, `012` (`002` and `011` closed) |
+| — of which **High** | **3** (`HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-012`) |
+| — of which **Medium** | **7** (`HDN-BLK-003..006`, `008`, `009`, `010`) |
+| Unresolved **Critical** anywhere | **0** |
+
+---
+
 ## Reserved
 
-`HDN-BLK-011` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-013` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.
