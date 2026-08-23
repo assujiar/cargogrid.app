@@ -62,6 +62,11 @@ begin
   perform app.set_role_version_permissions(v_manager_draft_a.id, array(select id from app.permissions where resource_module_code = 'FIN' and action in ('Create', 'Edit', 'Approve', 'View')), 'tester');
   perform app.publish_role_version(v_manager_draft_a.id, now(), 'tester');
   perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000032002', '00000000-0000-0000-0000-000000032001', 'tester');
+  -- HDN-373 (ISS-2026-181, maker/checker): admina also holds Finance Manager so it can
+  -- act as a genuinely distinct approver/poster from financemanagera, the preparer, in
+  -- the scenarios below -- app.approve_finance_journal/app.post_finance_journal now deny
+  -- an actor approving or posting their own submission.
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000032001', '00000000-0000-0000-0000-000000032001', 'tester');
 
   v_editor_role_a := (app.create_role(v_tenant_a, 'Finance Editor', 'edit only, no approve', 'tester')).id;
   v_editor_draft_a := app.create_role_version(v_editor_role_a, 'tester');
@@ -173,11 +178,11 @@ begin
     ), 'lock-journal-1', '00000000-0000-0000-0000-000000032002', 'financemanagera');
   perform app.submit_finance_journal_for_approval(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
   select * into v_journal from app.finance_journals where id = v_journal.id;
-  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
   select * into v_journal from app.finance_journals where id = v_journal.id;
 
   begin
-    perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+    perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
     raise exception 'assertion failed: expected finance_period_locked for a gl-locked period';
   exception
     when others then
@@ -246,9 +251,9 @@ begin
     ), 'lock-journal-2', '00000000-0000-0000-0000-000000032002', 'financemanagera');
   perform app.submit_finance_journal_for_approval(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
   select * into v_journal from app.finance_journals where id = v_journal.id;
-  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
   select * into v_journal from app.finance_journals where id = v_journal.id;
-  perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+  perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
   if not exists (select 1 from app.finance_journals where id = v_journal.id and status = 'posted') then
     raise exception 'assertion failed: expected posting to succeed inside the reopen window';
   end if;
@@ -266,11 +271,11 @@ begin
       ), 'lock-journal-3', '00000000-0000-0000-0000-000000032002', 'financemanagera');
     perform app.submit_finance_journal_for_approval(v_journal_after_expiry.id, v_journal_after_expiry.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
     select * into v_journal_after_expiry from app.finance_journals where id = v_journal_after_expiry.id;
-    perform app.approve_finance_journal(v_journal_after_expiry.id, v_journal_after_expiry.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+    perform app.approve_finance_journal(v_journal_after_expiry.id, v_journal_after_expiry.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
     select * into v_journal_after_expiry from app.finance_journals where id = v_journal_after_expiry.id;
 
     begin
-      perform app.post_finance_journal(v_journal_after_expiry.id, v_journal_after_expiry.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+      perform app.post_finance_journal(v_journal_after_expiry.id, v_journal_after_expiry.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
       raise exception 'assertion failed: expected finance_period_locked once the reopen window has expired';
     exception
       when others then
@@ -315,9 +320,9 @@ begin
     ), 'lock-journal-unrelated-scope-1', '00000000-0000-0000-0000-000000032002', 'financemanagera');
   perform app.submit_finance_journal_for_approval(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
   select * into v_journal from app.finance_journals where id = v_journal.id;
-  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
   select * into v_journal from app.finance_journals where id = v_journal.id;
-  perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032002', 'financemanagera');
+  perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000032001', 'admina');
 
   if not exists (select 1 from app.finance_journals where id = v_journal.id and status = 'posted') then
     raise exception 'assertion failed: expected a manual (gl-scoped) posting to succeed even though this period''s own ar scope is locked';

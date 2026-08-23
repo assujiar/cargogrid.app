@@ -780,6 +780,87 @@ begin
 end;
 $$;
 
+\echo '>> HDN-373 (Step 15, Prompt 373, RLS and RBAC Audit, ISS-2026-165): closes HDN-BLK-012, carried forward from HDN-372''s own Tier C review -- 13 dashboard functions (app.get_ops_dashboard_* x6, app.get_dashboard_* x7) shared HDN-BLK-011''s exact actor-forgery shape with no common root to fix once, so each is fixed individually at 20260810200000_harden_dashboard_actor_identity_gaps.sql. Position-aware, mirroring the HDN-372 check above: the assert must be the function''s first executable statement.'
+do $$
+declare
+  v_fn text;
+  v_missing text[];
+begin
+  foreach v_fn in array array['get_ops_dashboard_shipment_status', 'get_ops_dashboard_milestone_sla',
+                              'get_ops_dashboard_exception_queue', 'get_ops_dashboard_epod_completion',
+                              'get_ops_dashboard_cost_variance', 'get_ops_dashboard_billing_readiness',
+                              'get_dashboard_lead_aging', 'get_dashboard_activity_queue',
+                              'get_dashboard_pipeline_summary', 'get_dashboard_quote_sla',
+                              'get_dashboard_margin_summary', 'get_dashboard_win_loss_summary',
+                              'get_dashboard_forecast_summary'] loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = v_fn
+        and pg_get_functiondef(p.oid) ~ 'begin\s*(--[^\n]*\n\s*)*perform\s+app\.assert_actor_is_session_identity\('
+    ) then
+      v_missing := array_append(v_missing, v_fn);
+    end if;
+  end loop;
+
+  if v_missing is not null then
+    raise exception 'assertion failed: % of the 13 dashboard functions HDN-373 fixed no longer call app.assert_actor_is_session_identity as their first statement -- HDN-BLK-012 has regressed: %', array_length(v_missing, 1), v_missing;
+  end if;
+
+  raise notice 'HDN-373 dashboard actor-identity regression proof: all 13 fixed functions still call app.assert_actor_is_session_identity as their first statement';
+end;
+$$;
+
+\echo '>> HDN-373 (ISS-2026-165): live two-session forced-spoof regression for a representative sample of the 13 dashboard functions, same methodology as the HDN-372 proof above.'
+do $$
+declare
+  v_self uuid := '00000000-0000-0000-0000-000000000401';
+  v_victim uuid := '00000000-0000-0000-0000-000000000402';
+  v_fake_tenant uuid := gen_random_uuid();
+  v_raised boolean;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text, 'role', 'authenticated')::text, true);
+
+  v_raised := false;
+  begin
+    perform * from app.get_ops_dashboard_shipment_status(v_fake_tenant, null, null, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_ops_dashboard_shipment_status did not reject a forged actor -- HDN-373/HDN-BLK-012 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform * from app.get_dashboard_pipeline_summary(v_fake_tenant, null, null, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_dashboard_pipeline_summary did not reject a forged actor -- HDN-373/HDN-BLK-012 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform * from app.get_dashboard_margin_summary(v_fake_tenant, null, null, null, null, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_dashboard_margin_summary did not reject a forged actor -- HDN-373/HDN-BLK-012 has regressed (this one also gates a field-masking entitlement bypass, not merely a scope widening)';
+  end if;
+
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'HDN-373 live two-session forced-spoof proof: app.get_ops_dashboard_shipment_status, app.get_dashboard_pipeline_summary and app.get_dashboard_margin_summary all reject a forged actor from a genuine authenticated session';
+end;
+$$;
+
 \echo '>> ATW-032 (ISS-2026-010): a customer_user-layer principal must fail CLOSED by default. app.invite_user writes a tenant_user_identities row and app.has_active_tenant_membership reads exactly that table, so a portal principal satisfies plain tenant membership -- any SELECT policy whose ENTIRE test is that membership admits it. Which records the portal may read is Phase 8 scope; that the default is deny is not, and this gate holds the default.'
 do $$
 declare
@@ -860,6 +941,117 @@ begin
   end if;
 
   raise notice 'HRT-295 role_assignments cascade proof: suspend strips active grants system-wide, reactivation alone never restores them, an explicit re-grant does';
+end;
+$$;
+
+\echo '>> HDN-373 (Step 15, Prompt 373, RLS and RBAC Audit): app.evaluate_permission -- the single authority gate ~1,124 functions share -- now denies once a claimed actor is no longer a genuine active tenant member (app.has_active_tenant_membership), even when their app.role_assignments row was never separately cleaned up. app.revoke_auth_identity (Platform Core''s own tenant-membership-revocation RPC, distinct from HRT-295''s app.transition_user_status fix immediately above, which only cascades role_assignments for its own HRIS-domain status-transition path) touches only app.tenant_user_identities -- it never cascades to role_assignments, and this gate is the reason that omission no longer matters.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_decision app.rbac_decision;
+  v_active_count integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
+
+  -- Baseline restored by the HRT-295 block immediately above: grantee holds a genuine,
+  -- active FIN:Approve role_assignment again.
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: expected grantee to hold FIN:Approve before this block''s own revoke_auth_identity call, got allowed=%', v_decision.allowed;
+  end if;
+
+  perform app.revoke_auth_identity('00000000-0000-0000-0000-000000000401', v_tenant_id, 'HDN-373 revocation-propagation regression', 'tester');
+
+  -- The vulnerability class, made concrete: the role_assignment itself is genuinely
+  -- untouched by revoke_auth_identity -- this is not a no-op repro, the stale grant
+  -- really is still sitting there.
+  select count(*) into v_active_count from app.role_assignments
+  where tenant_id = v_tenant_id and auth_user_id = '00000000-0000-0000-0000-000000000401' and status = 'active';
+  if v_active_count = 0 then
+    raise exception 'assertion failed: expected the active role_assignment to survive revoke_auth_identity untouched (that is the defect this test proves is now mitigated at evaluate_permission itself), found 0 -- test fixture assumption broken';
+  end if;
+
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.allowed then
+    raise exception 'assertion failed: a revoked tenant member (app.tenant_user_identities.status=revoked) still evaluated allowed=true via a stale role_assignments row -- the HDN-373 tenant-membership regression this gate exists to prevent has reappeared';
+  end if;
+  if v_decision.reason is distinct from 'not_active_tenant_member' then
+    raise exception 'assertion failed: expected reason=not_active_tenant_member for a revoked tenant member, got %', v_decision.reason;
+  end if;
+
+  -- Supreme Admin is unaffected by this fix -- RPD-022's own cross-tenant residual risk
+  -- is independent of any single tenant's own membership state.
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000403', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.reason <> 'supreme_admin_exception' then
+    raise exception 'assertion failed: expected Supreme Admin to remain unaffected by the tenant-membership check (supreme_admin_exception), got reason=%', v_decision.reason;
+  end if;
+
+  raise notice 'HDN-373 RBAC-evaluator tenant-membership regression proof: a revoked tenant member with a surviving, uncleaned role_assignment is now correctly denied (not_active_tenant_member), and Supreme Admin remains unaffected';
+end;
+$$;
+
+\echo '>> HDN-373 (ISS-2026-171/173, carried forward from HDN-372; plus app.notification_preferences, found this checkpoint): own-row RLS policies on app.notifications/app.notification_preferences/app.saved_report_views now require an active tenant membership, not merely row ownership -- a revoked ex-member no longer retains RLS-level read access to their own past rows. Live-tested for notification_preferences (achievable without a large cross-table fixture); structurally verified for all three via the live policy expression, mirroring this file''s own established pg_get_expr sweep pattern.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_grantee_auth_id uuid := '00000000-0000-0000-0000-000000000401';
+  v_raised boolean;
+  v_count integer;
+  v_bad_policies text[];
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
+
+  -- Structural check first: every one of the three own-row policies' own-row branch must
+  -- reference has_active_tenant_membership. A regex on the full policy expression (not
+  -- just the own-row branch) is intentionally loose -- correctness of the exact reference
+  -- live proof for notification_preferences below.
+  select array_agg(c.relname || '.' || pol.polname order by c.relname, pol.polname) into v_bad_policies
+  from pg_policy pol
+  join pg_class c on c.oid = pol.polrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'app'
+    and c.relname in ('notifications', 'notification_preferences', 'saved_report_views')
+    and pol.polname in ('notifications_select_own', 'notification_preferences_select_own', 'saved_report_views_select_scoped')
+    and pg_get_expr(pol.polqual, pol.polrelid) !~ 'has_active_tenant_membership';
+
+  if v_bad_policies is not null then
+    raise exception 'assertion failed: % own-row policy(ies) missing has_active_tenant_membership -- ISS-2026-171/173 has regressed: %', array_length(v_bad_policies, 1), v_bad_policies;
+  end if;
+
+  -- Live behavioral proof for notification_preferences (the simplest of the three to
+  -- fixture -- no config_version_id/report_type_code cross-table dependency).
+  insert into app.notification_preferences (tenant_id, auth_user_id, notification_type_code, channel, enabled)
+  values (v_tenant_id, v_grantee_auth_id, 'test.hdn373.own_row_revoked', 'in_app', true);
+
+  perform app.revoke_auth_identity(v_grantee_auth_id, v_tenant_id, 'HDN-373 own-row RLS regression', 'tester');
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', v_grantee_auth_id::text, 'role', 'authenticated')::text, true);
+    if (select current_user) <> 'authenticated' then
+      raise exception 'harness failure: role switch to authenticated did not take effect';
+    end if;
+
+    select count(*) into v_count from app.notification_preferences
+    where tenant_id = v_tenant_id and auth_user_id = v_grantee_auth_id and notification_type_code = 'test.hdn373.own_row_revoked';
+    if v_count <> 0 then
+      raise exception 'assertion failed: a revoked ex-member still read their own app.notification_preferences row via direct RLS (% rows) -- ISS-2026-171-shaped regression', v_count;
+    end if;
+
+    reset role;
+  exception
+    when others then
+      reset role;
+      raise;
+  end;
+  perform set_config('request.jwt.claims', '', true);
+
+  -- No restoration needed: this is the final block in this file, and grantee's
+  -- tenant_user_identities status in this tenant is not read by anything after this
+  -- point (their app.role_assignments state, exercised by the block above this one, is a
+  -- separate table already left in a defined state by that block's own final re-grant).
+
+  raise notice 'HDN-373 own-row RLS membership regression proof: notifications/notification_preferences/saved_report_views policies all reference has_active_tenant_membership; a revoked ex-member live-confirmed denied on notification_preferences';
 end;
 $$;
 

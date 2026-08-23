@@ -30,7 +30,7 @@ from zero and no lane rediscovers a known item.
 | 1 | Full regression | `HDN-370` **`VERIFIED`** | **`PARTIAL`** — all local gates green; **CI red on all 3 jobs**; `test:e2e` a `TRACKED_GAP` | §1 |
 | 2 | Cross-module transactional integrity | `HDN-371` **`VERIFIED`** | **`PARTIAL`** — every named chain reconciled except loyalty/portal (not examined, tracked gap); one systemic finding (`HDN-BLK-010`, 9 functions, Medium), live-forced-race proven | §2 |
 | 3 | Tenant isolation | `HDN-372` **`COMPLETED`** | **`PARTIAL`** — not a pass. One High cross-tenant read class found and fixed at the root, twice — first 9 functions, then 4 more found by this checkpoint's own Tier C review and fixed in the same checkpoint (`HDN-BLK-011`, 13 direct + 11 transitive = 24 functions total); two same-shape findings remain genuinely open (`HDN-BLK-012`, 13 dashboard functions; `HDN-BLK-014`, ~24 candidate functions, not individually live-verified — both deferred to `HDN-373`); one High app-layer finding registered late and corrected at Tier C (`HDN-BLK-013`); 13 further Medium/Low findings registered | §3 |
-| 4 | RLS / RBAC | `HDN-373` | `NOT_RUN` | §4 |
+| 4 | RLS / RBAC | `HDN-373` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. Root RBAC gate (`app.evaluate_permission`) never checked tenant membership — fixed (`ISS-2026-180`). The entire Finance manual/period/config/import-export write surface (95 functions) was `SECURITY INVOKER`, completely unreachable by any real session since it shipped — fixed (`HDN-BLK-015`/`ISS-2026-182`, the largest reachability defect found in Step 15 to date). `HDN-BLK-012` (13 dashboard functions, deferred from `HDN-372`) fixed; `HDN-BLK-014` (~30 candidates, deferred from `HDN-372`) narrowed to 16 fixed / ~14 residual (`ISS-2026-186`, owner a future checkpoint); `ISS-2026-139` (loyalty maker/checker) fixed; `ISS-2026-137` re-verified accurate, no change. 6 further findings registered with named forward owners | §4 |
 | 5 | Financial integrity | `HDN-374` | `NOT_RUN` | §5 |
 | 6 | Data lineage | `HDN-375` | `NOT_RUN` | §6 |
 | 7 | API compatibility | `HDN-376` | `NOT_RUN` | §7 |
@@ -241,6 +241,53 @@ release gate.
 
 ## 4. RLS / RBAC — `HDN-373`
 
+> **Status: `PARTIAL`** — not a pass, Tier C review pending. See the gate-vocabulary table
+> above.
+>
+> **Result, 2026-08-23 (`CG-S15-HDN-005`), `COMPLETED`:** seven migrations, seven
+> independent findings, each live-forced before being fixed. **Headline**:
+> `app.evaluate_permission` (the root RBAC gate, ~1,124 callers) never checked tenant
+> membership at all — `app.tenant_user_identities`/`app.has_active_tenant_membership`
+> and `app.role_assignments` are separate tables with no FK/trigger cascade, and
+> `app.revoke_auth_identity` touches only the former, so a genuinely revoked ex-member
+> retained every role-based permission indefinitely. Live-confirmed end to end. **Fixed**
+> at `supabase/migrations/20260810300000_harden_rbac_evaluator_tenant_membership_check.sql`
+> (`ISS-2026-180`). **Largest finding of Step 15 to date**: the entire Finance
+> manual/period/config/import-export write surface — 95 functions (76 top-level entry
+> points plus 19 `check_finance_*_authority` helpers) plus `app.enqueue_job` — was
+> `SECURITY INVOKER` instead of `SECURITY DEFINER`, completely unreachable by any real
+> `authenticated` session since it shipped; live-forced against a genuine Finance
+> Manager session refused three call frames inside `evaluate_permission` itself. **Fixed**
+> at `supabase/migrations/20260810700000_harden_finance_authority_chain_security_definer.sql`
+> (`HDN-BLK-015`/`ISS-2026-182`), together with two companion findings its own
+> fix-and-verify cycle surfaced: `ISS-2026-183` (`create_and_post_finance_system_journal`
+> had no authority check of its own) and, at
+> `supabase/migrations/20260810800000_harden_finance_journal_view_gate_and_self_approval.sql`,
+> `ISS-2026-184` (`finance_journals`/`finance_journal_lines` RLS bypassed `FIN:View`
+> entirely) and `ISS-2026-181` (Finance journal self-approval, sharing `ISS-2026-139`'s
+> shape). **Carried forward from `HDN-372` and closed**: `HDN-BLK-012`/`ISS-2026-165` (13
+> dashboard functions, fixed — 5 of the 13 additionally closed a field-masking bypass,
+> not merely a record-scope widening); `HDN-BLK-014`/`ISS-2026-179` (~30 candidates: 16
+> confirmed terminal/self-referential and fixed; ~14 confirmed genuinely called with
+> third-party actor arguments elsewhere in the schema, re-registered narrower as
+> `ISS-2026-186`, not blindly fixed); `ISS-2026-171`/`173` (own-row RLS gaps on
+> `notifications`/`saved_report_views`, fixed, plus one further instance found and fixed
+> in the same migration — `ISS-2026-185`, `notification_preferences`). `ISS-2026-139`
+> (loyalty redemption maker/checker collapse, seeded here) confirmed live-forced and
+> fixed. `ISS-2026-137` independently re-verified — existing disposition (`OPEN`, Low,
+> "no live vulnerability, only a missing correction path") confirmed accurate, no
+> change. **Six further findings registered, not fixed, each with a named forward
+> owner**: `ISS-2026-186` (~14 residual shared RBAC primitives); `ISS-2026-187`/`188`
+> (support-access gaps, owner `HDN-378`); `ISS-2026-189` (`employees` column-grant,
+> judgment call); `ISS-2026-190` (a sibling of `ISS-2026-184`'s exact shape on
+> `performance_calibration_adjustments_select_scoped`, HRIS domain, out of this
+> checkpoint's Finance scope); `ISS-2026-191` (doc-drift); `ISS-2026-192`
+> (`principal_memberships` self-record variant, likely by design). Full 229-file
+> `scripts/db-tests` suite passes clean against a fresh disposable database with real
+> grants (no superuser-only bypass); `typecheck`/`lint` both clean. **`COMPLETED`, not
+> `VERIFIED`** — Tier C review pending before this gate can close. Full evidence:
+> `HDN-373.md`.
+
 | Scope | Seeded state | Required |
 |---|---|---|
 | Four-layer access model | Supreme Admin, User Admin, internal hierarchy, Customer User — built at Platform Core | Positive **and** negative matrix per module/action/field/record/status/amount/scope |
@@ -249,10 +296,10 @@ release gate.
 | `rls_enabled_no_policy` | 120 — INFO, default-deny by design | Confirm intent per table |
 | Field masking (finance, payroll, personal, tax, bank, margin, support, AI evidence) | Built per phase | Verify |
 | Supreme Admin absolute CRUD | **RPD-022 ratified accepted residual risk** | Must be **disclosed**, never weakened silently, and never described as tamper-proof or immutable-for-all |
-| Maker/checker collapse | **`ISS-2026-139`** — `LYL:Edit` alone can submit **and** instantly auto-fulfill a `discount_voucher` redemption for any loyalty account in the tenant | Seeded here. Medium; re-assess under this gate |
-| Supreme-Admin-override gap | **`ISS-2026-137`** — `app.loyalty_account_tier_movements` missed from `ISS-2026-130`'s fix scope | Seeded here |
-| Actor-identity-forgery class, deferred from `HDN-372` | **`HDN-BLK-012`/`ISS-2026-165`** (High) — 13 dashboard functions (`app.get_ops_dashboard_*` ×6, `app.get_dashboard_*` ×7) share `HDN-BLK-011`'s exact defect shape (no `assert_actor_is_session_identity`), no common root to fix once. **`HDN-BLK-014`/`ISS-2026-179`** (Medium) — ~24 further boolean-oracle/narrow-scope candidate functions from a wider closure sweep, only 3 individually live-verified (`resolve_locale_context`, `has_active_tenant_membership`, `actor_holds_customer_user_layer`) | **Release blockers for Step 16 per §8.1.** Fix pattern already established at `supabase/migrations/20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`/`20260810100000_..._round2.sql` — mirror it. For `HDN-BLK-014`, verify each candidate live before fixing; the sweep list is not itself proof. Full detail `HDN-372.md` §5.5, §5.7 |
-| RLS gaps post-revocation, deferred from `HDN-372` | **`ISS-2026-171`** — `app.notifications` RLS has no tenant-membership conjunct, a revoked ex-member retains read access to past notifications. **`ISS-2026-173`** — same shape, `app.saved_report_views`. **`ISS-2026-176`** — 35 `authenticated`-readable views bypass base-table RLS by construction, structurally fragile (no current leak, no mechanical gate to catch a future regression) | Fix the membership conjunct on `171`/`173`; build the mechanical view-predicate sweep for `176` |
+| Maker/checker collapse | **`ISS-2026-139`** — `LYL:Edit` alone can submit **and** instantly auto-fulfill a `discount_voucher` redemption for any loyalty account in the tenant | **Fixed at `HDN-373`** — live-forced and confirmed exactly as described (a "Redemption Clerk" role holding only `LYL:View/Create/Edit`, explicitly not `Configure`, walked two unrelated accounts' real points into real vouchers in one session, zero second reviewer). `supabase/migrations/20260810600000_harden_loyalty_redemption_maker_checker.sql` requires `LYL:Configure` before the auto-compose branch proceeds, identical to the check `decide_loyalty_redemption` already performs; lacking it falls back gracefully to `pending_approval` via the existing established mechanism |
+| Supreme-Admin-override gap | **`ISS-2026-137`** — `app.loyalty_account_tier_movements` missed from `ISS-2026-130`'s fix scope | **Independently re-verified at `HDN-373`** — the table is actually MORE locked down than its siblings (missing both the append-only trigger and any `UPDATE`/`DELETE` grant at all, so a Supreme Admin cannot correct tier history today), confirming the existing disposition (`OPEN`, Low, "no live vulnerability, only a missing correction path") is accurate. No change made |
+| Actor-identity-forgery class, deferred from `HDN-372` | **`HDN-BLK-012`/`ISS-2026-165`** (High) — 13 dashboard functions (`app.get_ops_dashboard_*` ×6, `app.get_dashboard_*` ×7) share `HDN-BLK-011`'s exact defect shape (no `assert_actor_is_session_identity`), no common root to fix once. **`HDN-BLK-014`/`ISS-2026-179`** (Medium) — ~24 further boolean-oracle/narrow-scope candidate functions from a wider closure sweep, only 3 individually live-verified (`resolve_locale_context`, `has_active_tenant_membership`, `actor_holds_customer_user_layer`) | **`HDN-BLK-012` fixed at `HDN-373`** — `supabase/migrations/20260810200000_harden_dashboard_actor_identity_gaps.sql`, all 13 converted `language sql` → `plpgsql` carrying `assert_actor_is_session_identity`; 5 of the 13 additionally closed a genuine field-masking bypass (cost/margin/selling-price entitlements gated on the same forged parameter), not merely a record-scope widening. **`HDN-BLK-014` narrowed, not closed** — of ~30 candidates (not ~24; the candidate list grew once every actual call site was grepped), 16 confirmed terminal/self-referential and fixed at `supabase/migrations/20260810400000_harden_crm_ops_actor_identity_gaps.sql`; ~14 (`has_active_tenant_membership`, `can_access_record`, `is_supreme_admin`, `actor_holds_customer_user_layer`, and others) confirmed genuinely called with THIRD-PARTY actor arguments elsewhere in the schema — an unconditional assert would break those legitimate uses, so they are re-registered narrower as `ISS-2026-186`, needing a per-call-site audit, owner a future checkpoint. Full detail `HDN-373.md` §5, §6.1 |
+| RLS gaps post-revocation, deferred from `HDN-372` | **`ISS-2026-171`** — `app.notifications` RLS has no tenant-membership conjunct, a revoked ex-member retains read access to past notifications. **`ISS-2026-173`** — same shape, `app.saved_report_views`. **`ISS-2026-176`** — 35 `authenticated`-readable views bypass base-table RLS by construction, structurally fragile (no current leak, no mechanical gate to catch a future regression) | **`171`/`173` fixed at `HDN-373`** — `supabase/migrations/20260810500000_harden_own_row_rls_membership_gap.sql` adds the missing tenant-membership conjunct, mirroring the already-correct `notification_contact_addresses_select_own` reference pattern; one further instance found and fixed in the same migration (`ISS-2026-185`, `app.notification_preferences`, identical shape). **`176` re-confirmed, unchanged** — 35/37 views correctly bypass base RLS by construction with a correct predicate of their own; still no mechanical sweep to catch a future regression, not built this checkpoint |
 
 ---
 

@@ -63,6 +63,11 @@ begin
   perform app.set_role_version_permissions(v_manager_draft_a.id, array(select id from app.permissions where resource_module_code = 'FIN' and action in ('Create', 'Edit', 'Approve', 'View')), 'tester');
   perform app.publish_role_version(v_manager_draft_a.id, now(), 'tester');
   perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000031002', '00000000-0000-0000-0000-000000031001', 'tester');
+  -- HDN-373 (ISS-2026-181, maker/checker): admina also holds Finance Manager so it can
+  -- act as a genuinely distinct approver/poster from financemanagera, the preparer, in
+  -- the scenarios below -- app.approve_finance_journal/app.post_finance_journal now deny
+  -- an actor approving or posting their own submission.
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000031001', '00000000-0000-0000-0000-000000031001', 'tester');
 
   v_editor_role_a := (app.create_role(v_tenant_a, 'Finance Editor', 'edit only, no approve', 'tester')).id;
   v_editor_draft_a := app.create_role_version(v_editor_role_a, 'tester');
@@ -109,9 +114,9 @@ begin
     ), 'rev-original-1', '00000000-0000-0000-0000-000000031002', 'financemanagera');
   perform app.submit_finance_journal_for_approval(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031002', 'financemanagera');
   select * into v_journal from app.finance_journals where id = v_journal.id;
-  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031002', 'financemanagera');
+  perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031001', 'admina');
   select * into v_journal from app.finance_journals where id = v_journal.id;
-  perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031002', 'financemanagera');
+  perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000031001', 'admina');
 
   if not exists (select 1 from app.finance_journals where id = v_journal.id and status = 'posted') then
     raise exception 'assertion failed: expected the original journal to be posted';

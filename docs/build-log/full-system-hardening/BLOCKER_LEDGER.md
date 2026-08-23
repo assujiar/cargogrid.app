@@ -391,8 +391,41 @@ be rediscovered.
 
 ---
 
+## HDN-BLK-015 — the entire Finance manual/period/config/import-export write surface (95 functions) was `SECURITY INVOKER`, unreachable by any real session since it shipped
+
+| Field | Value |
+|---|---|
+| **Title** | 76 top-level Finance (journal, period, exchange rate, tax, invoice, AP/AR, cash, settlement, vendor bill, correction, reconciliation, account, bank) RPCs plus `app.enqueue_job`, each already granted `EXECUTE` directly to `authenticated`, were `SECURITY INVOKER` -- Postgres' implicit default -- instead of `SECURITY DEFINER` like this schema's other 1,878 RPCs. Every nested call in each chain (down to `app.evaluate_permission`'s own internal reads, and the table `INSERT`/`UPDATE` itself) therefore executed as `authenticated`, which holds no grant on `app.permissions`, most Finance authority-check helpers, or DML on `app.finance_journals` and siblings (by design -- identical to every other domain, whose RPCs are correctly `SECURITY DEFINER`) |
+| **Found by** | `HDN-373` (`CG-S15-HDN-005`), RLS and RBAC Audit, investigation Lens 2 (access-matrix/`SECURITY DEFINER` posture) and Lens 3 (maker/checker), independently corroborating |
+| **Severity** | **High** -- per `00_EXECUTION_INDEX.md` §7, a mandatory control (the entire Finance write surface's RBAC gate) was not merely absent but completely non-functional on a real, currently-shipped, `authenticated`-granted path, live-forced end to end |
+| **Owning phase** | Finance (all sub-domains) plus the generic background-job path |
+| **Owning lane** | `HDN-373` (own charter -- RLS/RBAC reachability is squarely this lane's audit scope) |
+| **Reachability** | Every real Finance-domain `authenticated` session, for every write RPC in the affected list -- not narrow, not requiring any special knowledge or forged identity |
+| **Reproduction** | Live-forced: a genuine, non-superuser Finance Manager session calling `app.create_finance_journal_draft` for their own tenant refused with `permission denied for table permissions`, three frames inside `evaluate_permission`. Full transcript `HDN-373.md` §6 |
+| **Blast radius — measured, not exhaustively re-derived** | 95 functions (76 entry points + 19 `check_finance_*_authority` helpers) -- exact list `20260810700000_harden_finance_authority_chain_security_definer.sql`'s own header |
+| **Disposition** | **FIXED, same checkpoint** -- `20260810700000_harden_finance_authority_chain_security_definer.sql` (the 95-function `SECURITY DEFINER` conversion, mechanically generated from live `pg_get_functiondef` output, diffed byte-identical elsewhere, plus the `app.create_and_post_finance_system_journal` authority-check addition this checkpoint's own live test run surfaced -- `ISS-2026-183`) and `20260810800000_harden_finance_journal_view_gate_and_self_approval.sql` (the `FIN:View` RLS gate -- `ISS-2026-184` -- and the journal self-approval guard -- `ISS-2026-181`) |
+| **Required of `HDN-373`** | Done -- full 229-file `scripts/db-tests` suite run clean against a fresh database with real grants (no superuser bypass) after the fix, including the pre-existing ATW-031/032 authority-surface and optimistic-concurrency sweeps |
+| **Regression test** | `finance-journal.sql`'s own new HDN-373 blocks (self-approval deny-then-allow with a genuinely distinct actor; live authenticated-session `FIN:View` RLS proof, zero-permission member denied); 4 other Finance test files' own pre-existing fixtures updated to use two distinct actors per the new self-approval guard (`finance-lifecycle-state-control.sql`, `finance-period-lock.sql`, `finance-posted-journal-integrity.sql`, `finance-reversal-adjustment.sql`) |
+| **Rollback** | Revert the two migrations; `git revert` is clean since nothing downstream depends on the new column/grants |
+| **`KNOWN_ISSUES`** | `ISS-2026-182` (root cause, this entry), `ISS-2026-181`, `ISS-2026-183`, `ISS-2026-184` (companion fixes landed in the same pair of migrations) |
+
+---
+
+## Status as of `HDN-373` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **9** — `HDN-BLK-007` (High), `008` (Medium), `009` (Medium) at `HDN-370`; `HDN-BLK-010` (Medium) at `HDN-371`; `HDN-BLK-011` (High, closed same checkpoint), `HDN-BLK-012` (High), `HDN-BLK-013` (High), `HDN-BLK-014` (Medium) at `HDN-372`; `HDN-BLK-015` (High, closed same checkpoint) at `HDN-373` |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single** — `HDN-BLK-002` (all four member issues `RESOLVED`); `HDN-BLK-011` (fixed at `HDN-372`), `HDN-BLK-012` (its 13 dashboard functions fixed at `HDN-373` via `20260810200000_harden_dashboard_actor_identity_gaps.sql`, `ISS-2026-165`), `HDN-BLK-015` (fixed same checkpoint) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013` (3) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010`, `014` (8, `014` narrowed to its residual ~14-function scope -- `ISS-2026-186`) |
+| Unresolved **Critical** anywhere | **0** |
+
+`HDN-BLK-013` remains an open release blocker for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until
+fixed by its named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-015` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-016` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

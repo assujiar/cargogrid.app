@@ -67,6 +67,10 @@ begin
   perform app.set_role_version_permissions(v_manager_draft_a.id, array(select id from app.permissions where resource_module_code = 'FIN' and action in ('Create', 'Edit', 'Approve', 'View')), 'tester');
   perform app.publish_role_version(v_manager_draft_a.id, now(), 'tester');
   perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000029802', '00000000-0000-0000-0000-000000029801', 'tester');
+  -- HDN-373 (ISS-2026-181, maker/checker): admina also holds Finance Manager so this
+  -- file's own new self-approval regression block below has a genuinely distinct
+  -- FIN:Approve holder to approve/post what financemanagera submitted.
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000029801', '00000000-0000-0000-0000-000000029801', 'tester');
 
   v_editor_role_a := (app.create_role(v_tenant_a, 'Finance Editor', 'edit only, no approve', 'tester')).id;
   v_editor_draft_a := app.create_role_version(v_editor_role_a, 'tester');
@@ -457,6 +461,97 @@ begin
     ('create_finance_journal_draft', 'approve_finance_journal', 'post_finance_journal', 'create_and_post_finance_system_journal');
   if v_count < 3 then
     raise exception 'assertion failed: expected at least 3 audit events across this fixture''s own journal lifecycle calls, found %', v_count;
+  end if;
+end;
+$$;
+
+\echo '>> HDN-373 (ISS-2026-181, maker/checker): app.approve_finance_journal/app.post_finance_journal deny an identity approving or posting its own submission; a genuinely distinct FIN:Approve holder succeeds'
+do $$
+declare
+  v_tenant_a uuid;
+  v_cash_id uuid;
+  v_rev_id uuid;
+  v_journal app.finance_journals;
+  v_denied boolean := false;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmejrnla');
+  v_cash_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'CASH-JRNL');
+  v_rev_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'REV-JRNL');
+
+  select * into v_journal from app.create_finance_journal_draft(v_tenant_a, null, '2026-03-20'::date, 'USD',
+    jsonb_build_array(
+      jsonb_build_object('accountId', v_cash_id, 'direction', 'debit', 'amount', 250),
+      jsonb_build_object('accountId', v_rev_id, 'direction', 'credit', 'amount', 250)
+    ), 'jrnl-selfapproval-1', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+  select * into v_journal from app.submit_finance_journal_for_approval(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029802', 'financemanagera');
+
+  begin
+    perform app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029802', 'financemanagera');
+    raise exception 'assertion failed: expected financemanagera to be denied approving its own submission, but the call succeeded';
+  exception
+    when others then
+      if sqlerrm !~ '^self_approval_denied' then
+        raise;
+      end if;
+      v_denied := true;
+  end;
+  if not v_denied then
+    raise exception 'assertion failed: expected a self_approval_denied exception, got none';
+  end if;
+
+  select * into v_journal from app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029801', 'admina');
+  if v_journal.status <> 'approved' then
+    raise exception 'assertion failed: expected admina (a genuinely distinct FIN:Approve holder) to approve successfully, got status=%', v_journal.status;
+  end if;
+
+  v_denied := false;
+  begin
+    perform app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029802', 'financemanagera');
+    raise exception 'assertion failed: expected financemanagera to be denied posting the journal it submitted, but the call succeeded';
+  exception
+    when others then
+      if sqlerrm !~ '^self_approval_denied' then
+        raise;
+      end if;
+      v_denied := true;
+  end;
+  if not v_denied then
+    raise exception 'assertion failed: expected a self_approval_denied exception on post, got none';
+  end if;
+
+  select * into v_journal from app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029801', 'admina');
+  if v_journal.status <> 'posted' then
+    raise exception 'assertion failed: expected admina to post successfully, got status=%', v_journal.status;
+  end if;
+end;
+$$;
+
+\echo '>> HDN-373 (Finding B): app.finance_journals/app.finance_journal_lines RLS now requires FIN:View, not membership alone -- live-forced with genuine authenticated sessions, not superuser'
+do $$
+declare
+  v_tenant_a uuid;
+  v_viewer_count integer;
+  v_zero_perm_count integer;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmejrnla');
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000029802", "role": "authenticated"}';
+  select count(*) into v_viewer_count from app.finance_journals where tenant_id = v_tenant_a;
+  reset role;
+  if v_viewer_count = 0 then
+    raise exception 'assertion failed: expected financemanagera (holds FIN:View) to read at least one real journal row directly via RLS, got 0';
+  end if;
+
+  -- HDN-373 (Finding B): before this checkpoint's fix, tenant membership alone admitted
+  -- a raw client read of every journal row; plainusera holds active membership and zero
+  -- FIN permissions, so this must now return 0, not the same rows financemanagera saw.
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000029804", "role": "authenticated"}';
+  select count(*) into v_zero_perm_count from app.finance_journals where tenant_id = v_tenant_a;
+  reset role;
+  if v_zero_perm_count <> 0 then
+    raise exception 'assertion failed: expected plainusera (active member, zero FIN permissions) to read 0 rows from app.finance_journals directly via RLS, got %', v_zero_perm_count;
   end if;
 end;
 $$;

@@ -997,4 +997,82 @@ begin
   end;
 end $$;
 
+\echo '>> HDN-373 (ISS-2026-139, RLS and RBAC Audit): a redemption clerk holding LYL:Edit but NOT LYL:Configure can submit a discount_voucher redemption but the auto-compose shortcut no longer fires for them -- it lands pending_approval like a genuine customer submission, closing the maker/checker collapse main flow A relies on Configure-holding staff to legitimately exercise. A distinct LYL:Configure holder (v_manager1) then decides it for real -- self-service-with-Configure remains unaffected (main flow A above), and the graceful pending_approval fallback for everyone else is unchanged (main flow B above).'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'rdm1');
+  v_company1 uuid := (select org_unit_id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and legal_name = 'Rdm Account Alpha');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000344001';
+  v_clerk uuid := '00000000-0000-0000-0000-000000344005';
+  v_clerk_role uuid;
+  v_clerk_draft app.role_versions;
+  v_account_id uuid;
+  v_loyalty_account_id uuid;
+  v_voucher_reward_id uuid := (select id from app.loyalty_rewards where tenant_id = (select id from app.tenants where slug = 'rdm1') and reward_name = 'Voucher Reward');
+  v_redemption app.loyalty_redemptions;
+begin
+  -- A fresh account and loyalty account, isolated from every balance/stock
+  -- state the rest of this file may have already consumed.
+  insert into auth.users (id, email) values (v_clerk, 'clerk@rdm1.test');
+  perform app.invite_user(v_tenant1, v_clerk, 'clerk@rdm1.test', 'Rdm1 Redemption Clerk', v_company1, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'clerk@rdm1.test'), 'active', 'onboarded', 'tester');
+
+  v_clerk_role := (app.create_role(v_tenant1, 'Redemption Clerk', 'LYL:Edit only, no Configure -- HDN-373 regression', 'tester')).id;
+  v_clerk_draft := app.create_role_version(v_clerk_role, 'tester');
+  perform app.set_role_version_permissions(v_clerk_draft.id, array(select id from app.permissions where resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit')), 'tester');
+  perform app.publish_role_version(v_clerk_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_clerk_role and status = 'published'), v_clerk, v_manager1, 'tester');
+
+  if (app.evaluate_permission(v_clerk, v_tenant1, 'LYL', 'Configure')).allowed then
+    raise exception 'assertion failed: fixture error -- the clerk role must NOT hold LYL:Configure for this regression to be meaningful';
+  end if;
+
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant1, 'Rdm Account HDN373', 'rdm-hdn373-fp', '{}'::jsonb, v_company1, 'tester') returning id into v_account_id;
+  perform app.enroll_customer_loyalty_account(
+    v_tenant1, v_account_id,
+    (select program_id from app.loyalty_tier_definitions where tenant_id = v_tenant1 and tier_name = 'Silver' and status = 'published'),
+    v_manager1, 'manager1'
+  );
+  v_loyalty_account_id := (select id from app.loyalty_accounts where tenant_id = v_tenant1 and customer_account_id = v_account_id);
+
+  insert into app.loyalty_account_tier_movements (tenant_id, loyalty_account_id, from_tier_id, to_tier_id, movement_type, tier_definition_version_id, evaluation_snapshot, reason, next_review_at, created_by)
+  values (
+    v_tenant1, v_loyalty_account_id, null,
+    (select id from app.loyalty_tier_definitions where tenant_id = v_tenant1 and tier_name = 'Silver' and status = 'published'),
+    'initial',
+    (select id from app.loyalty_tier_definitions where tenant_id = v_tenant1 and tier_name = 'Silver' and status = 'published'),
+    '{}'::jsonb, 'HDN-373 fixture seed', clock_timestamp() + interval '365 days', 'tester'
+  );
+  insert into app.loyalty_point_balances (tenant_id, loyalty_account_id, total_earned, total_consumed)
+  values (v_tenant1, v_loyalty_account_id, 1000, 0);
+
+  -- The clerk, LYL:Edit only, submits the SAME discount_voucher reward main
+  -- flow A's Configure-holding manager gets instant-fulfilled for.
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_id, v_voucher_reward_id, 'hdn373-clerk-voucher', v_clerk, 'clerk');
+  if v_redemption.status <> 'pending_approval' or v_redemption.benefit_entitlement_id is not null or v_redemption.stock_reservation_id is not null then
+    raise exception 'assertion failed: HDN-373/ISS-2026-139 has regressed -- an LYL:Edit-only clerk auto-composed a discount_voucher redemption (status=%), the maker/checker collapse this fix closed', v_redemption.status;
+  end if;
+  if v_redemption.created_by <> 'clerk' then
+    raise exception 'assertion failed: fixture error -- expected created_by=clerk, got %', v_redemption.created_by;
+  end if;
+
+  -- The clerk cannot decide their own submission either (decide_loyalty_
+  -- redemption's own pre-existing LYL:Configure gate, unaffected by this fix).
+  begin
+    perform app.decide_loyalty_redemption(v_tenant1, v_redemption.id, v_redemption.record_version, 'approve', null, v_clerk, 'clerk');
+    raise exception 'assertion failed: expected insufficient_authority for the LYL:Edit-only clerk on decide_loyalty_redemption';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- A genuine, distinct LYL:Configure holder can still decide it for real --
+  -- the maker/checker separation this fix restores, not a blanket lockout.
+  v_redemption := app.decide_loyalty_redemption(v_tenant1, v_redemption.id, v_redemption.record_version, 'approve', null, v_manager1, 'manager1');
+  if v_redemption.status <> 'fulfilled' or v_redemption.benefit_entitlement_id is null or v_redemption.decided_by <> 'manager1' then
+    raise exception 'assertion failed: expected a distinct LYL:Configure holder to successfully decide the clerk''s submission, got %', v_redemption;
+  end if;
+
+  raise notice 'HDN-373 loyalty redemption maker/checker regression proof: an LYL:Edit-only clerk''s discount_voucher submission lands pending_approval (no self-fulfillment), is denied on their own decide_loyalty_redemption attempt, and is correctly decided by a distinct LYL:Configure holder';
+end $$;
+
 \echo 'ALL PASSED: CPL-321 Redemption Approval and Fulfillment'
