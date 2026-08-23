@@ -487,7 +487,7 @@ stable
 as $$
   select
     n.id, n.tenant_id, n.status, n.effective_channel, n.subject, n.body,
-    u.email,
+    u.email::text,
     ca.address,
     c.id, c.status, c.config
   from app.notifications n
