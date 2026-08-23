@@ -13,8 +13,13 @@ Phase 10 begins.
 Every defect below passed CI and failed on a real project. They share one root cause: the CI
 fixture models an environment that differs from a hosted Supabase project, so the resolution
 path production actually takes was never exercised. Each fix therefore lands at the root — the
-extension's schema, the stub's column types — rather than at the call site, so CI can catch the
-class on its own from now on.
+extension's schema, the stub's column types, the database-level search_path — rather than at the
+call site, so CI can catch the class on its own from now on.
+
+The divergence ran in both directions, and both are now closed: pgcrypto's schema made CI pass
+where production failed, and the session search_path made production pass where CI failed. Neither
+was reachable from inside a single environment, which is the argument for having done this before
+Phase 10 rather than after.
 
 ## Result
 
@@ -25,7 +30,8 @@ class on its own from now on.
 | RLS | 568 tables enabled, 448 policies |
 | Ledger | 306 rows, in sync with `supabase/migrations/` |
 | Security advisors | 0 findings attributable to application code |
-| db-tests (live) | **199 / 229 passed**; 22 of the 30 failures are harness limitations — see [Test results](#test-results) |
+| db-tests (real harness, psql) | **229 / 229 passed** |
+| db-tests (live, Management API) | **200 / 229**; every failure traced to a limitation of driving psql-oriented tests over HTTP — see [Test results](#test-results) |
 
 ## Defects found and fixed
 
@@ -136,7 +142,8 @@ Management API by a harness that reproduces the psql behaviours the tests depend
 per-statement autocommit (so a `set local` inside a `do` block cannot leak forward) and psql
 variables (`\set`, `:name`, `\gset`).
 
-**199 / 229 passed.** Of the 30 failures, 22 are harness limitations rather than defects:
+**200 / 229 passed.** All 29 failures are limitations of driving psql-oriented tests over an HTTP
+API, not defects. 22 of them are missing psql features:
 
 | Cause | Count | Why it cannot work over the Management API |
 |---|---|---|
@@ -146,54 +153,94 @@ variables (`\set`, `:name`, `\gset`).
 
 These are covered by CI, which runs the real `run.sh` against a Postgres service container.
 
-### One test defect found
+### The baseline that settles the rest
 
-`hris-overtime-timesheet.sql` asserts `eligible_classification = 'weekday'`, but derives the
-work date from a clock-in recorded with `now()`. It therefore fails on Saturdays and Sundays —
-this run was Sunday 2026-08-23, and the server correctly classified the overtime as `weekend`.
-The production code is right; the test is date-dependent and will fail in CI on any weekend run.
+The remaining failures were triaged by installing PostGIS locally and running the **real**
+harness — `scripts/db-tests/run.sh`, driven by psql against a disposable database, exactly as CI
+does — against the same migrations:
+
+```
+==> db-tests: ALL PASSED          (229/229)
+```
+
+So the same code and the same tests pass in full under the harness they were written for. Every
+live-only failure is therefore either a defect specific to this API path or a limitation of it —
+not a pre-existing defect, and not something the four fixes above broke.
+
+That local run also surfaced the **mirror image** of defect 1. With pgcrypto now in `extensions`,
+test files that call `digest()`/`hmac()` directly at the top level failed on a bare Postgres,
+because Supabase additionally sets a database-level `search_path` of `"$user", public,
+extensions` that a stock Postgres does not have. `setup-disposable-db.sh` now mirrors it, so the
+two environments resolve identically in both directions.
+
+### One test defect found — fixed
+
+`hris-overtime-timesheet.sql` asserted `eligible_classification = 'weekday'` but derived the work
+date from a clock-in stamped with the server clock, so it failed on Saturdays and Sundays. This
+run was Sunday 2026-08-23 and the server correctly returned `weekend`. The production code was
+right; the fixture is now pinned to the most recent weekday, and the test passes against the live
+project. Left alone it would have turned CI red every weekend.
+
+### Why the last seven cannot pass over the Management API
+
+Six depend on wall-clock time advancing between statements; the seventh exceeds a statement
+timeout. Both are properties of this transport.
+
+`now()` returns transaction start time, and the Management API executes an entire request as one
+transaction — explicit `begin`/`commit` inside the request do not create new snapshots for it.
+Measured directly against the live project:
+
+```
+clock_delta : 00:00:03.003   -- pg_sleep(3) really slept
+now_delta   : 00:00:00       -- now() never moved
+```
+
+Six tests depend on wall-clock time advancing between statements — an access grant expiring, an
+`updated_at` genuinely changing, a review window elapsing. `support-access.sql` is the clearest:
+it creates a short-lived grant, runs `select pg_sleep(3);`, then asserts the grant is denied. With
+`now()` frozen the grant cannot expire, so the assertion fails no matter how the statements are
+grouped — confirmed identical with per-statement transactions and with a single transaction.
+
+These pass under psql, where each statement really is its own transaction. They are a property of
+the transport, not of the code.
+
+`rbac-enforcement.sql` is the seventh: it walks `pg_proc` calling `pg_get_functiondef()` on every
+function in `app`. At ~2,900 functions that exceeds the API's statement timeout. It passes locally,
+where no such timeout applies.
 
 ## Open items for Phase 10
 
 Nothing below blocks Phase 10. Each is recorded because it could not be resolved from this
 session, not because it was deprioritised.
 
-1. **Six assertion failures not individually root-caused.**
-   `customer-loyalty-membership-tier`, `customer-warehouse-order-visibility`,
-   `disaster-recovery-enterprise-support`, `enterprise-monitoring-observability`,
-   `finance-job-profitability`, `support-access`. All six use relative time heavily (5–15
-   references each) and a sibling case in the same run was proven date-dependent, but that is a
-   hypothesis for these six, not a finding — each needs its own triage. Confirm against a
-   weekday CI run before treating any as a production defect.
+1. **`rbac-enforcement.sql`'s catalogue scan is getting expensive.** It walks `pg_proc` calling
+   `pg_get_functiondef()` for every function in `app`. It passes locally today, but ~2,900
+   functions is already enough to exceed a statement timeout over the Management API, and the
+   schema only grows from here. Worth scoping the scan before it starts biting CI too.
 
-2. **`rbac-enforcement.sql` times out on the catalogue scan.** The test walks `pg_proc` and calls
-   `pg_get_functiondef()` for every function in `app`. At ~2,900 functions this exceeds the
-   statement timeout. Not a production code path, but it will keep getting slower as the schema
-   grows and will eventually time out in CI too. Worth scoping the scan or raising its timeout.
-
-3. **postgis, pg_trgm and btree_gist live in `public`.** This is the same root-cause class as
+2. **postgis, pg_trgm and btree_gist live in `public`.** This is the same root-cause class as
    defect 1 — extension placement — and moving them to `extensions` would clear seven of the
    eight non-noise security findings, including the sole ERROR. It was left alone deliberately:
    every function touching `geometry`/`geography` types or `ST_*` would need `extensions` added
    to its search_path, which is a far larger blast radius than the pgcrypto change and deserves
    its own prompt.
 
-4. **`max_locks_per_transaction` is too low to drop the schema in one transaction.**
+3. **`max_locks_per_transaction` is too low to drop the schema in one transaction.**
    `drop schema app cascade` fails with `53200: out of shared memory` at ~1,400 objects. The
    statement is atomic, so it rolls back cleanly and nothing is corrupted — but any teardown must
    drop objects in batches, each in its own transaction. Relevant to disaster-recovery runbooks.
 
-5. **Migrations are not idempotent.** Tables are created with bare `create table` and there is no
+4. **Migrations are not idempotent.** Tables are created with bare `create table` and there is no
    explicit transaction wrapper, so re-running any applied migration fails. The Management API
    wraps each file in one implicit transaction, so a file either lands whole or not at all, and
    `supabase_migrations.schema_migrations` is the only thing preventing a re-run. Worth stating
    explicitly in the deployment runbook.
 
-6. **`auth.users` survives a schema reset.** The db-tests seed fixtures into `auth.users`, which
+5. **`auth.users` survives a schema reset.** The db-tests seed fixtures into `auth.users`, which
    is Supabase's schema and is untouched by dropping `app`. `run.sh` never has to think about
    this because it drops the whole disposable database. Any live test cycle must clear
    `auth.users` as part of teardown, or every rerun collides on `users_pkey`.
 
-7. **Dashboard settings, not migrations.** Enable leaked-password protection (Auth → Password
+6. **Dashboard settings, not migrations.** Enable leaked-password protection (Auth → Password
    Protection). `spatial_ref_sys` cannot have RLS enabled — it belongs to the PostGIS extension
    and `postgres` is not superuser on a hosted project.
