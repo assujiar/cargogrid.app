@@ -7144,3 +7144,22 @@ nothing to restore.
 | Status | **`VERIFIED`.** Tier C review closed clean: every finding fixed or explicitly disposed of, both live-proven defects independently re-verified, independent full gate re-run green. **Next eligible: `CG-S15-HDN-003` (Prompt 371, Cross-Module Transactional Integrity)** |
 | Date | 2026-08-23 |
 
+### CHG-2026-196 — Step 15 Cross-Module Transactional Integrity: 7/19 boundary functions found missing a race-safe idempotency pattern this codebase already proves elsewhere (Step 15, Prompt 371)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S15-HDN-003` (Prompt 371, Cross-Module Transactional Integrity), package document `CG-AABPP-HDN-371` |
+| Change type | DOCS only — build log, index, matrix, blocker ledger, known issues, runtime ledgers. **Zero migration, zero application code, zero contract, zero route.** |
+| Authorization | Continuation of the standing operator range authorization for Step 15, executed **one prompt only** per `AGENTS.md`'s never-batch list, immediately following `HDN-370`'s `VERIFIED` close in the same session |
+| Build process | Flow reconciliation of every named chain against existing code and the already-passing 229/229 db-test baseline, plus a mechanical, exhaustive code sweep of all 306 migrations for the cross-module boundary-function shape. Cross-referenced each of the 19 applicable functions against `pg_constraint` for its target table's backing unique constraint. Attempted a live two-process forced race directly before falling back to code-level verification, with the attempt and its two tooling failures disclosed rather than hidden |
+| Findings and disposition | **`HDN-BLK-010`/`ISS-2026-162`**: 7 of 19 genuine cross-module boundary functions (6 Finance-domain) share an identical gap — an idempotency short-circuit with no `unique_violation` exception handler around the subsequent `insert` — while 12 siblings, including one that documents the fix as "design note 9(a)," already have it. Bounded to **Medium**: every affected table has a confirmed backing unique constraint, so no duplicate financial or handoff record is possible; the exposure is a raw error surfaced to a genuinely racing caller. **Deferred to `HDN-374`** (Financial Integrity Audit — its own charter is this exact domain), not fixed here, per `AGENTS.md`'s finance-posting dedicated-treatment rule. Zero source-domain ownership conflict found across all 19 functions |
+| Files edited | `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md`; `HARDENING_MATRIX.md`; `BLOCKER_LEDGER.md`; `docs/runtime/TASK_LEDGER.md`; `HANDOFF.md`; `KNOWN_ISSUES.md`; `CHANGE_MANIFEST.md`; `CARGOGRID_BUILD_STATUS.md` |
+| Files added | `docs/build-log/full-system-hardening/HDN-371.md` |
+| Migration | **None.** 306 migration files unchanged; every function examined was read, not edited |
+| Risk | None from this checkpoint's own changes (documentation only). The risk this checkpoint *surfaces*: a genuinely concurrent retry against one of the 7 gapped functions currently returns a raw database error instead of the record already created — narrow (double-click/client-retry-race shaped), not a data-integrity risk (constraint-backed) |
+| Gates | Run fresh from the repository root: `typecheck` **0 errors**; `lint` **0 errors/337 warnings**; `pnpm run test` **5394/5394**; `bash scripts/db-tests/run.sh` **229/229 `ALL PASSED`** across 306 migrations (reconfirms, does not newly prove, since no fixture changed); all 7 governance gates clean |
+| Commits | see branch `claude/step-15-hdn-369-kickoff-w6qren` |
+| Rollback | `git revert` this checkpoint's commit. Nothing to reconcile — the probe database used for the empirical-race attempt was dropped directly; the live Supabase project was not touched |
+| Status | **`COMPLETED`, not `VERIFIED`** — adversarially unreviewed. A Tier C review plus an independent full gate re-run must close it before `HDN-372` or any other lane may begin |
+| Date | 2026-08-23 |
+

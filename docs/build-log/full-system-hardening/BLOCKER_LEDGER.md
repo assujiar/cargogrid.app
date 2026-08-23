@@ -35,7 +35,7 @@
 | — of which class-level | **1** (`HDN-BLK-002`, four issues in one defect family) |
 | Unresolved **Critical** anywhere | **0** |
 
-## Status as of `HDN-370` (live — update at every checkpoint that changes it)
+## Status as of `HDN-370` (historical snapshot — superseded by the table below)
 
 | | Count |
 |---|---|
@@ -44,6 +44,17 @@
 | Total open entries | **8** — `HDN-BLK-001`, `003..009` (`002` closed) |
 | — of which **High** | **2** (`HDN-BLK-001`, `HDN-BLK-007`) |
 | — of which **Medium** | **6** (`HDN-BLK-003..006`, `008`, `009`) |
+| Unresolved **Critical** anywhere | **0** |
+
+## Status as of `HDN-371` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **4** — `HDN-BLK-007` (High), `HDN-BLK-008` (Medium), `HDN-BLK-009` (Medium) at `HDN-370`; `HDN-BLK-010` (Medium) at `HDN-371` |
+| Blockers closed **by** Step 15 to date | **1 class** — `HDN-BLK-002` (all four member issues `RESOLVED`) |
+| Total open entries | **9** — `HDN-BLK-001`, `003..010` (`002` closed) |
+| — of which **High** | **2** (`HDN-BLK-001`, `HDN-BLK-007`) |
+| — of which **Medium** | **7** (`HDN-BLK-003..006`, `008`, `009`, `010`) |
 | Unresolved **Critical** anywhere | **0** |
 
 The seeded entries are **not** Step 15 discoveries. They are already-registered items with
@@ -250,8 +261,28 @@ three cases the code under test was correct and the fixture's temporal assumptio
 
 ---
 
+## HDN-BLK-010 — 7 of 19 cross-module boundary functions lack the race-safe idempotency pattern this codebase already proves elsewhere, 6 of them in Finance
+
+| Field | Value |
+|---|---|
+| **Title** | A systematic sweep of every genuine cross-module `prepare_/convert_/link_/create_from_` boundary function found 7 whose idempotent check-then-insert has no exception handler for a genuine concurrent race, unlike 12 siblings that do — including one, `prepare_wms_outbound_from_shipment`, that documents the fix explicitly as "design note 9(a)" |
+| **Found by** | `HDN-371` (`CG-S15-HDN-003`), Cross-Module Transactional Integrity, via a full code-level sweep of all 306 migrations for the boundary-function shape, cross-checked against each target table's actual constraints |
+| **Severity** | **Medium.** Bounded by direct verification: all 7 target tables carry a confirmed backing `unique` constraint, so **no duplicate financial or handoff record can be created**. The real consequence is narrower — a genuinely concurrent second caller (double-click, client retry racing its own in-flight request) receives a raw, uncaught `unique_violation` instead of the graceful "here is the record already created" every other caller gets |
+| **Owning phase** | Phase 4 (Finance, 6 of 7 functions) and Phase 2 (Commercial, 1 function: `prepare_job_order_handoff`) |
+| **Owning lane** | **`HDN-374`** (Financial Integrity Audit) — its own charter is exactly this domain, and it is the next Finance-focused lane; `HDN-371`(this lane) is its own hard upstream dependency, already satisfied |
+| **Reachability** | Any two near-simultaneous calls to the same one of these 7 functions with the same idempotency-defining argument (e.g. the same `billing_readiness_handoff_id`, `original_journal_id`, `payroll_run_id`, `actual_cost_id`, or `quotation_id`/`purpose` pair) |
+| **Reproduction** | Code-verified directly: each of the 7 functions' bodies contain `if found then return ...;` followed later by a bare `insert into ... returning * into ...` with no enclosing `begin ... exception when unique_violation ... end` block. Cross-referenced against `prepare_wms_outbound_from_shipment` (`20260730230000_create_advanced_tms_wms_outbound_order.sql`), which has exactly this pattern correctly implemented and documented |
+| **Blast radius — measured, not estimated** | `app.prepare_finance_invoice_from_readiness`, `app.prepare_finance_journal_adjustment`, `app.prepare_finance_journal_reversal`, `app.prepare_finance_payroll_disbursement_handoff_from_payroll_run`, `app.prepare_finance_settlement`, `app.prepare_finance_vendor_bill_from_actual_cost`, `app.prepare_job_order_handoff` — 7 functions, 5 migration files. Existing sequential-idempotency test coverage: 118 call sites across 58 db-test files, none exercising genuine two-process concurrency for these 7 |
+| **Disposition** | **`DEFERRED_TO_HDN-374`** — not fixed here. Six of seven affected functions are Finance-domain; `AGENTS.md` names "any prompt touching finance posting" as needing its own dedicated treatment, not a bundled fix inside an audit lane |
+| **Required of `HDN-374`** | Mirror `prepare_wms_outbound_from_shipment`'s own already-proven "design note 9(a)" nested-exception-handler shape into each of the 7 functions, one additive migration, each paired with a real two-process concurrency regression test (the `\!`-based helper pattern `advanced-tms-wms-outbound.sql` already establishes) proving the race resolves gracefully rather than erroring |
+| **Regression test** | Required with the fix: a genuine two-process race per function, proving the loser gets the already-created record, never a raw `unique_violation` |
+| **Rollback** | Additive migration only; `git revert` |
+| **`KNOWN_ISSUES`** | `ISS-2026-162` (`OPEN`, Medium) |
+
+---
+
 ## Reserved
 
-`HDN-BLK-010` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-011` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

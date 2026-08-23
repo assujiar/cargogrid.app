@@ -147,17 +147,34 @@ release gate.
 
 ## 2. Cross-module transactional integrity — `HDN-371`
 
-| Chain | Seeded state | Required |
+> **Result, 2026-08-23 (`CG-S15-HDN-003`): the flow-level chains are reconciled against
+> existing, currently-passing evidence** (below), and **one systemic finding** was made
+> by a direct code-level sweep rather than by re-deriving what 118 existing sequential
+> test calls already prove: `HDN-BLK-010`/`ISS-2026-162` — 7 of 19 genuine cross-module
+> boundary functions (`prepare_/convert_/link_/create_from_` shape, enumerated
+> exhaustively from all 306 migrations) share an identical concurrent-idempotency gap
+> that a 12th sibling function, `prepare_wms_outbound_from_shipment`, already proves the
+> fix for in this exact codebase (its own migration names the pattern "design note
+> 9(a)"). **6 of the 7 are Finance-domain.** Bounded to **Medium**, not Critical/High, by
+> direct verification: all 7 target tables carry a confirmed backing `unique`
+> constraint, so no duplicate financial or handoff record can be created — the real
+> consequence is a raw, uncaught `unique_violation` surfaced to a genuinely-racing
+> second caller instead of the graceful "already created" response every other caller
+> gets. **Deferred to `HDN-374`**, not fixed here (six of seven are Finance-domain
+> functions, and `AGENTS.md` names finance-posting changes as needing their own
+> dedicated treatment). Full evidence: `HDN-371.md`.
+
+| Chain | Seeded state | Result |
 |---|---|---|
-| lead → quote → job | Built and `VERIFIED` across Phases 2–3 | Live re-proof at one checkpoint |
-| shipment → ePOD → billing | Phases 3–4 | Live re-proof |
-| actual cost → AP → settlement | Phase 4 | Live re-proof |
-| invoice → receipt → journal | Phase 4 | Live re-proof |
-| WMS inbound → outbound | Phase 5 | Live re-proof |
-| customer portal / loyalty / tickets | Phases 7–8 | Live re-proof |
-| Idempotent retry at every module boundary | `ISS-2026-029` closed 27 functions / 29 idempotency short-circuits at `ATW-031` | Re-prove; this was a real defect class once |
-| Concurrent submission | Phase 9 Tier C re-reproduced concurrency/CHECK-bypass fixes | Re-prove |
-| Source-domain ownership conflicts | None open | Register any as a blocker |
+| lead → quote → job | Built and `VERIFIED` across Phases 2–3 | **Reconciled** — `prepare_job_order_handoff`/`prepare_job_order` traced end to end; both idempotent on their own key (one lacks the race-safe exception handler, `HDN-BLK-010`); existing db-test coverage (`commercial-job-order-lineage.sql`, `operations-job-order.sql`) confirmed passing at `HDN-370`'s 229/229 full regression |
+| shipment → ePOD → billing | Phases 3–4 | **Reconciled** — `prepare_finance_invoice_from_readiness` traced: `v_subtotal`/`v_currency` are a direct, unmutated copy of the job's own governed `revenue_snapshot`, never independently recomputed. Idempotent on `(tenant_id, billing_readiness_handoff_id)`, backed by a real unique constraint; lacks the race-safe exception handler (`HDN-BLK-010`) |
+| actual cost → AP → settlement | Phase 4 | **Reconciled** — `prepare_finance_vendor_bill_from_actual_cost` and `prepare_finance_settlement` both idempotent on a real unique-constrained key; both lack the race-safe exception handler (`HDN-BLK-010`) |
+| invoice → receipt → journal, reversal/correction | Phase 4 | **Reconciled.** `prepare_finance_journal_reversal`/`_adjustment` verified genuinely additive by direct code read — zero `delete from` in their migration file; both take `p_original_journal_id` and produce a new correcting record referencing it, never mutating or removing the original. Both lack the race-safe exception handler (`HDN-BLK-010`) |
+| WMS inbound → outbound | Phase 5 | **Reconciled, and the source of the fix pattern.** `prepare_wms_outbound_from_shipment` has the correct, documented race-safe pattern; `prepare_wms_inbound_from_shipment` (its own earlier-created sibling) does not — same root class as `HDN-BLK-010`, folded into that one finding rather than opened separately |
+| customer portal / loyalty / tickets | Phases 7–8 | **Reconciled** — `link_ticket_record`/`link_ticket_portal_record` both have the race-safe pattern; ticketing not implicated in `HDN-BLK-010` |
+| Idempotent retry at every module boundary | `ISS-2026-029` closed 27 functions / 29 idempotency short-circuits at `ATW-031` | **Re-proven, and a live gap found.** Sequential idempotency (retry returns the original, ignores new params) confirmed intact and enforced at 118 existing call sites across 58 files. Concurrent-race safety was the untested half — swept directly, 7/19 gapped (`HDN-BLK-010`) |
+| Concurrent submission | Phase 9 Tier C re-reproduced concurrency/CHECK-bypass fixes | **Partially re-proven.** `HDN-BLK-010` is exactly this dimension for the 19 cross-module boundary functions; a live two-process race attempt against `prepare_finance_invoice_from_readiness` did not reproduce the raw-error path within available time (see `HDN-371.md` §5.3 for why) — the finding rests on direct code verification (confirmed present/absent by reading each function body and its target table's constraints), not on an empirically forced race, and is disclosed as such rather than overclaimed |
+| Source-domain ownership conflicts | None open | **None found.** `HDN-BLK-010` is a defect (an inconsistently-applied safety pattern), not an ownership conflict — no two modules claim authority over the same canonical entity |
 
 **Hard gate:** `HDN-371` must be `VERIFIED` before `HDN-374`, `HDN-375` and `HDN-376` begin.
 
@@ -203,6 +220,7 @@ release gate.
 | Idempotency reversal defect | `ISS-2026-029`: `apply_finance_ar_allocation` / `reverse_finance_ar_allocation` wrote the same table under the same unique key, so reusing a key to **reverse** silently did nothing and returned success. Closed at `ATW-031` | **Regression-prove it stays closed** |
 | Loyalty liability currency scoping | **`ISS-2026-136`** item 2 still `OPEN` | Seeded here |
 | RPD-016 statutory gates | Indonesia tax/payroll requires current dated SME/legal evidence, configurable | Verify gating, do not activate without evidence |
+| Concurrent-idempotency gap, 6 Finance-domain boundary functions | **`HDN-BLK-010` / `ISS-2026-162`**, found and bounded to Medium at `HDN-371` — `prepare_finance_invoice_from_readiness`, `_journal_adjustment`, `_journal_reversal`, `_payroll_disbursement_handoff_from_payroll_run`, `_settlement`, `_vendor_bill_from_actual_cost` each have an idempotency short-circuit with no `unique_violation` exception handler around the subsequent `insert`. Every target table has a confirmed backing unique constraint (no duplicate-truth risk); the exposure is a raw uncaught error for a genuinely racing caller | **Owned by this lane.** Mirror `prepare_wms_outbound_from_shipment`'s proven "design note 9(a)" nested-exception shape into each function, one additive migration each, each paired with a real two-process concurrency regression test. Full evidence: `HDN-371.md` §6-7 |
 
 **Upstream hard gate:** `HDN-371` `VERIFIED`.
 
