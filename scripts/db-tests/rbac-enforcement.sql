@@ -504,7 +504,26 @@ declare
     -- identity can only ever act on or read the ONE row/challenge/exception
     -- that names it, never reach another identity's own. Genuinely
     -- correct-by-design, not a live gap.
-    'verify_mfa_step_up_challenge', 'consume_mfa_exception', 'assert_current_step_up_authorization'
+    'verify_mfa_step_up_challenge', 'consume_mfa_exception', 'assert_current_step_up_authorization',
+    -- HDN-373 Tier C completeness fix (Step 15, Prompt 373): converting these two to
+    -- SECURITY DEFINER (part of closing the wider Finance/Config authority-chain
+    -- reachability gap, HDN-BLK-015) newly surfaced them to this sweep. Both are
+    -- genuinely correct-by-design, not a live gap: app.list_n8n_action_allowlist takes
+    -- no arguments and reads app.n8n_action_allowlist, a platform-wide reference
+    -- catalog with no tenant_id column at all (grep-confirmed) -- there is no tenant
+    -- data to scope. app.validate_automation_rule_definition takes no id/tenant
+    -- parameter either (only p_trigger_event_type/p_conditions/p_actions) and performs
+    -- pure structural JSON validation plus one existence check against app.
+    -- notification_types (itself a shared, non-tenant-scoped catalog) -- it reads no
+    -- tenant-scoped row and returns only a boolean, so a forged or absent actor changes
+    -- nothing a caller could not already determine from the input they themselves
+    -- supplied. Two sibling functions surfaced by the same conversion,
+    -- app.preview_finance_config_impact and app.validate_custom_field_values, were
+    -- NOT added here -- both genuinely lacked a tenant check (a real cross-tenant
+    -- config-disclosure gap) and were fixed with an app.has_active_tenant_membership
+    -- check instead of being exempted; see 20260810900000_harden_finance_authority_
+    -- chain_tierc_completeness.sql's own header.
+    'list_n8n_action_allowlist', 'validate_automation_rule_definition'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor

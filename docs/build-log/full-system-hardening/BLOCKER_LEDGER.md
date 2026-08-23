@@ -313,7 +313,19 @@ full finding-by-finding disposition.*
 
 ---
 
-## HDN-BLK-012 — 13 dashboard read functions share the identical actor-forgery shape as `HDN-BLK-011`, no common root, deferred to `HDN-373`
+## HDN-BLK-012 — 13 dashboard read functions share the identical actor-forgery shape as `HDN-BLK-011`, no common root — FIXED at `HDN-373`
+
+*Amended at `HDN-373` (2026-08-23), same checkpoint that closed it. Fixed at
+`20260810200000_harden_dashboard_actor_identity_gaps.sql`: each of the 13 converted
+`language sql` → `language plpgsql` carrying `perform app.assert_actor_is_session_identity
+(p_actor_auth_user_id);` as its first statement, identical to `HDN-BLK-011`'s own pattern.
+A position-aware named-list regression check plus a live two-session forced-spoof test
+(3 representative functions, including one of the 5 that also gate a field-masking
+entitlement on the same forged parameter — a genuine unmasking bypass, not merely a
+record-scope widening, sharpening this finding's own severity reasoning) were added to
+`scripts/db-tests/rbac-enforcement.sql`. Full disposition: `docs/build-log/full-system-
+hardening/HDN-373.md` §6; `docs/runtime/KNOWN_ISSUES.md`'s `ISS-2026-165` updated to
+`RESOLVED` in the same amendment.*
 
 | Field | Value |
 |---|---|
@@ -325,11 +337,11 @@ full finding-by-finding disposition.*
 | **Reachability** | Same as `HDN-BLK-011` |
 | **Reproduction** | Code-verified directly against the live catalogue for all 13: `p_actor_auth_user_id uuid default auth.uid()`, `has_assert=false`, `has_can_access=true` — full query and output `HDN-372.md` §5.5 |
 | **Blast radius — measured, not estimated** | 13 functions, 2 migration files (`20260728150000_create_operations_dashboard.sql`, `20260724320000_create_commercial_dashboard.sql`), exact function list in `HDN-372.md` §5.5 |
-| **Disposition** | **`DEFERRED_TO_HDN-373`** |
-| **Required of `HDN-373`** | Convert each of the 13 from `language sql` to `language plpgsql`, adding `perform app.assert_actor_is_session_identity(p_actor_auth_user_id);` as the first statement — identical fix pattern to `HDN-BLK-011`'s own migration (`20260810000000_harden_tenant_isolation_actor_identity_gaps.sql`), which is the reference to mirror |
-| **Regression test** | Required with the fix: a live-forced spoof attempt per function (or a representative sample plus a named-list check mirroring `HDN-372`'s own regression test), proving `actor_identity_mismatch` on a forged actor |
+| **Disposition** | **FIXED at `HDN-373`** — see amendment note above |
+| **Required of `HDN-373`** | Done — see amendment note above |
+| **Regression test** | Done — position-aware named-list check plus a live two-session forced-spoof test, `scripts/db-tests/rbac-enforcement.sql` |
 | **Rollback** | Additive migration only; `git revert` |
-| **`KNOWN_ISSUES`** | `ISS-2026-165` (`OPEN`, High) |
+| **`KNOWN_ISSUES`** | `ISS-2026-165` (`RESOLVED`, High) |
 
 ---
 
@@ -353,7 +365,26 @@ full finding-by-finding disposition.*
 
 ---
 
-## HDN-BLK-014 — roughly 24 further `SECURITY DEFINER` boolean-oracle / narrow-scope functions share `HDN-BLK-011`'s shape, candidate-swept but not individually live-verified
+## HDN-BLK-014 — roughly 24 further `SECURITY DEFINER` boolean-oracle / narrow-scope functions share `HDN-BLK-011`'s shape — PARTIALLY RESOLVED at `HDN-373`, residual scope narrowed and re-owned
+
+*Amended at `HDN-373` (2026-08-23), same checkpoint. `HDN-373` independently grepped every
+candidate's actual call sites before fixing anything (per this entry's own explicit
+instruction not to treat the sweep as proof): 16 of the ~30 candidates (`HDN-372`'s own
+Tier C review had already refined "~24" to a fuller list before this checkpoint began) were
+confirmed terminal/self-referential (the actor parameter is never mutated or substituted
+before reaching any downstream call) and fixed at `20260810400000_harden_crm_ops_actor_
+identity_gaps.sql` (773 lines, one `perform app.assert_actor_is_session_identity(...)`
+inserted per function). The remaining ~14 (`has_active_tenant_membership`,
+`can_access_record`, `is_supreme_admin`, `actor_holds_customer_user_layer`,
+`has_active_support_grant`, `claim_case_record_scope_ok`, `label_subject_record_scope_ok`,
+`wms_pick_record_scope_ok`, `is_ticket_queue_member`, `current_support_session`,
+`pipeline_scope_org_unit_ids`, `evaluate_dispatch_readiness`,
+`customer_warehouse_eligibility_active`, `resolve_locale_context`) were confirmed genuinely
+called with THIRD-PARTY actor arguments elsewhere in the schema — an unconditional assert
+would break every one of those legitimate uses — and are **not fixed**, re-registered
+narrower as `ISS-2026-186` with owner `HDN-387` (no dedicated RLS/RBAC-audit lane remains
+in Step 15 after `HDN-373`). Full disposition: `docs/build-log/full-system-hardening/
+HDN-373.md` §6.*
 
 | Field | Value |
 |---|---|
@@ -365,11 +396,11 @@ full finding-by-finding disposition.*
 | **Reachability** | Same shape as `HDN-BLK-011`/`012` — any `authenticated` session that knows a victim tenant's own real member's `auth_user_id` |
 | **Reproduction** | **Not uniformly live-verified.** 3 of the ~24 were spot-checked live by the Tier C lens (`resolve_locale_context`, `has_active_tenant_membership`, `actor_holds_customer_user_layer`) and did reproduce the shape — though `resolve_locale_context`'s own disclosed nature (tenant display/locale configuration, not PII or business data) makes its real-world sensitivity materially lower than the others, which is why it stays on the pre-existing `ATW-032` "anon-facing by design" exemption list rather than being pulled onto this list for an app-layer fix. The remaining ~21 are statically identified by an `app`-schema-wide closure sweep only — **`HDN-373` must independently verify reachability and exploitability per function before fixing, not assume the sweep's candidate list is itself proof** |
 | **Blast radius — measured, not estimated** | ~24 functions across the domains named above — exact candidate list and the sweep query `HDN-372.md` §5.7 |
-| **Disposition** | **`DEFERRED_TO_HDN-373`** — not fixed here; live-verifying and fixing ~24 further candidates in the same checkpoint that already landed two migrations risked exactly the scope creep `20260810000000`'s own header warns against |
-| **Required of `HDN-373`** | For each candidate: confirm live exploitability with a genuine two-tenant fixture (methodology `HDN-372.md` §4.1); for confirmed cases, apply the identical fix pattern (`perform app.assert_actor_is_session_identity(...)` as the first statement, converting `language sql` to `language plpgsql` where needed); for `resolve_locale_context` specifically, either confirm its data is genuinely non-sensitive and downgrade/close, or fix it and remove it from the `ATW-032` exemption list |
-| **Regression test** | Required with each fix: a live-forced spoof attempt, plus a named-list regression check mirroring `HDN-372`'s own pattern |
-| **Rollback** | N/A — no fix landed yet |
-| **`KNOWN_ISSUES`** | `ISS-2026-179` (`OPEN`, Medium, owner `HDN-373`) |
+| **Disposition** | **`PARTIALLY_RESOLVED` at `HDN-373`** — 16 fixed, ~14 re-registered narrower as `ISS-2026-186` (owner `HDN-387`), not blindly fixed. See amendment note above |
+| **Required of `HDN-373`** | Done for the 16 confirmed-terminal candidates. The residual ~14 need a per-call-site audit (self-referential vs. genuinely third-party call sites, and whether third-party ones need a different check such as `assert_session_identity_in_tenant`) — carried to `ISS-2026-186`, owner `HDN-387` |
+| **Regression test** | Done for the 16 fixed — a position-aware named-list check plus a live two-session forced-spoof test, `scripts/db-tests/rbac-enforcement.sql` |
+| **Rollback** | Additive migration only for the 16 fixed; `git revert` |
+| **`KNOWN_ISSUES`** | `ISS-2026-179` (`PARTIALLY RESOLVED`, Medium); residual scope `ISS-2026-186` (`OPEN`, Medium, owner `HDN-387`) |
 
 ---
 
@@ -391,7 +422,23 @@ be rediscovered.
 
 ---
 
-## HDN-BLK-015 — the entire Finance manual/period/config/import-export write surface (95 functions) was `SECURITY INVOKER`, unreachable by any real session since it shipped
+## HDN-BLK-015 — the entire Finance manual/period/config/import-export write surface (95+57 functions) was `SECURITY INVOKER`, unreachable by any real session since it shipped
+
+*Amended at `HDN-373`'s own Tier C review (2026-08-23), same checkpoint. The original
+95-function diagnosis was incomplete: an independent, deliberately wider schema-wide sweep
+found **57 more functions** sharing the identical shape (54 further Finance-domain, plus
+2 generic Config-Engine functions and 1 Integration-domain function), root-caused to the
+same mechanism (only 1 of the 19 `check_finance_*_authority` helpers had been granted
+`authenticated` directly). Independently re-derived, live-forced (18 representative
+functions), and fixed at `20260810900000_harden_finance_authority_chain_tierc_
+completeness.sql`, with the closure re-run against the fixed state and confirmed to
+converge at zero further matches. The same migration also corrects a live-forced
+regression Tier C found in the original `ISS-2026-183` fix (the `FIN:Approve`-only gate on
+`app.create_and_post_finance_system_journal` blocked two legitimate `FIN:Edit`-only
+callers — now accepts either) and fixes a genuine new High finding the sweep surfaced,
+`ISS-2026-193` (`app.preview_finance_config_impact`/`app.validate_custom_field_values`
+disclosed another tenant's config data with no tenant check at all). Full disposition:
+`docs/build-log/full-system-hardening/HDN-373.md` §6/§13.*
 
 | Field | Value |
 |---|---|
@@ -402,12 +449,12 @@ be rediscovered.
 | **Owning lane** | `HDN-373` (own charter -- RLS/RBAC reachability is squarely this lane's audit scope) |
 | **Reachability** | Every real Finance-domain `authenticated` session, for every write RPC in the affected list -- not narrow, not requiring any special knowledge or forged identity |
 | **Reproduction** | Live-forced: a genuine, non-superuser Finance Manager session calling `app.create_finance_journal_draft` for their own tenant refused with `permission denied for table permissions`, three frames inside `evaluate_permission`. Full transcript `HDN-373.md` §6 |
-| **Blast radius — measured, not exhaustively re-derived** | 95 functions (76 entry points + 19 `check_finance_*_authority` helpers) -- exact list `20260810700000_harden_finance_authority_chain_security_definer.sql`'s own header |
-| **Disposition** | **FIXED, same checkpoint** -- `20260810700000_harden_finance_authority_chain_security_definer.sql` (the 95-function `SECURITY DEFINER` conversion, mechanically generated from live `pg_get_functiondef` output, diffed byte-identical elsewhere, plus the `app.create_and_post_finance_system_journal` authority-check addition this checkpoint's own live test run surfaced -- `ISS-2026-183`) and `20260810800000_harden_finance_journal_view_gate_and_self_approval.sql` (the `FIN:View` RLS gate -- `ISS-2026-184` -- and the journal self-approval guard -- `ISS-2026-181`) |
-| **Required of `HDN-373`** | Done -- full 229-file `scripts/db-tests` suite run clean against a fresh database with real grants (no superuser bypass) after the fix, including the pre-existing ATW-031/032 authority-surface and optimistic-concurrency sweeps |
-| **Regression test** | `finance-journal.sql`'s own new HDN-373 blocks (self-approval deny-then-allow with a genuinely distinct actor; live authenticated-session `FIN:View` RLS proof, zero-permission member denied); 4 other Finance test files' own pre-existing fixtures updated to use two distinct actors per the new self-approval guard (`finance-lifecycle-state-control.sql`, `finance-period-lock.sql`, `finance-posted-journal-integrity.sql`, `finance-reversal-adjustment.sql`) |
-| **Rollback** | Revert the two migrations; `git revert` is clean since nothing downstream depends on the new column/grants |
-| **`KNOWN_ISSUES`** | `ISS-2026-182` (root cause, this entry), `ISS-2026-181`, `ISS-2026-183`, `ISS-2026-184` (companion fixes landed in the same pair of migrations) |
+| **Blast radius — measured, not exhaustively re-derived** | 152 functions total (95 original + 57 found by Tier C's own wider sweep) -- exact lists `20260810700000_harden_finance_authority_chain_security_definer.sql`'s and `20260810900000_harden_finance_authority_chain_tierc_completeness.sql`'s own headers |
+| **Disposition** | **FIXED, same checkpoint** -- `20260810700000` (the original 95-function `SECURITY DEFINER` conversion, plus `ISS-2026-183`), `20260810800000` (the `FIN:View` RLS gate `ISS-2026-184` and the journal self-approval guard `ISS-2026-181`), and `20260810900000` (Tier C completeness: the 57 more functions, the `ISS-2026-183` gate correction, and `ISS-2026-193`'s cross-tenant config disclosure fix) -- all mechanically generated from live `pg_get_functiondef` output, diffed byte-identical elsewhere |
+| **Required of `HDN-373`** | Done -- full 229-file `scripts/db-tests` suite run clean against a fresh database with real grants (no superuser bypass) after every fix, including the pre-existing ATW-031/032 authority-surface and optimistic-concurrency sweeps; the closure sweep itself re-run against the fully-fixed state and confirmed to converge at zero further matches |
+| **Regression test** | `finance-journal.sql`'s own new HDN-373 blocks (self-approval deny-then-allow with a genuinely distinct actor; live authenticated-session `FIN:View` RLS proof, zero-permission member denied); 4 other Finance test files' own pre-existing fixtures updated to use two distinct actors per the new self-approval guard (`finance-lifecycle-state-control.sql`, `finance-period-lock.sql`, `finance-posted-journal-integrity.sql`, `finance-reversal-adjustment.sql`); live-forced cross-tenant attack + legitimate-access control for `ISS-2026-193`; `rbac-enforcement.sql`'s `v_expected` exemption list updated with a written reason for the 2 functions confirmed correct-by-design |
+| **Rollback** | Revert the three migrations; `git revert` is clean since nothing downstream depends on the new column/grants |
+| **`KNOWN_ISSUES`** | `ISS-2026-182` (root cause, this entry), `ISS-2026-181`, `ISS-2026-183`, `ISS-2026-184`, `ISS-2026-193` (companion fixes) |
 
 ---
 
