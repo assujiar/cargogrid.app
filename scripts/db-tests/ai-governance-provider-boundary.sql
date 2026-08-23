@@ -227,6 +227,74 @@ begin
 end;
 $$;
 
+\echo '>> app.record_ai_governed_request_outcome (IAE-037 Tier C fix): also rejects a NaN or Infinity provider_unit_cost_amount, which the original ">= 0" check alone silently admitted (NaN < 0 is false in Postgres numeric ordering) -- a real defense-in-depth gap since a poisoned NaN cost would corrupt a tenant-wide billing SUM'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaigov');
+  v_rep1 uuid := '00000000-0000-0000-0000-000021000002';
+  v_connection_id uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'openai_multimodal');
+  v_request app.ai_governed_requests;
+begin
+  v_request := app.request_ai_governed_action(v_tenant1, v_connection_id, 'quotation_draft', null, null, jsonb_build_object('origin', 'JKT'), v_rep1, 'rep');
+  begin
+    perform app.record_ai_governed_request_outcome(v_request.id, 'succeeded', jsonb_build_object('draftLines', '[]'::jsonb), 'high', 'openai-multimodal', 'NaN'::numeric, 'USD', null, v_rep1, 'rep');
+    raise exception 'assertion failed: expected ai_governed_request_invalid_cost_amount for a NaN cost';
+  exception when check_violation then
+    if sqlerrm !~ 'ai_governed_request_invalid_cost_amount' then raise; end if;
+  end;
+
+  begin
+    perform app.record_ai_governed_request_outcome(v_request.id, 'succeeded', jsonb_build_object('draftLines', '[]'::jsonb), 'high', 'openai-multimodal', 'Infinity'::numeric, 'USD', null, v_rep1, 'rep');
+    raise exception 'assertion failed: expected ai_governed_request_invalid_cost_amount for an Infinity cost';
+  exception when check_violation then
+    if sqlerrm !~ 'ai_governed_request_invalid_cost_amount' then raise; end if;
+  end;
+
+  -- The request itself must still be genuinely pending -- neither rejected
+  -- attempt above may have silently transitioned it.
+  if (select status from app.ai_governed_requests where id = v_request.id) <> 'pending' then
+    raise exception 'assertion failed: expected the request to remain pending after both rejected cost values';
+  end if;
+
+  raise notice 'PASS: record_ai_governed_request_outcome rejects NaN/Infinity provider_unit_cost_amount, never silently transitioning the request';
+end;
+$$;
+
+\echo '>> app.redact_ai_output_payload_secret_shaped_values (IAE-037 Tier C fix): a deeply nested output_payload no longer crashes with a raw Postgres stack-depth error -- it raises a clean, named ai_output_payload_nesting_too_deep error instead, and the governed request is never silently stranded'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaigov');
+  v_rep1 uuid := '00000000-0000-0000-0000-000021000002';
+  v_connection_id uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'openai_multimodal');
+  v_request app.ai_governed_requests;
+  v_deep jsonb := '"leaf"'::jsonb;
+  i integer;
+begin
+  -- 40 levels of nesting -- ordinary, non-malicious AI-provider content can
+  -- reach this depth; the un-fixed function crashed with a raw Postgres
+  -- 'stack depth limit exceeded' around ~400 levels, live-reproduced by the
+  -- adversarial hardening lens. This regression proves the bounded case
+  -- (well within the real cap) still works and the over-cap case fails
+  -- clean, not with a raw engine crash.
+  for i in 1..40 loop
+    v_deep := jsonb_build_object('nested', v_deep);
+  end loop;
+
+  v_request := app.request_ai_governed_action(v_tenant1, v_connection_id, 'quotation_draft', null, null, jsonb_build_object('origin', 'JKT'), v_rep1, 'rep');
+  begin
+    perform app.record_ai_governed_request_outcome(v_request.id, 'succeeded', v_deep, 'high', 'openai-multimodal', 0.05, 'USD', null, v_rep1, 'rep');
+    raise exception 'assertion failed: expected ai_output_payload_nesting_too_deep for a 40-level-deep output_payload (bounded cap is 32)';
+  exception when check_violation then
+    if sqlerrm !~ 'ai_output_payload_nesting_too_deep' then raise; end if;
+  end;
+
+  -- A shallow, ordinary payload (well under the cap) still succeeds normally.
+  perform app.record_ai_governed_request_outcome(v_request.id, 'succeeded', jsonb_build_object('draftLines', jsonb_build_array('Freight')), 'high', 'openai-multimodal', 0.05, 'USD', null, v_rep1, 'rep');
+
+  raise notice 'PASS: redact_ai_output_payload_secret_shaped_values bounds recursion to a clean, named error instead of a raw stack-depth crash, while ordinary shallow payloads are unaffected';
+end;
+$$;
+
 \echo '>> app.list_ai_governed_requests_for_tenant: AI:View-gated, sees this tenant''s own real requests, supports a feature_code filter; a cross-tenant admin is denied'
 do $$
 declare
@@ -365,6 +433,7 @@ begin
   exception when insufficient_privilege then null;
   end;
 
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant1, 'AI', 'Approve', v_approver1, 'approver')).id, v_approver1, 'approver');
   v_step := app.decide_ai_output_approval(v_step_id, 'approved', v_approver1, 'approver', 'looks correct');
   if v_step.status <> 'approved' then
     raise exception 'assertion failed: expected the real step to transition to approved, got %', to_jsonb(v_step);

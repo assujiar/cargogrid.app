@@ -62,7 +62,7 @@ Every Confirmed Product Decision is a binding constraint on one or more phases' 
 | CPD-002 | SaaS ERP model — entitlement/tenancy/release/onboarding/support | Phase 1 | PLT-105..106, PLT-135..136 | `01_*.md` §2 | `COVERED` |
 | CPD-003 | Target market 3PL/logistics — logistics-native domain model | Phases 1–9 (all domain phases) | All phase capability ranges | `02_*.md`, `03_*.md` | `COVERED` |
 | CPD-004 | Multi-tenant; tenant context in every surface | Phase 1 (foundation), all phases (propagation) | PLT-112..114; every phase's capability range | `06_*.md` §2–§4 | `COVERED` |
-| CPD-005 | White-label — branding/domain/templates/portal/terminology configurable | Phase 1/9 | PLT-117..119, IEP-354..359 | `09_*.md` §10 | `COVERED` |
+| CPD-005 | White-label — branding/domain/templates/portal/terminology configurable | Phase 1/9 | PLT-117..119, IAE-354..359 | `09_*.md` §10 | `COVERED` |
 | CPD-006 | RLS is the primary tenant-facing database control | Phase 1 | PLT-112..114 | `06_*.md` §2–§4, §9 | `COVERED` |
 | CPD-007 | RBAC governs action/field/scope | Phase 1 | PLT-109..114 | `06_*.md` §5 | `COVERED` |
 | CPD-008 | Four user layers (Supreme Admin, User Admin, Internal, Customer) | Phase 1 | PLT-107..108 | `06_*.md` §2 | `COVERED` |
@@ -91,41 +91,41 @@ All 23 CPDs `COVERED`. Zero CPDs reopened (`02_CONFIRMED_DECISION_REGISTER.md` �
 | RPD-001 | All major modules in first production; phases are internal milestones | Phases 0–9 → GA gate | Every phase register row, `RGL-404` (GA approval) | `13_*.md` §4, `12_*.md` §7.1 | `COVERED` |
 | RPD-002 | CargoGrid owned under SAIKI Group | Commercial/legal, non-architectural | n/a (branding config only) | `09_*.md` §10 | `COVERED` |
 | RPD-003 | First production tenant is external | Phase 16 | RGL-404..407 | `12_*.md` §7.3 | `COVERED` |
-| RPD-004 | Responsive PWA, online-first; native/offline deferred | Phase 0/9 | PH0-090, IEP-360..363 | `09_*.md` §8 | `COVERED` |
+| RPD-004 | Responsive PWA, online-first; native/offline deferred | Phase 0/9 | PH0-090, IAE-360..363 | `09_*.md` §8 | `COVERED` |
 | RPD-005 | Custom domain from Platform Core | Phase 1 | PLT-118 | `09_*.md` §10 | `COVERED` |
 | RPD-006 | PT SAIKI Group is contracting entity | Commercial/legal | n/a | — | `COVERED` (non-architectural) |
 | RPD-007 | Modular commercial packaging | Phase 1 | PLT-105..106 | `07_*.md` §3 | `COVERED` |
 | RPD-008 | Subscription pricing: platform/module/user/usage | Phase 1 | PLT-105..106 | `07_*.md` §3 | `COVERED` |
 | RPD-009 | Implementation tiers Fast-track/Standard/Enterprise | Phase 16 | RGL-390..391 | `12_*.md` §8 | `COVERED` |
 | RPD-010 | Tiered support (Standard/Premium/Enterprise) | Phase 7/16 | HRT-286..288, RGL-411 | `11_*.md` §8.4 | `COVERED` |
-| RPD-011 | Shared DB/schema default; dedicated Enterprise option | Phase 1/9 | PLT-112..114, IEP-360 | `06_*.md` §2 | `COVERED` |
+| RPD-011 | Shared DB/schema default; dedicated Enterprise option | Phase 1/9 | PLT-112..114, IAE-360 | `06_*.md` §2 | `COVERED` |
 | RPD-012 | PostgreSQL durable queue is initial job mechanism | Phase 1 | PLT-132 | `08_*.md` §9 | `COVERED` |
-| RPD-013 | APAC default region; Enterprise dedicated region option | Phase 9 | IEP-360..363 | `11_*.md` §2 | `COVERED` |
-| RPD-014 | Dashboards read transactional data directly, with query budgets | Phase 2–9 (every dashboard capability) | COM-158..159, OPS-182..183, FIN-213, IEP-330..334 | `08_*.md` §12, `10_*.md` §8.1 | `COVERED` |
+| RPD-013 | APAC default region; Enterprise dedicated region option | Phase 9 | IAE-360..363 | `11_*.md` §2 | `COVERED` |
+| RPD-014 | Dashboards read transactional data directly, with query budgets | Phase 2–9 (every dashboard capability) | COM-158..159, OPS-182..183, FIN-213, IAE-330..334 | `08_*.md` §12, `10_*.md` §8.1 | `COVERED` |
 | RPD-015 | PostGIS enabled from Platform Core | Phase 1 | PLT-134 | `05_*.md` §6 | `COVERED` |
 | RPD-016 | Indonesia-first finance/tax/payroll, SME-verified | Phase 4/7 | FIN-195, HRT-282 | `05_*.md` §5 | `EXTERNAL_VERIFICATION` (§22) |
-| RPD-017 | Enterprise IAM order OIDC→SAML→SCIM | Phase 9 | IEP-354..359 | `06_*.md` §2 | `COVERED` |
+| RPD-017 | Enterprise IAM order OIDC→SAML→SCIM | Phase 9 | IAE-354..359 | `06_*.md` §2 | `COVERED` |
 | RPD-018 | Partner referral model | Commercial | n/a | — | `COVERED` (non-architectural) |
 | RPD-019 | Controlled white-label | Phase 1 | PLT-117..119 | `09_*.md` §10 | `COVERED` |
-| RPD-020 | Tenant merge/split is admin-run migration | Phase 1/9 | PLT-105..106, IEP-360 | `11_*.md` §4 | `COVERED` |
-| RPD-021 | OpenAI multimodal AI/OCR default, human approval gate | Phase 9 | IEP-347..353 | `08_*.md` §8 | `COVERED` |
+| RPD-020 | Tenant merge/split is admin-run migration | Phase 1/9 | PLT-105..106, IAE-360 | `11_*.md` §4 | `COVERED` |
+| RPD-021 | OpenAI multimodal AI/OCR default, human approval gate | Phase 9 | IAE-347..353 | `08_*.md` §8 | `COVERED` |
 | RPD-022 | Supreme Admin absolute CRUD; no tamper-proof claim | Phase 1 (mechanism), all ledger/audit capabilities (exception) | PLT-115..116, FIN-204..208, CPL-316..323 | `06_*.md` §8, §10 test 8/9 | `ACCEPTED_RISK` (§21) |
 | RPD-023 | MFA mandatory for privileged roles | Phase 1 | PLT-107..108 | `06_*.md` §2 | `COVERED` |
 | RPD-024 | WCAG 2.2 AA; two latest stable browser releases | Phase 0/9/15 | PH0-090, HDN-380..381 | `09_*.md` §9, §8 | `COVERED` |
 | RPD-025 | Class-based retention schedule | Phase 0/15 | PH0-095, HDN-382..385 | `02_*.md` §11 | `COVERED` |
 | RPD-026 | Ten-suite module catalogue | Phase 1 | PLT-105..106 | `07_*.md` §3 | `COVERED` |
 | RPD-027 | Launch price book | Commercial | n/a | — | `COVERED` (non-architectural) |
-| RPD-028 | Usage charging, 20 GB included | Phase 1/9 | PLT-105..106, IEP-337..341 | `08_*.md` §9 | `COVERED` |
+| RPD-028 | Usage charging, 20 GB included | Phase 1/9 | PLT-105..106, IAE-337..341 | `08_*.md` §9 | `COVERED` |
 | RPD-029 | Launch implementation fees | Commercial | n/a | — | `COVERED` (non-architectural) |
 | RPD-030 | SLA A default, contract may replace | Phase 16 | RGL-399..403 | `12_*.md` §7.1 | `COVERED` |
 | RPD-031 | RPO/RTO contract-specific | Phase 15/16 | HDN-384, RGL-408 | `11_*.md` §8, `10_*.md` §7.4 | `EXTERNAL_VERIFICATION` (§22, per-contract) |
 | RPD-032 | Every upload malware-scanned before release | Phase 1 | PLT-128 | `06_*.md` §10 test 13 | `COVERED` |
-| RPD-033 | REST + GraphQL together, shared governance | Phase 1/9 | PLT-129..130, IEP-337..341 | `08_*.md` §3–§5 | `COVERED` |
+| RPD-033 | REST + GraphQL together, shared governance | Phase 1/9 | PLT-129..130, IAE-337..341 | `08_*.md` §3–§5 | `COVERED` |
 | RPD-034 | No external pilot; direct GA | Phase 16 | RGL-390..412 | `12_*.md` §2, §7.1 | `COVERED` |
 | RPD-035 | Tenant owns customer/operational data | Phase 1 | PLT-115..116 | `06_*.md` §6 | `COVERED` |
 | RPD-036 | Direct GA requires full internal validation, zero Sev-1 | Phase 16 | RGL-404 | `12_*.md` §7.1 | `COVERED` |
 | RPD-037 | Contract-silent recovery = best effort | Phase 15/16 | HDN-384, RGL-408 | `11_*.md` §8 | `EXTERNAL_VERIFICATION` (§22, per-contract) |
-| RPD-038 | Custom per-integration adapters, no generic abstraction | Phase 9 | IEP-342..346 | `08_*.md` §8 | `COVERED` |
+| RPD-038 | Custom per-integration adapters, no generic abstraction | Phase 9 | IAE-342..346 | `08_*.md` §8 | `COVERED` |
 | RPD-039 | Search/field security start in PostgreSQL/server policy | Phase 1 | PLT-112..114 | `06_*.md` §7 | `COVERED` |
 | RPD-040 | All non-conflicting Proposed Defaults approved | All phases (interpretive rule) | n/a | `03_ASSUMPTION_REGISTER.md` §8 | `COVERED` |
 
@@ -144,7 +144,7 @@ Traced at the family level (`XXX-YYY-001..004`), matching the granularity alread
 | Family | Capability | WBS capability ID(s) | Architecture artifact | Verification/hardening | Owner | Status |
 |---|---|---|---|---|---|---|
 | PLT-TNT-001..004 | Tenant & Subscription | PLT-105..106 | `05_*.md` §3, `07_*.md` §3 | PLT-137..140 | Platform Core delivery + Phase 1 verification | `COVERED` |
-| PLT-WLB-001..004 | White-label & Localization | PLT-117..119 (core), IEP-354..359 (enterprise depth) | `09_*.md` §10 | PLT-137..140, IEP-364..367 | Platform Core + Phase 9 depth | `COVERED` |
+| PLT-WLB-001..004 | White-label & Localization | PLT-117..119 (core), IAE-354..359 (enterprise depth) | `09_*.md` §10 | PLT-137..140, IAE-364..367 | Platform Core + Phase 9 depth | `COVERED` |
 | PLT-IAM-001..004 | User, Org, Role & Permission | PLT-107..116 | `06_*.md` §2–§6 | PLT-137..140 | Platform Core delivery + verification | `COVERED` |
 | PLT-CFG-001..004 | Workflow, Approval & Configuration | PLT-120..125 | `07_*.md` §5–§7 | PLT-137..140 | Platform Core delivery + verification | `COVERED` |
 | PLT-MDM-001..004 | Master Data & Integration Foundation | PLT-120, PLT-129..132 | `05_*.md` §3, `08_*.md` §8–§9 | PLT-137..140 | Platform Core delivery + verification | `COVERED` |
@@ -423,7 +423,7 @@ Bound verbatim in `07_*.md` §7.4 (Blueprint §13, all 16).
 | EXC-AUTH-001 | Unauthorized access | Cross-cutting | Phase 1 / PLT-112..114 | `COVERED` (`TI-001..018`) |
 | EXC-CFG-001 | Stale configuration version | Cross-cutting configurable modules | Phase 1 / PLT-121 | `COVERED` |
 | EXC-APR-001 | Approval SLA breached | Approval engine | Phase 1 / PLT-123 | `COVERED` |
-| EXC-INT-001 | Integration failed | API/webhook/import | Phase 1/9 / PLT-129..132, IEP-337..341 | `COVERED` |
+| EXC-INT-001 | Integration failed | API/webhook/import | Phase 1/9 / PLT-129..132, IAE-337..341 | `COVERED` |
 | EXC-RATE-001 | Expired vendor rate | Costing/Quotation/Procurement | Phase 2/6 / COM-149..150, PRC-254..255 | `COVERED` |
 | EXC-MRG-001 | Margin below threshold | Quotation | Phase 2 / COM-151..152 | `COVERED` |
 | EXC-SHP-001 | Shipment delay | Operations/TMS | Phase 3 / OPS-174..175 | `COVERED` |
@@ -443,7 +443,7 @@ Source: Blueprint §15 Reporting Requirement Catalogue. Every dashboard is bound
 
 | Report | Audience | Owning phase / WBS | Status |
 |---|---|---|---|
-| Executive Dashboard | Management | Phase 9 (cross-domain aggregation) / IEP-330..334 | `COVERED` |
+| Executive Dashboard | Management | Phase 9 (cross-domain aggregation) / IAE-330..334 | `COVERED` |
 | Commercial Dashboard | Sales Manager | Phase 2 / COM-158..159 | `COVERED` |
 | Quotation Report | Sales/Pricing | Phase 2 / COM-158..159 | `COVERED` |
 | Operations Control Tower | Operations | Phase 3 / OPS-182..183 | `COVERED` |
@@ -454,7 +454,7 @@ Source: Blueprint §15 Reporting Requirement Catalogue. Every dashboard is bound
 | HR Dashboard | HR/Management | Phase 7 / HRT-283..284 | `COVERED` |
 | Ticket SLA Dashboard | Service Manager | Phase 7 / HRT-289..291 | `COVERED` |
 | Customer Portal Dashboard | Customer User | Phase 8 / CPL-300..301 | `COVERED` |
-| Supreme Admin SaaS Dashboard | CargoGrid Admin | Phase 1/9 / PLT-135..136, IEP-330..334 | `COVERED` |
+| Supreme Admin SaaS Dashboard | CargoGrid Admin | Phase 1/9 / PLT-135..136, IAE-330..334 | `COVERED` |
 
 **§15 total: 12/12 report categories `COVERED`. Zero `NOT_COVERED`.**
 
@@ -512,7 +512,7 @@ Bound verbatim in `10_TESTING_WORKSTREAM.md` §5.1 (Blueprint §19.2). Each scen
 | UAT-E2E-017 | Payment | Phase 4 / FIN-196..198 | `COVERED` |
 | UAT-E2E-018 | Profitability | Phase 4 / FIN-212..213 | `COVERED` |
 | UAT-E2E-019 | Loyalty point | Phase 8 / CPL-316..319 | `ACCEPTED_RISK` (RPD-022 ledger exception, §21) |
-| UAT-E2E-020 | Dashboard update | Phase 9 / IEP-330..334 | `COVERED` |
+| UAT-E2E-020 | Dashboard update | Phase 9 / IAE-330..334 | `COVERED` |
 
 Sign-off criteria (Blueprint §19.3, 8 categories) apply to the suite as a whole and are gated at Phase 16 (`RGL-399..403` staging/UAT evidence).
 
@@ -530,7 +530,7 @@ Bound verbatim in `10_TESTING_WORKSTREAM.md` §5.2 (Blueprint §22.1), each mapp
 | TI-004 | Cross-tenant export | Critical | test 7 | Phase 1 / PLT-131..132 | `COVERED` |
 | TI-005 | Cross-tenant file access | Critical | test 13 | Phase 1 / PLT-126..128 | `COVERED` |
 | TI-006 | Cross-tenant API token | Critical | test 6 | Phase 1 / PLT-129..130 | `COVERED` |
-| TI-007 | Cross-tenant report | Critical | test 7 | Phase 9 / IEP-330..334 | `COVERED` |
+| TI-007 | Cross-tenant report | Critical | test 7 | Phase 9 / IAE-330..334 | `COVERED` |
 | TI-008 | Cross-tenant realtime subscription | Critical | test 14 | Phase 1 / PLT-112..114 | `COVERED` |
 | TI-009 | Supreme Admin impersonation | High | test 5 | Phase 1 / PLT-115..116 | `ACCEPTED_RISK` (RPD-022 overlay, §21) |
 | TI-010 | Support elevated access | Critical | test 5 | Phase 1 / PLT-115..116 | `COVERED` |
@@ -595,8 +595,8 @@ Per prompt task #4 ("one primary owner and explicit prerequisite/extension links
 | Finance/billing readiness (CPT-BIL) | Phase 4 (`FIN-196..214`) | Phase 8 (`CPL-311..315`, customer-visible scope) | — | `05_*.md` §21 |
 | Ticketing (TKT-CUS) | Phase 7 (core ticket engine) | Phase 8 (`CPL-311..315`, full customer channel) | — | `05_*.md` §20/§21 |
 | Ticketing (TKT-HLP) | Phase 7 (`HRT-286..288`, domain) | Phase 16 (`RGL-411`, release/support-doc depth) | — | `05_*.md` §20; §22 partial-blocked entry |
-| White-label/localization (PLT-WLB) | Phase 1 (core) | Phase 9 (`IEP-354..359`, enterprise depth: OIDC/SAML/SCIM/residency) | — | `05_*.md` §14/§22 |
-| Reporting/dashboards (all `*-DASH` capabilities) | Every domain phase (source data) | Phase 9 (`IEP-330..334`, cross-domain aggregation/Executive Dashboard) | — | `05_*.md` §22 |
+| White-label/localization (PLT-WLB) | Phase 1 (core) | Phase 9 (`IAE-354..359`, enterprise depth: OIDC/SAML/SCIM/residency) | — | `05_*.md` §14/§22 |
+| Reporting/dashboards (all `*-DASH` capabilities) | Every domain phase (source data) | Phase 9 (`IAE-330..334`, cross-domain aggregation/Executive Dashboard) | — | `05_*.md` §22 |
 
 No item in this table has two primary owners. Every prerequisite edge points strictly backward in phase order (Phase N prerequisite never depends on Phase N+1) except the already-disclosed, already-resolved non-monotonic exceptions `HRS→APPR/OPS` and `PRC→COM` (`01_*.md` §11 R10, `ADR-CAND-ARCH-002`/`001`, both resolved) — restated here, not reopened.
 
@@ -609,7 +609,7 @@ Per prompt task #7 ("Preserve RPD-022 risk disclosure, direct-GA all-module gate
 | **RPD-022** — Supreme Admin absolute CRUD, no tamper-proof claim | Every append-only/posted/ledger surface | FIN-GL-001..004, FIN-CLS-001..004 (§5.5); BR-LYL-001, BR-PAY-001 partial (§10); FINTEST-011/022 (§19); UAT-E2E-019 (§17); TI-009 (§18); LYL-PNT-001..004 (§5.9); NFR-AUD-001 (§6); PKG-NFR-DATA-001 (§7); INV-005/006 (source register) | `06_*.md` §8 (binding semantics), §10 tests 8/9 (proof); permanent disclosure in `docs/runtime/CARGOGRID_CONTEXT.md` §11 | Product/Security/Finance (standing, `HANDOFF.md` §7) |
 | **RPD-034/036** — Direct GA, no external pilot, full internal validation, zero Sev-1 | All 9 domain phases + hardening + release | Every `COVERED` row in §5–§19 is provisionally covered at *design* time; GA itself additionally requires `RGL-404` (zero open Sev-1/critical) across the entire matrix | `12_*.md` §7.1, `RGL-404` | Product/QA/Security/SRE |
 | **RPD-031/037** — Contract-silent recovery = best effort, no universal RPO/RTO | NFR-REL-001 (§6), ASM-TA-011 (§8), all backup/DR gates | HDN-384 (DR rehearsal), RGL-408 (rollback decision) | `11_*.md` §8, `10_*.md` §7.4 | SRE/Legal (per-contract, §22) |
-| **RPD-038** — Custom per-integration adapters, no generic provider abstraction | IEP-342..346 (provider integrations) | Every messaging/maps/payment/e-sign/tax connector capability | `08_*.md` §8 (adapter template), `13_*.md` §11 | Architecture/Integration |
+| **RPD-038** — Custom per-integration adapters, no generic provider abstraction | IAE-342..346 (provider integrations) | Every messaging/maps/payment/e-sign/tax connector capability | `08_*.md` §8 (adapter template), `13_*.md` §11 | Architecture/Integration |
 
 None of these four standing decisions is weakened, narrowed, or silently omitted anywhere in §3–§20 above — every row that touches their scope carries the matching `ACCEPTED_RISK`/`EXTERNAL_VERIFICATION` tag rather than a bare `COVERED`.
 

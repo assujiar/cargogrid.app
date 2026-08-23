@@ -286,6 +286,44 @@ begin
 end;
 $$;
 
+\echo '>> app.rotate_api_key (IAE-037 Tier C fix, live-reproduced): rotating an already-expired key is rejected outright, rather than silently minting a dead-on-arrival successor key that inherits the same past expires_at'
+do $$
+declare
+  v_tenant_id uuid;
+  v_key record;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmekey');
+  select * into v_key from app.create_api_key(v_tenant_id, 'Expiry Rotate Guard Key', '["HRS:View personal data"]'::jsonb, now() + interval '1 minute', null, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+
+  -- Simulate real expiry having already passed -- app.authenticate_api_key's
+  -- own lazy status='expired' transition is rolled back by its own
+  -- subsequent raise (the root cause this fix closes), so the stored
+  -- status column can genuinely still read 'active' here even though
+  -- expires_at is already in the past.
+  update app.api_keys set expires_at = now() - interval '1 hour' where id = v_key.id;
+  if (select status from app.api_keys where id = v_key.id) <> 'active' then
+    raise exception 'assertion failed: expected the stored status column to still read active (the exact stale-status condition this fix guards against)';
+  end if;
+
+  begin
+    perform app.authenticate_api_key(v_key.raw_key);
+    raise exception 'assertion failed: expected api_key_expired for a genuinely expired key';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'api_key_expired' then raise; end if;
+  end;
+
+  begin
+    perform app.rotate_api_key(v_key.id, 60, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+    raise exception 'assertion failed: expected api_key_expired -- rotating an already-expired key must be rejected outright, not silently mint a dead-on-arrival successor';
+  exception when check_violation then
+    if sqlerrm !~ 'api_key_expired' then raise; end if;
+  end;
+
+  raise notice 'PASS: app.rotate_api_key independently re-checks real-time expiry rather than trusting the stored status column, closing the dead-on-arrival-successor-key defect';
+end;
+$$;
+
 \echo '>> app.revoke_api_key: unauthorized/not-found rejected; idempotent double-revoke; a revoked key fails authentication'
 do $$
 declare

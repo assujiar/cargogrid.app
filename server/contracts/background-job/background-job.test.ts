@@ -141,6 +141,8 @@ test("ATW-031 (ISS-2026-012): GENERIC_JOB_TYPES matches app.generic_job_types() 
       "logistics_partner_sync",
       "finance_bank_feed_sync",
       "external_sync",
+      "audit_export",
+      "retention_archive",
     ],
   );
 });
