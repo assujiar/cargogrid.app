@@ -162,7 +162,7 @@ create function app.trg_capture_lineage_job_to_shipment()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_hash text;
@@ -191,7 +191,7 @@ create function app.trg_capture_lineage_shipment_to_epod()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_shipment app.shipment_orders;
@@ -222,7 +222,7 @@ create function app.trg_capture_lineage_shipment_to_cost()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_shipment app.shipment_orders;
@@ -248,7 +248,7 @@ create function app.trg_capture_lineage_job_to_profitability()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_job app.job_orders;
@@ -279,7 +279,7 @@ create function app.trg_capture_lineage_job_to_billing_readiness()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_job app.job_orders;
@@ -558,7 +558,7 @@ create function app.backfill_transaction_lineage(
 returns integer
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_decision app.rbac_decision;
@@ -659,7 +659,7 @@ alter table app.transaction_lineage_edges enable row level security;
 
 create policy transaction_lineage_edges_select_scoped on app.transaction_lineage_edges
   for select to authenticated
-  using (app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
+  using (app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null));
 
 revoke execute on all functions in schema app from public;
 

@@ -969,7 +969,7 @@ create policy shipment_legs_select_scoped on app.shipment_legs
     exists (
       select 1 from app.shipment_orders so
       where so.id = shipment_legs.shipment_order_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -980,7 +980,7 @@ create policy shipment_leg_stops_select_scoped on app.shipment_leg_stops
       select 1 from app.shipment_legs sl
       join app.shipment_orders so on so.id = sl.shipment_order_id
       where sl.id = shipment_leg_stops.shipment_leg_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -991,7 +991,7 @@ create policy shipment_leg_cargo_allocations_select_scoped on app.shipment_leg_c
       select 1 from app.shipment_legs sl
       join app.shipment_orders so on so.id = sl.shipment_order_id
       where sl.id = shipment_leg_cargo_allocations.shipment_leg_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -1002,7 +1002,7 @@ create policy shipment_leg_custody_events_select_scoped on app.shipment_leg_cust
       select 1 from app.shipment_legs sl
       join app.shipment_orders so on so.id = sl.shipment_order_id
       where sl.id = shipment_leg_custody_events.shipment_leg_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

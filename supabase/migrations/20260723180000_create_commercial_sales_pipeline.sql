@@ -1229,13 +1229,13 @@ create policy win_loss_reasons_select_scoped on app.win_loss_reasons
 create policy sales_plans_select_scoped on app.sales_plans
   for select to authenticated
   using (
-    app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
+    app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
   );
 
 create policy sales_targets_select_scoped on app.sales_targets
   for select to authenticated
   using (
-    app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
+    app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
   );
 
 create policy forecast_snapshots_select_scoped on app.forecast_snapshots
@@ -1244,7 +1244,7 @@ create policy forecast_snapshots_select_scoped on app.forecast_snapshots
     exists (
       select 1 from app.sales_targets t
       where t.id = forecast_snapshots.sales_target_id
-        and app.can_access_record(auth.uid(), t.tenant_id, t.owner_user_id, app.lead_record_scope_org_unit_ids(t.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), t.tenant_id, t.owner_user_id, app.lead_record_scope_org_unit_ids(t.org_unit_id), null)
     )
   );
 
@@ -1253,7 +1253,7 @@ create policy pipeline_outcomes_select_scoped on app.pipeline_outcomes
   using (
     exists (
       select 1 from app.resolve_commercial_record_ref(pipeline_outcomes.related_type, pipeline_outcomes.related_id) r
-      where app.can_access_record(auth.uid(), pipeline_outcomes.tenant_id, r.owner_user_id, app.lead_record_scope_org_unit_ids(r.org_unit_id), null)
+      where app.can_access_record((select auth.uid()), pipeline_outcomes.tenant_id, r.owner_user_id, app.lead_record_scope_org_unit_ids(r.org_unit_id), null)
     )
   );
 

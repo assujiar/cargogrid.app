@@ -1344,7 +1344,7 @@ alter table app.procurement_dashboard_saved_views enable row level security;
 
 create policy procurement_dashboard_saved_views_select_own on app.procurement_dashboard_saved_views
   for select to authenticated
-  using (owner_auth_user_id = auth.uid() or app.is_supreme_admin());
+  using (owner_auth_user_id = (select auth.uid()) or app.is_supreme_admin());
 
 revoke execute on all functions in schema app from public;
 

@@ -232,7 +232,7 @@ create policy job_profitability_snapshots_select_scoped on app.job_profitability
     exists (
       select 1 from app.job_orders jo
       where jo.id = job_profitability_snapshots.job_order_id
-        and app.can_access_record(auth.uid(), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), jo.tenant_id, jo.owner_user_id, app.lead_record_scope_org_unit_ids(jo.org_unit_id), null)
     )
   );
 

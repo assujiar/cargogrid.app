@@ -830,7 +830,7 @@ create policy inventory_movements_select_scoped on app.inventory_movements
     exists (
       select 1 from app.warehouses w
       where w.id = inventory_movements.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -842,7 +842,7 @@ create policy inventory_movement_lines_select_scoped on app.inventory_movement_l
     exists (
       select 1 from app.warehouses w
       where w.id = inventory_movement_lines.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -854,7 +854,7 @@ create policy inventory_balances_select_scoped on app.inventory_balances
     exists (
       select 1 from app.warehouses w
       where w.id = inventory_balances.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -867,7 +867,7 @@ create policy inventory_reservations_select_scoped on app.inventory_reservations
       select 1 from app.inventory_balances b
       join app.warehouses w on w.id = b.warehouse_id
       where b.id = inventory_reservations.balance_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 

@@ -1432,7 +1432,7 @@ create policy cycle_count_plans_select_scoped on app.cycle_count_plans
     exists (
       select 1 from app.warehouses w
       where w.id = cycle_count_plans.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -1441,8 +1441,8 @@ alter table app.cycle_count_scope_items enable row level security;
 create policy cycle_count_scope_items_select_scoped on app.cycle_count_scope_items
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), cycle_count_scope_items.warehouse_id, cycle_count_scope_items.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), cycle_count_scope_items.tenant_id, cycle_count_scope_items.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), cycle_count_scope_items.warehouse_id, cycle_count_scope_items.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), cycle_count_scope_items.tenant_id, cycle_count_scope_items.owner_account_id)
   );
 
 alter table app.cycle_count_observations enable row level security;
@@ -1453,8 +1453,8 @@ create policy cycle_count_observations_select_scoped on app.cycle_count_observat
     exists (
       select 1 from app.cycle_count_scope_items s
       where s.id = cycle_count_observations.scope_item_id
-        and app.wms_pick_record_scope_ok(auth.uid(), s.warehouse_id, s.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), s.tenant_id, s.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), s.warehouse_id, s.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), s.tenant_id, s.owner_account_id)
     )
   );
 

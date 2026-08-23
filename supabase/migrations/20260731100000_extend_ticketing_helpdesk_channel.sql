@@ -2089,7 +2089,7 @@ begin
   return query
   select t.id, t.ticket_number, t.tenant_id, tn.name, t.subject, t.status, t.priority,
          t.severity, t.product_area, t.support_queue_id, sq.code,
-         t.assignee_support_auth_user_id, au.email, t.support_access_case_ref,
+         t.assignee_support_auth_user_id, au.email::text, t.support_access_case_ref,
          t.record_version, t.created_at, t.updated_at
   from app.tickets t
   join app.tenants tn on tn.id = t.tenant_id
@@ -2131,7 +2131,7 @@ begin
   select t.id, t.ticket_number, t.tenant_id, tn.name, t.subject, t.status, t.priority,
          t.severity, t.product_area, t.environment, t.external_reference,
          c.name, t.support_queue_id, sq.code,
-         t.assignee_support_auth_user_id, au.email,
+         t.assignee_support_auth_user_id, au.email::text,
          t.support_access_case_ref, g.status, g.expires_at, g.revoked_at,
          t.resolution_summary, t.cancelled_reason, t.last_reopen_reason, t.reopen_count,
          t.record_version, t.created_at, t.updated_at, t.resolved_at, t.closed_at

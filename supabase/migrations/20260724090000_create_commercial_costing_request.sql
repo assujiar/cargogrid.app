@@ -579,7 +579,7 @@ alter table app.costing_response_components enable row level security;
 create policy costing_requests_select_scoped on app.costing_requests
   for select to authenticated
   using (
-    app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
+    app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
   );
 
 create policy costing_request_components_select_scoped on app.costing_request_components
@@ -588,7 +588,7 @@ create policy costing_request_components_select_scoped on app.costing_request_co
     exists (
       select 1 from app.costing_requests cr
       where cr.id = costing_request_components.costing_request_id
-        and app.can_access_record(auth.uid(), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
     )
   );
 
@@ -602,7 +602,7 @@ create policy costing_responses_select_scoped on app.costing_responses
     exists (
       select 1 from app.costing_requests cr
       where cr.id = costing_responses.costing_request_id
-        and app.can_access_record(auth.uid(), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
     )
   );
 
@@ -616,7 +616,7 @@ create policy costing_response_components_select_scoped on app.costing_response_
       select 1 from app.costing_responses r
       join app.costing_requests cr on cr.id = r.costing_request_id
       where r.id = costing_response_components.costing_response_id
-        and app.can_access_record(auth.uid(), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), cr.tenant_id, cr.owner_user_id, app.lead_record_scope_org_unit_ids(cr.org_unit_id), null)
     )
   );
 

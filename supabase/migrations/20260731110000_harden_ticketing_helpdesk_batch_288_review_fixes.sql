@@ -487,7 +487,7 @@ begin
   return query
   select t.id, t.ticket_number, t.tenant_id, tn.name, t.subject, t.status, t.priority,
          t.severity, t.product_area, t.support_queue_id, sq.code,
-         t.assignee_support_auth_user_id, au.email, t.support_access_case_ref,
+         t.assignee_support_auth_user_id, au.email::text, t.support_access_case_ref,
          t.record_version, t.created_at, t.updated_at
   from app.tickets t
   join app.tenants tn on tn.id = t.tenant_id

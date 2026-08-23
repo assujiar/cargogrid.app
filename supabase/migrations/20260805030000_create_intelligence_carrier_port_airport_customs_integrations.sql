@@ -272,7 +272,7 @@ returns text
 language plpgsql
 stable
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_secret text;

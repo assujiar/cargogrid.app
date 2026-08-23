@@ -1006,7 +1006,7 @@ create policy wms_inbound_orders_select_scoped on app.wms_inbound_orders
     exists (
       select 1 from app.warehouses w
       where w.id = wms_inbound_orders.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -1019,7 +1019,7 @@ create policy wms_inbound_order_lines_select_scoped on app.wms_inbound_order_lin
       select 1 from app.wms_inbound_orders o
       join app.warehouses w on w.id = o.warehouse_id
       where o.id = wms_inbound_order_lines.inbound_order_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 

@@ -799,7 +799,7 @@ create policy shipment_leg_tracking_policies_select_scoped on app.shipment_leg_t
       select 1 from app.shipment_legs sl
       join app.shipment_orders so on so.id = sl.shipment_order_id
       where sl.id = shipment_leg_tracking_policies.shipment_leg_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 
@@ -810,7 +810,7 @@ create policy shipment_leg_tracking_sessions_select_scoped on app.shipment_leg_t
       select 1 from app.shipment_legs sl
       join app.shipment_orders so on so.id = sl.shipment_order_id
       where sl.id = shipment_leg_tracking_sessions.shipment_leg_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

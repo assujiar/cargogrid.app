@@ -677,11 +677,11 @@ create policy notification_types_select_authenticated on app.notification_types
 -- migration's own header explains the deliberately tighter (self-only) RLS posture.
 create policy notification_preferences_select_own on app.notification_preferences
   for select to authenticated
-  using (auth_user_id = auth.uid() or app.is_supreme_admin());
+  using (auth_user_id = (select auth.uid()) or app.is_supreme_admin());
 
 create policy notifications_select_own on app.notifications
   for select to authenticated
-  using (recipient_auth_user_id = auth.uid() or app.is_supreme_admin());
+  using (recipient_auth_user_id = (select auth.uid()) or app.is_supreme_admin());
 
 -- app.notification_delivery_attempts has no tenant_id/recipient column of its own (it
 -- belongs to a notification) and no domain UI needs to browse it directly yet -- no

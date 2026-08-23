@@ -591,8 +591,8 @@ alter table app.integration_health_checks enable row level security;
 create policy integration_connections_select_scoped on app.integration_connections
   for select to authenticated
   using (
-    app.has_active_tenant_membership(tenant_id, auth.uid())
-    and not app.actor_holds_customer_user_layer(tenant_id, auth.uid())
+    app.has_active_tenant_membership(tenant_id, (select auth.uid()))
+    and not app.actor_holds_customer_user_layer(tenant_id, (select auth.uid()))
   );
 
 create policy integration_health_checks_select_scoped on app.integration_health_checks
@@ -601,8 +601,8 @@ create policy integration_health_checks_select_scoped on app.integration_health_
     exists (
       select 1 from app.integration_connections c
       where c.id = integration_health_checks.connection_id
-        and app.has_active_tenant_membership(c.tenant_id, auth.uid())
-        and not app.actor_holds_customer_user_layer(c.tenant_id, auth.uid())
+        and app.has_active_tenant_membership(c.tenant_id, (select auth.uid()))
+        and not app.actor_holds_customer_user_layer(c.tenant_id, (select auth.uid()))
     )
   );
 

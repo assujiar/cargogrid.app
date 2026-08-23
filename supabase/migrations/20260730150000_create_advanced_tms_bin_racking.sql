@@ -718,7 +718,7 @@ create policy warehouse_locations_select_scoped on app.warehouse_locations
     exists (
       select 1 from app.warehouses w
       where w.id = warehouse_locations.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 

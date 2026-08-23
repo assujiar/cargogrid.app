@@ -149,7 +149,7 @@ create function app.start_driver_mobile_session(
 returns table (driver_mobile_session_id uuid, raw_token text, expires_at timestamptz)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_session app.shipment_leg_tracking_sessions;
@@ -398,7 +398,7 @@ create function app.ingest_driver_mobile_report(
 returns table (ingest_status text, report_id uuid, session_ended boolean)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_recent_bad_count integer;

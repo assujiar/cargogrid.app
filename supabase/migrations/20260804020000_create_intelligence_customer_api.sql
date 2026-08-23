@@ -227,7 +227,7 @@ language plpgsql
 -- `public` -- see app.create_customer_api_key's own comment for why `public`
 -- must be explicit here rather than assumed from the session default.
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_old app.api_keys;
@@ -320,7 +320,7 @@ security definer
 -- tenants.sql's own unqualified `create extension if not exists pgcrypto`) --
 -- same reasoning as app.rotate_api_key just above, `public` is added here
 -- explicitly rather than assumed from the session default.
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_scope uuid[];

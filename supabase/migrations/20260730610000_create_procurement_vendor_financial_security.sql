@@ -232,7 +232,7 @@ comment on function app.vendor_financial_encryption_key is 'PRC-254 design note 
 create function app._encrypt_vendor_financial_value(p_plaintext text)
 returns bytea
 language sql
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
   select pgp_sym_encrypt(p_plaintext, app.vendor_financial_encryption_key());
 $$;
@@ -240,7 +240,7 @@ $$;
 create function app._decrypt_vendor_financial_value(p_ciphertext bytea)
 returns text
 language sql
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
   select pgp_sym_decrypt(p_ciphertext, app.vendor_financial_encryption_key());
 $$;
@@ -248,7 +248,7 @@ $$;
 create function app._hash_vendor_financial_value(p_plaintext text)
 returns text
 language sql
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
   select encode(digest(p_plaintext, 'sha256'), 'hex');
 $$;

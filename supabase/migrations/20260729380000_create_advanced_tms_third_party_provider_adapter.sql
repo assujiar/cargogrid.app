@@ -188,7 +188,7 @@ create function app.register_third_party_provider_connection(
 returns table (connection_id uuid, provider_code text, integration_mode text, raw_webhook_secret text, status text)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_decision app.rbac_decision;
@@ -244,7 +244,7 @@ create function app.rotate_third_party_provider_webhook_secret(
 returns table (connection_id uuid, raw_webhook_secret text)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_conn app.third_party_provider_connections;
@@ -327,7 +327,7 @@ create function app.compute_third_party_provider_webhook_signature(p_connection_
 returns text
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_secret text;

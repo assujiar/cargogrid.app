@@ -586,7 +586,7 @@ alter table app.activities enable row level security;
 create policy contacts_select_scoped on app.contacts
   for select to authenticated
   using (
-    app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
+    app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
   );
 
 -- app.contact_links is a thin join record -- tenant-membership-scoped rather than
@@ -601,7 +601,7 @@ create policy contact_links_select_scoped on app.contact_links
 create policy activities_select_scoped on app.activities
   for select to authenticated
   using (
-    app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
+    app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
   );
 
 grant usage on schema app to authenticated;

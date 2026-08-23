@@ -1483,8 +1483,8 @@ alter table app.wms_outbound_shipments enable row level security;
 create policy wms_outbound_shipments_select_scoped on app.wms_outbound_shipments
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), wms_outbound_shipments.warehouse_id, wms_outbound_shipments.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_outbound_shipments.tenant_id, wms_outbound_shipments.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), wms_outbound_shipments.warehouse_id, wms_outbound_shipments.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_outbound_shipments.tenant_id, wms_outbound_shipments.owner_account_id)
   );
 
 alter table app.wms_shipment_packages enable row level security;
@@ -1495,8 +1495,8 @@ create policy wms_shipment_packages_select_scoped on app.wms_shipment_packages
     exists (
       select 1 from app.wms_outbound_shipments s
       where s.id = wms_shipment_packages.shipment_id
-        and app.wms_pick_record_scope_ok(auth.uid(), s.warehouse_id, s.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), s.tenant_id, s.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), s.warehouse_id, s.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), s.tenant_id, s.owner_account_id)
     )
   );
 
@@ -1508,8 +1508,8 @@ create policy wms_shipment_load_events_select_scoped on app.wms_shipment_load_ev
     exists (
       select 1 from app.wms_outbound_shipments s
       where s.id = wms_shipment_load_events.shipment_id
-        and app.wms_pick_record_scope_ok(auth.uid(), s.warehouse_id, s.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), s.tenant_id, s.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), s.warehouse_id, s.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), s.tenant_id, s.owner_account_id)
     )
   );
 
@@ -1521,8 +1521,8 @@ create policy wms_shipment_confirmations_select_scoped on app.wms_shipment_confi
     exists (
       select 1 from app.wms_outbound_shipments s
       where s.id = wms_shipment_confirmations.shipment_id
-        and app.wms_pick_record_scope_ok(auth.uid(), s.warehouse_id, s.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), s.tenant_id, s.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), s.warehouse_id, s.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), s.tenant_id, s.owner_account_id)
     )
   );
 
@@ -1534,8 +1534,8 @@ create policy wms_shipment_issue_lines_select_scoped on app.wms_shipment_issue_l
     exists (
       select 1 from app.wms_outbound_shipments s
       where s.id = wms_shipment_issue_lines.shipment_id
-        and app.wms_pick_record_scope_ok(auth.uid(), s.warehouse_id, s.owner_account_id::text)
-        and app.actor_can_view_owner_scoped_row(auth.uid(), s.tenant_id, s.owner_account_id)
+        and app.wms_pick_record_scope_ok((select auth.uid()), s.warehouse_id, s.owner_account_id::text)
+        and app.actor_can_view_owner_scoped_row((select auth.uid()), s.tenant_id, s.owner_account_id)
     )
   );
 
@@ -1544,8 +1544,8 @@ alter table app.wms_billing_eligibility_events enable row level security;
 create policy wms_billing_eligibility_events_select_scoped on app.wms_billing_eligibility_events
   for select to authenticated
   using (
-    app.wms_pick_record_scope_ok(auth.uid(), wms_billing_eligibility_events.warehouse_id, wms_billing_eligibility_events.owner_account_id::text)
-    and app.actor_can_view_owner_scoped_row(auth.uid(), wms_billing_eligibility_events.tenant_id, wms_billing_eligibility_events.owner_account_id)
+    app.wms_pick_record_scope_ok((select auth.uid()), wms_billing_eligibility_events.warehouse_id, wms_billing_eligibility_events.owner_account_id::text)
+    and app.actor_can_view_owner_scoped_row((select auth.uid()), wms_billing_eligibility_events.tenant_id, wms_billing_eligibility_events.owner_account_id)
   );
 
 -- Per ERR-2026-004 (docs/runtime/ERROR_LEDGER.md): explicit, directly-provable revoke

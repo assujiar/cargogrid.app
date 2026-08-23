@@ -13,9 +13,17 @@
 
 create schema if not exists auth;
 
+-- Column TYPES here must match the real auth.users, not merely its column names. Supabase
+-- declares email and role as character varying(255); declaring them `text` here let a function
+-- that returns `au.email` inside a `returns table (... text ...)` pass CI and fail on a real
+-- project with `42804: structure of query does not match function result type -- Returned type
+-- character varying(255) does not match expected type text`. Verified against the live project:
+--   email character varying(255) | role character varying(255) | phone text
 create table if not exists auth.users (
   id uuid primary key default gen_random_uuid(),
-  email text unique,
+  email varchar(255) unique,
+  role varchar(255),
+  phone text,
   created_at timestamptz not null default now()
 );
 

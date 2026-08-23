@@ -729,11 +729,11 @@ create policy support_access_grants_select_visible
   on app.support_access_grants for select
   to authenticated
   using (
-    grantee_auth_user_id = auth.uid()
+    grantee_auth_user_id = (select auth.uid())
     or app.is_supreme_admin()
     or exists (
       select 1 from app.principal_memberships pm
-      where pm.auth_user_id = auth.uid()
+      where pm.auth_user_id = (select auth.uid())
         and pm.tenant_id = support_access_grants.tenant_id
         and pm.layer = 'tenant_admin'
         and pm.status = 'active'
@@ -745,11 +745,11 @@ create policy support_access_sessions_select_visible
   on app.support_access_sessions for select
   to authenticated
   using (
-    grantee_auth_user_id = auth.uid()
+    grantee_auth_user_id = (select auth.uid())
     or app.is_supreme_admin()
     or exists (
       select 1 from app.principal_memberships pm
-      where pm.auth_user_id = auth.uid()
+      where pm.auth_user_id = (select auth.uid())
         and pm.tenant_id = support_access_sessions.tenant_id
         and pm.layer = 'tenant_admin'
         and pm.status = 'active'

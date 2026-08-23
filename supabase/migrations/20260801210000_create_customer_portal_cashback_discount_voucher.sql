@@ -380,7 +380,7 @@ create function app.generate_random_base32_voucher_code()
 returns text
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_bytes bytea := gen_random_bytes(5);
@@ -429,7 +429,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_decision app.rbac_decision;
@@ -587,7 +587,7 @@ create function app.redeem_loyalty_benefit_entitlement(
 returns app.loyalty_benefit_entitlements
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_is_staff boolean;

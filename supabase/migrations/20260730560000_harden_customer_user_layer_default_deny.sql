@@ -254,7 +254,7 @@ alter policy item_masters_select_scoped on app.item_masters
   using (((app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)) OR app.is_supreme_admin()));
 
 alter policy jobs_select_scoped on app.jobs
-  using ((app.is_supreme_admin() OR ((app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)) AND ((requested_by_auth_user_id = auth.uid()) OR app.is_support_grant_authority(auth.uid(), tenant_id)))));
+  using ((app.is_supreme_admin() OR ((app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)) AND ((requested_by_auth_user_id = (select auth.uid())) OR app.is_support_grant_authority((select auth.uid()), tenant_id)))));
 
 alter policy label_print_jobs_select_scoped on app.label_print_jobs
   using (((app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)) OR app.is_supreme_admin()));
@@ -287,7 +287,7 @@ alter policy pipeline_categories_select_scoped on app.pipeline_categories
   using ((app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)));
 
 alter policy principal_memberships_select_own_tenant on app.principal_memberships
-  using ((((tenant_id IS NULL) AND (auth_user_id = auth.uid())) OR ((tenant_id IS NOT NULL) AND (app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)))));
+  using ((((tenant_id IS NULL) AND (auth_user_id = (select auth.uid()))) OR ((tenant_id IS NOT NULL) AND (app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)))));
 
 alter policy provider_vehicle_mappings_select_scoped on app.provider_vehicle_mappings
   using (((app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id)) OR app.is_supreme_admin()));

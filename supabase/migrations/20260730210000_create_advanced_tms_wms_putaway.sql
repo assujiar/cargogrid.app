@@ -970,7 +970,7 @@ create policy wms_putaway_tasks_select_scoped on app.wms_putaway_tasks
     exists (
       select 1 from app.warehouses w
       where w.id = wms_putaway_tasks.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -983,7 +983,7 @@ create policy wms_putaway_confirmations_select_scoped on app.wms_putaway_confirm
       select 1 from app.wms_putaway_tasks t
       join app.warehouses w on w.id = t.warehouse_id
       where t.id = wms_putaway_confirmations.task_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 

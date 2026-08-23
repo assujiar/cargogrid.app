@@ -907,16 +907,16 @@ using (
   app.is_supreme_admin()
   or (
     app.has_active_tenant_membership(tenant_id)
-    and (deleted_at is null or app.is_support_grant_authority(auth.uid(), tenant_id))
+    and (deleted_at is null or app.is_support_grant_authority((select auth.uid()), tenant_id))
     and (
-      uploaded_by_auth_user_id = auth.uid()
-      or app.can_access_record(auth.uid(), tenant_id, uploaded_by_auth_user_id, shared_org_unit_ids, customer_account_ref)
-      or app.is_support_grant_authority(auth.uid(), tenant_id)
+      uploaded_by_auth_user_id = (select auth.uid())
+      or app.can_access_record((select auth.uid()), tenant_id, uploaded_by_auth_user_id, shared_org_unit_ids, customer_account_ref)
+      or app.is_support_grant_authority((select auth.uid()), tenant_id)
     )
     and (
       classification not in ('restricted', 'credential')
-      or uploaded_by_auth_user_id = auth.uid()
-      or app.is_support_grant_authority(auth.uid(), tenant_id)
+      or uploaded_by_auth_user_id = (select auth.uid())
+      or app.is_support_grant_authority((select auth.uid()), tenant_id)
     )
   )
 );

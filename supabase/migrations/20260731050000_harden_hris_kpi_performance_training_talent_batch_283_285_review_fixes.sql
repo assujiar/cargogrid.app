@@ -366,9 +366,9 @@ create policy performance_reviewer_assignments_select_scoped on app.performance_
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.check_performance_authority('View personal data', tenant_id, auth.uid())
-    or (app.get_self_employee(tenant_id, auth.uid())).master_record_id = employee_id
-    or (app.get_self_employee(tenant_id, auth.uid())).master_record_id = assigned_to_employee_id
+    or app.check_performance_authority('View personal data', tenant_id, (select auth.uid()))
+    or (app.get_self_employee(tenant_id, (select auth.uid()))).master_record_id = employee_id
+    or (app.get_self_employee(tenant_id, (select auth.uid()))).master_record_id = assigned_to_employee_id
   );
 
 drop policy if exists performance_calibration_adjustments_select_scoped on app.performance_calibration_adjustments;
@@ -376,5 +376,5 @@ create policy performance_calibration_adjustments_select_scoped on app.performan
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.check_performance_authority('View personal data', tenant_id, auth.uid())
+    or app.check_performance_authority('View personal data', tenant_id, (select auth.uid()))
   );

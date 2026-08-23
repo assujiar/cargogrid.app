@@ -412,24 +412,24 @@ create policy payroll_finance_handoff_batches_select_scoped on app.payroll_finan
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.check_payroll_authority('View payroll', tenant_id, auth.uid())
-    or (app.evaluate_permission(auth.uid(), tenant_id, 'FIN', 'View')).allowed
+    or app.check_payroll_authority('View payroll', tenant_id, (select auth.uid()))
+    or (app.evaluate_permission((select auth.uid()), tenant_id, 'FIN', 'View')).allowed
   );
 
 create policy payroll_finance_handoff_gl_lines_select_scoped on app.payroll_finance_handoff_gl_lines
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.check_payroll_authority('View payroll', tenant_id, auth.uid())
-    or (app.evaluate_permission(auth.uid(), tenant_id, 'FIN', 'View')).allowed
+    or app.check_payroll_authority('View payroll', tenant_id, (select auth.uid()))
+    or (app.evaluate_permission((select auth.uid()), tenant_id, 'FIN', 'View')).allowed
   );
 
 create policy payroll_finance_handoff_payment_instructions_select_scoped on app.payroll_finance_handoff_payment_instructions
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid())
-    or (app.evaluate_permission(auth.uid(), tenant_id, 'FIN', 'View')).allowed
+    or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid()))
+    or (app.evaluate_permission((select auth.uid()), tenant_id, 'FIN', 'View')).allowed
   );
 
 comment on policy payroll_finance_handoff_batches_select_scoped on app.payroll_finance_handoff_batches is

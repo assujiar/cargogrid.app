@@ -305,7 +305,7 @@ create policy dispatch_commands_select_scoped on app.dispatch_commands
     exists (
       select 1 from app.shipment_orders so
       where so.id = dispatch_commands.shipment_order_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

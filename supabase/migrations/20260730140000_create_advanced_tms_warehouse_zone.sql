@@ -1021,7 +1021,7 @@ alter table app.warehouses enable row level security;
 
 create policy warehouses_select_scoped on app.warehouses
   for select to authenticated
-  using (app.can_access_record(auth.uid(), tenant_id, null, app.lead_record_scope_org_unit_ids(company_org_unit_id), null));
+  using (app.can_access_record((select auth.uid()), tenant_id, null, app.lead_record_scope_org_unit_ids(company_org_unit_id), null));
 
 alter table app.warehouse_zones enable row level security;
 
@@ -1031,7 +1031,7 @@ create policy warehouse_zones_select_scoped on app.warehouse_zones
     exists (
       select 1 from app.warehouses w
       where w.id = warehouse_zones.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 
@@ -1043,7 +1043,7 @@ create policy warehouse_customer_eligibility_select_scoped on app.warehouse_cust
     exists (
       select 1 from app.warehouses w
       where w.id = warehouse_customer_eligibility.warehouse_id
-        and app.can_access_record(auth.uid(), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
+        and app.can_access_record((select auth.uid()), w.tenant_id, null, app.lead_record_scope_org_unit_ids(w.company_org_unit_id), null)
     )
   );
 

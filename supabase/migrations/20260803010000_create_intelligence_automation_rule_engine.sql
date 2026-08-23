@@ -1068,8 +1068,8 @@ alter table app.automation_rule_executions enable row level security;
 create policy automation_rules_select_scoped on app.automation_rules
   for select to authenticated
   using (
-    app.has_active_tenant_membership(tenant_id, auth.uid())
-    and not app.actor_holds_customer_user_layer(tenant_id, auth.uid())
+    app.has_active_tenant_membership(tenant_id, (select auth.uid()))
+    and not app.actor_holds_customer_user_layer(tenant_id, (select auth.uid()))
   );
 
 create policy automation_rule_versions_select_scoped on app.automation_rule_versions
@@ -1078,16 +1078,16 @@ create policy automation_rule_versions_select_scoped on app.automation_rule_vers
     exists (
       select 1 from app.automation_rules r
       where r.id = automation_rule_versions.automation_rule_id
-        and app.has_active_tenant_membership(r.tenant_id, auth.uid())
-        and not app.actor_holds_customer_user_layer(r.tenant_id, auth.uid())
+        and app.has_active_tenant_membership(r.tenant_id, (select auth.uid()))
+        and not app.actor_holds_customer_user_layer(r.tenant_id, (select auth.uid()))
     )
   );
 
 create policy automation_rule_executions_select_scoped on app.automation_rule_executions
   for select to authenticated
   using (
-    app.has_active_tenant_membership(tenant_id, auth.uid())
-    and not app.actor_holds_customer_user_layer(tenant_id, auth.uid())
+    app.has_active_tenant_membership(tenant_id, (select auth.uid()))
+    and not app.actor_holds_customer_user_layer(tenant_id, (select auth.uid()))
   );
 
 -- ===========================================================================

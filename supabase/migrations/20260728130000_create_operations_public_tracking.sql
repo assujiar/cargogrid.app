@@ -107,7 +107,7 @@ create function app.issue_shipment_tracking_token(
 returns table (token_id uuid, raw_token text, expires_at timestamptz, shipment_order_id uuid)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_shipment app.shipment_orders;
@@ -245,7 +245,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_recent_bad_count integer;
@@ -315,7 +315,7 @@ create policy shipment_tracking_tokens_select_scoped on app.shipment_tracking_to
     exists (
       select 1 from app.shipment_orders so
       where so.id = shipment_tracking_tokens.shipment_order_id
-        and app.can_access_record(auth.uid(), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), so.tenant_id, so.owner_user_id, app.lead_record_scope_org_unit_ids(so.org_unit_id), null)
     )
   );
 

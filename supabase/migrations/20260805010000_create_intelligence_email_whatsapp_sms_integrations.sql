@@ -487,7 +487,7 @@ stable
 as $$
   select
     n.id, n.tenant_id, n.status, n.effective_channel, n.subject, n.body,
-    u.email,
+    u.email::text,
     ca.address,
     c.id, c.status, c.config
   from app.notifications n
@@ -543,7 +543,7 @@ alter table app.notification_contact_addresses enable row level security;
 
 create policy notification_contact_addresses_select_own on app.notification_contact_addresses
   for select to authenticated
-  using (auth_user_id = auth.uid() or app.is_supreme_admin());
+  using (auth_user_id = (select auth.uid()) or app.is_supreme_admin());
 
 -- ===========================================================================
 -- Grants

@@ -647,8 +647,8 @@ create policy payroll_finance_handoff_batches_select_scoped on app.payroll_finan
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.check_payroll_authority('View payroll', tenant_id, auth.uid())
-    or app.check_payroll_finance_handoff_view_authority(tenant_id, auth.uid())
+    or app.check_payroll_authority('View payroll', tenant_id, (select auth.uid()))
+    or app.check_payroll_finance_handoff_view_authority(tenant_id, (select auth.uid()))
   );
 
 drop policy payroll_finance_handoff_gl_lines_select_scoped on app.payroll_finance_handoff_gl_lines;
@@ -656,8 +656,8 @@ create policy payroll_finance_handoff_gl_lines_select_scoped on app.payroll_fina
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.check_payroll_authority('View payroll', tenant_id, auth.uid())
-    or app.check_payroll_finance_handoff_view_authority(tenant_id, auth.uid())
+    or app.check_payroll_authority('View payroll', tenant_id, (select auth.uid()))
+    or app.check_payroll_finance_handoff_view_authority(tenant_id, (select auth.uid()))
   );
 
 drop policy payroll_finance_handoff_payment_instructions_select_scoped on app.payroll_finance_handoff_payment_instructions;
@@ -665,8 +665,8 @@ create policy payroll_finance_handoff_payment_instructions_select_scoped on app.
   for select to authenticated
   using (
     app.is_supreme_admin()
-    or app.can_view_hris_payroll_row(tenant_id, employee_id, auth.uid())
-    or app.check_payroll_finance_handoff_view_authority(tenant_id, auth.uid())
+    or app.can_view_hris_payroll_row(tenant_id, employee_id, (select auth.uid()))
+    or app.check_payroll_finance_handoff_view_authority(tenant_id, (select auth.uid()))
   );
 
 comment on policy payroll_finance_handoff_batches_select_scoped on app.payroll_finance_handoff_batches is

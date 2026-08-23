@@ -837,7 +837,7 @@ create function app.publish_job_vacancy(
 returns table (vacancy app.job_vacancies, raw_posting_token text, posting_expires_at timestamptz)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_decision app.rbac_decision;

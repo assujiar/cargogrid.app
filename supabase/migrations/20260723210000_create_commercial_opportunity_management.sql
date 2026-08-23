@@ -554,7 +554,7 @@ alter table app.opportunity_stage_history enable row level security;
 create policy opportunities_select_scoped on app.opportunities
   for select to authenticated
   using (
-    app.can_access_record(auth.uid(), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
+    app.can_access_record((select auth.uid()), tenant_id, owner_user_id, app.lead_record_scope_org_unit_ids(org_unit_id), null)
   );
 
 create policy opportunity_stage_history_select_scoped on app.opportunity_stage_history
@@ -563,7 +563,7 @@ create policy opportunity_stage_history_select_scoped on app.opportunity_stage_h
     exists (
       select 1 from app.opportunities o
       where o.id = opportunity_stage_history.opportunity_id
-        and app.can_access_record(auth.uid(), o.tenant_id, o.owner_user_id, app.lead_record_scope_org_unit_ids(o.org_unit_id), null)
+        and app.can_access_record((select auth.uid()), o.tenant_id, o.owner_user_id, app.lead_record_scope_org_unit_ids(o.org_unit_id), null)
     )
   );
 

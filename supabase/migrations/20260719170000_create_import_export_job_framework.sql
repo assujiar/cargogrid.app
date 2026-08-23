@@ -947,7 +947,7 @@ using (
   app.is_supreme_admin()
   or (
     app.has_active_tenant_membership(tenant_id)
-    and (requested_by_auth_user_id = auth.uid() or app.is_support_grant_authority(auth.uid(), tenant_id))
+    and (requested_by_auth_user_id = (select auth.uid()) or app.is_support_grant_authority((select auth.uid()), tenant_id))
   )
 );
 
