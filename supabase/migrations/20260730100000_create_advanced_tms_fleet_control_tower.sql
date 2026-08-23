@@ -191,7 +191,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_recent_bad_count integer;

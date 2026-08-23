@@ -162,7 +162,7 @@ create function app.trg_capture_lineage_job_to_shipment()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_hash text;
@@ -191,7 +191,7 @@ create function app.trg_capture_lineage_shipment_to_epod()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_shipment app.shipment_orders;
@@ -222,7 +222,7 @@ create function app.trg_capture_lineage_shipment_to_cost()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_shipment app.shipment_orders;
@@ -248,7 +248,7 @@ create function app.trg_capture_lineage_job_to_profitability()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_job app.job_orders;
@@ -279,7 +279,7 @@ create function app.trg_capture_lineage_job_to_billing_readiness()
 returns trigger
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_job app.job_orders;
@@ -558,7 +558,7 @@ create function app.backfill_transaction_lineage(
 returns integer
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_decision app.rbac_decision;

@@ -514,7 +514,7 @@ create or replace function app.ingest_driver_mobile_report(
 returns table (ingest_status text, report_id uuid, session_ended boolean)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_recent_bad_count integer;

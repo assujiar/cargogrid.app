@@ -179,7 +179,7 @@ create function app.prepare_job_order_handoff(
 returns app.job_order_handoffs
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_quotation app.quotations;

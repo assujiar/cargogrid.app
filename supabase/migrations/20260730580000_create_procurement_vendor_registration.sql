@@ -1809,7 +1809,7 @@ create function app.create_vendor_intake_token(
 returns table (token_id uuid, raw_token text, expires_at timestamptz, intended_email text)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_decision app.rbac_decision;
@@ -1958,7 +1958,7 @@ create function app.redeem_vendor_intake_token_and_submit(
 returns table (submit_status text, master_record_id uuid)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_recent_bad_count integer;

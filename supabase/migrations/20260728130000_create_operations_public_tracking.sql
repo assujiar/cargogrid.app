@@ -107,7 +107,7 @@ create function app.issue_shipment_tracking_token(
 returns table (token_id uuid, raw_token text, expires_at timestamptz, shipment_order_id uuid)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_shipment app.shipment_orders;
@@ -245,7 +245,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_recent_bad_count integer;

@@ -16,7 +16,18 @@
 
 create schema if not exists app;
 
-create extension if not exists pgcrypto;
+-- pgcrypto lives in `extensions`, not `public`. A hosted Supabase project ships pgcrypto
+-- pre-installed into its own `extensions` schema, so an unqualified
+-- `create extension if not exists pgcrypto` is a silent no-op there while creating it in
+-- `public` on a bare Postgres (CI, local). That divergence is invisible at migration time and
+-- only surfaces at runtime: every SECURITY DEFINER function that pins
+-- `set search_path = app, public, pg_temp` resolves digest()/hmac()/gen_random_bytes() on CI
+-- and fails with `function digest(unknown, unknown) does not exist` on a real project.
+-- Pinning the schema here makes both environments identical, so CI actually exercises the
+-- same resolution path production uses. Every pgcrypto caller therefore carries `extensions`
+-- in its own search_path.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 
 create table app.tenants (
   id uuid primary key default gen_random_uuid(),

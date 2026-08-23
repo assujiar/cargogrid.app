@@ -1171,7 +1171,7 @@ create function app.generate_label(
 returns app.label_instances
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_decision app.rbac_decision;

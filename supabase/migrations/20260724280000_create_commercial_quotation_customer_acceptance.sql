@@ -175,7 +175,7 @@ create function app.send_quotation_for_acceptance(
 returns table (token_id uuid, raw_token text, expires_at timestamptz, quotation_id uuid)
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_quotation app.quotations;
@@ -388,7 +388,7 @@ create function app.record_quotation_customer_decision(
 returns app.quotations
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_hash text;

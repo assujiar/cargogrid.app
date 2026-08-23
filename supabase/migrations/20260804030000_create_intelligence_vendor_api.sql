@@ -146,7 +146,7 @@ language plpgsql
 security definer
 -- pgcrypto (gen_random_bytes/digest) lives in `public`, same reasoning as
 -- IAE-010's own app.create_customer_api_key/app.rotate_api_key.
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_vendor app.vendor_profiles;
@@ -259,7 +259,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = app, public, pg_temp
+set search_path = app, public, extensions, pg_temp
 as $$
 declare
   v_old app.api_keys;

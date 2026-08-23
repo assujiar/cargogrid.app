@@ -536,7 +536,7 @@ CREATE OR REPLACE FUNCTION app.ingest_driver_mobile_report(p_raw_token text, p_c
  RETURNS TABLE(ingest_status text, report_id uuid, session_ended boolean)
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'app', 'public', 'pg_temp'
+ SET search_path TO 'app', 'public', 'extensions', 'pg_temp'
 AS $function$
 declare
   v_recent_bad_count integer;
