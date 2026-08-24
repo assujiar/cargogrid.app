@@ -54,7 +54,7 @@ documented general-purpose control), found and fixed the same checkpoint
 (`ISS-2026-233`, Medium). **`ISS-2026-168`** (service-role import boundary — the
 file's own documented "bundle scan" enforcing server-only import does not exist)
 **resolved** via a new ESLint `no-restricted-imports` rule scoped to an explicit
-allowlist of the 26 real, currently-legitimate importers. **2 more findings surfaced
+allowlist of the 27 real, currently-legitimate importers. **2 more findings surfaced
 and fixed in the same pass, both pre-existing and already owned by this checkpoint,
 neither covered by any of the 4 investigation lenses**: `ISS-2026-169` (an anonymous
 vendor self-registration action's already-unified rendered error message still leaked
@@ -87,12 +87,13 @@ run fresh:** `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test`
 migrations) — confirmed by two independent full-suite runs (the implementing agent's
 own run against its committed state, and the orchestrating session's own separate
 re-run against the final, token_hash-migration-inclusive state). Three additive
-migrations, 4 db-test files gained new regression blocks, 9 TS files changed (4
-mutation wrappers, 4 contracts, 1 Server Action for IP-restriction; plus
-`eslint.config.js`, `lib/supabase/service-role.ts`, `lib/auth/redirect-allowlist.ts`,
+migrations, 4 db-test files gained new regression blocks, 16 application-layer files
+changed (4 mutation wrappers, 4 contracts, 1 Server Action for IP-restriction; plus
+`eslint.config.js`, `lib/supabase/service-role.ts`, `lib/auth/redirect-allowlist.ts` +
+`redirect-allowlist.test.ts`,
 `app/(public)/vendor-intake/register/[tenantSlug]/actions.ts`,
 `server/queries/public-tracking.ts`, `server/queries/driver-mobile-tracking.ts` for
-the other 5 findings), 4 new runbook docs. Migrations: 324 at entry, 327 at
+the other 4 findings), 4 new runbook docs. Migrations: 324 at entry, 327 at
 first-round close. **`CG-S15-HDN-010` is `COMPLETED`, not `VERIFIED`** — Tier C review
 has not yet run; nothing after it may begin until it closes and this row moves to
 `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it.
