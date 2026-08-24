@@ -441,6 +441,92 @@ what the RPC itself already allows, add the schema-level backstop; if not, discl
 explicitly rather than leaving the RPC's own check looking like the only line of defense it is
 not.
 
+**C-27 — An RPC's `RETURNING`/return-value clause carries a column that a table-level column
+grant deliberately excludes.**
+A column-privilege fix correctly revokes table-level `SELECT` on a sensitive column and re-grants
+an explicit column list omitting it — but an RPC's own `RETURNING * INTO v_row; RETURN v_row;`
+(or an equivalent `SELECT *`-shaped composite return) is not a `SELECT` against the table and is
+therefore not subject to column-level ACLs at all: any caller with `EXECUTE` on the function gets
+the excluded column back anyway, in the function's own response. Distinct from C-17 (`select("*")`
+on the *client/TypeScript* side against a column-restricted table, which correctly fails closed) —
+here the failure is silent and the opposite direction: the column-privilege fix looks complete
+(direct `SELECT` genuinely denied) while a same-checkpoint or pre-existing RPC quietly hands the
+value back through its own return type instead.
+*Evidence:* `HDN-378` (Security Hardening) Tier C **CRITICAL**, live-forced — `ISS-2026-232`'s own
+column-privilege fix revoked `authenticated`'s table-level `SELECT` on `token_hash` across 3
+tables, but each table's own "revoke" RPC (`app.revoke_shipment_tracking_token`,
+`app.revoke_driver_mobile_session`, `app.revoke_vendor_intake_token`) returned the full composite
+row type including `token_hash` verbatim, defeating the fix for all 3 tables in the same
+checkpoint that shipped it. Fixed by explicitly nulling the excluded column on the returned
+composite immediately before `RETURN`, preserving the return type so no caller-side contract
+change was needed.
+**Check:** for every table that gains a column-level grant restriction, does any `SECURITY
+DEFINER` function that reads or writes that table ever return the whole row (`RETURNING *`, `SELECT
+*` into a composite, or an explicit `RETURNS table (...)`/`RETURNS <table>` that mirrors every
+column)? If yes, either narrow the return shape to an explicit column list, or mask the excluded
+column's value on the returned composite before it leaves the function — a table-level grant
+alone never protects an RPC's own return value.
+
+**C-28 — A specialized wrapper's extra protections are bypassed because the generic primitive it
+delegates to remains independently callable with only its own, weaker check.**
+A high-risk sub-case (e.g. one connection type, one document type, one workflow branch) gets its
+own dedicated wrapper function layering extra protections on top of a shared, generic primitive —
+a lockout guard, step-up-MFA, an IP-restriction check, an additional approval step. The generic
+primitive underneath is never revisited: it keeps its own original, broader `EXECUTE` grant and
+its own original, narrower authority check, so any caller who satisfies the generic check alone
+can call it directly and achieve the same effect as the wrapper, skipping every protection the
+wrapper was built to add. Distinct from C-25 (two independently-built mechanisms for the *same*
+conceptual control, neither aware of the other, added in parallel) — here there is only one
+underlying mechanism and one, later, intentionally-layered wrapper around it; the defect is that
+layering a wrapper on top never closes the direct path to what it wraps. Also distinct from C-26
+(an RPC check with no schema-level backstop) — here the direct path is itself another RPC with its
+own real, working, but weaker check, not a raw table mutation.
+*Evidence:* `HDN-378` (Security Hardening) Tier C **CRITICAL**, live-forced — `ISS-2026-150`'s own
+IP-restriction fix, IAE-026's lockout guard, and `CG-S14-IAE-039`'s step-up-MFA were all layered
+onto `app.activate_enterprise_idp_connection`, a wrapper around the generic, shared
+`app.set_integration_connection_status` (created at Prompt 336, long before any of the three
+layers existed). `set_integration_connection_status` kept its own original `INTHUB:Configure`-only
+check and its own `authenticated` grant; calling it directly, as an actor holding `INTHUB:Configure`
+but none of the wrapper's own extra requirements, reactivated a live enterprise SSO connection
+with zero verified test login, zero step-up challenge, and zero client IP — defeating all three
+layered protections in one call. Registered as `ISS-2026-235`/`HDN-BLK-023`, not yet fixed (the
+correct shape — guard the generic function conditionally, or revoke direct access entirely — is a
+design decision touching a heavily-reused primitive).
+**Check:** whenever a new protection (step-up-MFA, IP-restriction, a lockout/lookback guard, an
+extra approval) is layered onto one wrapper function around a shared, generic primitive, is the
+generic primitive itself still independently callable by a role that does not need to satisfy the
+new protection? If yes, either move the new check into the generic primitive (scoped to the
+specific transition/case that needs it) or revoke the generic primitive's own direct grant in
+favor of forcing every caller through the wrapper.
+
+**C-29 — `CREATE OR REPLACE FUNCTION` with an added parameter silently creates a second overload
+instead of replacing the original.**
+Postgres identifies a function by name *and* argument-type signature, not name alone — appending
+even a single defaulted, trailing parameter changes the signature, so `CREATE OR REPLACE FUNCTION`
+does not replace the existing function at all; it silently creates a second, co-existing overload.
+Every already-compiled caller that doesn't pass the new parameter keeps resolving to the OLD
+overload, forever, regardless of how the new one behaves — a security gate added this way is
+therefore never actually reached by any existing caller, while looking, from the migration diff
+alone, exactly like an in-place update. Only surfaces as a real Postgres error
+(`function name "..." is not unique`) on the next statement that references the function
+unqualified by argument types (e.g. a bare `COMMENT ON FUNCTION name(...)` without the newly
+ambiguous full signature, or a second migration attempting the same `CREATE OR REPLACE`) — not on
+the defining statement itself, which succeeds silently.
+*Evidence:* `HDN-378` (Security Hardening) first round, self-caught before commit — a first draft
+added a trailing `p_client_ip text default null` parameter to 4 functions via a bare
+`CREATE OR REPLACE FUNCTION`, live-tested against a real disposable database as this checkpoint's
+own Tier A validation. Surfaced as `function name "app.decide_ai_output_approval" is not unique` on
+the very next `COMMENT ON FUNCTION` statement — caught before any commit, not shipped. Fixed by an
+explicit `DROP FUNCTION` (old signature) + `CREATE FUNCTION` (new signature) + re-`GRANT EXECUTE`
+(restoring the exact original grants, verified against each function's own origin migration) for
+all 4 functions.
+**Check:** does any migration diff add, remove, or reorder a parameter on an existing function via
+a bare `CREATE OR REPLACE FUNCTION`? If so, verify post-migration (via `pg_proc`, grouping by
+`(schema, function name) having count(*) > 1`) that exactly one overload exists — never assume a
+signature-changing `CREATE OR REPLACE` replaced the original; prefer an explicit `DROP FUNCTION`
+(old signature) + `CREATE FUNCTION` (new signature) + re-`GRANT EXECUTE` whenever the parameter
+list changes at all.
+
 ## 5. Two process lessons that are not code classes
 
 Recorded here because both cost real rework and both recur.

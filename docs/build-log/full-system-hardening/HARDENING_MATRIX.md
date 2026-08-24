@@ -543,7 +543,7 @@ release gate.
 
 | # | Item | Severity | Disposition required |
 |---|---|---|---|
-| 1 | **`ISS-2026-150` — IP restriction structurally unreachable.** RPD-023's enforcement is real and correct when called directly, but **no real client IP is threaded through the route-handler layer**, so a fully-configured `enforced`-mode allowlist gives zero real protection against a caller reaching the RPC layer directly (leaked service credential, compromised client bypassing the intended HTTP path). | **High** | **Must not be deferred again.** Phase 9's closure disclosed it as a deliberate first-of-its-kind accepted exception and **named Step 15 as the remedy**. Needs: (a) route-handler-level IP extraction and threading; (b) `assert_ip_allowed` wired into the bounded set of highest-risk SEC/IAM/INTHUB mutations; (c) an explicit ruling on service-role/background callers with no client IP (likely exempt — IP restriction is inherently an interactive-session control). A cosmetic partial wire-up is forbidden: an unenforced parameter nothing populates *looks* fixed without being fixed. — **`RESOLVED`.** Wired into all 4 named target functions; see Result below. |
+| 1 | **`ISS-2026-150` — IP restriction structurally unreachable.** RPD-023's enforcement is real and correct when called directly, but **no real client IP is threaded through the route-handler layer**, so a fully-configured `enforced`-mode allowlist gives zero real protection against a caller reaching the RPC layer directly (leaked service credential, compromised client bypassing the intended HTTP path). | **High** | **Must not be deferred again.** Phase 9's closure disclosed it as a deliberate first-of-its-kind accepted exception and **named Step 15 as the remedy**. Needs: (a) route-handler-level IP extraction and threading; (b) `assert_ip_allowed` wired into the bounded set of highest-risk SEC/IAM/INTHUB mutations; (c) an explicit ruling on service-role/background callers with no client IP (likely exempt — IP restriction is inherently an interactive-session control). A cosmetic partial wire-up is forbidden: an unenforced parameter nothing populates *looks* fixed without being fixed. — **`PARTIALLY RESOLVED`** (corrected from `RESOLVED` at Tier C). Wired into all 4 named target functions, but Tier C found `app.set_integration_connection_status` (the shared primitive behind `activate_enterprise_idp_connection`) independently bypasses the fix — see Result below and `ISS-2026-235`. |
 | 2 | **`ISS-2026-151` — step-up challenge unwired** on `app.create_integration_connection` (**"40+" call sites across 16 files, corrected to a precise 43 at `HDN-378`, see Disposition**). 3 of 4 target functions were wired at `CG-S14-IAE-039` via migration `20260809200000`; this one was deliberately left rather than risk a rushed mass edit. | Medium | Wire it with real fixtures and a negative-path regression proving genuine enforcement, or rule on it explicitly. — **Re-scoped precisely at `HDN-378` (43 call sites / 27 sequences / 16 files, superseding the original "40+" estimate), deliberately deferred again** — see Result below. |
 | 3 | **Move postgis, pg_trgm and btree_gist out of `public`.** Same root class as the fixed pgcrypto defect. Clears **7 of the 8 non-noise security advisories, including the only ERROR** (`rls_disabled_in_public` on PostGIS's own `spatial_ref_sys`, plus 3 `extension_in_public` and 6 `*_security_definer_function_executable` from `st_estimatedextent`). | Medium | **Its own scoped task inside this lane — never folded into another edit.** Every `geometry`/`geography`/`ST_*` caller needs `extensions` in its search_path: a far larger blast radius than pgcrypto's. Note `spatial_ref_sys` cannot have RLS enabled at all — it belongs to the extension and `postgres` is not superuser on a hosted project. — **Corrected and `PARTIALLY RESOLVED`: `postgis` is not relocatable at all (`relocatable = false`); clears 2 of 8, not 7 of 8** — see Result below and `ISS-2026-234`. |
 | 4 | `ISS-2026-149` — anonymous cross-tenant SSO-config enumeration oracle | Low | Throttle or gate — **Reconfirmed unchanged, still deferred** (still dead code at the HTTP layer; building attempt-tracking infrastructure for a zero-caller resolver is disproportionate). |
@@ -603,11 +603,50 @@ release gate.
 > error. `ISS-2026-149`/`146` reconfirmed and re-measured, severity unchanged, both
 > still deferred as out-of-bounded-scope repository-wide work. Dependency scan clean;
 > `ISS-2026-158`'s CI-enforcement gap reconfirmed, unchanged, owner `HDN-387`. 4 new
-> runbooks/checklists authored (items 6 and 10). Independent full gate re-run:
-> `typecheck` 0, `lint` 0 errors/337 warnings, 5443/5443 unit tests, db-tests
-> confirmed green by two independent full 229-file suite runs (the implementing agent's
-> own run and the orchestrating session's own separate re-run against the final,
-> token_hash-inclusive migration state). Full disposition: `HDN-378.md`.
+> runbooks/checklists authored (items 6 and 10). First-round independent full gate
+> re-run: `typecheck` 0, `lint` 0 errors/337 warnings, 5443/5443 unit tests, db-tests
+> confirmed green by two independent full 229-file suite runs.
+>
+> **Tier C review (4 independent lenses) found 2 Critical + 1 High genuine bypass in
+> this checkpoint's own first-round work, live-forced against a real disposable
+> database, all fixed before `VERIFIED` close.** (1) `ISS-2026-232`'s own
+> column-privilege fix was defeated by a second, more fundamental gap: all 3 "revoke"
+> RPCs returned the full composite row type — including `token_hash` — via
+> `RETURNING`/return value, which is not subject to column-level `SELECT` privileges at
+> all. Fixed: each function now nulls `token_hash` on its own returned composite before
+> `return` (taxonomy class `C-27`, new). (2) `ISS-2026-168`'s ESLint fix only inspected
+> static `import`/`export ... from` declarations — `require()` and dynamic `import()`
+> both evaded it undetected. Fixed: 2 new `no-restricted-syntax` selectors added to the
+> same rule object. (3) The schema-wide completeness sweep independently found
+> `app.validate_webhook_url` shares `ISS-2026-233`'s own control-character gap (not
+> exploitable end-to-end, a dispatch-time backstop holds) — fixed in the same pass.
+>
+> **The checkpoint's own headline claim required a real correction.** Attack-surface
+> testing found `app.set_integration_connection_status` — the shared, generic primitive
+> `activate_enterprise_idp_connection` delegates to — is independently `EXECUTE`-granted
+> to `authenticated`, gated only on a bare `INTHUB:Configure` check, none of the SSO
+> wrapper's own extra protections (the pre-existing IAE-026 lockout guard, step-up-MFA,
+> and this checkpoint's own IP-restriction). Live-forced: calling it directly, as an
+> `INTHUB:Configure`-only actor, reactivated a live enterprise SSO connection with zero
+> verified test login, zero step-up challenge, and zero client IP, defeating all 3
+> layered protections in one call. `ISS-2026-150` corrected `RESOLVED` →
+> `PARTIALLY RESOLVED`; registered as `ISS-2026-235`/`HDN-BLK-023` (Critical, owner
+> `HDN-386`, taxonomy class `C-28`, new) — the correct fix is a design decision touching
+> a heavily-reused shared primitive, exceeding what a Tier C pass should rush. The
+> completeness sweep separately found 3 of `is_high_risk_action`'s own 7 hardcoded
+> tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve` — 61 real functions) never
+> received either guard at all, across the entire prior lineage — registered as
+> `ISS-2026-236`/`HDN-BLK-024` (High, owner `HDN-386`). A pre-existing (two-weeks-prior,
+> unrelated-to-this-checkpoint) `select("*")`-vs-column-restriction defect was also
+> found in `automation-rule.ts` — registered, not fixed, as `ISS-2026-237` (Medium,
+> owner `HDN-387`), mirroring `HDN-377`'s own `ISS-2026-224` precedent. The
+> ledger/documentation consistency lens found and this checkpoint fixed 5 real
+> documentation miscounts in its own first-round propagation (commit `3fbf665`,
+> including this row's own stale "40+"/"7 of 8" figures) before this Tier C close; a 6th
+> claimed defect was resolved as not a real error. Independent full gate re-run after
+> the fix pass: `typecheck` 0, `lint` 0 errors/337 warnings, 5443/5443 unit tests,
+> db-tests confirmed green by the full 229-file suite against the final, Tier-C-fix-
+> inclusive migration state (328 migrations). Full disposition: `HDN-378.md`.
 
 ---
 

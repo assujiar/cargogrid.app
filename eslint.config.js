@@ -190,6 +190,26 @@ const serviceRoleImportGuard = {
         ],
       },
     ],
+    // ISS-2026-168 Tier C fix: `no-restricted-imports` above only inspects static
+    // `import`/`export ... from` declarations -- live-forced (attack-surface lens)
+    // that `require("...supabase/service-role...")` and a dynamic
+    // `import("...supabase/service-role...")` both produced zero lint errors,
+    // reproducing the exact "no real bundle scan" gap this rule exists to close.
+    // These two selectors catch both remaining forms; `ignores` above still applies
+    // (this is the same config object).
+    "no-restricted-syntax": [
+      "error",
+      {
+        selector: "CallExpression[callee.name='require'] > Literal[value=/supabase\\/service-role/]",
+        message:
+          "service-role client must not be required() from a Client Component (ISS-2026-168) -- same rule as the static-import guard immediately above.",
+      },
+      {
+        selector: "ImportExpression > Literal[value=/supabase\\/service-role/]",
+        message:
+          "service-role client must not be dynamically import()ed from a Client Component (ISS-2026-168) -- same rule as the static-import guard immediately above.",
+      },
+    ],
   },
 };
 

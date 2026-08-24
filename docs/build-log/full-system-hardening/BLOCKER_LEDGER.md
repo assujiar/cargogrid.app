@@ -680,25 +680,65 @@ disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md` `ISS-2026-225` (corrected).*
 
 ---
 
-## Status as of `HDN-378` (live — update at every checkpoint that changes it)
+### `HDN-BLK-023` — `app.set_integration_connection_status` independently bypasses `ISS-2026-150`'s own IP-restriction fix, IAE-026's lockout guard, and step-up-MFA simultaneously
+
+| Field | Value |
+|---|---|
+| **Title** | The generic, shared status-setter behind `app.activate_enterprise_idp_connection` (this checkpoint's own hardened IP-restriction wrapper) is independently `EXECUTE`-granted to `authenticated`, gated only on a bare `INTHUB:Configure` check — none of the SSO wrapper's own extra protections (lockout guard, step-up-MFA, IP-restriction) |
+| **Found by** | `HDN-378` (`CG-S15-HDN-010`), Security Hardening, Tier C attack-surface adversarial testing lens — live-forced end to end against a real disposable database |
+| **Severity** | **Critical** — fully defeats 3 independently-shipped, already-`VERIFIED` security controls for a tenant-wide SSO login-routing reconfiguration (one of RPD-023's own named highest-consequence action classes) via a single direct RPC call |
+| **Owning phase** | Phase 9 (Intelligence, Automation and Enterprise Expansion) — `app.set_integration_connection_status` created at Prompt 336 (IAE-008), the SSO-specific wrapper's own extra protections added by IAE-026, `CG-S14-IAE-039`, and this checkpoint, none of which closed the loophole in the shared generic primitive |
+| **Owning lane** | `HDN-386` (Integrated Verification) |
+| **Reachability** | Any actor holding a legitimately-granted `INTHUB:Configure` permission for the target tenant — not zero authority, but not `IAM:Configure` or any of the SSO wrapper's own extra checks either |
+| **Reproduction** | Created a disabled enterprise SSO connection with zero verified test logins, tenant under an `enforced`-mode IP allowlist; the hardened wrapper correctly denied an `INTHUB:Configure`-only actor with no in-range IP; calling `app.set_integration_connection_status(conn.id, 'active', ...)` directly, as that same actor, succeeded — reactivating the connection with zero client IP supplied |
+| **Blast radius** | Every enterprise SSO connection activation/reactivation across every tenant; potentially every other connection type's own equivalent specialized wrapper, not yet audited |
+| **Disposition** | **Registered, not fixed** — the correct fix is a genuine design decision (conditional guard inside the shared function vs. revoking direct callers entirely) touching a heavily-reused primitive, exceeding what a Tier C review pass should rush |
+| **Required of `HDN-386`** | Decide and implement the fix shape; audit whether any other connection type's own specialized wrapper has the same bypass |
+| **Regression test** | Required with the fix — must prove the direct-call path is closed while the legitimate wrapper-mediated path still works |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-235` (`OPEN`, Critical) |
+
+---
+
+### `HDN-BLK-024` — 3 of `app.is_high_risk_action`'s own 7 hardcoded platform-default high-risk tuples (61 real functions) never received step-up-MFA or IP-restriction wiring
+
+| Field | Value |
+|---|---|
+| **Title** | `SEC:Configure` (7 functions, including the very functions that configure MFA/IP enforcement itself — a "guard the guards" gap), `FIN:Approve` (32 functions), `HRS:Approve` (22 functions) never appear in the `IAE-037` → `CG-S14-IAE-039` → `HDN-378` step-up-MFA/IP-restriction wiring lineage at all |
+| **Found by** | `HDN-378` (`CG-S15-HDN-010`), Security Hardening, Tier C schema-wide completeness sweep lens — live `pg_proc.prosrc` inspection across the whole `app` schema, cross-referenced against real TS Server Action callers |
+| **Severity** | **High** — the same missing-control shape `ISS-2026-150`/`151` were rated for 1-4 functions apiece, found here across 61 additional live, reachable functions never previously disclosed |
+| **Owning phase** | Phase 4 (Finance), Phase 7 (HRIS), Phase 9 (enterprise security config) — `is_high_risk_action`'s own tuple list is Phase 9 (`IAE-037`) |
+| **Owning lane** | `HDN-386` (Integrated Verification), extending/superseding the `ISS-2026-150`/`151` lineage |
+| **Reachability** | Any actor holding the relevant module permission (`FIN:Approve`, `HRS:Approve`, or `SEC:Configure`) for the target tenant — all 61 functions confirmed `authenticated`-executable and TS-caller-reachable, not dead code |
+| **Reproduction** | Direct `pg_proc.prosrc` grep for a call to `assert_current_step_up_authorization`/`assert_ip_allowed` inside every function gating on one of the 3 tuples — 0 of 61 call either guard; sample TS callers confirmed for `approve_finance_invoice`, `close_finance_period`, `decide_overtime_request`, `set_mfa_tenant_policy`, `revoke_user_session`, `set_ip_allowlist_enforcement_mode` |
+| **Blast radius** | 32 Finance approval/posting/period-close functions, 22 HRIS approval functions, 7 platform Security-configuration functions (including the enforcement-mode togglers and bypass-grant self-service functions) across every tenant |
+| **Disposition** | **Registered, not fixed** — the fix shape (which of the 61 get step-up, IP-restriction, or both, bounded across 3 domains) is a real design decision, not a mechanical patch |
+| **Required of `HDN-386`** | Re-derive the full wiring plan for all 3 tuples, prioritizing `SEC:Configure` first given its "guard the guards" nature |
+| **Regression test** | Required with each tuple's own fix, mirroring the `ISS-2026-150`/`151` fixture-adaptation shape |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-236` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-378` Tier C (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 to date | **16** — unchanged from `HDN-377`'s own Tier C close. `HDN-378` (Security Hardening) opened **zero new formal `HDN-BLK-` entries**: its own new findings (`ISS-2026-233` open-redirect control-character bypass, Medium, `RESOLVED` same checkpoint; `ISS-2026-234` postgis non-relocatability, Medium, `OPEN`, owner a dedicated future task) are both Medium/non-systemic, matching this ledger's own established convention (registered in `KNOWN_ISSUES.md`, no dedicated blocker-ledger entry) already used for `ISS-2026-223`/`224`/`231` above |
-| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged; none of the open `HDN-BLK-` entries were this checkpoint's own to close (`HDN-BLK-020..022` remain owned by `HDN-386`) |
-| — of which **Critical**, open | `HDN-BLK-020` (1, unchanged, owner `HDN-386`) |
-| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022` (9, unchanged — none of these were `HDN-378`'s own to close) |
+| Blockers opened **by** Step 15 to date | **18** — `HDN-378`'s own first round opened zero new formal entries (its Medium findings, `ISS-2026-233`/`234`, are registered in `KNOWN_ISSUES.md` only, matching this ledger's own convention). Its Tier C review opened `HDN-BLK-023` (Critical — `app.set_integration_connection_status` independently bypasses this checkpoint's own IP-restriction fix, the pre-existing IAE-026 lockout guard, and step-up-MFA) and `HDN-BLK-024` (High — 3 of `is_high_risk_action`'s own 7 hardcoded tuples, 61 functions, never wired) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged; none of the open `HDN-BLK-` entries were this checkpoint's own to close (`HDN-BLK-020..024` all owned by `HDN-386`) |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, `HDN-BLK-023` new this checkpoint's own Tier C) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024` (10, `HDN-BLK-024` new this checkpoint's own Tier C) |
 | — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged) |
-| Unresolved **Critical** anywhere | **1** — `HDN-BLK-020` (`app.audit_logs.legal_hold` unenforced), registered not fixed, owner `HDN-386`, unchanged this checkpoint |
-| **`HDN-378`'s own charter items resolved this checkpoint (High severity, not blocker-ledger-tracked)** | `ISS-2026-150` (IP restriction structurally unreachable, High — never carried its own `HDN-BLK-` entry, tracked directly via `HARDENING_MATRIX.md` §9 as the lane's own named highest-priority item) — `RESOLVED`. See `HDN-378.md`/`KNOWN_ISSUES.md` for full disposition |
+| Unresolved **Critical** anywhere | **2** — `HDN-BLK-020` (`app.audit_logs.legal_hold` unenforced) and `HDN-BLK-023` (`app.set_integration_connection_status` bypass), both registered not fixed, both owner `HDN-386` |
+| **`HDN-378`'s own charter items — first round vs Tier C correction** | `ISS-2026-150` (IP restriction structurally unreachable, High) first-round-`RESOLVED`, **corrected to `PARTIALLY RESOLVED` at Tier C** once `HDN-BLK-023`'s own wrapper-bypass was found — the 4 named functions' own IP-restriction check is real and correctly enforced when reached, but is not the only path to the same effect for `activate_enterprise_idp_connection`. `ISS-2026-168`/`ISS-2026-232` both first-round-`RESOLVED`, **each had a further Tier C-found bypass fixed the same pass** (see `KNOWN_ISSUES.md`) and remain `RESOLVED`. `ISS-2026-233` first-round-`RESOLVED`, held clean under 2 further independent adversarial lenses; its SQL-side sibling gap (`app.validate_webhook_url`) found and fixed the same Tier C pass |
 
 `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
-`HDN-BLK-020`, `HDN-BLK-021` and `HDN-BLK-022` are open release blockers for Step 16
-per `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly ruled
-an accepted exception at `HDN-387`/`389`.
+`HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023` and `HDN-BLK-024` are open
+release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their
+named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
 
 ## Reserved
 
-`HDN-BLK-023` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-025` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

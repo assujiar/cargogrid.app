@@ -3,6 +3,61 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-010` — **Security Hardening (Prompt 378)** —
+`VERIFIED`, Tier C closed. Four independent parallel adversarial lenses (correctness
+re-derivation; schema-wide completeness sweep; ledger/documentation consistency;
+attack-surface adversarial testing) ran against the first-round commit (`ca7f300`).
+Lens 1 independently re-derived all 7 first-round claims and found no defect; full
+gates re-run clean. **2 Critical + 1 High genuine bypass found in this checkpoint's
+own first-round work, all fixed before close**
+(`20260815400000_harden_ip_restriction_tierc_fixes.sql`): `ISS-2026-232`'s own
+column-privilege fix was defeated by a second, more fundamental gap — all 3 "revoke"
+RPCs (`app.revoke_shipment_tracking_token`, `app.revoke_driver_mobile_session`,
+`app.revoke_vendor_intake_token`) returned the full composite row including
+`token_hash` via `RETURNING`/return value, not subject to column-level `SELECT`
+privileges at all; fixed by nulling the field on each returned composite (taxonomy
+`C-27`, new). `ISS-2026-168`'s ESLint fix only inspected static `import`/`export`
+declarations, evaded by `require()`/dynamic `import()`; fixed with 2 new
+`no-restricted-syntax` selectors. The schema-wide sweep independently found
+`app.validate_webhook_url` shares `ISS-2026-233`'s own control-character gap (not
+exploitable end-to-end — a dispatch-time backstop holds — fixed anyway). **The
+checkpoint's own headline claim required correction**: attack-surface testing found
+`app.set_integration_connection_status` — the shared, generic primitive
+`activate_enterprise_idp_connection` delegates to — is independently
+`EXECUTE`-granted to `authenticated`, gated only on a bare `INTHUB:Configure` check,
+none of the SSO wrapper's own extra protections (the pre-existing IAE-026 lockout
+guard, step-up-MFA, and this checkpoint's own IP-restriction). Live-forced end to
+end: an `INTHUB:Configure`-only actor calling it directly reactivated a live
+enterprise SSO connection with zero verified test login, zero step-up challenge, zero
+client IP, defeating all 3 layered protections in one call. `ISS-2026-150` corrected
+`RESOLVED` → `PARTIALLY RESOLVED`; registered as `ISS-2026-235`/`HDN-BLK-023`
+(Critical, owner `HDN-386`, taxonomy `C-28`, new). The same sweep found 3 of
+`app.is_high_risk_action`'s own 7 hardcoded high-risk tuples (`SEC:Configure`,
+`FIN:Approve`, `HRS:Approve` — 61 real, reachable functions) never received either
+guard anywhere in the prior lineage, registered as `ISS-2026-236`/`HDN-BLK-024`
+(High, owner `HDN-386`). A pre-existing (two-weeks-prior, unrelated) `select("*")`
+defect found in `automation-rule.ts` against `app.approval_requests`, registered as
+`ISS-2026-237` (Medium, owner `HDN-387`), mirroring `HDN-377`'s own `ISS-2026-224`
+precedent. The ledger/documentation consistency lens found and this checkpoint
+corrected 5 real documentation miscounts in its own first-round propagation (commit
+`3fbf665`, before this close): an entry-gate unit-test count contradicting its own
+close-gate figure, a stale "40+ call sites" left beside its own "43" correction, a "9
+TS files changed" undercount (real: 16) propagated into 5 documents, a
+self-contradicting db-test file count, and a "26 vs. actual 27" ESLint-importer
+count propagated into 7 documents; a 6th claimed defect was resolved as not a real
+error. Also corrected: `ISS-2026-150`'s own mis-cited taxonomy class (`C-24` was
+wrong — the real, new class is `C-29`). 3 new taxonomy classes added per §6's own
+mandate: `C-27`, `C-28`, `C-29`. **Independent full gate re-run after the fix pass:**
+`typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5443/5443**; `bash
+scripts/db-tests/run.sh` **229/229 files clean** (328 migrations). One more additive
+migration (`20260815400000`). Migrations: 327 at first-round close, 328 at Tier C
+close. **`CG-S15-HDN-010` is `VERIFIED`.** `CG-S15-HDN-011` (`HDN-379`, Prompt 379,
+Performance and Scalability) is now the next eligible prompt.
+`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it. Not a
+production/pilot/GA/market-ready claim (RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-378.md` §13; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-010` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-010` — **Security Hardening (Prompt 378)** —
 `COMPLETED`, first round only, Tier C review pending. Four independent parallel
 investigation lenses covered IP-restriction route-handler wiring feasibility;
 `app.create_integration_connection`'s own remaining step-up-MFA gap scoping; an
