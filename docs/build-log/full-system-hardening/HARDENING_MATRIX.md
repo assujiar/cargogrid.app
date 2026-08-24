@@ -33,7 +33,7 @@ from zero and no lane rediscovers a known item.
 | 4 | RLS / RBAC | `HDN-373` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. Root RBAC gate (`app.evaluate_permission`) never checked tenant membership — fixed (`ISS-2026-180`). The entire Finance manual/period/config/import-export write surface (95 functions) was `SECURITY INVOKER`, completely unreachable by any real session since it shipped — fixed (`HDN-BLK-015`/`ISS-2026-182`, the largest reachability defect found in Step 15 to date). `HDN-BLK-012` (13 dashboard functions, deferred from `HDN-372`) fixed; `HDN-BLK-014` (~30 candidates, deferred from `HDN-372`) narrowed to 16 fixed / ~14 residual (`ISS-2026-186`, owner a future checkpoint); `ISS-2026-139` (loyalty maker/checker) fixed; `ISS-2026-137` re-verified accurate, no change. 6 further findings registered with named forward owners | §4 |
 | 5 | Financial integrity | `HDN-374` **`VERIFIED`** | **`PARTIAL`** — not a pass, Tier C closed. Quote-level tax silently doubled at invoicing — fixed (`ISS-2026-194`). A job order could reach `issued` on two full-amount invoices from two distinct handoffs — fixed at the actual AR/GL posting boundary, `app.issue_finance_invoice` (`ISS-2026-195`; the first fix draft, gating invoice preparation itself, was self-corrected before commit — it would have broken `OPS-181`'s own disclosed legitimate-re-handoff allowance). `HDN-BLK-010`/`ISS-2026-162`'s Finance/HRIS-Payroll scope resolved — 10 functions (6 named plus 4 more this checkpoint's own wider sweep found) fixed with the codebase's own "design note 9(a)" pattern, 2 mechanisms live-forced with a genuine two-process race each. `app.run_loyalty_expiry_sweep`'s own `p_as_of` was silently ignored — fixed (`ISS-2026-196`). **Tier C review found 5 more real, live-forced defects**: `app.lock_finance_period` shared the sweep's own missed shape (fixed); Finding 1's own fix dropped the quote's discount, overbilling (fixed); Finding 2's own guard had no backing constraint and did not survive genuine concurrency (fixed with a real partial unique index); `app.request_finance_settlement_reversal` bypassed period lock entirely (fixed) and posts no reversing GL journal at all (registered, `ISS-2026-199`/`HDN-BLK-016`, owner `HDN-386`). 2 findings registered, not fixed, owner `HDN-386` (`ISS-2026-197`: no FX/multi-currency conversion anywhere in the revenue chain; Operations' own job-profitability planned-vs-actual split). `HDN-BLK-010`'s residual 3 non-Finance functions plus `ISS-2026-163` handed to `HDN-387` | §5 |
 | 6 | Data lineage | `HDN-375` **`VERIFIED`** | **`PARTIAL`** — not a pass, Tier C closed. Canonical lineage chain, downstream projection versioning, historical config preservation and permission-awareness all held clean at first round. `app.transaction_lineage_edges` had no `BEFORE UPDATE/DELETE` guard at all despite its own append-only contract — fixed (`ISS-2026-201`). `app.loyalty_earning_events`/`app.finance_journals` accepted a `source_id` with no DB-layer FK — fixed with a per-`source_type` validation trigger on each (`ISS-2026-202`). The 5 hash-chain triggers are standalone per-row fingerprints, not a genuine chain — registered, not fixed (`ISS-2026-200`/`HDN-BLK-017`, High, owner `HDN-386`). **Tier C found the append-only-guard pattern is genuinely needed on ~70 more tables schema-wide, including `app.audit_logs` itself** — registered, not fixed (`ISS-2026-205`/`HDN-BLK-018`, High, owner `HDN-386`); the orphan-`source_id` gap recurs on `finance_subledger_batches` and others — registered, not fixed (`ISS-2026-206`, Medium, owner `HDN-387`, after a fix draft was caught before commit breaking a pre-existing test file's own design) | §6 |
-| 7 | API compatibility | `HDN-376` | `NOT_RUN` | §7 |
+| 7 | API compatibility | `HDN-376` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. A Critical/High authentication bypass fixed on the inbound/outbound webhook signature verification path (`ISS-2026-209`/`210`, a NULL signature silently accepted as verified). 2 Low REST route error-code bugs fixed (`ISS-2026-211`/`212`). `ISS-2026-147` item 1 closed — 44 new route-level tests across all 9 REST `/v1` handlers, via a fetch-stubbing harness (no local PostgREST/Supabase stack available). GraphQL wording corrected (no surface exists). 2 findings registered, not fixed: the API-version deprecation registry has zero live effect on requests (`ISS-2026-207`, Medium); the Vendor API's accept/decline mutations lack an idempotency-key short-circuit (`ISS-2026-208`, Low, investigated and found not bounded-repair-sized) | §7 |
 | 8 | Storage / signed URL | `HDN-377` | `NOT_RUN` | §8 |
 | 9 | Security hardening | `HDN-378` | `NOT_RUN` | §9 |
 | 10 | Performance / scalability | `HDN-379` | `NOT_RUN` | §10 |
@@ -401,11 +401,47 @@ release gate.
 | Dimension | Seeded state | Required |
 |---|---|---|
 | REST `/v1` surface | 9 route handlers exist; **`ISS-2026-147`: zero test coverage for them** (Medium) | Seeded here — this gate cannot pass while its primary surface is untested |
-| GraphQL parity | Ratified as developed together with REST | Verify parity or register the gap |
+| GraphQL parity | **Corrected at `HDN-376` (live-forced): no GraphQL surface exists in this repository at all** — no `graphql` package dependency, no schema, no resolvers, no `app/api/graphql` route. `server/policies/graphql-complexity.ts` is a depth/complexity-limiter policy module pre-built for a future GraphQL server that was never built. The prior "Ratified as developed together with REST" wording was misleading — there is nothing to hold parity with today, not a broken parity relationship | Not a defect (nothing is exposed, nothing is broken); disclosed precisely rather than implying an existing parity relationship. Re-verify at whichever future prompt actually ships a GraphQL server |
 | Public / customer / vendor API | Phase 9 (`IAE`), built on `PLT-129` API-key primitives (hash-only storage, scope-narrowing via `app.evaluate_permission()`) | Compatibility + deprecation tests |
 | Webhooks — outbound delivery worker on `app.jobs`; inbound third-party-GPS receiver kept separate | Phase 9 / `ADR-0025` B | Signing, replay, retry, DLQ |
 | Idempotency, rate limit, error shapes, pagination | Built | Test |
 | Schema/migration compatibility plan | Additive / expand-and-contract only | Verify |
+
+> **Result, 2026-08-24 (`CG-S15-HDN-008`), `COMPLETED`, Tier C review pending:** one
+> additive migration, four independent parallel investigation lenses, each required to
+> live-force its own findings on disposable databases or real request/response
+> construction. **Standout finding, Critical, fixed**: `app.verify_third_party_provider_
+> webhook_signature` (inbound third-party GPS webhook gate) returned SQL `NULL`, not
+> `false`, for a null signature — `if not verify_...()` silently treated that as
+> verified, so a fully unsigned webhook was accepted as genuine; live-forced a real
+> telemetry report inserted with `p_signature => null`, `anon`-reachable directly via
+> PostgREST, entirely bypassing the app-layer check. Directly violated Prompt 376 §24
+> ("unsigned callbacks fail"). Fixed by mirroring 2 sibling functions' own already-proven
+> null/empty-signature guard (`ISS-2026-209`). The identical latent defect in `app.
+> verify_webhook_signature` (PLT-129, not currently live-exploitable, zero live caller)
+> also fixed for consistency (`ISS-2026-210`, High). **2 more real defects fixed**
+> (`ISS-2026-211`/`212`, both Low): a webhook-domain error code leaking onto 2 non-webhook
+> mutation routes; `stale_version` conflating a 400 malformed-input case with a real 409
+> conflict on 3 routes. **`ISS-2026-147` item 1 closed**: 9 REST `/v1` route handlers had
+> zero dedicated HTTP-layer test coverage — built a shared, reusable fetch-stubbing test
+> harness (this environment has no local PostgREST/Supabase stack, and `authorizeApiV1
+> Request()` constructs a real, non-injectable Supabase client, so the harness stubs
+> `globalThis.fetch` at the exact network boundary while every route's own real request
+> parsing/validation/response-shaping logic runs for real) plus 44 new tests across all
+> 9 routes. GraphQL wording corrected (live-forced: no GraphQL surface exists in this
+> repository at all). **2 findings registered, not fixed**: `ISS-2026-207` (Medium, owner
+> `HDN-387`) — the `app.api_versions` deprecation registry has zero live effect on real
+> requests, not a Step 16 blocker since only `v1` exists and is active; `ISS-2026-208`
+> (Low, owner `HDN-387`) — `accept`/`decline_vendor_assignment_invitation_via_vendor_api`
+> lack an idempotency-key short-circuit, a fix draft was investigated and found NOT to
+> mechanically mirror the established pattern (the table's own existing `idempotency_
+> key` column already serves a different purpose). A pre-Step-15 migration-editing
+> historical fact (3 commits, 86 files, predating `HDN-369`) reconciled against the
+> additive-only rule with one acknowledging sentence in `00_EXECUTION_INDEX.md` §2.2, no
+> fix required. No Critical finding residual anywhere. Gates: `typecheck` 0, `lint` 0
+> errors/337 warnings, 5438/5438 unit tests (+44 new), db-tests **228/229 files clean**
+> (321 migrations) — the 229th the same pre-existing, unrelated `ISS-2026-204` flake.
+> Tier C review required before `VERIFIED`. Full disposition: `HDN-376.md` §6/§12.
 
 **Upstream hard gate:** `HDN-371` `VERIFIED`.
 

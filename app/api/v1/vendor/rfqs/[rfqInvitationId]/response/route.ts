@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rfq
     responseBody = { error: buildApiError({ code: "forbidden_scope", message: "This endpoint requires a vendor-scoped API key.", requestId: authorized.request.correlationId }) };
   } else if (!idempotencyKeyResult.success) {
     statusCode = 400;
-    responseBody = { error: buildApiError({ code: "webhook_missing_idempotency_key", message: "An Idempotency-Key header is required for this mutation.", requestId: authorized.request.correlationId }) };
+    responseBody = { error: buildApiError({ code: "missing_idempotency_key", message: "An Idempotency-Key header is required for this mutation.", requestId: authorized.request.correlationId }) };
   } else {
     let body: RfqResponseBody;
     try {

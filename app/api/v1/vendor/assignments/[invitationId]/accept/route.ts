@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ inv
     responseBody = { error: buildApiError({ code: "forbidden_scope", message: "This endpoint requires a vendor-scoped API key.", requestId: authorized.request.correlationId }) };
   } else if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
     statusCode = 400;
-    responseBody = { error: buildApiError({ code: "stale_version", message: "A positive integer expectedVersion is required.", requestId: authorized.request.correlationId }) };
+    responseBody = { error: buildApiError({ code: "invalid_expected_version", message: "A positive integer expectedVersion is required.", requestId: authorized.request.correlationId }) };
   } else {
     try {
       const invitation = await acceptVendorAssignmentInvitationViaVendorApi(toVendorApiClient(authorized.request.rpcClient), {

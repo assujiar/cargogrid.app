@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ boo
   let responseBody: unknown;
   if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
     statusCode = 400;
-    responseBody = { error: buildApiError({ code: "stale_version", message: "A positive integer expectedVersion is required.", requestId: authorized.request.correlationId }) };
+    responseBody = { error: buildApiError({ code: "invalid_expected_version", message: "A positive integer expectedVersion is required.", requestId: authorized.request.correlationId }) };
   } else {
     try {
       const booking = await submitCustomerBookingRequest(toBookingClient(authorized.request.rpcClient), {

@@ -1027,15 +1027,13 @@ This is taxonomy class C-05 (`docs/standards/RECURRING_DEFECT_TAXONOMY.md` — "
 
 **Status `OPEN`**, Low severity — narrow blast radius (a single, non-secret UUID field, requiring an out-of-band leak of the record id first), and not a Group-8-specific regression (2,000+ pre-existing occurrences across many already-`VERIFIED` phases/batches). **Not fixed by this checkpoint** — patching only the ~8 Group-8 occurrences the review happened to name would leave the other 2,000+ instances (and the underlying pattern) untouched, exactly the "a finding fixed only where it was found is an incomplete fix" trap `RECURRING_DEFECT_TAXONOMY.md` §5 itself warns against; a real fix requires a single, repository-wide sweep (e.g., a shared helper that raises a tenant-blind `insufficient_authority`/`not_found` message, or reordering every affected function to check existence-and-authority together before ever reading `tenant_id` into an interpolated string) — genuinely out of scope for a four-capability batch fix pass. Owner: a dedicated future repository-wide hardening task, scoped to sweeping every `raise exception` that interpolates a looked-up record's own `tenant_id` (or any other cross-tenant field) into message text before the caller's own authority over that specific tenant has been established.
 
-### ISS-2026-147 — Batch 3's own two Tier C-disclosed findings (zero test coverage for the 9 `/api/v1` REST route handlers; `IAE-013`'s own per-connector execution-log filtering claim mismatch) were never registered in this file, breaking the discipline every later Phase 9 batch followed (Phase 9, `CG-S14-IAE-036`, Prompt 364 Integrated Verification, full regression/parity lens, `OPEN`, Medium for item 1 / Low for item 2)
+### ISS-2026-147 — Batch 3's own two Tier C-disclosed findings (zero test coverage for the 9 `/api/v1` REST route handlers; `IAE-013`'s own per-connector execution-log filtering claim mismatch) were never registered in this file, breaking the discipline every later Phase 9 batch followed (Phase 9, `CG-S14-IAE-036`, Prompt 364 Integrated Verification, full regression/parity lens, item 1 `RESOLVED` at `HDN-376`, item 2 still `OPEN`, Low)
 
 Found by `CG-S14-IAE-036`'s own REST/GraphQL parity and full-regression lens while re-verifying Phase 9's own closure discipline against the whole merged 34-capability system. `docs/build-log/phase-09/00_EXECUTION_INDEX.md` §14 (Batch 3, Prompts 337-341) itself already disclosed both findings at the time — "disclosed, not fixed" — but neither was ever promoted into this file the way every subsequent batch's own disclosed residuals were (`ISS-2026-143` through `146`), leaving Phase 9's own known-issue register incomplete relative to its own build-log record.
 
-**Item 1 (Medium)** — `IAE-009`/`IAE-010`/`IAE-011` (Public/Customer/Vendor API, Prompts 337-339) together expose 9 real `/api/v1` REST route handlers; zero of them have their own `.test.ts` route-level test file. Confirmed still true at this checkpoint: `find app/api -name "*.test.ts"` returns zero matches. This does not mean the underlying RPCs are untested — every RPC each route calls is exercised by its own capability's `scripts/db-tests/*.sql` file — but the HTTP-layer concerns (request parsing, header/auth extraction, response shaping, error-code mapping to HTTP status) have zero dedicated coverage.
+**Item 1 (Medium) — `RESOLVED` at `HDN-376`.** `IAE-009`/`IAE-010`/`IAE-011` (Public/Customer/Vendor API, Prompts 337-339) together expose 9 real `/api/v1` REST route handlers; zero of them had their own `.test.ts` route-level test file. This never meant the underlying RPCs were untested — every RPC each route calls is exercised by its own capability's `scripts/db-tests/*.sql` file — but the HTTP-layer concerns (request parsing, header/auth extraction, response shaping, error-code mapping to HTTP status) had zero dedicated coverage. **Closed at `HDN-376`** (Prompt 376, API Compatibility Audit, whose own charter squarely covers this): a shared, reusable fetch-stubbing test harness (`tests/api/v1/support/rpc-fetch-stub.ts` — `authorizeApiV1Request()` internally constructs a real, non-injectable Supabase client with no local PostgREST/Supabase stack available in this environment, so the harness stubs `globalThis.fetch` at the network boundary while every route's own real request parsing/validation/response-shaping logic runs for real) plus 44 new tests across all 9 route handlers (`tests/api/v1/*.test.ts`), covering auth denial, request validation, RPC-error-code-to-HTTP-status mapping, and success paths per route. Found and fixed 2 real route-level defects in the process (`ISS-2026-211`, `ISS-2026-212`).
 
-**Item 2 (Low)** — `IAE-013` (n8n Integration, Prompt 341) claims its own per-connector execution-log filtering scopes correctly by connector id; Batch 3's own Tier C review found the claim's supporting evidence narrower than stated (a documentation/evidence-completeness mismatch, not a live-reproduced authorization bypass — the filtering itself was not shown to leak across connectors, only under-evidenced relative to what the build log asserted).
-
-**Status `OPEN`** for both items. **Not fixed by this checkpoint** — writing 9 new route-level test files, or re-deriving and re-documenting `IAE-013`'s own filtering evidence, is real, additive work exceeding `IAE-036`'s own verification-only charter (`docs/ai-agent-build-prompt-package/14-phase-09-intelligence-enterprise/364_*.md` §12 forbids "hidden test/permission weakening" but adding brand-new route tests is scope expansion, not a bounded repair of a Tier C-confirmed live defect). Owner: a dedicated future Phase 9 test-coverage task (item 1) and a documentation-evidence follow-up on `IAE-341.md` (item 2).
+**Item 2 (Low) — still `OPEN`.** `IAE-013` (n8n Integration, Prompt 341) claims its own per-connector execution-log filtering scopes correctly by connector id; Batch 3's own Tier C review found the claim's supporting evidence narrower than stated (a documentation/evidence-completeness mismatch, not a live-reproduced authorization bypass — the filtering itself was not shown to leak across connectors, only under-evidenced relative to what the build log asserted). **Not fixed by `HDN-376`** — outside its own API-compatibility charter (n8n execution-log evidence is an Automation/Integration-domain documentation gap, not an API contract). Owner: a documentation-evidence follow-up on `IAE-341.md`.
 
 ### ISS-2026-148 — zero load/performance-test evidence exists for any Phase 9 route or RPC at a declared target volume, undisclosed until now (Phase 9, `CG-S14-IAE-036`, Prompt 364 Integrated Verification, full regression/parity lens, `OPEN`, Medium)
 
@@ -1853,6 +1851,158 @@ fixed here. Owner: `HDN-387`.** Fix shape once owned: for each table, first esta
 already passes a resolvable id, THEN add the same `BEFORE INSERT OR UPDATE` validation
 trigger pattern — updating any test fixture that currently relies on a synthetic
 non-resolving id to use a real one, rather than working around the new guard.
+
+### ISS-2026-207 — `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests (found at `CG-S15-HDN-008`, `OPEN`, Medium, owner `HDN-387`)
+
+Found by this checkpoint's own public/customer/vendor API lens, live-forced. `app.api_
+versions` is a real, audited, Supreme-only-mutable state machine (seeded `v1 active`),
+genuinely wired into the admin console (`app/(tenant)/[tenantSlug]/admin/api-keys/
+page.tsx` renders `ApiVersionList`) and covered by passing db-tests
+(`scripts/db-tests/public-api-platform.sql`). Live-forced against the real request-time
+gateway: marked `v1` `deprecated` then `sunset` (with a real future `sunset_at`), then
+called `app.authenticate_and_authorize_api_request()` with an otherwise fully valid
+key/scope — **still returned `outcome=ok`**. Root cause, confirmed by signature: the
+gateway RPC takes no version argument at all and never queries `app.api_versions`. The
+`x-cargogrid-api-version` response header is a hardcoded literal `"v1"` (`server/
+contracts/api/api.ts`), not derived from the registry. No route anywhere emits an
+RFC-8594-style `Deprecation`/`Sunset` header, and no `/v2` route tree exists.
+
+**Severity: Medium, not currently a live gap** — only `v1` has ever existed and it is
+currently `active`, so nothing is silently broken today; this is a forward risk that
+must be closed before this repository ever actually deprecates `v1` or ships a `v2`, not
+before then. **Not fixed here** — wiring `app.authenticate_and_authorize_api_request()`
+(or a thin wrapper) to check `app.api_versions.status` for the request's own route, and
+emitting real `Deprecation`/`Sunset` headers sourced from the registry, is a small,
+additive change (~2-3 files: `lib/api-gateway/authenticate.server.ts`, `server/
+mutations/public-api-platform.ts`, possibly `server/contracts/api/api.ts`) but requires
+an explicit ruling on when/whether to enforce it (per `00_EXECUTION_INDEX.md` §8.2's
+accepted-risk process) rather than a same-session bounded repair. **Owner: `HDN-387`.**
+
+### ISS-2026-208 — `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every sibling Vendor API mutation (found at `CG-S15-HDN-008`, `OPEN`, Low, owner `HDN-387`)
+
+Found by this checkpoint's own schema/migration-compatibility lens, live-forced. Every
+other idempotent Vendor/Customer API mutation this checkpoint spot-checked
+(`create_customer_booking_request_draft`, `submit_customer_booking_request`, `submit_
+rfq_response_via_vendor_api`) follows the codebase's own proven "design note 9(a)"
+pattern (an idempotency key that replays to the identical result). `accept_vendor_
+assignment_invitation_via_vendor_api`/`decline_...` do not — they rely solely on
+`expectedVersion` optimistic concurrency. Live-forced: accepted a real invitation once
+(success, version 1→2), then replayed the identical call with the client's original
+`expectedVersion=1` (simulating a lost-response retry) — result was `stale_version`
+(HTTP 409), not an idempotent 200 returning the unchanged accepted row. This does **not**
+violate Prompt 376 §24's "duplicate retry cannot duplicate transactions" rule (the
+invitation is accepted exactly once either way, live-confirmed) — it is a UX/API-
+ergonomics gap: a client cannot distinguish "my own retry already landed" from "someone
+else changed it" without a separate re-fetch.
+
+**Investigated for a same-checkpoint fix and found NOT bounded-repair-sized.** `app.
+vendor_assignment_invitations` already carries an `idempotency_key` column with a real
+unique index, but that column is scoped to a DIFFERENT purpose (dedup at invitation
+*creation* time, by the staff-facing RPC that creates the invitation) — reusing it for
+the vendor's own accept/decline mutation would conflict with its existing per-row
+uniqueness semantics, not mechanically mirror the pattern the way `ISS-2026-202`'s own
+fix did. A genuine fix needs a new parameter and its own column/index design, not a copy
+of an existing pattern — a design decision, not a bounded repair. **Severity: Low** —
+the core "no duplicate transaction" business rule already holds; this is solely a retry-
+ergonomics improvement. **Not fixed here. Owner: `HDN-387`.**
+
+### ISS-2026-209 — `app.verify_third_party_provider_webhook_signature` returned SQL NULL (not `false`) for a null signature, so `if not verify_...()` silently accepted a fully unsigned inbound GPS webhook as genuine (found and fixed at `CG-S15-HDN-008`, `RESOLVED` at `HDN-376`, Critical)
+
+Found by this checkpoint's own webhook signing/retry/replay/DLQ investigation lens,
+live-forced. `return v_expected = p_signature;` (ATW-226E) evaluates to SQL `NULL`, not
+`false`, whenever `p_signature` is null — and the caller's `if not app.verify_...(...)
+then <reject> end if;` treats a `NULL` condition as false-not-met in PL/pgSQL, so the
+reject branch is silently skipped. Live-forced: a direct call to `app.ingest_third_
+party_provider_webhook_event` with `p_signature => null` — no HMAC secret known at all —
+inserted a real `app.third_party_telemetry_reports` row attributed to a real, mapped
+vehicle, `ingest_status = 'ok'`. `app.ingest_third_party_provider_webhook_event` is
+granted to `anon`, directly reachable via Supabase PostgREST with the public anon key,
+entirely bypassing `app/api/webhooks/third-party-gps/[connectionId]/route.ts`'s own
+app-layer signature-presence check — the database function is the actual authoritative
+boundary and it failed open on this one input. Directly violated Prompt 376 §24:
+"Webhook spoofing and unsigned callbacks fail."
+
+This exact defect class had already been found and fixed twice, in two later,
+structurally identical capabilities, and never backported: `app.verify_logistics_
+partner_webhook_signature`/`app.verify_finance_payment_webhook_signature` both already
+carry an explicit `if p_signature is null or length(trim(p_signature)) = 0 then return
+false; end if;` guard this function lacked. Neither `advanced-tms-third-party-provider-
+adapter.sql` nor `api-key-webhook.sql` had a NULL-signature negative-case test — the
+coverage gap that let this ship and let the later fix fail to get backported.
+
+**Severity: Critical** — an authentication bypass on a data-ingestion boundary,
+live-exploitable by any unauthenticated caller with network access to the public
+Supabase REST endpoint, no credential of any kind required.
+
+**Fixed** at `20260813000000_harden_api_compatibility_audit_findings.sql`, mirroring the
+two sibling functions' own proven guard exactly (`p_signature is null or empty` →
+`false`), plus a `v_expected is null` defense-in-depth check. Live-force re-verified:
+null signature, empty-string signature, and null timestamp all now return exactly
+`false`, never `NULL`; a new regression block in `advanced-tms-third-party-provider-
+adapter.sql` proves the ingesting RPC now correctly rejects all three as `invalid` and
+never inserts a report.
+
+### ISS-2026-210 — `app.verify_webhook_signature` (PLT-129 outbound sibling) carried the identical NULL-signature/NULL-timestamp fail-open defect as `ISS-2026-209` (found and fixed at `CG-S15-HDN-008`, `RESOLVED` at `HDN-376`, High)
+
+Found alongside `ISS-2026-209` by the same investigation lens — `app.verify_third_party_
+provider_webhook_signature`'s own comment discloses it was "reused verbatim" from this
+function for the inbound direction, and the same `v_expected = p_signature` fail-open
+shape, plus a missing `p_timestamp is null` guard, was confirmed present in the source
+function too. **Not currently live-exploitable**: `grant execute` confirms `service_
+role`-only (never `anon`/`authenticated`), and a full grep of every migration found zero
+live callers anywhere in this codebase today — only a comment references it.
+
+**Severity: High** — the defect class itself is the same as `ISS-2026-209`'s (Critical),
+downgraded because there is no live caller today; fixed for consistency and to close the
+class permanently before any future caller wires this in as a live inbound gate, rather
+than leaving a second, dormant copy of the same bug shipped.
+
+**Fixed** at `20260813000000_harden_api_compatibility_audit_findings.sql`, same guard
+pattern as `ISS-2026-209`. Live-force re-verified via a new regression block in
+`api-key-webhook.sql`.
+
+### ISS-2026-211 — two REST `/v1` mutation routes returned a webhook-domain error code (`webhook_missing_idempotency_key`) for their own, non-webhook, missing-Idempotency-Key case (found and fixed at `CG-S15-HDN-008`, `RESOLVED` at `HDN-376`, Low)
+
+Found by this checkpoint's own REST/GraphQL contract parity lens, live-forced.
+`app/api/v1/customer/bookings/route.ts` and `app/api/v1/vendor/rfqs/[rfqInvitationId]/
+response/route.ts` both hardcoded `error.code: "webhook_missing_idempotency_key"` for a
+missing `Idempotency-Key` header on a Customer Portal booking / Vendor RFQ response
+mutation — neither route is a webhook. Live-forced against the real RPC
+(`app.create_customer_booking_request_draft`): calling it directly with `p_idempotency_
+key = NULL` succeeds — the key is genuinely optional at the RPC layer, only required by
+this gateway's own policy for these two mutations — so the borrowed webhook-domain
+vocabulary was the one place a cross-domain error code leaked into a REST response body
+a real consumer could reasonably branch on.
+
+**Severity: Low** — a naming/consistency defect, not a security or correctness gap; the
+HTTP status code (400) was always correct, only the `error.code` string was wrong.
+
+**Fixed**: both routes now return `missing_idempotency_key` (a domain-neutral code),
+verified live by 2 of the 44 new HDN-376 route-level tests (`tests/api/v1/customer-
+bookings.test.ts`, `tests/api/v1/vendor-rfq-response.test.ts`).
+
+### ISS-2026-212 — three REST `/v1` mutation routes reused the codewide `stale_version` error code for a locally-malformed `expectedVersion` (400), indistinguishable from a real optimistic-concurrency conflict (409) (found and fixed at `CG-S15-HDN-008`, `RESOLVED` at `HDN-376`, Low)
+
+Found by this checkpoint's own REST/GraphQL contract parity lens, live-forced.
+`customer/bookings/[bookingRequestId]/submit`, `vendor/assignments/[invitationId]/
+accept`, and `.../decline` all returned `error.code: "stale_version"` for a structurally
+missing/non-integer/`<=0` `expectedVersion` in the request body (400) — the identical
+code the SAME route also returns for a genuine RPC-sourced optimistic-concurrency
+conflict (409). `stale_version` is otherwise a stable, codebase-wide convention (128+
+mutation modules) meaning exactly "a real conflict, retry after refetch"; a client
+branching on `error.code === "stale_version"` to auto-retry could not distinguish "your
+request was malformed" from "someone else changed the record" without also inspecting
+the HTTP status, and the code name was simply wrong for the 400 case (nothing was ever
+fetched to go stale).
+
+**Severity: Low** — a naming/consistency defect; both HTTP status codes (400 vs 409)
+were always correctly distinct, only the `error.code` string collided.
+
+**Fixed**: the 400 (malformed-input) case on all 3 routes now returns
+`invalid_expected_version`, distinct from the genuine 409 `stale_version` case, verified
+live by 6 of the 44 new HDN-376 route-level tests across `tests/api/v1/customer-
+bookings-submit.test.ts`, `tests/api/v1/vendor-assignment-accept.test.ts`,
+`tests/api/v1/vendor-assignment-decline.test.ts`.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.

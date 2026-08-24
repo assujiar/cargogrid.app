@@ -88,6 +88,20 @@ not.
 > live migration exposed. This is not advice; it is a review item for every lane's Tier B
 > walk, and is repeated in `HARDENING_MATRIX.md` as a cross-cutting row.
 
+> **Additive-migration-only rule reconciliation, added at `HDN-376`.** `75278d3`,
+> `11bd409` and `d82cd6f` above each edited already-applied migration files in place (86
+> unique files total, spanning `20260716075355` through `20260804030000`) rather than
+> landing a new forward-fixing migration — the fixes themselves are correct and already
+> disclosed in the table above, but this specific fact (an exception to the "additive/
+> expand-and-contract only, never edit an applied migration" rule every Step 15 prompt's
+> own §19 states) was never explicitly assessed against that rule until `HDN-376`'s own
+> Tier A investigation found it. Pre-dates Step 15 entirely (all three commits landed
+> before `HDN-369`'s own kickoff) — not a Step-15-lane violation, and re-doing that
+> history now would be pure churn, not a real repair. Disposition: **no fix, standing
+> exception acknowledged here** — the rule itself is unchanged and binding on every Step
+> 15 lane from `HDN-369` onward; nothing before that kickoff is grandfathered into a
+> future audit re-litigating this same fact.
+
 ---
 
 ## 3. Runtime entry verdict — **PASS**
@@ -144,7 +158,7 @@ unrouted.
 | 5 | `HDN-373` | `CG-S15-HDN-005` | 373 | RLS and RBAC Audit | Security Assurance | `HDN-372` **`VERIFIED`** **(hard)** | **`VERIFIED`** |
 | 6 | `HDN-374` | `CG-S15-HDN-006` | 374 | Financial Integrity Audit | Financial Assurance | `HDN-371` **(hard)** | **`VERIFIED`** — Tier C closed, 5 more findings found (3 fixed same checkpoint, 2 registered — `HDN-BLK-016`/`ISS-2026-199`, owner `HDN-386`); see `HDN-374.md` |
 | 7 | `HDN-375` | `CG-S15-HDN-007` | 375 | Data Lineage Audit | Integrity Assurance | `HDN-371` **(hard)** | **`VERIFIED`** — Tier C closed. 2 real defects fixed (`ISS-2026-201` High, `app.transaction_lineage_edges` freely mutable; `ISS-2026-202` Medium, orphan `source_id` on loyalty/finance journals); 4 more findings found at Tier C (1 documentation-completeness gap corrected, 1 repeated ledger inconsistency corrected, 2 new in-charter findings registered — `HDN-BLK-018`/`ISS-2026-205`, High, systemic append-only-guard gap; `ISS-2026-206`, Medium, recurring orphan-source-id gap); plus `HDN-BLK-017`/`ISS-2026-200` (High, hash-chain not genuine) and `ISS-2026-203` (Low) registered, all owner `HDN-386`; see `HDN-375.md` |
-| 8 | `HDN-376` | `CG-S15-HDN-008` | 376 | API Compatibility Audit | API Assurance | `HDN-371` **(hard)** | `BLOCKED` |
+| 8 | `HDN-376` | `CG-S15-HDN-008` | 376 | API Compatibility Audit | API Assurance | `HDN-371` **(hard)** | **`COMPLETED`** — Tier C review pending. 4 lenses, 2 Critical/High security defects fixed (`ISS-2026-209` Critical, `ISS-2026-210` High, NULL-signature bypass on inbound/outbound webhook verification), 2 Low route defects fixed (`ISS-2026-211`/`212`), `ISS-2026-147` item 1 closed (44 new route-level tests), 2 findings registered (`ISS-2026-207` Medium owner `HDN-387`, `ISS-2026-208` Low owner `HDN-387`); see `HDN-376.md` |
 | 9 | `HDN-377` | `CG-S15-HDN-009` | 377 | Storage and Signed URL Audit | File Security Assurance | `HDN-372` **`VERIFIED`** | `READY` |
 | 10 | `HDN-378` | `CG-S15-HDN-010` | 378 | Security Hardening | Security Assurance | `HDN-372` **(hard)**, `HDN-373..377` | `BLOCKED` |
 | 11 | `HDN-379` | `CG-S15-HDN-011` | 379 | Performance and Scalability | Performance Assurance | `HDN-370` | `BLOCKED` |
@@ -159,8 +173,9 @@ unrouted.
 | 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `BLOCKED` |
 | 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `BLOCKED` |
 
-**Tally: 21 rows — 1 `COMPLETED` (kickoff), 13 `BLOCKED`, 6 `VERIFIED` (`HDN-370`,
-`HDN-371`, `HDN-372`, `HDN-373`, `HDN-374`, `HDN-375`), 1 `READY` (`HDN-377`).**
+**Tally: 21 rows — 2 `COMPLETED` (kickoff; `HDN-376` Tier C pending), 12 `BLOCKED`,
+6 `VERIFIED` (`HDN-370`, `HDN-371`, `HDN-372`, `HDN-373`, `HDN-374`, `HDN-375`), 1 `READY`
+(`HDN-377`).**
 
 > **`HDN-371` is `VERIFIED`.** Every chain named in its charter is reconciled against live code
 > and existing passing evidence, with one honestly disclosed gap (the loyalty/portal chain was
@@ -529,47 +544,37 @@ to `VERIFIED`.
 | 2026-08-23 | `HDN-374` | `CG-S15-HDN-006` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-374.md` | **`VERIFIED`** — Tier C closed. Four independent parallel investigation lenses (revenue chain; cost/AP chain; period lock/reversal/concurrency/rounding; loyalty liability/payroll/tax/statutory), each required to live-force its own findings on disposable databases. Cost/AP chain, payment/journal reconciliation, period lock, reversal, correction, rounding, tax snapshotting, payroll-handoff aggregation, and RPD-016's statutory gates all held clean in the first round. **4 real, live-forced defects fixed** at `20260811000000_harden_financial_integrity_invoicing_and_idempotency.sql`: `ISS-2026-194` (High, quote-level tax silently double-applied at invoicing); `ISS-2026-195` (High, a job order could reach `issued` on two full-amount invoices from two distinct handoffs — **the first fix draft was self-corrected before commit**: it gated invoice preparation itself, which would have broken `OPS-181`'s own disclosed legitimate-re-handoff allowance and an existing db-test fixture; the shipped fix gates `app.issue_finance_invoice`, the actual AR/GL posting boundary, instead); closes `ISS-2026-162`'s Finance/HRIS-Payroll scope (Medium, 10 functions, 2 mechanisms live-forced with a genuine two-process race each); `ISS-2026-196` (Medium, `app.run_loyalty_expiry_sweep`'s own `p_as_of` parameter was silently ignored, now threaded through). **Tier C review (four independent adversarial lenses) found 5 more real, live-forced defects**: `app.lock_finance_period` shared the exact idempotency-race shape the checkpoint's own sweep missed (Medium, fixed); Finding 1's own fix dropped the quote's own discount, overbilling by that amount (High, fixed — `subtotalAmount` is the raw pre-discount gross, the genuine base is `subtotalAmount - discountAmount`); Finding 2's own new guard had no backing constraint and did not survive genuine concurrency, live-forced to still double-bill under a real two-process race (High, fixed with a real backing partial unique index, `finance_invoices_job_order_issued_unique`); `app.request_finance_settlement_reversal` bypassed fiscal period lock entirely (High, fixed, mirroring `post_finance_settlement`'s own check) and **posts no reversing GL journal at all**, permanently desyncing GL from AP on every reversal (High, **registered, not fixed** — `ISS-2026-199`/`HDN-BLK-016`, owner `HDN-386`, a design decision outside this bounded-repair checkpoint's own scope). One further disclosure correction (`ISS-2026-198`, Medium, already fixed but undisclosed — `app.prepare_finance_vendor_bill_from_actual_cost`'s own idempotency predicate) and one ledger-consistency finding (`CARGOGRID_BUILD_STATUS.md`'s own stale summary row) also corrected. Fixing the two fixture files that broke against the new `finance_invoices_job_order_issued_unique` invariant (`customer-invoice-billing-visibility.sql`/`customer-payment-visibility.sql`, each giving 3 issued invoices their own distinct job order) changed nothing either file actually tests — `job_order_id` is a purely internal FK neither file's own customer-portal READ layer ever surfaces. `ISS-2026-197` (Low, owner `HDN-386`, no FX/multi-currency conversion anywhere in the revenue chain; Operations' own job-profitability planned-vs-actual split) and `ISS-2026-162`'s residual 3 non-Finance functions plus `ISS-2026-163` (owner `HDN-387`) remain registered, not fixed, explicitly out of this lane's own charter. Independent full gate re-run green after the complete fix pass: `typecheck` 0, `lint` 0 errors/337 warnings, 5394/5394 unit tests, 229/229 db-tests (319 migrations), fresh disposable database with real grants. Three additive migrations total, 7 existing db-test files extended with new regression coverage, zero application code, zero contract, zero route. Full disposition: `HDN-374.md` §6/§12/§13 |
 | 2026-08-24 | `HDN-375` | `CG-S15-HDN-007` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-375.md` | **`COMPLETED`** — Tier C review pending. Four independent parallel investigation lenses (canonical lineage chain lead→loyalty; downstream projection versioning; hash-chain triggers and historical config preservation; orphan records and no-silent-reentry), each required to live-force its own findings on disposable databases. Canonical lineage, projection versioning, historical config preservation, and permission-awareness all held clean. **2 real, live-forced defects fixed** at `20260812000000_harden_data_lineage_audit_findings.sql`: `ISS-2026-201` (High, `app.transaction_lineage_edges` — OPS-184's own lineage-evidence ledger — had no `BEFORE UPDATE/DELETE` guard at all despite its own "append-only, never-updated, never-deleted" contract; fixed by mirroring CPL-325's own proven append-only-guard pattern, scoped to this one table); `ISS-2026-202` (Medium, `app.loyalty_earning_events`/`app.finance_journals` accept a `source_id` with no DB-layer FK, enforced only by RPC discipline; fixed with a `BEFORE INSERT OR UPDATE` per-`source_type` validation trigger on each table). **1 finding registered, not fixed** (`ISS-2026-200`/`HDN-BLK-017`, High, owner `HDN-386`): the 5 "hash-chain" lineage triggers are standalone per-row content fingerprints, not a genuine `H_n = f(H_{n-1}, content_n)` chain, and `app.detect_transaction_lineage_anomalies` has no hash-mismatch/tamper-detection anomaly type — a design decision outside this bounded-repair checkpoint's own scope. Gates: `typecheck` 0, `lint` 0 errors/337 warnings, 5394/5394 unit tests, db-tests **228/229 files clean** (320 migrations) — the 229th, `procurement-vendor-performance.sql`, hit a pre-existing, unrelated, incidentally-found wall-clock/day-window defect confirmed independent of this checkpoint's own migration (registered `ISS-2026-204`, owner `HDN-387`, not this lane's charter), fresh disposable database with real grants. One additive migration, 3 pre-existing fixtures corrected/extended across 2 db-test files, zero application code, zero contract, zero route. Tier C review (§13) required before `VERIFIED`. Full disposition: `HDN-375.md` §6/§12 |
 | 2026-08-24 | `HDN-375` | `CG-S15-HDN-007` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-375.md` §13 | **`VERIFIED`** — Tier C closed. Four independent parallel lenses (correctness re-derivation; schema-wide completeness sweep; ledger/documentation consistency; permission-awareness/attack-surface adversarial testing), each required to live-force its own findings on disposable databases. All 3 first-round findings confirmed real and correctly disposed of; both shipped fixes confirmed solid under live adversarial attack (full role/permission matrix, `NULL`-actor-context, audit-capture correctness, `TRUNCATE`-bypass angle, exhaustive `source_type` coverage — no bypass found). **1 documentation-completeness gap corrected**: this build log's own §6.2 had silently omitted `ISS-2026-203` (already registered in `KNOWN_ISSUES.md`, a genuine Lens-2 finding) from its own outcome count — corrected. **1 repeated ledger inconsistency corrected**: 5 files stated "3 existing db-test files corrected/extended," conflating 3 fixture corrections with 3 files (the actual commit touched 2) — corrected in all 5. **2 new, real, in-charter findings found and registered, not fixed**: `ISS-2026-205`/`HDN-BLK-018` (High, owner `HDN-386`) — only 13 of ~90+ append-only/audit/ledger-shaped tables in schema `app` carry a real `BEFORE UPDATE/DELETE` guard trigger; ~70 more, live-forced-reachable, do not, most severely `app.audit_logs` itself (the audit trail every other detective control depends on, including this checkpoint's own new guard); `ISS-2026-206` (Medium, owner `HDN-387`) — the orphan-`source_id` gap `ISS-2026-202` closed on 2 tables recurs on `app.finance_subledger_batches` and others; **a fix draft for the first of these was written, then discovered before commit to break `scripts/db-tests/finance-subledger.sql`'s own pre-existing, deliberate test design (~15 call sites exercising the posting primitive in isolation with synthetic source ids) — self-corrected, the draft discarded rather than shipped broken or hastily patched**, mirroring `HDN-374`'s own Finding-2 self-correction precedent. No Critical finding anywhere. Gate state unchanged from the first round (§12) since no code changed in this Tier C pass — re-confirmed independently by 2 of the 4 lenses' own live testing against fresh disposable databases. Zero migration, zero application code, zero contract, zero route in this Tier C pass — documentation and ledger evidence only. **`CG-S15-HDN-007` is `VERIFIED`.** `CG-S15-HDN-008` (`HDN-376`, Prompt 376, API Compatibility Audit) is now the next eligible prompt. Full disposition: `HDN-375.md` §13 |
+| 2026-08-24 | `HDN-376` | `CG-S15-HDN-008` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-376.md` | **`COMPLETED`** — Tier C review pending. Four independent parallel investigation lenses (REST/GraphQL contract parity; webhook signing/retry/replay/DLQ and idempotency; schema/migration compatibility and cross-cutting idempotency/rate-limit/error-shape/pagination consistency; public/customer/vendor API and deprecation), each required to live-force its own findings. **Standout finding, Critical, fixed**: `app.verify_third_party_provider_webhook_signature` (inbound third-party GPS webhook gate) returned SQL NULL, not false, for a null signature, so `if not verify_...()` silently accepted a fully unsigned webhook as genuine — live-forced a real telemetry report inserted with `p_signature => null`, `anon`-reachable directly via PostgREST, bypassing the app-layer check entirely (`ISS-2026-209`). Fixed by mirroring 2 sibling functions' own already-proven null/empty-signature guard. The identical latent defect in `app.verify_webhook_signature` (PLT-129, not currently live-exploitable) also fixed for consistency (`ISS-2026-210`, High). **2 more real defects fixed** (`ISS-2026-211`/`212`, both Low): a webhook-domain error code leaking onto 2 non-webhook mutation routes; `stale_version` conflating a 400 malformed-input case with a real 409 conflict on 3 routes. **`ISS-2026-147` item 1 closed**: 9 REST `/v1` route handlers had zero dedicated test coverage; built a shared fetch-stubbing harness (no local PostgREST/Supabase stack available) plus 44 new route-level tests across all 9 handlers. `HARDENING_MATRIX.md` §7's GraphQL wording corrected (live-forced: no GraphQL surface exists in this repository at all). **2 findings registered, not fixed**: `ISS-2026-207` (Medium, owner `HDN-387`) — the `app.api_versions` deprecation registry has zero live effect on real requests, not a Step 16 blocker since only v1 exists; `ISS-2026-208` (Low, owner `HDN-387`) — `accept`/`decline_vendor_assignment_invitation_via_vendor_api` lack an idempotency-key short-circuit, investigated for a same-checkpoint fix and found not bounded-repair-sized (the table's own existing idempotency_key column serves a different purpose). A pre-Step-15 migration-editing historical fact (3 commits, 86 files, predating HDN-369) reconciled against the additive-only rule with one acknowledging sentence, no fix required. No Critical finding residual anywhere. Gates: `typecheck` 0, `lint` 0 errors/337 warnings, 5438/5438 unit tests (+44 new), db-tests 228/229 files clean (321 migrations) — the 229th the same pre-existing `ISS-2026-204` flake. One additive migration, 2 db-test files gained regression blocks, 5 route TS files fixed, 10 new test files. Tier C review (§13) required before `VERIFIED`. Full disposition: `HDN-376.md` §6/§12 |
 
 ---
 
 ## 16. Next eligible prompt
 
-> ### **`HDN-376` (API Compatibility Audit, `CG-S15-HDN-008`) is the single next eligible prompt**
+> ### Nothing is next-eligible — `HDN-376` is `COMPLETED`, not yet `VERIFIED`
 >
-> - **`HDN-375` is `VERIFIED`** — Tier C closed (4 independent adversarial lenses; all 3
->   first-round findings confirmed real and correctly disposed of; 1 documentation gap and
->   1 repeated ledger inconsistency corrected; 2 new in-charter findings registered with a
->   named forward owner rather than rushed — one after a same-checkpoint fix draft was
->   caught, before commit, breaking a pre-existing test file's own deliberate design).
->   Full disposition: `HDN-375.md` §13.
-> - `HDN-376`'s own dependency (`HDN-371` **`VERIFIED`**, hard) has been satisfied since
->   before `HDN-373` began; it must run in its own separate session — it may not share a
->   session with `HDN-375`.
-> - **`HDN-377` (Storage and Signed URL Audit) is also dependency-satisfied** and shows
->   `READY` in the WBS table above — noted for accuracy, not as a routing instruction.
->   This range's established cadence runs the numbered prompts in sequence; `HDN-376` is
->   the next one in that sequence and the one this section names as next.
-> - **Carry-forward for `HDN-376`, so it does not discover these cold:**
->   1. **`HDN-BLK-018`/`ISS-2026-205`** (High, new, owner `HDN-386`) — only 13 of ~90+
->      append-only/audit/ledger-shaped tables in schema `app` carry a real `BEFORE
->      UPDATE/DELETE` guard trigger; ~70 more do not, most severely `app.audit_logs`
->      itself. Not this lane's charter to fix; noted only in case `HDN-376`'s own API
->      compatibility audit touches any RPC surface over one of those tables.
->   2. **`ISS-2026-206`** (Medium, new, owner `HDN-387`) — the orphan-`source_id` gap
->      `ISS-2026-202` closed on 2 tables recurs on `app.finance_subledger_batches`,
->      `app.finance_bank_transactions.matched_source_id`, and 2 WMS tables.
->   3. **`HDN-BLK-016`/`ISS-2026-199`** (High, owner `HDN-386`) — `app.request_finance_
->      settlement_reversal` posts no reversing GL journal at all.
->   4. **`ISS-2026-186`** (Medium, owner `HDN-387`) — untouched since `HDN-374`; still
->      open, still `HDN-387`'s to resolve.
->   5. **`ISS-2026-197`** (Low, owner `HDN-386`) — no FX/multi-currency conversion
->      anywhere in the revenue chain.
->   6. **`HDN-BLK-010`'s residual 3 non-Finance functions plus `ISS-2026-163`** (owner
->      `HDN-387`) — explicitly not this lane's charter.
+> - **`HDN-376` (API Compatibility Audit, `CG-S15-HDN-008`) finished its investigation,
+>   fix pass and independent full Tier A gate re-run this checkpoint** — 4 independent
+>   lenses, 2 Critical/High security defects fixed (`ISS-2026-209`/`210`), 2 Low route
+>   defects fixed (`ISS-2026-211`/`212`), `ISS-2026-147` item 1 closed, 2 findings
+>   registered with a named forward owner (`ISS-2026-207`/`208`, owner `HDN-387`). Full
+>   disposition: `HDN-376.md` §6/§12.
+> - Per `AGENTS.md`'s never-batch rule, **Tier C review (4 independent adversarial lenses)
+>   is required before `HDN-376` may move from `COMPLETED` to `VERIFIED`** — recorded at
+>   `HDN-376.md` §13. No later prompt (`HDN-377` onward) may begin until then.
+> - **`HDN-377` (Storage and Signed URL Audit) is dependency-satisfied** and shows `READY`
+>   in the WBS table above — noted for accuracy, not as a routing instruction. This range's
+>   established cadence runs the numbered prompts in sequence.
+> - **Carry-forward already named for `HDN-376`, still open, not this checkpoint's own to
+>   resolve** (`HDN-BLK-018`/`ISS-2026-205`, `ISS-2026-206`, `HDN-BLK-016`/`ISS-2026-199`,
+>   `ISS-2026-186`, `ISS-2026-197`, `HDN-BLK-010`'s residual 3 non-Finance functions plus
+>   `ISS-2026-163`) — none were touched by this checkpoint's own investigation; each
+>   remains registered at its already-named owner (`HDN-386` or `HDN-387`). Plus this
+>   checkpoint's own 2 newly registered findings, `ISS-2026-207`/`208`, both owner
+>   `HDN-387`.
 > - **Do not cite CI as evidence for anything** — `HDN-BLK-007/008/009` remain open; every
 >   result this lane produces must be a real local execution.
 
-**Nothing after `HDN-375` may begin until `HDN-375` is `VERIFIED`** — satisfied above.
+**Nothing after `HDN-376` may begin until `HDN-376` is `VERIFIED`.**
 `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set and may only ever be set by Prompt 389.
 
 > **Standing warning for `HDN-386` and every lane before it:** CI is currently red on `main`

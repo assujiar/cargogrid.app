@@ -1,10 +1,23 @@
 /**
  * Shared REST/GraphQL platform API contract (PLT-130, CG-S6-PLT-027). The error shape,
- * pagination bounds, idempotency/correlation identifiers, and API version constant
- * every future REST route handler and GraphQL resolver reuse identically -- "Neither
- * interface is secondary or may bypass common service/access rules" (Prompt 130 §24).
- * Also mirrors supabase/migrations/20260719160000_create_api_foundation.sql's
+ * pagination bounds, idempotency/correlation identifiers, and API version constant are
+ * meant for every future REST route handler and GraphQL resolver to reuse identically --
+ * "Neither interface is secondary or may bypass common service/access rules" (Prompt 130
+ * §24). Also mirrors supabase/migrations/20260719160000_create_api_foundation.sql's
  * app.api_logs shape and the app.record_api_request RPC.
+ *
+ * HDN-376 (API Compatibility Audit) disclosure, live-verified against all 9 real
+ * `app/api/v1` route handlers as they stand today: the error shape (below) IS genuinely
+ * reused by all 9. `paginatedResultSchema`/`CursorPaginationParamsSchema`/
+ * `OffsetPaginationParamsSchema` are NOT yet exercised by any of them -- both current
+ * list endpoints (`GET /v1/status`, `GET /v1/webhook-event-types`) return small, plain
+ * unwrapped arrays by design, not this envelope. `ApiErrorDetail.details[]` is likewise
+ * defined but never populated by any of the 9 today (no route yet does field-level
+ * validation). No GraphQL resolver exists in this repository at all (see
+ * `HARDENING_MATRIX.md` §7). None of this is a live defect -- a shared contract can
+ * legitimately have unexercised members before its second real consumer arrives -- but
+ * "every future... reuse identically" read as a present-tense claim about all four
+ * pieces would overstate what is actually wired up today.
  *
  * Error shape source: docs/architecture/08_API_INTEGRATION_WORKSTREAM.md line 74 (Tech
  * Arch §25.6) -- `error.code`, `error.message`, `error.details[]`, `error.request_id`,
