@@ -31,7 +31,7 @@ from zero and no lane rediscovers a known item.
 | 2 | Cross-module transactional integrity | `HDN-371` **`VERIFIED`** | **`PARTIAL`** — every named chain reconciled except loyalty/portal (not examined, tracked gap); one systemic finding (`HDN-BLK-010`, 9 functions, Medium), live-forced-race proven | §2 |
 | 3 | Tenant isolation | `HDN-372` **`COMPLETED`** | **`PARTIAL`** — not a pass. One High cross-tenant read class found and fixed at the root, twice — first 9 functions, then 4 more found by this checkpoint's own Tier C review and fixed in the same checkpoint (`HDN-BLK-011`, 13 direct + 11 transitive = 24 functions total); two same-shape findings remain genuinely open (`HDN-BLK-012`, 13 dashboard functions; `HDN-BLK-014`, ~24 candidate functions, not individually live-verified — both deferred to `HDN-373`); one High app-layer finding registered late and corrected at Tier C (`HDN-BLK-013`); 13 further Medium/Low findings registered | §3 |
 | 4 | RLS / RBAC | `HDN-373` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. Root RBAC gate (`app.evaluate_permission`) never checked tenant membership — fixed (`ISS-2026-180`). The entire Finance manual/period/config/import-export write surface (95 functions) was `SECURITY INVOKER`, completely unreachable by any real session since it shipped — fixed (`HDN-BLK-015`/`ISS-2026-182`, the largest reachability defect found in Step 15 to date). `HDN-BLK-012` (13 dashboard functions, deferred from `HDN-372`) fixed; `HDN-BLK-014` (~30 candidates, deferred from `HDN-372`) narrowed to 16 fixed / ~14 residual (`ISS-2026-186`, owner a future checkpoint); `ISS-2026-139` (loyalty maker/checker) fixed; `ISS-2026-137` re-verified accurate, no change. 6 further findings registered with named forward owners | §4 |
-| 5 | Financial integrity | `HDN-374` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. Quote-level tax silently doubled at invoicing — fixed (`ISS-2026-194`). A job order could reach `issued` on two full-amount invoices from two distinct handoffs — fixed at the actual AR/GL posting boundary, `app.issue_finance_invoice` (`ISS-2026-195`; the first fix draft, gating invoice preparation itself, was self-corrected before commit — it would have broken `OPS-181`'s own disclosed legitimate-re-handoff allowance). `HDN-BLK-010`/`ISS-2026-162`'s Finance/HRIS-Payroll scope resolved — 10 functions (6 named plus 4 more this checkpoint's own wider sweep found) fixed with the codebase's own "design note 9(a)" pattern, 2 mechanisms live-forced with a genuine two-process race each. `app.run_loyalty_expiry_sweep`'s own `p_as_of` was silently ignored — fixed (`ISS-2026-196`). 2 findings registered, not fixed, owner `HDN-386` (`ISS-2026-197`: no FX/multi-currency conversion anywhere in the revenue chain; Operations' own job-profitability planned-vs-actual split). `HDN-BLK-010`'s residual 3 non-Finance functions plus `ISS-2026-163` handed to `HDN-387` | §5 |
+| 5 | Financial integrity | `HDN-374` **`VERIFIED`** | **`PARTIAL`** — not a pass, Tier C closed. Quote-level tax silently doubled at invoicing — fixed (`ISS-2026-194`). A job order could reach `issued` on two full-amount invoices from two distinct handoffs — fixed at the actual AR/GL posting boundary, `app.issue_finance_invoice` (`ISS-2026-195`; the first fix draft, gating invoice preparation itself, was self-corrected before commit — it would have broken `OPS-181`'s own disclosed legitimate-re-handoff allowance). `HDN-BLK-010`/`ISS-2026-162`'s Finance/HRIS-Payroll scope resolved — 10 functions (6 named plus 4 more this checkpoint's own wider sweep found) fixed with the codebase's own "design note 9(a)" pattern, 2 mechanisms live-forced with a genuine two-process race each. `app.run_loyalty_expiry_sweep`'s own `p_as_of` was silently ignored — fixed (`ISS-2026-196`). **Tier C review found 5 more real, live-forced defects**: `app.lock_finance_period` shared the sweep's own missed shape (fixed); Finding 1's own fix dropped the quote's discount, overbilling (fixed); Finding 2's own guard had no backing constraint and did not survive genuine concurrency (fixed with a real partial unique index); `app.request_finance_settlement_reversal` bypassed period lock entirely (fixed) and posts no reversing GL journal at all (registered, `ISS-2026-199`/`HDN-BLK-016`, owner `HDN-386`). 2 findings registered, not fixed, owner `HDN-386` (`ISS-2026-197`: no FX/multi-currency conversion anywhere in the revenue chain; Operations' own job-profitability planned-vs-actual split). `HDN-BLK-010`'s residual 3 non-Finance functions plus `ISS-2026-163` handed to `HDN-387` | §5 |
 | 6 | Data lineage | `HDN-375` | `NOT_RUN` | §6 |
 | 7 | API compatibility | `HDN-376` | `NOT_RUN` | §7 |
 | 8 | Storage / signed URL | `HDN-377` | `NOT_RUN` | §8 |
@@ -315,25 +315,38 @@ release gate.
 | RPD-016 statutory gates | Indonesia tax/payroll requires current dated SME/legal evidence, configurable | Verify gating, do not activate without evidence |
 | Concurrent-idempotency gap, 9 boundary functions across 5 domains (corrected at `HDN-371`'s own Tier C review from an original count of 6 Finance-only) | **`HDN-BLK-010` / `ISS-2026-162`**, found and bounded to Medium, **live-forced-race proven**, at `HDN-371` — `prepare_finance_invoice_from_readiness`, `_journal_adjustment`, `_journal_reversal`, `_payroll_disbursement_handoff_from_payroll_run` (HRIS-Payroll-owned), `_settlement`, `_vendor_bill_from_actual_cost` (5 Finance + 1 HRIS-Payroll), plus `prepare_job_order_handoff` (Commercial), `prepare_wms_inbound_from_shipment` (Advanced TMS/WMS) and `link_auth_identity` (Platform/Auth) each have an idempotency short-circuit with no `unique_violation` exception handler around the subsequent `insert`. Every target table has a confirmed backing unique constraint or partial unique index (no duplicate-truth risk); the exposure is a raw uncaught error for a genuinely racing caller — **observed directly**, `HDN-371.md` §6.3 | **Finance/HRIS-Payroll portion (6 functions) fixed at `HDN-374`, plus 4 more that checkpoint's own wider sweep found (10 total)** — the 3 non-Finance functions (Commercial/WMS/Platform-Auth) plus `ISS-2026-163` handed to `HDN-387`, explicitly out of `HDN-374`'s own Financial Integrity charter. Mirrored `prepare_wms_outbound_from_shipment`'s proven "design note 9(a)" nested-exception shape into each function, one additive migration, 2 mechanisms live-forced with a genuine two-process race each. Full evidence: `HDN-371.md` §4-§7, §12; `HDN-374.md` §6.3 |
 
-> **Result, 2026-08-23 (`CG-S15-HDN-006`), `COMPLETED`, Tier C review pending:** one
-> additive migration, four independent parallel investigation lenses, each required to
+> **Result, 2026-08-23 (`CG-S15-HDN-006`), `VERIFIED`, Tier C closed:** three additive
+> migrations, four independent parallel investigation lenses, each required to
 > live-force its own findings on disposable databases. Cost/AP chain, payment/journal
 > reconciliation, period lock, reversal, correction, rounding, tax snapshotting,
-> payroll-handoff aggregation, and RPD-016's statutory gates all held clean. **4 real,
-> live-forced defects fixed**: `ISS-2026-194` (High, quote-level tax silently doubled at
-> invoicing); `ISS-2026-195` (High, a job order could reach `issued` on two full-amount
-> invoices from two distinct handoffs — the first fix draft was self-corrected before
-> commit, since it would have broken `OPS-181`'s own disclosed legitimate-re-handoff
-> allowance; the shipped fix gates `app.issue_finance_invoice`, the actual AR/GL posting
-> boundary); closes `HDN-BLK-010`/`ISS-2026-162`'s Finance/HRIS-Payroll scope (10
-> functions, 2 mechanisms live-forced with a genuine two-process race each); `ISS-2026-196`
-> (Medium, `app.run_loyalty_expiry_sweep`'s own `p_as_of` silently ignored, now threaded
-> through). **2 findings registered, not fixed** (`ISS-2026-197`, Low, owner `HDN-386`):
+> payroll-handoff aggregation, and RPD-016's statutory gates all held clean in the first
+> round. **4 real, live-forced defects fixed**: `ISS-2026-194` (High, quote-level tax
+> silently doubled at invoicing); `ISS-2026-195` (High, a job order could reach `issued`
+> on two full-amount invoices from two distinct handoffs — the first fix draft was
+> self-corrected before commit, since it would have broken `OPS-181`'s own disclosed
+> legitimate-re-handoff allowance; the shipped fix gates `app.issue_finance_invoice`, the
+> actual AR/GL posting boundary); closes `HDN-BLK-010`/`ISS-2026-162`'s Finance/HRIS-
+> Payroll scope (10 functions, 2 mechanisms live-forced with a genuine two-process race
+> each); `ISS-2026-196` (Medium, `app.run_loyalty_expiry_sweep`'s own `p_as_of` silently
+> ignored, now threaded through). **Tier C review (4 independent adversarial lenses)
+> found 5 more real, live-forced defects, 3 fixed same checkpoint**: `app.lock_finance_
+> period` shared the sweep's own missed idempotency-race shape (Medium, fixed); Finding
+> 1's own fix dropped the quote's own discount, overbilling by that amount (High, fixed
+> — the genuine pre-tax base is `subtotalAmount - discountAmount`, not `subtotalAmount`
+> alone); Finding 2's own new guard had no backing constraint and did not survive genuine
+> concurrency, live-forced to still double-bill (High, fixed with a real backing partial
+> unique index, `finance_invoices_job_order_issued_unique`); `app.request_finance_
+> settlement_reversal` bypassed fiscal period lock entirely (High, fixed, mirroring
+> `post_finance_settlement`'s own check) **and posts no reversing GL journal at all**,
+> permanently desyncing GL from AP on every reversal (High, **registered, not fixed** —
+> `ISS-2026-199`/`HDN-BLK-016`, owner `HDN-386`). One disclosure correction (`ISS-2026-198`,
+> Medium, already fixed but undisclosed) and one ledger-consistency finding also
+> corrected. **2 findings registered, not fixed** (`ISS-2026-197`, Low, owner `HDN-386`):
 > no FX/multi-currency conversion anywhere in the revenue chain; Operations' own
 > `app.calculate_job_profitability` planned-vs-actual figure split. No Critical finding
-> anywhere. Fresh full gate run green: `typecheck` 0, `lint` 0 errors/337 warnings,
-> 5394/5394 unit tests, 229/229 db-tests (317 migrations). Full disposition:
-> `HDN-374.md`.
+> anywhere. Independent full gate re-run green after the complete fix pass: `typecheck` 0,
+> `lint` 0 errors/337 warnings, 5394/5394 unit tests, 229/229 db-tests (319 migrations).
+> Full disposition: `HDN-374.md` §13.
 
 **Upstream hard gate:** `HDN-371` `VERIFIED`.
 

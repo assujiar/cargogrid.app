@@ -483,11 +483,17 @@ begin
 
   select * into v_quote from app.create_quotation_draft(v_tenant1, v_opportunity.id, 'IDR', now() + interval '14 days', v_contact.id, null, null, '00000000-0000-0000-0000-000000027502', 'tester');
   -- The quote's OWN line-level tax_pct=11 -- independent of, and never to be confused
-  -- with, FIN-195's own p_tax_code applied later at invoicing.
-  perform app.add_quotation_line(v_quote.id, v_quote.record_version, 'service', 'Ocean freight invoice tax lane', v_calc_id, 1, 1000000, 0, 11, '00000000-0000-0000-0000-000000027502', 'tester');
+  -- with, FIN-195's own p_tax_code applied later at invoicing. discount_pct=8 (HDN-374
+  -- Tier C regression): quotation_lines.line_gross_amount=1,000,000, line_discount_
+  -- amount=80,000, line net (gross-discount)=920,000, line_tax_amount=920,000*11%=
+  -- 101,200 (tax is computed on the NET base, not the gross) -- app.quotations.subtotal_
+  -- amount is always the raw GROSS sum (app.recalculate_quotation_totals), so the genuine
+  -- pre-tax NET base an invoice must bill is subtotalAmount MINUS discountAmount, never
+  -- subtotalAmount alone.
+  perform app.add_quotation_line(v_quote.id, v_quote.record_version, 'service', 'Ocean freight invoice tax lane', v_calc_id, 1, 1000000, 8, 11, '00000000-0000-0000-0000-000000027502', 'tester');
   select * into v_quote from app.quotations where id = v_quote.id;
-  if v_quote.subtotal_amount <> 1000000 or v_quote.tax_amount <> 110000 or v_quote.total_amount <> 1110000 then
-    raise exception 'assertion failed: expected quote subtotal=1,000,000 tax=110,000 total=1,110,000 (its own 11%% line tax), got subtotal=% tax=% total=%', v_quote.subtotal_amount, v_quote.tax_amount, v_quote.total_amount;
+  if v_quote.subtotal_amount <> 1000000 or v_quote.discount_amount <> 80000 or v_quote.tax_amount <> 101200 or v_quote.total_amount <> 1021200 then
+    raise exception 'assertion failed: expected quote subtotal=1,000,000 discount=80,000 tax=101,200 total=1,021,200 (its own 11%% line tax on the discount-net base), got subtotal=% discount=% tax=% total=%', v_quote.subtotal_amount, v_quote.discount_amount, v_quote.tax_amount, v_quote.total_amount;
   end if;
   perform app.submit_quotation(v_quote.id, v_quote.record_version, '00000000-0000-0000-0000-000000027502', 'tester');
   select * into v_send from app.send_quotation_for_acceptance(v_quote.id, null, 'email', '00000000-0000-0000-0000-000000027502', 'tester');
@@ -497,8 +503,8 @@ begin
   select * into v_handoff from app.prepare_job_order_handoff(v_quote.id, '00000000-0000-0000-0000-000000027502', 'rep');
   select * into v_job from app.prepare_job_order(v_handoff.id, '00000000-0000-0000-0000-000000027502', 'rep');
 
-  if v_job.revenue_snapshot ->> 'subtotalAmount' <> '1000000.00' or v_job.revenue_snapshot ->> 'totalAmount' <> '1110000.00' then
-    raise exception 'assertion failed: expected job revenue_snapshot subtotalAmount=1000000.00 totalAmount=1110000.00, got %', v_job.revenue_snapshot;
+  if v_job.revenue_snapshot ->> 'subtotalAmount' <> '1000000.00' or v_job.revenue_snapshot ->> 'discountAmount' <> '80000.00' or v_job.revenue_snapshot ->> 'totalAmount' <> '1021200.00' then
+    raise exception 'assertion failed: expected job revenue_snapshot subtotalAmount=1000000.00 discountAmount=80000.00 totalAmount=1021200.00, got %', v_job.revenue_snapshot;
   end if;
 
   select * into v_evaluation from app.evaluate_billing_readiness(v_job.id, null, '00000000-0000-0000-0000-000000027502', 'rep');
@@ -506,13 +512,14 @@ begin
   select * into v_readiness_handoff from app.handoff_billing_readiness(v_job.id, 'invoice-tax-fixture-handoff-1', '00000000-0000-0000-0000-000000027502', 'rep');
 
   -- HDN-374 finding 1 regression: prepare with FIN-195's own p_tax_code (PPN) on top of a
-  -- quote that ALREADY carried its own 11% line tax_pct. The invoice's own subtotal must
-  -- be the quote's genuine pre-tax figure (1,000,000), never its already-tax-inclusive
-  -- total (1,110,000) -- reading the latter would double the tax (122,100 instead of
-  -- 110,000, total 1,232,100 instead of 1,110,000).
+  -- quote that ALREADY carried its own 11% line tax_pct AND an 8% line discount. The
+  -- invoice's own subtotal must be the quote's genuine pre-tax, discount-NET figure
+  -- (1,000,000 - 80,000 = 920,000), never the raw pre-discount gross (1,000,000, Tier C's
+  -- own finding) and never the already-tax-inclusive total (1,021,200, the original
+  -- finding). PPN 11%% on the correct 920,000 base = 101,200.
   select * into v_invoice from app.prepare_finance_invoice_from_readiness(v_tenant1, v_readiness_handoff.id, 30, 'PPN', '00000000-0000-0000-0000-000000027503', 'financemanagera');
-  if v_invoice.subtotal_amount <> 1000000 or v_invoice.tax_amount <> 110000 or v_invoice.total_amount <> 1110000 then
-    raise exception 'assertion failed: HDN-374 finding 1 regressed -- expected invoice subtotal=1,000,000 tax=110,000 (PPN 11%% applied ONCE) total=1,110,000, got subtotal=% tax=% total=%', v_invoice.subtotal_amount, v_invoice.tax_amount, v_invoice.total_amount;
+  if v_invoice.subtotal_amount <> 920000 or v_invoice.tax_amount <> 101200 or v_invoice.total_amount <> 1021200 then
+    raise exception 'assertion failed: HDN-374 finding 1 / Tier C regressed -- expected invoice subtotal=920,000 (discount-net) tax=101,200 (PPN 11%% applied ONCE on the correct base) total=1,021,200, got subtotal=% tax=% total=%', v_invoice.subtotal_amount, v_invoice.tax_amount, v_invoice.total_amount;
   end if;
 
   -- Approve and issue invoice 1 -- this job order's own first ISSUED invoice.
@@ -560,5 +567,130 @@ begin
   if v_invoice2.status <> 'approved' then
     raise exception 'assertion failed: expected the denied second invoice to remain approved (no partial-issue side effect), got %', v_invoice2.status;
   end if;
+end;
+$$;
+
+\echo '>> HDN-374 Tier C regression: a REAL two-process concurrent race -- two DIFFERENT, already-APPROVED invoices from two distinct handoffs on the SAME job order, both issued at the same instant. The sequential guard above cannot catch this (each process passes its own exists() check before either commits); finance_invoices_job_order_issued_unique must catch it instead -- exactly ONE may reach issued, the other must be denied finance_invoice_job_order_already_issued (never a raw unique_violation), and remain approved'
+do $$
+declare
+  v_tenant1 uuid;
+  v_lead app.leads;
+  v_prospect app.prospects;
+  v_contact app.contacts;
+  v_opportunity app.opportunities;
+  v_request app.costing_requests;
+  v_rate app.vendor_rate_versions;
+  v_selection app.rate_selections;
+  v_calc_id uuid;
+  v_quote app.quotations;
+  v_send record;
+  v_account app.accounts;
+  v_handoff app.job_order_handoffs;
+  v_job app.job_orders;
+  v_evaluation app.billing_readiness_evaluations;
+  v_readiness_handoff app.billing_readiness_handoffs;
+  v_invoice_a app.finance_invoices;
+  v_invoice_b app.finance_invoices;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'acmeinva');
+
+  perform app.capture_lead(v_tenant1, 'manual', null, 'Invoice Race Test Co', 'Rina Race', 'rina@invracetest.test', '0813',
+    '00000000-0000-0000-0000-000000027502', (select id from app.org_units where tenant_id = v_tenant1 and code = 'ACMEINVA-CO'), '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_lead from app.leads where email = 'rina@invracetest.test';
+  perform app.qualify_lead(v_lead.id, v_lead.record_version, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_lead from app.leads where id = v_lead.id;
+  perform app.convert_lead_to_prospect(v_lead.id, 'Invoice Race Test Co', 'IRT', '88.888.888.8-888.000',
+    jsonb_build_object('line1', 'Jl. Gatot Subroto 1', 'city', 'Jakarta', 'country', 'ID'),
+    '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_prospect from app.prospects where lead_id = v_lead.id;
+
+  select * into v_contact from app.create_contact(v_tenant1, 'Rina Race', 'Procurement', 'rina@invracetest.test', '0813', '00000000-0000-0000-0000-000000027502', (select id from app.org_units where tenant_id = v_tenant1 and code = 'ACMEINVA-CO'), '00000000-0000-0000-0000-000000027502', 'tester');
+  perform app.link_contact_to_record(v_contact.id, 'prospect', v_prospect.id, 'primary', true, '00000000-0000-0000-0000-000000027502', 'tester');
+
+  select * into v_opportunity from app.create_opportunity(
+    v_tenant1, v_prospect.id, 'Invoice race test lane',
+    jsonb_build_object('service_type', 'ocean_freight', 'cargo_description', 'General cargo', 'origin', 'Jakarta', 'destination', 'Surabaya', 'target_ready_date', '2026-08-01'),
+    '00000000-0000-0000-0000-000000027502', (select id from app.org_units where tenant_id = v_tenant1 and code = 'ACMEINVA-CO'), '00000000-0000-0000-0000-000000027502', 'tester'
+  );
+  select * into v_request from app.request_costing(v_opportunity.id, '[]'::jsonb, null, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_rate from app.create_rate_version(
+    v_tenant1, 'VENDOR-INV-RACE-1', 'Contoso Ocean Line', 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', '20ft',
+    null, null, null, null, 'IDR', 500000, null, '[]'::jsonb, now(), null, null, '00000000-0000-0000-0000-000000027501', 'tester'
+  );
+  perform app.approve_rate_version(v_rate.id, v_rate.record_version, '00000000-0000-0000-0000-000000027501', 'tester');
+  select * into v_selection from app.select_vendor_rate(v_request.id, v_rate.id, false, null, null, null, '00000000-0000-0000-0000-000000027502', 'tester');
+  perform app.calculate_margin(v_selection.id, 700000, 'IDR', 0, '00000000-0000-0000-0000-000000027502', 'tester');
+  select id into v_calc_id from app.margin_calculations where rate_selection_id = v_selection.id and is_current;
+
+  select * into v_quote from app.create_quotation_draft(v_tenant1, v_opportunity.id, 'IDR', now() + interval '14 days', v_contact.id, null, null, '00000000-0000-0000-0000-000000027502', 'tester');
+  perform app.add_quotation_line(v_quote.id, v_quote.record_version, 'service', 'Ocean freight invoice race lane', v_calc_id, 1, 700000, 0, 0, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_quote from app.quotations where id = v_quote.id;
+  perform app.submit_quotation(v_quote.id, v_quote.record_version, '00000000-0000-0000-0000-000000027502', 'tester');
+  select * into v_send from app.send_quotation_for_acceptance(v_quote.id, null, 'email', '00000000-0000-0000-0000-000000027502', 'tester');
+  perform app.record_quotation_customer_decision(v_send.raw_token, 'accepted', 'Rina Race', null, null, null, null, null);
+
+  select * into v_account from app.convert_quotation_to_account(v_quote.id, null, null, '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_handoff from app.prepare_job_order_handoff(v_quote.id, '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_job from app.prepare_job_order(v_handoff.id, '00000000-0000-0000-0000-000000027502', 'rep');
+
+  -- Two distinct handoffs (OPS-181's own sanctioned re-handoff flow) on the SAME job
+  -- order, each prepared, submitted and approved -- both legitimately reach 'approved',
+  -- neither yet issued, exactly the state the sequential guard test above already proved
+  -- is freely reachable.
+  select * into v_evaluation from app.evaluate_billing_readiness(v_job.id, null, '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_evaluation from app.override_billing_readiness(v_job.id, v_evaluation.record_version, 'fixture: HDN-374 Tier C race regression, handoff A', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_readiness_handoff from app.handoff_billing_readiness(v_job.id, 'invoice-race-fixture-handoff-a', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_invoice_a from app.prepare_finance_invoice_from_readiness(v_tenant1, v_readiness_handoff.id, 30, null, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_invoice_a from app.submit_finance_invoice_for_approval(v_invoice_a.id, v_invoice_a.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_invoice_a from app.approve_finance_invoice(v_invoice_a.id, v_invoice_a.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+
+  select * into v_evaluation from app.evaluate_billing_readiness(v_job.id, 'fixture: HDN-374 Tier C race regression, handoff B', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_evaluation from app.override_billing_readiness(v_job.id, v_evaluation.record_version, 'fixture: second override', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_readiness_handoff from app.handoff_billing_readiness(v_job.id, 'invoice-race-fixture-handoff-b', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_invoice_b from app.prepare_finance_invoice_from_readiness(v_tenant1, v_readiness_handoff.id, 30, null, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_invoice_b from app.submit_finance_invoice_for_approval(v_invoice_b.id, v_invoice_b.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  select * into v_invoice_b from app.approve_finance_invoice(v_invoice_b.id, v_invoice_b.record_version, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+
+  if v_invoice_a.status <> 'approved' or v_invoice_b.status <> 'approved' then
+    raise exception 'assertion failed: expected both race invoices to reach approved before the race, got a=% b=%', v_invoice_a.status, v_invoice_b.status;
+  end if;
+end;
+$$;
+
+select id as race_invoice_a_id, record_version as race_invoice_a_version from app.finance_invoices where billing_readiness_handoff_id = (select id from app.billing_readiness_handoffs where idempotency_key = 'invoice-race-fixture-handoff-a') \gset
+select id as race_invoice_b_id, record_version as race_invoice_b_version from app.finance_invoices where billing_readiness_handoff_id = (select id from app.billing_readiness_handoffs where idempotency_key = 'invoice-race-fixture-handoff-b') \gset
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as race_bpid \gset
+
+\set race_sql_a 'select app.issue_finance_invoice(''' :race_invoice_a_id ''', ' :race_invoice_a_version ', ''2026-03-25'', ''00000000-0000-0000-0000-000000027503'', ''financemanagera'');'
+\set race_sql_b 'select app.issue_finance_invoice(''' :race_invoice_b_id ''', ' :race_invoice_b_version ', ''2026-03-25'', ''00000000-0000-0000-0000-000000027503'', ''financemanagera'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-fin-invoice-issue-race-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-fin-invoice-issue-race-b-:race_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_job_order_id uuid;
+  v_issued_count integer;
+  v_approved_count integer;
+begin
+  v_job_order_id := (select job_order_id from app.finance_invoices where billing_readiness_handoff_id = (select id from app.billing_readiness_handoffs where idempotency_key = 'invoice-race-fixture-handoff-a'));
+
+  select count(*) filter (where status = 'issued'), count(*) filter (where status = 'approved') into v_issued_count, v_approved_count
+    from app.finance_invoices where job_order_id = v_job_order_id;
+
+  if v_issued_count <> 1 then
+    raise exception 'assertion failed: HDN-374 Tier C regressed -- expected exactly ONE of the two racing invoices to reach issued (never two, never zero -- a raw unique_violation reaching a caller means finance_invoices_job_order_issued_unique is not applied), got %. See the RACE_OUT_A/RACE_OUT_B process output captured above', v_issued_count;
+  end if;
+  if v_approved_count <> 1 then
+    raise exception 'assertion failed: expected exactly ONE invoice to remain approved (the loser, denied before any state mutation), got %', v_approved_count;
+  end if;
+
+  raise notice 'concurrent issue-invoice race proof: exactly 1 of 2 invoices on the same job order reached issued after two genuinely concurrent psql processes raced app.issue_finance_invoice -- the loser was denied finance_invoice_job_order_already_issued, never a raw unique_violation';
 end;
 $$;

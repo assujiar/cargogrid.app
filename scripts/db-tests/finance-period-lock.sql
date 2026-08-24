@@ -365,4 +365,44 @@ begin
 end;
 $$;
 
+\echo '>> HDN-374 Tier C (Financial Integrity Audit) regression: a REAL two-process concurrent race -- both processes call app.lock_finance_period for the SAME tenant/period/scope, both a genuine FIRST-TIME lock, at the same instant. Before the fix, the losing process surfaced a raw duplicate-key error; after the fix, it must gracefully return the SAME winning, correctly locked row -- exactly one lock row must exist, never two, never a raw unique_violation'
+select id as race_tenant_id from app.tenants where slug = 'acmelocka' \gset
+select id as race_period_id from app.finance_fiscal_periods where tenant_id = (select id from app.tenants where slug = 'acmelocka') and period_code like '%2026-05%' limit 1 \gset
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as race_bpid \gset
+
+\set race_sql_a 'select app.lock_finance_period(''' :race_tenant_id ''', null, ''' :race_period_id ''', ''tax'', ''concurrent lock race'', null, ''00000000-0000-0000-0000-000000032002'', ''financemanagera'');'
+\set race_sql_b 'select app.lock_finance_period(''' :race_tenant_id ''', null, ''' :race_period_id ''', ''tax'', ''concurrent lock race'', null, ''00000000-0000-0000-0000-000000032002'', ''financemanagera'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-fin-period-lock-race-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-fin-period-lock-race-b-:race_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_tenant_a uuid;
+  v_period_may_id uuid;
+  v_count integer;
+  v_status text;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmelocka');
+  v_period_may_id := (select id from app.finance_fiscal_periods where tenant_id = v_tenant_a and period_code like '%2026-05%' limit 1);
+
+  select count(*), max(status) into v_count, v_status from app.finance_period_locks
+    where tenant_id = v_tenant_a and period_id = v_period_may_id and lock_scope = 'tax';
+  if v_count <> 1 then
+    raise exception 'assertion failed: HDN-374 Tier C regression -- expected exactly ONE finance_period_locks row to survive the concurrent race (never two, never zero -- a raw unique_violation reaching a caller means this fix is not applied), got % -- see the RACE_OUT_A/RACE_OUT_B process output captured above', v_count;
+  end if;
+  if v_status <> 'locked' then
+    raise exception 'assertion failed: expected the race-surviving row to be correctly status=locked, got %', v_status;
+  end if;
+
+  raise notice 'concurrent lock-period race proof: exactly 1 lock row survived two genuinely concurrent psql processes racing the SAME tenant/period/scope, correctly locked -- the loser was handed the winner''s row gracefully, never a raw unique_violation';
+end;
+$$;
+
 \echo 'ALL FIN-207 (Period Lock and Governed Reopen) db-test assertions passed.'

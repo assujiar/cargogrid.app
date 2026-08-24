@@ -1521,6 +1521,62 @@ database repair. **Owner: `HDN-386`** (Full-System Hardening Integrated Verifica
 first downstream checkpoint positioned to rule on cross-cutting scope questions before Step 16
 go/no-go; forward to `HDN-387`/`389` if `HDN-386` does not resolve it explicitly.
 
+### ISS-2026-198 — `app.prepare_finance_vendor_bill_from_actual_cost`'s idempotency replay lookup had no `status <> 'void'` predicate, silently returning a discarded draft instead of allowing a fresh one (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, Medium, owner `HDN-374`)
+
+**Disclosure correction, not a new fix** — this fix was already shipped, mechanically, inside
+`20260811000000_harden_financial_integrity_invoicing_and_idempotency.sql`'s own header
+comment on `app.prepare_finance_vendor_bill_from_actual_cost` ("ATW-032: same defect and
+same fix as prepare_finance_invoice_from_readiness above"), but was never itself disclosed
+as a named finding in `HDN-374.md` §1/§6 or registered here — a Tier C review lens caught
+the omission (§13.2 of `HDN-374.md`) live-forcing that the pre-fix predicate genuinely
+returned an ambiguous multi-row match (one `void`, one `draft`) for the same
+`tenant_id`/`actual_cost_id`/`vendor_master_id`. Same shape, same root cause, and the same
+already-proven fix `ATW-032` established for `app.prepare_finance_invoice_from_readiness`
+(`discard_finance_vendor_bill_draft` writes a terminal `void` no other writer on this table
+leads out of; the total unique constraint is partial, `status <> 'void'`) — without the
+predicate, a discarded draft was handed back to every later replay call, and the partial
+unique index made preparing a genuine replacement impossible. **Severity: Medium** (a
+correctness/usability defect, not a financial-integrity or security one — no duplicate
+truth was ever possible, only a blocked legitimate replacement). **Fixed**, already shipped
+in the migration above; registered here for an honest, complete disclosure record rather
+than left as an undisclosed side effect of an unrelated fix pass.
+
+### ISS-2026-199 — `app.request_finance_settlement_reversal` posts no reversing GL journal at all -- the AP subledger reopens while the GL still shows the original payment posted (found at `CG-S15-HDN-006` Tier C, `OPEN`, High, owner `HDN-386`, ledger `HDN-BLK-016`)
+
+Found by an independent Tier C adversarial review lens, live-forced. `app.request_finance_
+settlement_reversal` (composing `app.reverse_finance_ap_settlement`) mutates only `app.
+finance_ap_open_items.settled_amount`/`status` and inserts an `app.finance_ap_open_item_
+events` row -- it never calls `app.create_and_post_finance_system_journal` or any other GL-
+posting primitive. **Live-forced**: a posted settlement (real GL journal, debit AP/credit
+cash) was reversed via this governed path -- the AP open item correctly returned to `open`,
+but the original GL journal remained `posted`, unchanged, and zero correction/reversal
+journals existed anywhere for the tenant afterward. Result: the GL and AP subledger
+permanently disagree about whether the vendor was paid, with no system-generated correction
+path to reconcile them (Finance would have to notice and manually construct a correction via
+`app.prepare_finance_journal_adjustment`/`reversal` against the ORIGINAL settlement-sourced
+journal, a step this function neither performs nor prompts for). **Severity: High** --
+squarely the "every financial flow reconciles to exact source-linked totals, balanced
+postings and governed correction paths at one checkpoint" business rule this audit's own
+charter states (Prompt 374 §21), reachable by any ordinary FIN:Approve holder, no forged
+identity or special access required.
+
+**Companion finding, fixed same checkpoint**: this same live-force pass also found and
+closed the narrower period-lock bypass on this same function (this same Tier C round --
+see `20260811200000_harden_financial_integrity_tierc_fixes.sql`'s own Tier C finding 3,
+`HDN-374.md` §13.3) -- a reversal against a settlement whose own posting period is now
+locked is refused, mirroring `app.post_finance_settlement`'s own established check.
+
+**Not fixed here** -- composing a correct, automatic reversing GL journal is a larger design
+decision (which accounts to debit/credit, whether reversal should be fully automatic or a
+separate governed step mirroring `app.prepare_finance_journal_reversal`'s own maker/checker
+shape, and how it interacts with a settlement spanning multiple AP open items/allocations)
+outside a bounded-repair checkpoint's own scope. **Owner: `HDN-386`** (Full-System Hardening
+Integrated Verification) -- the first downstream checkpoint positioned to rule on this kind
+of cross-cutting design question before Step 16 go/no-go; forward to `HDN-387`/`389` if
+`HDN-386` does not resolve it explicitly. Until resolved, any settlement reversal in this
+codebase requires a MANUAL, separately-tracked GL correction -- disclosed here so Finance
+operating procedure can account for it, not discovered in production.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.

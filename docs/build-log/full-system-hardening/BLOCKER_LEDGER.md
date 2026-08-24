@@ -482,21 +482,48 @@ fixed by its named owner or explicitly ruled an accepted exception at `HDN-387`/
 
 ---
 
+## HDN-BLK-016 — `app.request_finance_settlement_reversal` posts no reversing GL journal at all, permanently desyncing GL from the AP subledger on every settlement reversal
+
+*Found at `HDN-374`'s own Tier C review (2026-08-23), same checkpoint — an independent
+adversarial lens live-forcing areas the checkpoint's own 4 investigation lenses had called
+"clean" (period lock, reversal/correction). A companion, narrower defect on the same
+function (a complete period-lock bypass) was found by the same lens and fixed in the same
+Tier C fix pass; this one is registered, not fixed, since it needs a larger design decision.
+Full disposition: `HDN-374.md` §13.3, `KNOWN_ISSUES.md` `ISS-2026-199`.*
+
+| Field | Value |
+|---|---|
+| **Title** | `app.request_finance_settlement_reversal` mutates only `app.finance_ap_open_items`'s own `settled_amount`/`status` and logs an event — it never calls `app.create_and_post_finance_system_journal` or any other GL-posting primitive, so reversing a posted settlement reopens the AP subledger while the GL still shows the original payment as posted, with no system-generated correction path to reconcile them |
+| **Found by** | `HDN-374` (`CG-S15-HDN-006`), Financial Integrity Audit, Tier C adversarial review lens (wider financial-integrity sweep) — live-forced, not code-inferred |
+| **Severity** | **High** — a real, live-forced, permanent GL/AP reconciliation break, squarely the "every financial flow reconciles to exact source-linked totals... at one checkpoint" business rule this lane's own charter states (Prompt 374 §21), reachable by any ordinary FIN:Approve holder |
+| **Owning phase** | Finance (AP settlement/reversal) |
+| **Owning lane** | Registered by `HDN-374`; owned by `HDN-386` (Full-System Hardening Integrated Verification) — composing a correct automatic reversing journal is a design decision (account mapping, automatic vs. a separate governed step mirroring `app.prepare_finance_journal_reversal`'s own maker/checker shape) outside this bounded-repair checkpoint's own scope |
+| **Reachability** | Any FIN:Approve holder calling `app.request_finance_settlement_reversal` against any posted settlement |
+| **Reproduction** | Live-forced: a posted settlement (real GL journal, debit AP/credit cash) reversed via this governed path — AP open item correctly returned to `open`; the original GL journal remained `posted`, unchanged; zero correction/reversal journals existed anywhere afterward. Full transcript `HDN-374.md` §13.3 |
+| **Blast radius** | Every settlement reversal in this codebase, past and future, until fixed — an unbounded, ongoing GL/AP desync source, not a one-time data-quality issue |
+| **Disposition** | **Registered, not fixed.** The narrower, companion period-lock bypass on this SAME function was fixed in this same checkpoint's own Tier C fix pass (`20260811200000_harden_financial_integrity_tierc_fixes.sql`) — this finding (no reversing journal at all) needs a design decision this bounded-repair checkpoint cannot make unilaterally |
+| **Required of `HDN-386`** | Decide and implement (or explicitly accept as residual risk with a documented manual-correction procedure): whether `app.request_finance_settlement_reversal` should automatically post a reversing GL journal, and if so, its exact account mapping and idempotency/concurrency shape mirroring this codebase's own established correction-journal patterns |
+| **Regression test** | Required with the eventual fix — a live-forced proof that a reversed settlement's own GL journal is corrected, not merely the AP subledger |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-199` (`OPEN`, High) |
+
+---
+
 ## Status as of `HDN-374` (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 to date | **9** — unchanged; `HDN-374` opened no new `HDN-BLK-*` entry (its findings registered as `ISS-2026-194..197`, none rising to a release-blocking `HDN-BLK-*` on their own) |
+| Blockers opened **by** Step 15 to date | **10** — `HDN-374`'s own Tier C review opened `HDN-BLK-016` (High, registered not fixed) |
 | Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — `HDN-BLK-002` (all four member issues `RESOLVED`); `HDN-BLK-011`, `HDN-BLK-012`, `HDN-BLK-015` (fixed); `HDN-BLK-010` **partially** (Finance/HRIS-Payroll portion `RESOLVED` at `HDN-374`, 3 non-Finance functions + `ISS-2026-163` handed to `HDN-387`) |
-| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013` (3, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016` (4) |
 | — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged count — `010`'s own scope narrowed rather than closed) |
 | Unresolved **Critical** anywhere | **0** |
 
-`HDN-BLK-013` remains an open release blocker for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until
-fixed by its named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
+`HDN-BLK-013` and `HDN-BLK-016` are open release blockers for Step 16 per `00_EXECUTION_INDEX.md`
+§8.1 until fixed by their named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
 
 ## Reserved
 
-`HDN-BLK-016` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-017` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.
