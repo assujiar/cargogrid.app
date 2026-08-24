@@ -37,8 +37,8 @@ from zero and no lane rediscovers a known item.
 | 8 | Storage / signed URL | `HDN-377` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. First round: 2 Critical (`ISS-2026-216` storage_path exposure, `ISS-2026-217` dual legal-hold mechanisms) + 1 High (`ISS-2026-218` legal-hold DELETE backstop) + 3 Medium (`ISS-2026-219`/`220`/`221`) defects fixed. Tier C: 1 more Critical self-inflicted gap in the first round's own trigger fixed (`ISS-2026-226`), 1 more High fixed (`ISS-2026-227`), 1 Medium-High validation gap fixed (`ISS-2026-228`), 1 finding self-corrected before commit (`ISS-2026-231`). 6 findings registered, not fixed, all outside this checkpoint's own charter: `ISS-2026-222` High + `229` Critical + `230` High (owner `HDN-386`); `ISS-2026-223`/`225` (corrected High)/`232` (owner `HDN-378`); `ISS-2026-224` Medium (owner `HDN-387`) | §8 |
 | 9 | Security hardening | `HDN-378` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. `ISS-2026-150` wired across all 4 named functions, corrected `RESOLVED` → `PARTIALLY RESOLVED` at Tier C once `app.set_integration_connection_status`'s own independent bypass was found and registered (`ISS-2026-235`/`HDN-BLK-023`, Critical, owner `HDN-386`). 2 Critical + 1 High genuine bypass found and fixed in this checkpoint's own first-round work. 1 more High registered (`ISS-2026-236`/`HDN-BLK-024`, owner `HDN-386`), 1 Medium (`ISS-2026-237`, owner `HDN-387`) | §9 |
 | 10 | Performance / scalability | `HDN-379` **`VERIFIED`** | **`PASS`** — Tier C closed. `ISS-2026-145` (O(n²) `rbac-enforcement.sql` scan) `RESOLVED`, matched-pair verified, 300×-1200×+ speedup; a real structural weakening in the fix itself found and closed at Tier C. 3 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-238` (Medium, unbounded browser datasets), `ISS-2026-239` (Low, 892 unindexed-FK triage), `ISS-2026-240` (Low, informational `auth_rls_initplan` blind spot) | §10 |
-| 11 | Accessibility | `HDN-380` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. 6 color-contrast token failures fixed; `eslint-plugin-jsx-a11y` `recommended` wired repository-wide, 14 real errors fixed; 454/454 error displays now carry `role="alert"`; `HDN-BLK-009`/`ISS-2026-160` root-caused (Turbopack dev-mode hydration race, `C-30`) and `RESOLVED` (harness now 18/18). 2 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-241` (Medium, missing `<main>` landmarks), `ISS-2026-242` (Medium, accessible form-primitive under-adoption) | §11 |
-| 12 | Browser / device compatibility | `HDN-381` | `NOT_RUN` | §12 |
+| 11 | Accessibility | `HDN-380` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. 6 color-contrast token failures fixed; `eslint-plugin-jsx-a11y` `recommended` wired repository-wide, 14 real errors fixed; 463/463 error displays carry `role="alert"` after Tier C found 6 more missed by the first round's own narrower regex; `HDN-BLK-009`/`ISS-2026-160` root-caused (Turbopack dev-mode hydration race, `C-30`) and `RESOLVED` (harness now 18/18). No Critical/High finding either round. 2 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-241` (Medium, missing `<main>` landmarks), `ISS-2026-242` (Medium, accessible form-primitive under-adoption). 1 new Low finding at Tier C: `ISS-2026-243` (`reuseExistingServer` local-dev stale-build footgun, owner a dedicated future task) | §11 |
+| 12 | Browser / device compatibility | `HDN-381` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Matrix defined explicitly: Chrome/Edge (Chromium engine) + mobile/tablet/iPhone viewport+touch emulation all permanently tested (`test:e2e` 34/34, up from 18/18); Safari/Firefox a firm sandbox constraint, registered `ISS-2026-244`/`TRACKED_GAP`. 16/16 route×device combinations live-tested with zero defects. 5 real static gaps fixed first round (touch-target sizing on `Button`/`IconButton`/`Checkbox`, `ToastProvider` narrow-viewport clipping, 4 worst unwrapped tables, permanent mobile/tablet e2e coverage); 3 more fixed at Tier C (`Input`/`Select` touch-target sizing, a `position:fixed` overflow-detection blind spot, the `testMatch` anchoring regression + `iphone-chrome` completeness gap). PWA posture scoping registered (`ISS-2026-245`). Unused shared-UI-primitive surface corrected from an initial 6 to the true 33 of 50 files at Tier C (`ISS-2026-246`); 19 of 95 tables remain unwrapped (`ISS-2026-247`); a new ESLint automated-guard gap registered at Tier C (`ISS-2026-248`). No Critical or High finding either round | §12 |
 | 13 | Observability | `HDN-382` | `NOT_RUN` | §13 |
 | 14 | Backup / restore | `HDN-383` | `NOT_RUN` | §14 |
 | 15 | Disaster recovery rehearsal | `HDN-384` | `NOT_RUN` | §15 |
@@ -821,33 +821,69 @@ release gate.
 
 **Upstream:** `HDN-380`. Inherits `HDN-380`'s own `HDN-BLK-009` exposure — a harness that cannot reach a guarded route in `HDN-380` cannot reach one here either.
 
-> **Result (`HDN-381` first round, `COMPLETED`, Tier C pending):** Matrix defined
+> **Result (`HDN-381`, `VERIFIED`, Tier C closed):** Matrix defined
 > explicitly per the seeded instruction — Chrome/Edge (Chromium engine) and
-> mobile/tablet viewport+touch emulation are all real and now permanently tested
-> (`playwright.config.ts`'s new `mobile-chrome`/`tablet-chrome` projects,
-> `e2e/browser-device-compat.spec.ts`, 30/30 passing); Safari (WebKit) and Firefox
-> are a firm sandbox constraint (no binary present, environment configured not to
-> fetch more) — registered `ISS-2026-244`, `TRACKED_GAP`. `HDN-BLK-009`'s own
-> exposure re-confirmed already resolved at `HDN-380` (harness healthy); the
-> separate, still-open live-auth constraint (`ISS-2026-140`, unrelated to the
-> harness) confirmed unchanged. 16/16 route×device combinations live-tested at
-> the real production build with zero horizontal-overflow, zero obscured
-> controls, zero mobile-specific defects — including a live re-test of `HDN-380`'s
-> own dev-mode-hang fix under mobile touch (50ms resolve, no hang). 5 real static
-> gaps found and fixed: touch-target sizing on `Button`/`IconButton`/`Checkbox`
-> (was ~36px/~20px, under the 44px guidance); `ToastProvider`'s viewport clipping
-> below 336px wide; 4 files with the worst unwrapped tables (of 23 found) wrapped
-> in `overflow-x-auto`. PWA posture: no manifest/service worker exists anywhere —
-> registered `ISS-2026-245` (RPD-004's "PWA" language needs scoping, or a real
-> manifest built — either is out of this checkpoint's "no new product features"
-> boundary). 6 shared UI primitives found unused in any real screen, registered
-> `ISS-2026-246` — **a prior investigation's claim that `DataTable` was also
-> unused did not reproduce**, independently re-verified and corrected (56 real
-> importers). 19 remaining unwrapped tables registered `ISS-2026-247`. No
-> Critical or High finding. Independent full gate: `typecheck` 0, `lint` 0/337
-> warnings, 5443/5443 unit tests, `next build` clean, `test:e2e` 30/30 (up from
-> 18/18), 229/229 db-tests (328 migrations, unchanged — no schema change). Full
-> disposition: `HDN-381.md`.
+> mobile/tablet/iPhone viewport+touch emulation are all real and now permanently
+> tested (`playwright.config.ts`'s `mobile-chrome`/`tablet-chrome`/`iphone-chrome`
+> projects, `e2e/browser-device-compat.spec.ts`, 34/34 passing); Safari (WebKit)
+> and Firefox are a firm sandbox constraint (no binary present, environment
+> configured not to fetch more) — registered `ISS-2026-244`, `TRACKED_GAP`.
+> `HDN-BLK-009`'s own exposure re-confirmed already resolved at `HDN-380`
+> (harness healthy); the separate, still-open live-auth constraint
+> (`ISS-2026-140`, unrelated to the harness) confirmed unchanged. 16/16
+> route×device combinations live-tested at the real production build with zero
+> horizontal-overflow, zero obscured controls, zero mobile-specific defects —
+> including a live re-test of `HDN-380`'s own dev-mode-hang fix under mobile
+> touch (50ms resolve, no hang). 5 real static gaps found and fixed at first
+> round: touch-target sizing on `Button`/`IconButton`/`Checkbox` (was
+> ~36px/~20px, under the 44px guidance); `ToastProvider`'s viewport clipping
+> below 336px wide; 4 files with the worst unwrapped tables (of 23 found)
+> wrapped in `overflow-x-auto`; permanent `mobile-chrome`/`tablet-chrome` e2e
+> coverage added. PWA posture: no manifest/service worker exists anywhere —
+> registered `ISS-2026-245`. 6 shared UI primitives initially found unused in
+> any real screen, registered `ISS-2026-246` — **a prior investigation's claim
+> that `DataTable` was also unused did not reproduce**, independently
+> re-verified and corrected (56 real importers). 19 remaining unwrapped tables
+> registered `ISS-2026-247`.
+>
+> **Tier C review (4 independent adversarial lenses against commit `9762a87`)
+> found no Critical or High finding at either round.** 3 more real, live gaps
+> found and fixed: `Input`/`Select` also under the 44px touch-target floor (49
+> and 7 real importers, independently re-verified, not assumed) — fixed,
+> cascading automatically to 4 composing components; `document.documentElement.
+> scrollWidth`-only overflow detection has a real blind spot for
+> `position:fixed`/`sticky` elements (live-verified: a 600px-wide fixed element
+> on a 320px viewport measured zero overflow) — exactly the shape
+> `RadixToast.Viewport` uses, closed with a second bounding-box check in
+> `e2e/browser-device-compat.spec.ts`; the first round's own unanchored
+> `testMatch` regex was a real (if minor) footgun — the anchoring fix itself
+> then triggered a more severe regression (all 3 device-project test counts
+> silently dropped to zero, since Playwright's own `testMatch` matcher runs
+> against each file's full absolute filesystem path, not a `testDir`-relative
+> one) caught live via `pnpm exec playwright test --list` and fixed with a
+> correctly end-anchored pattern; `iphone-chrome` project added to close a
+> completeness gap (8 of 16 manually-verified route×device combinations had no
+> permanent automated re-check). `ISS-2026-246` widened from 6 to the true 33
+> of 50 unused primitive files (schema-wide completeness sweep); a numeric
+> self-contradiction in `ISS-2026-247`/`HDN-381.md` §4 corrected (95 total/72
+> wrapped-before/76 wrapped-after, not the stale 96/73/77); `Button`
+> importer-count precision corrected (215/212, not 218); `IconButton`'s
+> "floor" framing corrected to "fixed size" (a true floor is wrong for a
+> single-fixed-size-icon component). A ~8px row-height regression in 14 dense
+> `align-top` table files disclosed as a deliberate, low-severity trade-off
+> (44px touch-target compliance over vertical-rhythm), not reverted or
+> separately registered. A pre-existing keyboard-scroll gap on
+> `overflow-x-auto` wrappers (no `tabindex="0"`) noted as `HDN-380`'s own
+> territory, not fixed here. 1 new Low finding registered: `ISS-2026-248` (no
+> automated ESLint guard for unwrapped tables/undersized touch targets, owner
+> a dedicated future task). This very Gate index table's own row 11
+> (`HDN-380`) also found stale (`COMPLETED`/Tier-C-pending despite `HDN-380`
+> itself being `VERIFIED`) — corrected alongside this lane's own row 12.
+> Independent full gate re-run after the complete fix pass: `typecheck` 0,
+> `lint` 0/337 warnings, 5443/5443 unit tests, `next build` clean, `test:e2e`
+> 34/34 (up from 30/30 first round, 18/18 before this checkpoint), 229/229
+> db-tests (328 migrations, unchanged — no schema change). Full disposition:
+> `HDN-381.md` §13.
 
 ---
 

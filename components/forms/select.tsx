@@ -17,7 +17,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   ref,
 ) {
   const classes = [
-    "w-full rounded-md border bg-surface px-3 py-2 text-sm text-text-primary",
+    // HDN-381 (Browser and Device Compatibility) Tier C: min-h-11 (44px) touch-target
+    // floor added -- live-measured at ~36px before this fix, the same shape already
+    // fixed on `Button`/`Input`. This primitive has 7 real importers.
+    "w-full min-h-11 rounded-md border bg-surface px-3 py-2 text-sm text-text-primary",
     "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary",
     invalid ? "border-danger" : "border-neutral-300",
     "disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400",

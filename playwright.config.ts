@@ -40,7 +40,18 @@ export default defineConfig({
     {
       name: "mobile-chrome",
       use: { ...devices["Pixel 5"] },
-      testMatch: /browser-device-compat\.spec\.ts/,
+      // HDN-381 Tier C: end-anchored (`\/...$`) rather than a bare substring match -- an
+      // unanchored regex would also silently scope in a future differently-named file
+      // whose path merely contains this substring (e.g. a hypothetical
+      // `browser-device-compat-v2.spec.ts`), which is not this project's intent. NOT
+      // start-anchored: Playwright's own `testMatch` matcher runs the regex against each
+      // candidate file's full ABSOLUTE filesystem path (`packages/playwright/src/runner/
+      // index.js`'s `collectFiles`/`createFileMatcher`), not a `testDir`-relative path --
+      // two earlier attempts at a `^...$`-anchored pattern (with and without an `e2e/`
+      // prefix) both silently matched zero files for exactly this reason (live-verified:
+      // `pnpm exec playwright test --list` dropped from 34 to 22 total tests) before this
+      // end-anchored form was confirmed correct.
+      testMatch: /\/browser-device-compat\.spec\.ts$/,
     },
     {
       // `devices["iPad Pro 11"]`'s own `defaultBrowserType` is `webkit` (a real iPad runs
@@ -50,7 +61,20 @@ export default defineConfig({
       // live-verified this actually launches Chromium, not attempt a WebKit download.
       name: "tablet-chrome",
       use: { ...devices["iPad Pro 11"], defaultBrowserType: "chromium" },
-      testMatch: /browser-device-compat\.spec\.ts/,
+      testMatch: /\/browser-device-compat\.spec\.ts$/,
+    },
+    {
+      // HDN-381 Tier C: added to close a real completeness gap Tier C review found -- the
+      // checkpoint's own live-testing lens manually verified 4 device profiles (iPhone 13,
+      // Pixel 5, iPad Pro 11, plus a plain 375x667 non-touch context), but only 2 of those
+      // 4 (Pixel 5, iPad Pro 11) had a permanent project wired up, so 8 of the 16 originally
+      // claimed "converted to a permanent regression guard" route x device combinations
+      // had no actual automated re-check. `devices["iPhone 13"]`'s own `defaultBrowserType`
+      // is also `webkit` (verified the same way as iPad Pro 11 above) -- overridden to
+      // `chromium` for the same reason.
+      name: "iphone-chrome",
+      use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" },
+      testMatch: /\/browser-device-compat\.spec\.ts$/,
     },
   ],
   // PLT-135, CG-S6-PLT-032: the first real Next.js pages (`app/(public)/login`) land

@@ -3,40 +3,43 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-013` — **Browser and Device Compatibility
-(Prompt 381)** — `COMPLETED`, first round only, Tier C review pending. Three
-independent parallel investigation lenses (environment feasibility;
-source-level static evidence sweep; live mobile/tablet-viewport e2e testing
-against the real production build). **Zero real device-compatibility defects
-found live** — 16/16 route×device combinations (login, vendor-intake form,
-Supreme Admin guard redirect, Procurement guard fail-safe × iPhone 13/Pixel
-5/iPad Pro 11/375×667) rendered with zero horizontal overflow, no obscured
-controls, no mobile-specific console errors; mobile tap-to-submit resolved in
-50ms with no hang, confirming `HDN-380`'s dev-mode-hydration-race fix holds on
-a touch-emulated context too. **5 real, static gaps found and fixed**:
-touch-target sizing on `Button`/`IconButton`/the shared `Checkbox` (all under
-the commonly-cited 44px guidance, fixed with a `min-h-11`/`h-11 w-11` floor);
-`ToastProvider`'s own viewport clipping past the left edge on any screen
-≤336px wide (fixed); 4 files with the worst unwrapped tables (of 23 found)
-wrapped in `overflow-x-auto`; zero permanent mobile/tablet e2e coverage
-existed — `playwright.config.ts` extended with `mobile-chrome`/`tablet-chrome`
-projects + a new `e2e/browser-device-compat.spec.ts`, **30/30 passing** (up
-from 18/18), catching a real config bug before Tier C (`devices["iPad Pro
-11"]`'s own `defaultBrowserType` is `webkit`, absent in this sandbox). **4
-findings registered, not fixed**: `ISS-2026-244` (Low, `TRACKED_GAP` —
-Safari/Firefox structurally untestable, no binary present in this sandbox);
-`ISS-2026-245` (Low — no PWA manifest/service worker exists anywhere, RPD-004
-language needs scoping); `ISS-2026-246` (Low — 6 shared UI primitives unused
-in any real screen; **a prior claim that `DataTable` was also unused did NOT
-reproduce — independently corrected, 56 real importers**); `ISS-2026-247`
-(Low — 19 of 95 tables still unwrapped). No Critical or High finding
-anywhere. Independent full gate: `typecheck` 0; `lint` 0 errors/337 warnings;
-`pnpm run test` **5443/5443**; `pnpm exec next build` clean; `pnpm run
-test:e2e` **30/30**; `bash scripts/db-tests/run.sh` **229/229 files clean**
-(328 migrations, unchanged — no schema change). `CG-S15-HDN-013` first round
-`COMPLETED`; Tier C review required before `VERIFIED`.
-`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it. Not
-a production/pilot/GA/market-ready claim (RPD-001/034/036). Full detail:
-`docs/build-log/full-system-hardening/HDN-381.md`; ledger record:
+(Prompt 381)** — `VERIFIED`, Tier C closed. Four independent parallel
+adversarial lenses ran against the committed first-round state (`9762a87`).
+**No Critical or High finding at either round.** First round: zero real
+device-compatibility defects found live (16/16 route×device combinations,
+zero horizontal overflow, zero obscured controls, mobile tap-to-submit 50ms
+no hang); 5 real static gaps fixed (touch-target sizing on
+`Button`/`IconButton`/`Checkbox`; `ToastProvider`'s viewport clipping; 4 worst
+unwrapped tables; permanent `mobile-chrome`/`tablet-chrome` e2e coverage,
+30/30 up from 18/18). **Tier C found and fixed 3 more real gaps**:
+`Input`/`Select` also under the 44px touch-target floor (49/7 real importers,
+independently re-verified) — fixed, cascading to 4 composing components; a
+`position:fixed`/`sticky` blind spot in the overflow-detection e2e check
+(directly relevant to `RadixToast.Viewport`) — closed with a second
+bounding-box check; the first round's own unanchored `testMatch` footgun —
+anchoring it first introduced a *more severe* regression (all 3
+device-project test counts silently dropped to 0), root-caused to
+Playwright's `testMatch` matching each file's full absolute filesystem path
+rather than a `testDir`-relative one, fixed with a correctly end-anchored
+pattern, restoring 34/34; `iphone-chrome` project added closing a
+completeness gap. `ISS-2026-246` widened from an initial 6 to the true 33 of
+50 unused-primitive files; `ISS-2026-247`/`HDN-381.md` §4's own numeric
+self-contradiction corrected (95 total/72 wrapped-before/76 wrapped-after,
+not the stale 96/73/77); `Button`/`IconButton` wording precision-corrected. A
+~8px row-height regression in 14 dense table files disclosed as a deliberate
+trade-off, not reverted. 1 new Low finding: `ISS-2026-248` (no automated
+ESLint guard for unwrapped tables/undersized touch targets, owner a
+dedicated future task). `HARDENING_MATRIX.md`'s own Gate index row 11
+(`HDN-380`) also found stale, corrected alongside row 12. Independent full
+gate re-run after the complete fix pass: `typecheck` 0; `lint` 0
+errors/337 warnings; `pnpm run test` **5443/5443**; `pnpm exec next build`
+clean; `pnpm run test:e2e` **34/34** (up from 30/30 first round, 18/18
+pre-checkpoint); `bash scripts/db-tests/run.sh` **229/229 files clean** (328
+migrations, unchanged — no schema change at either round). `CG-S15-HDN-013`
+is `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389
+may set it. Not a production/pilot/GA/market-ready claim
+(RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-381.md` §13; ledger record:
 `docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-013` row.)
 
 **Prior update:** 2026-08-24 (`CG-S15-HDN-012` — **Accessibility Audit (Prompt 380)** —

@@ -21,7 +21,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   ref,
 ) {
   const classes = [
-    "w-full rounded-md border px-3 py-2 text-sm text-text-primary placeholder:text-neutral-400",
+    // HDN-381 (Browser and Device Compatibility) Tier C: min-h-11 (44px) touch-target
+    // floor added -- live-measured at ~36px before this fix (same `py-2`+`text-sm`
+    // shape already fixed on `Button`), and this primitive has 49 real importers
+    // (`date-input.tsx`/`number-input.tsx`/`password-input.tsx`/`search-input.tsx` all
+    // compose it, so the floor cascades to all four automatically).
+    "w-full min-h-11 rounded-md border px-3 py-2 text-sm text-text-primary placeholder:text-neutral-400",
     "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary",
     invalid ? "border-danger" : "border-neutral-300",
     "disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400",

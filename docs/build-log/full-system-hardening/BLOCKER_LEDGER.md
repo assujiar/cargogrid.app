@@ -781,6 +781,18 @@ named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
 `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly ruled an
 accepted exception at `HDN-387`/`389`.
 
+## Status as of `HDN-381` Tier C (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **20** — unchanged from `HDN-380`'s own close. `HDN-381` opened no new `HDN-BLK-` entry at either round — every finding this checkpoint made (first round: `ISS-2026-244..247`; Tier C: `ISS-2026-248`, plus 2 corrected entries) is Low severity and registered in `KNOWN_ISSUES.md` only, matching this ledger's own convention for Low/informational findings |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged from `HDN-380`'s own close |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024` (10, unchanged) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9, unchanged) |
+| Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
+| **`HDN-381`'s own charter items — first round plus Tier C** | Touch-target sizing on `Button`/`IconButton`/`Checkbox` (first round) and `Input`/`Select` (Tier C), `ToastProvider` viewport-clipping fix, 4 worst unwrapped tables wrapped (first round), permanent `mobile-chrome`/`tablet-chrome`/`iphone-chrome` (Tier C addition) e2e coverage. `ISS-2026-244`/`245` registered at the first round (Safari/Firefox untestable, PWA scoping — too large/out-of-charter to fix). `ISS-2026-246`/`247` registered at the first round, both corrected at Tier C (33 of 50 unused-primitive files, not 6; 95-total/72-before/76-after table count, not the self-contradicting 96/73/77). `ISS-2026-248` registered at Tier C (Low, no automated ESLint guard for the touch-target/table-overflow defect classes). **Tier C review found no Critical or High finding at either round** — 3 real gaps found and fixed (`Input`/`Select` sizing, a `position:fixed` overflow-detection blind spot, and a self-introduced-and-self-fixed `testMatch` anchoring regression); see `HDN-381.md` §13 |
+
 ## Reserved
 
 `HDN-BLK-027` onward are unassigned. Every Step 15 finding takes the next free ID and the
