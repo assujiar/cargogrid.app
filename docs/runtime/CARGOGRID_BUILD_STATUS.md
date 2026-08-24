@@ -3,6 +3,51 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-011` — **Performance and Scalability
+(Prompt 379)** — `VERIFIED`, Tier C closed. Four independent parallel adversarial
+lenses ran against the first-round commit (`57ce9fb`). **Lens 4 (attack-surface)
+found and this checkpoint fixed a real structural weakening in its own headline
+fix**: the first-draft `edge` CTE rewrite dropped a `\m` word-boundary anchor and a
+real join-against-`fn` requirement the original self-join carried "for free" —
+live-forced 876 spurious edges on the real 2,700-function schema (zero colliding
+with any real function name, so no wrong verdict today, but a future collision
+could have silently defeated the guard); fixed by adding
+`and m[1] in (select proname from fn)` (a hash semi-join, not a new cross join)
+and restoring the `\m` anchor, re-timed at **1.66 seconds**, both gaps confirmed
+closed via live reproduction with 3 scratch functions. **Lens 1 (correctness
+re-derivation) found the first round's own timing precision did not reproduce**:
+an independent same-schema matched-pair re-measurement got **212,105.6ms/≈313×**
+rather than **692,092.8ms/1244×** — both real, honest measurements; the ~3% spread
+reflects real sandbox contention variance at measurement time, cite
+"300×-1200×+" going forward, not a fixed multiplier. Also found `ISS-2026-239`'s
+claim that no RPC filters through `audit_logs.actor_auth_user_id` was factually
+wrong (`app.search_audit_logs` does, zero live UI callers today — the "don't
+index yet" conclusion is unchanged, the evidence was fixed). **Lens 2
+(schema-wide completeness sweep) found 5 new unbounded-dataset instances**
+`ISS-2026-238` missed, most notably a 4-list unbounded fleet-assets page
+(`listVehicleOperationalProfiles`/`listDriverOperationalProfiles`/
+`listGpsDevices`/`listSimCards`); everything else (more O(n²) self-joins, an
+independent unindexed-FK sample, other RLS-performance patterns,
+cache/backpressure) came back clean. **Lens 3 (ledger/documentation consistency)
+found and this checkpoint corrected 6 real documentation miscounts**: `auth.*()`
+call-site count (236→235), `default auth.uid()` pattern count (73/~40→72/35), a
+stale "~2,900 functions" figure left beside its own "2,700" correction, 2
+never-updated `BLOCKER_LEDGER.md` entries, a misleading FK-table-count phrasing,
+and a minor line-citation drift. `ISS-2026-238` corrected and expanded:
+`listFilesForTenant` reclassified Medium (a polymorphic, transactional-volume
+attachment table, not the bounded config table it was originally characterized
+as) — now 4 confirmed Medium routes, plus 5 new siblings. **No Critical or High
+finding at either round.** Independent full gate re-run after the Tier C fix
+pass: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5443/5443**
+(unchanged); `bash scripts/db-tests/run.sh` **229/229 files clean** (328
+migrations, unchanged — zero migrations at either round). **`CG-S15-HDN-011` is
+`VERIFIED`.** `CG-S15-HDN-012` (`HDN-380`, Prompt 380, Accessibility) is now the
+next eligible prompt. `FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt
+389 may set it. Not a production/pilot/GA/market-ready claim
+(RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-379.md` §13; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-011` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-011` — **Performance and Scalability
 (Prompt 379)** — `COMPLETED`, first round only, Tier C review pending. Four
 independent parallel investigation lenses covered `scripts/db-tests/rbac-
 enforcement.sql`'s ATW-032 O(n²) scan performance; the 892 `unindexed_foreign_keys`
@@ -26,9 +71,9 @@ cold candidates are write-only/audit-lineage columns on high-write-volume tables
 where speculative indexing would be pure write-amplification), deferred pending
 real production query telemetry that does not exist anywhere in this system yet.
 **`auth_rls_initplan` regression guard re-verified clean** (582 policy statements,
-236 call sites, zero regression since the original 65-migration fix); 1
+235 call sites, zero regression since the original 65-migration fix); 1
 informational blind spot documented (`ISS-2026-240`, Low) — a `default auth.uid()`
-helper-function pattern, 73 occurrences across ~40 migrations, structurally
+helper-function pattern, 72 occurrences across 35 migrations, structurally
 invisible to text-grep-based tooling by construction, the repository's own
 convention since day one, not a regression. **1 genuine new finding**: `listAccounts`,
 `listQuotationsForTenant`, and `listCustomerContracts` each load an entire

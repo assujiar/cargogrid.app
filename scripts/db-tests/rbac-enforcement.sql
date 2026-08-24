@@ -666,9 +666,23 @@ begin
     -- exactly. Verified via a same-schema matched-pair run (original vs rewrite, one
     -- disposable database, no rebuild in between) that both produce an identical
     -- verdict before this migration landed -- see HDN-379.md.
+    --
+    -- HDN-379 Tier C fix: the first draft's regex dropped two structural properties
+    -- the original self-join carried for free -- a leading `\m` word-boundary anchor
+    -- (so `webapp.foo(` cannot be mistaken for a call to app.foo), and a real
+    -- join-against-fn requirement (so `insert into app.some_table (...)` cannot be
+    -- mistaken for a call to a function named after the table). Live-forced: on the
+    -- current 2,700-function schema this never produced a wrong verdict (876 spurious
+    -- edges, all traced to unindexed table names with zero overlap against any real
+    -- function name), but a future function literally named after an existing table,
+    -- or a call site shaped like `wordapp.<realname>(`, could silently mark a caller
+    -- "covered" with no test failure -- restored both properties here, at the same
+    -- O(n) cost (the `in (select proname from fn)` filter is a hash semi-join against
+    -- the same already-materialized `fn` CTE, not a new cross join).
     select f.proname as caller, m[1] as callee
-    from fn f, regexp_matches(f.def, 'app\.([a-z0-9_]+)\s*\(', 'g') m
+    from fn f, regexp_matches(f.def, '\mapp\.([a-z0-9_]+)\s*\(', 'g') m
     where m[1] <> f.proname
+      and m[1] in (select proname from fn)
   ),
   covered(proname) as (
     select proname from fn where proname in ('evaluate_permission', 'assert_actor_is_session_identity')

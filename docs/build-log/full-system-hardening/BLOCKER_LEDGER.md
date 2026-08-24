@@ -186,9 +186,9 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Owning lane** | **`HDN-379`** (Performance and Scalability) |
 | **Reachability** | Every CI run. It passes locally today — that is the last thing that is still true about it |
 | **Trend** | The schema only grows. ~2,398 functions at Prompt 330, ~2,900 now |
-| **Disposition** | **`DEFERRED_TO_HDN-379`** |
-| **Required** | Scope the scan (incremental, sampled by risk class, or narrowed to functions the sweep actually needs) **without weakening what it proves** — it is a real security sweep, not a lint |
-| **`KNOWN_ISSUES`** | `ISS-2026-145` (`OPEN`, Low — the class is graded Medium here because it now threatens a mandatory gate) |
+| **Disposition** | **`RESOLVED` at `HDN-379`.** The `edge` CTE rewritten from an O(n²) self-join to a one-pass `regexp_matches()` extraction, mirroring this same file's own sibling ATW-032/`ISS-2026-033` pattern; verified with a same-schema matched-pair run (original 692,092.8ms, rewrite 556.4ms, byte-identical verdicts, 1244× speedup); full 229-file suite re-run clean. What it proves is unweakened — only `edge` construction changed, the `covered` recursive CTE's own transitive-closure walk is untouched |
+| **Required** | Scope the scan (incremental, sampled by risk class, or narrowed to functions the sweep actually needs) **without weakening what it proves** — it is a real security sweep, not a lint — **done, see Disposition** |
+| **`KNOWN_ISSUES`** | `ISS-2026-145` (`RESOLVED` at `HDN-379`) |
 
 ---
 
@@ -201,10 +201,10 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Severity** | **Medium** |
 | **Owning lane** | **`HDN-379`** |
 | **Assessment** | **A design question, not a defect.** The companion 982 `unused_index` advisories are pure noise — the database has served no queries — and the same absence of real traffic is exactly why the 892 cannot be resolved by inspection |
-| **Disposition** | **`ACCEPTED_EXCEPTION` — explicitly deferred with a named owner.** Recorded here at kickoff so the deferral is visible rather than implicit |
+| **Disposition** | **`ACCEPTED_EXCEPTION` — explicitly deferred with a named owner, ruled on at `HDN-379`.** Categorized into a 4-bucket decision framework from a 24-FK sample across 7 domains (60% genuinely bare, 23% tenant-composite-covered, 10% self-scoping `tenant_id`, 7% self-referencing lineage) — zero high-confidence "index now" candidates found; every column with confirmed hot usage already has a serving composite index, and the genuinely cold candidates are write-only/audit-lineage columns on high-write-volume tables |
 | **Hard constraint** | **Neither drop them nor blindly index.** Blanket-indexing 892 FKs adds real write cost and storage for unmeasured benefit; dismissing them hides a genuine future scaling risk |
-| **Required of `HDN-379`** | State the decision, its owner, and the measurement that would settle it (real query patterns at target volume). Index only where a measured pattern justifies it |
-| **`KNOWN_ISSUES`** | To be registered by `HDN-379` when it rules |
+| **Required of `HDN-379`** | State the decision, its owner, and the measurement that would settle it (real query patterns at target volume). Index only where a measured pattern justifies it — **done, see Disposition**: deferred pending real production query telemetry, which does not exist anywhere in this system yet |
+| **`KNOWN_ISSUES`** | `ISS-2026-239` (`OPEN`, Low, owner a dedicated future task) |
 
 ---
 

@@ -654,7 +654,7 @@ release gate.
 
 | # | Item | Seeded state | Required |
 |---|---|---|---|
-| 1 | **`rbac-enforcement.sql`'s `pg_proc` catalogue scan** — walks every function in `app` calling `pg_get_functiondef()`. At ~2,900 functions it **already exceeds a remote statement timeout**, takes 15–20+ minutes standalone (`ISS-2026-145`), and grows with the schema | `OPEN` | **Scope the scan** before it bites CI. It passes locally today; that is the last thing that is true about it — **`RESOLVED`.** O(n²) self-join rewritten to a one-pass extraction, matched-pair verified byte-identical, 1244× speedup — see Result below. |
+| 1 | **`rbac-enforcement.sql`'s `pg_proc` catalogue scan** — walks every function in `app` calling `pg_get_functiondef()`. At ~2,900 functions (seed-time estimate; confirmed exactly **2,700** at `HDN-379` fix time) it **already exceeds a remote statement timeout**, takes 15–20+ minutes standalone (`ISS-2026-145`), and grows with the schema | `OPEN` | **Scope the scan** before it bites CI. It passes locally today; that is the last thing that is true about it — **`RESOLVED`.** O(n²) self-join rewritten to a one-pass extraction, matched-pair verified byte-identical, 300×-1200×+ speedup across 2 independent measurements — see Result below. |
 | 2 | **892 `unindexed_foreign_keys` advisories** | `OPEN`, explicitly deferred | **An owner-named decision, not a defect.** A design question needing real query patterns. **Neither drop them nor blindly index.** Record the decision and its owner — **Categorized and deferred with a real decision framework, `ISS-2026-239`** — see Result below. |
 | 3 | 982 `unused_index` advisories | noise | The database has served no queries. Not actionable until it has |
 | 4 | 157 `auth_rls_initplan` warnings | **FIXED** — `auth.uid()` → `(select auth.uid())` at 228 call sites in 171 policy statements across 65 migrations | Regression-guard: a new policy using a bare `auth.uid()` reintroduces the class — **Re-verified clean, zero regression** (582 policy statements checked); 1 informational blind spot documented (`ISS-2026-240`). |
@@ -682,10 +682,10 @@ release gate.
 > high-write-volume tables where speculative indexing would be pure
 > write-amplification), deferred pending real production query telemetry that does
 > not exist anywhere in this system yet. **`auth_rls_initplan` regression guard
-> re-verified clean**: 582 policy statements, 236 `auth.*()` call sites, zero bare
+> re-verified clean**: 582 policy statements, 235 `auth.*()` call sites, zero bare
 > calls, no regression since the original 65-migration fix; 1 informational blind
 > spot documented (`ISS-2026-240`) — a `default auth.uid()` helper-function pattern,
-> 73 occurrences across ~40 migrations, invisible to text-grep-based tooling by
+> 72 occurrences across 35 migrations, invisible to text-grep-based tooling by
 > construction, not a regression, the repository's own convention since day one.
 > **Load/performance evidence**: the existing `scripts/load-tests/` harness
 > (Phase 5/`CG-S10-ATW-024` scope) re-confirmed live, all 8 scenarios pass with real
@@ -705,8 +705,46 @@ release gate.
 > errors/337 warnings, `pnpm run test` 5443/5443 (unchanged, no TS file touched),
 > db-tests **229/229 files clean** (328 migrations, unchanged — no migration this
 > checkpoint). Zero migrations, one test-infrastructure file changed
-> (`scripts/db-tests/rbac-enforcement.sql`). Tier C review (§13) required before
-> `VERIFIED`. Full disposition: `HDN-379.md`.
+> (`scripts/db-tests/rbac-enforcement.sql`). First-round independent full gate
+> re-run: `typecheck` 0, `lint` 0/337 warnings, 5443/5443 unit tests, db-tests
+> 229/229 files clean (328 migrations).
+>
+> **Tier C review (4 independent lenses) found and fixed a real structural
+> weakening in this checkpoint's own headline fix, live-forced against a real
+> disposable database.** The first-draft `edge` CTE rewrite dropped two properties
+> the original self-join carried "for free": a `\m` word-boundary anchor (so
+> `webapp.foo(` could not be mistaken for a call to `app.foo`), and a real
+> join-against-`fn` requirement (so `insert into app.<table> (...)` could not be
+> mistaken for a call to a function named after the table). Live-forced: 876
+> spurious edges on the real 2,700-function schema, zero of which collided with any
+> real function name — the rewrite never produced a wrong verdict today, but a
+> future function named after an existing table, or a `wordapp.<realname>(` call
+> site, could have silently defeated the guard. Fixed by restoring both properties
+> (regex now anchors `\mapp\.`, `where` clause adds `and m[1] in (select proname
+> from fn)` — a hash semi-join against the already-materialized `fn` CTE, not a new
+> cross join, confirmed the fix stays O(n)); re-timed at **1.66 seconds**. Live-
+> reproduced with 3 scratch functions that both gaps are closed.
+>
+> **Timing-precision corrected**: an independent same-schema matched-pair
+> re-measurement got 212,105.6ms/≈313× rather than the first round's own
+> 692,092.8ms/1244× — both real, honest measurements; the ~3× spread reflects real
+> sandbox contention variance at measurement time (the rewrite's own cost stayed
+> close both times: 556ms vs. 677ms), not a methodology flaw. Cite "300×-1200×+" for
+> this fix going forward, not a single fixed multiplier. Also corrected:
+> `ISS-2026-239`'s claim that no RPC filters through `audit_logs.actor_auth_user_id`
+> was factually wrong (`app.search_audit_logs` does, zero live UI callers today —
+> the "don't index yet" conclusion is unchanged, the evidence was fixed).
+> `ISS-2026-238` corrected and expanded: `listFilesForTenant` reclassified Medium
+> (a polymorphic, transactional-volume attachment table, not a bounded config
+> table as originally characterized); 5 new instances found by the completeness
+> sweep folded in, most notably a 4-list unbounded fleet-assets page. 6 real
+> documentation miscounts found and corrected by the ledger/documentation
+> consistency lens (236→235 call sites, 73/~40→72/35 default-pattern occurrences, a
+> stale "~2,900" figure, 2 never-updated `BLOCKER_LEDGER.md` entries, an ambiguous
+> FK-table-count phrasing, a line-citation drift). Independent full gate re-run
+> after the fix pass: `typecheck` 0, `lint` 0/337 warnings, 5443/5443 unit tests,
+> db-tests **229/229 files clean** (328 migrations, unchanged — no migration at
+> either round). Full disposition: `HDN-379.md` §13.
 
 ---
 
