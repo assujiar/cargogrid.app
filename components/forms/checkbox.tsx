@@ -17,7 +17,10 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
   ref,
 ) {
   return (
-    <label htmlFor={id} className="flex items-center gap-2 text-sm text-text-primary">
+    // HDN-381 (Browser and Device Compatibility): min-h-11 (44px) is a touch-target floor
+    // on the whole clickable label row -- live-measured at ~20px before this fix (just the
+    // text line-height, no padding), well under the commonly-cited 44px guidance.
+    <label htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm text-text-primary">
       <input
         ref={ref}
         id={id}

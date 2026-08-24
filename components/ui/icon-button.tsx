@@ -19,7 +19,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   ref,
 ) {
   const classes = [
-    "inline-flex h-9 w-9 items-center justify-center rounded-md transition-opacity",
+    // HDN-381 (Browser and Device Compatibility): h-9 w-9 (36px) measured under the
+    // commonly-cited 44x44px touch-target guidance -- bumped to h-11 w-11 (44px).
+    "inline-flex h-11 w-11 items-center justify-center rounded-md transition-opacity",
     "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
     "disabled:cursor-not-allowed disabled:opacity-60",
     VARIANT_CLASSES[variant],

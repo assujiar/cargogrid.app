@@ -821,6 +821,34 @@ release gate.
 
 **Upstream:** `HDN-380`. Inherits `HDN-380`'s own `HDN-BLK-009` exposure — a harness that cannot reach a guarded route in `HDN-380` cannot reach one here either.
 
+> **Result (`HDN-381` first round, `COMPLETED`, Tier C pending):** Matrix defined
+> explicitly per the seeded instruction — Chrome/Edge (Chromium engine) and
+> mobile/tablet viewport+touch emulation are all real and now permanently tested
+> (`playwright.config.ts`'s new `mobile-chrome`/`tablet-chrome` projects,
+> `e2e/browser-device-compat.spec.ts`, 30/30 passing); Safari (WebKit) and Firefox
+> are a firm sandbox constraint (no binary present, environment configured not to
+> fetch more) — registered `ISS-2026-244`, `TRACKED_GAP`. `HDN-BLK-009`'s own
+> exposure re-confirmed already resolved at `HDN-380` (harness healthy); the
+> separate, still-open live-auth constraint (`ISS-2026-140`, unrelated to the
+> harness) confirmed unchanged. 16/16 route×device combinations live-tested at
+> the real production build with zero horizontal-overflow, zero obscured
+> controls, zero mobile-specific defects — including a live re-test of `HDN-380`'s
+> own dev-mode-hang fix under mobile touch (50ms resolve, no hang). 5 real static
+> gaps found and fixed: touch-target sizing on `Button`/`IconButton`/`Checkbox`
+> (was ~36px/~20px, under the 44px guidance); `ToastProvider`'s viewport clipping
+> below 336px wide; 4 files with the worst unwrapped tables (of 23 found) wrapped
+> in `overflow-x-auto`. PWA posture: no manifest/service worker exists anywhere —
+> registered `ISS-2026-245` (RPD-004's "PWA" language needs scoping, or a real
+> manifest built — either is out of this checkpoint's "no new product features"
+> boundary). 6 shared UI primitives found unused in any real screen, registered
+> `ISS-2026-246` — **a prior investigation's claim that `DataTable` was also
+> unused did not reproduce**, independently re-verified and corrected (56 real
+> importers). 19 remaining unwrapped tables registered `ISS-2026-247`. No
+> Critical or High finding. Independent full gate: `typecheck` 0, `lint` 0/337
+> warnings, 5443/5443 unit tests, `next build` clean, `test:e2e` 30/30 (up from
+> 18/18), 229/229 db-tests (328 migrations, unchanged — no schema change). Full
+> disposition: `HDN-381.md`.
+
 ---
 
 ## 13. Observability — `HDN-382`

@@ -94,7 +94,12 @@ export function ComplianceMatrixPanel({
         {rows.length === 0 ? (
           <EmptyState title="No compliance rows match this view" description="Adjust your filters, or publish a requirement so vendors have something to submit against." />
         ) : (
-          <table className="w-full text-sm">
+          // HDN-381 (Browser and Device Compatibility): 7 columns with no overflow wrapper
+          // squeezed onto a narrow viewport instead of scrolling -- wrapped to match the
+          // same overflow-x-auto + min-w-[Npx] pattern this repository's own other data
+          // tables already use (e.g. loyalty-liability-admin-panel.tsx).
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[840px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Vendor</th>
@@ -128,6 +133,7 @@ export function ComplianceMatrixPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

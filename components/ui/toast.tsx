@@ -76,7 +76,13 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
             </RadixToast.Close>
           </RadixToast.Root>
         ))}
-        <RadixToast.Viewport className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2 outline-none" />
+        {/* HDN-381 (Browser and Device Compatibility): a bare `w-80` (320px) plus the 16px
+            `right-4` offset needs 336px of viewport width -- live-measured to overflow past
+            the left edge on any viewport <=336px wide. `max-w-[calc(100vw-2rem)]` caps the
+            viewport at the available width (viewport minus the 1rem left + 1rem right margin
+            this component's own `bottom-4`/`right-4` offsets imply), so it shrinks on a
+            narrow phone instead of clipping. */}
+        <RadixToast.Viewport className="fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 outline-none" />
       </RadixToast.Provider>
     </ToastContext.Provider>
   );

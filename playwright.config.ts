@@ -4,14 +4,21 @@ import { defineConfig, devices } from "@playwright/test";
 // Prompt 91. Tool choice and rationale: docs/adr/ADR-0007-test-runner-and-
 // framework-stack.md. Convention: docs/standards/TESTING_STANDARDS.md.
 //
-// Single Chromium project only, deliberately: this checkpoint has no real
-// application/component to run a cross-browser matrix against (e2e/smoke.spec.ts
-// scans synthetic inline content only). The latest-two Chrome/Edge/Safari/
-// Firefox matrix docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md §8
-// requires is deferred to Phase 1, once components/ui/ exists as a real
-// subject (docs/standards/TESTING_STANDARDS.md §7's NOT_RUN table) — adding
-// WebKit/Firefox projects now to test the same synthetic content three times
-// would be a fabricated multi-browser signal, not real coverage.
+// Single Chromium project only, deliberately, for the pre-existing spec files: this
+// checkpoint has no real application/component to run a cross-browser matrix against
+// (e2e/smoke.spec.ts scans synthetic inline content only) — adding WebKit/Firefox
+// projects to test the same synthetic content three times would be a fabricated
+// multi-browser signal, not real coverage.
+//
+// HDN-381 (Browser and Device Compatibility): `mobile-chrome`/`tablet-chrome` added
+// below, scoped via `testMatch` to only `e2e/browser-device-compat.spec.ts` (the other
+// 4 spec files never opted into device/viewport testing and running them 3x would add
+// execution time with no new signal). Real Safari (WebKit) and Firefox remain
+// untestable in this sandbox — no binary exists at `/opt/pw-browsers` and this
+// environment's own setup instructions say not to fetch more; TRACKED_GAP, see
+// `KNOWN_ISSUES.md` `ISS-2026-244`. Mobile/tablet viewport + touch emulation, by
+// contrast, works fully on the pre-installed Chromium binary via `devices[...]` (no
+// separate browser needed) — live-verified before adopting this pattern.
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -29,6 +36,21 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "mobile-chrome",
+      use: { ...devices["Pixel 5"] },
+      testMatch: /browser-device-compat\.spec\.ts/,
+    },
+    {
+      // `devices["iPad Pro 11"]`'s own `defaultBrowserType` is `webkit` (a real iPad runs
+      // Safari) -- overridden to `chromium` last, after the spread, since no WebKit binary
+      // exists in this sandbox (see the file-level comment above). This project borrows the
+      // preset's viewport/UA/touch-emulation fields only, not its browser engine choice --
+      // live-verified this actually launches Chromium, not attempt a WebKit download.
+      name: "tablet-chrome",
+      use: { ...devices["iPad Pro 11"], defaultBrowserType: "chromium" },
+      testMatch: /browser-device-compat\.spec\.ts/,
     },
   ],
   // PLT-135, CG-S6-PLT-032: the first real Next.js pages (`app/(public)/login`) land

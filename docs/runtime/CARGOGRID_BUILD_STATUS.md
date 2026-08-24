@@ -2,7 +2,44 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-012` — **Accessibility Audit (Prompt 380)** —
+**Updated:** 2026-08-24 (`CG-S15-HDN-013` — **Browser and Device Compatibility
+(Prompt 381)** — `COMPLETED`, first round only, Tier C review pending. Three
+independent parallel investigation lenses (environment feasibility;
+source-level static evidence sweep; live mobile/tablet-viewport e2e testing
+against the real production build). **Zero real device-compatibility defects
+found live** — 16/16 route×device combinations (login, vendor-intake form,
+Supreme Admin guard redirect, Procurement guard fail-safe × iPhone 13/Pixel
+5/iPad Pro 11/375×667) rendered with zero horizontal overflow, no obscured
+controls, no mobile-specific console errors; mobile tap-to-submit resolved in
+50ms with no hang, confirming `HDN-380`'s dev-mode-hydration-race fix holds on
+a touch-emulated context too. **5 real, static gaps found and fixed**:
+touch-target sizing on `Button`/`IconButton`/the shared `Checkbox` (all under
+the commonly-cited 44px guidance, fixed with a `min-h-11`/`h-11 w-11` floor);
+`ToastProvider`'s own viewport clipping past the left edge on any screen
+≤336px wide (fixed); 4 files with the worst unwrapped tables (of 23 found)
+wrapped in `overflow-x-auto`; zero permanent mobile/tablet e2e coverage
+existed — `playwright.config.ts` extended with `mobile-chrome`/`tablet-chrome`
+projects + a new `e2e/browser-device-compat.spec.ts`, **30/30 passing** (up
+from 18/18), catching a real config bug before Tier C (`devices["iPad Pro
+11"]`'s own `defaultBrowserType` is `webkit`, absent in this sandbox). **4
+findings registered, not fixed**: `ISS-2026-244` (Low, `TRACKED_GAP` —
+Safari/Firefox structurally untestable, no binary present in this sandbox);
+`ISS-2026-245` (Low — no PWA manifest/service worker exists anywhere, RPD-004
+language needs scoping); `ISS-2026-246` (Low — 6 shared UI primitives unused
+in any real screen; **a prior claim that `DataTable` was also unused did NOT
+reproduce — independently corrected, 56 real importers**); `ISS-2026-247`
+(Low — 19 of 95 tables still unwrapped). No Critical or High finding
+anywhere. Independent full gate: `typecheck` 0; `lint` 0 errors/337 warnings;
+`pnpm run test` **5443/5443**; `pnpm exec next build` clean; `pnpm run
+test:e2e` **30/30**; `bash scripts/db-tests/run.sh` **229/229 files clean**
+(328 migrations, unchanged — no schema change). `CG-S15-HDN-013` first round
+`COMPLETED`; Tier C review required before `VERIFIED`.
+`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it. Not
+a production/pilot/GA/market-ready claim (RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-381.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-013` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-012` — **Accessibility Audit (Prompt 380)** —
 `VERIFIED`, Tier C closed. Four independent parallel adversarial lenses ran
 against the committed first-round state (`4c5802f`). **No Critical or High
 finding at either round** — unlike `HDN-378`'s and `HDN-379`'s own Tier C

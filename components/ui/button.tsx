@@ -38,7 +38,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 ) {
   const Component = asChild ? Slot.Root : "button";
   const classes = [
-    "inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-opacity",
+    // HDN-381 (Browser and Device Compatibility): min-h-11 (44px) is a touch-target floor,
+    // not a forced height -- live-measured at ~36px before this fix, under the commonly-cited
+    // 44x44px touch-target guidance (WCAG 2.5.5 AAA / platform HIG); a floor rather than a
+    // fixed height means a button with larger content (e.g. a longer label wrapping to 2 lines)
+    // still grows past it instead of being clipped.
+    "inline-flex min-h-11 items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-opacity",
     "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
     "disabled:cursor-not-allowed disabled:opacity-60",
     VARIANT_CLASSES[variant],

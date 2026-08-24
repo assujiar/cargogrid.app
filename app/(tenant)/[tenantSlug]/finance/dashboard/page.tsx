@@ -169,28 +169,30 @@ export default async function FinanceDashboardPage({ params }: { params: Promise
             {baseline.cash.length === 0 ? (
               <p className="text-sm text-text-secondary">No active bank accounts in scope.</p>
             ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-text-secondary">
-                    <th scope="col" className="py-2 pr-4 font-medium">Account</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Currency</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Statement</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">GL</th>
-                    <th scope="col" className="py-2 font-medium">Variance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {baseline.cash.map((row) => (
-                    <tr key={row.bankAccountId} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-text-primary">{row.accountName}</td>
-                      <td className="py-2 pr-4 text-text-secondary">{row.currency}</td>
-                      <td className="py-2 pr-4 text-text-secondary">{row.statementBalance}</td>
-                      <td className="py-2 pr-4 text-text-secondary">{row.glBalance}</td>
-                      <td className="py-2 text-text-secondary">{row.varianceAmount}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200 text-left text-text-secondary">
+                      <th scope="col" className="py-2 pr-4 font-medium">Account</th>
+                      <th scope="col" className="py-2 pr-4 font-medium">Currency</th>
+                      <th scope="col" className="py-2 pr-4 font-medium">Statement</th>
+                      <th scope="col" className="py-2 pr-4 font-medium">GL</th>
+                      <th scope="col" className="py-2 font-medium">Variance</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {baseline.cash.map((row) => (
+                      <tr key={row.bankAccountId} className="border-b border-neutral-100">
+                        <td className="py-2 pr-4 text-text-primary">{row.accountName}</td>
+                        <td className="py-2 pr-4 text-text-secondary">{row.currency}</td>
+                        <td className="py-2 pr-4 text-text-secondary">{row.statementBalance}</td>
+                        <td className="py-2 pr-4 text-text-secondary">{row.glBalance}</td>
+                        <td className="py-2 text-text-secondary">{row.varianceAmount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             <a href={`/${tenantSlug}/finance/cash-bank`} className="text-sm font-medium text-primary underline">
               Open cash and bank
@@ -202,30 +204,32 @@ export default async function FinanceDashboardPage({ params }: { params: Promise
             {baseline.close.length === 0 ? (
               <p className="text-sm text-text-secondary">No fiscal periods in scope.</p>
             ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-text-secondary">
-                    <th scope="col" className="py-2 pr-4 font-medium">Period</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Period status</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Lock status</th>
-                    <th scope="col" className="py-2 font-medium">Reconciliation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {baseline.close.map((row) => (
-                    <tr key={row.periodId} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-text-primary">{row.periodName}</td>
-                      <td className="py-2 pr-4 text-text-secondary">{row.periodStatus.replace(/_/g, " ")}</td>
-                      <td className="py-2 pr-4 text-text-secondary">{row.lockStatus?.replace(/_/g, " ") ?? "Not locked"}</td>
-                      <td className="py-2 text-text-secondary">
-                        {row.reconciliationStatus
-                          ? `${row.reconciliationStatus} (${row.reconciliationWithinTolerance ? "within tolerance" : "out of tolerance"})`
-                          : "Not reconciled"}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200 text-left text-text-secondary">
+                      <th scope="col" className="py-2 pr-4 font-medium">Period</th>
+                      <th scope="col" className="py-2 pr-4 font-medium">Period status</th>
+                      <th scope="col" className="py-2 pr-4 font-medium">Lock status</th>
+                      <th scope="col" className="py-2 font-medium">Reconciliation</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {baseline.close.map((row) => (
+                      <tr key={row.periodId} className="border-b border-neutral-100">
+                        <td className="py-2 pr-4 text-text-primary">{row.periodName}</td>
+                        <td className="py-2 pr-4 text-text-secondary">{row.periodStatus.replace(/_/g, " ")}</td>
+                        <td className="py-2 pr-4 text-text-secondary">{row.lockStatus?.replace(/_/g, " ") ?? "Not locked"}</td>
+                        <td className="py-2 text-text-secondary">
+                          {row.reconciliationStatus
+                            ? `${row.reconciliationStatus} (${row.reconciliationWithinTolerance ? "within tolerance" : "out of tolerance"})`
+                            : "Not reconciled"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             <a href={`/${tenantSlug}/finance/reconciliation`} className="text-sm font-medium text-primary underline">
               Open reconciliation
@@ -241,28 +245,30 @@ export default async function FinanceDashboardPage({ params }: { params: Promise
         ) : !profitability || profitability.length === 0 ? (
           <p className="text-sm text-text-secondary">No calculated profitability facts yet.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-text-secondary">
-                <th scope="col" className="py-2 pr-4 font-medium">Customer</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Currency</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Jobs</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Profit</th>
-                <th scope="col" className="py-2 font-medium">Margin %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {profitability.map((row) => (
-                <tr key={`${row.dimensionKey}-${row.currency}`} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 text-text-primary">{row.dimensionLabel ?? "(unspecified)"}</td>
-                  <td className="py-2 pr-4 text-text-secondary">{row.currency ?? "-"}</td>
-                  <td className="py-2 pr-4 text-text-secondary">{row.jobCount}</td>
-                  <td className="py-2 pr-4 text-text-secondary">{row.profitAmount ?? "-"}</td>
-                  <td className="py-2 text-text-secondary">{row.marginPercent === null ? "-" : `${row.marginPercent}%`}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-text-secondary">
+                  <th scope="col" className="py-2 pr-4 font-medium">Customer</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">Currency</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">Jobs</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">Profit</th>
+                  <th scope="col" className="py-2 font-medium">Margin %</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {profitability.map((row) => (
+                  <tr key={`${row.dimensionKey}-${row.currency}`} className="border-b border-neutral-100">
+                    <td className="py-2 pr-4 text-text-primary">{row.dimensionLabel ?? "(unspecified)"}</td>
+                    <td className="py-2 pr-4 text-text-secondary">{row.currency ?? "-"}</td>
+                    <td className="py-2 pr-4 text-text-secondary">{row.jobCount}</td>
+                    <td className="py-2 pr-4 text-text-secondary">{row.profitAmount ?? "-"}</td>
+                    <td className="py-2 text-text-secondary">{row.marginPercent === null ? "-" : `${row.marginPercent}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         <a href={`/${tenantSlug}/finance/profitability`} className="text-sm font-medium text-primary underline">
           Open profitability
