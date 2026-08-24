@@ -2123,6 +2123,276 @@ found: ..."`) instead of the unrealistic empty-array shape, and 2 new regression
 added proving a genuine internal failure now returns `422 mutation_failed`, never the
 `404` not-found code.
 
+### ISS-2026-216 — `app.files.storage_path` (the real Supabase Storage object key) carried a full table-level SELECT grant to `authenticated`, with no column-level mask (found and fixed at `CG-S15-HDN-009`, `RESOLVED`, Critical)
+
+Found independently by 3 of 4 investigation lenses, live-forced. `app.files` granted
+`select` on every column to `authenticated`, including `storage_path`. Every RPC this
+codebase built to deliberately withhold `storage_path` (`app.get_customer_document`,
+`app.access_vendor_compliance_document_evidence` and its financial-security siblings)
+was moot: any caller with ordinary RLS row-visibility into a file could query
+`app.files` directly and read the key straight from the table. Live-forced: `set local
+role authenticated`, then `select storage_path from app.files where uploaded_by_
+auth_user_id = ...` returned the real path string, unconditional on `malware_scan_
+status` (a `pending` and a freshly-`infected` file both still returned it). No live
+Supabase Storage integration exists in this sandbox yet, bounding today's
+exploitability to metadata/key disclosure rather than actual byte exfiltration — but
+the key alone becomes a live download-bypass primitive the moment Storage is wired up.
+`RECURRING_DEFECT_TAXONOMY.md` C-11 (blanket grant where a deliberate column-level
+grant was needed) and C-17 (`select("*")` against a column-restricted table — the
+concrete symptom in `app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/
+page.tsx`, the one page in the repository that forwarded the full row, storage_path
+included, into a Client Component's props, shipping it to the browser).
+
+**Fixed**: mirrors `app.users`/`email`'s own already-proven column-level carve-out
+precedent exactly (`revoke select on app.files from authenticated`, then `grant
+select` on an explicit 26-column list omitting `storage_path`, per that migration's own
+documented reasoning that a bare column-level REVOKE cannot carve an exception out of
+a broader table-level GRANT in Postgres). `server/queries/document.ts`'s `listFilesFor
+Tenant` and the HRIS page both switched from `select("*")` to the same explicit column
+list, returning a new `FileSummary` contract type (identical to `File` minus
+`storagePath`) rather than `File`.
+
+### ISS-2026-217 — two independently-built legal-hold mechanisms for files (PLT-128-native vs IAE-031 generic) were unaware of each other, in both directions (found and fixed at `CG-S15-HDN-009`, `RESOLVED`, Critical)
+
+Found by the file-access-audit-and-retention lens, live-forced both directions. PLT-128
+built its own file-native hold (`app.files.legal_hold` + `app.set_file_legal_hold()`,
+consulted only by `app.request_file_deletion()`). IAE-031 later built a generic,
+cross-domain hold primitive (`app.legal_holds`, `app.request_legal_hold()`/`app._is_
+under_legal_hold()`) meant to cover every domain's own hold needs, `app.files`
+included — but nothing bridged them. Live-forced: (a) a hold placed via `app.request_
+legal_hold(scope='app.files', file.id)` left `app.files.legal_hold` false, and
+`app.request_file_deletion()` still succeeded, soft-deleting the file despite the
+active generic hold; (b) a PLT-128-native hold (`app.files.legal_hold=true`) was
+invisible to `app.request_retention_archive()`'s own dry-run classification
+(`legal_hold_blocking=false`). Directly violated RPD-025's "legal hold override must
+be tested across database, files, logs, reports, exports, AI evidence and audit" as a
+coherent whole. `RECURRING_DEFECT_TAXONOMY.md` C-25 (new class added this checkpoint):
+two independently-built enforcement mechanisms for the same conceptual control,
+neither aware of the other.
+
+**Fixed**: extended `app._is_under_legal_hold()` with one additional OR-branch
+checking `app.files.legal_hold` directly whenever the source table is `'app.files'` —
+this single extension point closes both directions at once, since `app.request_
+retention_archive()` already calls it and `app.request_file_deletion()` was updated to
+also call it (kept alongside its own existing native-flag check as defense-in-depth,
+not a replacement). Regression-tested both directions on a disposable database.
+
+### ISS-2026-218 — `app.files.legal_hold` was enforced only inside the `app.request_file_deletion()` RPC, with no schema-level backstop against a raw DELETE (found and fixed at `CG-S15-HDN-009`, `RESOLVED`, High)
+
+Found by the file-access-audit-and-retention lens, live-forced. `app.files` carried
+only a `BEFORE UPDATE` `touch_row` trigger, no `BEFORE DELETE` guard at all, and
+`service_role` holds a live table-level `DELETE` grant. Live-forced: `app.request_
+file_deletion()` correctly raised `document_legal_hold_blocks_deletion` for a
+legally-held file, then a raw `delete from app.files where id = ...` (no RLS bypass
+required, ordinary `service_role` privilege) succeeded unconditionally, physically
+erasing the legally-held row — not even a soft delete. The RPC-level check was real
+and correct for its one call path, but not a database invariant: any other `SECURITY
+DEFINER` function, future job, ad hoc migration, or misused `service_role` credential
+that issues the same mutation directly bypasses it completely, permanently destroying
+evidence a hold was meant to preserve. `RECURRING_DEFECT_TAXONOMY.md` C-26 (new class
+added this checkpoint): an RPC-level check with no schema-level backstop against the
+same mutation issued directly.
+
+**Fixed**: a narrowly-scoped `BEFORE DELETE` guard trigger (`app.protect_files_legal_
+hold_from_deletion`) mirroring `app.protect_transaction_lineage_edges_append_only`'s
+own proven RPD-022 supreme-admin-bypass shape (HDN-375) — fires only on `DELETE` of a
+`legal_hold=true` row, audited when the Supreme Admin override is actually invoked.
+Ordinary `UPDATE` (scan-status transitions, versioning supersede) and soft-deletion
+(`deleted_at`) are entirely unaffected. Regression-tested: blocked with no actor
+context, blocked for the uploader themselves, Supreme Admin's own RPD-022 override
+still works and is audited.
+
+### ISS-2026-219 — `app.access_vendor_compliance_document_evidence` and its two financial-security siblings left `file_id` unmasked on the content-gate denial branch, contradicting their own "every field nulled out" contract (found and fixed at `CG-S15-HDN-009`, `RESOLVED`, Medium)
+
+Found by the signed-URL/access-gating lens, live-forced for the compliance variant;
+code-parity-verified for the two financial-security siblings (byte-for-byte identical
+logic at the equivalent line). Each of `app.access_vendor_compliance_document_
+evidence`/`app.access_vendor_bank_account_evidence`/`app.access_vendor_tax_identity_
+evidence` documents itself as nulling out every file-identifying field on a denial —
+true for the first (insufficient-authority) denial branch, but the SECOND denial
+branch (PRC:Download authority passes, `app.authorize_file_access` itself denies —
+malware/record-access/classification) returned the real file/evidence UUID unmasked.
+Live-forced: a same-tenant, same-permission, non-uploader reviewer got `access_
+result=denied reason=document_record_access_denied file_id=<real uuid>`.
+`RECURRING_DEFECT_TAXONOMY.md` C-05 (permission check present and correct, but a
+different code path still discloses data before/around it).
+
+**Fixed**: all three functions now null `file_id` on this branch too, matching the
+first branch a few lines above it in each. The pre-existing regression test for the
+compliance variant already exercised this exact branch (an infected-file denial) but
+had only ever asserted on `original_filename`, never `file_id` — silently passing both
+before and after the leak; strengthened to assert `file_id is null` explicitly. A new
+regression added for the bank-account sibling exercising the identical branch.
+
+### ISS-2026-220 — `app.vendor_compliance_documents_select_scoped` and `app.rfq_response_attachments_select_scoped` RLS gated only on active tenant membership, never on `PRC:View`/`PRC:Download`, unlike the correct RPC read paths for the same data (found and fixed at `CG-S15-HDN-009`, `RESOLVED`, Medium)
+
+Found by the tenant-isolation/RLS lens, live-forced. Both file/evidence-shaped
+Procurement tables carry a real `grant select ... to authenticated` and an RLS policy
+gating only on `has_active_tenant_membership`/the `customer_user`-layer default-deny —
+never on any PRC module permission — while `app.access_vendor_compliance_document_
+evidence`/`app.list_rfq_response_attachments` correctly require `PRC:Download`/
+`PRC:View`. Live-forced: an active tenant member holding zero PRC role assignment
+direct-SELECTed every row of both tables (`verification_status`/`rejection_reason`/
+`expiry_date`/`file_id` on the compliance table; the competitor-bid `file_id` linkage
+on the RFQ table), while the RPC path correctly raised `insufficient_authority` for the
+identical actor. Same defect class `HDN-373` already fixed once for `app.finance_
+journals` (`ISS-2026-184`).
+
+**Fixed**: a new `app.check_procurement_authority` `SECURITY DEFINER` wrapper
+(mirroring `app.check_payroll_authority`/`app.check_finance_journal_authority`'s own
+proven shape, since an RLS `using` clause always runs as the querying role and `app.
+evaluate_permission` itself is `service_role`-only) embeds a real `PRC:View` check
+into both policies, matching the module-permission bar the list RPCs already require.
+Regression-tested: the zero-PRC-role actor now sees zero rows via RLS on both tables;
+a `PRC:View`-holding actor is unaffected.
+
+### ISS-2026-221 — vendor-assessment evidence upload called the service_role-only `app.initiate_file_upload` through the RLS-scoped client, permanently breaking evidence attachment for every real user (found and fixed at `CG-S15-HDN-009`, `RESOLVED`, Medium)
+
+Found by the upload/scan/quarantine-gate lens, live-forced. `app.initiate_file_upload`
+is granted `execute` to `service_role` only. `app/(tenant)/[tenantSlug]/procurement/
+assessments/actions.ts` wrapped `createSupabaseServerClient()` (executes as Postgres
+role `authenticated`) instead of the service-role client. Live-forced: `set local role
+authenticated; select app.initiate_file_upload(...)` → `ERROR: permission denied for
+function initiate_file_upload`; the identical call as `service_role` succeeded. The
+sibling file `procurement/compliance/vendors/actions.ts` had already been fixed for
+the identical defect and its own header comment explicitly named this exact file as
+still carrying "the identical anon-client defect" (`PRC-253`) — never subsequently
+fixed until now. The error is caught and surfaced as a generic message rather than
+crashing (the answer's score/notes still save without the evidence), so the feature
+failed closed, not open — a functional break, not a security disclosure.
+
+**Fixed**: mirrors the already-fixed sibling exactly — wraps `createSupabaseService
+RoleClient()` instead, at both call sites (`recordVendorAssessmentAnswerAction`,
+`updateVendorAssessmentCorrectiveActionStatusAction`).
+
+### ISS-2026-222 — `app.files.legal_hold` does not extend to protect that file's own `app.file_access_logs` evidence rows (found at `CG-S15-HDN-009`, `OPEN`, High, owner `HDN-386`)
+
+Found by the file-access-audit-and-retention lens, live-forced. `app.file_access_logs`
+carries zero triggers at all — not even a `BEFORE UPDATE` `touch_row` — and
+`service_role` holds live `UPDATE`/`DELETE` on the table (confirmed via
+`information_schema.role_table_grants`). Live-forced: uploaded a file with
+`legal_hold=true`, inserted a real `app.file_access_logs` row for a granted download
+of it, then `delete from app.file_access_logs where id = ...` succeeded unconditionally
+— no trigger, no reference anywhere to the parent file's own `legal_hold` flag. A hold
+placed on a file (through either mechanism `ISS-2026-217`/C-25 describes) protects
+the file row itself but not the evidence trail of who accessed it, which RPD-025
+("retention and legal hold override must be tested across database, files, logs,
+reports, exports, AI evidence and audit") names as a single, coherent requirement, not
+two independent ones.
+
+Same root cause as the already-registered, broader `HDN-BLK-018`/`ISS-2026-205`
+finding (only 13 of ~90+ append-only/audit/ledger-shaped tables in schema `app` carry a
+real guard trigger, `app.file_access_logs` among the ~70 that don't) — cross-referenced
+rather than duplicated as a second generic-guard-rollout item. This entry names the
+narrower, hold-specific consequence that survives even after a guard trigger exists:
+a guard alone stops silent tampering, it does not by itself teach the trigger to
+consult the parent file's `legal_hold` state and refuse deletion/mutation while a hold
+is active — that cascade logic does not exist yet for any table in this codebase and is
+therefore bundled with `HDN-386`'s own guard-rollout charter rather than fixed here as
+a one-off for this single table. **Severity: High** — a real, live-forced gap in
+retention/legal-hold coverage for evidence data, but not independently exploitable
+beyond what `ISS-2026-205` already discloses (the same missing-trigger population).
+**Not fixed here. Owner: `HDN-386`.**
+
+### ISS-2026-223 — ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority` misused as "elevated override" rather than its own documented "may approve a grant" meaning, a repository-wide (~35 domain) convention question, not a file-specific bug (found at `CG-S15-HDN-009`, `OPEN`, Low, owner `HDN-378`)
+
+Found by the tenant-isolation/RLS lens. `app.authorize_file_access`, the `files_
+select_scoped` RLS policy, `app.create_file_version`, `app.request_file_deletion`,
+and `app.set_file_legal_hold` all gate their own "privileged/support override" branch
+on `app.is_support_grant_authority(actor, tenant_id)` — per that function's own home
+migration (`20260716111315_create_support_access.sql`), its documented, actual meaning
+is "may approve/deny/revoke a support access **grant**" (Supreme Admin, or the target
+tenant's own active `tenant_admin`), explicitly **not** "currently holds a live,
+time-boxed support session." The function that means the latter, `app.has_active_
+support_grant()`, is never called by any of these five call sites. Live-forced: a
+tenant's own `tenant_admin`, confirmed to hold **zero** rows ever in `app.support_
+access_grants` (`app.has_active_support_grant()` returns `false` for them), still got
+`authorize_file_access(restricted_file, 'download', tenant_admin) = 'granted'` and
+could read the same restricted file's row (including `storage_path`, before
+`ISS-2026-216`'s own fix) directly via RLS.
+
+**Investigated for a same-checkpoint fix and found NOT bounded-repair-sized, and not
+this checkpoint's own charter to decide unilaterally.** `app.is_support_grant_
+authority` is reused this exact same way across roughly 35 other migrations/domains
+in this codebase, and this checkpoint's own `scripts/db-tests/document-file.sql`
+explicitly asserts and relies on the current behavior (`>> ... restricted
+classification hides from a mere teammate but not support authority`, echoing
+`tenant_admin` as "(support authority)" throughout its own test names). Narrowing this
+predicate to `has_active_support_grant` in just the file domain would (a) break that
+committed, currently-passing, deliberately-designed test, and (b) create an
+inconsistent security model where `tenant_admin` retains blanket override in ~35 other
+places but not file access — arguably a worse, more confusing outcome than the status
+quo. Whether the intended design is "any tenant_admin has elevated override within
+their own tenant" (in which case `is_support_grant_authority`'s own name and doc
+comment are simply misleading and should be corrected, not its behavior) or "only a
+genuine, time-boxed PLT-115 grant-holder should" (in which case this is a real,
+repository-wide defect spanning ~35 call sites, not 5) is a systemic RBAC-convention
+question this bounded storage-audit checkpoint has no mandate to decide alone — mirrors
+this session's own established self-correction discipline (`HDN-374`'s Finding-2,
+`HDN-375`'s `finance_subledger_batches` precedent) of registering rather than rushing
+a fix whose correct shape is genuinely ambiguous. **Severity: Low** — every live-forced
+reproduction stayed within a single tenant's own `tenant_admin` (not a cross-tenant or
+fully-unauthenticated bypass), and the identical shape already exists, untouched,
+across dozens of other already-`VERIFIED` capabilities, so fixing 5 of ~40 call sites
+in isolation would not materially change the repository's actual exposure. **Not fixed
+here. Owner: `HDN-378`** (Security Hardening — the WBS lane whose own charter is a
+repository-wide security-convention review, the correct scope for this question).
+
+### ISS-2026-224 — `app.can_access_record`'s record-scope gate denies an authorized-but-non-uploading Procurement evidence reviewer, defeating the "second reviewer verifies evidence" workflow the vendor evidence-access RPCs were built for (found at `CG-S15-HDN-009`, `OPEN`, Medium, owner `HDN-387`)
+
+Found by the signed-URL/access-gating lens, live-forced while reproducing this
+checkpoint's own `ISS-2026-219` (the file_id-leak-on-denial fix). `app.access_vendor_
+compliance_document_evidence`/`app.access_vendor_bank_account_evidence`/`app.access_
+vendor_tax_identity_evidence` each first check `PRC:Download` authority, then call
+`app.authorize_file_access`, whose own non-uploader branch requires `app.can_access_
+record(actor, tenant, uploader, shared_org_unit_ids, customer_account_ref)` to pass
+(org-unit share or customer-account match) — and every vendor compliance/financial/tax
+evidence upload in this codebase's own db-tests and this checkpoint's own live
+reproduction passes `p_shared_org_unit_ids = null` (defaults to `'{}'`). Live-forced: a
+same-tenant actor holding the exact `PRC:Download` permission these RPCs gate on, who
+is not the uploader and shares no org unit with them, got `access_result=denied
+reason=document_record_access_denied` — the identical shape a genuinely unauthorized
+caller gets. This directly contradicts `app.access_vendor_compliance_document_
+evidence`'s own header comment, which names itself a fix for exactly this scenario
+("HIGH-severity finding, adversarial review... Sec.21 authorized reviewers verify
+evidence... reviewers verified evidence blind").
+
+**Investigated for a same-checkpoint fix and found not bounded-repair-sized.** The
+correct fix requires a design decision about what "a second reviewer's own PRC:Download
+authority" should mean relative to `app.can_access_record`'s existing ownership/share/
+customer-scope model — either these 3 RPCs should bypass the record-scope check once
+their own module-permission gate has already passed (risking weakening
+`app.authorize_file_access`'s general contract for any future caller that composes it
+the same way), or vendor evidence uploads need to start populating
+`shared_org_unit_ids` with every org unit that legitimately reviews Procurement
+evidence (a data-modeling change touching the upload call sites, not just the read
+path). Neither is a bounded repair a storage-audit checkpoint should choose
+unilaterally. **Severity: Medium** — a functional/usability defect (the intended
+review workflow is currently unusable by anyone but the uploader), not a security
+disclosure — the RPC's own denial path is exactly as safe as before, just
+over-restrictive. **Not fixed here. Owner: `HDN-387`.**
+
+### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs identically across ~69 Procurement and ~17 HR recruitment/onboarding tables; most carry no `authenticated` grant (safe by construction), but the population was not exhaustively swept for the ones that do (found at `CG-S15-HDN-009`, `OPEN`, Low, owner `HDN-378`)
+
+Found by the tenant-isolation/RLS lens while investigating `ISS-2026-220`. The "broad
+tenant-membership RLS + fine-grained RPC-layer gate" shape `ISS-2026-220` fixed for 2
+tables is used identically across roughly 69 further Procurement-domain tables
+(spot-checked `vendor_bank_accounts`/`vendor_tax_identities` — confirmed 0 rows in
+`role_table_grants` for `authenticated`, so their RLS predicate is moot and safe by
+construction today) and roughly 17 HR recruitment/onboarding tables (`candidates`,
+`onboarding_offboarding_cases`, etc.) — a deliberate, consistent architectural
+convention, not an isolated coding bug, and the two tables `ISS-2026-220` fixed are
+simply the file/document-shaped members of this population that happen to also carry
+the `authenticated` grant, which is what made them live-exploitable and squarely this
+checkpoint's own file-security charter. A dedicated, exhaustive sweep of every other
+table in both domains for the same `authenticated`-grant-plus-broad-RLS combination —
+mirroring `ISS-2026-186`'s own precedent for a structurally similar prior finding — is
+recommended but out of this bounded file-scope audit's own charter. **Severity: Low**
+— every table actually checked either already has the correct gate or carries no
+exploitable grant at all; this is a completeness/coverage gap, not a confirmed live
+defect anywhere beyond what `ISS-2026-220` already fixed. **Not fixed here. Owner:
+`HDN-378`** (Security Hardening).
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.

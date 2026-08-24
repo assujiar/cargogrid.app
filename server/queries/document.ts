@@ -10,7 +10,7 @@
  * boundary every prior "no live consumer yet" capability this session recorded.
  */
 
-import { parseFile, parseDocumentType, type File, type DocumentType } from "../contracts/document/document.ts";
+import { parseFileSummary, parseDocumentType, type FileSummary, type DocumentType } from "../contracts/document/document.ts";
 
 export interface FileLookupClient {
   from(table: "files"): {
@@ -27,14 +27,26 @@ export class FileLookupError extends Error {
   }
 }
 
-/** Every file row the caller's RLS grants them visibility into for this tenant (own uploads, shared/record-scoped access, non-restricted classification, non-deleted -- see the migration's own files_select_scoped policy for the exact composed rule). */
-export async function listFilesForTenant(client: FileLookupClient, tenantId: string): Promise<File[]> {
-  const { data, error } = await client.from("files").select("*").eq("tenant_id", tenantId);
+/**
+ * Every file row the caller's RLS grants them visibility into for this tenant (own
+ * uploads, shared/record-scoped access, non-restricted classification, non-deleted
+ * -- see the migration's own files_select_scoped policy for the exact composed
+ * rule). Returns FileSummary, never File -- app.files no longer grants
+ * `authenticated` column-level SELECT on storage_path at all (HDN-377, Storage and
+ * Signed URL Audit), so this explicit column list omits it too.
+ */
+export async function listFilesForTenant(client: FileLookupClient, tenantId: string): Promise<FileSummary[]> {
+  const { data, error } = await client
+    .from("files")
+    .select(
+      "id, tenant_id, document_type_code, config_version_id, record_type, record_id, classification, original_filename, mime_type, size_bytes, malware_scan_status, malware_scan_completed_at, malware_scan_provider_ref, version_group_id, version_number, is_latest_version, lifecycle_status, legal_hold, legal_hold_reason, deleted_at, uploaded_by_auth_user_id, shared_org_unit_ids, customer_account_ref, idempotency_key, created_at, updated_at",
+    )
+    .eq("tenant_id", tenantId);
 
   if (error) {
     throw new FileLookupError(error.message);
   }
-  return (data ?? []).map((row) => parseFile(row as Record<string, unknown>));
+  return (data ?? []).map((row) => parseFileSummary(row as Record<string, unknown>));
 }
 
 export interface DocumentTypeLookupClient {

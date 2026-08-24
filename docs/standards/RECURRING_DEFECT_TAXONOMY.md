@@ -384,6 +384,63 @@ read `app.query_audit_logs` for this tenant (usually broader than the capability
 gate, since it is `is_support_grant_authority` = Supreme Admin OR any active `tenant_admin`, not
 the capability's own permission).
 
+**C-25 — Two independently-built enforcement mechanisms for the same conceptual control, neither
+aware of the other.**
+A capability ships its own narrow, domain-native control (e.g. a boolean flag plus a dedicated
+RPC), and a later, separate capability ships a generic, cross-domain primitive meant to cover
+every domain's version of the same concept (e.g. a polymorphic hold/lock/override table). Nothing
+bridges them: a control applied through one mechanism is invisible to the other's own enforcement
+and classification logic, in both directions. Distinct from C-08 (a function widened to leak a
+field to its existing callers) and C-11 (a grant treated as boilerplate) — here both mechanisms
+are individually correct and fully tested on their own; the gap only exists in the seam between
+them, which neither capability's own test suite exercises because neither was written aware the
+other existed.
+*Evidence:* `HDN-377` (Storage and Signed URL Audit) **CRITICAL**, live-forced both directions —
+PLT-128's own file-native `app.files.legal_hold` + `app.set_file_legal_hold()` (consulted only by
+`app.request_file_deletion()`) and IAE-031's later, generic `app.legal_holds` +
+`app.request_legal_hold()`/`app._is_under_legal_hold()` (meant to cover every domain's own hold
+needs, `app.files` included) never composed: a hold placed via the generic RPC left
+`app.files.legal_hold` false and `app.request_file_deletion()` still soft-deleted the file; a
+file-native hold was simultaneously invisible to `app.request_retention_archive()`'s own dry-run
+classification (`legal_hold_blocking=false`). Fixed by extending `app._is_under_legal_hold()`
+with an explicit `app.files`-scoped OR-branch and having `app.request_file_deletion()` consult it
+too, closing both directions from the one seam.
+**Check:** when a new generic/cross-domain primitive is introduced specifically to replace or
+unify N domains' own narrower, pre-existing mechanisms for the same concept, does the diff
+actually wire each existing domain's own mechanism into it (or vice versa), or does it merely
+add a new, parallel path that domain never calls and is never called by? Live-force both
+directions: apply the control through mechanism A, verify mechanism B's own enforcement/read
+path sees it, and the reverse.
+
+**C-26 — An RPC-level check has no schema-level backstop against the same mutation issued
+directly.**
+The correct guard exists and is correctly placed at the one RPC every legitimate caller is
+expected to use — but nothing at the table itself (a `CHECK` constraint, a `BEFORE
+UPDATE`/`DELETE` trigger) enforces the same invariant, so any other `SECURITY DEFINER` function,
+future job, ad hoc migration, or a compromised/misused `service_role` credential that issues the
+same mutation directly bypasses it completely. Distinct from C-12 (a function with no authority
+check at all) — here the *intended* path is correctly gated; the defect is that it is not the
+*only* path capable of performing the mutation. Related to the standing, still-open, larger
+`HDN-BLK-018`/`ISS-2026-205` finding (only 13 of ~90+ append-only/audit/ledger-shaped tables
+carry a real guard trigger at all) — this class names the narrower, single-invariant version of
+the same root gap: a specific field-level rule (not "this whole table is append-only") enforced
+by exactly one RPC and nowhere else.
+*Evidence:* `HDN-377` (Storage and Signed URL Audit) **HIGH**, live-forced — `app.files.legal_hold`
+was checked only inside `app.request_file_deletion()`; a raw `delete from app.files where
+id = ...` issued directly (no RLS bypass required, ordinary `service_role` grant) physically
+erased a legally-held row with zero error, `app.files` carrying no `BEFORE DELETE` trigger at
+all. Fixed with a narrowly-scoped guard trigger mirroring
+`app.protect_transaction_lineage_edges_append_only`'s own proven RPD-022 supreme-admin-bypass
+shape — firing only on `DELETE` of a `legal_hold=true` row, leaving every other UPDATE path
+(scan-status transitions, versioning supersede, soft-deletion) untouched.
+**Check:** for every `raise exception` guard inside an RPC that protects a specific row-level
+invariant (not merely "does the caller have permission"), is the identical invariant also
+reachable by a direct table mutation issued by any role the RPC's own callers already hold (most
+often `service_role`)? If yes, and the guard is cheap to express as a trigger without widening
+what the RPC itself already allows, add the schema-level backstop; if not, disclose the gap
+explicitly rather than leaving the RPC's own check looking like the only line of defense it is
+not.
+
 ## 5. Two process lessons that are not code classes
 
 Recorded here because both cost real rework and both recur.

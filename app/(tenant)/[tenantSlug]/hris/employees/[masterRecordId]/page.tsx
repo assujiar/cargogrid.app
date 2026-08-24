@@ -9,7 +9,7 @@ import {
   getEmployeeChangeRequests,
   EmployeeQueryError,
 } from "../../../../../../server/queries/employee.ts";
-import { parseFile, type File as HrisFile } from "../../../../../../server/contracts/document/document.ts";
+import { parseFileSummary, type FileSummary as HrisFile } from "../../../../../../server/contracts/document/document.ts";
 import type { EmployeeChangeRequest } from "../../../../../../server/contracts/employee/employee.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { PermissionState } from "../../../../../../components/ui/permission-state.tsx";
@@ -69,9 +69,16 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       getEmployeeLifecycleHistory(supabase, masterRecordId, access.authUserId),
       listEmployeeDuplicateCandidates(supabase, masterRecordId, access.authUserId),
     ]);
-    const { data: fileRows, error: fileError } = await supabase.from("files").select("*").eq("tenant_id", access.tenant.id).eq("record_type", "employee").eq("record_id", masterRecordId);
+    const { data: fileRows, error: fileError } = await supabase
+      .from("files")
+      .select(
+        "id, tenant_id, document_type_code, config_version_id, record_type, record_id, classification, original_filename, mime_type, size_bytes, malware_scan_status, malware_scan_completed_at, malware_scan_provider_ref, version_group_id, version_number, is_latest_version, lifecycle_status, legal_hold, legal_hold_reason, deleted_at, uploaded_by_auth_user_id, shared_org_unit_ids, customer_account_ref, idempotency_key, created_at, updated_at",
+      )
+      .eq("tenant_id", access.tenant.id)
+      .eq("record_type", "employee")
+      .eq("record_id", masterRecordId);
     if (fileError) throw new EmployeeQueryError(fileError.message);
-    files = (fileRows ?? []).map((row) => parseFile(row as Record<string, unknown>));
+    files = (fileRows ?? []).map((row) => parseFileSummary(row as Record<string, unknown>));
 
     // Batch 291-293 Tier C fix (20260731210000, Finding 6, closes ISS-2026-092):
     // was a direct raw-table read (`.select("*")`) relying on RLS alone --

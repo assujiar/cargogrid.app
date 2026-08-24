@@ -585,6 +585,43 @@ completeness-sweep lens. Full disposition: `HDN-375.md` §13.2, `KNOWN_ISSUES.md
 for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or
 explicitly ruled an accepted exception at `HDN-387`/`389`.
 
+## HDN-BLK-019 — a legal hold placed on a file does not extend to protect that file's own `app.file_access_logs` evidence rows, the same missing-guard root cause as `HDN-BLK-018` plus an unbuilt hold-cascade
+
+*Found at `HDN-377` (2026-08-24), same checkpoint, by the file-access-audit-and-
+retention lens. Full disposition: `HDN-377.md` §6, `KNOWN_ISSUES.md` `ISS-2026-222`.*
+
+| Field | Value |
+|---|---|
+| **Title** | `app.file_access_logs` carries zero triggers at all (not even a `BEFORE UPDATE` `touch_row`), and `service_role` holds live `UPDATE`/`DELETE` on the table — so even a file under an active legal hold (via either of `HDN-377`'s own now-bridged hold mechanisms, `ISS-2026-217`) has its own access-log evidence rows freely mutable/deletable, with no cascade logic anywhere consulting the parent file's hold state |
+| **Found by** | `HDN-377` (`CG-S15-HDN-009`), Storage and Signed URL Audit, file-access-audit-and-retention lens — live-forced: inserted a real access-log row for a legally-held file, then `delete from app.file_access_logs where id = ...` succeeded unconditionally |
+| **Severity** | **High** — a real, live-forced gap in retention/legal-hold coverage for evidence data, directly relevant to RPD-025's "tested across database, files, **logs**, reports, exports, AI evidence and audit" requirement, but not independently exploitable beyond what `HDN-BLK-018` already discloses (the same missing-trigger population covers this exact table) |
+| **Owning phase** | Platform Core / Storage (PLT-128's own `app.file_access_logs`) |
+| **Owning lane** | `HDN-386` (Full-System Hardening Integrated Verification) — same owner as `HDN-BLK-018`, since the fix requires both (a) the generic append-only guard `HDN-BLK-018` already scopes this table into, and (b) new hold-cascade logic (a guard trigger consulting the parent file's `legal_hold`/`app._is_under_legal_hold` state before permitting mutation) that does not exist yet for any table in this codebase — bundled with the same guard-rollout charter rather than fixed as a one-off |
+| **Reachability** | Any `service_role`-mediated write (i.e. any `SECURITY DEFINER` function, or a compromised service-role key) against `app.file_access_logs`, regardless of the parent file's own hold state |
+| **Reproduction** | Live-forced: file with `legal_hold=true`; inserted a real `app.file_access_logs` row for a granted download of it; `delete from app.file_access_logs where id = ...` succeeded with no error. Full detail: `HDN-377.md` §6 |
+| **Blast radius** | The access-log evidence trail for every legally-held file, until `app.file_access_logs` receives both a real guard trigger and hold-aware cascade logic |
+| **Disposition** | **Registered, not fixed.** `HDN-377`'s own Finding C (`ISS-2026-218`) added a schema-level backstop for `app.files` itself; this entry is the narrower, evidence-log-specific gap that survives even after that fix |
+| **Required of `HDN-386`** | When rolling out `HDN-BLK-018`'s own append-only guard to `app.file_access_logs`, also add hold-aware cascade logic (consulting the referenced file's own `legal_hold`/`app._is_under_legal_hold` state) rather than a bare append-only guard alone |
+| **Regression test** | Required with the fix — mirroring `HDN-377`'s own regression shape (a legally-held file's access-log row survives a direct mutation attempt; an un-held file's does not gain new restrictions) |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-222` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-377` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **13** — `HDN-377` opened `HDN-BLK-019` (High, registered not fixed). Also registered 3 further findings without their own ledger entry, matching this ledger's own established convention (Medium/Low, non-systemic-scale, no release-blocker designation): `ISS-2026-223` (repository-wide `is_support_grant_authority` convention question, Low, owner `HDN-378`), `ISS-2026-224` (`can_access_record` over-restriction on vendor evidence reviewers, Medium, owner `HDN-387`), `ISS-2026-225` (Procurement/HR RLS-sweep completeness recommendation, Low, owner `HDN-378`) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged from `HDN-375`'s own close (`HDN-BLK-019` is newly registered, not closed) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019` (7) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged) |
+| Unresolved **Critical** anywhere | **0** — `HDN-377`'s own 2 Critical findings (`ISS-2026-216`/`217`, storage_path exposure and the dual legal-hold mechanism gap) were both fixed same checkpoint, not registered |
+
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018` and `HDN-BLK-019` are open
+release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their
+named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
+
 ## Reserved
 
 `HDN-BLK-019` onward are unassigned. Every Step 15 finding takes the next free ID and the

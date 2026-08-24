@@ -77,6 +77,18 @@ export const FileSchema = z.object({
 });
 export type File = z.infer<typeof FileSchema>;
 
+/**
+ * The `authenticated`-safe projection of a file row (HDN-377, Storage and Signed URL
+ * Audit): identical to FileSchema minus storagePath. app.files no longer grants
+ * `authenticated` SELECT on storage_path at all (the real Supabase Storage object
+ * key), mirroring app.users/email's own established column-level carve-out -- any
+ * client-facing read of app.files must use this shape, never FileSchema, which stays
+ * reserved for service_role-mediated RPC return values that legitimately need the
+ * real key server-side.
+ */
+export const FileSummarySchema = FileSchema.omit({ storagePath: true });
+export type FileSummary = z.infer<typeof FileSummarySchema>;
+
 export const FileAccessLogSchema = z.object({
   id: z.string().uuid(),
   tenantId: z.string().uuid(),
@@ -200,6 +212,38 @@ export function parseFile(row: Record<string, unknown>): File {
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     storagePath: row.storage_path,
+    malwareScanStatus: row.malware_scan_status,
+    malwareScanCompletedAt: row.malware_scan_completed_at,
+    malwareScanProviderRef: row.malware_scan_provider_ref,
+    versionGroupId: row.version_group_id,
+    versionNumber: row.version_number,
+    isLatestVersion: row.is_latest_version,
+    lifecycleStatus: row.lifecycle_status,
+    legalHold: row.legal_hold,
+    legalHoldReason: row.legal_hold_reason,
+    deletedAt: row.deleted_at,
+    uploadedByAuthUserId: row.uploaded_by_auth_user_id,
+    sharedOrgUnitIds: row.shared_org_unit_ids,
+    customerAccountRef: row.customer_account_ref,
+    idempotencyKey: row.idempotency_key,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+/** Maps a raw, storage_path-less app.files row (an `authenticated`-scoped read, HDN-377) to this contract's camelCase shape. */
+export function parseFileSummary(row: Record<string, unknown>): FileSummary {
+  return FileSummarySchema.parse({
+    id: row.id,
+    tenantId: row.tenant_id,
+    documentTypeCode: row.document_type_code,
+    configVersionId: row.config_version_id,
+    recordType: row.record_type,
+    recordId: row.record_id,
+    classification: row.classification,
+    originalFilename: row.original_filename,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
     malwareScanStatus: row.malware_scan_status,
     malwareScanCompletedAt: row.malware_scan_completed_at,
     malwareScanProviderRef: row.malware_scan_provider_ref,
