@@ -990,8 +990,88 @@ release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed
 by their named owner or explicitly ruled an accepted exception at
 `HDN-387`/`389`.
 
+### `HDN-BLK-034` — the composed in-place restore procedure's own `TRUNCATE` step silently bypasses 9 security/integrity row-level triggers with zero audit trail
+
+| Field | Value |
+|---|---|
+| **Title** | `database-restore.md` §4 item 4's own `TRUNCATE`-before-restore step (added at `HDN-384`'s first round to fix a PK-collision defect) never fires `FOR EACH ROW` triggers at all — independent of `--disable-triggers` — silently bypassing 9 tables' worth of legal-hold, posted-journal-immutability, and append-only-ledger protection with zero audit-log entry |
+| **Found by** | `HDN-384` (Disaster Recovery Rehearsal) Tier C review, schema-wide completeness sweep lens (found the trigger enumeration) and attack-surface adversarial testing lens (found the same mechanism independently, confirmed live) |
+| **Severity** | **High** — silently defeats this repository's own most load-bearing integrity guarantees (legal hold, financial posted-journal immutability, append-only audit ledgers) in its own sanctioned recovery procedure, with zero forensic trail if interrupted mid-flight |
+| **Owning phase** | Cross-cutting — the 9 affected triggers span Phase 4 (Finance), Phase 8 (Loyalty), Phase 9 (Storage legal-hold, Data Lineage); the gap itself is exposed by Step 15's own DR-rehearsal charter |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | Reachable by anyone following this repository's own documented, sanctioned restore procedure — not an attacker-controlled path, but a real gap in a control this repository relies on |
+| **Reproduction** | Live-proved: a `status='posted'` row in `app.finance_journals` correctly blocks a plain `DELETE` via its own guard trigger; `TRUNCATE app.finance_journals CASCADE;` on the identical row succeeds silently, 0 errors, 0 audit rows, even though the same trigger calls `app.capture_audit_event` on its own legitimate-deletion exception path |
+| **Blast radius** | Every real restore using this procedure against a database holding a posted journal, a legally-held file, or an append-only ledger/lineage row — the risk is highest if the restore is interrupted after `TRUNCATE` completes but before `pg_restore` finishes |
+| **Disposition** | **Registered, not fixed** — a real fix requires either an alternative to `TRUNCATE` preserving trigger semantics (likely far slower at 603-table scale) or an explicit audit-log entry capturing the bypass itself, both real design decisions outside `HDN-384`'s own documentation-only charter. Disclosed with the exact affected-table list in `docs/runbooks/database-restore.md` §4 item 4 |
+| **Required of the owning task** | Design and implement either a trigger-preserving alternative to bulk `TRUNCATE`, or an explicit pre/post-truncate audit capture step, for the 9 named tables specifically |
+| **Regression test** | A db-test proving a legal-hold/posted-journal/append-only row survives (or its removal is audited) through the fixed procedure |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-265` (`OPEN`, High) |
+
+---
+
+### `HDN-BLK-035` — session revocation (`app.user_sessions.status`) is never consulted by any enforcement path; the documented incident-response resolution step is functionally inert
+
+| Field | Value |
+|---|---|
+| **Title** | `app.revoke_all_actor_sessions`'s own session-status flip is pure bookkeeping — no RLS policy, RPC, or `app.evaluate_permission` anywhere in this codebase reads `app.user_sessions.status`; `docs/runbooks/incident-response.md`'s own claim that session revocation "stops future RPC calls that check session status" describes a mechanism that does not exist |
+| **Found by** | `HDN-384` (Disaster Recovery Rehearsal) Tier C review, attack-surface adversarial testing lens, live-reproduced |
+| **Severity** | **High** — a real gap between a documented security control's stated effect and its actual, verified-zero enforcement effect; a responder could reasonably declare an incident resolved after revoking only sessions while the attacker retains full access via an unrevoked role/membership |
+| **Owning phase** | Phase 9 (`IAE` MFA/session-controls migration that created `app.user_sessions`); the gap itself is a wiring omission never closed by any later phase |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | Reachable in every real incident-response flow that follows the runbook's own documented order — not attacker-controlled, but a real gap in the responder-facing control surface |
+| **Reproduction** | Live-proved: grepped all 329 migrations for `user_sessions`, found it referenced only in its own creating migration; live-called `app.revoke_all_actor_sessions` in a drill and confirmed lockout traced entirely to the separately-called `app.revoke_role_assignment`, not the session revocation itself |
+| **Blast radius** | Every real security-incident response that relies on session revocation as a primary lockout mechanism, across every tenant |
+| **Disposition** | **Registered, not fixed** — wiring `app.user_sessions.status` into a real enforcement path (or removing the false claim and re-ordering guidance) is a real code/documentation decision; the guidance correction (re-order to lead with role/IP-allowlist revocation) has been applied in `docs/runbooks/disaster-recovery.md` §4 item 2 as an interim mitigation, but the underlying dead field remains unfixed |
+| **Required of the owning task** | Either wire a real session-validity check into `app.evaluate_permission` (or a dedicated session-gate RPC), or formally deprecate `app.user_sessions.status` as bookkeeping-only and update every runbook/doc that currently implies it is enforced |
+| **Regression test** | A db-test proving a revoked session's own JWT/claims no longer authorize an RPC call, once a real enforcement path exists |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-264` (`OPEN`, High) |
+
+---
+
+### `HDN-BLK-036` — no mutual-exclusion mechanism exists for the composed in-place restore procedure; two concurrent runs race
+
+| Field | Value |
+|---|---|
+| **Title** | `docs/runbooks/database-restore.md`'s own composed in-place restore procedure has no advisory lock or "restore in progress" guard — two responders starting the identical procedure concurrently against the same target race, live-reproduced to abort a migration replay mid-script |
+| **Found by** | `HDN-384` (Disaster Recovery Rehearsal) Tier C review, attack-surface adversarial testing lens, live-reproduced |
+| **Severity** | **High** — a real structural safety gap in this repository's own sanctioned recovery procedure, precisely the kind of double-response race more likely, not less, during a genuine high-stress DR event |
+| **Owning phase** | Cross-cutting — this repository's migrations use bare `CREATE TABLE` with no `IF NOT EXISTS` anywhere, a pre-existing property this checkpoint's own drill exposed rather than introduced |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | Reachable any time two people or processes follow the same documented procedure concurrently — a realistic operational scenario during a real incident, not a contrived edge case |
+| **Reproduction** | Live-proved: firing the identical `CREATE TABLE app.xxx (...)` statement from two concurrent `psql` sessions against the same target produces a clean success on one side and `ERROR: relation ... already exists` on the other, aborting that session's replay under `ON_ERROR_STOP=1` |
+| **Blast radius** | Any real DR event where more than one responder starts the composed in-place restore procedure — could leave the schema in a race-order-dependent, partially-rebuilt state |
+| **Disposition** | **Registered, not fixed** — a real fix requires a genuine mutual-exclusion primitive (`pg_advisory_lock` or an explicit marker row), a real, testable tooling change outside `HDN-384`'s own documentation-only charter. Disclosed with an explicit "coordinate before starting" warning in `docs/runbooks/database-restore.md` §4 item 4 in the interim |
+| **Required of the owning task** | Add a `pg_advisory_lock`-based (or equivalent) mutual-exclusion guard at the start of the composed in-place restore procedure, held for its full duration |
+| **Regression test** | A db-test/script proving a second concurrent invocation is blocked or queued rather than racing |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-267` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-384` Tier C (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **30** — `HDN-384`'s own Tier C review opened `HDN-BLK-034` (High — `TRUNCATE` bypasses 9 protective triggers with zero audit trail), `HDN-BLK-035` (High — session revocation never enforced anywhere), and `HDN-BLK-036` (High — no mutual-exclusion for concurrent restore attempts). `ISS-2026-263` (re-scoped from Low/unreproduced to Medium/confirmed), `ISS-2026-266`/`268` (Medium/Low) remain `KNOWN_ISSUES.md`-only |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged from `HDN-384`'s own first-round close |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`, `HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033`, `HDN-BLK-034`, `HDN-BLK-035`, `HDN-BLK-036` (20, 3 new this checkpoint) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9, unchanged) |
+| Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
+| **`HDN-384`'s own charter items — first round plus Tier C** | `docs/runbooks/disaster-recovery.md` authored (first round); data corruption and security incident scenarios live-rehearsed; a real defect in the composed in-place restore procedure found and fixed (first round). **Tier C review found 7 more real gaps, all corrected in the runbooks themselves** (not merely disclosed): the `TRUNCATE` step's own trigger-bypass (`ISS-2026-265`/`HDN-BLK-034`), session revocation confirmed inert (`ISS-2026-264`/`HDN-BLK-035`, resolution steps re-ordered), materialized views never restored (`ISS-2026-266`, new required refresh step added), no mutual-exclusion for concurrent restores (`ISS-2026-267`/`HDN-BLK-036`), 2 nuance corrections to first-round findings (`ISS-2026-259`, `261`), `ISS-2026-263` re-scoped from an unreproduced anomaly to a confirmed, root-caused defect (`ISS-2026-260`'s sibling gap in `app.transition_user_status`), and `app.files`'s 2-consecutive-checkpoint coverage gap formally tracked (`ISS-2026-268`). RTO re-measured and corrected from a single point figure to a range. No Critical finding anywhere. See `HDN-384.md` §13 |
+
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
+`HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,
+`HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`,
+`HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033`, `HDN-BLK-034`,
+`HDN-BLK-035` and `HDN-BLK-036` are open release blockers for Step 16 per
+`00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly
+ruled an accepted exception at `HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-034` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-037` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

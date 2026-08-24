@@ -3,51 +3,55 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-016` — **Disaster Recovery Rehearsal
-(Prompt 384)** — `COMPLETED`, first round only, Tier C review pending.
-Three independent parallel investigation lenses (scenario definition and
-sandbox feasibility; a real, live DR drill against a disposable Postgres;
-communication/ownership/enterprise-DR-controls review). **Sandbox
-constraint confirmed tighter than previously documented**: no Docker
-daemon exists at all in this session. **Data corruption and security
-incident scenarios live-rehearsed, not tabletop-discussed**: a full drill
-found and fixed a real defect in `database-restore.md`'s own composed
-in-place restore procedure — 80 silently-ignored `pg_restore` errors from
-migration-seeded reference-table PK collisions plus a real parallel-restore
-FK race under `-j 4`, fixed live with a `TRUNCATE` step and
-`--disable-triggers`, re-verified with 0 errors, RTO ≈49.65s, RPO window
-4m38s. `ISS-2026-254` (security-state reversion on restore) independently
-reconfirmed against this second, distinct restore procedure — all 3
-post-T0 actions (API-key revoke, user suspend, legal hold) silently
-reverted. A live security-incident revoke chain
-(`app.revoke_all_actor_sessions`/`app.revoke_role_assignment`/
-`app.revoke_ip_allowlist_entry`) confirmed effective, the first real
-rehearsal-history entry for `docs/runbooks/incident-response.md` itself.
-**Major outage and provider failure remain tabletop-only**, disclosed per
-Prompt 384 §22's own alternative flow — no Docker, no reachable Supabase
-services, and CargoGrid's own single-vendor architecture has no failover
-path. Authored `docs/runbooks/disaster-recovery.md` (new);
-`database-restore.md` §4 item 4 fixed, bumped to template version `0.3.0`.
-**6 findings registered, not fixed, each with a named owner**:
-`ISS-2026-258`/`HDN-BLK-032` (High — no real DR communication mechanism
-exists anywhere: no channel, no template, no customer-impact assessment
-tool); `ISS-2026-261`/`HDN-BLK-033` (High — CargoGrid has no second
-infrastructure vendor, no failover path for a provider-wide outage);
-`ISS-2026-259` (Medium — `app.audit_logs` structurally blind to
-raw-SQL/infra-level corruption); `ISS-2026-260` (Medium —
-`app.record_dr_restore_test`'s own `component_scope` enum has no slot for
-3 of the 4 DR scenarios); `ISS-2026-262` (Low — a runbook catalogue in
-`11_DEVOPS_WORKSTREAM.md` §8.5 names 6 files that don't exist);
-`ISS-2026-263` (Low — an unreproduced anomaly in
-`app.transition_user_status` observed mid-drill, not confirmed as a
-defect). No Critical finding anywhere. Independent full gate: `typecheck`
-0 (unchanged); `lint` 0 errors/337 warnings (unchanged); `pnpm run test`
-**5443/5443** (unchanged); `pnpm exec next build` clean (unchanged); `bash
-scripts/db-tests/run.sh` **229/229 files clean** (329 migrations,
-unchanged — no schema change). `CG-S15-HDN-016` first round `COMPLETED`;
-Tier C review required before `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED`
+(Prompt 384)** — `VERIFIED`, Tier C closed. First round: 3 independent
+parallel investigation lenses (scenario definition and sandbox feasibility;
+a real, live DR drill against a disposable Postgres; communication/
+enterprise-DR-controls review). Sandbox constraint confirmed tighter than
+previously documented: no Docker daemon exists at all. Data corruption and
+security incident scenarios live-rehearsed: a full drill found and fixed a
+real defect in `database-restore.md`'s own composed in-place restore
+procedure (80 silently-ignored `pg_restore` errors, fixed with a `TRUNCATE`
+step and `--disable-triggers`). `ISS-2026-254` independently reconfirmed
+against this second restore procedure. A live security-incident revoke
+chain confirmed effective. Major outage and provider failure remain
+tabletop-only, disclosed. Authored `docs/runbooks/disaster-recovery.md`
+(new). **Tier C review (4 independent adversarial lenses against commit
+`9c476b5`) found 7 more real gaps, all corrected directly in the runbooks
+themselves — not application/database code, none of which changed this
+checkpoint.** (1) The `TRUNCATE`-before-restore fix (added this
+checkpoint's own first round) silently bypasses 9 security/integrity
+row-level triggers with zero audit trail — live-proved on
+`app.finance_journals`'s own posted-journal-immutability guard — registered
+`ISS-2026-265`/`HDN-BLK-034` (High). (2) **`app.revoke_all_actor_sessions`'s
+own session-status flip is never consulted by any enforcement path
+anywhere in this codebase** — the security-incident drill's real, confirmed
+lockout traced entirely to role/IP-allowlist revocation, not session
+revocation as the first round's own framing implied — registered
+`ISS-2026-264`/`HDN-BLK-035` (High), resolution guidance re-ordered. (3) No
+mutual-exclusion mechanism exists for the composed in-place restore
+procedure, live-reproduced to race — registered `ISS-2026-267`/
+`HDN-BLK-036` (High). (4) Materialized views are never restored by
+`pg_restore --data-only` — registered `ISS-2026-266` (Medium), a new
+required refresh step added. (5) `ISS-2026-263` root-caused and re-scoped
+from an unreproduced anomaly to a confirmed, deterministic `CASE`-fallback
+defect in `app.transition_user_status`. (6-7) 2 nuance corrections
+(`ISS-2026-259` narrowed for a 2-table exception still defeated by
+`TRUNCATE`; `ISS-2026-261` sharpened — Supabase Read Replicas exist but are
+plan-gated and Auth-excluded regardless). RTO corrected from a single
+point figure to a measured range after 2 independent re-runs came in
+14-20% higher. `app.files`'s 2-consecutive-checkpoint DR-drill coverage
+gap formally tracked (`ISS-2026-268`, Low). No Critical finding anywhere.
+`HARDENING_MATRIX.md` §16 (`HDN-385`) now forward-links `HDN-384`'s own
+durable findings, a gap the schema-completeness lens also found. Runbooks
+bumped to template version `0.4.0`/`0.2.0`. Independent full gate re-run
+after the fix pass: `typecheck` 0 (unchanged); `lint` 0 errors/337 warnings
+(unchanged); `pnpm run test` **5443/5443** (unchanged); `pnpm exec next
+build` clean (unchanged); `bash scripts/db-tests/run.sh` **229/229 files
+clean** (329 migrations, unchanged — no schema change at either round).
+`CG-S15-HDN-016` is `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED`
 is not set; only Prompt 389 may set it. Not a production/pilot/GA/market-
 ready claim (RPD-001/034/036). Full detail:
-`docs/build-log/full-system-hardening/HDN-384.md`; ledger record:
+`docs/build-log/full-system-hardening/HDN-384.md` §13; ledger record:
 `docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-016` row.)
 
 **Prior update:** 2026-08-24 (`CG-S15-HDN-015` — **Backup and Restore
@@ -733,7 +737,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 | 7 | HRIS/Ticketing | **`VERIFIED` (`PHASE_7_VERIFIED`, closed 2026-08-16)** -- kickoff plus `CG-S12-HRT-001..025` (Prompts 273-297) all `VERIFIED`, spanning all 24 master capabilities (Employee Master, Organization/Position Linkage, Recruitment, Onboarding/Offboarding, Attendance, Shift/Roster, Leave/Permit/Business Trip, Overtime/Timesheet, Payroll Foundation, KPI/Performance, Training/Talent, ESS/MSS, Internal/Customer/Support Ticketing, SLA, Assignment, Escalation, Typed Links, Sensitive Data Controls, plus Integrated Verification/Hardening/Documentation/Closure), PLUS a dedicated out-of-band follow-up task (`CG-S12-HRT-ISS065-CLOSURE`, commit `fe1434f`, no source prompt number) that closed the sole item Prompt 297's own closure checkpoint found genuinely unmet -- `ISS-2026-065` (Employee Master effective-dated identity/lifecycle) -- independently re-verified firsthand by a dedicated finalization re-check (`CG-S12-HRT-025-FINALIZE`, 2026-08-16) rather than accepted on any report's word. `docs/adr/ADR-0023-*.md` resolves the `org_units` team-type gap (Part A, HRT-275) and ratifies employee-vs-user identity ownership (Part B, HRT-274). Full detail: `docs/build-log/phase-07/00_EXECUTION_INDEX.md` §31, `docs/build-log/phase-07/HRIS_TICKETING_CLOSURE_REPORT.md` §24 | 100% (25/25 WBS rows, plus the dedicated `ISS-2026-065` follow-up) | Phase 7 closed. Phase 8 (Customer Portal/Loyalty) is dependency-clean; Prompt 298 requires fresh, separate, explicit operator authorization |
 | 8 | Customer Portal/Loyalty | **`VERIFIED` (`PHASE_8_VERIFIED`, closed 2026-08-20)** -- kickoff plus `CG-S13-CPL-002..029` (Prompts 300-327) all `VERIFIED` -- 29/29 WBS rows resolved, zero Critical/High issue, 25 disclosed Medium/Low residuals each with a named owner. Full detail: `docs/build-log/phase-08/CUSTOMER_PORTAL_LOYALTY_CLOSURE_REPORT.md` | 100% (29/29 WBS rows) | Phase 8 closed. Step 14 (Intelligence, Automation and Enterprise Expansion, Phase 9) is dependency-clean; requires fresh, separate, explicit operator authorization before any work begins |
 | 9 | Intelligence/Enterprise | **`VERIFIED` (`PHASE_9_VERIFIED`, closed 2026-08-22)** -- kickoff plus all 34 capabilities (`CG-S14-IAE-002..035`, Prompts 330-363) and all four Group 9 closure prompts (`CG-S14-IAE-036..039`, Prompts 364-367) `VERIFIED` -- 39/39 WBS rows resolved, zero unresolved Critical issue. One High-severity residual (`ISS-2026-150`, IP-restriction universal wiring -- a repository-wide, cross-phase gap predating Phase 9 at Platform Core/RPD-023) explicitly and transparently ruled an accepted, first-of-its-kind exception to this repository's own zero-Critical/High closure precedent, full reasoning at `docs/build-log/phase-09/INTELLIGENCE_ENTERPRISE_CLOSURE_REPORT.md` §2; 10 further Medium/Low residuals each disclosed with a named owner. Full detail: `docs/build-log/phase-09/INTELLIGENCE_ENTERPRISE_CLOSURE_REPORT.md` | 100% (39/39 WBS rows) | Phase 9 closed. Step 15 (Full-System Hardening) is dependency-clean; requires fresh, separate, explicit operator authorization before any work begins |
-| 15 | Full-system hardening | **`IN_PROGRESS` (`FULL_SYSTEM_HARDENING_IN_PROGRESS`, set 2026-08-23 at `CG-S15-HDN-001`, Prompt 369, WBS Runtime Kickoff)** -- 21-row WBS built (`CG-S15-HDN-001..021`, Prompts 369-389); 5 `VERIFIED` (`CG-S15-HDN-002` / Prompt 370, Full Regression; `CG-S15-HDN-003` / Prompt 371, Cross-Module Transactional Integrity; `CG-S15-HDN-004` / Prompt 372, Tenant Isolation Audit; `CG-S15-HDN-005` / Prompt 373, RLS and RBAC Audit -- Tier C closed across two rounds; `CG-S15-HDN-006` / Prompt 374, Financial Integrity Audit -- Tier C closed, 5 more findings found, 3 fixed same checkpoint, 2 registered), 1 `COMPLETED` (the kickoff), 1 `READY` (`CG-S15-HDN-009` / Prompt 377, Storage and Signed URL Audit -- dependency-satisfied), 14 `BLOCKED`. `AGENTS.md` names this range in its **never batch** list: one prompt per session, each with its own full Tier A + Tier B + Tier C treatment, and no later prompt may begin until the current one is `VERIFIED`. 16 blockers now tracked (`HDN-BLK-001..016`, `016` new at `HDN-374`'s own Tier C review -- `app.request_finance_settlement_reversal` posts no reversing GL journal at all, High, registered not fixed, owner `HDN-386`): 6 carried-forward from kickoff plus 3 opened at `HDN-370` (`HDN-BLK-007` High/CI governance-gate blindness, `008`/`009` Medium/CI environment gaps, all deferred to `HDN-387` with explicit interim guidance for the 3 downstream lanes they actually touch) plus 1 opened at `HDN-371` (`HDN-BLK-010` Medium -- 9 cross-module boundary functions across 5 domains missing a race-safe idempotency pattern, live-forced and confirmed, deferred to `HDN-374`) plus 4 opened at `HDN-372` (`HDN-BLK-011` High -- 13 `SECURITY DEFINER` functions (24 protected total, corrected from an original miscounted 9/21) evaluated authority against a client-supplied actor UUID, live-forced cross-tenant PII/inventory/audit/notification read, **fixed at the root same checkpoint, in two rounds including 4 more found at this checkpoint's own Tier C review**; `HDN-BLK-012` High -- 13 dashboard functions sharing the identical shape, **fixed at `HDN-373`**; `HDN-BLK-013` High -- app-layer single-point-of-failure reliance on the database, registered late and corrected at Tier C, owner `HDN-378`, still open; `HDN-BLK-014` Medium -- ~24 further boolean-oracle candidates from the Tier C review's own wider sweep, only 3 live-verified, **narrowed at `HDN-373`: 16 confirmed terminal and fixed, ~14 confirmed genuinely shared with third-party call sites and re-registered narrower as `ISS-2026-186`, owner a future checkpoint**) plus 1 opened at `HDN-373` (`HDN-BLK-015` High -- the entire Finance manual/period/config/import-export write surface, 95 functions plus `app.enqueue_job`, was `SECURITY INVOKER` and completely unreachable by any real `authenticated` session since it shipped, live-forced and confirmed, **fixed at the root same checkpoint** -- the largest reachability defect found anywhere in Step 15 to date); `HDN-BLK-002` (the day-of-week fixture class), `HDN-BLK-011` (fixed at `HDN-372`), `HDN-BLK-012` (fixed at `HDN-373`), and `HDN-BLK-015` (fixed same checkpoint) closed. **`HDN-373` also fixed** `ISS-2026-180` (the root RBAC gate `app.evaluate_permission` never checked tenant membership, live-confirmed a revoked ex-member retained every permission indefinitely), `ISS-2026-181`/`183`/`184`/`185` (Finance journal self-approval, unchecked system-journal posting, `FIN:View` RLS bypass, and a `notification_preferences` own-row RLS gap -- all companion findings its own fix-and-verify cycles surfaced), `ISS-2026-171`/`173` (own-row RLS gaps on `notifications`/`saved_report_views`, carried forward from `HDN-372`), and `ISS-2026-139` (loyalty redemption maker/checker collapse, seeded from `HARDENING_MATRIX.md` §4); independently re-verified `ISS-2026-137` as accurate with no change needed. **6 further findings registered, not fixed, each with a named forward owner**: `ISS-2026-186` (~14 residual shared RBAC primitives, owner `HDN-387`), `ISS-2026-187`/`188` (support-access reauth/session-end gaps, owner `HDN-378`), `ISS-2026-189` (`employees` column-grant, judgment call), `ISS-2026-190` (a sibling RLS gap on `performance_calibration_adjustments_select_scoped`, owner `HDN-387`), `ISS-2026-191` (doc-drift), `ISS-2026-192` (`principal_memberships` variant, owner `HDN-387`). **Tier C's own first round found the fix pass incomplete** -- an independent wider sweep found 57 more functions sharing `HDN-BLK-015`'s shape (fixed at `20260810900000_harden_finance_authority_chain_tierc_completeness.sql`, which also corrected a regression in the `ISS-2026-183` fix and closed a new High, `ISS-2026-193`, cross-tenant Finance-config disclosure) -- a fifth independent lens then confirmed that correction complete (zero further matches schema-wide) and correct (all 3 fixes re-verified with fresh fixtures). Also `ISS-2026-163` (Low, `app.prepare_job_order`'s defective exception handler, owner `HDN-387` -- `HDN-374` explicitly kept this outside its own Financial Integrity charter) and `ISS-2026-167`/`172`/`174..178` (further Medium/Low tenant-isolation findings, owners across `HDN-376/377/378/379/382`), none needing their own `BLOCKER_LEDGER` entries. 3 High-severity items open -- `ISS-2026-150` (IP-restriction wiring, Phase 9 accepted exception, owned by `HDN-378`, not deferrable again), `ISS-2026-158`/`HDN-BLK-007` (CI governance-gate blindness, owned by `HDN-387`), and `ISS-2026-166`/`HDN-BLK-013` (app-layer single point of failure, owned by `HDN-378`) -- all release blockers for Step 16 per §8.1 until fixed or explicitly accepted at `HDN-387`/`HDN-389`. Zero unresolved Critical. `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set; only Prompt 389 may set it, and it is not a production/pilot/GA/market-ready claim. Full detail: `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` | 24% (5 of 21 WBS rows `VERIFIED`; 1 `COMPLETED`) | `HDN-375` (Data Lineage Audit) next; Step 16 gated on Prompt 389 |
+| 15 | Full-system hardening | **`IN_PROGRESS` (`FULL_SYSTEM_HARDENING_IN_PROGRESS`, set 2026-08-23 at `CG-S15-HDN-001`, Prompt 369, WBS Runtime Kickoff)** — **this row was found stale at `HDN-384`'s own Tier C ledger-consistency review (last resynced at `HDN-374`, 9 checkpoints prior) and is now resynced to current state; treat this file's own top "Updated:" block (§1) and `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` as the authoritative, continuously-current source of truth for this row going forward, not a hand-maintained narrative here.** 21-row WBS built (`CG-S15-HDN-001..021`, Prompts 369-389); 2 `COMPLETED` (the kickoff; `CG-S15-HDN-016`/`HDN-384` Disaster Recovery Rehearsal), 5 `BLOCKED`, 0 `READY`, 14 `VERIFIED` (`CG-S15-HDN-002` through `015`, Prompts 370-383 — Full Regression, Cross-Module Transactional Integrity, Tenant Isolation Audit, RLS and RBAC Audit, Financial Integrity Audit, Data Lineage Audit, API Compatibility Audit, Storage and Signed URL Audit, Security Hardening, Performance and Scalability, Accessibility Audit, Browser and Device Compatibility, Observability Audit, Backup and Restore — full detail for each in `00_EXECUTION_INDEX.md`'s own WBS table and `HARDENING_MATRIX.md` §1-§14). `AGENTS.md` names this range in its **never batch** list: one prompt per session, each with its own full Tier A + Tier B + Tier C treatment, and no later prompt may begin until the current one is `VERIFIED`. 33 blockers now tracked (`HDN-BLK-001..033`, current status/tally in `BLOCKER_LEDGER.md`'s own latest "Status as of" section). Zero unresolved Critical anywhere except the 2 already-owned residuals (`HDN-BLK-020`/`023`, owner `HDN-386`). `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set; only Prompt 389 may set it, and it is not a production/pilot/GA/market-ready claim. Full detail: `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` | 67% (14 of 21 WBS rows `VERIFIED`; 2 `COMPLETED`) | `HDN-384` Tier C review in progress; `HDN-385` (Data Migration Rehearsal) next; Step 16 gated on Prompt 389 |
 | 16 | RC and Go-live | `NOT_STARTED` | 0% | after hardening `VERIFIED` |
 
 ## 4. Workstream status
