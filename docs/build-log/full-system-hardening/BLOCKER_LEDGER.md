@@ -75,16 +75,16 @@ that none of them can quietly drift out of scope. Each names the single lane tha
 | **Reachability** | A fully-configured, `enforced`-mode IP allowlist currently provides **zero** real protection against any caller that reaches the RPC layer directly — e.g. via a leaked service credential, or a compromised client bypassing the intended HTTP path |
 | **Reproduction** | Call any IP-restricted mutation through the TypeScript mutation layer: no client IP is ever populated, so `assert_ip_allowed` is never reached with a real value. The function itself passes its own direct-call tests |
 | **Blast radius** | The route-handler layer plus the TypeScript mutation layer — a cross-layer change, materially larger than a migration-only fix |
-| **Disposition** | **`DEFERRED_TO_HDN-378`.** Phase 9 ruled it an explicit, transparent, **first-of-its-kind accepted exception** to this repository's own zero-Critical/High closure precedent, and **named Step 15 as the remedy**. Full reasoning: `docs/build-log/phase-09/INTELLIGENCE_ENTERPRISE_CLOSURE_REPORT.md` §2 |
-| **Required of `HDN-378`** | (a) build route-handler-level client-IP extraction and threading; (b) wire `assert_ip_allowed` into the bounded set of highest-risk SEC/IAM/INTHUB mutations that `ISS-2026-151`'s own ruling already names; (c) decide explicitly what service-role/background-job callers with no client IP at all should do (likely exempt — IP restriction is inherently an interactive-session control). **A cosmetic partial wire-up is forbidden**: adding an unenforced parameter that nothing ever populates would look fixed without being fixed |
-| **Regression test** | Required with the fix: a negative-path test proving a disallowed IP is actually rejected through the real call path, not only in a direct-call unit test |
+| **Disposition** | **Corrected at `HDN-386` (Full-System Hardening Integrated Verification) reconciliation, ledger-consistency finding**: this row's own `DEFERRED_TO_HDN-378` disposition text and `OPEN` `KNOWN_ISSUES` cross-reference were never updated after `HDN-378`'s own Tier C review actually wired the fix and then found and disclosed `HDN-BLK-023`'s own independent bypass of it — `KNOWN_ISSUES.md`'s own `ISS-2026-150` row was corrected from `RESOLVED` to **`PARTIALLY RESOLVED`** at that same Tier C, but this ledger entry's own text was left stale, undetected by any Tier C ledger-consistency sweep since. Corrected disposition: **`PARTIALLY RESOLVED`** — route-handler IP extraction and threading was genuinely built and wired into the 4 named highest-risk functions (`app.decide_ai_output_approval`, `app.activate_enterprise_idp_connection`, `app.approve_mfa_exception`, `app.create_integration_connection`), with a real negative-path regression proving rejection through the actual call path — but the fix's own effectiveness is undercut for `app.activate_enterprise_idp_connection` specifically by `HDN-BLK-023`'s own independent bypass (the shared `app.set_integration_connection_status` primitive it delegates to remains independently callable with none of the same protections). Not a full closure until `HDN-BLK-023` itself closes |
+| **Required of `HDN-378`** | (a) build route-handler-level client-IP extraction and threading; (b) wire `assert_ip_allowed` into the bounded set of highest-risk SEC/IAM/INTHUB mutations that `ISS-2026-151`'s own ruling already names; (c) decide explicitly what service-role/background-job callers with no client IP at all should do (likely exempt — IP restriction is inherently an interactive-session control). **A cosmetic partial wire-up is forbidden**: adding an unenforced parameter that nothing ever populates would look fixed without being fixed. **Done at `HDN-378`** — see `HDN-BLK-023` for the residual gap its own Tier C found |
+| **Regression test** | Required with the fix: a negative-path test proving a disallowed IP is actually rejected through the real call path, not only in a direct-call unit test. **Done at `HDN-378`** |
 | **Rollback** | Additive migration + additive route-layer parameter; `git revert` the checkpoint's commit |
-| **`KNOWN_ISSUES`** | `ISS-2026-150` (`OPEN`, High) |
+| **`KNOWN_ISSUES`** | `ISS-2026-150` (`PARTIALLY RESOLVED` at `HDN-378` Tier C, High) |
 
-> **This is the one item Step 15 cannot defer.** It was accepted once, explicitly, on the
-> stated condition that Step 15 would remedy it. Deferring it again would convert a
-> disclosed, time-bounded exception into a permanent silent one — precisely what the
-> Phase 9 ruling refused to do.
+> **This was the one item Step 15 could not defer.** It was accepted once, explicitly, on
+> the stated condition that Step 15 would remedy it. `HDN-378` built the real fix rather
+> than deferring it again — but its own Tier C review found the fix incompletely closes
+> the gap for one of the 4 named functions, tracked now at `HDN-BLK-023`, owner `HDN-386`.
 
 ---
 
@@ -198,12 +198,12 @@ three cases the code under test was correct and the fixture's temporal assumptio
 |---|---|
 | **Title** | 892 foreign keys have no covering index on the live project |
 | **Found by** | Live Supabase migration advisors, 2026-08-23 |
-| **Severity** | **Medium** |
-| **Owning lane** | **`HDN-379`** |
+| **Severity** | ~~Medium~~ **Low** — corrected at `HDN-386` reconciliation to match the paired `ISS-2026-239` row, which has read `Low` since it was written; this ledger entry's own severity field was never brought into sync |
+| **Owning lane** | **`HDN-379`** (the finding); **not a valid acceptance authority for its own finding — see Disposition correction below** |
 | **Assessment** | **A design question, not a defect.** The companion 982 `unused_index` advisories are pure noise — the database has served no queries — and the same absence of real traffic is exactly why the 892 cannot be resolved by inspection |
-| **Disposition** | **`ACCEPTED_EXCEPTION` — explicitly deferred with a named owner, ruled on at `HDN-379`.** Categorized into a 4-bucket decision framework from a 24-FK sample across 7 domains (60% genuinely bare, 23% tenant-composite-covered, 10% self-scoping `tenant_id`, 7% self-referencing lineage) — zero high-confidence "index now" candidates found; every column with confirmed hot usage already has a serving composite index, and the genuinely cold candidates are write-only/audit-lineage columns on high-write-volume tables |
+| **Disposition** | **Corrected at `HDN-386` reconciliation, procedural finding**: this entry's own prior text read `ACCEPTED_EXCEPTION — ... ruled on at HDN-379` — the identical lane that found the item, directly violating `00_EXECUTION_INDEX.md` §8.2 condition 5 ("accepted... never by the lane that found it, and never by this kickoff"). No prior checkpoint's own Tier C ledger-consistency sweep caught this. Reclassified to **`DEFERRED_TO_HDN-387`** pending a genuine ruling by an authorized lane (`HDN-387` or `HDN-389`) under §8.2's full 5-condition test — the underlying 4-bucket categorization and zero-high-confidence-candidates finding itself is not in question, only the self-ruled acceptance is unratified |
 | **Hard constraint** | **Neither drop them nor blindly index.** Blanket-indexing 892 FKs adds real write cost and storage for unmeasured benefit; dismissing them hides a genuine future scaling risk |
-| **Required of `HDN-379`** | State the decision, its owner, and the measurement that would settle it (real query patterns at target volume). Index only where a measured pattern justifies it — **done, see Disposition**: deferred pending real production query telemetry, which does not exist anywhere in this system yet |
+| **Required of `HDN-387`** | Re-rule on the already-categorized finding under §8.2's full 5-condition test (severity Low-or-below already satisfied; a named owner and written rationale already exist from `HDN-379`'s own work — only the "who rules" condition needs correcting), or index where a measured pattern justifies it |
 | **`KNOWN_ISSUES`** | `ISS-2026-239` (`OPEN`, Low, owner a dedicated future task) |
 
 ---
@@ -219,7 +219,7 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Owning lane** | **`HDN-387`** (Release Blocker Triage and Remediation) |
 | **Reachability** | Every CI run, `push` and `pull_request` alike. Verified: runs #105–#109 all `failure`; #109 is `main` at `e5da061` |
 | **Reproduction** | `scripts/git/check-worktree-collision.test.ts:40` — `assert.ok(current, 'expected ${branch} to have commits ahead of origin/main')`. A CI checkout of `main` **is** `origin/main`, so `commitsAheadOfMain` is 0. There is no CI guard and no skip in the file |
-| **Blast radius — the real damage** | Because `Test` fails first, these six steps report `skipped` and **have never run in CI on a push**: suppression-governance check; documentation checks; **secret scan**; **dependency vulnerability audit (fails on critical/high)**; data-classification registry check; threat-model register check. Two of those are security controls. `ISS-2026-007`'s own recorded lesson was that a silently-broken audit gate hid 20 real advisories, 11 high, for a whole phase — this is the same failure shape one level up. (A seventh step, protected-path check, is `if: github.event_name == 'pull_request'`-gated and is correctly absent from any push regardless of this failure — corrected at Tier C review, which caught it listed here in error) |
+| **Blast radius — the real damage** | Because `Test` fails first, these six steps report `skipped` and **have never run in CI on a push**: suppression-governance check; documentation checks; **secret scan**; **dependency vulnerability audit (fails on critical/high)**; data-classification registry check; threat-model register check. Two of those are security controls. `ISS-2026-007`'s own recorded lesson was that a silently-broken audit gate hid 20 real advisories, 11 high, for a whole phase — this is the same failure shape one level up. (A seventh step, protected-path check, is `if: github.event_name == 'pull_request'`-gated and is correctly absent from any push regardless of this failure — corrected at Tier C review, which caught it listed here in error). **Confirmed and sharpened at `HDN-386`**: `.github/workflows/ci.yml`'s `security:audit` step (added 2026-08-05, `cbe57cb`, before Step 15 began) has genuinely **never executed on any CI run** as a direct consequence of this same cascade — `HDN-378`'s own security-hardening work ran `security:audit`/`security:check` locally only, and this is real, disclosed `Executed`-locally/`Tracked-gap`-in-CI evidence, not silently waved through as "not applicable." The same disposition applies to `HDN-380`/`381`'s own axe-core and mobile/tablet/iPhone Playwright coverage — real and green locally (34/34, re-confirmed fresh at `HDN-386`), never independently confirmed against an actual CI run |
 | **Why it went unnoticed** | Every phase's gate evidence in this repository was produced by **local** runs, where the test passes on a feature branch that genuinely is ahead of `origin/main`. The local and CI outcomes are inverses of each other, so a green local run is not evidence about CI |
 | **Disposition** | **`DEFERRED_TO_HDN-387`** — not fixed here. It is a governance test whose intent (catching the `ISS-2026-002` collision class) is real; deciding what it should assert *in CI* is a design call, not a side-edit inside a regression-baseline lane |
 | **Not to do** | Do not delete or skip the test to turn CI green. That would remove the `ISS-2026-002` control this repository added after real content corruption (`ERR-2026-001..003`) |
@@ -624,11 +624,11 @@ completeness-sweep lens. Full disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md
 | **Reachability** | Any actor holding Supreme Admin (the same authority the native setter itself requires), or any `service_role`-mediated write bypassing `app.supreme_admin_delete_audit_log` entirely |
 | **Reproduction** | Live-forced: `perform app.supreme_admin_mutate_audit_log(..., legal_hold => true, ...)` on a real row; `perform app.supreme_admin_delete_audit_log(...)` on the same row succeeded, row gone. Full detail: `HDN-377.md` §13.2 |
 | **Blast radius** | Every audit-log row ever placed under legal hold, until `app.audit_logs` receives both a real guard trigger and legal-hold enforcement |
-| **Disposition** | **Registered, not fixed.** Not a file/storage table — outside this checkpoint's own charter |
-| **Required of `HDN-386`** | When rolling out `HDN-BLK-018`'s own append-only guard to `app.audit_logs`, also enforce `legal_hold` (native flag, and bridge into `app._is_under_legal_hold()` mirroring `HDN-377`'s own `app.files` fix) in the same pass |
-| **Regression test** | Required with the fix — a legally-held audit-log row must survive both `supreme_admin_mutate_audit_log`'s own write path attempting to alter protected fields and `supreme_admin_delete_audit_log`, mirroring `HDN-377`'s own `ISS-2026-226`/`227` regression shape |
-| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
-| **`KNOWN_ISSUES`** | `ISS-2026-229` (`OPEN`, Critical) |
+| **Disposition** | **`FIXED` at `HDN-386`** (`supabase/migrations/20260818000000_harden_integrated_verification_legal_hold_bridge.sql`) — a genuinely BOUNDED repair scoped only to the two specific reproducible bypasses (`HDN-BLK-020`/`021`), NOT `HDN-BLK-018`'s own separate, much larger systemic append-only-guard rollout (~90+ tables), which remains registered, unchanged, owner `HDN-387`. `app._is_under_legal_hold()` now also bridges `app.audit_logs`/`app.tenants` (mirroring the existing `app.files` bridge branch exactly); a new `app.protect_audit_logs_legal_hold_from_deletion` `BEFORE DELETE` trigger blocks physical deletion of a held row (native or generic hold) by any non-Supreme-Admin caller, including a raw `service_role` DELETE with no session-bound actor — the exact bypass this finding live-forced. A genuine Supreme Admin RPC caller retains RPD-022's disclosed absolute-CRUD override, but the override is now honestly and distinctly audited (`action='delete_legally_held_audit_log'`, `actor_label='supreme_admin_absolute_crud'`) rather than silent |
+| **Required of `HDN-386`** | When rolling out `HDN-BLK-018`'s own append-only guard to `app.audit_logs`, also enforce `legal_hold` (native flag, and bridge into `app._is_under_legal_hold()` mirroring `HDN-377`'s own `app.files` fix) in the same pass. **Done for the legal-hold half only** — `HDN-BLK-018`'s own append-only-guard rollout is deliberately not bundled into this bounded repair; see Disposition |
+| **Regression test** | Required with the fix — a legally-held audit-log row must survive both `supreme_admin_mutate_audit_log`'s own write path attempting to alter protected fields and `supreme_admin_delete_audit_log`, mirroring `HDN-377`'s own `ISS-2026-226`/`227` regression shape. **Done**: `scripts/db-tests/audit-trail.sql`, 3 directions (native-hold raw-DELETE block, generic-hold raw-DELETE block, Supreme Admin override honestly audited) |
+| **Rollback** | `git revert` this checkpoint's commit; the migration is a `create or replace function` (persists existing grants) plus one genuinely new trigger function and trigger, additive and reversible |
+| **`KNOWN_ISSUES`** | `ISS-2026-229` (`RESOLVED` at `HDN-386`, was Critical) |
 
 ---
 
@@ -648,11 +648,11 @@ completeness-sweep lens. Full disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md
 | **Reachability** | Any Supreme Admin or `service_role`-mediated write |
 | **Reproduction** | Live-forced: `app.request_legal_hold(scope='app.tenants', tenant.id)` recorded active; `app.transition_tenant_status(..., 'terminated', ...)` succeeded regardless. Full detail: `HDN-377.md` §13.2 |
 | **Blast radius** | Every tenant ever placed under a generic legal hold, until this bridge exists |
-| **Disposition** | **Registered, not fixed.** Not a file/storage table — outside this checkpoint's own charter |
-| **Required of `HDN-386`** | Bridge `app._is_under_legal_hold()` to also check `app.tenants.legal_hold` (mirroring `HDN-377`'s own `app.files` bridge), and decide whether a real RPC should set the native flag at all going forward or whether the generic mechanism alone should govern tenants |
-| **Regression test** | Required with the fix |
-| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
-| **`KNOWN_ISSUES`** | `ISS-2026-230` (`OPEN`, High) |
+| **Disposition** | **`FIXED` at `HDN-386`** (`supabase/migrations/20260818000000_harden_integrated_verification_legal_hold_bridge.sql`), bundled with `HDN-BLK-020`'s own bounded repair. `app._is_under_legal_hold()` now bridges `app.tenants` (mirroring the `app.files` bridge exactly), AND — the actual live-forced reproduction — `app.enforce_tenant_status_transition` now checks BOTH the native flag and the generic bridge before blocking termination, closing the direction that mattered operationally (a generic-only hold previously did not block termination at all) |
+| **Required of `HDN-386`** | Bridge `app._is_under_legal_hold()` to also check `app.tenants.legal_hold` (mirroring `HDN-377`'s own `app.files` bridge), and decide whether a real RPC should set the native flag at all going forward or whether the generic mechanism alone should govern tenants. **Done for the bridge/enforcement half.** The second ask — whether a dedicated RPC should exist to set the native flag — is a genuine product/API-surface decision, left explicitly open and registered for `HDN-387`, not guessed at here |
+| **Regression test** | Required with the fix. **Done**: `scripts/db-tests/tenant-lifecycle.sql` — a purely generic (no native flag) hold on scope `app.tenants` now correctly blocks `app.transition_tenant_status(..., 'terminated', ...)`, and succeeds once released |
+| **Rollback** | `git revert` this checkpoint's commit; both function replacements persist existing grants, additive and reversible |
+| **`KNOWN_ISSUES`** | `ISS-2026-230` (`RESOLVED` at `HDN-386`, was High) |
 
 ---
 
@@ -692,8 +692,8 @@ disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md` `ISS-2026-225` (corrected).*
 | **Reachability** | Any actor holding a legitimately-granted `INTHUB:Configure` permission for the target tenant — not zero authority, but not `IAM:Configure` or any of the SSO wrapper's own extra checks either |
 | **Reproduction** | Created a disabled enterprise SSO connection with zero verified test logins, tenant under an `enforced`-mode IP allowlist; the hardened wrapper correctly denied an `INTHUB:Configure`-only actor with no in-range IP; calling `app.set_integration_connection_status(conn.id, 'active', ...)` directly, as that same actor, succeeded — reactivating the connection with zero client IP supplied |
 | **Blast radius** | Every enterprise SSO connection activation/reactivation across every tenant; potentially every other connection type's own equivalent specialized wrapper, not yet audited |
-| **Disposition** | **Registered, not fixed** — the correct fix is a genuine design decision (conditional guard inside the shared function vs. revoking direct callers entirely) touching a heavily-reused primitive, exceeding what a Tier C review pass should rush |
-| **Required of `HDN-386`** | Decide and implement the fix shape; audit whether any other connection type's own specialized wrapper has the same bypass |
+| **Disposition** | **Registered, not fixed** — the correct fix is a genuine design decision (conditional guard inside the shared function vs. revoking direct callers entirely) touching a heavily-reused primitive, exceeding what a Tier C review pass should rush. **`HDN-386` reviewed this entry and formally hands it to `HDN-387`, not attempted here**: the fix requires auditing every OTHER connection type (webhook, GPS, third-party API) for the identical wrapper-bypass shape before choosing a fix that doesn't just patch the one known instance — genuine investigation-plus-design work, not a mechanical, already-proven-pattern repair like the two legal-hold bridges `HDN-386` did fix (`HDN-BLK-020`/`021`). Since a Critical can never be an accepted exception (§8.2 condition 1), this remains a hard Step 16 blocker until `HDN-387` closes it or a future checkpoint does |
+| **Required of `HDN-386`** | Decide and implement the fix shape; audit whether any other connection type's own specialized wrapper has the same bypass. **Handed to `HDN-387` with this exact scope, not decided here** |
 | **Regression test** | Required with the fix — must prove the direct-call path is closed while the legitimate wrapper-mediated path still works |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
 | **`KNOWN_ISSUES`** | `ISS-2026-235` (`OPEN`, Critical) |
@@ -712,8 +712,8 @@ disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md` `ISS-2026-225` (corrected).*
 | **Reachability** | Any actor holding the relevant module permission (`FIN:Approve`, `HRS:Approve`, or `SEC:Configure`) for the target tenant — all 61 functions confirmed `authenticated`-executable and TS-caller-reachable, not dead code |
 | **Reproduction** | Direct `pg_proc.prosrc` grep for a call to `assert_current_step_up_authorization`/`assert_ip_allowed` inside every function gating on one of the 3 tuples — 0 of 61 call either guard; sample TS callers confirmed for `approve_finance_invoice`, `close_finance_period`, `decide_overtime_request`, `set_mfa_tenant_policy`, `revoke_user_session`, `set_ip_allowlist_enforcement_mode` |
 | **Blast radius** | 32 Finance approval/posting/period-close functions, 22 HRIS approval functions, 7 platform Security-configuration functions (including the enforcement-mode togglers and bypass-grant self-service functions) across every tenant |
-| **Disposition** | **Registered, not fixed** — the fix shape (which of the 61 get step-up, IP-restriction, or both, bounded across 3 domains) is a real design decision, not a mechanical patch |
-| **Required of `HDN-386`** | Re-derive the full wiring plan for all 3 tuples, prioritizing `SEC:Configure` first given its "guard the guards" nature |
+| **Disposition** | **Registered, not fixed** — the fix shape (which of the 61 get step-up, IP-restriction, or both, bounded across 3 domains) is a real design decision, not a mechanical patch. **`HDN-386` reviewed this entry and formally hands it to `HDN-387`, not attempted here**: 61 functions across 3 domains (Finance, HRIS, platform Security) genuinely need a re-derived wiring plan, not a rushed pattern-copy — the identical judgment this checkpoint applied when choosing to fix the two small, mechanical legal-hold gaps (`HDN-BLK-020`/`021`) itself but hand off the large, design-heavy ones |
+| **Required of `HDN-386`** | Re-derive the full wiring plan for all 3 tuples, prioritizing `SEC:Configure` first given its "guard the guards" nature. **Handed to `HDN-387` with this exact scope, not decided here** |
 | **Regression test** | Required with each tuple's own fix, mirroring the `ISS-2026-150`/`151` fixture-adaptation shape |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
 | **`KNOWN_ISSUES`** | `ISS-2026-236` (`OPEN`, High) |
@@ -1132,8 +1132,51 @@ release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed
 by their named owner or explicitly ruled an accepted exception at
 `HDN-387`/`389`.
 
+---
+
+### `HDN-BLK-039` — 14 open blockers (12 High, 2 Medium) carry no real named owning lane, only "a dedicated future task"
+
+| Field | Value |
+|---|---|
+| **Title** | A full sweep of this ledger's own 32 currently-open entries found 14 (`HDN-BLK-027` through `038`, plus 2 Medium accessibility-architecture findings) whose "Owning lane" field reads "a dedicated future task" rather than a real Step 15 lane name — none silently dropped, each fully reproduced and blast-radius-measured, but none accountable to a checkpoint in this session's own numbered sequence |
+| **Found by** | `HDN-386` (`CG-S15-HDN-018`), Full-System Hardening Integrated Verification, blocker ledger reconciliation lens — independent full-ledger sweep, not a new technical investigation |
+| **Severity** | **High** — matches the severity class of the 12 High findings it describes; this is a meta-finding about accountability, not a new technical defect, but the business rule it violates ("any critical/high unowned blocker stops Step 16", `00_EXECUTION_INDEX.md` §24) is itself release-blocking |
+| **Owning phase** | Cross-cutting (spans Reliability, Migration, and Accessibility Assurance workstreams) |
+| **Owning lane** | `HDN-387` (Release Blocker Triage and Remediation) — this is squarely its own charter |
+| **Reachability** | N/A — a documentation/accountability gap, not a live exploit path |
+| **Reproduction** | Full read of `BLOCKER_LEDGER.md`'s 32 open entries, filtering "Owning lane" for non-`HDN-3xx` values: `HDN-BLK-027..038` (the `HDN-382`/`383`/`384`/`385`-found reliability/migration blockers) plus 2 accessibility-architecture Medium findings all read "a dedicated future task" |
+| **Blast radius** | Every one of the 14 findings' own remediation timelines — none currently has a committed owner or a scheduled fix |
+| **Disposition** | **Registered, not fixed** — assigning real remediation ownership across 3 domains is `HDN-387`'s own charter, not a bounded repair this checkpoint can perform |
+| **Required of `HDN-387`** | For each of the 14, either assign it to a genuine future task/phase with a real name, or formally accept it as a disclosed, time-bounded exception per §8.2's 5 conditions (High-severity findings are eligible for acceptance, unlike the 2 open Criticals) |
+| **Regression test** | N/A — a ledger/ownership correction, not a code fix |
+| **Rollback** | N/A — no code fix; this entry is a disclosure |
+| **`KNOWN_ISSUES`** | `ISS-2026-282` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-386` first round (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **33** — `HDN-386` opened `HDN-BLK-039` (High — 14 blockers carry no real owning lane). `ISS-2026-280`/`281`/`283` (Low/Medium) and `282` (folded into `HDN-BLK-039` above) are the checkpoint's own new findings |
+| Blockers closed **by** Step 15 to date | **2 classes + 3 single + 1 partial + 1 single** — `HDN-386` closed `HDN-BLK-020` (Critical) and `HDN-BLK-021` (High) at the root, a bounded repair scoped to the two specific reproducible legal-hold bypasses, deliberately not the larger `HDN-BLK-018` append-only-guard rollout they were originally bundled with |
+| — of which **Critical**, open | `HDN-BLK-023` (1, `HDN-BLK-020` closed this checkpoint) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-022`, `HDN-BLK-024`, `HDN-BLK-027..038`, `HDN-BLK-039` (23, `HDN-BLK-021` closed this checkpoint, `HDN-BLK-039` new this checkpoint) |
+| — of which **Medium**, still open | `HDN-BLK-003`, `004`, `006` (re-ruling required, see its own entry), `008`, `010` (narrowed), `014`, `025`, `026` (8, corrected from the previously-miscounted 9 — `HDN-BLK-005` was `RESOLVED` at `HDN-379` and never dropped from the running tally since, see `ISS-2026-283`) |
+| Unresolved **Critical** anywhere | **1** — `HDN-BLK-023`, owner `HDN-386` (formally handed to `HDN-387` this checkpoint with a concrete remediation scope — see `HDN-386.md` §6; a Critical may be handed off, it may never be accepted as risk per §8.2 condition 1) |
+| **`HDN-386`'s own charter items — first round** | Reconciled all Step 15 evidence to one compatible checkpoint (`d57ad0b`), re-ran the full Tier A gate suite fresh (all green, 330 migrations, `test:e2e` 34/34) and confirmed the CI-blindness gap by exact mechanism (`check-worktree-collision.test.ts` fails on every CI push, cascading to skip `security:audit`/secret-scan and 5 other governance steps — sharpens `HDN-BLK-007`, unchanged owner `HDN-387`). Fixed `HDN-BLK-020`/`021` at the root (bounded legal-hold bridge, not the larger append-only rollout). Corrected 3 pre-existing ledger inconsistencies found by its own reconciliation lens: `HDN-BLK-001`'s stale disposition text (never updated after `HDN-378`'s own Tier C correction), `HDN-BLK-006`'s procedurally-invalid self-acceptance (ruled on by the same lane that found it, violating §8.2 condition 5 — reclassified `DEFERRED_TO_HDN-387` pending a genuine re-ruling), and the stale Medium-open tally (`ISS-2026-283`). Backfilled a real evidence-propagation gap in `docs/runbooks/incident-response.md` §7 (a rehearsal `disaster-recovery.md` claimed was recorded there, never actually was) and corrected its own stale §4 resolution-order claim to match the already-established `ISS-2026-264` finding. 4 new findings registered (`ISS-2026-280..283`), 1 paired (`HDN-BLK-039`, High). `HDN-BLK-023`/`024` formally handed to `HDN-387` with concrete remediation scopes, not attempted here (genuine design decisions, not bounded repairs). Independent full gate: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5443/5443**; `pnpm exec next build` clean; `pnpm run test:e2e` **34/34**; `bash scripts/db-tests/run.sh` **229/229 files clean** (331 migrations, one additive migration this checkpoint) |
+
+`HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`,
+`HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,
+`HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`,
+`HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033`, `HDN-BLK-034`,
+`HDN-BLK-035`, `HDN-BLK-036`, `HDN-BLK-037`, `HDN-BLK-038` and `HDN-BLK-039`
+are open release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until
+fixed by their named owner or explicitly ruled an accepted exception at
+`HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-039` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-040` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

@@ -379,4 +379,65 @@ begin
 end;
 $$;
 
+\echo '>> HDN-386 (Full-System Hardening Integrated Verification) regression, closing HDN-BLK-020 (Critical): app.audit_logs.legal_hold (native) and a generic (IAE-031) app.legal_holds hold on scope app.audit_logs both now block physical deletion at the schema level, not just at the RPC layer -- and a raw DELETE with no session-bound actor (the exact bypass HDN-377''s own Tier C live-forced) is blocked outright'
+do $$
+declare
+  v_tenant_id uuid;
+  v_row_native app.audit_logs;
+  v_row_generic app.audit_logs;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmeaud');
+
+  -- Direction A: native flag, set via app.supreme_admin_mutate_audit_log, then a raw
+  -- DELETE with no session-bound actor (request.jwt.claims cleared, mirroring
+  -- document-file.sql''s own established pattern for this exact bypass shape) must be
+  -- blocked -- this is the schema-level backstop for a service_role write that never
+  -- goes through app.supreme_admin_delete_audit_log at all.
+  v_row_native := app.capture_audit_event(v_tenant_id, '00000000-0000-0000-0000-000000000803', 'supreme admin', 'hdn386_bridge_fixture_native', 'app.audit_logs', gen_random_uuid(), 'success', 'HDN-386 bridge regression fixture', null, null);
+  perform app.supreme_admin_mutate_audit_log('00000000-0000-0000-0000-000000000803', v_row_native.id, null, true, 'HDN-386 bridge regression', 'placing native hold');
+
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    delete from app.audit_logs where id = v_row_native.id;
+    raise exception 'assertion failed: expected a raw DELETE of a natively-held audit_logs row with no session-bound actor to be blocked, but it succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'audit_log_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  -- Direction B: a generic (IAE-031) hold placed on scope app.audit_logs (no native
+  -- flag ever set) must ALSO block a raw DELETE -- this is the read-side bridge in
+  -- app._is_under_legal_hold, not the native column.
+  v_row_generic := app.capture_audit_event(v_tenant_id, '00000000-0000-0000-0000-000000000803', 'supreme admin', 'hdn386_bridge_fixture_generic', 'app.audit_logs', gen_random_uuid(), 'success', 'HDN-386 bridge regression fixture', null, null);
+  perform app.request_legal_hold(v_tenant_id, 'audit_security', 'app.audit_logs', v_row_generic.id, 'HDN-386 bridge regression', '00000000-0000-0000-0000-000000000803', 'supreme admin');
+
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    delete from app.audit_logs where id = v_row_generic.id;
+    raise exception 'assertion failed: expected a raw DELETE of a generically-held (app.legal_holds) audit_logs row to be blocked, but it succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'audit_log_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  -- Direction C: RPD-022's disclosed residual risk is unchanged, not eliminated -- a
+  -- genuine Supreme Admin session may still override and physically delete a held row
+  -- (this codebase never claims audit records are immutable or tamper-proof). What
+  -- HDN-BLK-020 actually closes is the silence: the override must now leave a second,
+  -- distinct, honestly-labeled audit trace beyond app.supreme_admin_delete_audit_log's
+  -- own generic event.
+  perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000000803", "role": "authenticated"}', true);
+  perform app.supreme_admin_delete_audit_log('00000000-0000-0000-0000-000000000803', v_row_native.id, 'HDN-386 regression: deliberate Supreme Admin override of an active legal hold');
+  perform set_config('request.jwt.claims', 'null', true);
+
+  if not exists (
+    select 1 from app.audit_logs
+    where resource_type = 'app.audit_logs' and resource_id = v_row_native.id
+      and action = 'delete_legally_held_audit_log' and actor_label = 'supreme_admin_absolute_crud'
+  ) then
+    raise exception 'assertion failed: expected a distinct delete_legally_held_audit_log/supreme_admin_absolute_crud audit event capturing the Supreme Admin override, none found';
+  end if;
+end;
+$$;
+
 \echo 'ALL PLT-116 db-test assertions passed.'

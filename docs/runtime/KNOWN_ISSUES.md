@@ -2510,7 +2510,9 @@ inconsistent case. Regression-tested: mixed-case and whitespace-padded variants 
 correctly still match and block deletion; a non-qualified value is now loudly rejected
 at hold-creation time instead of silently accepted.
 
-### ISS-2026-229 — `app.audit_logs.legal_hold` is enforced nowhere: neither the native flag nor the generic (IAE-031) hold mechanism is checked before physical deletion, on the platform's own canonical audit trail (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, **Critical**, owner `HDN-386`, `HDN-BLK-020`)
+### ISS-2026-229 — `app.audit_logs.legal_hold` is enforced nowhere: neither the native flag nor the generic (IAE-031) hold mechanism is checked before physical deletion, on the platform's own canonical audit trail (found at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED` at `HDN-386`, was Critical, `HDN-BLK-020`)
+
+**`RESOLVED` at `HDN-386`** (Full-System Hardening Integrated Verification, `supabase/migrations/20260818000000_harden_integrated_verification_legal_hold_bridge.sql`) — a bounded repair scoped only to this specific reproducible bypass, deliberately NOT bundled with `HDN-BLK-018`'s own much larger systemic append-only-guard rollout (~90+ tables), which remains open, unchanged, owner `HDN-387`. `app._is_under_legal_hold()` now bridges `app.audit_logs` (mirroring the existing `app.files` bridge exactly); a new `app.protect_audit_logs_legal_hold_from_deletion` `BEFORE DELETE` trigger blocks physical deletion of a held row (native or generic) by any non-Supreme-Admin caller, including the exact raw `service_role` DELETE this finding live-forced. RPD-022's disclosed Supreme Admin absolute-CRUD override still works, but is now honestly and distinctly audited rather than silent. Regression: `scripts/db-tests/audit-trail.sql`, live-verified via a full `db-tests` run. Full disposition: `HDN-BLK-020` in `BLOCKER_LEDGER.md`, `HDN-386.md`.
 
 Found by the Tier C completeness-sweep lens while sweeping for more instances of
 `RECURRING_DEFECT_TAXONOMY.md` C-25 (the dual-mechanism-drift class this checkpoint's
@@ -2528,18 +2530,18 @@ the still-open `HDN-BLK-018`/`ISS-2026-205` finding (the general append-only-gua
 rollout gap), Supreme-Admin-reachable and self-serving since the same authority both
 sets and bypasses the hold.
 
-**Not this checkpoint's own charter to fix** — `app.audit_logs` is not a file/storage
-table, and reconciling its own legal-hold enforcement is squarely part of the
-already-registered, already-owned `HDN-BLK-018` guard-rollout work. **Severity:
-Critical** — the audit trail is the evidence store every other detective control in
-this codebase relies on; a Supreme-Admin-reachable, self-serving, live-forced physical
-deletion of held audit evidence is the most severe instance of the dual-mechanism-drift
-class found anywhere this checkpoint. **Not fixed here. Owner: `HDN-386`** (bundled
-with `HDN-BLK-018`'s own audit_logs guard-rollout work — the two invariants, append-only
-and legal-hold, should be added together, not as two separate passes over the same
-table). See `HDN-BLK-020` in `BLOCKER_LEDGER.md` for the full disposition.
+**Originally severity Critical** — the audit trail is the evidence store every other
+detective control in this codebase relies on; a Supreme-Admin-reachable, self-serving,
+live-forced physical deletion of held audit evidence was the most severe instance of
+the dual-mechanism-drift class found anywhere this checkpoint. Its own bundled
+suggestion to fold this fix into `HDN-BLK-018`'s much larger append-only-guard rollout
+was reconsidered at `HDN-386`: the two invariants are separable, and closing the
+specific Critical bypass did not need to wait on the larger, still-open rollout. See
+`HDN-BLK-020` in `BLOCKER_LEDGER.md` for the full disposition.
 
-### ISS-2026-230 — `app.tenants.legal_hold` is invisible to the generic (IAE-031) legal-hold mechanism in both directions, and no RPC exists to set the native flag at all (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, High, owner `HDN-386`)
+### ISS-2026-230 — `app.tenants.legal_hold` is invisible to the generic (IAE-031) legal-hold mechanism in both directions, and no RPC exists to set the native flag at all (found at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED` at `HDN-386`, was High)
+
+**`RESOLVED` at `HDN-386`** (Full-System Hardening Integrated Verification, `supabase/migrations/20260818000000_harden_integrated_verification_legal_hold_bridge.sql`), bundled with `ISS-2026-229`'s own bounded repair. `app._is_under_legal_hold()` now bridges `app.tenants` (mirroring the `app.files` bridge exactly), and `app.enforce_tenant_status_transition` now checks BOTH the native flag and the generic bridge before blocking termination — closing the direction that actually mattered operationally (a purely generic hold previously did not block termination at all, the exact live-forced reproduction below). Whether a dedicated RPC should exist to set the native flag going forward remains an open product decision, registered for `HDN-387`, not decided here. Regression: `scripts/db-tests/tenant-lifecycle.sql`, live-verified via a full `db-tests` run.
 
 Found by the Tier C completeness-sweep lens, live-forced, same sweep as `ISS-2026-229`.
 `app.tenants.legal_hold`'s own native trigger (`app.enforce_tenant_status_transition`)
@@ -2552,14 +2554,11 @@ tenant_status(..., 'terminated', ...)` **succeeded**, terminating a tenant under
 active generic legal hold. Same `RECURRING_DEFECT_TAXONOMY.md` C-25 class as `ISS-2026-
 217`, a different table.
 
-**Not this checkpoint's own charter to fix** — `app.tenants` is not a file/storage
-table. **Severity: High** — Supreme-Admin/service-role-reachable, no legitimate RPC
-path exists to set the native flag at all today, so the practical exposure is narrower
+**Originally severity High** — Supreme-Admin/service-role-reachable, no legitimate RPC
+path exists to set the native flag at all today, so the practical exposure was narrower
 than `ISS-2026-229`'s audit-log instance, but the failure mode (a tenant terminated
-mid-hold) is severe when it does occur. **Not fixed here. Owner: `HDN-386`** (bundled
-with the same C-25 reconciliation work `ISS-2026-217`/`229` name — a single pass should
-decide which of `app.tenants`/`app.audit_logs`/any other native-hold-shaped column gets
-bridged into `app.legal_holds`, rather than three separate one-table patches).
+mid-hold) was severe when it occurred. See `HDN-BLK-021` in `BLOCKER_LEDGER.md` for the
+full disposition.
 
 ### ISS-2026-231 — a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered before commit to conflict with an established, deliberate, already-tested repository pattern of a raw, session-context-free correction UPDATE (the disclosed RPD-022 residual-risk path), used in 4 other domains' own test suites (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, Medium, owner `HDN-386`)
 
@@ -2998,6 +2997,30 @@ Read the exact trigger definition (`supabase/migrations/20260729180000_create_fi
 Live-reproduced against a disposable database seeded through this checkpoint's own migration (`supabase/migrations/20260817000000_harden_employee_import_duplicate_swallow.sql`): staging 3 rows with `EMP-CASE-001`, `emp-case-001`, and `EMP-CASE-001 ` (trailing space) as explicit `employee_number` values in one job committed all 3 as separate `app.master_records`/`app.employees` rows — the job reported `completed`, 3 employees created. `master_records_tenant_code_unique` (`20260717120000_create_master_data.sql`) is a plain case-sensitive `btree` unique index on `(master_type_code, tenant_id, code)` with no normalization (no `lower()`/`trim()` functional index, no `citext`), so this checkpoint's own duplicate-swallow fix (which now correctly raises on an *exact* string collision) never triggers for a trivially-varied re-entry of the same logical employee number. This is a distinct gap from `ISS-2026-269` (which concerns rows with no explicit `employee_number` at all, relying on auto-generation) — this finding concerns rows that DO supply an explicit number, just not byte-identically.
 
 **Status `OPEN`**, Medium severity (a real, live-reproduced duplicate-record vector reachable by any authorized importer with no error or warning, but requiring only a trivial keystroke variation rather than a fully-blank field — narrower than `ISS-2026-269`'s always-triggers-on-reimport shape, so rated one tier below it). **Not fixed by this checkpoint** — the correct fix is a genuine design decision (normalize via a functional unique index on `lower(trim(code))`? reject non-canonical formats at validation time? both?) best made alongside `ISS-2026-269`'s own broader un-keyed-duplicate-detection fix, not in isolation. Owner: a dedicated future task, scoped alongside `ISS-2026-269`.
+
+### ISS-2026-280 — no performance/capacity runbook exists; `00_EXECUTION_INDEX.md` §11.4 named `HDN-379` as its owner, but `HDN-379` never created or mentioned one (found at `HDN-386` cross-lane consistency lens, `OPEN`, Low, owner `HDN-388`)
+
+Independently swept `docs/runbooks/` against `00_EXECUTION_INDEX.md` §11.4's own runbook checklist. Every other named runbook exists and carries real evidence from its named owner (security incident response/key rotation from `HDN-378`; backup/restore from `HDN-383`; disaster recovery from `HDN-384`; observability/alerting refreshed by `HDN-382`) — but no file under `docs/runbooks/` matches a performance/capacity shape, and `HDN-379.md` §10 (Documentation) makes zero mention of authoring or refreshing any runbook, only `KNOWN_ISSUES.md` updates. `HDN-379` (`CG-S15-HDN-011`, Performance and Scalability) is already `VERIFIED` and, per this session's own never-batch discipline, cannot be reopened to retroactively author one.
+
+**Status `OPEN`**, Low severity (a documentation-completeness gap, not a live control failure — the underlying performance work `HDN-379` did (the `rbac-enforcement.sql` O(n²) fix, the unindexed-FK triage) is real and evidenced in its own build log, just never distilled into an operational runbook). **Not fixed by this checkpoint** — authoring a genuine performance/capacity runbook (symptom/trigger, diagnosis steps, escalation) from `HDN-379`'s own already-real findings is real, scoped work, better done alongside `HDN-388`'s own charter (Documentation Handoff) than rushed here. Owner: `HDN-388`.
+
+### ISS-2026-281 — the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documented as performed in only 3 of 16 domain-audit build logs (found at `HDN-386` cross-lane consistency lens, `OPEN`, Medium, owner `HDN-387`)
+
+`00_EXECUTION_INDEX.md` §13's own carry-forward table requires "all lanes" to preserve the CI-mirrors-hosted property (extension schema and database-level `search_path` both) and names it a "cross-cutting Tier B review item." Swept all 16 build logs (`HDN-370.md` through `HDN-385.md`) for an explicit occurrence of this named check: only `HDN-370`, `HDN-371`, `HDN-372` contain it by name. `HDN-373` through `HDN-385` (13 of 16 lanes) contain zero occurrence of the named check, though several substantively engage the same property anyway without labeling it as such (`HDN-373` pins `search_path` on 95+ functions; `HDN-378`'s own lane is extension-schema relocation). No evidence of an actual regression was found — this is a gap in the *documented record* that the required check ran, not a confirmed divergence.
+
+**Status `OPEN`**, Medium severity (a real process-consistency gap in this session's own mandatory Tier B discipline, self-inflicted risk if a future checkpoint reintroduces the exact divergence class `ISS-2026-***`/the live-migration report already found once — silence on 13 of 16 lanes' own compliance is not proof of compliance). **Not fixed by this checkpoint** — retroactively editing 13 already-`VERIFIED` build logs to insert a check they may or may not have actually performed would be revisionist, not a genuine fix; the real remedy is a positive re-derivation of whether the property held across all 16 lanes' own diffs, which is exactly the kind of integrated-evidence work `HDN-387`/`389` are chartered for. Owner: `HDN-387`.
+
+### ISS-2026-282 — 14 open `BLOCKER_LEDGER.md` entries (12 High, 2 Medium) carry no named owning lane at all, only "a dedicated future task" (found at `HDN-386` blocker ledger reconciliation lens, `OPEN`, High, owner `HDN-387`)
+
+A full sweep of `BLOCKER_LEDGER.md`'s 32 currently-open entries found 14 (`HDN-BLK-027` through `038`, plus 2 Medium accessibility-architecture findings) whose "Owning lane" field reads "a dedicated future task" rather than a real Step 15 lane name. None were silently dropped — each carries full reproduction, blast radius, and "required of" text — but per `00_EXECUTION_INDEX.md` §12/business rule §24 ("any critical/high unowned blocker stops Step 16"), an unassigned owning lane on a High-severity finding is itself a structural gap, not merely an inconvenience: it means no checkpoint in this session's own numbered sequence is currently accountable for closing it.
+
+**Status `OPEN`**, High severity (matches the severity of the 12 High findings it describes — this is a meta-finding about accountability, not a new technical defect, but the business rule it violates is itself a release-blocking one). **Not fixed by this checkpoint** — assigning real remediation ownership to 14 findings spanning reliability, migration, and accessibility domains is squarely `HDN-387`'s own charter (Release Blocker Triage and Remediation), not a bounded repair. Owner: `HDN-387`.
+
+### ISS-2026-283 — `BLOCKER_LEDGER.md`'s own "Status as of" running tallies have overcounted open Medium-severity blockers by 1 since `HDN-379` closed `HDN-BLK-005`, `RESOLVED`, without ever being dropped from the `"HDN-BLK-003..006"` count (found at `HDN-386` blocker ledger reconciliation lens, `OPEN`, Low, owner `HDN-387`)
+
+`HDN-BLK-005` (Medium, matching `ISS-2026-145`) was marked `RESOLVED at HDN-379` — confirmed genuinely fixed and reconfirmed in `KNOWN_ISSUES.md`. But every "Status as of" table from `HDN-380` Tier C onward through `HDN-385` Tier C still lists Medium-open as `"HDN-BLK-003..006"`, silently re-counting the closed `005` as still open across 6 subsequent checkpoints' own tallies — a pure bookkeeping drift, not a re-opened defect (the underlying fix was never touched or reverted).
+
+**Status `OPEN`**, Low severity (a documentation-accuracy issue only — the true current Medium-open count is 8, not 9, as `HDN-386`'s own new "Status as of" section below states correctly). **Not fixed retroactively** — editing 6 prior checkpoints' own historical "Status as of" snapshots would misrepresent what each checkpoint actually stated at the time; the correct remedy is stating the true count going forward, done in this checkpoint's own section, and treating this as a standing reminder for `HDN-387`/`389` to hand-recount rather than trust a carried-forward figure. Owner: `HDN-387`.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.

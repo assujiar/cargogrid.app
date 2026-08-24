@@ -2,17 +2,59 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-017` — **Data Migration Rehearsal
-(Prompt 385)** — `VERIFIED`, Tier C closed. First round: three independent
-parallel investigation lenses (migration/import framework inventory and
-feasibility; a real, live migration rehearsal against a disposable
-Postgres; financial reconciliation and business-rule compliance review).
-**Corrected a seeded-state error**: the Import/Export Job Framework
-(`PLT-131`) is Phase 1 (Platform Core), not Phase 5 as `HARDENING_MATRIX.md`
-§16 originally seeded — Phase 5/6/7 modules are later consumers, not its
-origin. **The generic framework's full pipeline is real and live-tested**,
-via the only real domain-write adapter this checkpoint exercised
-end-to-end (`employee_import`): mapping → preview → validation → commit, a
+**Updated:** 2026-08-24 (`CG-S15-HDN-018` — **Full-System Hardening
+Integrated Verification (Prompt 386)** — `COMPLETED`, first round only,
+Tier C review pending. Three independent parallel investigation lenses
+(full compatible-checkpoint gate matrix + CI-blindness disposition;
+blocker ledger reconciliation; cross-lane consistency and completeness
+sweep) ran against the frozen checkpoint `d57ad0b` (`HDN-385`, `VERIFIED`).
+**Full Tier A gate suite re-run fresh, entirely green**: `typecheck` 0;
+`lint` 0 errors/337 warnings; `pnpm run test` 5443/5443; `bash
+scripts/db-tests/run.sh` ALL PASSED (229/229 files, 330 migrations at
+entry); `next build` clean; `pnpm run test:e2e` 34/34. No mixed-checkpoint
+evidence anywhere across the 16 domain-audit lanes. **CI-blindness gap
+confirmed by exact mechanism, not waved through**: `security:audit` has
+genuinely never executed in CI on any run, cascading from `HDN-BLK-007`'s
+already-tracked `check-worktree-collision.test.ts` failure; same
+disposition for `HDN-380`/`381`'s own axe-core/browser-device coverage
+(real and green locally, `Tracked gap` for CI confirmation) — `HDN-BLK-007`
+widened. **Fixed at the root, bounded**: `HDN-BLK-020` (Critical —
+`app.audit_logs.legal_hold` enforced nowhere) and `HDN-BLK-021` (High —
+`app.tenants` generic-hold bridge gap), both mirroring `HDN-377`'s own
+already-proven `app.files` legal-hold bridge pattern, deliberately
+narrower than `HDN-BLK-018`'s own much larger append-only-guard rollout
+(unchanged, owner `HDN-387`). **Formally handed to `HDN-387`, not
+attempted**: `HDN-BLK-023` (Critical) and `HDN-BLK-024` (High) — both
+genuine design decisions exceeding a bounded-repair pass. **3
+pre-existing ledger inconsistencies found and fixed**: `HDN-BLK-001`'s
+stale disposition text, `HDN-BLK-006`'s procedurally-invalid
+self-acceptance (violated §8.2 condition 5), a stale Medium-open tally.
+**1 evidence-propagation gap fixed**: `docs/runbooks/incident-response.md`
+§7 backfilled, plus a stale §4 resolution-order claim corrected. **4 new
+findings registered**: `ISS-2026-280` (Low, missing performance/capacity
+runbook), `ISS-2026-281` (Medium, CI-mirrors-hosted Tier B check
+documented in only 3/16 lanes), `ISS-2026-282`/`HDN-BLK-039` (High, 14
+blockers with no real owning lane), `ISS-2026-283` (Low, the stale-tally
+finding itself). One additive migration
+(`supabase/migrations/20260818000000_harden_integrated_verification_legal_hold_bridge.sql`),
+2 new db-test regression blocks. Independent full gate: `typecheck` 0;
+`lint` 0 errors/337 warnings; `pnpm run test` **5443/5443**; `pnpm exec
+next build` clean; `pnpm run test:e2e` **34/34**; `bash
+scripts/db-tests/run.sh` **229/229 files clean** (331 migrations, one
+additive migration this checkpoint). `CG-S15-HDN-018` first round
+`COMPLETED`; Tier C review required before `VERIFIED`.
+`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it.
+Not a production/pilot/GA/market-ready claim (RPD-001/034/036). Full
+detail: `docs/build-log/full-system-hardening/HDN-386.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-018` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-017` — **Data Migration Rehearsal
+(Prompt 385)** — `VERIFIED`, Tier C closed. Corrected a seeded-state error:
+the Import/Export Job Framework (`PLT-131`) is Phase 1 (Platform Core), not
+Phase 5 as `HARDENING_MATRIX.md` §16 originally seeded. **The generic
+framework's full pipeline is real and live-tested**, via the only real
+domain-write adapter this checkpoint exercised end-to-end
+(`employee_import`): mapping → preview → validation → commit, a
 real 7-row batch (valid/duplicate/formula-injection/missing-field cases),
 all correctly classified. **A real, live-reproduced defect found and
 fixed**: `app.commit_employee_import_job` silently swallowed a genuine
@@ -804,7 +846,7 @@ All rows are internal build/acceptance phases. No row alone authorizes external 
 | 7 | HRIS/Ticketing | **`VERIFIED` (`PHASE_7_VERIFIED`, closed 2026-08-16)** -- kickoff plus `CG-S12-HRT-001..025` (Prompts 273-297) all `VERIFIED`, spanning all 24 master capabilities (Employee Master, Organization/Position Linkage, Recruitment, Onboarding/Offboarding, Attendance, Shift/Roster, Leave/Permit/Business Trip, Overtime/Timesheet, Payroll Foundation, KPI/Performance, Training/Talent, ESS/MSS, Internal/Customer/Support Ticketing, SLA, Assignment, Escalation, Typed Links, Sensitive Data Controls, plus Integrated Verification/Hardening/Documentation/Closure), PLUS a dedicated out-of-band follow-up task (`CG-S12-HRT-ISS065-CLOSURE`, commit `fe1434f`, no source prompt number) that closed the sole item Prompt 297's own closure checkpoint found genuinely unmet -- `ISS-2026-065` (Employee Master effective-dated identity/lifecycle) -- independently re-verified firsthand by a dedicated finalization re-check (`CG-S12-HRT-025-FINALIZE`, 2026-08-16) rather than accepted on any report's word. `docs/adr/ADR-0023-*.md` resolves the `org_units` team-type gap (Part A, HRT-275) and ratifies employee-vs-user identity ownership (Part B, HRT-274). Full detail: `docs/build-log/phase-07/00_EXECUTION_INDEX.md` §31, `docs/build-log/phase-07/HRIS_TICKETING_CLOSURE_REPORT.md` §24 | 100% (25/25 WBS rows, plus the dedicated `ISS-2026-065` follow-up) | Phase 7 closed. Phase 8 (Customer Portal/Loyalty) is dependency-clean; Prompt 298 requires fresh, separate, explicit operator authorization |
 | 8 | Customer Portal/Loyalty | **`VERIFIED` (`PHASE_8_VERIFIED`, closed 2026-08-20)** -- kickoff plus `CG-S13-CPL-002..029` (Prompts 300-327) all `VERIFIED` -- 29/29 WBS rows resolved, zero Critical/High issue, 25 disclosed Medium/Low residuals each with a named owner. Full detail: `docs/build-log/phase-08/CUSTOMER_PORTAL_LOYALTY_CLOSURE_REPORT.md` | 100% (29/29 WBS rows) | Phase 8 closed. Step 14 (Intelligence, Automation and Enterprise Expansion, Phase 9) is dependency-clean; requires fresh, separate, explicit operator authorization before any work begins |
 | 9 | Intelligence/Enterprise | **`VERIFIED` (`PHASE_9_VERIFIED`, closed 2026-08-22)** -- kickoff plus all 34 capabilities (`CG-S14-IAE-002..035`, Prompts 330-363) and all four Group 9 closure prompts (`CG-S14-IAE-036..039`, Prompts 364-367) `VERIFIED` -- 39/39 WBS rows resolved, zero unresolved Critical issue. One High-severity residual (`ISS-2026-150`, IP-restriction universal wiring -- a repository-wide, cross-phase gap predating Phase 9 at Platform Core/RPD-023) explicitly and transparently ruled an accepted, first-of-its-kind exception to this repository's own zero-Critical/High closure precedent, full reasoning at `docs/build-log/phase-09/INTELLIGENCE_ENTERPRISE_CLOSURE_REPORT.md` §2; 10 further Medium/Low residuals each disclosed with a named owner. Full detail: `docs/build-log/phase-09/INTELLIGENCE_ENTERPRISE_CLOSURE_REPORT.md` | 100% (39/39 WBS rows) | Phase 9 closed. Step 15 (Full-System Hardening) is dependency-clean; requires fresh, separate, explicit operator authorization before any work begins |
-| 15 | Full-system hardening | **`IN_PROGRESS` (`FULL_SYSTEM_HARDENING_IN_PROGRESS`, set 2026-08-23 at `CG-S15-HDN-001`, Prompt 369, WBS Runtime Kickoff)** — **this row was found stale at `HDN-384`'s own Tier C ledger-consistency review (last resynced at `HDN-374`, 9 checkpoints prior) and is now resynced to current state; treat this file's own top "Updated:" block (§1) and `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` as the authoritative, continuously-current source of truth for this row going forward, not a hand-maintained narrative here.** 21-row WBS built (`CG-S15-HDN-001..021`, Prompts 369-389); **row re-touched at `HDN-385`'s own Tier C close (tally/blocker-count only — full narrative still deferred to §1's own top block and `00_EXECUTION_INDEX.md` per this row's own standing disclaimer above)**: 1 `COMPLETED` (the kickoff), 4 `BLOCKED`, 0 `READY`, 16 `VERIFIED` (`CG-S15-HDN-002` through `017`, Prompts 370-385 — Full Regression, Cross-Module Transactional Integrity, Tenant Isolation Audit, RLS and RBAC Audit, Financial Integrity Audit, Data Lineage Audit, API Compatibility Audit, Storage and Signed URL Audit, Security Hardening, Performance and Scalability, Accessibility Audit, Browser and Device Compatibility, Observability Audit, Backup and Restore, Disaster Recovery Rehearsal, Data Migration Rehearsal — full detail for each in `00_EXECUTION_INDEX.md`'s own WBS table and `HARDENING_MATRIX.md` §1-§16). `AGENTS.md` names this range in its **never batch** list: one prompt per session, each with its own full Tier A + Tier B + Tier C treatment, and no later prompt may begin until the current one is `VERIFIED`. 38 blockers now tracked (`HDN-BLK-001..038`, current status/tally in `BLOCKER_LEDGER.md`'s own latest "Status as of" section). Zero unresolved Critical anywhere except the 2 already-owned residuals (`HDN-BLK-020`/`023`, owner `HDN-386`). `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set; only Prompt 389 may set it, and it is not a production/pilot/GA/market-ready claim. Full detail: `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` | 76% (16 of 21 WBS rows `VERIFIED`; 1 `COMPLETED`) | `HDN-385` (Data Migration Rehearsal) `VERIFIED`; `HDN-386` (Integrated Verification) next; Step 16 gated on Prompt 389 |
+| 15 | Full-system hardening | **`IN_PROGRESS` (`FULL_SYSTEM_HARDENING_IN_PROGRESS`, set 2026-08-23 at `CG-S15-HDN-001`, Prompt 369, WBS Runtime Kickoff)** — **this row was found stale at `HDN-384`'s own Tier C ledger-consistency review (last resynced at `HDN-374`, 9 checkpoints prior) and is now resynced to current state; treat this file's own top "Updated:" block (§1) and `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` as the authoritative, continuously-current source of truth for this row going forward, not a hand-maintained narrative here.** 21-row WBS built (`CG-S15-HDN-001..021`, Prompts 369-389); **row re-touched at `HDN-386`'s own first round (tally/blocker-count only — full narrative still deferred to §1's own top block and `00_EXECUTION_INDEX.md` per this row's own standing disclaimer above)**: 2 `COMPLETED` (the kickoff; `CG-S15-HDN-018`/`HDN-386` Full-System Hardening Integrated Verification — first round only, Tier C pending), 3 `BLOCKED`, 0 `READY`, 16 `VERIFIED` (`CG-S15-HDN-002` through `017`, Prompts 370-385 — full detail for each in `00_EXECUTION_INDEX.md`'s own WBS table and `HARDENING_MATRIX.md` §1-§16). `AGENTS.md` names this range in its **never batch** list: one prompt per session, each with its own full Tier A + Tier B + Tier C treatment, and no later prompt may begin until the current one is `VERIFIED`. 39 blockers now tracked (`HDN-BLK-001..039`, current status/tally in `BLOCKER_LEDGER.md`'s own latest "Status as of" section — `HDN-BLK-020`/`021` closed this checkpoint). Zero unresolved Critical anywhere except 1 already-owned residual (`HDN-BLK-023`, formally handed to `HDN-387` this checkpoint). `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set; only Prompt 389 may set it, and it is not a production/pilot/GA/market-ready claim. Full detail: `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` | 76% (16 of 21 WBS rows `VERIFIED`; 2 `COMPLETED`) | `HDN-386` (Full-System Hardening Integrated Verification) `COMPLETED`, Tier C pending; Step 16 gated on Prompt 389 |
 | 16 | RC and Go-live | `NOT_STARTED` | 0% | after hardening `VERIFIED` |
 
 ## 4. Workstream status
