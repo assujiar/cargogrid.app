@@ -547,22 +547,46 @@ Full disposition: `HDN-374.md` §13.3, `KNOWN_ISSUES.md` `ISS-2026-199`.*
 
 ---
 
+## HDN-BLK-018 — the append-only-guard pattern `HDN-BLK-017`'s own sibling finding (`ISS-2026-201`) applied to one table is genuinely needed on roughly 70 more tables schema-wide, including `app.audit_logs` itself
+
+*Found at `HDN-375`'s own Tier C review (2026-08-24), same checkpoint, by the
+completeness-sweep lens. Full disposition: `HDN-375.md` §13.2, `KNOWN_ISSUES.md`
+`ISS-2026-205`.*
+
+| Field | Value |
+|---|---|
+| **Title** | Only 13 tables in the entire `app` schema carry a real `BEFORE UPDATE/DELETE` append-only guard trigger. At minimum ~70 more tables are documented as append-only/immutable/"never updated, never deleted" or are functionally an audit/event/ledger/history table by name and role, carry no such guard, and have `service_role` holding live `UPDATE`/`DELETE` grants — genuinely reachable, not merely a naming-pattern match already protected by revoked grants |
+| **Found by** | `HDN-375` (`CG-S15-HDN-007`), Data Lineage Audit, Tier C completeness-sweep lens — live-forced via direct `pg_trigger`/`information_schema.role_table_grants` queries against a fresh disposable database, not a grep sweep alone |
+| **Severity** | **High** — the same vulnerability class already rated High for one table (`ISS-2026-201`), now shown to span a materially larger, more central surface. Most severe live-forced instance: `app.audit_logs` itself — the canonical, tenant-wide audit trail every `app.capture_audit_event()` call writes to, including `ISS-2026-201`'s own new exception-path evidence — freely `UPDATE`/`DELETE`-able by `service_role` with zero guard, despite already having its own RPC-level Supreme-Admin discipline (`app.supreme_admin_mutate_audit_log`/`app.supreme_admin_delete_audit_log`, RPD-022) with no schema-level backstop. Second: `app.inventory_movements`, the exact table CPL-325's own migration header already disclosed as not covered, still unguarded |
+| **Owning phase** | Cross-cutting — spans Platform Core (`audit_logs`), Advanced TMS/WMS (`inventory_movements` and ~15 more), Finance, Commercial, Operations, HRIS, Procurement, Customer Portal/Loyalty, and Phase 9 domains |
+| **Owning lane** | Registered by `HDN-375`; owned by `HDN-386` (Full-System Hardening Integrated Verification) — blanket-applying an append-only guard to ~70 tables is behavior-RESTRICTING (unlike a validation trigger, which can never block a legitimate write), so each table needs its own legitimate-write-path audit before a guard can be safely added, mirroring the one-table-at-a-time discipline CPL-325 and this checkpoint's own Finding 1 already used — a genuinely larger undertaking than one Tier C session's own bounded-repair budget |
+| **Reachability** | Any `service_role`-mediated write (i.e. any `SECURITY DEFINER` function, or a compromised service-role key) against any of the ~70 unguarded tables |
+| **Reproduction** | Live-forced against `app.audit_logs`: `SET ROLE service_role; INSERT ...; UPDATE ... SET reason='TAMPERED...', result='success'; DELETE ...` — all three succeeded silently. Live-forced against `app.inventory_movements`: insert, then `UPDATE`/`DELETE` both succeeded with no error. Full table list and catalogue-query method: `HDN-375.md` §13.2 |
+| **Blast radius** | Every one of the ~70 tables' own historical and future rows, until each is individually audited and fixed — most significantly, every other detective/audit-based control in this codebase (including `HDN-BLK-017`'s own sibling fix, `ISS-2026-201`) that relies on `app.audit_logs` as its evidence of record |
+| **Disposition** | **Registered, not fixed.** `ISS-2026-201`'s own single-table fix (this checkpoint's first round) is not extended to any of these ~70 tables |
+| **Required of `HDN-386`** | Audit and fix each table individually, prioritized by centrality and reachability — `app.audit_logs` first, given every other detective control's own dependency on it, followed by the ranked remainder; for each, confirm no legitimate non-Supreme-Admin UPDATE/DELETE call path exists before adding the guard, exactly as CPL-325/`ISS-2026-201` already did one table at a time |
+| **Regression test** | Required with each table's own fix — a live-forced proof mirroring `ISS-2026-201`'s own regression blocks (no-actor-context and ordinary-staff denial, genuine Supreme Admin override with audit capture) |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-205` (`OPEN`, High) |
+
+---
+
 ## Status as of `HDN-375` (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 to date | **11** — `HDN-375`'s own investigation opened `HDN-BLK-017` (High, registered not fixed) |
-| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged from `HDN-374`'s own close (`HDN-BLK-017` is newly registered, not closed) |
-| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017` (5) |
+| Blockers opened **by** Step 15 to date | **12** — `HDN-375`'s own first round opened `HDN-BLK-017` (High, registered not fixed); its own Tier C review opened `HDN-BLK-018` (High, registered not fixed). Its Tier C review also registered a further Medium finding, `ISS-2026-206` (orphan-`source_id` gap recurring on `finance_subledger_batches` and others), which did not receive its own ledger entry — Medium, non-systemic-scale, no release-blocker designation, matching this ledger's own established convention (e.g. `ISS-2026-186`/`197`) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged from `HDN-374`'s own close (`HDN-BLK-017`/`018` are newly registered, not closed) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018` (6) |
 | — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged) |
 | Unresolved **Critical** anywhere | **0** |
 
-`HDN-BLK-013`, `HDN-BLK-016` and `HDN-BLK-017` are open release blockers for Step 16 per
-`00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly ruled an accepted
-exception at `HDN-387`/`389`.
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017` and `HDN-BLK-018` are open release blockers
+for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or
+explicitly ruled an accepted exception at `HDN-387`/`389`.
 
 ## Reserved
 
-`HDN-BLK-018` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-019` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

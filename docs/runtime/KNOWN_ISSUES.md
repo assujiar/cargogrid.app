@@ -1759,6 +1759,101 @@ checkpoints have used for out-of-lane defects found incidentally (`ISS-2026-163`
 direct half-open-interval day-span computation that cannot invert regardless of the
 window's own start/end hour alignment.
 
+### ISS-2026-205 — the append-only-guard pattern `ISS-2026-201` applied to `app.transaction_lineage_edges` is genuinely needed on roughly 70 more tables schema-wide, including `app.audit_logs` itself (found at `CG-S15-HDN-007`'s own Tier C review, `OPEN`, High, owner `HDN-386`, ledger `HDN-BLK-018`)
+
+Found by this checkpoint's own Tier C completeness-sweep lens, live-forced against a
+fresh disposable database via direct `pg_trigger`/`information_schema.role_table_grants`
+queries, not a grep sweep alone. Only 13 tables in the entire `app` schema carry a real
+`BEFORE UPDATE/DELETE` append-only guard trigger (the 5 CPL-325 loyalty tables,
+`transaction_lineage_edges` fixed by this checkpoint's own first round, plus
+`claim_items`/`inventory_reservations`/`leads`/`master_records`/`prospects`/`resource_
+assignments`). At minimum ~70 more tables are documented (by table comment) as
+append-only/immutable/"never updated, never deleted," or are functionally an
+audit/event/ledger/history table by name and role, carry no such guard, AND have
+`service_role` holding live `UPDATE`/`DELETE` grants (i.e. genuinely reachable, not
+merely naming-pattern matches already protected by revoked grants).
+
+**Most severe instance, live-forced: `app.audit_logs` itself** — the canonical, tenant-
+wide audit trail every `app.capture_audit_event()` call in the entire codebase writes
+to, including this checkpoint's own new `transaction_lineage_edges` guard's own exception-
+path evidence. `SET ROLE service_role; INSERT ...; UPDATE ... SET reason='TAMPERED',
+result='success'; DELETE ...` all succeeded silently, zero guard. This table already has
+its own RPC-level Supreme-Admin discipline (`app.supreme_admin_mutate_audit_log`/`app.
+supreme_admin_delete_audit_log`, both gating on `app.is_supreme_admin`, RPD-022) but no
+schema-level backstop at all — the identical "RPC discipline, not schema" gap class
+`ISS-2026-202` closed for `loyalty_earning_events`/`finance_journals`, now shown to apply
+to the audit trail those RPCs themselves are supposed to be the sole legitimate path to.
+Second most severe: `app.inventory_movements` — "the canonical, append-only inventory
+movement header" (ATW-015 comment), and the exact table CPL-325's own migration header
+already disclosed as not covered; still unguarded. ~68 further tables confirmed via
+catalogue query, full list in the Tier C completeness-sweep transcript (`docs/build-log/
+full-system-hardening/HDN-375.md` §13.2) — includes `finance_ap_open_item_events`,
+`finance_ar_open_item_events`, `finance_period_lock_events`, `webhook_delivery_
+attempts`, `wms_pick_task_confirmations`, and dozens more.
+
+**Severity: High, systemic** — the same vulnerability class already rated High for one
+table (`ISS-2026-201`), now shown to span a materially larger, more central surface,
+including the audit trail every other detective control in this codebase (including
+`ISS-2026-201`'s own fix) depends on as its evidence of record.
+
+**Not fixed here.** Unlike `ISS-2026-201`'s own single-table fix, blanket-applying an
+append-only guard to ~70 tables is behavior-RESTRICTING (unlike a validation trigger,
+which only ever blocks writes referencing something that never legitimately exists) — it
+risks breaking any table among the 70 that has even one legitimate non-Supreme-Admin
+UPDATE/DELETE call path this checkpoint has not individually verified. That verification
+(a per-table legitimate-write-path audit, the same discipline CPL-325 and this
+checkpoint's own Finding 1 already applied one table at a time) is a genuinely larger
+undertaking than this Tier C session's own bounded-repair budget, not a rushed blanket
+migration. **Owner: `HDN-386`** (Integrated Verification) — `app.audit_logs` should be
+the first table audited and fixed given its centrality, followed by the ranked remainder.
+Ledger: `HDN-BLK-018`.
+
+### ISS-2026-206 — the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up the same lineage chains (found at `CG-S15-HDN-007`'s own Tier C review, `OPEN`, Medium, owner `HDN-387`)
+
+Found independently by two of this checkpoint's own four Tier C lenses (correctness
+re-derivation and completeness sweep), converging on the same gap by different methods.
+`app.finance_subledger_batches.source_id` — the exact table `finance_journals`'s own new
+`ISS-2026-202` guard validates a `source_type='subledger'` row's `source_id` against —
+has the identical gap one hop upstream: live-forced as `service_role`, a direct
+`insert into app.finance_subledger_batches (..., source_type, source_id, ...) values
+(..., 'invoice', gen_random_uuid(), ...)` succeeds with a `source_id` matching no real
+`app.finance_invoices` row. This measurably weakens `ISS-2026-202`'s own fix: a
+`finance_journals` row can pass the brand-new guard while pointing at a fabricated
+subledger batch, still lineage-less at its actual root. The same shape also recurs on
+`app.finance_bank_transactions.matched_source_id` (its `app.match_finance_bank_
+transaction` gate whitelists `matched_source_type` but never resolves `matched_source_
+id`) and, by code-shape inspection, `app.inventory_movements.source_id`/`app.inventory_
+reservations.source_id` (Advanced TMS/WMS domain).
+
+**Investigated for a same-checkpoint fix and found NOT bounded-repair-sized for
+`finance_subledger_batches` specifically**, unlike `ISS-2026-202`'s own two tables: a
+validation-trigger fix mirroring `ISS-2026-202`'s own proven pattern was drafted, then
+discovered — before being shipped — to break `scripts/db-tests/finance-subledger.sql`'s
+own pre-existing, extensive test design, which deliberately exercises `app.post_finance_
+subledger_batch` in isolation from real upstream document creation across roughly 15 call
+sites, passing synthetic/non-resolving `source_id` values (`gen_random_uuid()` or a fixed
+placeholder UUID) on purpose to test the posting primitive's own idempotency/concurrency
+mechanics, not real lineage. Applying the naive fix would have broken this established,
+legitimate test pattern — caught and self-corrected before commit, the fix draft
+discarded rather than shipped with a broken test suite or a hastily rewritten one. Fixing
+this properly requires either reworking that test file's own fixture design to pass real
+resolvable ids throughout, or a considered design decision about whether DB-layer
+resolution enforcement is even the right layer for a table whose own tests treat it as an
+isolated posting primitive — a genuine open question, not a same-session bounded repair.
+`finance_bank_transactions.matched_source_id`'s own real callers live in the application/
+API layer (TypeScript), not SQL migrations, so verifying them is a separate, wider audit
+this SQL-focused checkpoint did not do. `inventory_movements`/`inventory_reservations`
+were only code-shape-inspected, not live-forced or call-site-audited.
+
+**Severity: Medium** — same class as the already-fixed `ISS-2026-202` (a structural
+absence, mitigated in practice since no legitimate RPC path is known to insert an
+unresolvable id, not a live-forced exploit against real application behavior). **Not
+fixed here. Owner: `HDN-387`.** Fix shape once owned: for each table, first establish
+(via a real call-site/fixture audit, not a grep alone) whether every legitimate caller
+already passes a resolvable id, THEN add the same `BEFORE INSERT OR UPDATE` validation
+trigger pattern — updating any test fixture that currently relies on a synthetic
+non-resolving id to use a real one, rather than working around the new guard.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
