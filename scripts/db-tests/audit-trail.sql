@@ -440,4 +440,62 @@ begin
 end;
 $$;
 
+\echo '>> HDN-386 Tier C regression, closing the attack-surface lens' own live-reproduced gap: a raw UPDATE of a held app.audit_logs row (clearing legal_hold itself, or nulling before_value/after_value/reason) is now blocked at the schema level, not just the physical DELETE path -- the exact UPDATE-then-DELETE bypass the first round''s own DELETE-only trigger missed'
+do $$
+declare
+  v_tenant_id uuid;
+  v_row_native app.audit_logs;
+  v_row_generic app.audit_logs;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmeaud');
+
+  -- Direction A: a raw UPDATE clearing the native legal_hold flag itself must be
+  -- blocked -- this is the exact move that, before this fix, silently defeated the
+  -- DELETE trigger for a follow-up DELETE.
+  v_row_native := app.capture_audit_event(v_tenant_id, '00000000-0000-0000-0000-000000000803', 'supreme admin', 'hdn386_tierc_fixture_native', 'app.audit_logs', gen_random_uuid(), 'success', 'HDN-386 Tier C regression fixture', null, null);
+  perform app.supreme_admin_mutate_audit_log('00000000-0000-0000-0000-000000000803', v_row_native.id, null, true, 'HDN-386 Tier C regression', 'placing native hold');
+
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    update app.audit_logs set legal_hold = false where id = v_row_native.id;
+    raise exception 'assertion failed: expected a raw UPDATE clearing legal_hold on a held row to be blocked, but it succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'audit_log_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  -- Direction B: a raw UPDATE nulling out the row's own informational content
+  -- (before_value/after_value/reason) must also be blocked, whether the hold is
+  -- native or generic -- content corruption, not just outright deletion, is the
+  -- attack-surface lens's own headline finding.
+  v_row_generic := app.capture_audit_event(v_tenant_id, '00000000-0000-0000-0000-000000000803', 'supreme admin', 'hdn386_tierc_fixture_generic', 'app.audit_logs', gen_random_uuid(), 'success', 'HDN-386 Tier C regression fixture', null, null);
+  perform app.request_legal_hold(v_tenant_id, 'audit_security', 'app.audit_logs', v_row_generic.id, 'HDN-386 Tier C regression', '00000000-0000-0000-0000-000000000803', 'supreme admin');
+
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    update app.audit_logs set before_value = null, after_value = null, reason = 'CORRUPTED' where id = v_row_generic.id;
+    raise exception 'assertion failed: expected a raw UPDATE nulling a generically-held row''s own content to be blocked, but it succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'audit_log_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  -- Direction C: confirm the flag genuinely never cleared and the row survives a
+  -- follow-up DELETE attempt too -- the full original attack chain is closed end to
+  -- end, not just its first step.
+  perform 1 from app.audit_logs where id = v_row_native.id and legal_hold = true;
+  if not found then
+    raise exception 'assertion failed: expected the native row''s own legal_hold flag to remain true after the blocked UPDATE attempt';
+  end if;
+  begin
+    delete from app.audit_logs where id = v_row_native.id;
+    raise exception 'assertion failed: expected the follow-up DELETE to still be blocked (the flag was never actually cleared), but it succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'audit_log_legal_hold_blocks_deletion' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', 'null', true);
+end;
+$$;
+
 \echo 'ALL PLT-116 db-test assertions passed.'
