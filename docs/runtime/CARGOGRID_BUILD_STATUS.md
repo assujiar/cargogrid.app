@@ -2,7 +2,54 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-019` — **Release Blocker Triage and
+**Updated:** 2026-08-24 (`CG-S15-HDN-020` — **Documentation Handoff (Prompt
+388)** — `COMPLETED`, first round only, Tier C review pending. Pure
+documentation reconciliation — **zero code, zero migration, zero schema
+change**, the first Step 15 checkpoint of this kind. 3 independent parallel
+investigation lenses (runbook completeness audit; ledger/matrix
+reconciliation and Step 16 eligibility; RPD-disclosure and handoff-package
+audit) confirmed all 19 prior checkpoints `VERIFIED`, no RPD-021/022/023/
+025/032/033/038/040 contradiction anywhere, no production/pilot/GA/
+market-ready claim anywhere. **Found real documentation-synchronization
+gaps, all closed this round**: `HARDENING_MATRIX.md` missing its own §18/
+§19 narrative sections for `HDN-386`/`HDN-387` — added; no `docs/runtime/
+RELEASE_READINESS_MATRIX.md` anywhere — authored (new); `HANDOFF.md`
+reading only as a chronological per-checkpoint log with no explicit Step 16
+go/no-go section — added (§0); 2 genuinely missing/thin runbooks
+(performance/capacity, on-call ownership) per the `00_EXECUTION_INDEX.md`
+§11.4 checklist — authored, closing `ISS-2026-280`; the migration re-run
+guard statement buried in another runbook's prose with no dedicated home —
+consolidated into `docs/runbooks/deployment-migration-guard.md`; a stale
+runbook catalogue in `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.5 —
+reconciled with a dated note, closing `ISS-2026-262`; `docs/runbooks/
+README.md` authored as the new authoritative runbook index. **2 stale
+`BLOCKER_LEDGER.md` entries corrected, zero code**: `HDN-BLK-001` (High) —
+its own blocking dependency, `HDN-BLK-023`, closed at `HDN-387`; this
+entry's text was never revisited, corrected `RESOLVED`. `HDN-BLK-004`
+(Medium) — `HDN-378` already relocated 2 of 3 extensions and registered
+`ISS-2026-234` for the non-relocatable `postgis` remainder; corrected to
+`PARTIALLY RESOLVED`. **The load-bearing finding, disclosed not fixed (no
+ruling authority at this checkpoint)**: 5 open High blockers (`HDN-BLK-016`/
+`017`/`018`/`022`/`024`) whose owning checkpoints have all since closed
+`VERIFIED` without a formal §8.2 disposition — per §8.2 condition 5, only
+`HDN-387` or `HDN-389` may make that ruling, and `HDN-387` is closed; handed
+to `HDN-389` explicitly as the only remaining authority, alongside
+`FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md`'s own authorship (does not exist
+yet, Step 16 eligibility condition 5, `HDN-389`'s own deliverable, not
+`HDN-388`'s). **`RELEASE_READINESS_MATRIX.md`'s own explicit go/no-go
+recommendation: NO-GO for Step 16, as of `HDN-388`** — expected, not a
+setback; only `HDN-389` may ever set `FULL_SYSTEM_HARDENING_VERIFIED`.
+Gates re-run in full despite the documentation-only scope, per this
+session's own standing discipline that "docs-only" is never assumed safe
+without verification: `typecheck` 0; `lint` 0 errors/337 warnings;
+`pnpm run test` **5444/5444** (unchanged); `pnpm exec next build` clean;
+`bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations,
+unchanged) — every number matches `HDN-387`'s own Tier C close exactly, as
+expected for a checkpoint that touched zero code. **`CG-S15-HDN-020` first
+round `COMPLETED`.** Tier C review required before `VERIFIED`. Full
+disposition: `docs/build-log/full-system-hardening/HDN-388.md`.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-019` — **Release Blocker Triage and
 Remediation (Prompt 387)** — `VERIFIED`, Tier C closed. 3 independent
 parallel investigation lenses ran against the open
 blocker backlog from `HDN-386`'s own `VERIFIED` state. Selected 7 bounded
