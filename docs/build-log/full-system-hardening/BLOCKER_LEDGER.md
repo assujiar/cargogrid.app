@@ -1070,8 +1070,69 @@ by their named owner or explicitly ruled an accepted exception at
 `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly
 ruled an accepted exception at `HDN-387`/`389`.
 
+### `HDN-BLK-037` — auto-generated-employee-number import rows have zero duplicate detection on a fresh re-import; a live-reproduced real duplicate person record
+
+| Field | Value |
+|---|---|
+| **Title** | `app.commit_employee_import_job` never populates `app.employee_duplicate_candidates`; an un-keyed row (no explicit `employee_number` supplied) gets a fresh auto-generated code on every re-import, so a genuine re-run of the same source file silently creates a duplicate employee record with zero error, zero skip, zero flag |
+| **Found by** | `HDN-385` (Data Migration Rehearsal), live migration rehearsal execution lens, live-reproduced |
+| **Severity** | **High** — the single most consequential defect this checkpoint's own live rehearsal found; silently doubles a real person's HR record on an ordinary, foreseeable operational event |
+| **Owning phase** | Phase 7 (HRIS, `HRT-274`, `app.employees`/`app.employee_duplicate_candidates`); the gap itself is exposed by Step 15's own migration-rehearsal charter |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | Reachable by any tenant performing an ordinary, legitimate re-import of the same source file (e.g. a retry after an unrelated partial failure, or an intentional re-upload) |
+| **Reproduction** | Live-proved: re-ran an identical un-keyed row ("Citra Amelia," no `employee_number`) in a brand-new job — 2 employee rows created (`EMP-2026-000001`/`EMP-2026-000002`), identical name/email, no error/skip/flag anywhere |
+| **Blast radius** | Every tenant's own employee master data, for any import lacking an explicit external employee-number key |
+| **Disposition** | **Registered, not fixed** — designing the right identity-matching heuristic (work_email? full_name+DOB? fuzzy match?) is a real HR-domain design decision, not a mechanical copy of the already-proven, already-fixed explicit-number-collision pattern (this checkpoint's own fix, `20260817000000_harden_employee_import_duplicate_swallow.sql`) |
+| **Required of the owning task** | Wire `app.flag_employee_duplicate_candidate` into `app.commit_employee_import_job` with an explicit, reviewed matching rule for un-keyed rows |
+| **Regression test** | A db-test proving a re-import of an identical un-keyed row is flagged, not silently duplicated, once the matching rule is built |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-269` (`OPEN`, High) |
+
+---
+
+### `HDN-BLK-038` — no bulk financial opening-balance import path exists at all; the one domain requiring "exact reconciliation" has no batch mechanism and never reaches the GL journal
+
+| Field | Value |
+|---|---|
+| **Title** | `app.post_finance_ar_open_item()`/`app.post_finance_ap_open_item()` are real, idempotent single-record RPCs with no staging/mapping/preview/batch wrapper anywhere; `FIN-202.md` self-discloses an `opening_balance`-sourced item never emits a subledger batch, so it never reaches the GL journal, and `FIN-202`'s own reconciliation excludes these items rather than breaking on them |
+| **Found by** | `HDN-385` (Data Migration Rehearsal), financial reconciliation + business-rules lens and live migration rehearsal execution lens, both independently confirming |
+| **Severity** | **High** — business rule (Prompt 385 §24) explicitly requires "financial opening balances require exact reconciliation"; there is today no bulk path to test at a real cutover, and even the single-record path cannot be called "exactly reconciled" in the full double-entry sense |
+| **Owning phase** | Phase 4 (Finance, `FIN-202`/`FIN-209`); the bulk-import gap itself is cross-cutting, exposed by Step 15's own migration-rehearsal charter |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | Reachable by any real tenant cutover requiring bulk historical AR/AP opening balances — no CargoGrid-provided tooling exists for this today |
+| **Reproduction** | Live-proved: 3 `post_finance_ar_open_item` calls reconciled exactly at the open-items level (USD 19250.50, SGD 9999.99, 3 items); `app.finance_subledger_batches` confirmed at 0 rows for these postings, matching `FIN-202`'s own disclosed gap directly rather than assuming it |
+| **Blast radius** | Every tenant's own AR/AP opening-balance cutover, plus the identical bespoke, disconnected-from-`PLT-131` pattern in Inventory and HRIS opening/cutover balances |
+| **Disposition** | **Registered, not fixed** — building a real bulk pipeline (wiring `PLT-131` to these domains' own single-record primitives, plus closing `FIN-202`'s own disclosed GL gap) is a substantial feature addition, outside this checkpoint's own documentation-only charter |
+| **Required of the owning task** | Build a staging/preview/batch wrapper around the existing single-record opening-balance RPCs, and close the subledger-batch gap so opening balances reach the GL journal |
+| **Regression test** | A db-test proving a bulk opening-balance import reconciles exactly at both the open-items AND GL-journal level |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-273` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-385` first round (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **32** — `HDN-385` opened `HDN-BLK-037` (High — auto-generated-employee-number rows have zero duplicate detection) and `HDN-BLK-038` (High — no bulk financial opening-balance import path exists). `ISS-2026-270`/`272`/`274`/`275` (Medium) and `ISS-2026-271`/`276`/`277`/`278` (Low) remain `KNOWN_ISSUES.md`-only |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged from `HDN-384`'s own close |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`, `HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033`, `HDN-BLK-034`, `HDN-BLK-035`, `HDN-BLK-036`, `HDN-BLK-037`, `HDN-BLK-038` (22, 2 new this checkpoint) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9, unchanged) |
+| Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
+| **`HDN-385`'s own charter items — first round** | `docs/runbooks/data-migration-rehearsal.md` authored (new) — the generic Import/Export Job Framework (`PLT-131`, Phase 1, correcting a wrong Phase-5 attribution in `HARDENING_MATRIX.md` §16) and its `employee_import` adapter live-rehearsed end-to-end. A real, live-found duplicate-swallowing defect fixed (`supabase/migrations/20260817000000_harden_employee_import_duplicate_swallow.sql`, mirroring an already-proven fix pattern from a sibling adapter). 10 findings registered (`ISS-2026-269..278`), 2 High paired with new blockers above: no master-data/tenant-setup import, no bulk opening-balance path (self-disclosed GL gap confirmed live), no safe reference-table import path, `finance_journals_protect_posted` never fires on INSERT (same root cause as `HDN-384`'s own `ISS-2026-265`), no migration-rehearsal tracking mechanism (mirrors `ISS-2026-258`'s shape), no lineage vocabulary for migrated records, legal-hold not a generic write guard, no MFA gate on import-commit RPCs, rollback residue |
+
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
+`HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,
+`HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`,
+`HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033`, `HDN-BLK-034`,
+`HDN-BLK-035`, `HDN-BLK-036`, `HDN-BLK-037` and `HDN-BLK-038` are open
+release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed
+by their named owner or explicitly ruled an accepted exception at
+`HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-037` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-039` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

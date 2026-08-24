@@ -2,7 +2,56 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-016` — **Disaster Recovery Rehearsal
+**Updated:** 2026-08-24 (`CG-S15-HDN-017` — **Data Migration Rehearsal
+(Prompt 385)** — `COMPLETED`, first round only, Tier C review pending.
+Three independent parallel investigation lenses (migration/import framework
+inventory and feasibility; a real, live migration rehearsal against a
+disposable Postgres; financial reconciliation and business-rule compliance
+review). **Corrected a seeded-state error**: the Import/Export Job
+Framework (`PLT-131`) is Phase 1 (Platform Core), not Phase 5 as
+`HARDENING_MATRIX.md` §16 originally seeded — Phase 5/6/7 modules are later
+consumers, not its origin. **The generic framework's full pipeline is real
+and live-tested**, via the only real domain-write adapter this checkpoint
+exercised end-to-end (`employee_import`): mapping → preview → validation →
+commit, a real 7-row batch (valid/duplicate/formula-injection/missing-field
+cases), all correctly classified. **A real, live-reproduced defect found
+and fixed**: `app.commit_employee_import_job` silently swallowed a genuine
+`employee_number` collision instead of surfacing it — the identical defect
+class an earlier commit already found and fixed in a sibling adapter
+(`app.commit_vendor_rate_import_job`, PRC-255), simply never applied here.
+Fixed this checkpoint
+(`supabase/migrations/20260817000000_harden_employee_import_duplicate_swallow.sql`),
+mirroring the proven pattern exactly, with a new db-test regression in
+`scripts/db-tests/hris-employee-master.sql`. **10 findings registered, not
+fixed, each with a named owner**: `ISS-2026-269`/`HDN-BLK-037` (High — no
+duplicate detection at all for un-keyed rows on a fresh re-import, a real,
+more severe, live-reproduced duplicate-person record distinct from the
+fixed defect); `ISS-2026-273`/`HDN-BLK-038` (High — no bulk financial
+opening-balance import path exists anywhere, self-disclosed to never reach
+the GL journal, confirmed live); `ISS-2026-270` (Medium — no safe
+import/registration path for migration-seeded reference tables);
+`ISS-2026-272` (Medium — no mechanism tracks migration-rehearsals-completed
+for enterprise tenants, mirroring `ISS-2026-258`'s own shape); `ISS-2026-274`
+(Medium — no master-data or tenant-setup bulk-import mechanism exists
+anywhere); `ISS-2026-275` (Medium — `app.finance_journals_protect_posted`
+never fires on INSERT, the same root cause as `HDN-384`'s own
+`ISS-2026-265`); `ISS-2026-271` (Low — manual rollback residue);
+`ISS-2026-276` (Low — no migration source-type vocabulary in Finance's
+lineage model); `ISS-2026-277` (Low — legal-hold enforcement is
+single-call-site only); `ISS-2026-278` (Low — no MFA gate on import-commit
+RPCs). No Critical finding anywhere. Authored `docs/runbooks/
+data-migration-rehearsal.md` (new). Independent full gate: `typecheck` 0
+(unchanged); `lint` 0 errors/337 warnings (unchanged); `pnpm run test`
+**5443/5443** (unchanged); `pnpm exec next build` clean (unchanged); `bash
+scripts/db-tests/run.sh` **229/229 files clean** (330 migrations, one
+additive migration this checkpoint). `CG-S15-HDN-017` first round
+`COMPLETED`; Tier C review required before `VERIFIED`.
+`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it.
+Not a production/pilot/GA/market-ready claim (RPD-001/034/036). Full
+detail: `docs/build-log/full-system-hardening/HDN-385.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-017` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-016` — **Disaster Recovery Rehearsal
 (Prompt 384)** — `VERIFIED`, Tier C closed. First round: 3 independent
 parallel investigation lenses (scenario definition and sandbox feasibility;
 a real, live DR drill against a disposable Postgres; communication/

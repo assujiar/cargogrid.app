@@ -42,7 +42,7 @@ from zero and no lane rediscovers a known item.
 | 13 | Observability | `HDN-382` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Live-reproduced headline finding: IAE-030's own real, well-built alerting/incident schema had zero real production callers anywhere — a job reaching terminal `dead_letter` produced zero incident before this checkpoint. Fixed: `app.record_job_failure`'s dead-letter transition now raises a real, deduplicated alert; `/api/health`/`/api/ready` built (did not exist despite a runbook falsely claiming otherwise); 2 stale/false runbook references corrected. No Critical or High finding at either round. `ISS-2026-249` (High, every other failure producer still unwired, widened at Tier C with 2 more concrete instances) and `ISS-2026-250` (High, no monitoring dashboard UI exists anywhere) each now paired with a `HDN-BLK-` entry (`027`/`028`); `ISS-2026-251` (Medium, no escalation/dispatch mechanism), `ISS-2026-252` (Low, stale standards-doc framing), `ISS-2026-253` (Low, `/api/ready`'s own unlogged failure path, found at Tier C). A wrong "231/231" db-test count (corrected to 229/229) and a misplaced Result blockquote (moved from §12 to this section) fixed at Tier C. `ISS-2026-155`/`152` independently re-verified live, both accurate, unchanged | §13 |
 | 14 | Backup / restore | `HDN-383` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Live-executed and measured: schema/structure recovery via full migration replay (~44-46s, 3 runs, 0 errors); row-level data recovery via a real `pg_dump`/`pg_restore` cycle (~11.6s, 0 errors, object/row counts, job state, and RLS all verified identical pre/post-restore); teardown-batching constraint reproduced and corrected (stale "~1,400 objects" figure updated with real current counts and a tested batching strategy); `auth.users`/`users_pkey` collision reproduced live. 1 real footgun found (`pg_dump --no-owner --no-privileges` silently strips RLS-supporting grants). **Tier C found 5 real, live-reproduced gaps in the runbook's own safety claims/procedures, all corrected directly in the runbook** (not merely disclosed, since a false safety claim in a runbook is itself a hazard): a false "secrets as references only" claim (`ISS-2026-257`/`HDN-BLK-031`, High — plaintext values verified to survive dump/restore); the security-state-reversion risk widened from legal-holds-only to API-key/webhook revocation and user/membership suspension (`ISS-2026-254` widened, `HDN-BLK-029`); an incomplete RLS-preservation claim now scoped to same-migration-version restores with mandatory catch-up replay; a new target-role precondition (missing roles silently drop all RLS policies); an interrupted-teardown resume gap now documented. No defect found in the live-measured mechanics themselves — all first-round timings independently reproduced. 3 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-254` (High, widened, paired `HDN-BLK-029`), `ISS-2026-255` (High, `TRACKED_GAP`, paired `HDN-BLK-030`, Storage/Auth/hosted-project restore untested, structurally infeasible in this sandbox), `ISS-2026-256` (Medium, RPO/RTO defaults never operationally confirmed on the real project), `ISS-2026-257` (High, paired `HDN-BLK-031`, plaintext secrets in backups, no encryption-at-rest) | §14 |
 | 15 | Disaster recovery rehearsal | `HDN-384` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Data corruption and security incident scenarios live-rehearsed; major outage/provider failure tabletop-only, disclosed. First round: a real bug found and fixed in `database-restore.md`'s own composed in-place restore procedure (80 silent errors). **Tier C found 7 more real gaps, all corrected directly in the runbooks**: the `TRUNCATE` step itself silently bypasses 9 security/integrity triggers with zero audit trail (`ISS-2026-265`/`HDN-BLK-034`, High); session revocation in the incident-response flow confirmed inert, never enforced anywhere (`ISS-2026-264`/`HDN-BLK-035`, High); materialized views never restored by `pg_restore --data-only` (`ISS-2026-266`, Medium, new required step); no mutual-exclusion for concurrent restore attempts (`ISS-2026-267`/`HDN-BLK-036`, High); `ISS-2026-263` re-scoped from an unreproduced anomaly to a confirmed, root-caused defect (Medium); 2 nuance corrections (`ISS-2026-259`/`261`); RTO corrected from a single figure to a measured range. No Critical finding anywhere. 3 findings unchanged from the first round: `ISS-2026-258`/`HDN-BLK-032` (High, no DR communication mechanism), `ISS-2026-260` (Medium), `ISS-2026-262` (Low), plus `ISS-2026-268` (Low, new — `app.files` DR-drill coverage gap now tracked) | §15 |
-| 16 | Data migration rehearsal | `HDN-385` | `NOT_RUN` | §16 |
+| 16 | Data migration rehearsal | `HDN-385` **`COMPLETED`** | **`PARTIAL`** — first round, not a pass, Tier C review pending. The generic Import/Export Job Framework (`PLT-131`, Phase 1) and its `employee_import` adapter live-rehearsed end-to-end; a real duplicate-swallowing defect found and fixed, mirroring an already-proven sibling-adapter fix. 10 findings registered, not fixed: `ISS-2026-269`/`HDN-BLK-037` (High, no duplicate detection for un-keyed rows), `ISS-2026-273`/`HDN-BLK-038` (High, no bulk opening-balance path), `ISS-2026-270`/`272`/`274`/`275` (Medium), `ISS-2026-271`/`276`/`277`/`278` (Low) | §16 |
 | X | **Cross-cutting: CI-mirrors-hosted** | **all lanes** | `PASS` at kickoff | §17 |
 
 ---
@@ -1195,12 +1195,48 @@ release gate.
 |---|---|---|
 | Real precedent | **306/306 migrations applied cleanly to a real hosted project**, ledger in sync — the strongest single piece of migration evidence this repository has | Cite it; do not re-derive it |
 | Non-idempotency | §14 item 2 applies | Rollback/rerun idempotency must be tested honestly against it |
-| Mapping, preview, validation, duplicate handling | Import/Export Job Framework (Phase 5) | Exercise |
+| Mapping, preview, validation, duplicate handling | Import/Export Job Framework (`PLT-131`, built at **Phase 1 — Platform Core**, not Phase 5 as originally seeded here — corrected at `HDN-385`'s own investigation; Phase 5/6/7 modules are later consumers/adopters of it, not its origin) | Exercise |
 | Commit + reconcile counts/totals/files/lineage | — | Rehearsal environment only |
 | Do not fabricate historical data | ratified | Hard rule |
 | **`HDN-384`'s own durable findings, forward-linked at Tier C (added — schema-wide completeness sweep lens found this dimension row was missing entirely)** | The Docker-daemon-absent-entirely sandbox constraint (§15 item 1, a firmer version of §11's own `runc`/`RLIMIT_NOFILE` constraint) will almost certainly recur — do not rediscover it from scratch. The TRUNCATE-before-restore / migration-seeded-PK-collision defect class (`database-restore.md` §4 item 4, `ISS-2026-265`) is directly relevant to this checkpoint's own "duplicate handling" dimension above — the identical shape (migration-seeded rows colliding with imported/restored rows on PK) is a plausible failure mode for a data-migration rehearsal too, test for it explicitly rather than assuming import tooling is immune. Never trust `pg_restore`'s exit code or an "N errors ignored" summary as a pass signal — verify row counts per table | Cite and test against, do not re-derive |
 
 **Upstream:** `HDN-371`, `HDN-384` (for the durable sandbox/restore-mechanics findings named above — `HDN-384` itself is not a hard dependency for this checkpoint's own charter, but its findings are directly relevant and should not be silently rediscovered).
+
+> **Result (`HDN-385` first round, `COMPLETED`, Tier C pending):** Three
+> independent investigation lenses (migration/import framework inventory and
+> feasibility; a real, live migration rehearsal executed against this
+> sandbox's own disposable Postgres; financial reconciliation and
+> business-rule compliance review), each required to live-force its own
+> claims. **Real precedent correction**: the Import/Export Job Framework
+> (`PLT-131`) was seeded here as Phase 5 in error — corrected to Phase 1,
+> Platform Core; Phase 5/6/7 modules are later consumers, not its origin.
+> **The generic framework's full pipeline is real and live-tested**, via the
+> only adapter this checkpoint exercised end-to-end (`employee_import`):
+> mapping → preview → validation → commit, a real 7-row batch (valid/
+> duplicate/formula-injection/missing-field cases), all correctly
+> classified. **1 real, live-reproduced defect found and fixed**: a genuine
+> `employee_number` collision was silently swallowed instead of surfaced —
+> the identical defect class an earlier commit already found and fixed in a
+> sibling adapter (`app.commit_vendor_rate_import_job`, PRC-255), simply
+> never applied to `employee_import`. Fixed this checkpoint
+> (`supabase/migrations/20260817000000_harden_employee_import_duplicate_swallow.sql`),
+> mirroring the proven pattern exactly, with a new db-test regression.
+> **10 findings registered, not fixed, each with a named owner**:
+> `ISS-2026-269`/`HDN-BLK-037` (High — auto-generated-employee-number rows
+> have zero duplicate detection on a fresh re-import, a real live-reproduced
+> duplicate person record); `ISS-2026-273`/`HDN-BLK-038` (High — no bulk
+> financial opening-balance import path exists at all, and the single-record
+> path self-discloses never reaching the GL journal, confirmed live);
+> `ISS-2026-270` (Medium — no safe import path for migration-seeded
+> reference tables); `ISS-2026-272` (Medium — no migration-rehearsal
+> tracking mechanism, mirrors `ISS-2026-258`'s own shape); `ISS-2026-274`
+> (Medium — no master-data or tenant-setup bulk-import mechanism exists
+> anywhere); `ISS-2026-275` (Medium — `finance_journals_protect_posted`
+> never fires on INSERT, the same root cause as `HDN-384`'s own
+> `ISS-2026-265`, reached via a migration-realistic INSERT instead of
+> `TRUNCATE`); `ISS-2026-271`/`276`/`277`/`278` (Low). No Critical finding
+> anywhere. Authored `docs/runbooks/data-migration-rehearsal.md` (new).
+> Full disposition: `HDN-385.md`.
 
 ---
 

@@ -827,6 +827,75 @@ begin
 end;
 $$;
 
+\echo '>> HDN-385 (Data Migration Rehearsal) fix regression: a genuine explicit employee_number collision (two rows in the same batch) now aborts the whole commit with a loud, named error instead of silently swallowing the duplicate and reporting status=completed as if nothing were wrong'
+do $$
+declare
+  v_tenant1 uuid;
+  v_staff uuid;
+  v_job app.jobs;
+  v_source_file app.files;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_created_before integer;
+  v_created_after integer;
+  v_raised boolean := false;
+begin
+  select id into v_tenant1 from app.tenants where slug = 'hrmemp1';
+  select auth_user_id into v_staff from app.users where email = 'staff@hrmemp1.test';
+
+  v_source_file := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-dup.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-dup-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file.id, 'clean', null, v_staff, 'staff');
+
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file.id, '{}'::jsonb, 'idem-empimport-dup-job-1', v_staff, 'staff');
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-DUP-001', 'full_name', 'Duplicate Row One', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job.job_id and row_number = 1;
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-DUP-001', 'full_name', 'Duplicate Row Two', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job.job_id and row_number = 2;
+
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+
+  select count(*) into v_created_before from app.employees where tenant_id = v_tenant1 and full_name in ('Duplicate Row One', 'Duplicate Row Two');
+  if v_created_before <> 0 then
+    raise exception 'assertion failed: expected zero pre-existing rows for this test''s own fixture names, found %', v_created_before;
+  end if;
+
+  begin
+    perform app.commit_employee_import_job(v_job.job_id, true, v_staff, 'staff');
+    raise exception 'assertion failed: expected employee_import_duplicate_employee_number to abort the commit, but it reported success';
+  exception
+    when others then
+      if sqlerrm like 'employee_import_duplicate_employee_number%' then
+        v_raised := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected the duplicate-employee_number exception branch to have been taken';
+  end if;
+
+  -- The whole commit is one transaction (job-scoped advisory lock, HDN-385's
+  -- own fix comment) -- the entire attempt must roll back cleanly, not leave
+  -- the first row silently committed while the second was rejected.
+  select count(*) into v_created_after from app.employees where tenant_id = v_tenant1 and full_name in ('Duplicate Row One', 'Duplicate Row Two');
+  if v_created_after <> 0 then
+    raise exception 'assertion failed: expected zero employees committed after an aborted duplicate-collision commit (all-or-nothing), found %', v_created_after;
+  end if;
+
+  -- The job itself must not be silently marked completed by the failed attempt.
+  if (select status from app.jobs where job_id = v_job.job_id) = 'completed' then
+    raise exception 'assertion failed: expected the job to remain in_progress after an aborted commit, not completed';
+  end if;
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth (ERR-2026-004): anon holds no direct table/EXECUTE access to any new employee object; authenticated has RLS-scoped SELECT but no direct INSERT/UPDATE/DELETE; app.validate_employee_import_row is service_role-only (ATW-032''s own live rbac-enforcement.sql gate independently proves the transitive-authority half of this); CRITICAL fix regression -- authenticated''s SELECT on app.employees/app.employee_emergency_contacts/app.employee_change_requests is column-scoped, never full-row (this checkpoint''s own review-round fix, PLT-114''s exact established pattern)'
 do $$
 declare
