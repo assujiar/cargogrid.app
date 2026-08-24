@@ -654,9 +654,21 @@ begin
     where n.nspname = 'app' and p.prokind = 'f'
   ),
   edge as (
-    select c.proname as caller, e.proname as callee
-    from fn c join fn e on c.oid <> e.oid
-    where c.def ~ ('\mapp\.' || e.proname || '\s*\(')
+    -- ISS-2026-145 (HDN-379): rewritten from an O(n^2) fn x fn self-join (one regex
+    -- match per PAIR, ~2,700^2 pairs at current scale, 15-20+ minutes) to an O(n) pass
+    -- extracting every app.<name>( call from each function's own definition once, then
+    -- joining on proname -- mirrors the identical technique already used unmodified in
+    -- this same file's own ATW-032/ISS-2026-033 sibling block above (the `edge as
+    -- (select f.proname caller, m[1] callee from fn f, regexp_matches(f.prosrc, ...)`
+    -- shape). Only edge construction changes; the covered/closure recursive walk below
+    -- is untouched, so multi-hop transitive coverage (a function that calls a helper
+    -- that calls another helper that finally reaches evaluate_permission) is preserved
+    -- exactly. Verified via a same-schema matched-pair run (original vs rewrite, one
+    -- disposable database, no rebuild in between) that both produce an identical
+    -- verdict before this migration landed -- see HDN-379.md.
+    select f.proname as caller, m[1] as callee
+    from fn f, regexp_matches(f.def, 'app\.([a-z0-9_]+)\s*\(', 'g') m
+    where m[1] <> f.proname
   ),
   covered(proname) as (
     select proname from fn where proname in ('evaluate_permission', 'assert_actor_is_session_identity')

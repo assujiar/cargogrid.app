@@ -2,7 +2,56 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-010` — **Security Hardening (Prompt 378)** —
+**Updated:** 2026-08-24 (`CG-S15-HDN-011` — **Performance and Scalability
+(Prompt 379)** — `COMPLETED`, first round only, Tier C review pending. Four
+independent parallel investigation lenses covered `scripts/db-tests/rbac-
+enforcement.sql`'s ATW-032 O(n²) scan performance; the 892 `unindexed_foreign_keys`
+advisory triage; load/performance-test evidence; and the `auth_rls_initplan`
+regression guard plus API-response-boundedness/cross-tenant-cache verification.
+**`ISS-2026-145` (the O(n²) scan) is `RESOLVED`**: the `edge` CTE rewritten from an
+`fn c join fn e` self-join (one regex evaluation per PAIR) to a one-pass
+`regexp_matches()` extraction (one regex evaluation per FUNCTION), mirroring this
+same file's own sibling ATW-032/`ISS-2026-033` pattern unmodified — only edge
+construction changed, the `covered` recursive CTE's own multi-hop
+transitive-closure walk untouched, so the invariant proved is unweakened.
+**Verified with a same-schema matched-pair run**, not a before/after comparison
+across two separate database builds: original and rewritten queries both executed
+in the same transaction, against one 2,700-function disposable database — original
+**692,092.8ms** (~11.5 min), rewrite **556.4ms**, verdicts byte-identical,
+**1244× speedup**. Full 229-file suite re-run clean. **892 `unindexed_foreign_keys`
+advisories categorized and deferred** (`ISS-2026-239`, Low): a 4-bucket decision
+framework built from a 24-FK sample across 7 domains — zero high-confidence "index
+now" candidates found (every hot column already has a serving composite index;
+cold candidates are write-only/audit-lineage columns on high-write-volume tables
+where speculative indexing would be pure write-amplification), deferred pending
+real production query telemetry that does not exist anywhere in this system yet.
+**`auth_rls_initplan` regression guard re-verified clean** (582 policy statements,
+236 call sites, zero regression since the original 65-migration fix); 1
+informational blind spot documented (`ISS-2026-240`, Low) — a `default auth.uid()`
+helper-function pattern, 73 occurrences across ~40 migrations, structurally
+invisible to text-grep-based tooling by construction, the repository's own
+convention since day one, not a regression. **1 genuine new finding**: `listAccounts`,
+`listQuotationsForTenant`, and `listCustomerContracts` each load an entire
+tenant-wide dataset to the browser with zero pagination, live-verified via real
+`EXPLAIN (ANALYZE, BUFFERS)` evidence — self-disclosed only in a code comment
+before this checkpoint, never promoted to `KNOWN_ISSUES.md` (`ISS-2026-238`,
+Medium, ~10 lower-severity siblings named). Existing `scripts/load-tests/` harness
+re-confirmed live and green (8/8 scenarios, real p50/p95/p99 evidence);
+`ISS-2026-141`/`148`'s own overall evidence-gap ruling reconfirmed unchanged. No
+unbounded API response, no cross-tenant cache key gap, no queue-backpressure gap
+found — all verified clean. **No Critical or High finding anywhere.** Full gate:
+`typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5443/5443**
+(unchanged); `bash scripts/db-tests/run.sh` **229/229 files clean** (328
+migrations, unchanged — zero migrations this checkpoint). One test-infrastructure
+file changed (`scripts/db-tests/rbac-enforcement.sql`). **`CG-S15-HDN-011` is
+`COMPLETED`, not `VERIFIED`** — Tier C review has not yet run; nothing after it may
+begin until it closes and this row moves to `VERIFIED`. `FULL_SYSTEM_HARDENING_
+VERIFIED` is not set; only Prompt 389 may set it. Not a production/pilot/GA/
+market-ready claim (RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-379.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-011` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-010` — **Security Hardening (Prompt 378)** —
 `VERIFIED`, Tier C closed. Four independent parallel adversarial lenses (correctness
 re-derivation; schema-wide completeness sweep; ledger/documentation consistency;
 attack-surface adversarial testing) ran against the first-round commit (`ca7f300`).

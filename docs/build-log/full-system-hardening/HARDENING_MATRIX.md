@@ -654,13 +654,59 @@ release gate.
 
 | # | Item | Seeded state | Required |
 |---|---|---|---|
-| 1 | **`rbac-enforcement.sql`'s `pg_proc` catalogue scan** — walks every function in `app` calling `pg_get_functiondef()`. At ~2,900 functions it **already exceeds a remote statement timeout**, takes 15–20+ minutes standalone (`ISS-2026-145`), and grows with the schema | `OPEN` | **Scope the scan** before it bites CI. It passes locally today; that is the last thing that is true about it |
-| 2 | **892 `unindexed_foreign_keys` advisories** | `OPEN`, explicitly deferred | **An owner-named decision, not a defect.** A design question needing real query patterns. **Neither drop them nor blindly index.** Record the decision and its owner |
+| 1 | **`rbac-enforcement.sql`'s `pg_proc` catalogue scan** — walks every function in `app` calling `pg_get_functiondef()`. At ~2,900 functions it **already exceeds a remote statement timeout**, takes 15–20+ minutes standalone (`ISS-2026-145`), and grows with the schema | `OPEN` | **Scope the scan** before it bites CI. It passes locally today; that is the last thing that is true about it — **`RESOLVED`.** O(n²) self-join rewritten to a one-pass extraction, matched-pair verified byte-identical, 1244× speedup — see Result below. |
+| 2 | **892 `unindexed_foreign_keys` advisories** | `OPEN`, explicitly deferred | **An owner-named decision, not a defect.** A design question needing real query patterns. **Neither drop them nor blindly index.** Record the decision and its owner — **Categorized and deferred with a real decision framework, `ISS-2026-239`** — see Result below. |
 | 3 | 982 `unused_index` advisories | noise | The database has served no queries. Not actionable until it has |
-| 4 | 157 `auth_rls_initplan` warnings | **FIXED** — `auth.uid()` → `(select auth.uid())` at 228 call sites in 171 policy statements across 65 migrations | Regression-guard: a new policy using a bare `auth.uid()` reintroduces the class |
-| 5 | Load/perf evidence | **`ISS-2026-141`** (Phase 8) and **`ISS-2026-148`** (Phase 9): zero load/performance-test evidence exists for any route or RPC at declared target volume | Seeded here. This gate cannot pass on assertion |
-| 6 | p95, query count, payload size, job duration, queue depth, cache behavior | — | Measure or register a tracked gap |
-| 7 | No `SELECT *` in transactional APIs, no browser-loaded full dataset, no unbounded export/report/import/AI workload, no unsafe cross-tenant cache | ratified | Verify |
+| 4 | 157 `auth_rls_initplan` warnings | **FIXED** — `auth.uid()` → `(select auth.uid())` at 228 call sites in 171 policy statements across 65 migrations | Regression-guard: a new policy using a bare `auth.uid()` reintroduces the class — **Re-verified clean, zero regression** (582 policy statements checked); 1 informational blind spot documented (`ISS-2026-240`). |
+| 5 | Load/perf evidence | **`ISS-2026-141`** (Phase 8) and **`ISS-2026-148`** (Phase 9): zero load/performance-test evidence exists for any route or RPC at declared target volume | Seeded here. This gate cannot pass on assertion — **Reconfirmed unchanged, still deferred**; existing `scripts/load-tests/` harness re-confirmed live and green (8/8 scenarios), new `EXPLAIN` evidence gathered for 9 endpoints — see Result below. |
+| 6 | p95, query count, payload size, job duration, queue depth, cache behavior | — | Measure or register a tracked gap — **Done, real evidence gathered** — see Result below. |
+| 7 | No `SELECT *` in transactional APIs, no browser-loaded full dataset, no unbounded export/report/import/AI workload, no unsafe cross-tenant cache | ratified | Verify — **Verified. 1 genuine finding**: 3 routes load an entire tenant dataset with zero pagination (`ISS-2026-238`). Everything else (APIs, cache, queues) held clean. |
+
+**Upstream hard gate:** `HDN-372..378` all `VERIFIED`.
+
+> **Result (`HDN-379`, Prompt 379, Performance and Scalability):** the checkpoint's
+> own highest-priority item, `ISS-2026-145` (the O(n²) `rbac-enforcement.sql` scan,
+> 15-20+ minutes standalone), is `RESOLVED` — the `edge` CTE inside the
+> ATW-032/`ISS-2026-032` block rewritten from an `fn c join fn e` self-join to a
+> one-pass `regexp_matches()` extraction, mirroring this same file's own sibling
+> ATW-032/`ISS-2026-033` pattern unmodified. Only edge construction changed; the
+> `covered` recursive CTE's own multi-hop transitive-closure walk is byte-identical,
+> so the invariant proved is unweakened. **Verified with a same-schema matched-pair
+> run**, not a before/after comparison across two separate builds: original
+> 692,092.8ms (~11.5 min), rewrite 556.4ms, verdicts byte-identical, **1244×
+> speedup**. Full 229-file suite re-run clean, `ALL PASSED`. **892
+> `unindexed_foreign_keys` advisories categorized and deferred** (`ISS-2026-239`):
+> 4-bucket decision framework built from a 24-FK sample across 7 domains — zero
+> high-confidence "index now" candidates found (every hot column already has a
+> serving composite index; cold candidates are write-only/audit-lineage columns on
+> high-write-volume tables where speculative indexing would be pure
+> write-amplification), deferred pending real production query telemetry that does
+> not exist anywhere in this system yet. **`auth_rls_initplan` regression guard
+> re-verified clean**: 582 policy statements, 236 `auth.*()` call sites, zero bare
+> calls, no regression since the original 65-migration fix; 1 informational blind
+> spot documented (`ISS-2026-240`) — a `default auth.uid()` helper-function pattern,
+> 73 occurrences across ~40 migrations, invisible to text-grep-based tooling by
+> construction, not a regression, the repository's own convention since day one.
+> **Load/performance evidence**: the existing `scripts/load-tests/` harness
+> (Phase 5/`CG-S10-ATW-024` scope) re-confirmed live, all 8 scenarios pass with real
+> measured p50/p95/p99 latencies; new `EXPLAIN (ANALYZE, BUFFERS)` evidence gathered
+> for 9 representative endpoints across 5 domains at a seeded realistic volume.
+> `ISS-2026-141`/`148`'s own overall evidence-gap ruling reconfirmed unchanged, still
+> correctly out of one checkpoint's bounded scope. **1 genuine new finding**
+> (`ISS-2026-238`, Medium): 3 production routes (Commercial accounts/quotations/
+> contracts) load an entire tenant-wide dataset to the browser with zero pagination,
+> live-verified via real query-plan evidence at a seeded 25,000/10,000-row volume;
+> ~10 lower-severity siblings on config/rate-shaped tables share the same code
+> pattern. Self-disclosed only in a code comment before this checkpoint, never
+> promoted to `KNOWN_ISSUES.md` — now properly registered. Everything else
+> (API-response boundedness, cross-tenant cache safety, queue backpressure) verified
+> clean by 2 independent lenses using different methods, zero findings. **No
+> Critical or High finding anywhere.** Full gate: `typecheck` 0, `lint` 0
+> errors/337 warnings, `pnpm run test` 5443/5443 (unchanged, no TS file touched),
+> db-tests **229/229 files clean** (328 migrations, unchanged — no migration this
+> checkpoint). Zero migrations, one test-infrastructure file changed
+> (`scripts/db-tests/rbac-enforcement.sql`). Tier C review (§13) required before
+> `VERIFIED`. Full disposition: `HDN-379.md`.
 
 ---
 
