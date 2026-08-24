@@ -856,12 +856,12 @@ explicitly ruled an accepted exception at `HDN-387`/`389`.
 | Field | Value |
 |---|---|
 | **Title** | Legal holds (`app.legal_holds`), revoked API keys/disabled webhook endpoints (`app.api_keys.status`, `app.webhook_endpoints.status`), and suspended user/membership access (`app.users.status`, `app.principal_memberships.status`) are all ordinary application data stored in the same schema a database restore recovers — restoring to a point before any of these decisions was made silently reverts it |
-| **Found by** | `HDN-383` (Backup and Restore), live investigation (legal holds, first round); widened by the attack-surface adversarial testing lens (Tier C) with 2 additional live-reproduced instances (API key/webhook revocation; user/membership suspension) |
+| **Found by** | `HDN-383` (Backup and Restore), live investigation (legal holds, first round); widened by the attack-surface adversarial testing lens (Tier C) with 2 additional live-reproduced instances (API key/webhook revocation; user/membership suspension); independently reconfirmed by `HDN-384` (Disaster Recovery Rehearsal) against `database-restore.md`'s own composed in-place restore procedure — a distinct code path from the drop-database procedure originally tested |
 | **Severity** | **High** — a real reversion-risk vector against an explicit legal/regulatory control (RPD-025) and ordinary access-control expectations (revocation, offboarding); no compensating control exists for any of the 3 instances |
 | **Owning phase** | Phase 9 (`app.legal_holds`, `app.api_keys`, `app.webhook_endpoints`, `app.principal_memberships` schemas); the gap itself is cross-cutting, exposed by Step 15's own backup/restore charter |
 | **Owning lane** | A dedicated future task |
 | **Reachability** | All 3 categories are ordinary, live, reachable application state changed via real user/admin actions (placing a hold, revoking a key, suspending a member) |
-| **Reproduction** | Live-reproduced 3 times independently: (1) place a legal hold, restore a pre-hold backup — hold gone, `_is_under_legal_hold()` returns false; (2) revoke an API key, restore a pre-revocation backup — key returns `status='active'`; (3) suspend a user/membership, restore a pre-suspension backup — access returns `status='active'` |
+| **Reproduction** | Live-reproduced 3 times independently at `HDN-383`: (1) place a legal hold, restore a pre-hold backup — hold gone, `_is_under_legal_hold()` returns false; (2) revoke an API key, restore a pre-revocation backup — key returns `status='active'`; (3) suspend a user/membership, restore a pre-suspension backup — access returns `status='active'`. Reproduced a 4th time at `HDN-384`, all 3 categories together in a single live DR drill, against the in-place restore procedure specifically — confirming the risk is a property of point-in-time restore itself, not one procedure's implementation |
 | **Blast radius** | Every tenant's legal holds, revoked credentials, and suspended accounts are all exposed to silent reversion by any restore to a point before the relevant decision — user/membership suspension is the highest-blast-radius instance since offboarding is the most common of the three events |
 | **Disposition** | **Registered, not fixed** — the correct fix (an enforced restore precondition, or a real platform-wide export/reconciliation tool) is a real design decision requiring product/legal/security input, outside `HDN-383`'s own documentation-only "backup/restore runbook" charter. Interim manual-vigilance precheck (with an `app.audit_logs` cross-check) documented in `docs/runbooks/database-restore.md` §3 item 2 |
 | **Required of the owning task** | Build a real, platform-wide, live-queried precheck/reconciliation tool covering legal holds, key/webhook revocation, and user/membership suspension; or enforce a enforced restore precondition against the earliest active instance of any of the three |
@@ -930,8 +930,68 @@ explicitly ruled an accepted exception at `HDN-387`/`389`.
 `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly
 ruled an accepted exception at `HDN-387`/`389`.
 
+### `HDN-BLK-032` — no real DR communication mechanism exists anywhere: no channel, no template, no notification order, no customer-impact assessment tool
+
+| Field | Value |
+|---|---|
+| **Title** | Every runbook in `docs/runbooks/` shares the identical Communication-section shape — "notify DevOps/Security lead," no named individual, no channel, no notification order, no customer-facing message template. No status page, tenant-broadcast mechanism, SLA-impact tracker, or customer-impact assessment tool exists anywhere in the codebase. `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.4's own incident/communication contract (support tiers, SLAs, Incident Commander field) is designed but never built |
+| **Found by** | `HDN-384` (Disaster Recovery Rehearsal), communication/ownership/enterprise-DR-controls investigation lens, live investigation |
+| **Severity** | **High** — one of this checkpoint's own named charter items (verify communication, ownership, escalation, customer-impact assessment); the finding is that none of it exists as a real, callable mechanism |
+| **Owning phase** | Cross-cutting — no phase built a real communication/status/customer-impact system; `11_DEVOPS_WORKSTREAM.md` §8.4 is architecture-planning prose only |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | N/A — the gap is an absence of tooling, not a live attack surface |
+| **Reproduction** | Read all 12 `docs/runbooks/` files — identical "notify DevOps/Security lead" pattern in every Communication section; broad search across `app/`, `server/`, and every migration for `customer_impact`/`status_page`/`service_status`/`maintenance_window`/`tenant_notification`/`broadcast_notice`/`system_status` returned zero matches |
+| **Blast radius** | Every real DR event, of any of the 4 named scenarios, would rely entirely on ad hoc human judgment with no tooling, template, or systematic record of what was communicated to whom or when |
+| **Disposition** | **Registered, not fixed** — building a real incident-communication system is a real product/infrastructure build, outside `HDN-384`'s own documentation-only "DR rehearsal runbook" charter |
+| **Required of the owning task** | Build a real communication mechanism: a defined notification channel/integration, message templates per scenario, a customer-impact/status-page mechanism, and an incident-commander/ownership-assignment tool |
+| **Regression test** | An e2e/manual test proving a real DR drill produces a real, timestamped communication record through the new mechanism |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-258` (`OPEN`, High) |
+
+---
+
+### `HDN-BLK-033` — CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path
+
+| Field | Value |
+|---|---|
+| **Title** | CargoGrid's architecture is a Next.js app-hosting layer in front of exactly one managed backend vendor (Supabase — Postgres, Auth, Storage, PostgREST all from one project); no multi-region/multi-vendor failover exists anywhere in `docs/architecture/`. A genuine Supabase-wide outage ("provider failure"/"major outage" DR scenarios) has nothing to fail over to |
+| **Found by** | `HDN-384` (Disaster Recovery Rehearsal), scenario definition + feasibility lens and communication/enterprise-DR-controls lens, both independently confirming |
+| **Severity** | **High** — a real, structural single-point-of-failure dependency directly relevant to 2 of the 4 DR scenarios this checkpoint's own charter names; recovery is bounded entirely by Supabase's own SLA and support responsiveness, neither controlled nor operationally confirmed by this repository |
+| **Owning phase** | Cross-cutting architectural decision, predates Step 15; `ADR-CAND-ARCH-025` explicitly chose to lean further into the single-vendor model for secrets specifically |
+| **Owning lane** | A dedicated future task, requiring architecture/executive sign-off |
+| **Reachability** | N/A — the gap is an absence of failover architecture, not a live attack surface |
+| **Reproduction** | Read `docs/architecture/11_DEVOPS_WORKSTREAM.md` §0/§6 and every architecture doc referencing infrastructure topology — no second vendor, no multi-region description found anywhere; independently confirmed by 2 lenses |
+| **Blast radius** | Every tenant, simultaneously, for the duration of any real Supabase-wide outage — no CargoGrid-controlled mitigation exists |
+| **Disposition** | **Registered, not fixed** — introducing a second infrastructure vendor or multi-region failover is a major infrastructure/product decision, outside `HDN-384`'s own documentation-only charter |
+| **Required of the owning task** | A conscious, documented business/architecture decision: accept this as a bounded risk with an explicit disclosed SLA dependency, or invest in multi-vendor/multi-region failover |
+| **Regression test** | N/A until a mitigation is chosen — no code fix possible without an architectural decision first |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-261` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-384` first round (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **27** — `HDN-384` opened `HDN-BLK-032` (High — no DR communication mechanism exists) and `HDN-BLK-033` (High — no infrastructure failover, single-vendor dependency). `ISS-2026-259`/`260`/`262`/`263` (Medium/Low) remain `KNOWN_ISSUES.md`-only, matching this ledger's own convention for Medium/Low/informational findings. `ISS-2026-254`/`HDN-BLK-029` independently reconfirmed, not newly opened |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged from `HDN-383`'s own close |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`, `HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033` (17, 2 new this checkpoint) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9, unchanged) |
+| Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
+| **`HDN-384`'s own charter items — first round** | `docs/runbooks/disaster-recovery.md` authored (new) — 4 DR scenarios defined with success criteria; data corruption and security incident scenarios live-rehearsed against a disposable sandbox Postgres; major outage and provider failure tabletop-rehearsed given this sandbox's own confirmed absence of Docker/Supabase-CLI/reachable Supabase services. A real, live-found defect in `database-restore.md`'s own composed in-place restore procedure (80 silent `pg_restore` errors — migration-seeded PK collisions plus a parallel-restore FK race) was found and fixed by this checkpoint's own drill, that runbook bumped to `0.3.0`. `ISS-2026-254` independently reconfirmed against a second restore procedure. `ISS-2026-258`/`259`/`260`/`261`/`262`/`263` registered (2 High paired with new blockers above, 2 Medium and 2 Low `KNOWN_ISSUES.md`-only) |
+
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
+`HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,
+`HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`,
+`HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032` and `HDN-BLK-033` are open
+release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed
+by their named owner or explicitly ruled an accepted exception at
+`HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-032` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-034` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

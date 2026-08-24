@@ -2,7 +2,55 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-015` — **Backup and Restore
+**Updated:** 2026-08-24 (`CG-S15-HDN-016` — **Disaster Recovery Rehearsal
+(Prompt 384)** — `COMPLETED`, first round only, Tier C review pending.
+Three independent parallel investigation lenses (scenario definition and
+sandbox feasibility; a real, live DR drill against a disposable Postgres;
+communication/ownership/enterprise-DR-controls review). **Sandbox
+constraint confirmed tighter than previously documented**: no Docker
+daemon exists at all in this session. **Data corruption and security
+incident scenarios live-rehearsed, not tabletop-discussed**: a full drill
+found and fixed a real defect in `database-restore.md`'s own composed
+in-place restore procedure — 80 silently-ignored `pg_restore` errors from
+migration-seeded reference-table PK collisions plus a real parallel-restore
+FK race under `-j 4`, fixed live with a `TRUNCATE` step and
+`--disable-triggers`, re-verified with 0 errors, RTO ≈49.65s, RPO window
+4m38s. `ISS-2026-254` (security-state reversion on restore) independently
+reconfirmed against this second, distinct restore procedure — all 3
+post-T0 actions (API-key revoke, user suspend, legal hold) silently
+reverted. A live security-incident revoke chain
+(`app.revoke_all_actor_sessions`/`app.revoke_role_assignment`/
+`app.revoke_ip_allowlist_entry`) confirmed effective, the first real
+rehearsal-history entry for `docs/runbooks/incident-response.md` itself.
+**Major outage and provider failure remain tabletop-only**, disclosed per
+Prompt 384 §22's own alternative flow — no Docker, no reachable Supabase
+services, and CargoGrid's own single-vendor architecture has no failover
+path. Authored `docs/runbooks/disaster-recovery.md` (new);
+`database-restore.md` §4 item 4 fixed, bumped to template version `0.3.0`.
+**6 findings registered, not fixed, each with a named owner**:
+`ISS-2026-258`/`HDN-BLK-032` (High — no real DR communication mechanism
+exists anywhere: no channel, no template, no customer-impact assessment
+tool); `ISS-2026-261`/`HDN-BLK-033` (High — CargoGrid has no second
+infrastructure vendor, no failover path for a provider-wide outage);
+`ISS-2026-259` (Medium — `app.audit_logs` structurally blind to
+raw-SQL/infra-level corruption); `ISS-2026-260` (Medium —
+`app.record_dr_restore_test`'s own `component_scope` enum has no slot for
+3 of the 4 DR scenarios); `ISS-2026-262` (Low — a runbook catalogue in
+`11_DEVOPS_WORKSTREAM.md` §8.5 names 6 files that don't exist);
+`ISS-2026-263` (Low — an unreproduced anomaly in
+`app.transition_user_status` observed mid-drill, not confirmed as a
+defect). No Critical finding anywhere. Independent full gate: `typecheck`
+0 (unchanged); `lint` 0 errors/337 warnings (unchanged); `pnpm run test`
+**5443/5443** (unchanged); `pnpm exec next build` clean (unchanged); `bash
+scripts/db-tests/run.sh` **229/229 files clean** (329 migrations,
+unchanged — no schema change). `CG-S15-HDN-016` first round `COMPLETED`;
+Tier C review required before `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED`
+is not set; only Prompt 389 may set it. Not a production/pilot/GA/market-
+ready claim (RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-384.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-016` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-015` — **Backup and Restore
 (Prompt 383)** — `VERIFIED`, Tier C closed. First round: three independent
 parallel investigation lenses (backup scope/feasibility inventory; a real,
 live restore drill executed against this sandbox's own disposable Postgres;
