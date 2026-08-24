@@ -111,6 +111,7 @@ export const DecideAiOutputApprovalInputSchema = z.object({
   reason: z.string().nullable().default(null),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
 });
 export type DecideAiOutputApprovalInput = z.input<typeof DecideAiOutputApprovalInputSchema>;
 

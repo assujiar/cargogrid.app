@@ -469,4 +469,132 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-150 closure: app.decide_ai_output_approval now composes app.assert_ip_allowed + app.has_active_ip_allowlist_bypass when a caller supplies p_client_ip -- a fresh, dedicated tenant (iaeaigovip), never touched by any earlier block in this file (which uses iaeaigov/iaeaigov2 for its own, unrelated create_integration_connection fixture calls), so this enforced-mode policy cannot collide with them'
+do $$
+declare
+  v_tenant uuid;
+  v_admin uuid := '00000000-0000-0000-0000-000021900000';
+  v_rep uuid := '00000000-0000-0000-0000-000021900001';
+  v_approver uuid := '00000000-0000-0000-0000-000021900002';
+  v_admin_role uuid;
+  v_admin_draft app.role_versions;
+  v_rep_role uuid;
+  v_rep_draft app.role_versions;
+  v_approver_role uuid;
+  v_approver_draft app.role_versions;
+  v_connection_id uuid;
+  v_appr_draft app.config_versions;
+  v_request app.ai_governed_requests;
+  v_succeeded app.ai_governed_requests;
+  v_approval_request app.approval_requests;
+  v_step_id uuid;
+  v_step app.approval_request_steps;
+begin
+  insert into auth.users (id, email) values
+    (v_admin, 'admin@iaeaigovip.test'),
+    (v_rep, 'rep@iaeaigovip.test'),
+    (v_approver, 'approver@iaeaigovip.test');
+
+  perform app.provision_tenant('iaeaigovip', 'IaeAiGovIp Co', 'idem-iaeaigovip', 'tester');
+  v_tenant := (select id from app.tenants where slug = 'iaeaigovip');
+  perform app.transition_tenant_status(v_tenant, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant, v_admin, 'admin@iaeaigovip.test', 'Admin', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin@iaeaigovip.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin, 'tenant_admin', v_tenant, null, 'tester');
+
+  perform app.invite_user(v_tenant, v_rep, 'rep@iaeaigovip.test', 'Rep', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'rep@iaeaigovip.test'), 'active', 'onboarded', 'tester');
+
+  perform app.invite_user(v_tenant, v_approver, 'approver@iaeaigovip.test', 'Approver', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'approver@iaeaigovip.test'), 'active', 'onboarded', 'tester');
+
+  -- v_admin's own tenant_admin membership grants config-draft authority (app.check_
+  -- config_object_authority / app.is_support_grant_authority) but carries no module
+  -- permission of its own -- SEC:Configure needs its own explicit role, same as
+  -- integration-hub.sql's own new regression block above establishes.
+  v_admin_role := (app.create_role(v_tenant, 'IaeAiGovIp Admin', 'SEC:Configure', 'tester')).id;
+  v_admin_draft := app.create_role_version(v_admin_role, 'tester');
+  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'SEC' and action = 'Configure'), 'tester');
+  perform app.publish_role_version(v_admin_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), v_admin, v_admin, 'admin');
+
+  v_rep_role := (app.create_role(v_tenant, 'IaeAiGovIp Rep', 'AI:Create+View, INTHUB:Configure+View', 'tester')).id;
+  v_rep_draft := app.create_role_version(v_rep_role, 'tester');
+  perform app.set_role_version_permissions(
+    v_rep_draft.id,
+    array(select id from app.permissions where (resource_module_code = 'AI' and action in ('Create', 'View')) or (resource_module_code = 'INTHUB' and action in ('Configure', 'View'))),
+    'tester'
+  );
+  perform app.publish_role_version(v_rep_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_rep_role and status = 'published'), v_rep, v_admin, 'admin');
+
+  v_approver_role := (app.create_role(v_tenant, 'IaeAiGovIp Approver', 'AI:Approve+View', 'tester')).id;
+  v_approver_draft := app.create_role_version(v_approver_role, 'tester');
+  perform app.set_role_version_permissions(v_approver_draft.id, array(select id from app.permissions where resource_module_code = 'AI' and action in ('Approve', 'View')), 'tester');
+  perform app.publish_role_version(v_approver_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_approver_role and status = 'published'), v_approver, v_admin, 'admin');
+
+  v_connection_id := (app.create_integration_connection(v_tenant, 'openai_multimodal', 'OpenAI Multimodal', 'production', null, null, null, jsonb_build_object('apiUrl', 'https://ai.iaeaigovip-provider.test/v1/infer'), 'test-ai-secret', v_rep, 'rep')).id;
+
+  v_appr_draft := app.create_config_draft('approval:ai_output_acceptance', v_tenant, 'tenant', null, v_admin, 'tester');
+  perform app.set_config_items(
+    v_appr_draft.id,
+    jsonb_build_array(
+      jsonb_build_object('key', 'pattern', 'value', 'sequential'),
+      jsonb_build_object('key', 'steps', 'value', jsonb_build_array(
+        jsonb_build_object('step_order', 1, 'approver_type', 'specific_user', 'specific_user_id', v_approver, 'required_approvals', 1)
+      ))
+    ),
+    v_admin, 'tester'
+  );
+  perform app.publish_approval_definition(v_appr_draft.id, v_admin, now(), 'tester');
+
+  -- Real allowlist entry (203.0.113.0/24, scope admin) plus enforced mode -- mirrors
+  -- ip-restriction-network-access.sql's own established setup pattern verbatim.
+  perform app.add_ip_allowlist_entry(v_tenant, '203.0.113.0/24', 'iaeaigovip office range', 'admin', v_admin, 'admin');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant, 'enforced', v_admin, 'admin');
+
+  -- One verified step-up challenge stays "current" for the tenant policy's own
+  -- step_up_max_age_minutes window (default 15) -- reused across all 3 decide calls
+  -- below, exactly the real client behavior this checkpoint composes against.
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant, 'AI', 'Approve', v_approver, 'approver')).id, v_approver, 'approver');
+
+  -- (a) out-of-range p_client_ip -- denied, ip_not_allowed.
+  v_request := app.request_ai_governed_action(v_tenant, v_connection_id, 'quotation_draft', null, null, jsonb_build_object('origin', 'JKT'), v_rep, 'rep');
+  v_succeeded := app.record_ai_governed_request_outcome(v_request.id, 'succeeded', jsonb_build_object('draftLines', jsonb_build_array('Freight')), 'high', 'openai-multimodal', 0.05, 'USD', null, v_rep, 'rep');
+  v_approval_request := app.request_ai_output_approval(v_succeeded.id, v_rep, 'rep');
+  select id into v_step_id from app.approval_request_steps where request_id = v_approval_request.id;
+  begin
+    perform app.decide_ai_output_approval(v_step_id, 'approved', v_approver, 'approver', 'looks correct', '198.51.100.7');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-range p_client_ip under enforced mode, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    if sqlerrm !~ 'ip_not_allowed' then raise; end if;
+  end;
+  if (select status from app.approval_request_steps where id = v_step_id) <> 'active' then
+    raise exception 'assertion failed: the rejected out-of-range-IP attempt must never leave the step transitioned';
+  end if;
+
+  -- (b) in-range p_client_ip -- succeeds.
+  v_step := app.decide_ai_output_approval(v_step_id, 'approved', v_approver, 'approver', 'looks correct', '203.0.113.42');
+  if v_step.status <> 'approved' then
+    raise exception 'assertion failed: expected the step to transition to approved for an in-range p_client_ip, got %', to_jsonb(v_step);
+  end if;
+
+  -- (c) p_client_ip omitted/null -- succeeds regardless of the enforced policy, proving
+  -- the non-interactive-caller exemption. A fresh request/outcome/approval cycle is
+  -- needed since the one above already resolved.
+  v_request := app.request_ai_governed_action(v_tenant, v_connection_id, 'quotation_draft', null, null, jsonb_build_object('origin', 'JKT'), v_rep, 'rep');
+  v_succeeded := app.record_ai_governed_request_outcome(v_request.id, 'succeeded', jsonb_build_object('draftLines', jsonb_build_array('Freight')), 'high', 'openai-multimodal', 0.05, 'USD', null, v_rep, 'rep');
+  v_approval_request := app.request_ai_output_approval(v_succeeded.id, v_rep, 'rep');
+  select id into v_step_id from app.approval_request_steps where request_id = v_approval_request.id;
+  v_step := app.decide_ai_output_approval(v_step_id, 'approved', v_approver, 'approver', 'looks correct');
+  if v_step.status <> 'approved' then
+    raise exception 'assertion failed: expected the step to transition to approved when p_client_ip is omitted, regardless of the enforced IP allowlist policy, got %', to_jsonb(v_step);
+  end if;
+
+  raise notice 'PASS: app.decide_ai_output_approval (ISS-2026-150 closure) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, and allows a null p_client_ip regardless of enforcement';
+end;
+$$;
+
 \echo '>> ai-governance-provider-boundary.sql: ALL PASSED'

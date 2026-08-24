@@ -543,18 +543,71 @@ release gate.
 
 | # | Item | Severity | Disposition required |
 |---|---|---|---|
-| 1 | **`ISS-2026-150` — IP restriction structurally unreachable.** RPD-023's enforcement is real and correct when called directly, but **no real client IP is threaded through the route-handler layer**, so a fully-configured `enforced`-mode allowlist gives zero real protection against a caller reaching the RPC layer directly (leaked service credential, compromised client bypassing the intended HTTP path). | **High** | **Must not be deferred again.** Phase 9's closure disclosed it as a deliberate first-of-its-kind accepted exception and **named Step 15 as the remedy**. Needs: (a) route-handler-level IP extraction and threading; (b) `assert_ip_allowed` wired into the bounded set of highest-risk SEC/IAM/INTHUB mutations; (c) an explicit ruling on service-role/background callers with no client IP (likely exempt — IP restriction is inherently an interactive-session control). A cosmetic partial wire-up is forbidden: an unenforced parameter nothing populates *looks* fixed without being fixed. |
-| 2 | **`ISS-2026-151` — step-up challenge unwired** on `app.create_integration_connection` (**40+ call sites across 16 files**). 3 of 4 target functions were wired at `CG-S14-IAE-039` via migration `20260809200000`; this one was deliberately left rather than risk a rushed mass edit. | Medium | Wire it with real fixtures and a negative-path regression proving genuine enforcement, or rule on it explicitly. |
-| 3 | **Move postgis, pg_trgm and btree_gist out of `public`.** Same root class as the fixed pgcrypto defect. Clears **7 of the 8 non-noise security advisories, including the only ERROR** (`rls_disabled_in_public` on PostGIS's own `spatial_ref_sys`, plus 3 `extension_in_public` and 6 `*_security_definer_function_executable` from `st_estimatedextent`). | Medium | **Its own scoped task inside this lane — never folded into another edit.** Every `geometry`/`geography`/`ST_*` caller needs `extensions` in its search_path: a far larger blast radius than pgcrypto's. Note `spatial_ref_sys` cannot have RLS enabled at all — it belongs to the extension and `postgres` is not superuser on a hosted project. |
-| 4 | `ISS-2026-149` — anonymous cross-tenant SSO-config enumeration oracle | Low | Throttle or gate |
-| 5 | `ISS-2026-146` — `tenant_id` disclosure via exception text | Low | Re-assess reachability |
-| 6 | `auth_leaked_password_protection` advisory | Low | **Dashboard setting, not a migration.** Record as a deployment-runbook item |
-| 7 | Dependency scan | — | `pnpm run security:check` / `security:audit`. Note `ISS-2026-007`'s lesson: a broken audit gate hid 20 real advisories, 11 high, for a whole phase. The gate now fails when the advisory service is unreachable — **keep that property**. **`HDN-BLK-007`/`ISS-2026-158` (High, added at `HDN-370`) means this exact gate does not run in CI on a push right now.** `HDN-378` cannot treat "the gate exists" as evidence it is enforced anywhere but a local run — it must run `security:audit` itself and record the result, the same gap this row's own note warns about one level up. Do not close this item on CI's silence being green; CI is not currently running it. |
-| 8 | OWASP-style abuse: CSRF, XSS, SQLi, IDOR, SSRF, open redirect, file upload, API abuse, webhook spoofing, prompt injection | — | Test per Prompt 389 item 10 |
-| 9 | Service-role / secrets server-only; logs redacted | — | Verify |
-| 10 | Incident response, key rotation, privileged access audit | — | Test |
+| 1 | **`ISS-2026-150` — IP restriction structurally unreachable.** RPD-023's enforcement is real and correct when called directly, but **no real client IP is threaded through the route-handler layer**, so a fully-configured `enforced`-mode allowlist gives zero real protection against a caller reaching the RPC layer directly (leaked service credential, compromised client bypassing the intended HTTP path). | **High** | **Must not be deferred again.** Phase 9's closure disclosed it as a deliberate first-of-its-kind accepted exception and **named Step 15 as the remedy**. Needs: (a) route-handler-level IP extraction and threading; (b) `assert_ip_allowed` wired into the bounded set of highest-risk SEC/IAM/INTHUB mutations; (c) an explicit ruling on service-role/background callers with no client IP (likely exempt — IP restriction is inherently an interactive-session control). A cosmetic partial wire-up is forbidden: an unenforced parameter nothing populates *looks* fixed without being fixed. — **`RESOLVED`.** Wired into all 4 named target functions; see Result below. |
+| 2 | **`ISS-2026-151` — step-up challenge unwired** on `app.create_integration_connection` (**40+ call sites across 16 files**). 3 of 4 target functions were wired at `CG-S14-IAE-039` via migration `20260809200000`; this one was deliberately left rather than risk a rushed mass edit. | Medium | Wire it with real fixtures and a negative-path regression proving genuine enforcement, or rule on it explicitly. — **Re-scoped precisely (43 call sites / 27 sequences / 16 files), deliberately deferred again** — see Result below. |
+| 3 | **Move postgis, pg_trgm and btree_gist out of `public`.** Same root class as the fixed pgcrypto defect. Clears **7 of the 8 non-noise security advisories, including the only ERROR** (`rls_disabled_in_public` on PostGIS's own `spatial_ref_sys`, plus 3 `extension_in_public` and 6 `*_security_definer_function_executable` from `st_estimatedextent`). | Medium | **Its own scoped task inside this lane — never folded into another edit.** Every `geometry`/`geography`/`ST_*` caller needs `extensions` in its search_path: a far larger blast radius than pgcrypto's. Note `spatial_ref_sys` cannot have RLS enabled at all — it belongs to the extension and `postgres` is not superuser on a hosted project. — **Corrected and `PARTIALLY RESOLVED`: `postgis` is not relocatable at all (`relocatable = false`); clears 2 of 8, not 7 of 8** — see Result below and `ISS-2026-234`. |
+| 4 | `ISS-2026-149` — anonymous cross-tenant SSO-config enumeration oracle | Low | Throttle or gate — **Reconfirmed unchanged, still deferred** (still dead code at the HTTP layer; building attempt-tracking infrastructure for a zero-caller resolver is disproportionate). |
+| 5 | `ISS-2026-146` — `tenant_id` disclosure via exception text | Low | Re-assess reachability — **Reconfirmed and re-measured: 2,335 occurrences (up from 2,087), 10/10-sampled reachability, severity held at Low**, still deferred as a repository-wide sweep. |
+| 6 | `auth_leaked_password_protection` advisory | Low | **Dashboard setting, not a migration.** Record as a deployment-runbook item — **Done**: `docs/runbooks/production-configuration-checklist.md`. |
+| 7 | Dependency scan | — | `pnpm run security:check` / `security:audit`. Note `ISS-2026-007`'s lesson: a broken audit gate hid 20 real advisories, 11 high, for a whole phase. The gate now fails when the advisory service is unreachable — **keep that property**. **`HDN-BLK-007`/`ISS-2026-158` (High, added at `HDN-370`) means this exact gate does not run in CI on a push right now.** `HDN-378` cannot treat "the gate exists" as evidence it is enforced anywhere but a local run — it must run `security:audit` itself and record the result, the same gap this row's own note warns about one level up. Do not close this item on CI's silence being green; CI is not currently running it. — **Ran live: both clean.** `ISS-2026-158`'s CI-enforcement gap reconfirmed unchanged, owner unchanged `HDN-387`. |
+| 8 | OWASP-style abuse: CSRF, XSS, SQLi, IDOR, SSRF, open redirect, file upload, API abuse, webhook spoofing, prompt injection | — | Test per Prompt 389 item 10 — **Done, live-forced across all 10 categories.** 9 HELD; 1 Medium finding (open-redirect control-character bypass) found and fixed (`ISS-2026-233`). |
+| 9 | Service-role / secrets server-only; logs redacted | — | Verify — **Done.** `ISS-2026-168` fixed (ESLint import-boundary guard); audit-redaction spot-check clean; 2 more findings surfaced and fixed in the process (`ISS-2026-169`, `ISS-2026-232`). |
+| 10 | Incident response, key rotation, privileged access audit | — | Test — **Done.** 3 new runbooks authored: `docs/runbooks/incident-response.md`, `key-rotation.md`, `privileged-access-audit.md`, each naming real, verified-to-exist primitives and disclosing the still-open gaps (`ISS-2026-151`, and 3-of-4 IP-restricted functions' own missing live HTTP route) rather than overstating coverage. |
 
 **Upstream hard gate:** `HDN-372` `VERIFIED`. Also depends on `HDN-373..377`.
+
+> **Result (`HDN-378`, Prompt 378, Security Hardening):** the checkpoint's own highest
+> priority (`ISS-2026-150`, High, "must not be deferred again") is `RESOLVED` — all 4
+> named platform-default high-risk functions (`decide_ai_output_approval`,
+> `activate_enterprise_idp_connection`, `approve_mfa_exception`,
+> `create_integration_connection`) now compose the previously-inert
+> `app.assert_ip_allowed`/`app.has_active_ip_allowlist_bypass` primitives, scope
+> `'admin'`, exempting a null client IP or an active bypass-grant holder. **A genuine
+> implementation defect was caught and fixed before commit, not shipped**: a first
+> `CREATE OR REPLACE FUNCTION` draft silently created a second overload per function
+> instead of replacing it (Postgres does not treat an added trailing parameter as a
+> signature match), which would have left every existing caller permanently bound to
+> the OLD, un-gated version — corrected to an explicit `DROP FUNCTION` + `CREATE
+> FUNCTION` + re-`GRANT EXECUTE` for all 4, re-verified (exactly one overload each,
+> correct grants, 11 db-test files clean, full 229-file suite green). `ISS-2026-151`
+> (the sibling step-up-MFA gap on the same `create_integration_connection` function)
+> was re-scoped precisely — 43 real call sites, 27 distinct step-up sequences, across
+> the same 16 files — and deliberately deferred again: stacking it onto this
+> checkpoint's own IP-restriction migration would exceed the normal bounded-repair
+> budget and repeat the exact "rushed, under-tested wide edit" risk `CG-S14-IAE-039`
+> already declined once. `pg_trgm`/`btree_gist` relocated out of `public` (2 of the
+> item 3 punch-list's own 8 advisories); `postgis` was found to be structurally
+> non-relocatable (`relocatable = false` in its own control file — a `DROP EXTENSION
+> CASCADE` would destroy 15 live `geography`-typed columns across 12 tables), so the
+> matrix's own original "clears 7 of 8" framing is corrected here to "clears 2 of 8";
+> the remaining 6, including the one ERROR advisory, are registered separately
+> (`ISS-2026-234`, owner a dedicated future task). A full OWASP-style abuse-pattern
+> sweep across SQL injection, IDOR, CSRF, XSS, rate limiting, API-key handling, webhook
+> signature verification, file-upload validation, and AI-governed-action human-approval
+> integrity was live-forced against a real disposable database and 9 of 10 categories
+> held with zero findings; the 10th (open redirect) surfaced a real, latent
+> control-character-injection bypass in `lib/auth/redirect-allowlist.ts` (not currently
+> exploitable — its one live caller constrains input upstream — but a genuine gap in a
+> documented general-purpose control), found and fixed same checkpoint
+> (`ISS-2026-233`). `ISS-2026-168` (service-role import boundary) closed via a new
+> ESLint `no-restricted-imports` rule scoped to an explicit allowlist of the 26 real
+> legitimate importers. **2 more findings surfaced and fixed in the same pass, both
+> pre-existing and already owned by this checkpoint**: `ISS-2026-169` (an anonymous
+> vendor self-registration action still returned its raw tenant-existence discriminator
+> on the wire even though the rendered message was already unified) and `ISS-2026-232`
+> (3 more `token_hash` columns exposed via a blanket grant, the same class as
+> `HDN-377`'s own `ISS-2026-216`) — fixing the latter required catching and fixing a
+> **second** real regression in the same pass: two query functions used a bare
+> `select("*")` against the now-column-restricted tables, one with a real live
+> `authenticated`-session caller that would have started failing with a permission
+> error. `ISS-2026-149`/`146` reconfirmed and re-measured, severity unchanged, both
+> still deferred as out-of-bounded-scope repository-wide work. Dependency scan clean;
+> `ISS-2026-158`'s CI-enforcement gap reconfirmed, unchanged, owner `HDN-387`. 4 new
+> runbooks/checklists authored (items 6 and 10). Independent full gate re-run:
+> `typecheck` 0, `lint` 0 errors/337 warnings, 5443/5443 unit tests, db-tests
+> confirmed green by two independent full 229-file suite runs (the implementing agent's
+> own run and the orchestrating session's own separate re-run against the final,
+> token_hash-inclusive migration state). Full disposition: `HDN-378.md`.
 
 ---
 

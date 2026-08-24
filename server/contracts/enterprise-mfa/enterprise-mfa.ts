@@ -202,6 +202,7 @@ export const ApproveMfaExceptionInputSchema = z.object({
   exceptionId: z.string().uuid(),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
 });
 export type ApproveMfaExceptionInput = z.input<typeof ApproveMfaExceptionInputSchema>;
 

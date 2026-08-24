@@ -550,4 +550,95 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-150 closure: app.activate_enterprise_idp_connection now composes app.assert_ip_allowed + app.has_active_ip_allowlist_bypass when a caller supplies p_client_ip -- a fresh, dedicated tenant (iaeiamip), never touched by any earlier block in this file (which uses iaeiam/iaeiam2 for its own, unrelated create_integration_connection fixture calls), so this enforced-mode policy cannot collide with them'
+do $$
+declare
+  v_tenant uuid;
+  v_admin uuid := '00000000-0000-0000-0000-000030900001';
+  v_target_emp uuid := '00000000-0000-0000-0000-000030900002';
+  v_admin_role uuid;
+  v_admin_draft app.role_versions;
+  v_connection app.integration_connections;
+  v_claim app.iam_domain_claims;
+  v_attempt app.iam_sso_login_attempts;
+  v_connection_after app.integration_connections;
+begin
+  insert into auth.users (id, email) values
+    (v_admin, 'admin@iaeiamip.test'),
+    (v_target_emp, 'scim.target@iaeiamip-corp.test');
+
+  perform app.provision_tenant('iaeiamip', 'IaeIamIp Co', 'idem-iaeiamip', 'tester');
+  v_tenant := (select id from app.tenants where slug = 'iaeiamip');
+  perform app.transition_tenant_status(v_tenant, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant, v_admin, 'admin@iaeiamip.test', 'Admin', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin@iaeiamip.test'), 'active', 'onboarded', 'tester');
+
+  perform app.invite_user(v_tenant, v_target_emp, 'scim.target@iaeiamip-corp.test', 'SCIM Target', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'scim.target@iaeiamip-corp.test'), 'active', 'onboarded', 'tester');
+
+  -- One role carries every permission v_admin needs below (IAM:Configure for the
+  -- domain-claim/activation dance, INTHUB:Configure to create the connection,
+  -- SEC:Configure for the IP allowlist setup) -- all 3 actions are protected=false,
+  -- so a self-assign is not a self_escalation violation.
+  v_admin_role := (app.create_role(v_tenant, 'IaeIamIp Admin', 'IAM:Configure+View, INTHUB:Configure, SEC:Configure', 'tester')).id;
+  v_admin_draft := app.create_role_version(v_admin_role, 'tester');
+  perform app.set_role_version_permissions(
+    v_admin_draft.id,
+    array(select id from app.permissions where (resource_module_code = 'IAM' and action in ('Configure', 'View')) or (resource_module_code = 'INTHUB' and action = 'Configure') or (resource_module_code = 'SEC' and action = 'Configure')),
+    'tester'
+  );
+  perform app.publish_role_version(v_admin_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), v_admin, v_admin, 'admin');
+
+  v_connection := app.create_integration_connection(v_tenant, 'enterprise_sso_oidc', 'Okta OIDC', 'production', null, null, null, '{"issuer": "https://iaeiamip.okta.com", "client_id": "cg-client-1"}'::jsonb, 'okta-client-secret-value', v_admin, 'admin');
+
+  v_claim := app.request_enterprise_sso_domain_claim(v_tenant, v_connection.id, 'iaeiamip-corp.test', v_admin, 'admin');
+  v_claim := app.verify_enterprise_sso_domain_claim(v_claim.id, v_claim.verification_token, v_admin, 'admin');
+  v_claim := app.activate_enterprise_sso_domain_claim(v_claim.id, v_admin, 'admin');
+  if v_claim.status <> 'active' then
+    raise exception 'assertion failed: expected the domain claim to be active, got %', v_claim.status;
+  end if;
+
+  v_attempt := app.resolve_enterprise_sso_claims(v_connection.id, 'okta|subject-ip-target', 'scim.target@iaeiamip-corp.test', v_admin, 'admin');
+  if v_attempt.outcome <> 'matched' then
+    raise exception 'assertion failed: expected a matched test-login resolution (lockout-guard precondition), got %', v_attempt.outcome;
+  end if;
+
+  -- Real allowlist entry (203.0.113.0/24, scope admin) plus enforced mode -- mirrors
+  -- ip-restriction-network-access.sql's own established setup pattern verbatim.
+  perform app.add_ip_allowlist_entry(v_tenant, '203.0.113.0/24', 'iaeiamip office range', 'admin', v_admin, 'admin');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant, 'enforced', v_admin, 'admin');
+
+  -- One verified step-up challenge stays "current" for the tenant policy's own
+  -- step_up_max_age_minutes window (default 15) -- reused across all 3 activate
+  -- calls below.
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant, 'IAM', 'Configure', v_admin, 'admin')).id, v_admin, 'admin');
+
+  -- (a) out-of-range p_client_ip -- denied, ip_not_allowed.
+  begin
+    perform app.activate_enterprise_idp_connection(v_connection.id, v_admin, 'admin', '198.51.100.7');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-range p_client_ip under enforced mode, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    if sqlerrm !~ 'ip_not_allowed' then raise; end if;
+  end;
+
+  -- (b) in-range p_client_ip -- succeeds.
+  v_connection_after := app.activate_enterprise_idp_connection(v_connection.id, v_admin, 'admin', '203.0.113.42');
+  if v_connection_after.status <> 'active' then
+    raise exception 'assertion failed: expected the connection to be active for an in-range p_client_ip, got %', v_connection_after.status;
+  end if;
+
+  -- (c) p_client_ip omitted/null -- succeeds regardless of the enforced policy, proving
+  -- the non-interactive-caller exemption. A repeat activation is harmless (the matched
+  -- test-login attempt row still exists, and re-setting status to active is a no-op).
+  v_connection_after := app.activate_enterprise_idp_connection(v_connection.id, v_admin, 'admin');
+  if v_connection_after.status <> 'active' then
+    raise exception 'assertion failed: expected the connection to remain active when p_client_ip is omitted, regardless of the enforced IP allowlist policy, got %', v_connection_after.status;
+  end if;
+
+  raise notice 'PASS: app.activate_enterprise_idp_connection (ISS-2026-150 closure) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, and allows a null p_client_ip regardless of enforcement';
+end;
+$$;
+
 \echo 'ALL IAE-026 (Enterprise IAM SSO/SAML/SCIM) ASSERTIONS PASSED'

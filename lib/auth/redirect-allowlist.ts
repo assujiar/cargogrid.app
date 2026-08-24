@@ -28,7 +28,12 @@ export function validateRedirectTarget(target: string, allowedOrigins: readonly 
     return { safe: false, reason: "empty_target" };
   }
 
-  const trimmed = target.trim();
+  // Strip tab/CR/LF from the entire string first, matching the WHATWG URL
+  // parser's behavior (browsers strip these characters from a URL before
+  // parsing it). Without this normalization, a target like "/\t/evil.com"
+  // passes the checks below as a same-origin relative path, but a browser
+  // parses it as "//evil.com" -- a protocol-relative off-origin redirect.
+  const trimmed = target.trim().replace(/[\t\r\n]/g, "");
   const lower = trimmed.toLowerCase();
 
   if (DANGEROUS_PREFIXES.some((prefix) => lower.startsWith(prefix))) {

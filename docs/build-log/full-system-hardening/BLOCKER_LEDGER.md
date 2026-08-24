@@ -680,16 +680,17 @@ disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md` `ISS-2026-225` (corrected).*
 
 ---
 
-## Status as of `HDN-377` Tier C (live — update at every checkpoint that changes it)
+## Status as of `HDN-378` (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 to date | **16** — `HDN-377` first round opened `HDN-BLK-019` (High, registered not fixed); its own Tier C review opened `HDN-BLK-020` (Critical), `HDN-BLK-021` (High), and `HDN-BLK-022` (High, a severity correction of `ISS-2026-225`, first registered without a ledger entry at Low). Also registered 2 further findings without their own ledger entry, matching this ledger's own established convention (Medium/Low, non-systemic-scale, no release-blocker designation): `ISS-2026-223` (repository-wide `is_support_grant_authority` convention question, Low, owner `HDN-378`), `ISS-2026-224` (`can_access_record` over-restriction on vendor evidence reviewers, Medium, owner `HDN-387`), `ISS-2026-231` (a scan-status backstop trigger drafted then self-corrected before commit, conflicting with 4 established tests, Medium, owner `HDN-386`) |
-| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged from `HDN-375`'s own close (`HDN-BLK-019..022` are newly registered, not closed) |
-| — of which **Critical**, open | `HDN-BLK-020` (1, new this checkpoint) |
-| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022` (9) |
+| Blockers opened **by** Step 15 to date | **16** — unchanged from `HDN-377`'s own Tier C close. `HDN-378` (Security Hardening) opened **zero new formal `HDN-BLK-` entries**: its own new findings (`ISS-2026-233` open-redirect control-character bypass, Medium, `RESOLVED` same checkpoint; `ISS-2026-234` postgis non-relocatability, Medium, `OPEN`, owner a dedicated future task) are both Medium/non-systemic, matching this ledger's own established convention (registered in `KNOWN_ISSUES.md`, no dedicated blocker-ledger entry) already used for `ISS-2026-223`/`224`/`231` above |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged; none of the open `HDN-BLK-` entries were this checkpoint's own to close (`HDN-BLK-020..022` remain owned by `HDN-386`) |
+| — of which **Critical**, open | `HDN-BLK-020` (1, unchanged, owner `HDN-386`) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022` (9, unchanged — none of these were `HDN-378`'s own to close) |
 | — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged) |
-| Unresolved **Critical** anywhere | **1** — `HDN-BLK-020` (`app.audit_logs.legal_hold` unenforced), registered not fixed, owner `HDN-386`. `HDN-377`'s own 3 Critical findings found and fixed same checkpoint (`ISS-2026-216`/`217` first round, `ISS-2026-226` Tier C) are not counted here — this line tracks unresolved Critical only |
+| Unresolved **Critical** anywhere | **1** — `HDN-BLK-020` (`app.audit_logs.legal_hold` unenforced), registered not fixed, owner `HDN-386`, unchanged this checkpoint |
+| **`HDN-378`'s own charter items resolved this checkpoint (High severity, not blocker-ledger-tracked)** | `ISS-2026-150` (IP restriction structurally unreachable, High — never carried its own `HDN-BLK-` entry, tracked directly via `HARDENING_MATRIX.md` §9 as the lane's own named highest-priority item) — `RESOLVED`. See `HDN-378.md`/`KNOWN_ISSUES.md` for full disposition |
 
 `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
 `HDN-BLK-020`, `HDN-BLK-021` and `HDN-BLK-022` are open release blockers for Step 16

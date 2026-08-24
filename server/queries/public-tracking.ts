@@ -26,7 +26,17 @@ export class PublicTrackingQueryError extends Error {
 
 /** The current active token's metadata (status/expiry), if any -- for the Operations management panel. Never the raw token. */
 export async function getActiveShipmentTrackingToken(client: PublicTrackingQueryClient, shipmentOrderId: string): Promise<ShipmentTrackingToken | null> {
-  const { data, error } = await client.from("shipment_tracking_tokens").select("*").eq("shipment_order_id", shipmentOrderId).eq("status", "active").maybeSingle();
+  // ISS-2026-232: explicit column list, omitting token_hash -- `authenticated` no
+  // longer holds table-level SELECT on app.shipment_tracking_tokens (column-privilege
+  // closure), so a bare `select("*")` would now fail with a permission error for any
+  // caller using the ordinary authenticated-session client (this function's own real
+  // caller, the Operations tracking panel).
+  const { data, error } = await client
+    .from("shipment_tracking_tokens")
+    .select("id, tenant_id, shipment_order_id, status, expires_at, revoked_at, revoked_reason, created_by, created_at")
+    .eq("shipment_order_id", shipmentOrderId)
+    .eq("status", "active")
+    .maybeSingle();
   if (error) {
     throw new PublicTrackingQueryError(error.message);
   }

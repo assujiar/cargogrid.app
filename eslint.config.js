@@ -115,6 +115,84 @@ const chartGovernancePatterns = {
   },
 };
 
+// ISS-2026-168: `lib/supabase/service-role.ts`'s own header comment claims a "bundle
+// scan" (`scripts/env/client-guard.ts`) enforces that this module never reaches a
+// client bundle -- it does not; `client-guard.ts` is only a runtime `typeof window`
+// check, not a static scan, and it does not even look for this import path (see its
+// own header comment, updated alongside this rule). The only real *static* control
+// was `bannedPatterns`'s `no-restricted-syntax` selector above, which matches literal
+// `process.env.SUPABASE_SERVICE_ROLE_KEY` dot-access -- `service-role.ts`'s own
+// `requireEnv()` helper evades that selector by reading `process.env[name]` via
+// bracket access. This rule closes that gap at the import boundary instead: no file
+// anywhere may import `lib/supabase/service-role` (with or without its explicit
+// `.ts` extension, however many `../` segments or a `@/` alias precede it) full stop.
+//
+// This repository has no directory or filename convention that reliably distinguishes
+// Client Components from Server Components/Server Actions/Route Handlers -- "use
+// client" is a top-of-file directive, not a naming pattern (confirmed: e.g.
+// `app/(tenant)/[tenantSlug]/procurement/vendors/vendor-directory-panel.tsx` is a
+// Client Component, `app/(public)/tracking/[token]/page.tsx` is a Server Component,
+// and both live under `app/`; `*-panel.tsx` is not a safe signal either way). A glob
+// scoped to only client-component paths is therefore not available, so this rule
+// takes the opposite, still-bounded shape used by `chartGovernancePatterns` above:
+// flag the import everywhere, then `ignores` the exact file list of every current,
+// audited-legitimate importer (Server Actions, Route Handlers, and Server Components
+// under `app/`, plus `lib/portal/*-deps.server.ts`, `lib/api-gateway/authenticate.
+// server.ts`, and `scripts/jobs/*-worker.ts` -- all confirmed server-only code that
+// already owns the service-role call). A brand-new importer -- a Client Component or
+// anything else not on this list -- is not exempted and trips the rule immediately;
+// extending legitimate access requires deliberately adding the new file to this list,
+// which is itself a lightweight review gate on top of the import boundary. Square
+// brackets in Next.js dynamic-segment directory names (e.g. `[tenantSlug]`,
+// `[token]`) are escaped below because flat config's glob matching treats unescaped
+// `[...]` as a character class, not a literal path segment (verified with
+// `eslint --print-config` against a throwaway rule before adopting this pattern).
+const serviceRoleImportGuard = {
+  ignores: [
+    "app/(public)/careers/\\[tenantSlug\\]/\\[postingToken\\]/actions.ts",
+    "app/(public)/careers/\\[tenantSlug\\]/\\[postingToken\\]/page.tsx",
+    "app/(public)/careers/\\[tenantSlug\\]/page.tsx",
+    "app/(public)/quote-decision/\\[token\\]/actions.ts",
+    "app/(public)/quote-decision/\\[token\\]/page.tsx",
+    "app/(public)/tracking/\\[token\\]/page.tsx",
+    "app/(public)/vendor-intake/\\[token\\]/actions.ts",
+    "app/(public)/vendor-intake/register/\\[tenantSlug\\]/actions.ts",
+    "app/(public)/vendor-intake/register/\\[tenantSlug\\]/page.tsx",
+    "app/(tenant)/\\[tenantSlug\\]/admin/api-keys/actions.ts",
+    "app/(tenant)/\\[tenantSlug\\]/customer-quotes/actions.ts",
+    "app/(tenant)/\\[tenantSlug\\]/operations/shipment-orders/\\[shipmentOrderId\\]/actions.ts",
+    "app/(tenant)/\\[tenantSlug\\]/procurement/assessments/actions.ts",
+    "app/(tenant)/\\[tenantSlug\\]/procurement/compliance/vendors/actions.ts",
+    "app/(tenant)/\\[tenantSlug\\]/procurement/vendors/\\[masterRecordId\\]/financial/actions.ts",
+    "app/api/tracking/driver-mobile/route.ts",
+    "app/api/webhooks/finance-payment-gateway/\\[connectionId\\]/route.ts",
+    "app/api/webhooks/logistics-partner/\\[connectionId\\]/route.ts",
+    "app/api/webhooks/third-party-gps/\\[connectionId\\]/route.ts",
+    "lib/api-gateway/authenticate.server.ts",
+    "lib/portal/supreme-admin-guard-deps.server.ts",
+    "lib/portal/tenant-admin-guard-deps.server.ts",
+    "scripts/jobs/external-sync-worker.ts",
+    "scripts/jobs/finance-bank-feed-sync-worker.ts",
+    "scripts/jobs/logistics-partner-sync-worker.ts",
+    "scripts/jobs/notification-delivery-worker.ts",
+    "scripts/jobs/webhook-delivery-worker.ts",
+  ],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: ["**/supabase/service-role", "**/supabase/service-role.ts"],
+            message:
+              "service-role client must only be imported from Server Actions, Route Handlers, or Server Components -- never from a Client Component (ISS-2026-168, docs/standards/CODING_STANDARDS.md §4/§10). If this is genuinely server-only code, add the file to serviceRoleImportGuard's `ignores` list in eslint.config.js after confirming it never runs in a Client Component.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 // PLT-135, CG-S6-PLT-032: `app/`'s first real pages mean `.next/` (the build output
 // directory) now actually gets created locally/in CI -- `eslint-config-next`'s bundled
 // shareable config (consumed directly here as a flat-config array, not through the
@@ -130,6 +208,6 @@ const ignores = {
   ignores: [".next/**", "playwright-report/**", "test-results/**", "services/**"],
 };
 
-const config = [ignores, ...next, boundaryRules, bannedPatterns, chartGovernancePatterns];
+const config = [ignores, ...next, boundaryRules, bannedPatterns, chartGovernancePatterns, serviceRoleImportGuard];
 
 export default config;

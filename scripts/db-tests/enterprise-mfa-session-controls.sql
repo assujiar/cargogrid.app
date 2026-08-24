@@ -489,4 +489,85 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-150 closure: app.approve_mfa_exception now composes app.assert_ip_allowed + app.has_active_ip_allowlist_bypass when a caller supplies p_client_ip -- a fresh, dedicated tenant (iaemfaip), never touched by any earlier block in this file'
+do $$
+declare
+  v_tenant uuid;
+  v_admin uuid := '00000000-0000-0000-0000-000031900001';
+  v_rep uuid := '00000000-0000-0000-0000-000031900002';
+  v_approver uuid := '00000000-0000-0000-0000-000031900003';
+  v_admin_role uuid;
+  v_admin_draft app.role_versions;
+  v_exception app.mfa_exceptions;
+begin
+  insert into auth.users (id, email) values
+    (v_admin, 'admin@iaemfaip.test'),
+    (v_rep, 'rep@iaemfaip.test'),
+    (v_approver, 'approver@iaemfaip.test');
+
+  perform app.provision_tenant('iaemfaip', 'IaeMfaIp Co', 'idem-iaemfaip', 'tester');
+  v_tenant := (select id from app.tenants where slug = 'iaemfaip');
+  perform app.transition_tenant_status(v_tenant, 'active', 'setup', 'tester');
+
+  perform app.invite_user(v_tenant, v_admin, 'admin@iaemfaip.test', 'Admin', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin@iaemfaip.test'), 'active', 'onboarded', 'tester');
+
+  perform app.invite_user(v_tenant, v_rep, 'rep@iaemfaip.test', 'Rep', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'rep@iaemfaip.test'), 'active', 'onboarded', 'tester');
+
+  perform app.invite_user(v_tenant, v_approver, 'approver@iaemfaip.test', 'Approver', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'approver@iaemfaip.test'), 'active', 'onboarded', 'tester');
+
+  -- One role (SEC:Configure/View/Approve) is assigned to BOTH v_admin (requester +
+  -- IP-allowlist configurer) and v_approver (a genuinely different identity from the
+  -- requester -- app.approve_mfa_exception forbids self-approval at the CHECK level).
+  v_admin_role := (app.create_role(v_tenant, 'IaeMfaIp Admin', 'SEC:Configure/View/Approve', 'tester')).id;
+  v_admin_draft := app.create_role_version(v_admin_role, 'tester');
+  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'SEC' and action in ('Configure', 'View', 'Approve')), 'tester');
+  perform app.publish_role_version(v_admin_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), v_admin, v_admin, 'admin');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), v_approver, v_admin, 'admin');
+
+  -- Real allowlist entry (203.0.113.0/24, scope admin) plus enforced mode -- mirrors
+  -- ip-restriction-network-access.sql's own established setup pattern verbatim.
+  perform app.add_ip_allowlist_entry(v_tenant, '203.0.113.0/24', 'iaemfaip office range', 'admin', v_admin, 'admin');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant, 'enforced', v_admin, 'admin');
+
+  -- One verified step-up challenge stays "current" for the tenant policy's own
+  -- step_up_max_age_minutes window (default 15) -- reused across all 3 approve calls
+  -- below (each against a SEPARATE exception request -- an already-approved exception
+  -- cannot be approved twice).
+  perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant, 'SEC', 'Approve', v_approver, 'approver')).id, v_approver, 'approver');
+
+  -- (a) out-of-range p_client_ip -- denied, ip_not_allowed.
+  v_exception := app.request_mfa_exception(v_tenant, v_rep, 'IP-restriction regression, attempt a', v_admin, 'admin');
+  begin
+    perform app.approve_mfa_exception(v_exception.id, v_approver, 'approver', '198.51.100.7');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-range p_client_ip under enforced mode, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    if sqlerrm !~ 'ip_not_allowed' then raise; end if;
+  end;
+  if (select status from app.mfa_exceptions where id = v_exception.id) <> 'pending' then
+    raise exception 'assertion failed: the rejected out-of-range-IP attempt must never leave the exception approved';
+  end if;
+
+  -- (b) in-range p_client_ip -- succeeds.
+  v_exception := app.approve_mfa_exception(v_exception.id, v_approver, 'approver', '203.0.113.42');
+  if v_exception.status <> 'approved' then
+    raise exception 'assertion failed: expected status approved for an in-range p_client_ip, got %', v_exception.status;
+  end if;
+
+  -- (c) p_client_ip omitted/null -- succeeds regardless of the enforced policy, proving
+  -- the non-interactive-caller exemption. A SEPARATE, freshly-requested exception is
+  -- used since the one above already resolved.
+  v_exception := app.request_mfa_exception(v_tenant, v_rep, 'IP-restriction regression, attempt c', v_admin, 'admin');
+  v_exception := app.approve_mfa_exception(v_exception.id, v_approver, 'approver');
+  if v_exception.status <> 'approved' then
+    raise exception 'assertion failed: expected status approved when p_client_ip is omitted, regardless of the enforced IP allowlist policy, got %', v_exception.status;
+  end if;
+
+  raise notice 'PASS: app.approve_mfa_exception (ISS-2026-150 closure) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, and allows a null p_client_ip regardless of enforcement';
+end;
+$$;
+
 \echo 'ALL IAE-027 (Enterprise MFA and Session Controls) ASSERTIONS PASSED'

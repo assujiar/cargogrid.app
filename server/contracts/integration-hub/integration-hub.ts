@@ -121,6 +121,7 @@ export const CreateIntegrationConnectionInputSchema = z.object({
   credentialValue: z.string().min(1),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
 });
 export type CreateIntegrationConnectionInput = z.input<typeof CreateIntegrationConnectionInputSchema>;
 
