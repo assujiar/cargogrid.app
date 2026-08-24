@@ -86,6 +86,18 @@ that none of them can quietly drift out of scope. Each names the single lane tha
 > than deferring it again — but its own Tier C review found the fix incompletely closes
 > the gap for one of the 4 named functions, tracked now at `HDN-BLK-023`, owner `HDN-386`.
 
+*Amended at `HDN-388` (Documentation Handoff), ledger reconciliation, zero code. `HDN-BLK-023`
+— the dependency this entry's own Disposition field named as the one thing standing between
+`PARTIALLY RESOLVED` and full closure — was resolved at `HDN-387` (see that entry's own
+`Amended at HDN-387` note). This entry's own text was never revisited after that closure
+landed, left reading `PARTIALLY RESOLVED` with a "not a full closure until `HDN-BLK-023`
+itself closes" caveat that no longer held. **Corrected disposition: `RESOLVED`.** No new code;
+the underlying fix (route-handler IP extraction/threading into the 4 named functions,
+`HDN-378`) and the dependency's own closure (`HDN-387`) are both already-landed, already-
+verified work — this amendment only brings the ledger's own text into agreement with a state
+that has existed since `HDN-387` closed. `KNOWN_ISSUES.md`'s `ISS-2026-150` corrected in the
+same pass from `PARTIALLY RESOLVED` to `RESOLVED`.*
+
 ---
 
 ## HDN-BLK-002 — The day-of-week / wall-clock db-test fixture flake class
@@ -167,11 +179,11 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Reachability** | Advisory-level. It exposes PostGIS's own `st_estimatedextent` as a `SECURITY DEFINER` function and leaves `spatial_ref_sys` without RLS |
 | **Value of fixing** | Clears **7 of the 8 non-noise security advisories, including the only ERROR**: 3 × `extension_in_public`, 6 × `*_security_definer_function_executable`, 1 × `rls_disabled_in_public` (ERROR) |
 | **Blast radius** | **Every function touching `geometry`/`geography` types or any `ST_*` call needs `extensions` added to its search_path.** Far larger than the pgcrypto change, which already spanned 39 functions across 22 migrations |
-| **Disposition** | **`DEFERRED_TO_HDN-378`** |
+| **Disposition** | ~~`DEFERRED_TO_HDN-378`~~ **`PARTIALLY RESOLVED` at `HDN-378`, corrected at `HDN-388`.** `pg_trgm`/`btree_gist` were relocated out of `public` into a new `extensions` schema (`20260815200000_harden_relocate_pg_trgm_btree_gist_out_of_public.sql`, 2 of the item's own 8 named advisories). `postgis` was live-verified genuinely non-relocatable — `ALTER EXTENSION postgis SET SCHEMA` fails outright on a hosted project; the only real path (`DROP EXTENSION postgis CASCADE` + recreate) would destroy 15 live `geography`-typed columns, exceeding what a bounded repair should risk — registered `ISS-2026-234` (Medium, `OPEN`, owner a dedicated future task). This ledger entry's own text was left reading `DEFERRED_TO_HDN-378` and "not yet registered" after `HDN-378` closed `VERIFIED`, undetected by any Tier C ledger-consistency sweep since — the identical stale-disposition-text shape as `HDN-BLK-001`, corrected in the same `HDN-388` pass |
 | **Hard constraint** | **Never fold this into another edit.** It gets its own migration, its own review, and its own gate run. Mixing it with any other change makes a failure impossible to attribute |
 | **Known limit** | `spatial_ref_sys` **cannot** have RLS enabled — it belongs to the PostGIS extension and `postgres` is not superuser on a hosted project. That sub-item is permanently a disclosed residual, not a fixable one |
 | **Rollback** | Additive migration; `git revert`. The move is reversible but expensive — plan it once |
-| **`KNOWN_ISSUES`** | Not yet registered as an `ISS-2026-nnn` row; registered here and to be given one when `HDN-378` opens it |
+| **`KNOWN_ISSUES`** | `ISS-2026-234` (`OPEN`, Medium, postgis non-relocatability, owner a dedicated future task) |
 
 ---
 
@@ -1374,7 +1386,7 @@ fixed by their named owner or explicitly ruled an accepted exception at
 | **`HDN-387`'s own charter items — first round** | Selected 7 bounded critical/high repairs from the open backlog per its own charter, all mechanical or mirroring an already-proven pattern: `HDN-BLK-023` (mirrors `app.request_gps_device_status_transition`, `ATW-031`), `HDN-BLK-013` (mirrors the existing `account.tenantId !== access.tenant.id` app-layer idiom), `HDN-BLK-019` (mirrors `HDN-386`'s own `app.audit_logs` legal-hold-bridge-plus-trigger pattern), `HDN-BLK-022` (mirrors `HDN-377`'s own `app.check_procurement_authority`/`ISS-2026-220` fix, first 2-table increment), `HDN-BLK-027` (mirrors `app.record_job_failure`'s own dead-letter alert pattern), `HDN-BLK-010` (mirrors `app.prepare_wms_outbound_from_shipment`'s own "design note 9(a)" pattern, plus `ISS-2026-163`'s own distinct fix), `HDN-BLK-007` (TS-only). `HDN-BLK-006` closed administratively. **3 real defects caught and fixed live before the first-round commit**: a webhook-alert fix that silently reverted 3 later hardening passes (caught by a live `db-tests` failure); a `jsonb`-into-`text` parameter mismatch (caught before any test run); an RLS policy dropped under the wrong name, leaving the real weak policy live (caught by a live probe). Gates: `typecheck` 0; `lint` 0/337 warnings; `pnpm run test` 5444/5444; `next build` clean; `bash scripts/db-tests/run.sh` 230/230 files clean (333 migrations) |
 | **`HDN-387`'s own charter items — Tier C** | 4 independent adversarial lenses ran against the pushed first-round state (`e152f4f`). **Correctness re-derivation: clean PASS** — every migration part, TS change, and the CI test fix independently re-derived correct against the actual current schema/code state, all 4 gates independently re-run and matched. **Attack-surface adversarial testing: mostly HELD, one live-demonstrated addendum** — `HDN-BLK-023`/`019`/`027`/`010` all HELD under live attack, several with stronger guarantees than documented (an FK-level `RESTRICT` on `file_access_logs.file_id` independently prevents the exact orphaned-parent scenario the task worried about); `HDN-BLK-022`'s RLS fix itself HELD under every attack, but a `customer_user`-layer actor who also holds a staff role can still read the same data via the pre-existing, unguarded `list_position_grades`/`list_vendor_kpi_scorecards`/2 procurement-dashboard RPCs — not a regression this checkpoint introduced, folded into `ISS-2026-225`'s own still-open ~33-table remainder as a disclosed addendum, owner unchanged `HDN-378`. **Schema-wide completeness sweep: 2 real gaps found and fixed** — (a) 3 own-charter ledger entries (`HDN-BLK-008`, `HDN-BLK-014`'s residual, `HDN-BLK-039`) left with no disposition update at the first round, the identical procedural-gap shape `HDN-386` was itself caught committing one checkpoint earlier for `HDN-BLK-016..019` — corrected with explicit disposition notes; `HDN-BLK-039` (High, 14 unowned blockers) formally accepted under §8.2, real owner `Step 16` assigned, closing `RESOLVED`; (b) a newly-surfaced sibling gap disclosed in `ISS-2026-166`'s own prose (`sendTestWebhookDeliveryAction` sharing `HDN-BLK-013`'s exact unchecked shape) but never registered with a trackable ID — closed directly in the fix pass (genuinely bounded, identical mechanical pattern, same file) rather than minted as a separate finding. **Ledger/documentation consistency: 1 minor gap found and fixed** — `HDN-387.md` §10 omitted `HARDENING_MATRIX.md` from its own documentation-changes list, though the edit itself was accurate; corrected. No Critical or unowned High finding survives Tier C. Independent full gate re-run after the fix pass: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444** (unchanged — the `sendTestWebhookDeliveryAction` fix has no dedicated test harness, matching this file's own established no-test-file precedent for `admin/api-keys/actions.ts`); `bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations, unchanged — no schema change at Tier C). **`HDN-387` closes `VERIFIED`.** |
 
-`HDN-BLK-001`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-022`,
+`HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-022`,
 `HDN-BLK-024`, `HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`,
 `HDN-BLK-029`, `HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033`,
 `HDN-BLK-034`, `HDN-BLK-035`, `HDN-BLK-036`, `HDN-BLK-037`, `HDN-BLK-038`,
@@ -1382,8 +1394,21 @@ fixed by their named owner or explicitly ruled an accepted exception at
 are open release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until
 fixed by their named owner or explicitly ruled an accepted exception at
 `HDN-389`. `HDN-BLK-006`/`039` are `ACCEPTED_EXCEPTION` (re-ruled/ruled at
-`HDN-387`) and `HDN-BLK-007`/`010`/`013`/`019` are `RESOLVED` (`HDN-387`) —
-no longer open blockers.
+`HDN-387`) and `HDN-BLK-001`/`007`/`010`/`013`/`019` are `RESOLVED`
+(`HDN-BLK-001` at `HDN-388`, the rest at `HDN-387`) — no longer open blockers.
+
+## Status as of `HDN-388` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **33** — unchanged this checkpoint; `HDN-388`'s own charter is documentation reconciliation and Step 16 handoff, not new discovery |
+| Blockers closed/corrected **by** `HDN-388` | **`RESOLVED`** (ledger-text correction only, zero code): `HDN-BLK-001` (High — its own blocking dependency, `HDN-BLK-023`, closed at `HDN-387`; this entry's text was never revisited, left reading `PARTIALLY RESOLVED`). **`PARTIALLY RESOLVED`, text corrected** (zero code): `HDN-BLK-004` (Medium — `HDN-378` already relocated 2 of 3 extensions and registered `ISS-2026-234` for the genuinely non-relocatable `postgis` remainder; this entry's text was left reading `DEFERRED_TO_HDN-378`/"not yet registered," the identical stale-text shape as `HDN-BLK-001`, both corrected in this same pass). No new findings, no new migration, no code change of any kind this checkpoint — see `HDN-388.md` for the full documentation-handoff scope (runbooks authored/widened, `HARDENING_MATRIX.md` reconciled, `docs/runtime/RELEASE_READINESS_MATRIX.md` authored) |
+| — of which **Critical**, open | **0** — unchanged |
+| — of which **High**, still open | `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-022` (partial), `HDN-BLK-024`, `HDN-BLK-027` (partial), `HDN-BLK-028..038` (**17**, down from 18 — `HDN-BLK-001` closed by this checkpoint's own ledger-text correction; `HDN-BLK-022`/`027` remain open, only partially closed, still counted here) |
+| — of which **Medium**, still open | `HDN-BLK-003`, `004`, `008`, `014`, `025`, `026` (**6**, unchanged — `HDN-BLK-004`'s text corrected but its own postgis-remainder, `ISS-2026-234`, stays genuinely open, so the tally does not change) |
+| Unresolved **Critical** anywhere | **0** |
+| **§8.2 disposition gap disclosed, not ruled here** | Of the 17 open High items, 12 (`HDN-BLK-027..038`) were formally ruled `ACCEPTED_EXCEPTION` under §8.2 by `HDN-BLK-039` at `HDN-387` Tier C, owner `Step 16`. **5 remain neither fixed-with-regression-proof nor formally ruled**: `HDN-BLK-016`, `017`, `018`, `022` (partial remainder), `024` — each carries a named prior owner (`HDN-386`, `HDN-378`) whose own checkpoint has since closed `VERIFIED` without making that ruling, and per `00_EXECUTION_INDEX.md` §8.2 condition 5 a ruling may only be made "at `HDN-387` or `HDN-389`," never by the lane that found it and never by this documentation-handoff checkpoint. `HDN-387` is closed; **`HDN-389` is therefore the only remaining authority that can either see these 5 items fixed with regression proof or formally rule them `ACCEPTED_EXCEPTION` before Step 16 eligibility can be reached** (`00_EXECUTION_INDEX.md` §12 condition 4). This gap is not new — it existed identically at `HDN-387`'s own close — but no prior checkpoint's own ledger synthesis stated it this explicitly. Folded into `docs/runtime/RELEASE_READINESS_MATRIX.md`'s own go/no-go section |
+| **`HDN-388`'s own charter items** | Documentation-handoff checkpoint: 2 stale ledger-text corrections (`HDN-BLK-001`/`004`, both zero-code); runbook checklist reconciled (`00_EXECUTION_INDEX.md` §11.4 — performance/capacity and on-call-ownership runbooks authored, deployment/migration re-run-guard consolidated, `ISS-2026-262`'s stale catalogue corrected); `HARDENING_MATRIX.md` reconciled with `HDN-386`/`HDN-387` narrative sections and a refreshed gate-index note; `docs/runtime/RELEASE_READINESS_MATRIX.md` authored (did not exist); `docs/runtime/HANDOFF.md` given an explicit Step 16 go/no-go section. See `HDN-388.md` for full disposition |
 
 ## Reserved
 
