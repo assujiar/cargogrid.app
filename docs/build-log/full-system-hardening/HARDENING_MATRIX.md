@@ -34,7 +34,7 @@ from zero and no lane rediscovers a known item.
 | 5 | Financial integrity | `HDN-374` **`VERIFIED`** | **`PARTIAL`** — not a pass, Tier C closed. Quote-level tax silently doubled at invoicing — fixed (`ISS-2026-194`). A job order could reach `issued` on two full-amount invoices from two distinct handoffs — fixed at the actual AR/GL posting boundary, `app.issue_finance_invoice` (`ISS-2026-195`; the first fix draft, gating invoice preparation itself, was self-corrected before commit — it would have broken `OPS-181`'s own disclosed legitimate-re-handoff allowance). `HDN-BLK-010`/`ISS-2026-162`'s Finance/HRIS-Payroll scope resolved — 10 functions (6 named plus 4 more this checkpoint's own wider sweep found) fixed with the codebase's own "design note 9(a)" pattern, 2 mechanisms live-forced with a genuine two-process race each. `app.run_loyalty_expiry_sweep`'s own `p_as_of` was silently ignored — fixed (`ISS-2026-196`). **Tier C review found 5 more real, live-forced defects**: `app.lock_finance_period` shared the sweep's own missed shape (fixed); Finding 1's own fix dropped the quote's discount, overbilling (fixed); Finding 2's own guard had no backing constraint and did not survive genuine concurrency (fixed with a real partial unique index); `app.request_finance_settlement_reversal` bypassed period lock entirely (fixed) and posts no reversing GL journal at all (registered, `ISS-2026-199`/`HDN-BLK-016`, owner `HDN-386`). 2 findings registered, not fixed, owner `HDN-386` (`ISS-2026-197`: no FX/multi-currency conversion anywhere in the revenue chain; Operations' own job-profitability planned-vs-actual split). `HDN-BLK-010`'s residual 3 non-Finance functions plus `ISS-2026-163` handed to `HDN-387` | §5 |
 | 6 | Data lineage | `HDN-375` **`VERIFIED`** | **`PARTIAL`** — not a pass, Tier C closed. Canonical lineage chain, downstream projection versioning, historical config preservation and permission-awareness all held clean at first round. `app.transaction_lineage_edges` had no `BEFORE UPDATE/DELETE` guard at all despite its own append-only contract — fixed (`ISS-2026-201`). `app.loyalty_earning_events`/`app.finance_journals` accepted a `source_id` with no DB-layer FK — fixed with a per-`source_type` validation trigger on each (`ISS-2026-202`). The 5 hash-chain triggers are standalone per-row fingerprints, not a genuine chain — registered, not fixed (`ISS-2026-200`/`HDN-BLK-017`, High, owner `HDN-386`). **Tier C found the append-only-guard pattern is genuinely needed on ~70 more tables schema-wide, including `app.audit_logs` itself** — registered, not fixed (`ISS-2026-205`/`HDN-BLK-018`, High, owner `HDN-386`); the orphan-`source_id` gap recurs on `finance_subledger_batches` and others — registered, not fixed (`ISS-2026-206`, Medium, owner `HDN-387`, after a fix draft was caught before commit breaking a pre-existing test file's own design) | §6 |
 | 7 | API compatibility | `HDN-376` **`VERIFIED`** | **`PASS`** — Tier C closed. A Critical/High authentication bypass fixed on the inbound/outbound webhook signature verification path (`ISS-2026-209`/`210`, a NULL signature silently accepted as verified). 2 Low REST route error-code bugs fixed (`ISS-2026-211`/`212`). `ISS-2026-147` item 1 closed — 44 new route-level tests across all 9 REST `/v1` handlers, via a fetch-stubbing harness (no local PostgREST/Supabase stack available). GraphQL wording corrected (no surface exists). Tier C found and fixed 1 more real defect (`ISS-2026-215`, Low, 2 GET routes conflating a genuine internal RPC failure with the 404 not-found case) and corrected 1 documentation-citation error. 4 findings registered, not fixed: `ISS-2026-207`/`208` (Medium/Low, owner `HDN-387`); `ISS-2026-213`/`214` (both Low, owner `HDN-386`/`HDN-387`) | §7 |
-| 8 | Storage / signed URL | `HDN-377` | **`PARTIAL`** — not a pass, Tier C review pending. 2 Critical (`ISS-2026-216` storage_path exposure, `ISS-2026-217` dual legal-hold mechanisms) + 1 High (`ISS-2026-218` legal-hold DELETE backstop) + 3 Medium (`ISS-2026-219`/`220`/`221`) defects fixed. 4 findings registered (`ISS-2026-222` High owner `HDN-386`; `ISS-2026-223`/`225` Low owner `HDN-378`; `ISS-2026-224` Medium owner `HDN-387`) | §8 |
+| 8 | Storage / signed URL | `HDN-377` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. First round: 2 Critical (`ISS-2026-216` storage_path exposure, `ISS-2026-217` dual legal-hold mechanisms) + 1 High (`ISS-2026-218` legal-hold DELETE backstop) + 3 Medium (`ISS-2026-219`/`220`/`221`) defects fixed. Tier C: 1 more Critical self-inflicted gap in the first round's own trigger fixed (`ISS-2026-226`), 1 more High fixed (`ISS-2026-227`), 1 Medium-High validation gap fixed (`ISS-2026-228`), 1 finding self-corrected before commit (`ISS-2026-231`). 6 findings registered, not fixed, all outside this checkpoint's own charter: `ISS-2026-222` High + `229` Critical + `230` High (owner `HDN-386`); `ISS-2026-223`/`225` (corrected High)/`232` (owner `HDN-378`); `ISS-2026-224` Medium (owner `HDN-387`) | §8 |
 | 9 | Security hardening | `HDN-378` | `NOT_RUN` | §9 |
 | 10 | Performance / scalability | `HDN-379` | `NOT_RUN` | §10 |
 | 11 | Accessibility | `HDN-380` | `NOT_RUN` | §11 |
@@ -478,48 +478,62 @@ release gate.
 
 **Upstream:** `HDN-372`.
 
-> **Result, 2026-08-24 (`CG-S15-HDN-009`), `COMPLETED`, Tier C review pending:** one
-> additive migration, four independent parallel investigation lenses, each required to
-> live-force its own findings on disposable databases or real request/response
-> construction. No live Supabase Storage integration exists anywhere in this
+> **Result, 2026-08-24 (`CG-S15-HDN-009`), `VERIFIED`, Tier C closed:** two additive
+> migrations, four independent parallel investigation lenses in the first round plus
+> four independent parallel adversarial lenses at Tier C, each required to live-force
+> its own findings. No live Supabase Storage integration exists anywhere in this
 > repository (confirmed by exhaustive grep), narrowing several findings' exploitability
 > to metadata/key disclosure today rather than actual byte exfiltration — several
-> become live download-bypass primitives the moment Storage is wired up. **2 Critical
-> findings fixed**: `app.files.storage_path` (the real Supabase Storage object key)
+> become live download-bypass primitives the moment Storage is wired up. **First round,
+> 2 Critical fixed**: `app.files.storage_path` (the real Supabase Storage object key)
 > carried a full table-level SELECT grant to `authenticated` with no column-level
-> mask, found independently by 3 of 4 lenses — live-forced, `pending`/`infected` files
-> both still returned the key; fixed by mirroring `app.users`/`email`'s own proven
-> column-level carve-out, plus a new `FileSummary` contract type (`ISS-2026-216`).
-> Two independently-built legal-hold mechanisms for files (PLT-128-native vs IAE-031
-> generic) were unaware of each other in both directions, live-forced both ways; fixed
-> by bridging `app._is_under_legal_hold()` (`ISS-2026-217`). **1 High fixed**:
-> `app.files.legal_hold` was enforced only inside one RPC with no schema-level
-> backstop — a raw `service_role` DELETE physically erased a legally-held row; fixed
-> with a narrowly-scoped `BEFORE DELETE` guard trigger mirroring `HDN-375`'s own proven
-> RPD-022 pattern (`ISS-2026-218`). **3 Medium fixed**: 3 vendor evidence-access RPCs
-> leaked `file_id` on their own content-gate denial branch (`ISS-2026-219`); 2
-> Procurement file/evidence-shaped tables' RLS bypassed `PRC:View`/`PRC:Download`, the
-> same class `HDN-373` fixed once for `app.finance_journals` (`ISS-2026-220`); vendor-
-> assessment evidence upload called a `service_role`-only RPC through the wrong client,
-> mirroring an already-fixed sibling file (`ISS-2026-221`). **2 new taxonomy classes
-> added** to `RECURRING_DEFECT_TAXONOMY.md` per its own §6 maintenance mandate: C-25
-> (two independently-built enforcement mechanisms for the same conceptual control,
-> neither aware of the other) and C-26 (an RPC-level check with no schema-level
-> backstop against the same mutation issued directly). **4 findings registered, not
-> fixed**: `ISS-2026-222` (High, owner `HDN-386`) — legal hold does not extend to
-> protect a file's own `app.file_access_logs` rows, given its own `HDN-BLK-019` entry;
-> `ISS-2026-223` (Low, owner `HDN-378`) — ordinary `tenant_admin` bypasses file gates
-> via a misused `is_support_grant_authority` predicate, a repository-wide ~35-domain
-> convention question rather than a bounded repair; `ISS-2026-224` (Medium, owner
-> `HDN-387`) — `app.can_access_record` over-restricts legitimate Procurement evidence
-> reviewers, defeating the workflow the vendor evidence-access RPCs were built for;
-> `ISS-2026-225` (Low, owner `HDN-378`) — the same coarse-RLS-plus-fine-RPC-gate
-> pattern recurs across ~69 Procurement/~17 HR tables, most safe by construction (no
-> `authenticated` grant), full sweep out of this bounded audit's own scope. No
-> Critical finding residual anywhere. Gates: `typecheck` 0, `lint` 0 errors/337
-> warnings, 5440/5440 unit tests, db-tests **228/229 files clean** (323 migrations) —
-> the 229th the same pre-existing, unrelated `ISS-2026-204` flake. Tier C review
-> required before `VERIFIED`. Full disposition: `HDN-377.md` §6/§12.
+> mask, found independently by 3 of 4 lenses — fixed mirroring `app.users`/`email`'s
+> own proven column-level carve-out, plus a new `FileSummary` contract type
+> (`ISS-2026-216`). Two independently-built legal-hold mechanisms for files
+> (PLT-128-native vs IAE-031 generic) were unaware of each other in both directions —
+> fixed by bridging `app._is_under_legal_hold()` (`ISS-2026-217`). **1 High fixed**:
+> `app.files.legal_hold` enforced only inside one RPC with no schema-level backstop —
+> fixed with a `BEFORE DELETE` guard trigger mirroring `HDN-375`'s own proven RPD-022
+> pattern (`ISS-2026-218`). **3 Medium fixed**: vendor evidence-access RPCs leaking
+> `file_id` on denial (`ISS-2026-219`); 2 Procurement tables' RLS bypassing
+> `PRC:View`/`PRC:Download`, the same class `HDN-373` fixed for `app.finance_journals`
+> (`ISS-2026-220`); a vendor-assessment upload wrong-client bug mirroring an
+> already-fixed sibling (`ISS-2026-221`). **2 new taxonomy classes added**: C-25 (dual
+> independently-built enforcement mechanisms unaware of each other) and C-26 (an
+> RPC-level check with no schema-level backstop).
+>
+> **Tier C review found a Critical, self-inflicted bypass in the first round's own new
+> trigger**: `app.protect_files_legal_hold_from_deletion()` checked only the native
+> `legal_hold` flag, never the bridged generic mechanism the SAME migration added
+> elsewhere — a generically-held file could still be physically destroyed via a raw
+> `service_role` DELETE with zero audit trail; fixed same Tier C pass (`ISS-2026-226`).
+> **2 more same-domain gaps fixed**: the legal-hold check had no backstop against the
+> UPDATE-based soft-delete path (`ISS-2026-227`, High); `scope_record_table` was
+> unvalidated free text, silently creating a non-protecting hold on a case/whitespace
+> variant, now normalized and validated (`ISS-2026-228`, Medium-High). **1 finding
+> drafted then self-corrected before commit**: a matching scan-status backstop trigger
+> was found to break 4 pre-existing, deliberately-designed tests across other domains
+> relying on a session-context-free raw-UPDATE correction path; discarded, registered
+> instead (`ISS-2026-231`, Medium, owner `HDN-386`) — mirrors `HDN-374`/`375`'s own
+> self-correction precedent. **2 new, real, out-of-charter findings registered**:
+> `app.audit_logs.legal_hold` enforced nowhere, a legally-held audit row physically
+> deleted (`ISS-2026-229`/`HDN-BLK-020`, Critical, owner `HDN-386`); `app.tenants.
+> legal_hold` unbridged, a held tenant terminated successfully (`ISS-2026-230`/
+> `HDN-BLK-021`, High, owner `HDN-386`). **1 first-round disposition corrected**: Tier C
+> independently found 60 (not "most safe") Procurement/HR tables with a real
+> `authenticated` grant, ~35 confirmed RLS-bypass-exploitable, 2 live-forced —
+> `ISS-2026-225`/`HDN-BLK-022` corrected from Low to High, owner unchanged `HDN-378`.
+> **1 more out-of-charter finding registered**: 3 more `token_hash` columns share
+> `ISS-2026-216`'s own exposure class (`ISS-2026-232`, Medium, owner `HDN-378`).
+> Several documentation miscounts corrected across 9 ledger files (a self-contradicting
+> "2 Medium"/"3 Medium" line, a "6 files" miscount propagated into 5 documents, 2
+> `CHANGE_MANIFEST.md` overcounts, 1 stale `BLOCKER_LEDGER.md` footer). No Critical
+> finding fixed-vs-registered residual — the one registered Critical is a pre-existing,
+> out-of-charter `app.audit_logs` gap bundled with the already-owned `HDN-BLK-018`
+> work. Independent full gate re-run green post-Tier-C: `typecheck` 0, `lint` 0
+> errors/337 warnings, 5440/5440 unit tests, db-tests **228/229 files clean** (324
+> migrations) — the 229th the same pre-existing, unrelated `ISS-2026-204` flake. Full
+> disposition: `HDN-377.md` §13.
 
 ---
 

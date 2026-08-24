@@ -2372,26 +2372,231 @@ review workflow is currently unusable by anyone but the uploader), not a securit
 disclosure — the RPC's own denial path is exactly as safe as before, just
 over-restrictive. **Not fixed here. Owner: `HDN-387`.**
 
-### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs identically across ~69 Procurement and ~17 HR recruitment/onboarding tables; most carry no `authenticated` grant (safe by construction), but the population was not exhaustively swept for the ones that do (found at `CG-S15-HDN-009`, `OPEN`, Low, owner `HDN-378`)
+### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs across at least ~35 more Procurement/HR tables that DO carry the `authenticated` grant and ARE live-exploitable, correcting this entry's own first-round "safe by construction" disposition (found at `CG-S15-HDN-009`, `OPEN`, **High** (corrected at Tier C from Low), owner `HDN-378`)
 
-Found by the tenant-isolation/RLS lens while investigating `ISS-2026-220`. The "broad
-tenant-membership RLS + fine-grained RPC-layer gate" shape `ISS-2026-220` fixed for 2
-tables is used identically across roughly 69 further Procurement-domain tables
-(spot-checked `vendor_bank_accounts`/`vendor_tax_identities` — confirmed 0 rows in
-`role_table_grants` for `authenticated`, so their RLS predicate is moot and safe by
-construction today) and roughly 17 HR recruitment/onboarding tables (`candidates`,
-`onboarding_offboarding_cases`, etc.) — a deliberate, consistent architectural
-convention, not an isolated coding bug, and the two tables `ISS-2026-220` fixed are
-simply the file/document-shaped members of this population that happen to also carry
-the `authenticated` grant, which is what made them live-exploitable and squarely this
-checkpoint's own file-security charter. A dedicated, exhaustive sweep of every other
-table in both domains for the same `authenticated`-grant-plus-broad-RLS combination —
-mirroring `ISS-2026-186`'s own precedent for a structurally similar prior finding — is
-recommended but out of this bounded file-scope audit's own charter. **Severity: Low**
-— every table actually checked either already has the correct gate or carries no
-exploitable grant at all; this is a completeness/coverage gap, not a confirmed live
-defect anywhere beyond what `ISS-2026-220` already fixed. **Not fixed here. Owner:
-`HDN-378`** (Security Hardening).
+**Corrected at this checkpoint's own Tier C completeness-sweep lens** — the first-round
+disposition below undercounted the live-exploitable population; the correction follows.
+
+Found by the tenant-isolation/RLS lens while investigating `ISS-2026-220`, first round:
+the "broad tenant-membership RLS + fine-grained RPC-layer gate" shape `ISS-2026-220`
+fixed for 2 tables is used identically across a much larger Procurement/HR population,
+spot-checked as "most carry no `authenticated` grant... safe by construction." **Tier C
+independently queried `information_schema.role_table_grants` for every Procurement/
+HR-shaped table with a real `authenticated` SELECT grant — 60 tables, not "most carry
+no grant."** Cross-referencing `pg_policies` against all 60: 58 gate purely on
+`has_active_tenant_membership(tenant_id) and not actor_holds_customer_user_layer(...)`
+(the 2 already-fixed tables now correctly also require `check_procurement_authority`).
+Of a 51-table sample of those 58, **~35 confirmed** requiring `PRC:View`/`HRS:View` at
+their own RPC layer while RLS remains bare tenant-membership — the exact same bypass
+shape, not a coverage gap. **2 live-forced to confirm genuine exploitability**:
+`app.vendor_kpi_scorecards` — a zero-PRC-role tenant member directly `SELECT`ed all 4
+rows (real `composite_score`/`band` data for named vendors, e.g. `band='poor'`) while
+`list_vendor_kpi_scorecards` correctly raised `insufficient_authority` for the
+identical actor; `app.position_grades` (HR) — a zero-HRS-role `org_user` directly
+`SELECT`ed the seeded row in full while `list_position_grades` correctly denied it.
+
+**Severity corrected: High** (from the first round's Low) — this is a real, live-forced,
+repeated instance of the exact defect class this checkpoint's own headline fix
+addressed, not a completeness/coverage gap as originally disclosed; the affected tables
+carry real vendor-performance, compliance, sourcing, and HR-recruitment data. **Still
+not bounded-repair-sized for this checkpoint** — ~35+ tables across two domains is
+squarely a dedicated sweep-and-fix lane's own charter, not a storage-audit checkpoint's
+— but the disposition is corrected from "safe by construction, low priority" to "a
+real, large, live-exploitable population requiring prompt remediation." **Not fixed
+here. Owner: `HDN-378`** (Security Hardening) — named list of confirmed-affected
+tables and the full 60-table/58-policy query method: `HDN-377.md` §13.2.
+
+### ISS-2026-226 — the first round's own new `BEFORE DELETE` legal-hold guard trigger checked only the PLT-128-native `legal_hold` flag, never the bridged generic (IAE-031) hold mechanism the SAME migration's own Finding B added — a file held exclusively via the generic mechanism was still physically destroyable, with zero audit trail (found and fixed at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED`, Critical)
+
+Found by the Tier C attack-surface adversarial lens, live-forced, reproducible.
+`app.protect_files_legal_hold_from_deletion()` (the first round's own new schema-level
+backstop, `ISS-2026-218`) checked only `OLD.legal_hold` and never called `app._is_
+under_legal_hold()` — the bridge the SAME migration's own Finding B (`ISS-2026-217`)
+added in the same commit to make the generic hold mechanism visible everywhere.
+Because `app.request_legal_hold()` never writes back to `app.files.legal_hold`, a file
+held exclusively via the generic mechanism kept `legal_hold=false` forever, so the new
+trigger let the deletion through unimpeded. Live-forced: placed a real, active generic
+hold via `app.request_legal_hold(scope='app.files', file.id)`; `app.request_file_
+deletion()` correctly refused (RPC-level check, unaffected); a raw `service_role`
+`DELETE` on the same row **succeeded**, with **no exception raised and no `app.audit_
+logs` row written anywhere** — the trigger's own audit-capture branch is gated on the
+same false flag it failed to check. This directly falsified the first round's own claim
+that the bridge "closes both directions at once." Matches `RECURRING_DEFECT_TAXONOMY.md`
+C-26 recurring within the very fix that introduced the class this checkpoint.
+
+**Fixed**: `app.protect_files_legal_hold_from_deletion()` now computes `v_held :=
+OLD.legal_hold or app._is_under_legal_hold(OLD.tenant_id, 'operational', 'app.files',
+OLD.id)` and gates on that combined value for both DELETE and the soft-delete UPDATE
+transition (see `ISS-2026-227` below). Regression-tested: a generic-only hold now
+correctly blocks a raw DELETE, matching the native-hold case that already worked.
+
+### ISS-2026-227 — `app.request_file_deletion()`'s legal-hold check had no schema-level backstop against the UPDATE-based soft-delete path (`deleted_at`), only the physical DELETE path the first round fixed (found and fixed at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED`, High)
+
+Found by the Tier C completeness-sweep lens, live-forced. The first round's own new
+`BEFORE DELETE` trigger (`ISS-2026-218`) only fires on the physical `DELETE` statement
+— but `app.request_file_deletion()`'s own sanctioned deletion path is a soft delete
+(`UPDATE app.files SET deleted_at = now(), lifecycle_status = 'deleted'`), which the
+trigger never covered. Live-forced: a raw `UPDATE app.files SET deleted_at = now(),
+lifecycle_status='deleted' WHERE ... AND legal_hold = true` (bypassing the RPC
+entirely) succeeded unimpeded, soft-deleting a legally-held file. More realistic than
+the already-fixed physical-DELETE bypass, since soft-delete via `deleted_at` is the
+sanctioned, everyday deletion path in this system, not an exceptional one. Same C-26
+class as `ISS-2026-218`/`226`, recurring a third time on the same table in the same
+checkpoint.
+
+**Fixed**: `app.protect_files_legal_hold_from_deletion()` is now `BEFORE UPDATE OR
+DELETE` (was `BEFORE DELETE` only) and additionally guards any UPDATE where `NEW.
+deleted_at is not null and OLD.deleted_at is null` (the soft-delete transition) under
+the same combined native+generic hold check as `ISS-2026-226`. Every other UPDATE path
+(scan-status transitions, versioning supersede, classification change) is unaffected —
+confirmed via regression that an ordinary, non-deletion UPDATE on a held file still
+succeeds.
+
+### ISS-2026-228 — `app.request_legal_hold()`'s `scope_record_table` parameter was unvalidated free text compared by exact string equality; a case/whitespace variant or a missing schema-qualifier silently created a hold that looked active but protected nothing (found and fixed at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED`, Medium-High)
+
+Found by the Tier C attack-surface adversarial lens, live-forced. `app._is_under_legal_
+hold()`'s specific-record branch (and this checkpoint's own new `app.files` bridge
+branch) compares `scope_record_table` by exact string equality with no normalization
+or validation on the write side. Live-forced three variants: a hold placed with wrong
+case (`'App.Files'`), leading whitespace (`' app.files'`), or a missing schema prefix
+(`'files'`) all inserted successfully, looked like a genuine active hold (`status=
+active`, visible in `app.legal_holds`), and silently protected nothing — `app.request_
+file_deletion()` still succeeded against the file the caller believed was held. No
+route in this repository currently calls `app.request_legal_hold()` (grepped, zero
+matches), limiting today's reachability to direct/future RPC callers, but the RPC
+itself — what any future UI or script would call — failed silently with no validation
+error, the worst-case "false sense of protection" shape.
+
+**Fixed**: `app.request_legal_hold()` now normalizes `scope_record_table` (`lower(
+trim(...))`) before storing it, and rejects a non-schema-qualified value outright
+(`legal_hold_scope_table_not_qualified`) rather than silently accepting it. `app._is_
+under_legal_hold()`'s own read-side comparisons normalize the caller-supplied
+`p_source_table` the same way, for defense in depth against any future caller passing
+inconsistent case. Regression-tested: mixed-case and whitespace-padded variants now
+correctly still match and block deletion; a non-qualified value is now loudly rejected
+at hold-creation time instead of silently accepted.
+
+### ISS-2026-229 — `app.audit_logs.legal_hold` is enforced nowhere: neither the native flag nor the generic (IAE-031) hold mechanism is checked before physical deletion, on the platform's own canonical audit trail (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, **Critical**, owner `HDN-386`, `HDN-BLK-020`)
+
+Found by the Tier C completeness-sweep lens while sweeping for more instances of
+`RECURRING_DEFECT_TAXONOMY.md` C-25 (the dual-mechanism-drift class this checkpoint's
+own `ISS-2026-217` fix introduced). `app.audit_logs.legal_hold` has its own dedicated
+setter (`app.supreme_admin_mutate_audit_log`), but its own deletion RPC (`app.supreme_
+admin_delete_audit_log`) never checks `legal_hold` at all — not the native flag, not
+the generic `app._is_under_legal_hold()` mechanism (never bridged to `app.audit_logs`
+either, unlike `app.files` after this checkpoint's own fix). Live-forced: set `legal_
+hold=true` on a real audit row via the native setter, then called `supreme_admin_
+delete_audit_log` — the row was physically deleted. This is a dead invariant at both
+the native and generic layers simultaneously, on the audit trail every other detective
+control in this codebase (including this checkpoint's own new triggers' own audit
+captures) depends on as evidence of record — a sharper, single-invariant instance of
+the still-open `HDN-BLK-018`/`ISS-2026-205` finding (the general append-only-guard
+rollout gap), Supreme-Admin-reachable and self-serving since the same authority both
+sets and bypasses the hold.
+
+**Not this checkpoint's own charter to fix** — `app.audit_logs` is not a file/storage
+table, and reconciling its own legal-hold enforcement is squarely part of the
+already-registered, already-owned `HDN-BLK-018` guard-rollout work. **Severity:
+Critical** — the audit trail is the evidence store every other detective control in
+this codebase relies on; a Supreme-Admin-reachable, self-serving, live-forced physical
+deletion of held audit evidence is the most severe instance of the dual-mechanism-drift
+class found anywhere this checkpoint. **Not fixed here. Owner: `HDN-386`** (bundled
+with `HDN-BLK-018`'s own audit_logs guard-rollout work — the two invariants, append-only
+and legal-hold, should be added together, not as two separate passes over the same
+table). See `HDN-BLK-020` in `BLOCKER_LEDGER.md` for the full disposition.
+
+### ISS-2026-230 — `app.tenants.legal_hold` is invisible to the generic (IAE-031) legal-hold mechanism in both directions, and no RPC exists to set the native flag at all (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, High, owner `HDN-386`)
+
+Found by the Tier C completeness-sweep lens, live-forced, same sweep as `ISS-2026-229`.
+`app.tenants.legal_hold`'s own native trigger (`app.enforce_tenant_status_transition`)
+correctly blocks tenant termination when the native flag is true (control case
+verified) — but no RPC anywhere sets that native column at all, so it is reachable only
+via a raw superuser/service_role UPDATE, and it was never bridged into the generic
+mechanism either direction. Live-forced: placed a hold via the generic `app.request_
+legal_hold(scope='app.tenants', tenant.id)` — recorded `active` — then `app.transition_
+tenant_status(..., 'terminated', ...)` **succeeded**, terminating a tenant under an
+active generic legal hold. Same `RECURRING_DEFECT_TAXONOMY.md` C-25 class as `ISS-2026-
+217`, a different table.
+
+**Not this checkpoint's own charter to fix** — `app.tenants` is not a file/storage
+table. **Severity: High** — Supreme-Admin/service-role-reachable, no legitimate RPC
+path exists to set the native flag at all today, so the practical exposure is narrower
+than `ISS-2026-229`'s audit-log instance, but the failure mode (a tenant terminated
+mid-hold) is severe when it does occur. **Not fixed here. Owner: `HDN-386`** (bundled
+with the same C-25 reconciliation work `ISS-2026-217`/`229` name — a single pass should
+decide which of `app.tenants`/`app.audit_logs`/any other native-hold-shaped column gets
+bridged into `app.legal_holds`, rather than three separate one-table patches).
+
+### ISS-2026-231 — a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered before commit to conflict with an established, deliberate, already-tested repository pattern of a raw, session-context-free correction UPDATE (the disclosed RPD-022 residual-risk path), used in 4 other domains' own test suites (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, Medium, owner `HDN-386`)
+
+Found by the Tier C completeness-sweep lens (the schema-backstop gap itself) and
+self-corrected by the orchestrating session before commit (the drafted fix's own
+conflict). `app.record_file_scan_result()`'s own `document_scan_already_resolved`
+invariant (a non-`pending` `malware_scan_status` can never change) has no trigger
+backstop — live-forced, a raw `service_role` `UPDATE app.files SET malware_scan_
+status = 'clean'` on an `infected` row succeeds unimpeded, the literal malware-scan
+quarantine gate this checkpoint's own charter depends on. A matching `BEFORE UPDATE`
+guard trigger was drafted mirroring `ISS-2026-226`/`227`'s own Supreme-Admin-bypass
+shape, then found before commit to break 4 pre-existing, currently-passing, deliberately
+-designed tests (`customer-epod-access.sql`, `procurement-vendor-compliance.sql`,
+`procurement-vendor-financial-security.sql`, `ticketing-customer.sql`) that each
+directly re-flag an already-`clean` file to `infected` via a raw `UPDATE`, explicitly
+documented at every call site as simulating "the disclosed RPD-022 Supreme Admin
+residual-risk correction path... never reachable through app.record_file_scan_result
+once resolved" — executed with **no session-bound actor context at all** (an
+out-of-band, service-level correction, not a browser session), which the drafted
+trigger's own `is_supreme_admin(auth.uid())` bypass check cannot recognize as
+legitimate. Shipping the drafted fix would have broken 4 real, deliberately-designed
+regression tests to close a gap this codebase already has a differently-shaped,
+disclosed, accepted residual-risk path for. **Self-corrected, the draft discarded
+rather than shipped broken or hastily re-designed under Tier C's own time budget**,
+mirroring `HDN-374`'s own Finding-2 and `HDN-375`'s own `finance_subledger_batches`
+self-correction precedent.
+
+**Not fixed here — genuinely a design decision, not a bounded repair.** The correct fix
+requires reconciling two currently-incompatible models of "who may perform an
+out-of-band RPD-022 correction": a session-bound Supreme Admin actor (this checkpoint's
+own `ISS-2026-226`/`227` shape) vs. a service-level correction with no actor context at
+all (the pattern 4 other domains already rely on and test for). Whichever model is
+chosen needs to apply consistently, not per-table. **Severity: Medium** — a real,
+live-forced schema-level gap, but the RPC-level check (the primary, documented control)
+remains fully intact; this is a defense-in-depth gap, not a currently-exploited primary
+control failure. **Not fixed here. Owner: `HDN-386`** (Integrated Verification — the
+right lane to reconcile a repository-wide "out-of-band correction" actor-context
+convention, matching how `ISS-2026-223` also deferred a repository-wide RBAC-convention
+question to the same tier).
+
+### ISS-2026-232 — 3 more `token_hash` columns exposed via a blanket table-level grant, contradicting each table's own "mirrors `app.quotation_acceptance_tokens`" design claim, the same class as this checkpoint's own headline `ISS-2026-216` fix (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, Medium, owner `HDN-378`)
+
+Found by the Tier C completeness-sweep lens while sweeping for more instances of the
+blanket-grant-exposing-a-sensitive-column class (`RECURRING_DEFECT_TAXONOMY.md`
+C-11/C-17) this checkpoint's own `ISS-2026-216` fix addressed for `app.files.storage_
+path`. `app.quotation_acceptance_tokens` (COM-154) is the correct, established
+precedent: `token_hash` deliberately excluded from its own `grant select (...)`
+column list, explicitly commented "token_hash is never granted." Three later tables,
+each explicitly documented as "mirrors" that precedent, instead used a blanket `grant
+select on app.<table> to authenticated`, exposing `token_hash` (a one-way SHA-256
+digest of a bearer token) with no column mask: `app.vendor_intake_tokens` (PRC-251) —
+live-forced, a zero-PRC-role active tenant member direct-`SELECT`ed `token_hash` for 5
+tokens including a still-redeemable `pending` one; `app.driver_mobile_tracking_
+sessions` (ATW-226C) — live-forced, a bare tenant member with zero granted role
+direct-`SELECT`ed `token_hash` for 2 `active` bearer-token sessions, the broadest-RLS
+of the three (no record-scoping at all beyond tenant membership); `app.shipment_
+tracking_tokens` (OPS-180) — code-cited via `information_schema.column_privileges`
+(all 10/10 columns including `token_hash` confirmed granted), RLS is record-scoped
+(narrower population than the other two, same parity gap).
+
+**Not this checkpoint's own charter to fix** — none of these three tables are
+file/storage-domain (they are bearer-token hashes for vendor intake, driver mobile
+sessions, and shipment tracking links respectively, unrelated capabilities that merely
+share the abstract defect class). **Severity: Medium** — the exposed value is a
+preimage-resistant hash, not the raw bearer token itself, so this is not a direct
+impersonation primitive today, but it is a real, live, confirmed contradiction of each
+table's own documented design intent, and the weakest of the three (`driver_mobile_
+tracking_sessions`) has zero record-scoping at all. **Not fixed here. Owner:
+`HDN-378`** (Security Hardening — the same fix pattern `ISS-2026-216` already
+established: `revoke select` then `grant select` on an explicit column list omitting
+`token_hash`, mirroring `app.quotation_acceptance_tokens`'s own proven shape).
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.

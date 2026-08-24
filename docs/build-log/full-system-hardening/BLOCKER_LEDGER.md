@@ -608,22 +608,96 @@ retention lens. Full disposition: `HDN-377.md` §6, `KNOWN_ISSUES.md` `ISS-2026-
 
 ---
 
-## Status as of `HDN-377` (live — update at every checkpoint that changes it)
+## HDN-BLK-020 — `app.audit_logs.legal_hold` is enforced nowhere: neither the native flag nor the generic (IAE-031) hold mechanism is checked before physical deletion of the platform's own canonical audit trail
+
+*Found at `HDN-377`'s own Tier C review (2026-08-24), same checkpoint, by the
+completeness-sweep lens. Full disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md`
+`ISS-2026-229`.*
+
+| Field | Value |
+|---|---|
+| **Title** | `app.audit_logs.legal_hold` has its own dedicated setter (`app.supreme_admin_mutate_audit_log`), but its own deletion RPC (`app.supreme_admin_delete_audit_log`) never checks it at all — not the native flag, not the generic `app._is_under_legal_hold()` mechanism (never bridged to `app.audit_logs`, unlike `app.files` after this checkpoint's own fix). A dead invariant at both layers simultaneously, on the audit trail every other detective control in this codebase depends on as evidence of record |
+| **Found by** | `HDN-377` (`CG-S15-HDN-009`), Storage and Signed URL Audit, Tier C completeness-sweep lens — live-forced: set `legal_hold=true` on a real audit row via the native setter, then called `app.supreme_admin_delete_audit_log` — the row was physically deleted |
+| **Severity** | **Critical** — the most severe instance of the dual-mechanism-drift class (`RECURRING_DEFECT_TAXONOMY.md` C-25) found anywhere this checkpoint. Supreme-Admin-reachable and self-serving (the same authority both sets and bypasses the hold), against the exact table every other detective control in this codebase relies on as its own evidence of record, including this checkpoint's own new triggers' own audit captures |
+| **Owning phase** | Platform Core (`app.audit_logs`, `20260716113048_create_audit_trail.sql`) |
+| **Owning lane** | `HDN-386` (Full-System Hardening Integrated Verification) — bundled with the already-registered `HDN-BLK-018` (the general append-only-guard rollout gap covering this exact table): the two invariants, append-only and legal-hold, should be added to `app.audit_logs` together, not as two separate passes |
+| **Reachability** | Any actor holding Supreme Admin (the same authority the native setter itself requires), or any `service_role`-mediated write bypassing `app.supreme_admin_delete_audit_log` entirely |
+| **Reproduction** | Live-forced: `perform app.supreme_admin_mutate_audit_log(..., legal_hold => true, ...)` on a real row; `perform app.supreme_admin_delete_audit_log(...)` on the same row succeeded, row gone. Full detail: `HDN-377.md` §13.2 |
+| **Blast radius** | Every audit-log row ever placed under legal hold, until `app.audit_logs` receives both a real guard trigger and legal-hold enforcement |
+| **Disposition** | **Registered, not fixed.** Not a file/storage table — outside this checkpoint's own charter |
+| **Required of `HDN-386`** | When rolling out `HDN-BLK-018`'s own append-only guard to `app.audit_logs`, also enforce `legal_hold` (native flag, and bridge into `app._is_under_legal_hold()` mirroring `HDN-377`'s own `app.files` fix) in the same pass |
+| **Regression test** | Required with the fix — a legally-held audit-log row must survive both `supreme_admin_mutate_audit_log`'s own write path attempting to alter protected fields and `supreme_admin_delete_audit_log`, mirroring `HDN-377`'s own `ISS-2026-226`/`227` regression shape |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-229` (`OPEN`, Critical) |
+
+---
+
+## HDN-BLK-021 — `app.tenants.legal_hold` is invisible to the generic (IAE-031) legal-hold mechanism in both directions, and no RPC exists to set the native flag at all
+
+*Found at `HDN-377`'s own Tier C review (2026-08-24), same checkpoint, by the
+completeness-sweep lens. Full disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md`
+`ISS-2026-230`.*
+
+| Field | Value |
+|---|---|
+| **Title** | `app.tenants.legal_hold`'s own native trigger (`app.enforce_tenant_status_transition`) correctly blocks termination when the native flag is true, but no RPC anywhere sets that column (reachable only via a raw superuser/service_role UPDATE), and it was never bridged into the generic `app.legal_holds`/`app._is_under_legal_hold()` mechanism in either direction |
+| **Found by** | `HDN-377` (`CG-S15-HDN-009`), Storage and Signed URL Audit, Tier C completeness-sweep lens — live-forced: a generic hold on scope `app.tenants` did not prevent `app.transition_tenant_status(..., 'terminated', ...)` from succeeding |
+| **Severity** | **High** — Supreme-Admin/service-role-reachable; the practical exposure is narrower than `HDN-BLK-020`'s audit-log instance (no legitimate RPC path sets the native flag at all today), but a tenant terminated mid-hold is a severe failure mode when it does occur |
+| **Owning phase** | Platform Core (`app.tenants`, `20260716075355_create_tenants.sql`) |
+| **Owning lane** | `HDN-386` (Full-System Hardening Integrated Verification) — bundled with `HDN-BLK-020`'s own C-25 reconciliation work; a single pass should decide which native-hold-shaped columns (`app.tenants`, `app.audit_logs`, any others found) get bridged into `app.legal_holds`, rather than one-table patches |
+| **Reachability** | Any Supreme Admin or `service_role`-mediated write |
+| **Reproduction** | Live-forced: `app.request_legal_hold(scope='app.tenants', tenant.id)` recorded active; `app.transition_tenant_status(..., 'terminated', ...)` succeeded regardless. Full detail: `HDN-377.md` §13.2 |
+| **Blast radius** | Every tenant ever placed under a generic legal hold, until this bridge exists |
+| **Disposition** | **Registered, not fixed.** Not a file/storage table — outside this checkpoint's own charter |
+| **Required of `HDN-386`** | Bridge `app._is_under_legal_hold()` to also check `app.tenants.legal_hold` (mirroring `HDN-377`'s own `app.files` bridge), and decide whether a real RPC should set the native flag at all going forward or whether the generic mechanism alone should govern tenants |
+| **Regression test** | Required with the fix |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-230` (`OPEN`, High) |
+
+---
+
+## HDN-BLK-022 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern recurs across at least ~35 more Procurement/HR tables, live-forced exploitable — corrects `HDN-377`'s own first-round disposition of `ISS-2026-225` from Low/"safe by construction" to High
+
+*Found at `HDN-377`'s own Tier C review (2026-08-24), same checkpoint, by the
+completeness-sweep lens, correcting the first round's own under-count. Full
+disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md` `ISS-2026-225` (corrected).*
+
+| Field | Value |
+|---|---|
+| **Title** | The RLS bypass shape `HDN-377`'s own `ISS-2026-220` fixed for 2 Procurement tables recurs across ~35 more Procurement/HR tables that DO carry a real `authenticated` SELECT grant (not "most carry no grant, safe by construction" as the first round's own `ISS-2026-225` disclosed) — each correctly gates its own RPC read path on `PRC:View`/`HRS:View` while RLS remains bare tenant-membership |
+| **Found by** | `HDN-377` (`CG-S15-HDN-009`), Storage and Signed URL Audit, Tier C completeness-sweep lens — queried `information_schema.role_table_grants` for every Procurement/HR table with a real `authenticated` grant (60 found, not "most safe"), cross-referenced `pg_policies` (58 of 60 gate on bare tenant membership), sampled 51 for RPC-layer module-permission requirements (~35 confirmed), live-forced 2 (`app.vendor_kpi_scorecards`, `app.position_grades`) |
+| **Severity** | **High** (corrected from the first round's own Low) — live-forced genuine exploitability against real vendor-performance and HR-recruitment data, not a coverage/completeness gap as originally disclosed |
+| **Owning phase** | Procurement (Phase 6) and HRIS (Phase 7) |
+| **Owning lane** | `HDN-378` (Security Hardening) — unchanged owner from the first round's own disposition, only the severity and scope are corrected |
+| **Reachability** | Any active tenant member holding zero PRC/HRS role assignment |
+| **Reproduction** | Live-forced: zero-PRC-role tenant member direct-`SELECT`ed all 4 `app.vendor_kpi_scorecards` rows (real `composite_score`/`band` data) while `list_vendor_kpi_scorecards` correctly denied the identical actor; zero-HRS-role `org_user` direct-`SELECT`ed the seeded `app.position_grades` row in full while `list_position_grades` correctly denied it. Full detail and the named ~35-table list: `HDN-377.md` §13.2 |
+| **Blast radius** | Every one of the ~35+ tables' own current and future rows, for any zero-permission active tenant member |
+| **Disposition** | **Registered, not fixed** — still not bounded-repair-sized for a storage-audit checkpoint (~35+ tables across two domains), but the severity/scope correction itself is recorded now rather than left understated |
+| **Required of `HDN-378`** | A dedicated sweep-and-fix pass across the named table population, mirroring `HDN-377`'s own `app.check_procurement_authority`/`ISS-2026-220` fix pattern (or the HR-domain equivalent) |
+| **Regression test** | Required with each table's own fix — mirroring `ISS-2026-220`'s own regression shape (zero-role actor denied via RLS; role-holding actor unaffected) |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-225` (`OPEN`, High, corrected from Low) |
+
+---
+
+## Status as of `HDN-377` Tier C (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 to date | **13** — `HDN-377` opened `HDN-BLK-019` (High, registered not fixed). Also registered 3 further findings without their own ledger entry, matching this ledger's own established convention (Medium/Low, non-systemic-scale, no release-blocker designation): `ISS-2026-223` (repository-wide `is_support_grant_authority` convention question, Low, owner `HDN-378`), `ISS-2026-224` (`can_access_record` over-restriction on vendor evidence reviewers, Medium, owner `HDN-387`), `ISS-2026-225` (Procurement/HR RLS-sweep completeness recommendation, Low, owner `HDN-378`) |
-| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged from `HDN-375`'s own close (`HDN-BLK-019` is newly registered, not closed) |
-| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019` (7) |
+| Blockers opened **by** Step 15 to date | **16** — `HDN-377` first round opened `HDN-BLK-019` (High, registered not fixed); its own Tier C review opened `HDN-BLK-020` (Critical), `HDN-BLK-021` (High), and `HDN-BLK-022` (High, a severity correction of `ISS-2026-225`, first registered without a ledger entry at Low). Also registered 2 further findings without their own ledger entry, matching this ledger's own established convention (Medium/Low, non-systemic-scale, no release-blocker designation): `ISS-2026-223` (repository-wide `is_support_grant_authority` convention question, Low, owner `HDN-378`), `ISS-2026-224` (`can_access_record` over-restriction on vendor evidence reviewers, Medium, owner `HDN-387`), `ISS-2026-231` (a scan-status backstop trigger drafted then self-corrected before commit, conflicting with 4 established tests, Medium, owner `HDN-386`) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged from `HDN-375`'s own close (`HDN-BLK-019..022` are newly registered, not closed) |
+| — of which **Critical**, open | `HDN-BLK-020` (1, new this checkpoint) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022` (9) |
 | — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged) |
-| Unresolved **Critical** anywhere | **0** — `HDN-377`'s own 2 Critical findings (`ISS-2026-216`/`217`, storage_path exposure and the dual legal-hold mechanism gap) were both fixed same checkpoint, not registered |
+| Unresolved **Critical** anywhere | **1** — `HDN-BLK-020` (`app.audit_logs.legal_hold` unenforced), registered not fixed, owner `HDN-386`. `HDN-377`'s own 3 Critical findings found and fixed same checkpoint (`ISS-2026-216`/`217` first round, `ISS-2026-226` Tier C) are not counted here — this line tracks unresolved Critical only |
 
-`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018` and `HDN-BLK-019` are open
-release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their
-named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
+`HDN-BLK-020`, `HDN-BLK-021` and `HDN-BLK-022` are open release blockers for Step 16
+per `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly ruled
+an accepted exception at `HDN-387`/`389`.
 
 ## Reserved
 
-`HDN-BLK-019` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-023` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.
