@@ -189,6 +189,7 @@ export async function activateEnterpriseIdpConnection(
     p_connection_id: parsedInput.connectionId,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    p_client_ip: parsedInput.clientIp ?? null,
   });
   if (error) {
     throw new EnterpriseIamMutationError(classifyError(error.message), error.message);

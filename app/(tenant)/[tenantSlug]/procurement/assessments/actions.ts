@@ -11,6 +11,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
+import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { resolveProcurementAccessForRequest } from "../../../../../lib/portal/resolve-procurement-access.server.ts";
 import {
   startVendorAssessment,
@@ -50,13 +51,20 @@ async function requireAccess(tenantSlug: string) {
 }
 
 /**
- * The real Supabase client's own `rpc` overload set does not structurally satisfy
- * DocumentMutationRpcClient's narrower literal-function-name interface (a pure type-
- * level mismatch -- the real client accepts a much wider `fn: string`) -- this is the
- * first real (non-test-mock) caller of the Document/File Engine's mutation wrappers
- * from a live Server Action, so no prior call site needed this adapter.
+ * HDN-377 (Storage and Signed URL Audit) fix: app.initiate_file_upload is granted
+ * `execute` to service_role only (20260719140000_create_document_file_engine.sql) --
+ * this file previously wrapped the RLS-scoped `createSupabaseServerClient()` here,
+ * live-forced to fail closed with `permission denied for function
+ * initiate_file_upload` for every real user, permanently breaking vendor-assessment
+ * evidence upload. `app/(tenant)/[tenantSlug]/procurement/compliance/vendors/
+ * actions.ts` already named this exact file as carrying "the identical anon-client
+ * defect" (PRC-253) and was itself already fixed; this file was not. Mirrors that
+ * fix: wrap the service-role client instead. The real Supabase client's own `rpc`
+ * overload set does not structurally satisfy DocumentMutationRpcClient's narrower
+ * literal-function-name interface (a pure type-level mismatch -- the real client
+ * accepts a much wider `fn: string`).
  */
-function toDocumentClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): DocumentMutationRpcClient {
+function toDocumentClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient {
   return client as unknown as DocumentMutationRpcClient;
 }
 
@@ -122,7 +130,7 @@ export async function recordVendorAssessmentAnswerAction(tenantSlug: string, ass
   const supabase = await createSupabaseServerClient();
   if (evidenceFile instanceof File && evidenceFile.size > 0) {
     try {
-      const uploaded = await initiateFileUpload(toDocumentClient(supabase), {
+      const uploaded = await initiateFileUpload(toDocumentClient(createSupabaseServiceRoleClient()), {
         tenantId: access.tenant.id,
         documentTypeCode: "vendor_assessment_evidence",
         recordType: "vendor_assessment",
@@ -240,7 +248,7 @@ export async function updateVendorAssessmentCorrectiveActionStatusAction(
   let resolvedEvidenceFileId: string | null = null;
   if (evidenceFile instanceof File && evidenceFile.size > 0) {
     try {
-      const uploaded = await initiateFileUpload(toDocumentClient(supabase), {
+      const uploaded = await initiateFileUpload(toDocumentClient(createSupabaseServiceRoleClient()), {
         tenantId: access.tenant.id,
         documentTypeCode: "vendor_assessment_evidence",
         recordType: "vendor_assessment",

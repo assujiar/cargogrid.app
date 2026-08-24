@@ -551,9 +551,97 @@ select set_config('request.jwt.claims', 'null', false);
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027802", "role": "authenticated"}', false);
 set role authenticated;
 do $$
+declare
+  v_policy app.attendance_policy_versions;
+  v_workday date;
+  v_shift_start timestamptz;
+  v_manual_at timestamptz;
 begin
+  -- ISS-2026-154 root fix (CG-S15-HDN-002, Prompt 370, Step 15 Full Regression).
+  --
+  -- This block used a bare `now() - interval '1 hour'`, whose only real
+  -- requirement is that it land in the SAME shift day as the geofence session
+  -- created just above -- that is what makes app.record_manual_attendance_event
+  -- raise duplicate_workday_session (which is checked before any location rule,
+  -- and is the whole point of this negative control: manual_hr is structurally
+  -- exempt from geofence).
+  --
+  -- But this tenant's policy starts its shift day at 04:00 Asia/Jakarta
+  -- (21:00 UTC) -- a real, intentional HRT-278 design decision, not a bug. Both
+  -- timestamps are bucketed by app.resolve_attendance_workday(), so inside the
+  -- ~1-hour real-UTC window immediately after each 21:00 UTC boundary crossing,
+  -- "now" is in the new shift day while "one hour ago" is still in the previous
+  -- one. Two correctly-resolved but DIFFERENT work days, so
+  -- duplicate_workday_session correctly does not fire and this assertion fails.
+  -- Live-instrumented at exactly that moment during Phase 9 (21:09 UTC).
+  --
+  -- Fixed by deriving the timestamp from the policy itself instead of assuming
+  -- "one hour ago is the same work day": keep the realistic backdated-entry
+  -- shape, but clamp it so it can never fall out of the resolved shift day.
+  -- The policy is read rather than hardcoded, so this stays correct if the
+  -- fixture's timezone or boundary is ever changed.
+  -- Tier C review (2026-08-23, security/tenant + correctness lenses, independently)
+  -- caught a real gap in the first draft: `att1` has TWO published policy versions
+  -- with the identical effective_from '2024-01-01' (tenant-wide and
+  -- branch-geofenced), so `order by effective_from desc limit 1` picked one
+  -- non-deterministically -- and the WRONG one relative to which policy actually
+  -- governs mgr1 (the branch-geofenced one, since mgr1 is on the required-geofence
+  -- branch exercised two blocks above). It was harmless only because both
+  -- versions happen to share one (timezone, day_boundary_local_time) pair today,
+  -- which falsified this fix's own comment claiming it "stays correct if the
+  -- fixture's timezone or boundary is ever changed."
+  --
+  -- Fixed by reading the policy off mgr1's OWN just-created session instead of
+  -- guessing which tenant-level policy applies: this whole block's premise is
+  -- that mgr1 already has a session today from the geofence test immediately
+  -- above, and app.record_attendance_clock_event stamps that session with the
+  -- exact policy_version_id it actually resolved and used -- the same source
+  -- app.evaluate_late_and_early_leave_exceptions itself reads from
+  -- (attendance_policy_versions where id = v_session.policy_version_id). This
+  -- is no longer a lookup that can disagree with production; it is the same
+  -- fact production already recorded.
+  select p.* into v_policy
+  from app.attendance_sessions s
+  join app.attendance_policy_versions p on p.id = s.policy_version_id
+  where s.tenant_id = (select id from app.tenants where slug='att1')
+    and s.employee_id = (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug='att1') and work_email = 'mgr1work@att1.test')
+  order by s.raw_clock_in_at desc
+  limit 1;
+
+  -- Tier C correctness review (2026-08-23) caught a further real gap in the first draft:
+  -- `greatest()` ignores NULLs, so if this select ever finds no row, v_policy is
+  -- entirely NULL and v_manual_at below silently collapses back to the exact
+  -- pre-fix `now() - interval '1 hour'` -- reintroducing ISS-2026-154 with no
+  -- error, because the invariant check further down (`<> v_workday`) evaluates
+  -- to NULL, not TRUE, when either side is NULL, so it never fires. Live-proven:
+  -- with the tenant's published policy renamed/unpublished, the block completed
+  -- silently instead of failing loudly. Ordinary fixture maintenance could do
+  -- this by accident, so the precondition is asserted explicitly rather than
+  -- assumed.
+  if v_policy.id is null then
+    raise exception 'fixture invariant broken: no published attendance policy found for tenant att1 -- the manual-entry timestamp clamp below has nothing to clamp against';
+  end if;
+
+  v_workday := app.resolve_attendance_workday(now(), v_policy.timezone, v_policy.day_boundary_local_time);
+  v_shift_start := (v_workday::text || ' ' || v_policy.day_boundary_local_time::text)::timestamp at time zone v_policy.timezone;
+  -- One hour back, but never before the shift day opened, and never in the future.
+  -- Clamped to v_shift_start exactly, NOT to v_shift_start + some margin: the shift
+  -- start is itself the first instant of its own work day (resolve_attendance_workday
+  -- is inclusive of the boundary), so clamping to it is both correct and the only
+  -- choice that never produces a future timestamp. An earlier draft of this fix used
+  -- `v_shift_start + interval '1 minute'` and a 2,016-instant sweep across a full week
+  -- caught it emitting a future timestamp at exactly 7 instants -- one per day, in the
+  -- minute right after each boundary crossing. Recorded because it is the same
+  -- one-boundary-instant reasoning error this whole defect class is made of.
+  v_manual_at := greatest(now() - interval '1 hour', v_shift_start);
+
+  if app.resolve_attendance_workday(v_manual_at, v_policy.timezone, v_policy.day_boundary_local_time) <> v_workday then
+    raise exception 'fixture invariant broken: the manual entry timestamp % resolves to a different work day than now() (% vs %)',
+      v_manual_at, app.resolve_attendance_workday(v_manual_at, v_policy.timezone, v_policy.day_boundary_local_time), v_workday;
+  end if;
+
   begin
-    perform app.record_manual_attendance_event((select id from app.tenants where slug='att1'), (select master_record_id from app.employees where work_email='mgr1work@att1.test'), 'clock_in', now() - interval '1 hour', 'HR entered on behalf, employee forgot badge', 'man-1', '00000000-0000-0000-0000-000000027802', 'staff');
+    perform app.record_manual_attendance_event((select id from app.tenants where slug='att1'), (select master_record_id from app.employees where work_email='mgr1work@att1.test'), 'clock_in', v_manual_at, 'HR entered on behalf, employee forgot badge', 'man-1', '00000000-0000-0000-0000-000000027802', 'staff');
     raise exception 'assertion failed: expected duplicate_workday_session (mgr1 already has a session today from the geofence test above), never location_required';
   exception when others then
     if sqlerrm not like 'duplicate_workday_session%' then raise; end if;

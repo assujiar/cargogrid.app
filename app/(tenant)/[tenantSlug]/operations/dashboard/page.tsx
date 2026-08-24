@@ -191,34 +191,38 @@ export default async function OperationsDashboardPage({ params }: { params: Prom
             {data.costVariance.length === 0 ? (
               <p className="text-sm text-neutral-600">No approved actual costs with an estimate in scope.</p>
             ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Bucket
-                    </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Currency
-                    </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Shipments
-                    </th>
-                    <th scope="col" className="py-2 font-medium">
-                      Avg variance
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.costVariance.map((row) => (
-                    <tr key={`${row.bucket}-${row.currency}`} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-neutral-900">{COST_VARIANCE_LABELS[row.bucket]}</td>
-                      <td className="py-2 pr-4 text-neutral-600">{row.currency}</td>
-                      <td className="py-2 pr-4 text-neutral-600">{row.shipmentCount}</td>
-                      <td className="py-2 text-neutral-600">{row.varianceMasked ? "Masked" : `${row.avgVariancePct ?? "—"}%`}</td>
+              // HDN-381 (Browser and Device Compatibility): wrapped in overflow-x-auto,
+              // matching this repository's own existing data-table convention.
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200 text-left text-neutral-600">
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Bucket
+                      </th>
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Currency
+                      </th>
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Shipments
+                      </th>
+                      <th scope="col" className="py-2 font-medium">
+                        Avg variance
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.costVariance.map((row) => (
+                      <tr key={`${row.bucket}-${row.currency}`} className="border-b border-neutral-100">
+                        <td className="py-2 pr-4 text-neutral-900">{COST_VARIANCE_LABELS[row.bucket]}</td>
+                        <td className="py-2 pr-4 text-neutral-600">{row.currency}</td>
+                        <td className="py-2 pr-4 text-neutral-600">{row.shipmentCount}</td>
+                        <td className="py-2 text-neutral-600">{row.varianceMasked ? "Masked" : `${row.avgVariancePct ?? "—"}%`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
 

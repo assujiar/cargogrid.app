@@ -353,23 +353,25 @@ declare
     'current_support_session', 'has_active_support_grant',
     'customer_warehouse_eligibility_active', 'resolve_customer_owner_account_scope',
     'evaluate_dispatch_readiness',
-    -- HRT-278 (pre-existing, PRE-DATES HRT-280 -- proven via a captured baseline:
-    -- `TEST_DB_NAME=cargogrid_db_test_impl280_baseline pnpm run db:test` re-run
-    -- with HRT-280's own two migrations temporarily removed reproduces this SAME
-    -- single-entry {get_self_employee} failure byte-for-byte, confirming HRT-280
-    -- did not cause it -- docs/runtime/ERROR_LEDGER.md). app.get_self_employee
-    -- takes p_actor_auth_user_id as an ordinary parameter but is correct by
-    -- design: its own WHERE clause (`u.auth_user_id = p_actor_auth_user_id`) can
-    -- only ever return the CALLING actor''s own linked employee row, never
-    -- another actor''s -- there is no p_target_employee_id-shaped parameter for
-    -- it to leak through. Every one of its own call sites (HRT-278/279/280)
-    -- additionally calls app.assert_actor_is_session_identity before invoking it,
-    -- which this call-graph sweep does not credit (assert_actor_is_session_identity
-    -- itself carries no closure-qualifying keyword in its own body -- it is a
-    -- session/claim primitive, not a tenant/authority lookup). Genuinely
-    -- correct-by-design, not a live gap -- added here per this test''s own
-    -- documented escape hatch rather than left as a permanently-red Tier A gate
-    -- for every future checkpoint.
+    -- app.get_self_employee's own exemption reason CORRECTED at HDN-372 (Step 15,
+    -- Prompt 372, Tenant Isolation Audit) -- this sweep's own closure genuinely requires
+    -- it to stay named here, since it has no AUTHORITY check (evaluate_permission/
+    -- can_access_record/etc.) and structurally needs none: once identity is proven, the
+    -- query is inherently self-scoped (`u.auth_user_id = p_actor_auth_user_id`) and can
+    -- only ever return the CALLING actor's own linked employee row. What was WRONG in
+    -- the original reasoning is the IDENTITY half: it claimed "every one of its own call
+    -- sites additionally calls app.assert_actor_is_session_identity before invoking it"
+    -- as the reason the gap was safe -- true for its intended callers, but it is
+    -- SECURITY DEFINER and granted EXECUTE directly to authenticated, so any session
+    -- could call it standalone, bypassing whatever a caller-side wrapper does. HDN-372
+    -- live-forced exactly this and confirmed a real cross-tenant PII read
+    -- (docs/build-log/full-system-hardening/HDN-372.md). Fixed at the root: the assert
+    -- now lives inside app.get_self_employee itself
+    -- (20260810000000_harden_tenant_isolation_actor_identity_gaps.sql) rather than being
+    -- assumed from caller convention -- verified by the separate, dedicated HDN-372
+    -- regression check further down this file, which this authority-surface sweep does
+    -- not replace (identity and authority remain two different checks in this codebase's
+    -- own vocabulary, and this function only ever needed the former).
     'get_self_employee',
     -- HRT-287 (Prompt 287, Customer-to-Tenant Ticket, CG-S12-HRT-015): this
     -- migration is the first to use app.actor_holds_customer_user_layer as a
@@ -502,7 +504,26 @@ declare
     -- identity can only ever act on or read the ONE row/challenge/exception
     -- that names it, never reach another identity's own. Genuinely
     -- correct-by-design, not a live gap.
-    'verify_mfa_step_up_challenge', 'consume_mfa_exception', 'assert_current_step_up_authorization'
+    'verify_mfa_step_up_challenge', 'consume_mfa_exception', 'assert_current_step_up_authorization',
+    -- HDN-373 Tier C completeness fix (Step 15, Prompt 373): converting these two to
+    -- SECURITY DEFINER (part of closing the wider Finance/Config authority-chain
+    -- reachability gap, HDN-BLK-015) newly surfaced them to this sweep. Both are
+    -- genuinely correct-by-design, not a live gap: app.list_n8n_action_allowlist takes
+    -- no arguments and reads app.n8n_action_allowlist, a platform-wide reference
+    -- catalog with no tenant_id column at all (grep-confirmed) -- there is no tenant
+    -- data to scope. app.validate_automation_rule_definition takes no id/tenant
+    -- parameter either (only p_trigger_event_type/p_conditions/p_actions) and performs
+    -- pure structural JSON validation plus one existence check against app.
+    -- notification_types (itself a shared, non-tenant-scoped catalog) -- it reads no
+    -- tenant-scoped row and returns only a boolean, so a forged or absent actor changes
+    -- nothing a caller could not already determine from the input they themselves
+    -- supplied. Two sibling functions surfaced by the same conversion,
+    -- app.preview_finance_config_impact and app.validate_custom_field_values, were
+    -- NOT added here -- both genuinely lacked a tenant check (a real cross-tenant
+    -- config-disclosure gap) and were fixed with an app.has_active_tenant_membership
+    -- check instead of being exempted; see 20260810900000_harden_finance_authority_
+    -- chain_tierc_completeness.sql's own header.
+    'list_n8n_action_allowlist', 'validate_automation_rule_definition'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor
@@ -633,9 +654,35 @@ begin
     where n.nspname = 'app' and p.prokind = 'f'
   ),
   edge as (
-    select c.proname as caller, e.proname as callee
-    from fn c join fn e on c.oid <> e.oid
-    where c.def ~ ('\mapp\.' || e.proname || '\s*\(')
+    -- ISS-2026-145 (HDN-379): rewritten from an O(n^2) fn x fn self-join (one regex
+    -- match per PAIR, ~2,700^2 pairs at current scale, 15-20+ minutes) to an O(n) pass
+    -- extracting every app.<name>( call from each function's own definition once, then
+    -- joining on proname -- mirrors the identical technique already used unmodified in
+    -- this same file's own ATW-032/ISS-2026-033 sibling block above (the `edge as
+    -- (select f.proname caller, m[1] callee from fn f, regexp_matches(f.prosrc, ...)`
+    -- shape). Only edge construction changes; the covered/closure recursive walk below
+    -- is untouched, so multi-hop transitive coverage (a function that calls a helper
+    -- that calls another helper that finally reaches evaluate_permission) is preserved
+    -- exactly. Verified via a same-schema matched-pair run (original vs rewrite, one
+    -- disposable database, no rebuild in between) that both produce an identical
+    -- verdict before this migration landed -- see HDN-379.md.
+    --
+    -- HDN-379 Tier C fix: the first draft's regex dropped two structural properties
+    -- the original self-join carried for free -- a leading `\m` word-boundary anchor
+    -- (so `webapp.foo(` cannot be mistaken for a call to app.foo), and a real
+    -- join-against-fn requirement (so `insert into app.some_table (...)` cannot be
+    -- mistaken for a call to a function named after the table). Live-forced: on the
+    -- current 2,700-function schema this never produced a wrong verdict (876 spurious
+    -- edges, all traced to unindexed table names with zero overlap against any real
+    -- function name), but a future function literally named after an existing table,
+    -- or a call site shaped like `wordapp.<realname>(`, could silently mark a caller
+    -- "covered" with no test failure -- restored both properties here, at the same
+    -- O(n) cost (the `in (select proname from fn)` filter is a hash semi-join against
+    -- the same already-materialized `fn` CTE, not a new cross join).
+    select f.proname as caller, m[1] as callee
+    from fn f, regexp_matches(f.def, '\mapp\.([a-z0-9_]+)\s*\(', 'g') m
+    where m[1] <> f.proname
+      and m[1] in (select proname from fn)
   ),
   covered(proname) as (
     select proname from fn where proname in ('evaluate_permission', 'assert_actor_is_session_identity')
@@ -644,7 +691,14 @@ begin
   )
   select array_agg(f.proname order by f.proname) into v_unguarded
   from fn f
-  where f.args ~ 'p_actor_auth_user_id'   -- claims to act as somebody
+  where f.args ~ 'p_(actor|requester)_auth_user_id'   -- claims to act as somebody --
+                                                       -- HDN-372: broadened from
+                                                       -- 'p_actor_auth_user_id' alone,
+                                                       -- which is exactly the gap that
+                                                       -- let app.query_audit_logs/
+                                                       -- app.export_audit_logs (named
+                                                       -- p_requester_auth_user_id) go
+                                                       -- unswept and unfixed until HDN-372
     and f.auth_exec                       -- and a logged-in session can call it
     and f.provolatile = 'v'               -- and it has a side effect (pure reads are exempt)
     and f.proname not in (select proname from covered);
@@ -654,6 +708,201 @@ begin
   end if;
 
   raise notice 'ATW-032 actor-authority proof: no side-effecting client-callable function accepts a p_actor_auth_user_id it never proves belongs to the caller';
+end;
+$$;
+
+\echo '>> HDN-372 (Step 15, Prompt 372, Tenant Isolation Audit, ISS-2026-164): the ATW-032 sweep above deliberately exempts `provolatile = ''v''` reads on the premise "a forged actor changes nothing a caller could not already read." That premise is false for a SECURITY DEFINER reader -- it bypasses RLS, so a forged actor is exactly what lets a caller read what they could not otherwise. 13 such functions (9 found and fixed first, 4 more found by this same checkpoint''s own Tier C review and fixed in a second migration) were live-forced and confirmed exploitable (full disposition docs/build-log/full-system-hardening/HDN-372.md) and fixed at 20260810000000_harden_tenant_isolation_actor_identity_gaps.sql / 20260810100000_harden_tenant_isolation_actor_identity_gaps_round2.sql. This is a narrow, named-list regression proof for exactly those 13 -- not a widening of the general sweep above, which would also flag the functions HDN-372 explicitly deferred to HDN-373 (ISS-2026-165, ISS-2026-179) rather than silently reopening Tier A for work that lane, not this gate, owns. Position-aware: the assert must be the function''s first executable statement (optionally after leading comment lines), not merely present anywhere in the body -- a bare substring match would still pass if the call were commented out or moved after a data read.'
+do $$
+declare
+  v_fn text;
+  v_missing text[];
+begin
+  foreach v_fn in array array['get_self_employee', 'resolve_customer_owner_account_scope',
+                              'query_audit_logs', 'export_audit_logs',
+                              'list_notifications_for_recipient', 'count_unread_notifications',
+                              'get_workflow_instance_history', 'get_approval_request_history',
+                              'get_shipment_status_history', 'get_notification_preferences',
+                              'get_custom_field_values', 'list_pending_approval_steps_for_actor',
+                              'resolve_actor_owner_account_scope'] loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = v_fn
+        and pg_get_functiondef(p.oid) ~ 'begin\s*(--[^\n]*\n\s*)*perform\s+app\.assert_actor_is_session_identity\('
+    ) then
+      v_missing := array_append(v_missing, v_fn);
+    end if;
+  end loop;
+
+  if v_missing is not null then
+    raise exception 'assertion failed: % of the 13 functions HDN-372 fixed no longer call app.assert_actor_is_session_identity as their first statement -- the tenant-isolation regression this gate exists to prevent: %', array_length(v_missing, 1), v_missing;
+  end if;
+
+  raise notice 'HDN-372 actor-identity regression proof: all 13 fixed functions still call app.assert_actor_is_session_identity as their first statement';
+end;
+$$;
+
+\echo '>> HDN-372 (ISS-2026-164): live two-session forced-spoof regression. A genuine authenticated session -- claimed via request.jwt.claims, not a role switch, since assert_actor_is_session_identity compares auth.uid() (GUC-derived) to the claimed actor regardless of calling role, exactly as the pre-existing ATW-031 proof above already establishes for this file -- must be refused by a representative sample of the 13 fixed functions when it claims to act as a different identity: the same live attack this checkpoint used to find and re-verify the defect, now committed as regression evidence rather than only pasted console output in the build log.'
+do $$
+declare
+  v_self uuid := '00000000-0000-0000-0000-000000000401';
+  v_victim uuid := '00000000-0000-0000-0000-000000000402';
+  v_fake_tenant uuid := gen_random_uuid();
+  v_raised boolean;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text, 'role', 'authenticated')::text, true);
+
+  -- app.get_self_employee: original 9, "add the assert" shape, LANGUAGE sql -> plpgsql.
+  v_raised := false;
+  begin
+    perform app.get_self_employee(v_fake_tenant, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_self_employee did not reject a forged actor from a genuine authenticated session -- HDN-372/ISS-2026-164 has regressed';
+  end if;
+
+  -- app.resolve_customer_owner_account_scope: root of the 10-function ATW-023 family.
+  v_raised := false;
+  begin
+    perform app.resolve_customer_owner_account_scope(v_victim, v_fake_tenant);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.resolve_customer_owner_account_scope did not reject a forged actor -- HDN-372/ISS-2026-164 has regressed, and the whole ATW-023 family is exposed again';
+  end if;
+
+  -- app.query_audit_logs: the p_requester_auth_user_id-named shape ATW-032's own
+  -- candidate regex missed until HDN-372 broadened it, above in this same file.
+  v_raised := false;
+  begin
+    perform app.query_audit_logs(v_victim, v_fake_tenant);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.query_audit_logs did not reject a forged actor -- HDN-372/ISS-2026-164 has regressed';
+  end if;
+
+  -- app.get_notification_preferences: round-2 sibling of app.list_notifications_for_
+  -- recipient/app.count_unread_notifications, found by this checkpoint's own Tier C
+  -- review after the first migration had already landed.
+  v_raised := false;
+  begin
+    perform app.get_notification_preferences(v_fake_tenant, v_victim, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_notification_preferences did not reject a forged actor -- HDN-372 round 2 has regressed';
+  end if;
+
+  -- The same session acting as ITSELF must not be blanket-denied -- v_self holds no
+  -- real tenant membership, so this must fail on a DIFFERENT, later check (or return
+  -- empty), never actor_identity_mismatch, proving the fix is not a blanket deny.
+  begin
+    perform app.resolve_customer_owner_account_scope(v_self, v_fake_tenant);
+  exception
+    when insufficient_privilege then
+      if sqlerrm ~ 'actor_identity_mismatch' then
+        raise exception 'assertion failed: app.resolve_customer_owner_account_scope rejected the caller acting as themselves -- the fix has become a blanket deny, not an identity check';
+      end if;
+    when others then
+      null; -- any non-identity failure past the assert is fine and expected here
+  end;
+
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'HDN-372 live two-session forced-spoof proof: app.get_self_employee, app.resolve_customer_owner_account_scope, app.query_audit_logs and app.get_notification_preferences all reject a forged actor from a genuine authenticated (non-superuser-identity) session; an own-identity call is not blanket-denied';
+end;
+$$;
+
+\echo '>> HDN-373 (Step 15, Prompt 373, RLS and RBAC Audit, ISS-2026-165): closes HDN-BLK-012, carried forward from HDN-372''s own Tier C review -- 13 dashboard functions (app.get_ops_dashboard_* x6, app.get_dashboard_* x7) shared HDN-BLK-011''s exact actor-forgery shape with no common root to fix once, so each is fixed individually at 20260810200000_harden_dashboard_actor_identity_gaps.sql. Position-aware, mirroring the HDN-372 check above: the assert must be the function''s first executable statement.'
+do $$
+declare
+  v_fn text;
+  v_missing text[];
+begin
+  foreach v_fn in array array['get_ops_dashboard_shipment_status', 'get_ops_dashboard_milestone_sla',
+                              'get_ops_dashboard_exception_queue', 'get_ops_dashboard_epod_completion',
+                              'get_ops_dashboard_cost_variance', 'get_ops_dashboard_billing_readiness',
+                              'get_dashboard_lead_aging', 'get_dashboard_activity_queue',
+                              'get_dashboard_pipeline_summary', 'get_dashboard_quote_sla',
+                              'get_dashboard_margin_summary', 'get_dashboard_win_loss_summary',
+                              'get_dashboard_forecast_summary'] loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = v_fn
+        and pg_get_functiondef(p.oid) ~ 'begin\s*(--[^\n]*\n\s*)*perform\s+app\.assert_actor_is_session_identity\('
+    ) then
+      v_missing := array_append(v_missing, v_fn);
+    end if;
+  end loop;
+
+  if v_missing is not null then
+    raise exception 'assertion failed: % of the 13 dashboard functions HDN-373 fixed no longer call app.assert_actor_is_session_identity as their first statement -- HDN-BLK-012 has regressed: %', array_length(v_missing, 1), v_missing;
+  end if;
+
+  raise notice 'HDN-373 dashboard actor-identity regression proof: all 13 fixed functions still call app.assert_actor_is_session_identity as their first statement';
+end;
+$$;
+
+\echo '>> HDN-373 (ISS-2026-165): live two-session forced-spoof regression for a representative sample of the 13 dashboard functions, same methodology as the HDN-372 proof above.'
+do $$
+declare
+  v_self uuid := '00000000-0000-0000-0000-000000000401';
+  v_victim uuid := '00000000-0000-0000-0000-000000000402';
+  v_fake_tenant uuid := gen_random_uuid();
+  v_raised boolean;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text, 'role', 'authenticated')::text, true);
+
+  v_raised := false;
+  begin
+    perform * from app.get_ops_dashboard_shipment_status(v_fake_tenant, null, null, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_ops_dashboard_shipment_status did not reject a forged actor -- HDN-373/HDN-BLK-012 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform * from app.get_dashboard_pipeline_summary(v_fake_tenant, null, null, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_dashboard_pipeline_summary did not reject a forged actor -- HDN-373/HDN-BLK-012 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform * from app.get_dashboard_margin_summary(v_fake_tenant, null, null, null, null, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.get_dashboard_margin_summary did not reject a forged actor -- HDN-373/HDN-BLK-012 has regressed (this one also gates a field-masking entitlement bypass, not merely a scope widening)';
+  end if;
+
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'HDN-373 live two-session forced-spoof proof: app.get_ops_dashboard_shipment_status, app.get_dashboard_pipeline_summary and app.get_dashboard_margin_summary all reject a forged actor from a genuine authenticated session';
 end;
 $$;
 
@@ -737,6 +986,117 @@ begin
   end if;
 
   raise notice 'HRT-295 role_assignments cascade proof: suspend strips active grants system-wide, reactivation alone never restores them, an explicit re-grant does';
+end;
+$$;
+
+\echo '>> HDN-373 (Step 15, Prompt 373, RLS and RBAC Audit): app.evaluate_permission -- the single authority gate ~1,124 functions share -- now denies once a claimed actor is no longer a genuine active tenant member (app.has_active_tenant_membership), even when their app.role_assignments row was never separately cleaned up. app.revoke_auth_identity (Platform Core''s own tenant-membership-revocation RPC, distinct from HRT-295''s app.transition_user_status fix immediately above, which only cascades role_assignments for its own HRIS-domain status-transition path) touches only app.tenant_user_identities -- it never cascades to role_assignments, and this gate is the reason that omission no longer matters.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_decision app.rbac_decision;
+  v_active_count integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
+
+  -- Baseline restored by the HRT-295 block immediately above: grantee holds a genuine,
+  -- active FIN:Approve role_assignment again.
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: expected grantee to hold FIN:Approve before this block''s own revoke_auth_identity call, got allowed=%', v_decision.allowed;
+  end if;
+
+  perform app.revoke_auth_identity('00000000-0000-0000-0000-000000000401', v_tenant_id, 'HDN-373 revocation-propagation regression', 'tester');
+
+  -- The vulnerability class, made concrete: the role_assignment itself is genuinely
+  -- untouched by revoke_auth_identity -- this is not a no-op repro, the stale grant
+  -- really is still sitting there.
+  select count(*) into v_active_count from app.role_assignments
+  where tenant_id = v_tenant_id and auth_user_id = '00000000-0000-0000-0000-000000000401' and status = 'active';
+  if v_active_count = 0 then
+    raise exception 'assertion failed: expected the active role_assignment to survive revoke_auth_identity untouched (that is the defect this test proves is now mitigated at evaluate_permission itself), found 0 -- test fixture assumption broken';
+  end if;
+
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.allowed then
+    raise exception 'assertion failed: a revoked tenant member (app.tenant_user_identities.status=revoked) still evaluated allowed=true via a stale role_assignments row -- the HDN-373 tenant-membership regression this gate exists to prevent has reappeared';
+  end if;
+  if v_decision.reason is distinct from 'not_active_tenant_member' then
+    raise exception 'assertion failed: expected reason=not_active_tenant_member for a revoked tenant member, got %', v_decision.reason;
+  end if;
+
+  -- Supreme Admin is unaffected by this fix -- RPD-022's own cross-tenant residual risk
+  -- is independent of any single tenant's own membership state.
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000403', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.reason <> 'supreme_admin_exception' then
+    raise exception 'assertion failed: expected Supreme Admin to remain unaffected by the tenant-membership check (supreme_admin_exception), got reason=%', v_decision.reason;
+  end if;
+
+  raise notice 'HDN-373 RBAC-evaluator tenant-membership regression proof: a revoked tenant member with a surviving, uncleaned role_assignment is now correctly denied (not_active_tenant_member), and Supreme Admin remains unaffected';
+end;
+$$;
+
+\echo '>> HDN-373 (ISS-2026-171/173, carried forward from HDN-372; plus app.notification_preferences, found this checkpoint): own-row RLS policies on app.notifications/app.notification_preferences/app.saved_report_views now require an active tenant membership, not merely row ownership -- a revoked ex-member no longer retains RLS-level read access to their own past rows. Live-tested for notification_preferences (achievable without a large cross-table fixture); structurally verified for all three via the live policy expression, mirroring this file''s own established pg_get_expr sweep pattern.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_grantee_auth_id uuid := '00000000-0000-0000-0000-000000000401';
+  v_raised boolean;
+  v_count integer;
+  v_bad_policies text[];
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
+
+  -- Structural check first: every one of the three own-row policies' own-row branch must
+  -- reference has_active_tenant_membership. A regex on the full policy expression (not
+  -- just the own-row branch) is intentionally loose -- correctness of the exact reference
+  -- live proof for notification_preferences below.
+  select array_agg(c.relname || '.' || pol.polname order by c.relname, pol.polname) into v_bad_policies
+  from pg_policy pol
+  join pg_class c on c.oid = pol.polrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'app'
+    and c.relname in ('notifications', 'notification_preferences', 'saved_report_views')
+    and pol.polname in ('notifications_select_own', 'notification_preferences_select_own', 'saved_report_views_select_scoped')
+    and pg_get_expr(pol.polqual, pol.polrelid) !~ 'has_active_tenant_membership';
+
+  if v_bad_policies is not null then
+    raise exception 'assertion failed: % own-row policy(ies) missing has_active_tenant_membership -- ISS-2026-171/173 has regressed: %', array_length(v_bad_policies, 1), v_bad_policies;
+  end if;
+
+  -- Live behavioral proof for notification_preferences (the simplest of the three to
+  -- fixture -- no config_version_id/report_type_code cross-table dependency).
+  insert into app.notification_preferences (tenant_id, auth_user_id, notification_type_code, channel, enabled)
+  values (v_tenant_id, v_grantee_auth_id, 'test.hdn373.own_row_revoked', 'in_app', true);
+
+  perform app.revoke_auth_identity(v_grantee_auth_id, v_tenant_id, 'HDN-373 own-row RLS regression', 'tester');
+
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claims', json_build_object('sub', v_grantee_auth_id::text, 'role', 'authenticated')::text, true);
+    if (select current_user) <> 'authenticated' then
+      raise exception 'harness failure: role switch to authenticated did not take effect';
+    end if;
+
+    select count(*) into v_count from app.notification_preferences
+    where tenant_id = v_tenant_id and auth_user_id = v_grantee_auth_id and notification_type_code = 'test.hdn373.own_row_revoked';
+    if v_count <> 0 then
+      raise exception 'assertion failed: a revoked ex-member still read their own app.notification_preferences row via direct RLS (% rows) -- ISS-2026-171-shaped regression', v_count;
+    end if;
+
+    reset role;
+  exception
+    when others then
+      reset role;
+      raise;
+  end;
+  perform set_config('request.jwt.claims', '', true);
+
+  -- No restoration needed: this is the final block in this file, and grantee's
+  -- tenant_user_identities status in this tenant is not read by anything after this
+  -- point (their app.role_assignments state, exercised by the block above this one, is a
+  -- separate table already left in a defined state by that block's own final re-grant).
+
+  raise notice 'HDN-373 own-row RLS membership regression proof: notifications/notification_preferences/saved_report_views policies all reference has_active_tenant_membership; a revoked ex-member live-confirmed denied on notification_preferences';
 end;
 $$;
 

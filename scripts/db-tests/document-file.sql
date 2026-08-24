@@ -671,4 +671,192 @@ begin
 end;
 $$;
 
+\echo '>> HDN-377 (Storage and Signed URL Audit) regression: app.files.storage_path is no longer selectable by authenticated at all -- other columns remain readable, service_role is unaffected'
+do $$
+declare
+  v_tenant_id uuid;
+  v_file app.files;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+  v_file := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-key.pdf', 'application/pdf', 1000, null, false, null, '{}', null, 'idem-hdn377-storagepath-1', '00000000-0000-0000-0000-000000002001', 'uploader');
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000002001", "role": "authenticated"}';
+  begin
+    perform storage_path from app.files where id = v_file.id;
+    raise exception 'assertion failed: authenticated must be denied SELECT on app.files.storage_path, even for their own uploaded row, but the query succeeded';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+  perform original_filename, malware_scan_status from app.files where id = v_file.id;
+  reset role;
+
+  perform storage_path from app.files where id = v_file.id;
+end;
+$$;
+
+\echo '>> HDN-377 (Storage and Signed URL Audit) regression: a raw DELETE of a legally-held file is blocked at the schema level -- app.request_file_deletion''s own RPC-level check is not the only guard, and Supreme Admin''s RPD-022 override still works, audited'
+do $$
+declare
+  v_tenant_id uuid;
+  v_file app.files;
+  v_audit app.audit_logs;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+  v_file := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-hold.pdf', 'application/pdf', 1000, null, true, 'litigation hold', '{}', null, 'idem-hdn377-hold-1', '00000000-0000-0000-0000-000000002001', 'uploader');
+
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    delete from app.files where id = v_file.id;
+    raise exception 'assertion failed: a raw DELETE of a legal_hold=true row must be blocked with no actor context, but it succeeded';
+  exception when others then
+    if sqlerrm !~ 'document_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-0000-0000-000000002001', 'role', 'authenticated')::text, true);
+  begin
+    delete from app.files where id = v_file.id;
+    raise exception 'assertion failed: a raw DELETE of a legal_hold=true row must be blocked for the uploader themselves, but it succeeded';
+  exception when others then
+    if sqlerrm !~ 'document_legal_hold_blocks_deletion' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', 'null', true);
+
+  -- Supreme Admin's own RPD-022 absolute-CRUD exception still works (best-effort
+  -- evidence, not a preventive control -- the guard's own disclosed design).
+  perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-0000-0000-000000002005', 'role', 'authenticated')::text, true);
+  delete from app.files where id = v_file.id;
+  if exists (select 1 from app.files where id = v_file.id) then
+    raise exception 'assertion failed: expected Supreme Admin''s RPD-022 override to actually delete the legally-held row';
+  end if;
+  perform set_config('request.jwt.claims', 'null', true);
+
+  select * into v_audit from app.audit_logs where resource_type = 'app.files' and resource_id = v_file.id and action = 'delete_legally_held_file';
+  if v_audit.id is null then
+    raise exception 'assertion failed: expected an app.audit_logs row for the Supreme Admin RPD-022 override delete';
+  end if;
+end;
+$$;
+
+\echo '>> HDN-377 (Storage and Signed URL Audit) regression: the two legal-hold mechanisms are now bridged -- a generic (IAE-031) app.request_legal_hold on scope app.files blocks app.request_file_deletion, and a PLT-128-native file hold is visible to app._is_under_legal_hold (consulted by app.request_retention_archive''s own dry-run classification)'
+do $$
+declare
+  v_tenant_id uuid;
+  v_ret_role uuid;
+  v_ret_draft app.role_versions;
+  v_file_a app.files;
+  v_file_b app.files;
+  v_archive app.retention_archive_requests;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+
+  -- 00000000-0000-0000-0000-000000002004 is the tenant_admin fixture actor -- grant
+  -- them a real RET:Configure role too, mirroring IAE-031's own established
+  -- data-retention-archival.sql fixture shape (a bare tenant_admin membership does
+  -- not itself carry RET:Configure).
+  v_ret_role := (app.create_role(v_tenant_id, 'AcmeDoc RET Configure', 'HDN-377 bridge regression fixture', 'tester')).id;
+  v_ret_draft := app.create_role_version(v_ret_role, 'tester');
+  perform app.set_role_version_permissions(v_ret_draft.id, array(select id from app.permissions where resource_module_code = 'RET' and action in ('Configure', 'View')), 'tester');
+  perform app.publish_role_version(v_ret_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant_id, (select id from app.role_versions where role_id = v_ret_role and status = 'published'), '00000000-0000-0000-0000-000000002004', '00000000-0000-0000-0000-000000002005', 'supreme admin');
+
+  -- Direction A: a generic (IAE-031) hold placed on a file must block PLT-128's own deletion RPC.
+  v_file_a := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-bridge-a.pdf', 'application/pdf', 1000, null, false, null, '{}', null, 'idem-hdn377-bridge-a', '00000000-0000-0000-0000-000000002001', 'uploader');
+  perform app.request_legal_hold(v_tenant_id, 'operational', 'app.files', v_file_a.id, 'HDN-377 bridge regression', '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  begin
+    perform app.request_file_deletion(v_file_a.id, 'attempted deletion under a generic hold', '00000000-0000-0000-0000-000000002001', 'uploader');
+    raise exception 'assertion failed: expected document_legal_hold_blocks_deletion for a file under a generic (app.legal_holds) hold, deletion succeeded instead';
+  exception
+    when others then
+      if sqlerrm !~ 'document_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  -- Direction B: a PLT-128-native hold must be visible to the generic retention-archive dry-run classification.
+  v_file_b := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-bridge-b.pdf', 'application/pdf', 1000, null, true, 'HDN-377 bridge regression', '{}', null, 'idem-hdn377-bridge-b', '00000000-0000-0000-0000-000000002001', 'uploader');
+  v_archive := app.request_retention_archive(v_tenant_id, 'operational', 'app.files', v_file_b.id, now() - interval '10 years', true, '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  if v_archive.status <> 'blocked_legal_hold' or not v_archive.legal_hold_blocking then
+    raise exception 'assertion failed: expected a file-native legal_hold=true to be visible to app.request_retention_archive''s own dry-run classification (status=blocked_legal_hold), got status=% legal_hold_blocking=%', v_archive.status, v_archive.legal_hold_blocking;
+  end if;
+end;
+$$;
+
+\echo '>> HDN-377 Tier C regression: a raw UPDATE setting deleted_at on a legally-held file (native OR generic hold) is blocked at the schema level too, not just the physical DELETE path -- the Tier C attack-surface lens live-forced this gap in the first round''s own trigger'
+do $$
+declare
+  v_tenant_id uuid;
+  v_file_native app.files;
+  v_file_generic app.files;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+
+  -- Native hold.
+  v_file_native := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-tierc-softdel-native.pdf', 'application/pdf', 1000, null, true, 'litigation hold', '{}', null, 'idem-hdn377-tierc-softdel-native', '00000000-0000-0000-0000-000000002001', 'uploader');
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    update app.files set deleted_at = now(), lifecycle_status = 'deleted' where id = v_file_native.id;
+    raise exception 'assertion failed: expected a raw soft-delete UPDATE of a natively-held file to be blocked, but it succeeded';
+  exception when others then
+    if sqlerrm !~ 'document_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  -- Generic (IAE-031) hold, the exact gap the Tier C attack-surface lens found.
+  v_file_generic := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-tierc-softdel-generic.pdf', 'application/pdf', 1000, null, false, null, '{}', null, 'idem-hdn377-tierc-softdel-generic', '00000000-0000-0000-0000-000000002001', 'uploader');
+  perform app.request_legal_hold(v_tenant_id, 'operational', 'app.files', v_file_generic.id, 'HDN-377 Tier C regression', '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  begin
+    update app.files set deleted_at = now(), lifecycle_status = 'deleted' where id = v_file_generic.id;
+    raise exception 'assertion failed: expected a raw soft-delete UPDATE of a generically-held file to be blocked, but it succeeded -- this is the exact gap the first round''s own trigger missed';
+  exception when others then
+    if sqlerrm !~ 'document_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  -- An ordinary, unrelated UPDATE (not touching deleted_at) on the same held file
+  -- must still succeed -- the guard is scoped to the deletion transition only.
+  update app.files set original_filename = 'renamed-while-held.pdf' where id = v_file_generic.id;
+  if (select original_filename from app.files where id = v_file_generic.id) <> 'renamed-while-held.pdf' then
+    raise exception 'assertion failed: expected an ordinary, non-deletion UPDATE on a held file to succeed unimpeded';
+  end if;
+end;
+$$;
+
+\echo '>> HDN-377 Tier C regression: app.request_legal_hold normalizes scope_record_table (case/whitespace) so a variant still matches a real hold, and loudly rejects a non-schema-qualified value instead of silently creating a non-protecting hold -- the Tier C attack-surface lens live-forced the prior silent-no-op'
+do $$
+declare
+  v_tenant_id uuid;
+  v_file_mixed_case app.files;
+  v_file_whitespace app.files;
+  v_hold app.legal_holds;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+
+  v_file_mixed_case := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-tierc-scope-case.pdf', 'application/pdf', 1000, null, false, null, '{}', null, 'idem-hdn377-tierc-scope-case', '00000000-0000-0000-0000-000000002001', 'uploader');
+  v_hold := app.request_legal_hold(v_tenant_id, 'operational', 'App.Files', v_file_mixed_case.id, 'HDN-377 Tier C regression -- mixed case', '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  if v_hold.scope_record_table <> 'app.files' then
+    raise exception 'assertion failed: expected scope_record_table to be normalized to lowercase, got %', v_hold.scope_record_table;
+  end if;
+  begin
+    perform app.request_file_deletion(v_file_mixed_case.id, 'attempted deletion under a mixed-case-scoped hold', '00000000-0000-0000-0000-000000002001', 'uploader');
+    raise exception 'assertion failed: expected a mixed-case scope_record_table (App.Files) to still match and block deletion, but it succeeded';
+  exception when others then
+    if sqlerrm !~ 'document_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  v_file_whitespace := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hdn377-tierc-scope-ws.pdf', 'application/pdf', 1000, null, false, null, '{}', null, 'idem-hdn377-tierc-scope-ws', '00000000-0000-0000-0000-000000002001', 'uploader');
+  perform app.request_legal_hold(v_tenant_id, 'operational', '  app.files  ', v_file_whitespace.id, 'HDN-377 Tier C regression -- whitespace', '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  begin
+    perform app.request_file_deletion(v_file_whitespace.id, 'attempted deletion under a whitespace-padded-scoped hold', '00000000-0000-0000-0000-000000002001', 'uploader');
+    raise exception 'assertion failed: expected a whitespace-padded scope_record_table to still match and block deletion, but it succeeded';
+  exception when others then
+    if sqlerrm !~ 'document_legal_hold_blocks_deletion' then raise; end if;
+  end;
+
+  begin
+    perform app.request_legal_hold(v_tenant_id, 'operational', 'files', gen_random_uuid(), 'HDN-377 Tier C regression -- missing schema prefix', '00000000-0000-0000-0000-000000002004', 'tenant admin');
+    raise exception 'assertion failed: expected a non-schema-qualified scope_record_table (files) to be loudly rejected, not silently accepted';
+  exception when others then
+    if sqlerrm !~ 'legal_hold_scope_table_not_qualified' then raise; end if;
+  end;
+end;
+$$;
+
 \echo '>> PLT-128 (Document and File Engine) test suite passed'

@@ -51,4 +51,22 @@ describe("validateRedirectTarget", () => {
     assert.equal(result.safe, false);
     assert.equal(result.reason, "not_a_relative_path_or_valid_url");
   });
+
+  test("rejects a tab-smuggled protocol-relative target (WHATWG URL parsers strip \\t/\\r/\\n before parsing, turning '/\\t/evil.com' into '//evil.com')", () => {
+    const result = validateRedirectTarget("/\t/evil.com");
+    assert.equal(result.safe, false);
+    assert.equal(result.reason, "dangerous_prefix");
+  });
+
+  test("rejects a CR/LF-smuggled protocol-relative target", () => {
+    const result = validateRedirectTarget("/\r\n//evil.com");
+    assert.equal(result.safe, false);
+    assert.equal(result.reason, "dangerous_prefix");
+  });
+
+  test("still accepts legitimate paths with no control characters", () => {
+    assert.equal(validateRedirectTarget("/dashboard").safe, true);
+    assert.equal(validateRedirectTarget("/tenant/acme/admin?tab=users").safe, true);
+    assert.equal(validateRedirectTarget("https://cargogrid.app/dashboard", ["https://cargogrid.app"]).safe, true);
+  });
 });

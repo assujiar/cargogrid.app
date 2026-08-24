@@ -430,6 +430,64 @@ begin
 end;
 $$;
 
+\echo '>> HDN-374 Tier C regression: app.request_finance_settlement_reversal must deny reversing a settlement whose own original posting period is locked -- period lock cannot be bypassed by a normal FIN:Approve role via the reversal path any more than via the posting path'
+do $$
+declare
+  v_tenant_a uuid;
+  v_vendor_id uuid;
+  v_item app.finance_ap_open_items;
+  v_settlement app.finance_settlements;
+  v_lock app.finance_period_locks;
+  v_ap_before app.finance_ap_open_items;
+  v_ap_after app.finance_ap_open_items;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
+  v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
+
+  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 400, '2026-06-08'::date, '2026-07-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-REV-LOCK-1', 'Bank ***5678', 'USD', '2026-06-15'::date,
+    jsonb_build_array(jsonb_build_object('apOpenItemId', v_item.id, 'amount', 400)), 0, 'prep-rev-lock-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.submit_finance_settlement_for_approval(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.approve_finance_settlement(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.execute_finance_settlement(v_settlement.id, v_settlement.record_version, 'TXN-REF-LOCK-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.post_finance_settlement(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+
+  select * into v_ap_before from app.finance_ap_open_items where id = v_item.id;
+
+  -- Lock the settlement's own posting period (2026-06) AFTER it posted, exactly the
+  -- ordinary period-close sequence -- the reversal attempt below happens against an
+  -- already-locked period, the real scenario the live-forced Tier C reproduction used.
+  select * into v_lock from app.lock_finance_period(v_tenant_a, null,
+    (select id from app.finance_fiscal_periods where tenant_id = v_tenant_a and period_code like '%2026-06%' limit 1),
+    'all', 'HDN-374 Tier C fixture: period close', null, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  if v_lock.status <> 'locked' then
+    raise exception 'assertion failed: expected the fixture period to be locked, got %', v_lock.status;
+  end if;
+
+  begin
+    perform app.request_finance_settlement_reversal(v_settlement.id, 'attempted reversal against a locked period', '00000000-0000-0000-0000-000000029602', 'financemanagera');
+    raise exception 'assertion failed: HDN-374 Tier C regressed -- expected finance_settlement_reversal_period_not_open, a locked period must never be bypassed by the reversal path';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_settlement_reversal_period_not_open' then
+        raise exception 'assertion failed: expected finance_settlement_reversal_period_not_open, got %', sqlerrm;
+      end if;
+  end;
+
+  -- The denied reversal must leave both the settlement and the AP open item byte-for-byte
+  -- untouched -- the guard denies before any state mutation, mirroring every other guard
+  -- this checkpoint added.
+  select * into v_settlement from app.finance_settlements where id = v_settlement.id;
+  if v_settlement.status <> 'posted' then
+    raise exception 'assertion failed: expected the settlement to remain posted (reversal denied before any mutation), got %', v_settlement.status;
+  end if;
+  select * into v_ap_after from app.finance_ap_open_items where id = v_item.id;
+  if v_ap_after.status <> v_ap_before.status or v_ap_after.settled_amount <> v_ap_before.settled_amount then
+    raise exception 'assertion failed: expected the AP open item completely untouched by the denied reversal, got status=% settled=% (was status=% settled=%)', v_ap_after.status, v_ap_after.settled_amount, v_ap_before.status, v_ap_before.settled_amount;
+  end if;
+end;
+$$;
+
 \echo '>> discard boundary: only a draft or submitted settlement may be discarded; an approved settlement cannot be'
 do $$
 declare

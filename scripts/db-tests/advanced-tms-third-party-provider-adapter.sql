@@ -157,6 +157,46 @@ begin
   end if;
 end $$;
 
+\echo '>> HDN-376 (API Compatibility Audit) finding 1 regression: a NULL signature (no HMAC secret known at all -- the literal unauthenticated-caller case) is rejected as invalid, never silently accepted. Before the fix, `v_expected = null` evaluated to SQL NULL and `if not verify_...()` treated that as verified'
+do $$
+declare
+  v_connection_id uuid := (select value::uuid from provider_test_state where key = 'connection_id');
+  v_payload text;
+  v_ts bigint := extract(epoch from now())::bigint;
+  v_result record;
+  v_direct boolean;
+begin
+  v_payload := jsonb_build_object('event_id', 'evt-null-sig', 'vehicle_id', 'EXT-VEH-001', 'event_type', 'heartbeat', 'timestamp', now()::text)::text;
+
+  v_direct := app.verify_third_party_provider_webhook_signature(v_connection_id, v_payload, v_ts, null);
+  if v_direct is distinct from false then
+    raise exception 'assertion failed: expected app.verify_third_party_provider_webhook_signature to return exactly false for a null signature, got %', v_direct;
+  end if;
+
+  select * into v_result from app.ingest_third_party_provider_webhook_event(v_connection_id, 'client-null-sig', v_payload, v_ts, null);
+  if v_result.ingest_status <> 'invalid' then
+    raise exception 'assertion failed: HDN-376 finding 1 regressed -- expected invalid for a NULL (fully unauthenticated) signature, got %', v_result.ingest_status;
+  end if;
+
+  if exists (select 1 from app.third_party_telemetry_reports where connection_id = v_connection_id and provider_event_id = 'evt-null-sig') then
+    raise exception 'assertion failed: a NULL-signature event must never be inserted into app.third_party_telemetry_reports';
+  end if;
+
+  -- Empty-string signature (distinct SQL value from null) must also fail closed.
+  v_direct := app.verify_third_party_provider_webhook_signature(v_connection_id, v_payload, v_ts, '');
+  if v_direct is distinct from false then
+    raise exception 'assertion failed: expected app.verify_third_party_provider_webhook_signature to return exactly false for an empty-string signature, got %', v_direct;
+  end if;
+
+  -- Null timestamp must also fail closed (was already guarded pre-fix, re-verified here).
+  v_direct := app.verify_third_party_provider_webhook_signature(v_connection_id, v_payload, null, 'anysignature');
+  if v_direct is distinct from false then
+    raise exception 'assertion failed: expected app.verify_third_party_provider_webhook_signature to return exactly false for a null timestamp, got %', v_direct;
+  end if;
+
+  raise notice 'HDN-376 finding 1 regression proof: NULL signature, empty-string signature and NULL timestamp are all rejected as false (never NULL), never accepted as verified';
+end $$;
+
 \echo '>> app.ingest_third_party_provider_webhook_event: an unmapped external vehicle_id is quarantined (not dropped, not treated as invalid) with the raw payload preserved for operator review'
 do $$
 declare

@@ -51,6 +51,11 @@ begin
   perform app.set_role_version_permissions(v_manager_draft_a.id, array(select id from app.permissions where resource_module_code = 'FIN' and action in ('Create', 'Edit', 'Approve', 'View')), 'tester');
   perform app.publish_role_version(v_manager_draft_a.id, now(), 'tester');
   perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000029902', '00000000-0000-0000-0000-000000029901', 'tester');
+  -- HDN-373 (ISS-2026-181, maker/checker): admina also holds Finance Manager so it can
+  -- act as a genuinely distinct approver/poster from financemanagera, the preparer, in
+  -- the scenarios below -- app.approve_finance_journal/app.post_finance_journal now deny
+  -- an actor approving or posting their own submission.
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000029901', '00000000-0000-0000-0000-000000029901', 'tester');
 
   perform app.invite_user(v_tenant_a, '00000000-0000-0000-0000-000000029903', 'supremeadmin@acmepji.test', 'Global Supreme Admin', null, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'supremeadmin@acmepji.test'), 'active', 'onboarded', 'tester');
@@ -70,8 +75,8 @@ begin
       jsonb_build_object('accountId', v_rev_id, 'direction', 'credit', 'amount', 800)
     ), 'pji-posted-1', '00000000-0000-0000-0000-000000029902', 'financemanagera');
   select * into v_journal from app.submit_finance_journal_for_approval(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029902', 'financemanagera');
-  select * into v_journal from app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029902', 'financemanagera');
-  select * into v_journal from app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029902', 'financemanagera');
+  select * into v_journal from app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029901', 'admina');
+  select * into v_journal from app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029901', 'admina');
 
   select * into v_draft_journal from app.create_finance_journal_draft(v_tenant_a, null, '2026-03-11'::date, 'USD',
     jsonb_build_array(

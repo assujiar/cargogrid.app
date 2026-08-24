@@ -617,4 +617,22 @@ begin
 end;
 $$;
 
+\echo '>> HDN-382 (Observability Audit): app.ping() -- the /api/ready DB-connectivity probe -- returns true, is anon-inaccessible, and touches no application table (a readiness probe is not itself a tenant-data-leak surface)'
+do $$
+declare
+  v_result boolean;
+  v_anon_grant boolean;
+begin
+  v_result := app.ping();
+  if v_result is distinct from true then
+    raise exception 'assertion failed: expected app.ping() to return true, got %', v_result;
+  end if;
+
+  select has_function_privilege('anon', 'app.ping()'::regprocedure, 'EXECUTE') into v_anon_grant;
+  if v_anon_grant then
+    raise exception 'assertion failed: expected anon to hold no EXECUTE grant on app.ping()';
+  end if;
+end;
+$$;
+
 \echo 'ALL IAE-030 (Enterprise Monitoring and Observability) ASSERTIONS PASSED'

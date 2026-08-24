@@ -8,6 +8,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
 import { resolveCommercialAccessForRequest } from "../../../../lib/portal/resolve-commercial-access.server.ts";
 import {
@@ -67,6 +68,13 @@ export async function createIntegrationConnectionAction(tenantSlug: string, _pre
     return { error: "Config must be a valid JSON object." };
   }
 
+  // ISS-2026-150 closure fix: the caller's best-effort client IP, threaded through so
+  // app.create_integration_connection can enforce the tenant's own IP allowlist
+  // restriction (scope 'admin') when one is configured -- same x-forwarded-for-derived
+  // shape as app/(public)/vendor-intake/register/[tenantSlug]/actions.ts.
+  const requestHeaders = await headers();
+  const clientIp = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+
   const supabase = await createSupabaseServerClient();
   try {
     await createIntegrationConnection(supabase, {
@@ -81,6 +89,7 @@ export async function createIntegrationConnectionAction(tenantSlug: string, _pre
       credentialValue,
       actorAuthUserId: access.authUserId,
       actorLabel: access.authUserId,
+      clientIp,
     });
   } catch (error) {
     if (error instanceof IntegrationHubMutationError) return { error: `Could not create this connection: ${error.message}` };

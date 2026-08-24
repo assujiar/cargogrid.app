@@ -1038,14 +1038,54 @@ do $$
 declare
   v_event app.attendance_events;
   v_session_assignment_id uuid;
+  v_expected_assignment_id uuid;
 begin
   v_event := app.record_attendance_clock_event((select id from app.tenants where slug='shr1'), 'clock_in', 'mobile_web', now(), null, null, 'integration-clockin-emp3', '00000000-0000-0000-0000-000000027907', 'emp3');
   if v_event.id is null then
     raise exception 'assertion failed: expected a real attendance event to be created regardless of roster adoption';
   end if;
-  select schedule_assignment_id into v_session_assignment_id from app.attendance_sessions where id = v_event.session_id;
-  if v_session_assignment_id is not null then
-    raise exception 'assertion failed: expected schedule_assignment_id to stay null when no roster assignment exists for this employee/work_date';
+
+  -- ISS-2026-135 root fix (CG-S15-HDN-002, Prompt 370, Step 15 Full Regression).
+  --
+  -- This negative control asserted schedule_assignment_id IS NULL unconditionally,
+  -- on the assumption that emp3 never has a roster assignment "covering today".
+  -- That assumption is not the fixture's to make: emp3 is given bulk_generated
+  -- assignments on the HARDCODED literal dates 2026-08-17 and 2026-08-18 earlier
+  -- in this same file, while work_date below is the real wall-clock day. Only the
+  -- 08-18 row reaches app.resolve_effective_schedule_assignment's own
+  -- status='published' filter -- the bulk publish call that runs right after
+  -- 08-17's own generation covers 08-18 only, leaving 08-17 at 'scheduled' -- so
+  -- the assertion is armed on exactly ONE calendar date (Tier C review, 2026-08-23,
+  -- corrected this from an earlier draft that said "two"; both the correctness and
+  -- security/tenant review lenses independently traced the same single date by
+  -- reading the actual bulk_generated/publish call sequence, not by re-deriving it
+  -- from the comment). It is not day-of-week, and it is not fixed by waiting for
+  -- that date to pass: it re-arms the moment anyone refreshes this file's literal
+  -- dates forward, which is an ordinary maintenance action.
+  --
+  -- Fixed by deriving the expectation from real state instead of assuming it.
+  -- The property actually under test -- decision 9: a clock-in never fabricates
+  -- a roster link, and never errors when no roster exists -- is now asserted in
+  -- both directions and is true on every calendar date.
+  select s.schedule_assignment_id into v_session_assignment_id
+  from app.attendance_sessions s where s.id = v_event.session_id;
+
+  select a.id into v_expected_assignment_id
+  from app.attendance_sessions s
+  join app.schedule_assignments a
+    on a.tenant_id = s.tenant_id and a.employee_id = s.employee_id
+   and a.work_date = s.work_date and a.status = 'published'
+  where s.id = v_event.session_id
+  limit 1;
+
+  if v_expected_assignment_id is null then
+    if v_session_assignment_id is not null then
+      raise exception 'assertion failed: expected schedule_assignment_id to stay null when no published roster assignment exists for this employee/work_date, got %', v_session_assignment_id;
+    end if;
+  else
+    if v_session_assignment_id is distinct from v_expected_assignment_id then
+      raise exception 'assertion failed: a published roster assignment DOES exist for this employee/work_date (%), so the session must link to exactly it, got %', v_expected_assignment_id, v_session_assignment_id;
+    end if;
   end if;
 end $$;
 reset role;

@@ -112,6 +112,16 @@ declare
   v_eval_beta uuid;
   v_eval_delta uuid;
   v_batch uuid;
+  -- HDN-374 Tier C (Financial Integrity Audit): finance_invoices_job_order_issued_unique
+  -- now enforces at most one ISSUED invoice per job order -- each of Alpha's 3 issued
+  -- invoices below needs its own distinct job order (job_order_id is a purely internal FK
+  -- never surfaced by this file's own customer-portal READ layer under test).
+  v_job_order_alpha_inv1 uuid;
+  v_job_order_alpha_inv2 uuid;
+  v_job_order_alpha_inv3 uuid;
+  v_eval_alpha_inv1 uuid;
+  v_eval_alpha_inv2 uuid;
+  v_eval_alpha_inv3 uuid;
 begin
   insert into auth.users (id, email) values
     (v_supreme, 'supreme@cpv.test'),
@@ -161,12 +171,19 @@ begin
   select job_order_id, eval_id into v_job_order_alpha, v_eval_alpha from app._cpv_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA', v_supreme);
   select job_order_id, eval_id into v_job_order_beta, v_eval_beta from app._cpv_test_make_chain(v_tenant1, v_company1, v_account_beta, 'BETA', v_supreme);
   select job_order_id, eval_id into v_job_order_delta, v_eval_delta from app._cpv_test_make_chain(v_tenant2, v_company2, v_account_delta, 'DELTA', v_supreme);
+  select job_order_id, eval_id into v_job_order_alpha_inv1, v_eval_alpha_inv1 from app._cpv_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA-INV1', v_supreme);
+  select job_order_id, eval_id into v_job_order_alpha_inv2, v_eval_alpha_inv2 from app._cpv_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA-INV2', v_supreme);
+  select job_order_id, eval_id into v_job_order_alpha_inv3, v_eval_alpha_inv3 from app._cpv_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA-INV3', v_supreme);
 
-  -- One billing_readiness_handoff per invoice fixture case.
+  -- One billing_readiness_handoff per invoice fixture case -- the 3 ISSUED cases (a1/a2/a3)
+  -- each get their own separate Alpha job order (HDN-374 Tier C: finance_invoices_job_
+  -- order_issued_unique forbids two ISSUED invoices sharing a job order); the void-before-
+  -- issuance case (a4) stays on the original shared v_job_order_alpha since it never
+  -- reaches 'issued'.
   insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by) values
-    ('00000000-0000-0000-0000-000000325201', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cpv-br-a1', v_supreme, 'tester'),
-    ('00000000-0000-0000-0000-000000325202', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cpv-br-a2', v_supreme, 'tester'),
-    ('00000000-0000-0000-0000-000000325203', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cpv-br-a3', v_supreme, 'tester'),
+    ('00000000-0000-0000-0000-000000325201', v_tenant1, v_job_order_alpha_inv1, v_eval_alpha_inv1, 'idem-cpv-br-a1', v_supreme, 'tester'),
+    ('00000000-0000-0000-0000-000000325202', v_tenant1, v_job_order_alpha_inv2, v_eval_alpha_inv2, 'idem-cpv-br-a2', v_supreme, 'tester'),
+    ('00000000-0000-0000-0000-000000325203', v_tenant1, v_job_order_alpha_inv3, v_eval_alpha_inv3, 'idem-cpv-br-a3', v_supreme, 'tester'),
     ('00000000-0000-0000-0000-000000325204', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cpv-br-a4', v_supreme, 'tester');
   insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by) values
     ('00000000-0000-0000-0000-000000325220', v_tenant1, v_job_order_beta, v_eval_beta, 'idem-cpv-br-b1', v_supreme, 'tester');
@@ -192,9 +209,9 @@ begin
   -- ever-issued (ar_open_item_id null -- payment_status must resolve to
   -- not_posted with an empty allocations array).
   insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, ar_open_item_id, issued_by, issued_at, created_by) values
-    ('00000000-0000-0000-0000-000000325101', v_tenant1, v_company1, 'INV-CPV-000001', v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000325201', 'USD', 'issued', 1000, 0, '2026-07-01', '2026-07-31', '00000000-0000-0000-0000-000000325301', 'tester', now(), 'tester'),
-    ('00000000-0000-0000-0000-000000325102', v_tenant1, v_company1, 'INV-CPV-000002', v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000325202', 'USD', 'issued', 500, 0, '2026-08-01', '2026-08-31', '00000000-0000-0000-0000-000000325302', 'tester', now(), 'tester'),
-    ('00000000-0000-0000-0000-000000325103', v_tenant1, v_company1, 'INV-CPV-000003', v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000325203', 'USD', 'issued', 300, 0, '2026-08-05', '2026-09-04', '00000000-0000-0000-0000-000000325303', 'tester', now(), 'tester');
+    ('00000000-0000-0000-0000-000000325101', v_tenant1, v_company1, 'INV-CPV-000001', v_account_alpha, v_job_order_alpha_inv1, '00000000-0000-0000-0000-000000325201', 'USD', 'issued', 1000, 0, '2026-07-01', '2026-07-31', '00000000-0000-0000-0000-000000325301', 'tester', now(), 'tester'),
+    ('00000000-0000-0000-0000-000000325102', v_tenant1, v_company1, 'INV-CPV-000002', v_account_alpha, v_job_order_alpha_inv2, '00000000-0000-0000-0000-000000325202', 'USD', 'issued', 500, 0, '2026-08-01', '2026-08-31', '00000000-0000-0000-0000-000000325302', 'tester', now(), 'tester'),
+    ('00000000-0000-0000-0000-000000325103', v_tenant1, v_company1, 'INV-CPV-000003', v_account_alpha, v_job_order_alpha_inv3, '00000000-0000-0000-0000-000000325203', 'USD', 'issued', 300, 0, '2026-08-05', '2026-09-04', '00000000-0000-0000-0000-000000325303', 'tester', now(), 'tester');
   insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, void_reason, voided_by, voided_at, created_by) values
     ('00000000-0000-0000-0000-000000325104', v_tenant1, v_company1, null, v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000325204', 'USD', 'void', 150, 0, 'cpv fixture void before issuance', 'tester', now(), 'tester');
 

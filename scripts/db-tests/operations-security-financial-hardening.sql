@@ -205,7 +205,14 @@ declare
   v_outsider_count integer;
   v_supreme_count integer;
 begin
+  -- HDN-375 (Data Lineage Audit): app.transaction_lineage_edges is now a protected
+  -- append-only ledger (app.protect_transaction_lineage_edges_append_only, mirroring
+  -- CPL-325's own established shape) -- simulating data loss for this anomaly-detection
+  -- proof requires a genuine Supreme Admin session context, the same disclosed RPD-022
+  -- exception path every other append-only ledger in this codebase already requires.
+  perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-0000-0000-000000024106', 'role', 'authenticated')::text, true);
   delete from app.transaction_lineage_edges where relation_type = 'job_to_shipment' and target_id = v_shipment_id;
+  perform set_config('request.jwt.claims', 'null', true);
 
   select count(*) into v_rep_count from app.detect_transaction_lineage_anomalies(v_tenant1, '00000000-0000-0000-0000-000000024102') a
   where a.anomaly_type = 'orphan_shipment_order' and a.target_id = v_shipment_id;

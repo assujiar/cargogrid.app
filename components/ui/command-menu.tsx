@@ -10,7 +10,7 @@
  */
 
 import { Dialog as RadixDialog } from "radix-ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 export interface CommandMenuItem {
@@ -23,6 +23,7 @@ export interface CommandMenuItem {
 export function CommandMenu({ items }: { readonly items: readonly CommandMenuItem[] }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -34,6 +35,19 @@ export function CommandMenu({ items }: { readonly items: readonly CommandMenuIte
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // HDN-380 (jsx-a11y/no-autofocus): moving focus to the search field the instant this
+  // dialog opens is the correct, expected behavior for a keyboard-launched (Cmd/Ctrl+K)
+  // command palette -- the whole point is to let the user start typing immediately. The
+  // JSX `autoFocus` prop is flagged regardless of context because it always fires on
+  // mount, including for a palette that opened non-interactively; an effect gated on
+  // `open` only moves focus for the one interaction this component actually supports
+  // (an explicit user-initiated open), which is the distinction the lint rule can't see.
+  useEffect(() => {
+    if (open) {
+      searchInputRef.current?.focus();
+    }
+  }, [open]);
 
   const filtered = useMemo(
     () => items.filter((item) => item.label.toLowerCase().includes(query.toLowerCase())),
@@ -47,7 +61,7 @@ export function CommandMenu({ items }: { readonly items: readonly CommandMenuIte
         <RadixDialog.Content className="fixed left-1/2 top-24 z-50 w-full max-w-lg -translate-x-1/2 rounded-md border border-neutral-200 bg-surface shadow-lg focus:outline-none">
           <RadixDialog.Title className="sr-only">Command menu</RadixDialog.Title>
           <input
-            autoFocus
+            ref={searchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search actions and pages… (⌘K)"

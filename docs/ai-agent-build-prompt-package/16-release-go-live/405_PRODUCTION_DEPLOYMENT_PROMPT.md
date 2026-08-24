@@ -37,7 +37,7 @@ Record repository root, branch, HEAD, dirty-worktree ownership, release candidat
 
 ## 8. Preconditions
 
-Read persistent context/status/task/change/decision/assumption/error/issues/handoff artifacts, Step 15 closure report, release board authority, relevant runbooks and evidence. Confirm no unresolved critical/high tenant, security, financial, data loss, migration, backup/restore, DR, performance, accessibility or observability blocker exists unless this prompt explicitly records `NO_GO`.
+Read persistent context/status/task/change/decision/assumption/error/issues/handoff artifacts, Step 15 closure report, release board authority, relevant runbooks and evidence. Confirm no unresolved critical/high tenant, security, financial, data loss, migration, backup/restore, DR, performance, accessibility or observability blocker exists unless this prompt explicitly records `NO_GO`. Confirm every item in `docs/runbooks/production-configuration-checklist.md` (dashboard/Management-API-only settings no migration can set) is applied on the target project.
 
 ## 9. Upstream dependencies
 

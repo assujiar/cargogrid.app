@@ -504,3 +504,48 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> HDN-374 (Financial Integrity Audit) finding 3 regression: a REAL two-process concurrent race -- both processes call app.post_finance_subledger_batch for the SAME (tenant, source_type, source_id) at the same instant. post_finance_subledger_batch is the core GL-posting primitive called transitively by AR receipt allocation, AP settlement posting and invoice/vendor-bill subledger posting -- before the fix, the losing process surfaced a raw duplicate-key error; after the fix, it must gracefully return the SAME winning batch row, and the source''s own journal must be posted exactly once (never double-posted GL lines)'
+-- A fixed, self-chosen source_id (not gen_random_uuid()) -- unlike the pick_task race
+-- above, this proof's own post-race assertion needs to re-identify the exact target row
+-- from a plain do $$ ... $$ block, and psql's own :variable interpolation is not
+-- performed inside dollar-quoted bodies, so a literal constant known to both the raced
+-- SQL and the assertion block is used instead of a \gset''d random value.
+select id as race_tenant_id from app.tenants where slug = 'acmesubla' \gset
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as race_bpid \gset
+
+\set race_sql_a 'select app.post_finance_subledger_batch(''' :race_tenant_id ''', null, ''invoice'', ''00000000-0000-0000-0000-000000029799'', ''2026-03-10'', ''USD'', ''[{"postingMapKey": "cash_default", "direction": "debit", "amount": 750}, {"postingMapKey": "revenue_default", "direction": "credit", "amount": 750}]''::jsonb, ''00000000-0000-0000-0000-000000029702'', ''financemanagera'');'
+\set race_sql_b 'select app.post_finance_subledger_batch(''' :race_tenant_id ''', null, ''invoice'', ''00000000-0000-0000-0000-000000029799'', ''2026-03-10'', ''USD'', ''[{"postingMapKey": "cash_default", "direction": "debit", "amount": 750}, {"postingMapKey": "revenue_default", "direction": "credit", "amount": 750}]''::jsonb, ''00000000-0000-0000-0000-000000029702'', ''financemanagera'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-fin-subledger-race-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-fin-subledger-race-b-:race_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_tenant_a uuid;
+  v_source_id uuid := '00000000-0000-0000-0000-000000029799';
+  v_batch_count integer;
+  v_journal_count integer;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmesubla');
+
+  select count(*) into v_batch_count from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'invoice' and source_id = v_source_id;
+  if v_batch_count <> 1 then
+    raise exception 'assertion failed: HDN-374 finding 3 regressed -- expected exactly ONE subledger batch row to survive the concurrent race (never two, never zero -- a raw unique_violation reaching a caller means this fix is not applied), got % -- see the RACE_OUT_A/RACE_OUT_B process output captured above', v_batch_count;
+  end if;
+
+  select count(*) into v_journal_count from app.finance_journals where tenant_id = v_tenant_a and source_type = 'subledger'
+    and source_id = (select id from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'invoice' and source_id = v_source_id);
+  if v_journal_count <> 1 then
+    raise exception 'assertion failed: expected the race-surviving subledger batch to have posted exactly ONE backing system journal (never a double GL posting), got %', v_journal_count;
+  end if;
+
+  raise notice 'concurrent subledger-batch-post race proof: exactly 1 batch row / 1 backing journal survived two genuinely concurrent psql processes racing the SAME (tenant, source_type, source_id) -- the loser was handed the winner''s row gracefully, never a raw unique_violation';
+end;
+$$;

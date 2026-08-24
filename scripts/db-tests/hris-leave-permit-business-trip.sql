@@ -15,6 +15,44 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-077 root fix (CG-S15-HDN-002, Prompt 370, Step 15 Full Regression).
+--
+-- This fixture seeds schedule assignments, leave requests and attendance clock
+-- events for "today" using current_date, then asserts against
+-- app.attendance_sessions.work_date. Those are NOT the same clock:
+--
+--   * current_date is evaluated in the SESSION timezone, which run.sh leaves at
+--     the server default (Etc/UTC on CI and on a hosted project alike);
+--   * work_date is computed by app.resolve_attendance_workday() in the tenant
+--     ATTENDANCE POLICY's timezone -- Asia/Jakarta (UTC+7) for this fixture's lv1.
+--
+-- From 17:00 UTC onward the Jakarta date is already tomorrow while current_date
+-- is still today, so `where s.work_date = current_date` matches nothing and the
+-- HRT-278-integration negative control below reports "found 0" for an employee
+-- who genuinely did get a late exception. That is a real ~7-hour window every
+-- single day (17:00-24:00 UTC), which is why this file was seen failing on
+-- 2026-08-13, passing on 2026-08-14, and flipping from pass to fail partway
+-- through one Phase 9 session on 2026-08-22 -- all on an identical, unmodified
+-- file. It was registered as a "day-of-week" flake (ISS-2026-077); it is not.
+-- It is a timezone-boundary mismatch, the same root class as ISS-2026-154.
+--
+-- Fixed at the root rather than at the assertion: align the session's own idea
+-- of "today" with the timezone the code under test actually resolves work days
+-- in, so current_date and work_date can never disagree. The specific comparison
+-- that produced the registered failure (work_date = current_date, the HRT-278
+-- late-exception negative control) is proven by construction across a full
+-- 7-day sweep, not by re-running and hoping -- see
+-- docs/build-log/full-system-hardening/HDN-370.md. This file has ~40 further
+-- current_date/now() sites; the Tier C correctness review checked the rest of
+-- this file for exposure to the same shift (the coverage-requirement seed and
+-- the accrual/carry-forward period labels) and found none live-breaking, but
+-- that check was not itself an exhaustive sweep -- treat only the cited
+-- comparison as swept-proven, the rest as reviewed.
+--
+-- run.sh gives every test file its own psql session, so this setting is scoped
+-- to this file and cannot leak into any other.
+set timezone = 'Asia/Jakarta';
+
 \echo '>> setup: two tenants (lv1, lv2). lv1 gets a tenant_admin, HR staff (HRS Create/Edit/Export/View/View personal data/Import), an approver (HRS Approve/View/Override), four active employees (emp1, emp2, mgr1, emp3 -- emp1/emp2 report to mgr1), a published tenant-wide approval routing definition (PLT-123), a published attendance policy (HRT-278 integration), and a published shift template + coverage requirement (HRT-279 integration). lv2 gets a tenant_admin and one active employee for cross-tenant checks. A global Supreme Admin is also seeded.'
 do $$
 declare

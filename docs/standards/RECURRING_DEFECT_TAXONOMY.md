@@ -384,6 +384,189 @@ read `app.query_audit_logs` for this tenant (usually broader than the capability
 gate, since it is `is_support_grant_authority` = Supreme Admin OR any active `tenant_admin`, not
 the capability's own permission).
 
+**C-25 — Two independently-built enforcement mechanisms for the same conceptual control, neither
+aware of the other.**
+A capability ships its own narrow, domain-native control (e.g. a boolean flag plus a dedicated
+RPC), and a later, separate capability ships a generic, cross-domain primitive meant to cover
+every domain's version of the same concept (e.g. a polymorphic hold/lock/override table). Nothing
+bridges them: a control applied through one mechanism is invisible to the other's own enforcement
+and classification logic, in both directions. Distinct from C-08 (a function widened to leak a
+field to its existing callers) and C-11 (a grant treated as boilerplate) — here both mechanisms
+are individually correct and fully tested on their own; the gap only exists in the seam between
+them, which neither capability's own test suite exercises because neither was written aware the
+other existed.
+*Evidence:* `HDN-377` (Storage and Signed URL Audit) **CRITICAL**, live-forced both directions —
+PLT-128's own file-native `app.files.legal_hold` + `app.set_file_legal_hold()` (consulted only by
+`app.request_file_deletion()`) and IAE-031's later, generic `app.legal_holds` +
+`app.request_legal_hold()`/`app._is_under_legal_hold()` (meant to cover every domain's own hold
+needs, `app.files` included) never composed: a hold placed via the generic RPC left
+`app.files.legal_hold` false and `app.request_file_deletion()` still soft-deleted the file; a
+file-native hold was simultaneously invisible to `app.request_retention_archive()`'s own dry-run
+classification (`legal_hold_blocking=false`). Fixed by extending `app._is_under_legal_hold()`
+with an explicit `app.files`-scoped OR-branch and having `app.request_file_deletion()` consult it
+too, closing both directions from the one seam.
+**Check:** when a new generic/cross-domain primitive is introduced specifically to replace or
+unify N domains' own narrower, pre-existing mechanisms for the same concept, does the diff
+actually wire each existing domain's own mechanism into it (or vice versa), or does it merely
+add a new, parallel path that domain never calls and is never called by? Live-force both
+directions: apply the control through mechanism A, verify mechanism B's own enforcement/read
+path sees it, and the reverse.
+
+**C-26 — An RPC-level check has no schema-level backstop against the same mutation issued
+directly.**
+The correct guard exists and is correctly placed at the one RPC every legitimate caller is
+expected to use — but nothing at the table itself (a `CHECK` constraint, a `BEFORE
+UPDATE`/`DELETE` trigger) enforces the same invariant, so any other `SECURITY DEFINER` function,
+future job, ad hoc migration, or a compromised/misused `service_role` credential that issues the
+same mutation directly bypasses it completely. Distinct from C-12 (a function with no authority
+check at all) — here the *intended* path is correctly gated; the defect is that it is not the
+*only* path capable of performing the mutation. Related to the standing, still-open, larger
+`HDN-BLK-018`/`ISS-2026-205` finding (only 13 of ~90+ append-only/audit/ledger-shaped tables
+carry a real guard trigger at all) — this class names the narrower, single-invariant version of
+the same root gap: a specific field-level rule (not "this whole table is append-only") enforced
+by exactly one RPC and nowhere else.
+*Evidence:* `HDN-377` (Storage and Signed URL Audit) **HIGH**, live-forced — `app.files.legal_hold`
+was checked only inside `app.request_file_deletion()`; a raw `delete from app.files where
+id = ...` issued directly (no RLS bypass required, ordinary `service_role` grant) physically
+erased a legally-held row with zero error, `app.files` carrying no `BEFORE DELETE` trigger at
+all. Fixed with a narrowly-scoped guard trigger mirroring
+`app.protect_transaction_lineage_edges_append_only`'s own proven RPD-022 supreme-admin-bypass
+shape — firing only on `DELETE` of a `legal_hold=true` row, leaving every other UPDATE path
+(scan-status transitions, versioning supersede, soft-deletion) untouched.
+**Check:** for every `raise exception` guard inside an RPC that protects a specific row-level
+invariant (not merely "does the caller have permission"), is the identical invariant also
+reachable by a direct table mutation issued by any role the RPC's own callers already hold (most
+often `service_role`)? If yes, and the guard is cheap to express as a trigger without widening
+what the RPC itself already allows, add the schema-level backstop; if not, disclose the gap
+explicitly rather than leaving the RPC's own check looking like the only line of defense it is
+not.
+
+**C-27 — An RPC's `RETURNING`/return-value clause carries a column that a table-level column
+grant deliberately excludes.**
+A column-privilege fix correctly revokes table-level `SELECT` on a sensitive column and re-grants
+an explicit column list omitting it — but an RPC's own `RETURNING * INTO v_row; RETURN v_row;`
+(or an equivalent `SELECT *`-shaped composite return) is not a `SELECT` against the table and is
+therefore not subject to column-level ACLs at all: any caller with `EXECUTE` on the function gets
+the excluded column back anyway, in the function's own response. Distinct from C-17 (`select("*")`
+on the *client/TypeScript* side against a column-restricted table, which correctly fails closed) —
+here the failure is silent and the opposite direction: the column-privilege fix looks complete
+(direct `SELECT` genuinely denied) while a same-checkpoint or pre-existing RPC quietly hands the
+value back through its own return type instead.
+*Evidence:* `HDN-378` (Security Hardening) Tier C **CRITICAL**, live-forced — `ISS-2026-232`'s own
+column-privilege fix revoked `authenticated`'s table-level `SELECT` on `token_hash` across 3
+tables, but each table's own "revoke" RPC (`app.revoke_shipment_tracking_token`,
+`app.revoke_driver_mobile_session`, `app.revoke_vendor_intake_token`) returned the full composite
+row type including `token_hash` verbatim, defeating the fix for all 3 tables in the same
+checkpoint that shipped it. Fixed by explicitly nulling the excluded column on the returned
+composite immediately before `RETURN`, preserving the return type so no caller-side contract
+change was needed.
+**Check:** for every table that gains a column-level grant restriction, does any `SECURITY
+DEFINER` function that reads or writes that table ever return the whole row (`RETURNING *`, `SELECT
+*` into a composite, or an explicit `RETURNS table (...)`/`RETURNS <table>` that mirrors every
+column)? If yes, either narrow the return shape to an explicit column list, or mask the excluded
+column's value on the returned composite before it leaves the function — a table-level grant
+alone never protects an RPC's own return value.
+
+**C-28 — A specialized wrapper's extra protections are bypassed because the generic primitive it
+delegates to remains independently callable with only its own, weaker check.**
+A high-risk sub-case (e.g. one connection type, one document type, one workflow branch) gets its
+own dedicated wrapper function layering extra protections on top of a shared, generic primitive —
+a lockout guard, step-up-MFA, an IP-restriction check, an additional approval step. The generic
+primitive underneath is never revisited: it keeps its own original, broader `EXECUTE` grant and
+its own original, narrower authority check, so any caller who satisfies the generic check alone
+can call it directly and achieve the same effect as the wrapper, skipping every protection the
+wrapper was built to add. Distinct from C-25 (two independently-built mechanisms for the *same*
+conceptual control, neither aware of the other, added in parallel) — here there is only one
+underlying mechanism and one, later, intentionally-layered wrapper around it; the defect is that
+layering a wrapper on top never closes the direct path to what it wraps. Also distinct from C-26
+(an RPC check with no schema-level backstop) — here the direct path is itself another RPC with its
+own real, working, but weaker check, not a raw table mutation.
+*Evidence:* `HDN-378` (Security Hardening) Tier C **CRITICAL**, live-forced — `ISS-2026-150`'s own
+IP-restriction fix, IAE-026's lockout guard, and `CG-S14-IAE-039`'s step-up-MFA were all layered
+onto `app.activate_enterprise_idp_connection`, a wrapper around the generic, shared
+`app.set_integration_connection_status` (created at Prompt 336, long before any of the three
+layers existed). `set_integration_connection_status` kept its own original `INTHUB:Configure`-only
+check and its own `authenticated` grant; calling it directly, as an actor holding `INTHUB:Configure`
+but none of the wrapper's own extra requirements, reactivated a live enterprise SSO connection
+with zero verified test login, zero step-up challenge, and zero client IP — defeating all three
+layered protections in one call. Registered as `ISS-2026-235`/`HDN-BLK-023`, not yet fixed (the
+correct shape — guard the generic function conditionally, or revoke direct access entirely — is a
+design decision touching a heavily-reused primitive).
+**Check:** whenever a new protection (step-up-MFA, IP-restriction, a lockout/lookback guard, an
+extra approval) is layered onto one wrapper function around a shared, generic primitive, is the
+generic primitive itself still independently callable by a role that does not need to satisfy the
+new protection? If yes, either move the new check into the generic primitive (scoped to the
+specific transition/case that needs it) or revoke the generic primitive's own direct grant in
+favor of forcing every caller through the wrapper.
+
+**C-29 — `CREATE OR REPLACE FUNCTION` with an added parameter silently creates a second overload
+instead of replacing the original.**
+Postgres identifies a function by name *and* argument-type signature, not name alone — appending
+even a single defaulted, trailing parameter changes the signature, so `CREATE OR REPLACE FUNCTION`
+does not replace the existing function at all; it silently creates a second, co-existing overload.
+Every already-compiled caller that doesn't pass the new parameter keeps resolving to the OLD
+overload, forever, regardless of how the new one behaves — a security gate added this way is
+therefore never actually reached by any existing caller, while looking, from the migration diff
+alone, exactly like an in-place update. Only surfaces as a real Postgres error
+(`function name "..." is not unique`) on the next statement that references the function
+unqualified by argument types (e.g. a bare `COMMENT ON FUNCTION name(...)` without the newly
+ambiguous full signature, or a second migration attempting the same `CREATE OR REPLACE`) — not on
+the defining statement itself, which succeeds silently.
+*Evidence:* `HDN-378` (Security Hardening) first round, self-caught before commit — a first draft
+added a trailing `p_client_ip text default null` parameter to 4 functions via a bare
+`CREATE OR REPLACE FUNCTION`, live-tested against a real disposable database as this checkpoint's
+own Tier A validation. Surfaced as `function name "app.decide_ai_output_approval" is not unique` on
+the very next `COMMENT ON FUNCTION` statement — caught before any commit, not shipped. Fixed by an
+explicit `DROP FUNCTION` (old signature) + `CREATE FUNCTION` (new signature) + re-`GRANT EXECUTE`
+(restoring the exact original grants, verified against each function's own origin migration) for
+all 4 functions.
+**Check:** does any migration diff add, remove, or reorder a parameter on an existing function via
+a bare `CREATE OR REPLACE FUNCTION`? If so, verify post-migration (via `pg_proc`, grouping by
+`(schema, function name) having count(*) > 1`) that exactly one overload exists — never assume a
+signature-changing `CREATE OR REPLACE` replaced the original; prefer an explicit `DROP FUNCTION`
+(old signature) + `CREATE FUNCTION` (new signature) + re-`GRANT EXECUTE` whenever the parameter
+list changes at all.
+
+**C-30 — An e2e/browser test harness pointed at a dev-mode server (Turbopack/webpack `next dev`)
+can fail on a client-hydration timing race that never reproduces under a real production build,
+making a tooling artifact look like an application defect.**
+A form submit button becomes "visible, enabled, and stable" (Playwright's own readiness
+definition) before the framework's client-side event interception has actually attached, because
+dev-mode compiles/hydrates routes on demand and more slowly than a production build. The click
+then falls through to a real browser-native navigation the framework's dev-mode runtime does not
+resolve, which never fires its `load` event — the test sees `net::ERR_ABORTED`, an empty
+`page.url()`, or a hang to the full test timeout, with no server-side error, no non-2xx status,
+and no stack trace to point at, because nothing on the server side ever failed. The route's own
+guard logic, server action, and RPC layer are all completely uninvolved. This can also cascade:
+once one test in a file hangs to its own 30s timeout against a still-busy dev server, later tests
+in the same run can fail the same way even though their own routes are individually fine.
+*Evidence:* `HDN-380` (Accessibility Audit) — `e2e/vendor-registration.spec.ts` failed 5 of 7 tests
+(`net::ERR_ABORTED`/timeout, `page.url()` returning `""`) against `playwright.config.ts`'s
+`webServer.command: "pnpm exec next dev --port 3000"`, reproducible in isolation
+(`--workers=1`, ruling out parallel-worker contention) and via a standalone throwaway Playwright
+script clicking the same button against a manually-started `next dev` server (`locator.click()`
+hangs on "waiting for scheduled navigations to finish"). The identical click against a
+`next build && next start` production server on the same route resolved in under 500ms, and the
+full suite passed 18/18 with zero 500s against production — conclusively isolating the failure to
+dev-mode itself, not the application. Fixed by changing `webServer.command` to
+`next build && next start` (with `webServer.timeout` raised to accommodate the build step), which
+also directly serves this repository's own `next build`-required convention for this lane.
+**Earlier, unrecognized precedent:** `HDN-370` (Full Regression, Prompt 370) had already observed a
+symptom of this same class without naming it as its own — with the sandbox's Playwright browser
+substituted, 11 of 18 e2e tests failed, and the write-up recorded the (correctly attributed)
+`ISS-2026-160` unset-env 500 as the primary cause "compounded by the Next.js dev server itself
+crashing mid-run with `RangeError: Map maximum size exceeded` inside `app-page-turbo.runtime.dev.js`
+after serving repeated 500s" — a dev-mode-runtime-only crash signature, filed only as a secondary
+detail under `ISS-2026-160` rather than recognized as a distinct, generalizable class in its own
+right. `HDN-380`'s Tier C review found this precedent and is the first checkpoint to name the
+general class.
+**Check:** before registering an e2e/browser-harness failure as an application defect (a broken
+guard, a hanging server action, a real regression), check what `webServer.command` (or equivalent)
+the harness is actually running against. If it is a dev-mode server, reproduce the same failure
+against a production build (`next build && next start` or equivalent) before trusting the
+diagnosis — a failure that disappears under production is a harness artifact, not a shippable bug,
+and the harness itself should point at a production build rather than being routinely excused.
+
 ## 5. Two process lessons that are not code classes
 
 Recorded here because both cost real rework and both recur.

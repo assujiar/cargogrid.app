@@ -1059,6 +1059,39 @@ begin
   perform app.list_rfq_requirement_lines(v_rfq.id, v_staff1);
 end $$;
 
+\echo '>> HDN-377 (Storage and Signed URL Audit) regression: app.rfq_response_attachments_select_scoped RLS now requires real PRC:View authority, not just active tenant membership -- an active tenant member with zero PRC role assignment previously read the competitor-bid file_id linkage directly via RLS, live-forced independent of the RPC path''s (app.list_rfq_response_attachments) own already-correct PRC:View gate'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'rfq1');
+  v_zero_role uuid := '00000000-0000-0000-0000-000000037105';
+  v_count integer;
+begin
+  insert into auth.users (id, email) values (v_zero_role, 'zerorole@rfq1.test');
+  perform app.invite_user(v_tenant1, v_zero_role, 'zerorole@rfq1.test', 'Rfq1 Zero Role', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'zerorole@rfq1.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_zero_role, 'org_user', v_tenant1, null, 'tester');
+
+  if not exists (select 1 from app.rfq_response_attachments where tenant_id = v_tenant1) then
+    raise exception 'assertion failed: test precondition failed -- expected at least one existing app.rfq_response_attachments row for tenant1';
+  end if;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000037105", "role": "authenticated"}';
+  select count(*) into v_count from app.rfq_response_attachments where tenant_id = v_tenant1;
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero rows visible via RLS to a tenant member holding zero PRC role assignment, got %', v_count;
+  end if;
+  reset role;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000037102", "role": "authenticated"}';
+  select count(*) into v_count from app.rfq_response_attachments where tenant_id = v_tenant1;
+  if v_count = 0 then
+    raise exception 'assertion failed: expected staff1 (holding PRC:View) to still see rows via RLS';
+  end if;
+  reset role;
+end $$;
+
 \echo '>> app.next_rfq_number: monotonic, never recycled, stable rfq_number across a revision'
 do $$
 declare

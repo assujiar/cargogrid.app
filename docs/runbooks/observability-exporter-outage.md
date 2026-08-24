@@ -20,7 +20,7 @@ Once Phase 1 wires real export: the Better Stack ingestion endpoint is unreachab
 
 ## 3. Diagnosis steps
 
-1. Confirm the application itself is healthy independent of telemetry — check `/api/health`/`/api/ready` (contract fixed in `docs/standards/OBSERVABILITY_STANDARDS.md` §7, implemented Phase 1) rather than inferring app health from an absent dashboard signal.
+1. Confirm the application itself is healthy independent of telemetry — check `/api/health`/`/api/ready` (contract fixed in `docs/standards/OBSERVABILITY_STANDARDS.md` §7, **built at `HDN-382`** — `/api/health` is an unconditional liveness check; `/api/ready` additionally calls `app.ping()` to confirm DB connectivity, returning `503`/`{status: "degraded", reason: [...]}` on failure) rather than inferring app health from an absent dashboard signal. **Correction (`HDN-382`, Observability Audit):** an earlier version of this step said these routes were "implemented Phase 1" — they were not; both `HDN-382`'s own investigation lenses confirmed neither route existed anywhere in `app/api` (a live 404 for any responder who followed this step), a genuine broken reference in a live operational document, now fixed by actually building them.
 2. Check the exporter's own failure log — `scripts/observability/logger.ts`'s fallback sink writes to `stderr` on primary-sink failure; in Phase 1's real deployment this is the platform's own stdout/stderr capture (Vercel function logs), which remains available even when the *export* to Better Stack fails, since it is a local, always-on fallback, not a second remote dependency.
 3. Check Better Stack's own status page for a vendor-side outage vs. a local configuration/credential issue (expired/rotated ingestion token, network egress block).
 

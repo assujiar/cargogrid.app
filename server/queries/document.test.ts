@@ -15,7 +15,10 @@ function fakeFileClient(response: { data: unknown[] | null; error: { message: st
       assert.equal(table, "files");
       return {
         select(columns) {
-          assert.equal(columns, "*");
+          assert.equal(
+            columns,
+            "id, tenant_id, document_type_code, config_version_id, record_type, record_id, classification, original_filename, mime_type, size_bytes, malware_scan_status, malware_scan_completed_at, malware_scan_provider_ref, version_group_id, version_number, is_latest_version, lifecycle_status, legal_hold, legal_hold_reason, deleted_at, uploaded_by_auth_user_id, shared_org_unit_ids, customer_account_ref, idempotency_key, created_at, updated_at",
+          );
           return {
             async eq(column, value) {
               assert.equal(column, "tenant_id");
@@ -82,6 +85,9 @@ describe("listFilesForTenant", () => {
     const files = await listFilesForTenant(client, TENANT_ID);
     assert.equal(files.length, 1);
     assert.equal(files[0]?.malwareScanStatus, "clean");
+    // HDN-377 (Storage and Signed URL Audit) regression: storagePath must never appear
+    // on a FileSummary, even if the underlying row somehow carried it.
+    assert.equal("storagePath" in (files[0] ?? {}), false);
   });
 
   test("wraps a database error into a typed error", async () => {

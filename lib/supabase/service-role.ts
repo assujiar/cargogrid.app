@@ -1,8 +1,11 @@
 /**
  * Service-role Supabase client factory (PLT-135, CG-S6-PLT-032). `SUPABASE_SERVICE_ROLE_KEY`
- * is server-only (no `NEXT_PUBLIC_` prefix -- `scripts/env/client-guard.ts`'s own bundle
- * scan enforces it never reaches a client bundle) and this file must never be imported
- * from a Client Component.
+ * is server-only (no `NEXT_PUBLIC_` prefix) and this file must never be imported from a
+ * Client Component. `scripts/env/client-guard.ts`'s `assertServerOnly()` is only a
+ * runtime `typeof window` check, not a static bundle scan, and does not target this
+ * import path specifically -- the real static control is eslint.config.js's
+ * `serviceRoleImportGuard` `no-restricted-imports` rule (ISS-2026-168), which flags
+ * any import of this module regardless of caller.
  *
  * Every privileged platform RPC in this repository (`app.resolve_access_context`,
  * `app.evaluate_permission`, and every mutation function across every migration) is

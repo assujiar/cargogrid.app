@@ -60,7 +60,11 @@ export function TrackingSourcePolicyPanel({
             <input type="number" name="switchHysteresisSeconds" min={0} defaultValue={sourcePolicy.switchHysteresisSeconds} className="rounded border border-neutral-300 px-2 py-1 text-sm" />
           </label>
         </div>
-        {state.error ? <p className="text-xs text-danger-600">{state.error}</p> : null}
+        {state.error ? (
+          <p role="alert" className="text-xs text-danger">
+            {state.error}
+          </p>
+        ) : null}
         <div>
           <Button type="submit">Save source policy</Button>
         </div>

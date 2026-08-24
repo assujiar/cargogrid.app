@@ -69,7 +69,12 @@ export async function submitVendorSelfRegistrationAction(tenantId: string, _prev
       conflict: "This submission conflicts with an earlier one using the same details request. Please refresh and try again.",
       disabled: "Vendor registration is not available for this organization.",
     };
-    return { error: message[result.submitStatus] ?? "This submission could not be completed.", result };
+    // ISS-2026-169: `result` (and its `submitStatus` discriminator) is never
+    // returned on an error path -- `not_found` (no such active tenant) and
+    // `disabled` (tenant exists, self-registration off) already render the
+    // identical message above, but returning the raw result object would still
+    // let an anonymous caller distinguish them by inspecting the wire payload.
+    return { error: message[result.submitStatus] ?? "This submission could not be completed.", result: null };
   }
 
   return { error: null, result };

@@ -28,9 +28,13 @@ export async function getDriverMobileTrackingSession(
   client: DriverMobileTrackingQueryClient,
   shipmentLegTrackingSessionId: string,
 ): Promise<DriverMobileTrackingSession | null> {
+  // ISS-2026-232: explicit column list, omitting token_hash -- `authenticated` no
+  // longer holds table-level SELECT on app.driver_mobile_tracking_sessions
+  // (column-privilege closure); a bare `select("*")` would fail with a permission
+  // error for an authenticated-session caller.
   const { data, error } = await client
     .from("driver_mobile_tracking_sessions")
-    .select("*")
+    .select("id, tenant_id, shipment_leg_tracking_session_id, status, issued_at, expires_at, last_seen_at, revoked_at, revoked_reason, created_by, created_at")
     .eq("shipment_leg_tracking_session_id", shipmentLegTrackingSessionId)
     .eq("status", "active")
     .maybeSingle();

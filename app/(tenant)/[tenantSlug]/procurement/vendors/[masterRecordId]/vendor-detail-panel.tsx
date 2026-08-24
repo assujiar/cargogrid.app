@@ -315,7 +315,11 @@ function FlagButton({ action }: { action: PlainAction }) {
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Flagging…">
         Flag as duplicate
       </Button>
-      {state.error ? <span className="text-danger">{state.error}</span> : null}
+      {state.error ? (
+        <span role="alert" className="text-danger">
+          {state.error}
+        </span>
+      ) : null}
     </form>
   );
 }
@@ -331,7 +335,11 @@ function DuplicateDecisionForm({ action }: { action: PlainAction }) {
       <Button type="submit" name="decision" value="dismissed" loading={pending} loadingLabel="Saving…">
         Dismiss (different vendor)
       </Button>
-      {state.error ? <span className="text-danger">{state.error}</span> : null}
+      {state.error ? (
+        <span role="alert" className="text-danger">
+          {state.error}
+        </span>
+      ) : null}
     </form>
   );
 }
@@ -369,7 +377,11 @@ function ContactsSection({ contacts, isDraft, addAction, removeActionFor }: { co
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add contact
           </Button>
-          {state.error ? <span className="text-xs text-danger">{state.error}</span> : null}
+          {state.error ? (
+            <span role="alert" className="text-xs text-danger">
+              {state.error}
+            </span>
+          ) : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Contacts may only be edited while this vendor is a draft.</p>
@@ -413,7 +425,11 @@ function AddressesSection({ addresses, isDraft, addAction, removeActionFor }: { 
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add address
           </Button>
-          {state.error ? <span className="text-xs text-danger">{state.error}</span> : null}
+          {state.error ? (
+            <span role="alert" className="text-xs text-danger">
+              {state.error}
+            </span>
+          ) : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Addresses may only be edited while this vendor is a draft.</p>
@@ -445,7 +461,11 @@ function ServicesSection({ services, isDraft, addAction, removeActionFor }: { se
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add service
           </Button>
-          {state.error ? <span className="text-xs text-danger">{state.error}</span> : null}
+          {state.error ? (
+            <span role="alert" className="text-xs text-danger">
+              {state.error}
+            </span>
+          ) : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Services may only be edited while this vendor is a draft.</p>
@@ -481,7 +501,11 @@ function CoverageSection({ coverage, isDraft, addAction, removeActionFor }: { co
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add coverage
           </Button>
-          {state.error ? <span className="text-xs text-danger">{state.error}</span> : null}
+          {state.error ? (
+            <span role="alert" className="text-xs text-danger">
+              {state.error}
+            </span>
+          ) : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Coverage may only be edited while this vendor is a draft.</p>

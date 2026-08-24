@@ -75,6 +75,7 @@ export async function createIntegrationConnection(client: IntegrationHubMutation
     p_credential_value: parsedInput.credentialValue,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    p_client_ip: parsedInput.clientIp ?? null,
   });
   if (error) {
     throw new IntegrationHubMutationError(classifyError(error.message), error.message);

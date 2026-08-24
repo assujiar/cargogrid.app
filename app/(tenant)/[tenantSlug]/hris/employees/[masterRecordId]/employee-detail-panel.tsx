@@ -5,7 +5,7 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import { EMPLOYMENT_TYPES, type EmployeeLifecycleStatus, type EmployeeProfile, type EmployeeEmergencyContact, type EmployeeLifecycleEvent, type EmployeeDuplicateCandidate, type EmployeeChangeRequest } from "../../../../../../server/contracts/employee/employee.ts";
-import type { File as HrisFile } from "../../../../../../server/contracts/document/document.ts";
+import type { FileSummary as HrisFile } from "../../../../../../server/contracts/document/document.ts";
 import type { EmployeeActionState } from "../actions.ts";
 
 const INITIAL_STATE: EmployeeActionState = { error: null };

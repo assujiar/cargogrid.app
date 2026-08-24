@@ -5,7 +5,10 @@ import AxeBuilder from "@axe-core/playwright";
  * Tenant Admin portal E2E (PLT-135, CG-S6-PLT-032). Unlike `e2e/smoke.spec.ts`
  * (synthetic inline content only), this spec navigates the real `app/(public)/login`
  * and `app/(tenant)/[tenantSlug]/admin` routes via `playwright.config.ts`'s own
- * `webServer` (a real `next dev`, placeholder Supabase env values).
+ * `webServer` (a real production build, `next build && next start` -- `HDN-380`
+ * switched this from `next dev` after root-causing a Turbopack dev-mode-only
+ * hydration race, `RECURRING_DEFECT_TAXONOMY.md` `C-30` -- placeholder Supabase
+ * env values).
  *
  * **Scope, disclosed rather than left implicit**: no live Supabase project exists
  * anywhere in this repository yet (`preflight` correctly fails closed, every prior

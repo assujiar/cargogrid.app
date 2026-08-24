@@ -89,7 +89,7 @@ begin
 end;
 $$;
 
-\echo '>> setup: tenant cib1 (accounts Alpha/Beta, company Cib1 Co), tenant cib2 (account Delta) -- one lead->prospect->opportunity->quotation->job_order_handoff->job_order->billing_readiness_evaluation chain per account, then MULTIPLE billing_readiness_handoffs off the SAME job_order (Alpha: 7, Beta/Delta: 1 each), each producing one directly-inserted app.finance_invoices row (bypasses app.prepare_finance_invoice_from_readiness/app.issue_finance_invoice -- neither is under test here, only the customer-portal READ layer is)'
+\echo '>> setup: tenant cib1 (accounts Alpha/Beta, company Cib1 Co), tenant cib2 (account Delta) -- one lead->prospect->opportunity->quotation->job_order_handoff->job_order->billing_readiness_evaluation chain per account (Alpha gets 4, one shared by its 3 pre-issuance/void handoffs plus 3 more, one per ISSUED invoice -- HDN-374 Tier C''s own finance_invoices_job_order_issued_unique forbids two ISSUED invoices sharing a job order; Beta/Delta: 1 each), each handoff producing one directly-inserted app.finance_invoices row (bypasses app.prepare_finance_invoice_from_readiness/app.issue_finance_invoice -- neither is under test here, only the customer-portal READ layer is)'
 do $$
 declare
   v_tenant1 uuid;
@@ -111,6 +111,18 @@ declare
   v_eval_alpha uuid;
   v_eval_beta uuid;
   v_eval_delta uuid;
+  -- HDN-374 Tier C (Financial Integrity Audit): finance_invoices_job_order_issued_unique
+  -- now enforces at most one ISSUED invoice per job order (ISS-2026-195's own real fix) --
+  -- each of Alpha's 3 issued invoices below needs its own distinct job order, since
+  -- job_order_id is a purely internal FK never surfaced by this file's own customer-portal
+  -- READ layer under test (see the "internal-linkage field" exclusion list below), so
+  -- splitting it changes nothing this file actually asserts.
+  v_job_order_alpha_inv1 uuid;
+  v_job_order_alpha_inv2 uuid;
+  v_job_order_alpha_inv3 uuid;
+  v_eval_alpha_inv1 uuid;
+  v_eval_alpha_inv2 uuid;
+  v_eval_alpha_inv3 uuid;
 begin
   insert into auth.users (id, email) values
     (v_supreme, 'supreme@cib.test'),
@@ -167,18 +179,25 @@ begin
   select job_order_id, eval_id into v_job_order_alpha, v_eval_alpha from app._cib_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA', v_supreme);
   select job_order_id, eval_id into v_job_order_beta, v_eval_beta from app._cib_test_make_chain(v_tenant1, v_company1, v_account_beta, 'BETA', v_supreme);
   select job_order_id, eval_id into v_job_order_delta, v_eval_delta from app._cib_test_make_chain(v_tenant2, v_company2, v_account_delta, 'DELTA', v_supreme);
+  select job_order_id, eval_id into v_job_order_alpha_inv1, v_eval_alpha_inv1 from app._cib_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA-INV1', v_supreme);
+  select job_order_id, eval_id into v_job_order_alpha_inv2, v_eval_alpha_inv2 from app._cib_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA-INV2', v_supreme);
+  select job_order_id, eval_id into v_job_order_alpha_inv3, v_eval_alpha_inv3 from app._cib_test_make_chain(v_tenant1, v_company1, v_account_alpha, 'ALPHA-INV3', v_supreme);
 
-  -- 7 billing_readiness_handoffs off the SAME Alpha job_order (no
-  -- uniqueness constraint besides (tenant_id, job_order_id,
-  -- idempotency_key) forces this), one per Alpha invoice fixture below.
+  -- 4 billing_readiness_handoffs off the SAME Alpha job_order (draft/submitted/approved/
+  -- void-before-issuance -- none reach ISSUED, so finance_invoices_job_order_issued_unique
+  -- never applies to them) plus one handoff each on 3 SEPARATE Alpha job orders for the 3
+  -- ISSUED invoices below (HDN-374 Tier C: at most one ISSUED invoice per job order is now
+  -- a real, enforced invariant -- job_order_id itself is a purely internal FK this file's
+  -- own customer-portal READ layer never surfaces, so this split changes nothing under test).
   insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by) values
     ('00000000-0000-0000-0000-000000322201', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cib-br-draft', v_supreme, 'tester'),
     ('00000000-0000-0000-0000-000000322202', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cib-br-submitted', v_supreme, 'tester'),
     ('00000000-0000-0000-0000-000000322203', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cib-br-approved', v_supreme, 'tester'),
-    ('00000000-0000-0000-0000-000000322204', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cib-br-issued1', v_supreme, 'tester'),
-    ('00000000-0000-0000-0000-000000322205', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cib-br-issued2', v_supreme, 'tester'),
-    ('00000000-0000-0000-0000-000000322206', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cib-br-issued3', v_supreme, 'tester'),
     ('00000000-0000-0000-0000-000000322207', v_tenant1, v_job_order_alpha, v_eval_alpha, 'idem-cib-br-void', v_supreme, 'tester');
+  insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by) values
+    ('00000000-0000-0000-0000-000000322204', v_tenant1, v_job_order_alpha_inv1, v_eval_alpha_inv1, 'idem-cib-br-issued1', v_supreme, 'tester'),
+    ('00000000-0000-0000-0000-000000322205', v_tenant1, v_job_order_alpha_inv2, v_eval_alpha_inv2, 'idem-cib-br-issued2', v_supreme, 'tester'),
+    ('00000000-0000-0000-0000-000000322206', v_tenant1, v_job_order_alpha_inv3, v_eval_alpha_inv3, 'idem-cib-br-issued3', v_supreme, 'tester');
   insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by) values
     ('00000000-0000-0000-0000-000000322220', v_tenant1, v_job_order_beta, v_eval_beta, 'idem-cib-br-beta', v_supreme, 'tester');
   insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by) values
@@ -206,9 +225,9 @@ begin
     ('00000000-0000-0000-0000-000000322102', v_tenant1, v_company1, null, v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000322202', 'USD', 'submitted', 500, 0, 'tester'),
     ('00000000-0000-0000-0000-000000322103', v_tenant1, v_company1, null, v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000322203', 'USD', 'approved', 500, 0, 'tester');
   insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, ar_open_item_id, issued_by, issued_at, created_by) values
-    ('00000000-0000-0000-0000-000000322104', v_tenant1, v_company1, 'INV-CIB-000001', v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000322204', 'USD', 'issued', 1000, 100, '2026-07-01', '2026-07-31', '00000000-0000-0000-0000-000000322304', 'tester', now(), 'tester'),
-    ('00000000-0000-0000-0000-000000322105', v_tenant1, v_company1, 'INV-CIB-000002', v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000322205', 'USD', 'issued', 200, 0, '2026-08-10', '2026-09-09', '00000000-0000-0000-0000-000000322305', 'tester', now(), 'tester'),
-    ('00000000-0000-0000-0000-000000322106', v_tenant1, v_company1, 'INV-CIB-000003', v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000322206', 'USD', 'issued', 50, 0, '2026-08-05', '2026-09-04', '00000000-0000-0000-0000-000000322306', 'tester', now(), 'tester');
+    ('00000000-0000-0000-0000-000000322104', v_tenant1, v_company1, 'INV-CIB-000001', v_account_alpha, v_job_order_alpha_inv1, '00000000-0000-0000-0000-000000322204', 'USD', 'issued', 1000, 100, '2026-07-01', '2026-07-31', '00000000-0000-0000-0000-000000322304', 'tester', now(), 'tester'),
+    ('00000000-0000-0000-0000-000000322105', v_tenant1, v_company1, 'INV-CIB-000002', v_account_alpha, v_job_order_alpha_inv2, '00000000-0000-0000-0000-000000322205', 'USD', 'issued', 200, 0, '2026-08-10', '2026-09-09', '00000000-0000-0000-0000-000000322305', 'tester', now(), 'tester'),
+    ('00000000-0000-0000-0000-000000322106', v_tenant1, v_company1, 'INV-CIB-000003', v_account_alpha, v_job_order_alpha_inv3, '00000000-0000-0000-0000-000000322206', 'USD', 'issued', 50, 0, '2026-08-05', '2026-09-04', '00000000-0000-0000-0000-000000322306', 'tester', now(), 'tester');
   insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, void_reason, voided_by, voided_at, created_by) values
     ('00000000-0000-0000-0000-000000322107', v_tenant1, v_company1, null, v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000322207', 'USD', 'void', 300, 0, 'cib fixture void before issuance', 'tester', now(), 'tester');
 

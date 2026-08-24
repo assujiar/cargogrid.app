@@ -26,7 +26,7 @@ export function MyInterviewsPanel({ interviews, submitFeedbackAction }: { interv
           {iv.myFeedbackSubmitted ? (
             <p className="mt-2 text-xs text-success">You have submitted your feedback for this interview.</p>
           ) : iv.status === "scheduled" || iv.status === "completed" ? (
-            <FeedbackForm action={submitFeedbackAction(iv.interviewId)} />
+            <FeedbackForm interviewId={iv.interviewId} action={submitFeedbackAction(iv.interviewId)} />
           ) : null}
         </div>
       ))}
@@ -34,17 +34,21 @@ export function MyInterviewsPanel({ interviews, submitFeedbackAction }: { interv
   );
 }
 
-function FeedbackForm({ action }: { action: Bound }) {
+function FeedbackForm({ interviewId, action }: { interviewId: string; action: Bound }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-2" noValidate>
       <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium text-neutral-700">Rating (1-5)</label>
-        <input name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <label htmlFor={`feedback-rating-${interviewId}`} className="text-xs font-medium text-neutral-700">
+          Rating (1-5)
+        </label>
+        <input id={`feedback-rating-${interviewId}`} name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium text-neutral-700">Recommendation</label>
-        <select name="recommendation" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+        <label htmlFor={`feedback-recommendation-${interviewId}`} className="text-xs font-medium text-neutral-700">
+          Recommendation
+        </label>
+        <select id={`feedback-recommendation-${interviewId}`} name="recommendation" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
           <option value="strong_yes">Strong yes</option>
           <option value="yes">Yes</option>
           <option value="no">No</option>

@@ -478,7 +478,13 @@ begin
     raise exception 'assertion failed: expected exactly 1 duplicate_target anomaly for the consolidated shipment, got %', v_dup_count;
   end if;
 
+  -- HDN-375 (Data Lineage Audit): app.transaction_lineage_edges is now a protected
+  -- append-only ledger (app.protect_transaction_lineage_edges_append_only, mirroring
+  -- CPL-325's own established shape) -- simulating data loss for this anomaly-detection
+  -- proof requires a genuine Supreme Admin session context.
+  perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-0000-0000-000000023906', 'role', 'authenticated')::text, true);
   delete from app.transaction_lineage_edges where relation_type = 'job_to_billing_readiness' and target_id = v_billing_id;
+  perform set_config('request.jwt.claims', 'null', true);
 
   select count(*) into v_orphan_count from app.detect_transaction_lineage_anomalies(v_tenant1, '00000000-0000-0000-0000-000000023902') a
   where a.anomaly_type = 'orphan_billing_readiness' and a.target_id = v_billing_id;
@@ -498,7 +504,9 @@ begin
     raise exception 'assertion failed: expected exactly 1 cross_tenant_mismatch anomaly for the directly-inserted mismatched-tenant row, got %', v_mismatch_count;
   end if;
 
+  perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-0000-0000-000000023906', 'role', 'authenticated')::text, true);
   delete from app.transaction_lineage_edges where tenant_id = v_tenant2;
+  perform set_config('request.jwt.claims', 'null', true);
 end $$;
 
 \echo '>> app.backfill_transaction_lineage: authority-gated (restricted actor lacks OPS:Override); idempotent (a second call with nothing missing backfills zero); re-derives the exact billing-readiness edge the data-loss simulation deleted above -- orphan_billing_readiness no longer appears afterward'
@@ -580,5 +588,80 @@ begin
   select count(*) into v_backfill_count from app.audit_logs where action = 'backfill_transaction_lineage';
   if v_capture_count < 6 or v_override_count < 1 or v_backfill_count < 1 then
     raise exception 'assertion failed: expected >=6 capture, >=1 override, >=1 backfill audit events, found %/%/%', v_capture_count, v_override_count, v_backfill_count;
+  end if;
+end $$;
+
+\echo '>> HDN-375 (Data Lineage Audit) finding 1 regression: app.transaction_lineage_edges is now a protected append-only ledger -- a raw UPDATE/DELETE with no actor context, and by an ordinary tenant staff actor (OPS:Override, NOT supreme_admin), are both blocked; only a genuine Supreme Admin session may mutate it, and that mutation is captured to app.audit_logs with correct before/after and actor identity'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmeopslineage');
+  v_rep uuid := '00000000-0000-0000-0000-000000023902';
+  v_supreme uuid := '00000000-0000-0000-0000-000000023906';
+  v_edge_id uuid;
+  v_row app.transaction_lineage_edges;
+  v_audit app.audit_logs;
+begin
+  select id into v_edge_id from app.transaction_lineage_edges where tenant_id = v_tenant1 limit 1;
+
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    update app.transaction_lineage_edges set override_reason = 'tamper attempt' where id = v_edge_id;
+    raise exception 'assertion failed: expected UPDATE with no actor context to be blocked';
+  exception when others then
+    if sqlerrm !~ 'transaction_lineage_edge_append_only_immutable' then raise; end if;
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', v_rep::text, 'role', 'authenticated')::text, true);
+  begin
+    delete from app.transaction_lineage_edges where id = v_edge_id;
+    raise exception 'assertion failed: expected DELETE by an ordinary staff actor (OPS:Override, not supreme_admin) to be blocked';
+  exception when others then
+    if sqlerrm !~ 'transaction_lineage_edge_append_only_immutable' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', 'null', true);
+
+  perform set_config('request.jwt.claims', json_build_object('sub', v_supreme::text, 'role', 'authenticated')::text, true);
+  update app.transaction_lineage_edges set override_reason = 'corrected by supreme admin' where id = v_edge_id returning * into v_row;
+  if v_row.override_reason <> 'corrected by supreme admin' then
+    raise exception 'assertion failed: expected Supreme Admin UPDATE to succeed, got override_reason=%', v_row.override_reason;
+  end if;
+  perform set_config('request.jwt.claims', 'null', true);
+
+  select * into v_audit from app.audit_logs where resource_type = 'app.transaction_lineage_edges' and resource_id = v_edge_id and action = 'update_append_only_transaction_lineage_edge';
+  if v_audit.id is null then
+    raise exception 'assertion failed: expected exactly 1 audit_logs row for the Supreme Admin UPDATE';
+  end if;
+  if v_audit.actor_auth_user_id <> v_supreme then
+    raise exception 'assertion failed: expected audit actor_auth_user_id=%, got %', v_supreme, v_audit.actor_auth_user_id;
+  end if;
+end $$;
+
+\echo '>> HDN-375 (Data Lineage Audit) finding 2 regression: app.loyalty_earning_events / app.finance_journals reject a source_id that does not resolve to a real row of the type source_type claims, even for a direct service_role insert bypassing the validating RPC'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmeopslineage');
+  v_loyalty_account uuid;
+begin
+  -- No loyalty account exists in this file's own fixture -- a syntactically valid but
+  -- nonexistent loyalty_account_id/program_id/rule_version_id would fail on THEIR OWN FK
+  -- before ever reaching source_id validation, so this proof targets app.finance_journals
+  -- instead, whose every other column has a real, satisfiable value in this fixture.
+  begin
+    insert into app.finance_journals (tenant_id, source_type, source_id, idempotency_key, currency, total_amount, journal_date, status, created_by)
+    values (v_tenant1, 'subledger', gen_random_uuid(), 'hdn375-orphan-source-probe', 'USD', 100, current_date, 'draft', 'test-fixture');
+    raise exception 'assertion failed: HDN-375 finding 2 regressed -- expected finance_journal_orphan_source for a source_id matching no real finance_subledger_batches row';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_journal_orphan_source' then
+        raise exception 'assertion failed: expected finance_journal_orphan_source, got %', sqlerrm;
+      end if;
+  end;
+
+  -- A manual journal legitimately has no source document -- source_id null is still
+  -- accepted (this guard only validates a NON-null claim actually resolves).
+  insert into app.finance_journals (tenant_id, source_type, source_id, idempotency_key, currency, total_amount, journal_date, status, created_by)
+  values (v_tenant1, 'manual', null, 'hdn375-manual-source-probe', 'USD', 100, current_date, 'draft', 'test-fixture');
+  if not exists (select 1 from app.finance_journals where idempotency_key = 'hdn375-manual-source-probe') then
+    raise exception 'assertion failed: expected a manual journal with null source_id to insert successfully';
   end if;
 end $$;

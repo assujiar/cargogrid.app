@@ -168,30 +168,34 @@ export default async function CommercialDashboardPage({ params }: { params: Prom
             {data.pipeline.length === 0 ? (
               <p className="text-sm text-neutral-600">No open opportunities in scope.</p>
             ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 text-left text-neutral-600">
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Stage
-                    </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
-                      Opportunities
-                    </th>
-                    <th scope="col" className="py-2 font-medium">
-                      Value
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.pipeline.map((row) => (
-                    <tr key={`${row.stage}-${row.currency ?? "none"}`} className="border-b border-neutral-100">
-                      <td className="py-2 pr-4 text-neutral-900">{row.stage.replace(/_/g, " ")}</td>
-                      <td className="py-2 pr-4 text-neutral-600">{row.opportunityCount}</td>
-                      <td className="py-2 text-neutral-600">{formatAmount(row.valueAmountTotal, row.valueMasked, row.currency)}</td>
+              // HDN-381 (Browser and Device Compatibility): wrapped in overflow-x-auto,
+              // matching this repository's own existing data-table convention.
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200 text-left text-neutral-600">
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Stage
+                      </th>
+                      <th scope="col" className="py-2 pr-4 font-medium">
+                        Opportunities
+                      </th>
+                      <th scope="col" className="py-2 font-medium">
+                        Value
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.pipeline.map((row) => (
+                      <tr key={`${row.stage}-${row.currency ?? "none"}`} className="border-b border-neutral-100">
+                        <td className="py-2 pr-4 text-neutral-900">{row.stage.replace(/_/g, " ")}</td>
+                        <td className="py-2 pr-4 text-neutral-600">{row.opportunityCount}</td>
+                        <td className="py-2 text-neutral-600">{formatAmount(row.valueAmountTotal, row.valueMasked, row.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             <a href={`/${tenantSlug}/commercial/pipeline`} className="text-sm font-medium text-primary underline">
               Open pipeline

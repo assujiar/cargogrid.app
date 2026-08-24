@@ -3,8 +3,16 @@
 -- schema (identities, passwords, OAuth state, MFA, sessions) -- this repository's own
 -- migrations (supabase/migrations/) must never create, alter, or drop anything in it.
 --
--- This repository has no live Supabase project yet (ADR-0010, PH0-094; still true as of
--- PLT-107). scripts/db-tests/run.sh loads this fixture, and only this fixture, before
+-- A live Supabase project now exists and is fully migrated -- `cargogrid.app`
+-- (awdlicmwzdxquopwtcfd), ap-northeast-1, PostgreSQL 17.6, all 306 migrations applied
+-- (docs/build-log/phase-09/LIVE_SUPABASE_MIGRATION_REPORT.md). The former claim here that
+-- "this repository has no live Supabase project yet (ADR-0010, PH0-094; still true as of
+-- PLT-107)" was stale on both counts, and corrected at CG-S15-HDN-001 (Prompt 369) as part
+-- of Step 15's own state freeze: it is no longer true, and neither ADR-0010 nor PH0-094
+-- ever asserted it (both were checked directly -- the citation was itself wrong). The
+-- fixture is still required, and still local-only: run.sh applies migrations to a
+-- disposable bare Postgres that has no Supabase-managed `auth` schema of its own.
+-- run.sh loads this fixture, and only this fixture, before
 -- applying supabase/migrations/*.sql, purely so PLT-107's app.tenant_user_identities
 -- foreign key to auth.users(id) has a real target to validate against locally. The
 -- columns below are the minimal real subset of Supabase's actual auth.users shape

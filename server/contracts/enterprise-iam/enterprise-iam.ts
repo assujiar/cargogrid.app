@@ -194,6 +194,7 @@ export const ActivateEnterpriseIdpConnectionInputSchema = z.object({
   connectionId: z.string().uuid(),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
 });
 export type ActivateEnterpriseIdpConnectionInput = z.input<typeof ActivateEnterpriseIdpConnectionInputSchema>;
 

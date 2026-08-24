@@ -67,6 +67,11 @@ begin
   perform app.set_role_version_permissions(v_manager_draft_a.id, array(select id from app.permissions where resource_module_code = 'FIN' and action in ('Create', 'Edit', 'Approve', 'View')), 'tester');
   perform app.publish_role_version(v_manager_draft_a.id, now(), 'tester');
   perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000029911', '00000000-0000-0000-0000-000000029910', 'tester');
+  -- HDN-373 (ISS-2026-181, maker/checker): admina also holds Finance Manager so it can
+  -- act as a genuinely distinct approver/poster from financemanagera, the preparer, in
+  -- the scenarios below -- app.approve_finance_journal/app.post_finance_journal now deny
+  -- an actor approving or posting their own submission.
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_manager_role_a and status = 'published'), '00000000-0000-0000-0000-000000029910', '00000000-0000-0000-0000-000000029910', 'tester');
 
   perform app.invite_user(v_tenant_a, '00000000-0000-0000-0000-000000029912', 'plainusera@acmelife.test', 'Plain User A', v_team_a, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'plainusera@acmelife.test'), 'active', 'onboarded', 'tester');
@@ -249,13 +254,13 @@ begin
     raise exception 'assertion failed: submitted journal lifecycle state mismatch, got %', v_state;
   end if;
 
-  select * into v_journal from app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029911', 'financemanagera');
+  select * into v_journal from app.approve_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029910', 'admina');
   v_state := app.get_finance_lifecycle_record_state(v_tenant_a, 'journal', v_journal.id, '00000000-0000-0000-0000-000000029911');
   if v_state ->> 'canonicalState' <> 'approved' or v_state -> 'allowedActions' <> '["post"]'::jsonb then
     raise exception 'assertion failed: approved journal lifecycle state mismatch, got %', v_state;
   end if;
 
-  select * into v_journal from app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029911', 'financemanagera');
+  select * into v_journal from app.post_finance_journal(v_journal.id, v_journal.record_version, '00000000-0000-0000-0000-000000029910', 'admina');
   v_state := app.get_finance_lifecycle_record_state(v_tenant_a, 'journal', v_journal.id, '00000000-0000-0000-0000-000000029911');
   if v_state ->> 'canonicalState' <> 'posted' or v_state -> 'allowedActions' <> '[]'::jsonb or v_state ->> 'lockedReason' <> 'posted_immutable_normal_role' or not (v_state -> 'postedTriggerProtected')::boolean then
     raise exception 'assertion failed: posted journal lifecycle state mismatch, got %', v_state;

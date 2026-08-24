@@ -310,24 +310,34 @@ function TaskRow({
         <div className="mt-2 flex flex-col gap-2">
           <form action={assignFormAction} className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-neutral-500">Assign owner (auth user id)</label>
-              <input name="ownerAuthUserId" type="text" defaultValue={task.ownerAuthUserId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+              <label htmlFor={`task-owner-${task.id}`} className="text-xs text-neutral-500">
+                Assign owner (auth user id)
+              </label>
+              <input id={`task-owner-${task.id}`} name="ownerAuthUserId" type="text" defaultValue={task.ownerAuthUserId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
             </div>
             <Button type="submit" variant="secondary" loading={assignPending} loadingLabel="Assigning…">
               Assign
             </Button>
           </form>
-          {assignState.error ? <p className="text-xs text-danger">{assignState.error}</p> : null}
+          {assignState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {assignState.error}
+            </p>
+          ) : null}
 
           {task.taskType === "access_provisioning" ? (
             <form action={provisionFormAction} className="flex flex-wrap items-end gap-2 rounded-md bg-neutral-50 p-2">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-neutral-500">Target auth user id (resolved identity, optional)</label>
-                <input name="targetAuthUserId" type="text" placeholder="leave blank to only record the request" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                <label htmlFor={`task-target-user-${task.id}`} className="text-xs text-neutral-500">
+                  Target auth user id (resolved identity, optional)
+                </label>
+                <input id={`task-target-user-${task.id}`} name="targetAuthUserId" type="text" placeholder="leave blank to only record the request" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-neutral-500">Role version ids (comma-separated, optional)</label>
-                <input name="roleVersionIds" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                <label htmlFor={`task-role-versions-${task.id}`} className="text-xs text-neutral-500">
+                  Role version ids (comma-separated, optional)
+                </label>
+                <input id={`task-role-versions-${task.id}`} name="roleVersionIds" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
               </div>
               <Button type="submit" loading={provisionPending} loadingLabel="Requesting…">
                 Request provisioning
@@ -336,8 +346,10 @@ function TaskRow({
           ) : task.taskType === "access_revocation" ? (
             <form action={revokeFormAction} className="flex flex-wrap items-end gap-2 rounded-md bg-neutral-50 p-2">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-neutral-500">Reason (required)</label>
-                <input name="reason" type="text" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                <label htmlFor={`task-revoke-reason-${task.id}`} className="text-xs text-neutral-500">
+                  Reason (required)
+                </label>
+                <input id={`task-revoke-reason-${task.id}`} name="reason" type="text" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
               </div>
               <Button type="submit" variant="destructive" loading={revokePending} loadingLabel="Revoking…">
                 Request revocation
@@ -346,47 +358,73 @@ function TaskRow({
           ) : (
             <form action={completeFormAction} className="flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-neutral-500">
+                <label htmlFor={`task-evidence-note-${task.id}`} className="text-xs text-neutral-500">
                   Evidence note{task.taskType === "handoff" ? " (a note or a file is required)" : ""}
                 </label>
-                <input name="evidenceNote" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                <input id={`task-evidence-note-${task.id}`} name="evidenceNote" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-neutral-500">Evidence file id (optional)</label>
-                <input name="evidenceFileId" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                <label htmlFor={`task-evidence-file-${task.id}`} className="text-xs text-neutral-500">
+                  Evidence file id (optional)
+                </label>
+                <input id={`task-evidence-file-${task.id}`} name="evidenceFileId" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
               </div>
               <Button type="submit" loading={completePending} loadingLabel="Completing…">
                 Complete
               </Button>
             </form>
           )}
-          {provisionState.error ? <p className="text-xs text-danger">{provisionState.error}</p> : null}
-          {revokeState.error ? <p className="text-xs text-danger">{revokeState.error}</p> : null}
-          {completeState.error ? <p className="text-xs text-danger">{completeState.error}</p> : null}
+          {provisionState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {provisionState.error}
+            </p>
+          ) : null}
+          {revokeState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {revokeState.error}
+            </p>
+          ) : null}
+          {completeState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {completeState.error}
+            </p>
+          ) : null}
 
           <form action={waiveFormAction} className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-neutral-500">Waive reason</label>
-              <input name="waiveReason" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+              <label htmlFor={`task-waive-reason-${task.id}`} className="text-xs text-neutral-500">
+                Waive reason
+              </label>
+              <input id={`task-waive-reason-${task.id}`} name="waiveReason" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
             </div>
             <Button type="submit" variant="secondary" loading={waivePending} loadingLabel="Waiving…">
               Waive (requires Override)
             </Button>
           </form>
-          {waiveState.error ? <p className="text-xs text-danger">{waiveState.error}</p> : null}
+          {waiveState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {waiveState.error}
+            </p>
+          ) : null}
         </div>
       ) : isBlocked ? (
         <p className="mt-2 text-xs text-warning">Blocked -- waiting on the task(s) listed above.</p>
       ) : (
         <form action={reopenFormAction} className="mt-2 flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-neutral-500">Reopen reason</label>
-            <input name="reason" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+            <label htmlFor={`task-reopen-reason-${task.id}`} className="text-xs text-neutral-500">
+              Reopen reason
+            </label>
+            <input id={`task-reopen-reason-${task.id}`} name="reason" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
           </div>
           <Button type="submit" variant="secondary" loading={reopenPending} loadingLabel="Reopening…">
             Reopen
           </Button>
-          {reopenState.error ? <p className="text-xs text-danger">{reopenState.error}</p> : null}
+          {reopenState.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {reopenState.error}
+            </p>
+          ) : null}
         </form>
       )}
     </div>

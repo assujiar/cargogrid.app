@@ -742,6 +742,37 @@ begin
 end;
 $$;
 
+\echo '>> HDN-376 (API Compatibility Audit) finding 2 regression: app.verify_webhook_signature (PLT-129 outbound sibling of ATW-226E) rejects a NULL/empty signature and a NULL timestamp as exactly false, never SQL NULL -- carried the identical fail-open defect finding 1 fixed on the inbound direction, not currently live-exploitable (service_role-only, no live caller) but fixed for consistency'
+do $$
+declare
+  v_tenant_id uuid;
+  v_endpoint record;
+  v_payload text;
+  v_timestamp bigint;
+  v_result boolean;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmekey');
+  select * into v_endpoint from app.register_webhook_endpoint(v_tenant_id, 'https://hooks.example-partner.test/e2', '["test.event"]'::jsonb, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+  v_payload := '{"event":"test.event"}';
+  v_timestamp := extract(epoch from now())::bigint;
+
+  v_result := app.verify_webhook_signature(v_endpoint.id, v_payload, v_timestamp, null);
+  if v_result is distinct from false then
+    raise exception 'assertion failed: expected app.verify_webhook_signature to return exactly false for a null signature, got %', v_result;
+  end if;
+
+  v_result := app.verify_webhook_signature(v_endpoint.id, v_payload, v_timestamp, '');
+  if v_result is distinct from false then
+    raise exception 'assertion failed: expected app.verify_webhook_signature to return exactly false for an empty-string signature, got %', v_result;
+  end if;
+
+  v_result := app.verify_webhook_signature(v_endpoint.id, v_payload, null, 'anysignature');
+  if v_result is distinct from false then
+    raise exception 'assertion failed: expected app.verify_webhook_signature to return exactly false for a null timestamp, got %', v_result;
+  end if;
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth: authenticated has no direct table access to api_keys/webhook_endpoints/webhook_deliveries/webhook_delivery_attempts; app.webhook_event_types is broadly readable'
 do $$
 declare

@@ -597,3 +597,100 @@ begin
 
   raise notice 'TS-mirror drift gate proof: app.generic_job_types() (% values) matches the hardcoded TS-mirror literal exactly -- server/contracts/background-job/background-job.ts''s own GENERIC_JOB_TYPES is confirmed in lockstep with the live database, not merely with a same-file tautology', array_length(v_generic, 1);
 end $$;
+
+\echo '>> HDN-382 (Observability Audit): app.record_job_failure''s own dead-letter transition now raises a real, deduplicated observability alert -- live-forced regression proof that this checkpoint''s own fix (20260816000000_harden_observability_audit_findings.sql) actually closes the gap Lens 2 live-reproduced (a job exhausting all retries produced zero incident before this fix)'
+do $$
+declare
+  v_tenant_id uuid;
+  v_job app.jobs;
+  v_second_job app.jobs;
+  v_baseline_open_count integer;
+  v_after_first_open_count integer;
+  v_after_second_open_count integer;
+  v_after_retry_open_count integer;
+  v_incident_id uuid;
+  v_incident_severity text;
+  v_timeline_count_before integer;
+  v_timeline_count_after integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmejob');
+
+  -- Delta-based, not absolute-count-based: an earlier fixture in this SAME file (the
+  -- app.record_job_failure/backoff test above) already dead-letters a recurring_billing
+  -- job for this same tenant -- with this checkpoint's own fix, that earlier fixture now
+  -- legitimately opens (or reuses) a job/error incident for this tenant before this block
+  -- ever runs. Asserting an absolute "exactly 1 incident" count here would be coupled to
+  -- unrelated test ordering, not to this fix's own real behavior.
+  select count(*) into v_baseline_open_count
+  from app.incidents
+  where tenant_id = v_tenant_id and source_type = 'job' and signal_type = 'error' and status = 'open';
+
+  -- A job with max_attempts=1: the very first recorded failure is immediately terminal
+  -- (attempts=1 >= max_attempts=1), matching Lens 2's own live reproduction exactly.
+  v_job := app.enqueue_job(v_tenant_id, 'report_generation', '{}'::jsonb, 0, 'idem-hdn382-dlq1', 1, '00000000-0000-0000-0000-000000004001', 'requester');
+  perform app.claim_next_job('hdn382-probe-worker', array['report_generation'], 300);
+  v_job := app.record_job_failure(v_job.job_id, 'simulated: HDN-382 regression proof', '00000000-0000-0000-0000-000000004001', 'requester');
+
+  if v_job.status <> 'dead_letter' then
+    raise exception 'assertion failed: expected the job to reach dead_letter on its first recorded failure (max_attempts=1), got %', v_job.status;
+  end if;
+
+  select count(*) into v_after_first_open_count
+  from app.incidents
+  where tenant_id = v_tenant_id and source_type = 'job' and signal_type = 'error' and status = 'open';
+  if v_after_first_open_count < 1 or (v_baseline_open_count = 0 and v_after_first_open_count <> 1) then
+    raise exception 'assertion failed: expected at least 1 open job/error incident to exist after a dead-letter transition (either freshly opened, or an existing one absorbing this as a duplicate signal) -- baseline was %, got %. Before this checkpoint''s own fix, app.record_job_failure never called app.raise_observability_alert at all, so this count could never increase.', v_baseline_open_count, v_after_first_open_count;
+  end if;
+
+  -- Capture the incident this job's own breach is now associated with (whichever open
+  -- job/error incident for this tenant was opened/touched most recently).
+  select id, severity into v_incident_id, v_incident_severity from app.incidents
+  where tenant_id = v_tenant_id and source_type = 'job' and signal_type = 'error' and status = 'open'
+  order by opened_at desc limit 1;
+  if v_incident_severity <> 'high' then
+    raise exception 'assertion failed: expected the dead-letter incident''s own severity to be high, got %', v_incident_severity;
+  end if;
+
+  select count(*) into v_timeline_count_before
+  from app.incident_timeline_events where incident_id = v_incident_id;
+
+  -- A second, distinct job of a different type dead-lettering for the SAME tenant within
+  -- the same (source_type, signal_type) dedup window collapses into the SAME incident as
+  -- a duplicate_signal timeline event, not a second incident -- this is the correct,
+  -- already-known, separately-owned ISS-2026-155 dedup-granularity behavior interacting
+  -- with this checkpoint's own new call site, not a regression this checkpoint introduces.
+  v_second_job := app.enqueue_job(v_tenant_id, 'notification_batch', '{}'::jsonb, 0, 'idem-hdn382-dlq2', 1, '00000000-0000-0000-0000-000000004001', 'requester');
+  perform app.claim_next_job('hdn382-probe-worker', array['notification_batch'], 300);
+  v_second_job := app.record_job_failure(v_second_job.job_id, 'simulated: HDN-382 regression proof (second job)', '00000000-0000-0000-0000-000000004001', 'requester');
+
+  select count(*) into v_after_second_open_count
+  from app.incidents
+  where tenant_id = v_tenant_id and source_type = 'job' and signal_type = 'error' and status = 'open';
+  if v_after_second_open_count <> v_after_first_open_count then
+    raise exception 'assertion failed: expected the second dead-lettered job (different job_type, same tenant, same dedup window) to collapse into the SAME open incident per app.raise_observability_alert''s own (tenant_id, source_type, signal_type) dedup key (ISS-2026-155, disclosed and separately owned) rather than opening a new one -- open count changed from % to %', v_after_first_open_count, v_after_second_open_count;
+  end if;
+
+  select count(*) into v_timeline_count_after
+  from app.incident_timeline_events where incident_id = v_incident_id;
+  if v_timeline_count_after <> v_timeline_count_before + 1 then
+    raise exception 'assertion failed: expected exactly 1 new duplicate_signal timeline event on incident % recording the second job''s own dead-letter breach, got % (before: %)', v_incident_id, v_timeline_count_after, v_timeline_count_before;
+  end if;
+
+  -- A job that reaches its FINAL retry but is NOT yet dead-lettered (max_attempts > 1,
+  -- not yet exhausted) must NOT raise an alert -- only the terminal transition does.
+  v_job := app.enqueue_job(v_tenant_id, 'report_generation', '{}'::jsonb, 0, 'idem-hdn382-retry', 3, '00000000-0000-0000-0000-000000004001', 'requester');
+  perform app.claim_next_job('hdn382-probe-worker', array['report_generation'], 300);
+  v_job := app.record_job_failure(v_job.job_id, 'simulated: HDN-382 regression proof (retryable, not yet terminal)', '00000000-0000-0000-0000-000000004001', 'requester');
+  if v_job.status <> 'pending' then
+    raise exception 'assertion failed: expected the job to remain pending (attempts=1 < max_attempts=3), got %', v_job.status;
+  end if;
+
+  select count(*) into v_after_retry_open_count
+  from app.incidents
+  where tenant_id = v_tenant_id and source_type = 'job' and signal_type = 'error' and status = 'open';
+  if v_after_retry_open_count <> v_after_second_open_count then
+    raise exception 'assertion failed: a retryable (non-terminal) job failure must not raise a NEW observability alert -- expected the open incident count to stay at % (unchanged from the dead-letter cases above), got %', v_after_second_open_count, v_after_retry_open_count;
+  end if;
+
+  raise notice 'HDN-382 dead-letter observability wiring proof: a job reaching dead_letter raises (or correctly reuses, per ISS-2026-155''s own dedup key) exactly 1 real, correctly-severed (high) incident; a second distinct job_type dead-lettering for the same tenant within the dedup window correctly collapses into it as a duplicate_signal event; a merely-retryable (non-terminal) failure raises no alert at all';
+end $$;

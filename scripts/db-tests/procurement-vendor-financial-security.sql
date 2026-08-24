@@ -717,6 +717,20 @@ begin
   if not exists (select 1 from app.audit_logs where action = 'access_vendor_bank_account_evidence' and resource_id = v_account.id and result = 'success') then
     raise exception 'assertion failed: expected the evidence access to be captured in app.audit_logs';
   end if;
+
+  -- HDN-377 (Storage and Signed URL Audit) regression: the SECOND denial branch --
+  -- PRC:Download authority passes, but app.authorize_file_access itself denies
+  -- (malware/record-access/classification) -- previously left file_id unmasked,
+  -- contradicting this RPC's own "denial nulls out every file-identifying field"
+  -- contract asserted for the authority-denial branch above. Live-forced via the
+  -- content-gate branch (infected file), the same shape the compliance-evidence
+  -- sibling's own existing regression exercises.
+  update app.files set malware_scan_status = 'infected' where id = v_clean_file.id;
+  select * into v_access from app.access_vendor_bank_account_evidence(v_account.id, 'download', v_staff, 'staff');
+  if v_access.access_result <> 'denied' or v_access.file_id is not null then
+    raise exception 'assertion failed: expected file_id nulled out on the content-gate denial branch too, got result=% file_id=%', v_access.access_result, v_access.file_id;
+  end if;
+  update app.files set malware_scan_status = 'clean' where id = v_clean_file.id;
 end $$;
 
 \echo '>> tax identity lifecycle: create/update/submit/decide (self-approval + MFA blocked), masked read, reveal (audited, plaintext never in the audit row), duplicate-hash detection, hold/deactivate'

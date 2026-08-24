@@ -1102,7 +1102,7 @@ begin
     'app.post_loyalty_point_ledger_entry(uuid, uuid, text, numeric, uuid, text, uuid, text, text, uuid, uuid, text, integer)',
     'app.post_loyalty_points_earned(uuid, uuid, uuid, text, integer)',
     'app.reverse_loyalty_points_earned(uuid, uuid, uuid, text)',
-    'app.expire_loyalty_point_lots(uuid, uuid, text)',
+    'app.expire_loyalty_point_lots(uuid, uuid, text, timestamptz)',
     'app.consume_loyalty_points_fifo(uuid, uuid, numeric, text, uuid, text, uuid, text)',
     'app.request_loyalty_point_adjustment(uuid, uuid, numeric, text, text, uuid, text)',
     'app.decide_loyalty_point_adjustment(uuid, uuid, integer, text, text, uuid, text)',

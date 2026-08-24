@@ -623,6 +623,15 @@ begin
   if v_result.access_result <> 'denied' or v_result.original_filename is not null or v_result.access_reason is null then
     raise exception 'assertion failed: expected a denied result with nulled-out metadata for infected evidence, got result=% filename=% reason=%', v_result.access_result, v_result.original_filename, v_result.access_reason;
   end if;
+  -- HDN-377 (Storage and Signed URL Audit) regression: this exact content-gate
+  -- denial branch (PRC:Download authority passes, app.authorize_file_access itself
+  -- denies) previously left file_id unmasked, contradicting this RPC's own "every
+  -- file-identifying field nulled out" contract -- the assertion above never
+  -- actually checked file_id, only original_filename, so it silently passed both
+  -- before and would have kept passing after the leak. Checked explicitly now.
+  if v_result.file_id is not null then
+    raise exception 'assertion failed: expected file_id to also be nulled out on a denied (infected) evidence access, got file_id=%', v_result.file_id;
+  end if;
   update app.files set malware_scan_status = 'clean' where id = v_doc.file_id;
 
   -- PLT-128's own independent audit trail recorded both the granted metadata_view and
@@ -638,6 +647,28 @@ begin
   ) then
     raise exception 'assertion failed: expected no storage_path column in app.access_vendor_compliance_document_evidence''s own return shape';
   end if;
+end $$;
+
+\echo '>> HDN-377 (Storage and Signed URL Audit) regression: app.vendor_compliance_documents_select_scoped RLS now requires real PRC:View authority, not just active tenant membership -- an active tenant_admin with zero PRC role assignment previously read every row (verification_status/rejection_reason/expiry_date/file_id) directly via RLS, live-forced independent of the RPC path''s own already-correct PRC:Download gate'
+do $$
+declare
+  v_count integer;
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000091101", "role": "authenticated"}';
+  select count(*) into v_count from app.vendor_compliance_documents;
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero rows visible via RLS to a tenant_admin holding zero PRC role assignment, got %', v_count;
+  end if;
+  reset role;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000091102", "role": "authenticated"}';
+  select count(*) into v_count from app.vendor_compliance_documents;
+  if v_count = 0 then
+    raise exception 'assertion failed: expected staff (holding PRC:View via PRC:Create/Edit/View/Download) to still see rows via RLS';
+  end if;
+  reset role;
 end $$;
 
 \echo '>> expiry computation: a past-expiry document drives status=expired with eligibility_hold=true for a BLOCKING requirement, but never for a WARNING requirement'

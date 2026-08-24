@@ -6,7 +6,7 @@
 **Status:** `ACTIVE`
 **Owner:** DevOps
 **Since:** Phase 5 (`ATW-226C`/`226D`/`226E` ingestion paths; `ATW-226I` closing verification of the buffered/replay behavior)
-**Severity class:** `NOT_YET_REHEARSED` against a live Supabase outage — no live Supabase project exists yet (the same disclosed sandbox condition every UI-adjacent Phase-5 checkpoint since `PLT-135` has carried); this describes the *designed* per-source safe-degrade behavior.
+**Severity class:** `NOT_YET_REHEARSED` against a live Supabase outage. **Correction (`HDN-382`, Observability Audit):** this note previously said "no live Supabase project exists yet" — stale since `HDN-372` (2026-08-23), where a real, hosted Supabase project (`awdlicmwzdxquopwtcfd`) was first live-confirmed and has been used for live verification at every checkpoint since (`docs/build-log/full-system-hardening/HARDENING_MATRIX.md` §3 onward). The actual, still-true rehearsal blocker is narrower: no live GPS Gateway process, Driver PWA, or third-party provider webhook sender has ever been deployed to interrupt — this runbook's own cited safe-degrade behavior (`services/gps-gateway/src/buffer.ts`'s durable NDJSON buffer) has real code to point to, but nothing to rehearse an outage against yet. This describes the *designed* per-source safe-degrade behavior.
 
 > Covers a Supabase/database-layer outage affecting the write path shared by all three ingestion modes: `app.ingest_driver_mobile_report` (`ATW-226C`), `app.ingest_direct_device_telemetry_batch` (`ATW-226D`), and `app.ingest_third_party_provider_webhook_event` (`ATW-226E`, widened at `ATW-226F`/`ATW-226I`). Each mode's own recovery posture differs by design — this runbook covers all three per §2/§4 below, rather than three near-duplicate documents.
 

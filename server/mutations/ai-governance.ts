@@ -142,6 +142,7 @@ export async function decideAiOutputApproval(client: AiGovernanceMutationRpcClie
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
     p_reason: parsedInput.reason,
+    p_client_ip: parsedInput.clientIp ?? null,
   });
   if (error) {
     throw new AiGovernanceMutationError(classifyError(error.message), error.message);
