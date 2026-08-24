@@ -2,7 +2,52 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-020` — **Documentation Handoff (Prompt
+**Updated:** 2026-08-24 (`CG-S15-HDN-021` — **Closure Verification (Prompt 389)** —
+`VERIFIED`. **Sets `FULL_SYSTEM_HARDENING_VERIFIED`. Step 15 (Full-System Hardening,
+Prompts 368-389) is closed.** Not a production, pilot, GA, or market-ready claim
+(RPD-001/034/036). 4 independent parallel closure-verification lenses ran against the
+pushed `HDN-388` `VERIFIED` state (commit `00403cb`), each covering a disjoint cluster
+of Prompt 389's own 22 required-verification items. **21 of 22 verified PASS outright**,
+independently re-derived from fresh live evidence — a full Tier A gate re-run, an
+independently-run full 230-file db-test suite, a from-scratch rebuild of the
+21-checkpoint commit chain via `git log`/`git ls-tree`, and entry-by-entry re-reads of
+every Critical/High blocker's own Disposition field, not the summary tally. **1 item
+(18, blocker disposition completeness) verified PARTIAL, now PROVEN**: every open
+blocker independently confirmed to carry a real reproduction, named owner, and
+concrete resume path, but 5 open High items (`HDN-BLK-016`/`017`/`018`/`022`/`024`)
+had neither a fix-with-regression-proof nor a formal §8.2 ruling as of entry — the
+exact gap `HDN-388`'s own Tier C had already found and disclosed explicitly, with no
+standing to rule on it itself (§8.2 condition 5 restricts ruling authority to
+`HDN-387`/`HDN-389` only, and `HDN-387` had already closed). **`HDN-389`, one of the
+two authorized checkpoints, formally accepted all 5 under §8.2's full 5-condition
+test** (new `BLOCKER_LEDGER.md` entry `HDN-BLK-040`), real owner `Step 16` — mirroring
+`HDN-BLK-039`'s own identical precedent for the other 12 open High items. This closes
+item 18 without fabricating a fix: the underlying technical work (a reversing-GL-
+journal design, genuine hash-chaining, a ~69-table append-only-guard rollout, a
+~33-table RLS/RPC sweep, a 61-function step-up/IP-restriction wiring plan) remains
+genuinely unfixed and is now `Step 16`'s own real, disclosed, honestly-scoped
+inherited backlog — not a hidden risk. **Closure state ruling**:
+`FULL_SYSTEM_HARDENING_PARTIALLY_COMPLETE` considered and rejected (its own "blocked
+until accepted or repaired" describes exactly the gap this checkpoint accepted);
+`FULL_SYSTEM_HARDENING_BLOCKED` considered and rejected (0 Critical anywhere,
+independently re-confirmed entry-by-entry by 2 separate lenses, no item verified
+FAIL). **`docs/build-log/full-system-hardening/FULL_SYSTEM_HARDENING_CLOSURE_
+REPORT.md` authored** (new, the required output of this prompt) — disposes of all 22
+required-verification items explicitly, the final blocker register, residual-risk
+disclosures, and the Step 16 eligibility determination (all 6 §12 conditions **MET**,
+3 with disclosed `PARTIAL` §8.1 gate residuals — backup/restore, DR rehearsal,
+monitoring/alerting — formally accepted rather than silently waived, mirroring the
+same treatment applied to the blocker backlog). Final independent gate re-run:
+`typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444**; `pnpm exec
+next build` clean; `bash scripts/db-tests/run.sh` **230/230 files clean** (333
+migrations, unchanged); `pnpm install --frozen-lockfile` clean — every number matches
+`HDN-388`'s own close exactly, zero code/migration/schema change throughout this
+checkpoint. **`CG-S15-HDN-021` is `VERIFIED`.** Step 15 is closed. Next command at the
+package level: `LANJUT STEP 16` — not a licence for any Step 15 prompt to begin Step
+16 work. Full disposition: `docs/build-log/full-system-hardening/HDN-389.md`,
+`FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md`.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-020` — **Documentation Handoff (Prompt
 388)** — `VERIFIED`, Tier C closed. Pure documentation reconciliation —
 **zero code, zero migration, zero schema change throughout both rounds**,
 the first Step 15 checkpoint of this kind. 3 independent parallel

@@ -1612,7 +1612,7 @@ truth was ever possible, only a blocked legitimate replacement). **Fixed**, alre
 in the migration above; registered here for an honest, complete disclosure record rather
 than left as an undisclosed side effect of an unrelated fix pass.
 
-### ISS-2026-199 — `app.request_finance_settlement_reversal` posts no reversing GL journal at all -- the AP subledger reopens while the GL still shows the original payment posted (found at `CG-S15-HDN-006` Tier C, `OPEN`, High, owner `HDN-386`, ledger `HDN-BLK-016`)
+### ISS-2026-199 — `app.request_finance_settlement_reversal` posts no reversing GL journal at all -- the AP subledger reopens while the GL still shows the original payment posted (found at `CG-S15-HDN-006` Tier C, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-016`)
 
 Found by an independent Tier C adversarial review lens, live-forced. `app.request_finance_
 settlement_reversal` (composing `app.reverse_finance_ap_settlement`) mutates only `app.
@@ -1648,7 +1648,11 @@ of cross-cutting design question before Step 16 go/no-go; forward to `HDN-387`/`
 codebase requires a MANUAL, separately-tracked GL correction -- disclosed here so Finance
 operating procedure can account for it, not discovered in production.
 
-### ISS-2026-200 — the 5 "hash-chain" transaction-lineage triggers are standalone content fingerprints, not a genuine tamper-evident chain, and no reconciliation ever recomputes or compares them (found at `CG-S15-HDN-007`, `OPEN`, High, owner `HDN-386`, ledger `HDN-BLK-017`)
+**`ACCEPTED_EXCEPTION` at `HDN-389`.** Formally ruled under `00_EXECUTION_INDEX.md` §8.2's full
+5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
+`Step 16`.
+
+### ISS-2026-200 — the 5 "hash-chain" transaction-lineage triggers are standalone content fingerprints, not a genuine tamper-evident chain, and no reconciliation ever recomputes or compares them (found at `CG-S15-HDN-007`, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-017`)
 
 Found by this checkpoint's own investigation lens (hash-chain triggers and historical
 config preservation), live-forced. `app.trg_capture_lineage_job_to_shipment`/
@@ -1689,6 +1693,10 @@ checkpoint positioned to rule on this kind of cross-cutting design question befo
 go/no-go; forward to `HDN-387`/`389` if `HDN-386` does not resolve it explicitly. A
 narrower, genuinely bounded-repair-sized half of this same area — the evidence ledger's
 own mutability — was fixed in the same checkpoint's own migration; see `ISS-2026-201`.
+
+**`ACCEPTED_EXCEPTION` at `HDN-389`.** Formally ruled under `00_EXECUTION_INDEX.md` §8.2's full
+5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
+`Step 16`.
 
 ### ISS-2026-201 — `app.transaction_lineage_edges` was freely UPDATE/DELETE-able by `service_role` despite its own table comment claiming "append-only, never-updated, never-deleted" (found at `CG-S15-HDN-007`, `RESOLVED` at `HDN-375`, High, owner `HDN-375`)
 
@@ -1830,7 +1838,7 @@ checkpoints have used for out-of-lane defects found incidentally (`ISS-2026-163`
 direct half-open-interval day-span computation that cannot invert regardless of the
 window's own start/end hour alignment.
 
-### ISS-2026-205 — the append-only-guard pattern `ISS-2026-201` applied to `app.transaction_lineage_edges` is genuinely needed on roughly 70 more tables schema-wide, including `app.audit_logs` itself (found at `CG-S15-HDN-007`'s own Tier C review, `OPEN`, High, owner `HDN-386`, ledger `HDN-BLK-018`)
+### ISS-2026-205 — the append-only-guard pattern `ISS-2026-201` applied to `app.transaction_lineage_edges` is genuinely needed on roughly 70 more tables schema-wide, including `app.audit_logs` itself (found at `CG-S15-HDN-007`'s own Tier C review, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-018`)
 
 Found by this checkpoint's own Tier C completeness-sweep lens, live-forced against a
 fresh disposable database via direct `pg_trigger`/`information_schema.role_table_grants`
@@ -1878,6 +1886,10 @@ undertaking than this Tier C session's own bounded-repair budget, not a rushed b
 migration. **Owner: `HDN-386`** (Integrated Verification) — `app.audit_logs` should be
 the first table audited and fixed given its centrality, followed by the ranked remainder.
 Ledger: `HDN-BLK-018`.
+
+**`ACCEPTED_EXCEPTION` at `HDN-389`.** Formally ruled under `00_EXECUTION_INDEX.md` §8.2's full
+5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
+`Step 16`.
 
 ### ISS-2026-206 — the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up the same lineage chains (found at `CG-S15-HDN-007`'s own Tier C review, `OPEN`, Medium, owner `HDN-387`)
 
@@ -2459,7 +2471,7 @@ review workflow is currently unusable by anyone but the uploader), not a securit
 disclosure — the RPC's own denial path is exactly as safe as before, just
 over-restrictive. **Not fixed here. Owner: `HDN-387`.**
 
-### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs across at least ~35 more Procurement/HR tables that DO carry the `authenticated` grant and ARE live-exploitable, correcting this entry's own first-round "safe by construction" disposition (found at `CG-S15-HDN-009`, `PARTIALLY RESOLVED at HDN-387`, **High** (corrected at Tier C from Low), owner `HDN-378`)
+### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs across at least ~35 more Procurement/HR tables that DO carry the `authenticated` grant and ARE live-exploitable, correcting this entry's own first-round "safe by construction" disposition (found at `CG-S15-HDN-009`, `PARTIALLY RESOLVED at HDN-387` — remainder `ACCEPTED_EXCEPTION` at `HDN-389`, **High** (corrected at Tier C from Low), owner `Step 16`)
 
 **Corrected at this checkpoint's own Tier C completeness-sweep lens** — the first-round
 disposition below undercounted the live-exploitable population; the correction follows.
@@ -2524,6 +2536,11 @@ this checkpoint introduced, but a real gap in the stated security goal for these
 RPC surface, disclosed rather than left implicit. Folded into this finding's own still-`OPEN`
 ~33-table remainder (same domain, same drift shape), not a separate finding — a genuine design
 decision (per-RPC checks, or preventing the dual-layer state at grant time) for `HDN-378`.
+
+**~33-table remainder `ACCEPTED_EXCEPTION` at `HDN-389`.** Formally ruled under
+`00_EXECUTION_INDEX.md` §8.2's full 5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040`
+for the complete ruling. Real owner: `Step 16`. The 2 already-fixed tables
+(`app.vendor_kpi_scorecards`, `app.position_grades`, `HDN-387`) are unaffected by this ruling.
 
 ### ISS-2026-226 — the first round's own new `BEFORE DELETE` legal-hold guard trigger checked only the PLT-128-native `legal_hold` flag, never the bridged generic (IAE-031) hold mechanism the SAME migration's own Finding B added — a file held exclusively via the generic mechanism was still physically destroyable, with zero audit trail (found and fixed at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED`, Critical)
 
@@ -2766,7 +2783,7 @@ reactivates unchanged; the core's grant confirmed revoked, the new entry point's
 present — full transcript `HDN-387.md` §11. `supabase/migrations/
 20260819000000_harden_release_blocker_triage_remediation.sql` Part 1.
 
-### ISS-2026-236 — 3 of `app.is_high_risk_action`'s own 7 hardcoded platform-default high-risk tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve` — 61 real, reachable functions) received neither step-up-MFA nor IP-restriction wiring across the entire `IAE-037` → `CG-S14-IAE-039` → `HDN-378` lineage (found at `HDN-378` Tier C schema-wide completeness sweep lens, `OPEN`, High, own `HDN-BLK-024` entry, owner `HDN-386`)
+### ISS-2026-236 — 3 of `app.is_high_risk_action`'s own 7 hardcoded platform-default high-risk tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve` — 61 real, reachable functions) received neither step-up-MFA nor IP-restriction wiring across the entire `IAE-037` → `CG-S14-IAE-039` → `HDN-378` lineage (found at `HDN-378` Tier C schema-wide completeness sweep lens, `ACCEPTED_EXCEPTION` at `HDN-389`, High, own `HDN-BLK-024` entry, owner `Step 16`)
 
 **Corrected at `HDN-385` Tier C ledger/documentation consistency lens**: this finding was originally mis-numbered `ISS-2026-235` at authoring time (colliding with the unrelated Critical finding immediately above it, `app.set_integration_connection_status`'s own IP-restriction/lockout/step-up-MFA bypass), leaving `BLOCKER_LEDGER.md`'s own `HDN-BLK-024` entry cross-referencing a number (`ISS-2026-236`) that did not yet exist anywhere in this file. No prior checkpoint's own Tier C ledger-consistency sweep caught the collision. Renumbered here to match the cross-reference already on record; no other content changed.
 
@@ -2775,6 +2792,10 @@ present — full transcript `HDN-387.md` §11. `supabase/migrations/
 Live-verified via direct `pg_proc.prosrc` inspection across the whole `app` schema (checking every function whose body evaluates one of these 3 tuples for a call to either guard): **`FIN:Approve`** — 32 real, `authenticated`-executable, TS-caller-reachable functions (`approve_finance_invoice`, `close_finance_period`, `approve_finance_journal`, `execute_finance_settlement`, `reverse_finance_ar_allocation`, `approve_finance_tax_rule`, `publish_finance_config_version`, etc.) — 0 of 32 call either guard. **`HRS:Approve`** — 22 real functions (`decide_overtime_request`, `decide_attendance_correction`, `publish_job_vacancy`, `decide_employee_position_assignment`, `approve_timesheet_period_summary`, `lock_timesheet_period`, etc.) — 0 of 22. **`SEC:Configure`** — 7 real functions, and the sharpest gap of the three: `app.set_mfa_tenant_policy` and `app.set_ip_allowlist_enforcement_mode` are the very functions that configure MFA/IP enforcement itself, and `app.add_ip_allowlist_entry`/`app.request_ip_allowlist_bypass` let a holder add their own allowlist entry or grant themselves a bypass — none of which require step-up-MFA or IP-restriction themselves, a genuine "guard the guards" gap. All sampled functions confirmed reachable (not dead code): real TS Server Action callers verified for `approve_finance_invoice`, `close_finance_period`, `decide_overtime_request`, `set_mfa_tenant_policy`, `revoke_user_session`, `set_ip_allowlist_enforcement_mode`.
 
 **Status `OPEN`**, High severity — this is the same missing-control shape `ISS-2026-150` (High) and `ISS-2026-151` (High→Medium) were rated for a narrower scope (1-4 functions apiece); this sweep found 61 additional live, reachable functions across 3 of `is_high_risk_action`'s own 7 tuples that no prior checkpoint in this lineage ever discussed, discovered because `HDN-378`'s own Lens 1 investigated the wiring question working from the 4-function list precedent already named, rather than re-deriving the full tuple list from `is_high_risk_action`'s own source. **Not fixed by this checkpoint** — the fix shape (which of the 61 functions get step-up, IP-restriction, or both, and how to bound the blast radius across 3 domains — Finance, HRIS, and platform Security config) is a real design decision extending or superseding the `ISS-2026-150`/`151` lineage, not a mechanical patch. Owner: `HDN-386`, scoped to re-deriving the full wiring plan for all 3 tuples, prioritizing `SEC:Configure` first given its "guard the guards" nature.
+
+**`ACCEPTED_EXCEPTION` at `HDN-389`.** Formally ruled under `00_EXECUTION_INDEX.md` §8.2's full
+5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
+`Step 16`.
 
 ### ISS-2026-237 — `server/queries/automation-rule.ts::getLatestAutomationRulePublishApprovalRequest` uses `select("*")` against `app.approval_requests`, whose `ended_reason` column is deliberately not granted to `authenticated`, breaking the live Automation Rule detail page (found at `HDN-378` Tier C schema-wide completeness sweep lens, `OPEN`, Medium, owner `HDN-387`)
 

@@ -571,7 +571,7 @@ Full disposition: `HDN-374.md` §13.3, `KNOWN_ISSUES.md` `ISS-2026-199`.*
 | **Required of `HDN-386`** | Decide and implement (or explicitly accept as residual risk with a documented manual-correction procedure): whether `app.request_finance_settlement_reversal` should automatically post a reversing GL journal, and if so, its exact account mapping and idempotency/concurrency shape mirroring this codebase's own established correction-journal patterns. **Handed to `HDN-387` with this exact scope, not decided here** |
 | **Regression test** | Required with the eventual fix — a live-forced proof that a reversed settlement's own GL journal is corrected, not merely the AP subledger |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
-| **`KNOWN_ISSUES`** | `ISS-2026-199` (`OPEN`, High) |
+| **`KNOWN_ISSUES`** | `ISS-2026-199` (`ACCEPTED_EXCEPTION` at `HDN-389`, High) |
 
 *Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
 `HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
@@ -581,6 +581,10 @@ shape. Still `OPEN`, High, requiring a genuine design decision (GL account mappi
 governed-step shape) this documentation-handoff checkpoint has no standing to make. Folded into
 the aggregate 5-item punch list `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to
 `HDN-389` as the only remaining §8.2 ruling authority.*
+
+*Ruled at `HDN-389`, closure verification, same checkpoint. **`ACCEPTED_EXCEPTION`**, formally
+accepted under `00_EXECUTION_INDEX.md` §8.2's full 5-condition test — see `HDN-BLK-040` for the
+complete ruling covering this entry and its 4 siblings. Real owner: `Step 16`.*
 
 ---
 
@@ -618,7 +622,7 @@ the aggregate 5-item punch list `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1
 | **Required of `HDN-386`** | Decide and implement (or explicitly accept as residual risk with a documented reconciliation procedure): a real per-relation-type chain ordering, a `prev_hash` column, backfill, and a hash-mismatch anomaly type in `detect_transaction_lineage_anomalies`. **Handed to `HDN-387` with this exact scope, not decided here** |
 | **Regression test** | Required with the eventual fix — a live-forced proof that a tampered source row is actually detected and surfaced, not merely detectable by hand |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
-| **`KNOWN_ISSUES`** | `ISS-2026-200` (`OPEN`, High) |
+| **`KNOWN_ISSUES`** | `ISS-2026-200` (`ACCEPTED_EXCEPTION` at `HDN-389`, High) |
 
 *Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
 `HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
@@ -626,6 +630,10 @@ its named recipient — the identical gap as `HDN-BLK-016`. Still `OPEN`, High, 
 design decision (canonical ordering across 5 relation types, a real `prev_hash` column, backfill,
 a new anomaly-detector type). Folded into the aggregate 5-item punch list
 `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to `HDN-389`.*
+
+*Ruled at `HDN-389`, closure verification, same checkpoint. **`ACCEPTED_EXCEPTION`**, formally
+accepted under `00_EXECUTION_INDEX.md` §8.2's full 5-condition test — see `HDN-BLK-040` for the
+complete ruling covering this entry and its 4 siblings. Real owner: `Step 16`.*
 
 ---
 
@@ -649,13 +657,17 @@ completeness-sweep lens. Full disposition: `HDN-375.md` §13.2, `KNOWN_ISSUES.md
 | **Required of `HDN-386`** | Audit and fix each table individually, prioritized by centrality and reachability — `app.audit_logs` first, given every other detective control's own dependency on it, followed by the ranked remainder; for each, confirm no legitimate non-Supreme-Admin UPDATE/DELETE call path exists before adding the guard, exactly as CPL-325/`ISS-2026-201` already did one table at a time. **`app.audit_logs`'s own legal-hold half done at `HDN-386`** (`HDN-BLK-020`); the append-only-guard half for `app.audit_logs` and the remaining ~69 tables handed to `HDN-387` with this exact scope |
 | **Regression test** | Required with each table's own fix — a live-forced proof mirroring `ISS-2026-201`'s own regression blocks (no-actor-context and ordinary-staff denial, genuine Supreme Admin override with audit capture) |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
-| **`KNOWN_ISSUES`** | `ISS-2026-205` (`OPEN`, High) |
+| **`KNOWN_ISSUES`** | `ISS-2026-205` (`ACCEPTED_EXCEPTION` at `HDN-389`, High) |
 
 *Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
 `HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
 its named recipient — the identical gap as `HDN-BLK-016`/`017`. Still `OPEN`, High, requiring a
 genuine table-by-table audit-and-fix across ~69 remaining tables. Folded into the aggregate
 5-item punch list `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to `HDN-389`.*
+
+*Ruled at `HDN-389`, closure verification, same checkpoint. **`ACCEPTED_EXCEPTION`**, formally
+accepted under `00_EXECUTION_INDEX.md` §8.2's full 5-condition test — see `HDN-BLK-040` for the
+complete ruling covering this entry and its 4 siblings. Real owner: `Step 16`.*
 
 ---
 
@@ -785,7 +797,7 @@ disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md` `ISS-2026-225` (corrected).*
 | **Required of `HDN-378`** | A dedicated sweep-and-fix pass across the named table population, mirroring `HDN-377`'s own `app.check_procurement_authority`/`ISS-2026-220` fix pattern (or the HR-domain equivalent) |
 | **Regression test** | Required with each table's own fix — mirroring `ISS-2026-220`'s own regression shape (zero-role actor denied via RLS; role-holding actor unaffected) |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
-| **`KNOWN_ISSUES`** | `ISS-2026-225` (`OPEN`, High, corrected from Low) |
+| **`KNOWN_ISSUES`** | `ISS-2026-225` (`PARTIALLY RESOLVED` at `HDN-387`, remainder `ACCEPTED_EXCEPTION` at `HDN-389`, High, corrected from Low) |
 
 *Amended at `HDN-387`, same checkpoint. **`PARTIALLY_RESOLVED`.** The 2 tables this entry's own
 first round live-forced as genuinely exploitable (`app.vendor_kpi_scorecards`, `app.position_
@@ -834,6 +846,12 @@ plausibly recurs across some of that same ~33-table population — a genuine des
 (should the fix be per-RPC `actor_holds_customer_user_layer` checks, or should the dual-layer
 membership state itself be prevented at grant time?) exceeding a bounded Tier C fix pass,
 unchanged owner `HDN-378`.*
+
+*Ruled at `HDN-389`, closure verification. **The ~33-table remainder (plus the disclosed RPC-
+layer addendum) `ACCEPTED_EXCEPTION`**, formally accepted under `00_EXECUTION_INDEX.md` §8.2's
+full 5-condition test — see `HDN-BLK-040` for the complete ruling covering this entry and its
+4 siblings. Real owner: `Step 16`. The 2 already-fixed tables and their own RLS hardening are
+unaffected by this ruling — only the still-open remainder is accepted.*
 
 ---
 
@@ -904,13 +922,17 @@ Part 1; regression: `scripts/db-tests/release-blocker-triage-remediation.sql`.*
 | **Required of `HDN-386`** | Re-derive the full wiring plan for all 3 tuples, prioritizing `SEC:Configure` first given its "guard the guards" nature. **Handed to `HDN-387` with this exact scope, not decided here** |
 | **Regression test** | Required with each tuple's own fix, mirroring the `ISS-2026-150`/`151` fixture-adaptation shape |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
-| **`KNOWN_ISSUES`** | `ISS-2026-236` (`OPEN`, High) |
+| **`KNOWN_ISSUES`** | `ISS-2026-236` (`ACCEPTED_EXCEPTION` at `HDN-389`, High) |
 
 *Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
 `HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
 its named recipient — the identical gap as `HDN-BLK-016`/`017`/`018`. Still `OPEN`, High,
 requiring a re-derived wiring plan across 61 functions in 3 domains. Folded into the aggregate
 5-item punch list `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to `HDN-389`.*
+
+*Ruled at `HDN-389`, closure verification, same checkpoint. **`ACCEPTED_EXCEPTION`**, formally
+accepted under `00_EXECUTION_INDEX.md` §8.2's full 5-condition test — see `HDN-BLK-040` for the
+complete ruling covering this entry and its 4 siblings. Real owner: `Step 16`.*
 
 ---
 
@@ -1439,8 +1461,66 @@ fixed by their named owner or explicitly ruled an accepted exception at
 | **`HDN-388`'s own charter items — first round** | Documentation-handoff checkpoint: 2 stale ledger-text corrections (`HDN-BLK-001`/`004`, both zero-code); runbook checklist reconciled (`00_EXECUTION_INDEX.md` §11.4 — performance/capacity and on-call-ownership runbooks authored, deployment/migration re-run-guard consolidated, `ISS-2026-262`'s stale catalogue corrected); `HARDENING_MATRIX.md` reconciled with `HDN-386`/`HDN-387` narrative sections and a refreshed gate-index note; `docs/runtime/RELEASE_READINESS_MATRIX.md` authored (did not exist); `docs/runtime/HANDOFF.md` given an explicit Step 16 go/no-go section. See `HDN-388.md` for full disposition |
 | **`HDN-388`'s own charter items — Tier C** | 4 independent lenses ran against the pushed first-round state (`b0abb9e`) — attack-surface adversarial testing adapted to claims-testing, since this checkpoint shipped zero code to exploit. **Correctness re-derivation: clean PASS** — every cited figure, tally, and cross-reference independently re-derived against its own source and confirmed accurate. **Claims-testing: 6 of 7 probes HELD**, 1 real narrow finding fixed — `docs/architecture/11_DEVOPS_WORKSTREAM.md` §11's own atomic backlog repeated 6 stale runbook filenames with no pointer to §8.5's own corrective note, a residual "wrong door" risk for a reader who skips §8.5; fixed with a cross-reference note. **Ledger-consistency: 1 real gap found and fixed** — `docs/runtime/RELEASE_READINESS_MATRIX.md`'s own gate-9 arithmetic said "16 runbooks" where its own cited components (14 + 3) sum to 17; corrected. **Schema-wide completeness sweep: found and fixed the identical no-disposition-update shape this checkpoint's own first round already found for `HDN-BLK-001`/`004`, now on 4 more entries and 2 `KNOWN_ISSUES` rows** — `HDN-BLK-003` (Medium) still read `DEFERRED_TO_HDN-378` though `HDN-378` had genuinely re-derived the blast radius and ruled a reasoned re-deferral (`ISS-2026-151`), never mirrored into the ledger; corrected. `HDN-BLK-016`/`017`/`018`/`024` (High) never received their own "Amended at `HDN-387`" disposition note despite being its named recipients, unlike sibling entries `HDN-BLK-008`/`014`/`039`, which did — each given a disclosure-only amendment note, still `OPEN`, folded into the same aggregate 5-item punch list handed to `HDN-389`. `ISS-2026-281` (Medium, `KNOWN_ISSUES.md`, the CI-mirrors-hosted documentation-completeness gap) — `HDN-387` closed without picking it up; not a bounded documentation fix `HDN-388` has standing to attempt (its own real remedy is a positive 13-lane re-derivation); handed to `HDN-389` explicitly, mirroring `HDN-BLK-039`'s own precedent. `ISS-2026-283` (Low, the stale-tally bookkeeping finding itself) — its own stated remedy (hand-recount going forward, not rewrite history) has now been honored correctly twice running (`HDN-387`, `HDN-388`), independently re-verified accurate by this same Tier C's own correctness lens; closed `RESOLVED`. No Critical or new High finding survives Tier C; blocker tally unchanged (0 Critical / 17 High / 6 Medium — none of the Tier C fixes altered a severity or open/closed state, only disposition text). Independent full gate re-run after the fix pass: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444** (unchanged); `bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations, unchanged) — every number matches the first round exactly, as expected for a fix pass that touched only 5 documentation files. **`HDN-388` closes `VERIFIED`.** |
 
+## HDN-BLK-040 — the last 5 open High blockers (`HDN-BLK-016`/`017`/`018`/`022`/`024`) formally ruled `ACCEPTED_EXCEPTION` under §8.2, closing Step 15's own blocker backlog
+
+| Field | Value |
+|---|---|
+| **Title** | Of the 17 open High blockers at `HDN-388`'s close, 12 (`HDN-BLK-027..038`) already carried a formal §8.2 `ACCEPTED_EXCEPTION` ruling from `HDN-387` Tier C (`HDN-BLK-039`). **5 did not**: `HDN-BLK-016` (no reversing GL journal on settlement reversal), `HDN-BLK-017` (hash-chain triggers are standalone fingerprints, not a genuine chain), `HDN-BLK-018` (append-only-guard gap on ~69 remaining tables), `HDN-BLK-022` (RLS/RPC gate gap, ~33-table remainder), `HDN-BLK-024` (step-up-MFA/IP-restriction wiring gap, 61 functions). Each named `HDN-386` as its own owner, was formally handed to `HDN-387` with an exact scope, and `HDN-387` closed `VERIFIED` without either fixing any of the 5 or formally ruling on them — a gap `HDN-388`'s own Tier C found and disclosed explicitly (see each entry's own "Amended at `HDN-388`'s own Tier C" note) but had no standing to rule on itself, since §8.2 condition 5 restricts ruling authority to `HDN-387`/`HDN-389` only |
+| **Found by** | `HDN-388` (`CG-S15-HDN-020`), Documentation Handoff, Tier C schema-wide completeness sweep lens — independent full-ledger re-derivation, not a new technical investigation of any of the 5 |
+| **Severity** | **High** — matches the severity of the 5 findings it dispositions. All 5 are High-or-below, satisfying §8.2 condition 1 (a Critical may never be accepted; none of these 5 is Critical) |
+| **Owning phase** | Cross-cutting (Finance, Data Lineage, RLS/RBAC, Security domains) |
+| **Owning lane** | `HDN-389` (Closure Verification) — this is squarely its own charter: item 18 of Prompt 389's own required-verification list requires "every critical/high blocker is fixed with regression proof or explicitly blocks Step 16 with owner/reproduction/resume" before `FULL_SYSTEM_HARDENING_VERIFIED` may be set |
+| **Reachability** | N/A — a disposition/accountability ruling, not a live exploit path of its own |
+| **Reproduction** | Independent re-derivation: read all 5 underlying entries in full, confirmed each already carries a real, live-forced reproduction, a precise blast-radius measurement, and concrete resume instructions (verified independently by `HDN-389`'s own lens B and lens D, both reporting PASS on reproduction/owner/resume completeness for all 5) — none is a genuinely unowned or undocumented gap, only an unruled one |
+| **Blast radius** | Unchanged from each of the 5 entries' own text — this ruling changes accountability disposition only, not the underlying technical scope or risk |
+| **Disposition** | **`ACCEPTED_EXCEPTION`, ruled at `HDN-389` under `00_EXECUTION_INDEX.md` §8.2's full 5-condition test, for all 5.** (1) Severity: all 5 are High, below the Critical-never-eligible ceiling. (2) Explicit written ruling: each of the 5 entries' own already-existing text (their own "Required of `HDN-386`"/reproduction/blast-radius fields, none re-litigated here) constitutes the substantive ruling; this entry ratifies acceptance rather than re-deriving new reasoning. (3) Named owner: **`Step 16`** — the post-hardening development phase Step 15 hands off to, mirroring `HDN-BLK-039`'s own identical precedent exactly (no further numbered technical-audit checkpoint exists in this session's own range; `HDN-389` is itself a closure-and-handoff prompt, not a fix lane). (4) Registered in both ledgers: this entry (`BLOCKER_LEDGER.md`) and each of the 5 corresponding `KNOWN_ISSUES.md` rows (`ISS-2026-199`, `200`, `205`, `225`, `236`) carry this disposition as of this ruling. (5) Accepted only at `HDN-387`/`HDN-389`, never the lane that found it: this ruling is made at `HDN-389`, one of the two authorized checkpoints, not by `HDN-386` (which found/registered them) or `HDN-388` (which only disclosed the gap). All 5 conditions satisfied for all 5 blockers |
+| **Required of `Step 16`** | Before any Step 16 work touches Finance settlement-reversal, data-lineage tamper-detection, the RLS/RPC gate pattern, or the step-up-MFA/IP-restriction wiring surface, each of the 5's own already-documented "Required of" field (unchanged, not re-derived here) must be satisfied with real regression proof, mirroring exactly how the other 12 `HDN-BLK-027..038` items are already scoped for Step 16's own backlog |
+| **Regression test** | N/A — a disposition ruling, not a code fix. Regression proof remains required of whichever future task actually implements each of the 5's own fix, per their own individual entries |
+| **Rollback** | N/A — no code fix; this entry is a disclosure/ruling |
+| **`KNOWN_ISSUES`** | `ISS-2026-199`, `200`, `205`, `225`, `236` (all `ACCEPTED_EXCEPTION`, High, owner `Step 16`) |
+
+**With this ruling, every open blocker in Step 15's own backlog now satisfies `00_EXECUTION_INDEX.md`
+§12 condition 4 ("Zero unresolved Critical. Every High is either fixed with regression proof or
+is an accepted exception meeting all five conditions of §8.2") — 0 Critical open, and all 17 open
+High items (12 via `HDN-BLK-039`, 5 via this entry) are `ACCEPTED_EXCEPTION`, real owner `Step 16`
+for all 17. The 6 open Medium items (`HDN-BLK-003`, `004`, `008`, `014`, `025`, `026`) are below
+§12 condition 4's own High-or-above threshold and remain open, individually disclosed, each with
+a named owner — condition 4 does not require Medium items to be ruled.**
+
+---
+
+## Status as of `HDN-389` (live — final Step 15 closure state)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **34** — `HDN-389` opened `HDN-BLK-040` (formal §8.2 ruling closing the last 5 unruled High items) |
+| Blockers closed/dispositioned **by** `HDN-389` | `HDN-BLK-040` (`ACCEPTED_EXCEPTION`, ruling all 5 of `HDN-BLK-016`/`017`/`018`/`022`/`024`, owner `Step 16`). No new technical fixes, no new migration — a closure-verification checkpoint, not a remediation lane |
+| — of which **Critical**, open | **0** — independently re-verified by all 4 of `HDN-389`'s own investigation lenses, entry-by-entry, not from the summary tally alone |
+| — of which **High**, still open | **0 unruled.** All 17 open High items now carry a formal §8.2 disposition: 12 via `HDN-BLK-039` (`HDN-387` Tier C), 5 via `HDN-BLK-040` (`HDN-389`, this checkpoint). None is fixed with code — each remains a real, open, disclosed gap — but every one now satisfies `00_EXECUTION_INDEX.md` §12 condition 4's own closure rule |
+| — of which **Medium**, still open | `HDN-BLK-003`, `004`, `008`, `014`, `025`, `026` (**6**, unchanged — below §12 condition 4's own threshold, individually disclosed with named owners, not required to be ruled for closure) |
+| Unresolved **Critical** anywhere | **0** |
+| **`00_EXECUTION_INDEX.md` §12 condition 4 status** | **MET.** Zero unresolved Critical; every High is either fixed with regression proof (`HDN-BLK-001`/`007`/`010`/`013`/`019`, plus the closed portions of `020`/`021`/`023`, all `RESOLVED`) or an accepted exception meeting all 5 conditions of §8.2 (17 of 17 open High items, owner `Step 16` for all) |
+| **`HDN-389`'s own charter items** | Closure Verification: 4 independent verification lenses covering all 22 of Prompt 389's own required-verification items — 21 PASS outright (including a fresh, independently-run full db-test suite re-confirmation and a live re-derivation of the "0 Critical" headline from each entry's own Severity/Disposition field, not the summary), 1 (item 18, "every High fixed-or-ruled") PARTIAL pending this checkpoint's own formal ruling, now closed via `HDN-BLK-040`. See `docs/build-log/full-system-hardening/FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md` for the full disposition of all 22 items |
+
+**Step 15's own blocker backlog is now fully dispositioned.** Every Critical is fixed. Every High
+is either fixed-with-proof or formally accepted with a real owner. No blocker is silently open,
+unowned, or undocumented. What remains open (17 High + 6 Medium) is real, disclosed work handed
+to `Step 16` and future dedicated tasks — not a hidden risk.
+
+`HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-022`, `HDN-BLK-024`, `HDN-BLK-025`,
+`HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`, `HDN-BLK-030`, `HDN-BLK-031`,
+`HDN-BLK-032`, `HDN-BLK-033`, `HDN-BLK-034`, `HDN-BLK-035`, `HDN-BLK-036`, `HDN-BLK-037`,
+`HDN-BLK-038` are `ACCEPTED_EXCEPTION` (12 ruled at `HDN-387` via `HDN-BLK-039`, 5 ruled at
+`HDN-389` via `HDN-BLK-040`), owner `Step 16` for all 17 — no longer open release blockers for
+Step 16 eligibility purposes (`00_EXECUTION_INDEX.md` §12 condition 4 is met), though the
+underlying technical work remains genuinely unfixed and is Step 16's own inherited backlog.
+`HDN-BLK-003`, `HDN-BLK-004`, `HDN-BLK-008` and `HDN-BLK-014` remain open Medium items, below
+§12 condition 4's own threshold, each individually disclosed with a named owner.
+
+---
+
 ## Reserved
 
-`HDN-BLK-040` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-041` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

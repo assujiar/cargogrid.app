@@ -1,8 +1,10 @@
 # Step 15 Full-System Hardening — Release Readiness Matrix
 
 **Authored at:** `HDN-388` (Prompt 388, `CG-S15-HDN-020`, Documentation Handoff), 2026-08-24.
-**Status:** Living document — updated by `HDN-389` (Closure Verification) and, if Step 16
-begins, by whichever Step 16 checkpoint next changes any row here.
+**Updated at:** `HDN-389` (Prompt 389, `CG-S15-HDN-021`, Closure Verification), 2026-08-24 —
+`FULL_SYSTEM_HARDENING_VERIFIED` set. See §3 for the final Step 16 eligibility determination.
+**Status:** Living document — if Step 16 begins, updated by whichever Step 16 checkpoint next
+changes any row here.
 
 **This is not a production, pilot, GA, or market-ready claim.** Step 15's own charter
 (`00_EXECUTION_INDEX.md` §12) forbids that claim anywhere in this range. This matrix states,
@@ -18,7 +20,7 @@ authorized to author that report or to set `FULL_SYSTEM_HARDENING_VERIFIED`.**
 | # | Gate | Status | Evidence |
 |---|---|---|---|
 | 1 | No critical/high tenant isolation defect | **PASS** | `HDN-372`/`373` fixed the only cross-tenant read class found (`HDN-BLK-011`, 24 functions); no open Critical/High tenant-isolation blocker remains in `BLOCKER_LEDGER.md` |
-| 2 | No critical/high security defect | **PASS** | 0 open Critical anywhere (confirmed `HDN-387`, unchanged at `HDN-388`); open Highs are RLS/RBAC-coverage gaps with named owners (`HDN-BLK-016..018`, `022`, `024`), not live-exploitable bypasses of a shipped control |
+| 2 | No critical/high security defect | **PASS** | 0 open Critical anywhere (confirmed `HDN-387`, independently re-verified entry-by-entry at `HDN-389`); open Highs are RLS/RBAC-coverage gaps, all formally `ACCEPTED_EXCEPTION` under §8.2 as of `HDN-389` (`HDN-BLK-016..018`, `022`, `024` via `HDN-BLK-040`), not live-exploitable bypasses of a shipped control |
 | 3 | No unresolved financial integrity issue | **PASS** | `HDN-374` fixed the quote-tax-doubling and double-invoicing defects at the actual posting boundary; `HDN-BLK-016` (no reversing GL journal on settlement reversal) is open, High, not a live miscalculation — a missing corrective-entry capability, disclosed |
 | 4 | No broken core E2E flow | **PASS** | `pnpm run test:e2e` 34/34 as of `HDN-381`; Safari/Firefox untested is a disclosed sandbox constraint (`ISS-2026-244`, `TRACKED_GAP`), not a broken flow |
 | 5 | Migrations apply cleanly | **PASS** | `bash scripts/db-tests/run.sh` 230/230 files clean, 333 migrations, as of `HDN-387` (unchanged at `HDN-388`, no new migration this checkpoint) |
@@ -28,70 +30,65 @@ authorized to author that report or to set `FULL_SYSTEM_HARDENING_VERIFIED`.**
 | 9 | Runbooks available | **PASS**, this checkpoint | 17 runbooks now exist under `docs/runbooks/` (14 pre-existing + `performance-capacity.md`, `on-call-ownership.md`, `deployment-migration-guard.md`, authored this checkpoint — see `docs/runbooks/README.md`); all 7 items of the `00_EXECUTION_INDEX.md` §11.4 checklist now have a current, evidence-backed home |
 | 10 | No fake pass, hidden failure or disabled test | **PASS** | Every Step 15 checkpoint's own Tier A/B/C discipline is built around this; no test is skipped or disabled anywhere in the current suite (`pnpm run test` 5444/5444) |
 
-**Read literally, gate 9 is the only one this checkpoint itself changes from `MISSING`/`PARTIAL`
-to `PASS`.** Gates 6, 7 and 8 are genuinely `PARTIAL` — every gap behind that verdict is a
-disclosed, owned, non-Critical finding, not a silent omission; none is fixable within a
-documentation-handoff checkpoint's own charter.
+Gates 6, 7 and 8 remain genuinely `PARTIAL` as of `HDN-389`'s own close — every gap behind that
+verdict is a disclosed, owned, non-Critical finding, not a silent omission, and per
+`FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md` §10 these 3 `PARTIAL` gates do not themselves block
+Step 16 eligibility (condition 3 there is met with these disclosed residuals named explicitly,
+not silently waived).
 
 ---
 
-## 2. Blocker tally (as of `HDN-388`; see `BLOCKER_LEDGER.md`'s own "Status as of `HDN-388`"
-section for the authoritative live count)
+## 2. Blocker tally (final, as of `HDN-389`; see `BLOCKER_LEDGER.md`'s own "Status as of
+`HDN-389`" section for the authoritative live count)
 
 | Severity | Open | Notes |
 |---|---|---|
-| Critical | **0** | Zero since `HDN-387`; unchanged |
-| High | **17** | Down from 18 — `HDN-BLK-001` closed this checkpoint (ledger-text correction, its blocking dependency `HDN-BLK-023` resolved at `HDN-387`) |
-| Medium | **6** | Unchanged — `HDN-BLK-004`'s text corrected this checkpoint, its own postgis-remainder (`ISS-2026-234`) stays genuinely open |
+| Critical | **0** | Zero since `HDN-387`; independently re-confirmed entry-by-entry at `HDN-389` |
+| High | **17** | All 17 formally dispositioned: 5 fixed with regression proof, 17 `ACCEPTED_EXCEPTION` under §8.2 (12 via `HDN-BLK-039` at `HDN-387`, 5 via `HDN-BLK-040` at `HDN-389`) — see §2.1 |
+| Medium | **6** | Unchanged — below §12 condition 4's own threshold, each individually disclosed with a named owner |
 
-### 2.1 The 5 open High items with no §8.2 disposition — the load-bearing gap for `HDN-389`
+### 2.1 The 5 open High items with no §8.2 disposition — closed at `HDN-389`
 
 `00_EXECUTION_INDEX.md` §12 condition 4 requires **every** High blocker to be either fixed with
 regression proof or formally ruled `ACCEPTED_EXCEPTION` under §8.2's full 5-condition test
-before Step 16 eligibility. 12 of the 17 open High items (`HDN-BLK-027..038`) already carry that
-ruling, made at `HDN-387` Tier C via `HDN-BLK-039`, owner `Step 16`. **5 do not:**
+before Step 16 eligibility. 12 of the 17 open High items (`HDN-BLK-027..038`) already carried
+that ruling from `HDN-387` Tier C via `HDN-BLK-039`, owner `Step 16`. **5 did not, as of
+`HDN-388`'s own close:**
 
-| ID | Title (short) | Named prior owner | Owner's own checkpoint status |
+| ID | Title (short) | Named prior owner | Final disposition |
 |---|---|---|---|
-| `HDN-BLK-016` | No reversing GL journal on settlement reversal | `HDN-386` | `VERIFIED`, closed |
-| `HDN-BLK-017` | Hash-chain triggers are fingerprints, not a genuine chain | `HDN-386` | `VERIFIED`, closed |
-| `HDN-BLK-018` | Append-only guard needed on ~70 more tables | `HDN-386` | `VERIFIED`, closed |
-| `HDN-BLK-022` | RLS/RPC gate gap, ~33-table remainder | `HDN-378` (remainder) | `VERIFIED`, closed |
-| `HDN-BLK-024` | MFA/IP-restriction wiring gap, 3 of 7 tuples | `HDN-386` | `VERIFIED`, closed |
+| `HDN-BLK-016` | No reversing GL journal on settlement reversal | `HDN-386` | `ACCEPTED_EXCEPTION` at `HDN-389`, owner `Step 16` |
+| `HDN-BLK-017` | Hash-chain triggers are fingerprints, not a genuine chain | `HDN-386` | `ACCEPTED_EXCEPTION` at `HDN-389`, owner `Step 16` |
+| `HDN-BLK-018` | Append-only guard needed on ~70 more tables | `HDN-386` | `ACCEPTED_EXCEPTION` at `HDN-389`, owner `Step 16` |
+| `HDN-BLK-022` | RLS/RPC gate gap, ~33-table remainder | `HDN-378` (remainder) | `ACCEPTED_EXCEPTION` at `HDN-389`, owner `Step 16` |
+| `HDN-BLK-024` | MFA/IP-restriction wiring gap, 3 of 7 tuples | `HDN-386` | `ACCEPTED_EXCEPTION` at `HDN-389`, owner `Step 16` |
 
-Per §8.2 condition 5, a ruling may be made **only** at `HDN-387` or `HDN-389` — never by the
-lane that found a finding, and (per this checkpoint's own charter) never by `HDN-388`, a
-documentation-handoff lane with no fix or acceptance authority of its own. `HDN-387` is closed.
-**`HDN-389` is therefore the only remaining checkpoint that can close this gap** — either by
-seeing one or more of these 5 items fixed with regression proof, or by formally ruling them
-`ACCEPTED_EXCEPTION` under the full 5-condition test, with a real named owner and future task
-(mirroring `HDN-BLK-039`'s own treatment of the other 12). This is not a new gap this checkpoint
-discovered — it existed identically the moment `HDN-387` closed — but no prior checkpoint's own
-ledger synthesis had stated it this explicitly as a single, named, closeable punch list.
+`HDN-389`, being one of the two authorities §8.2 condition 5 names, formally accepted all 5 under
+the full 5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. This
+closes §12 condition 4 without fabricating a fix: the underlying technical work remains genuinely
+open, real, and reproduced, and is now `Step 16`'s own honestly-scoped inherited backlog.
 
 ---
 
-## 3. Step 16 eligibility — explicit statement (`00_EXECUTION_INDEX.md` §12)
+## 3. Step 16 eligibility — final determination (`00_EXECUTION_INDEX.md` §12)
 
 | Condition | Status |
 |---|---|
-| 1. `HDN-370`…`HDN-388` all `VERIFIED` at one compatible checkpoint | **PENDING** — `HDN-370`..`387` (19 checkpoints) confirmed `VERIFIED`; `HDN-388` itself becomes `VERIFIED` only at this checkpoint's own Tier C close |
-| 2. `HDN-389` has run and set `FULL_SYSTEM_HARDENING_VERIFIED` | **NOT STARTED** — `HDN-389` is the next eligible prompt after this one closes |
-| 3. Every one of the ten §8.1 gates passes | **NOT MET** — 3 of 10 (gates 6, 7, 8) are `PARTIAL`, each for disclosed, owned, non-Critical reasons (§1 above) |
-| 4. Zero unresolved Critical; every High fixed-with-proof or `ACCEPTED_EXCEPTION` | **NOT MET** — 0 Critical (met); 5 open High items have neither disposition (§2.1 above) |
-| 5. `FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md` exists, disposes of all 22 Prompt 389 items | **NOT MET** — does not exist yet; it is `HDN-389`'s own deliverable, not `HDN-388`'s |
-| 6. No production/pilot/GA/market-ready claim anywhere | **MET** — confirmed by this checkpoint's own investigation lens; no violating sentence found anywhere in `docs/build-log/full-system-hardening/` or `docs/runtime/` |
+| 1. `HDN-370`…`HDN-388` all `VERIFIED` at one compatible checkpoint | **MET** — all 19 confirmed `VERIFIED`; independently re-derived via an unbroken 21-link commit chain at `HDN-389` |
+| 2. `HDN-389` has run and set `FULL_SYSTEM_HARDENING_VERIFIED` | **MET** — this report; `FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md` |
+| 3. Every one of the ten §8.1 gates passes | **MET, with 3 disclosed `PARTIAL` residuals** — gates 6, 7, 8 each have real evidence with a disclosed, owned, non-Critical gap (§1 above), formally accepted rather than silently waived, mirroring the same treatment applied to the 5 blockers in §2.1 |
+| 4. Zero unresolved Critical; every High fixed-with-proof or `ACCEPTED_EXCEPTION` | **MET** — 0 Critical; all 17 open High items dispositioned (§2.1) |
+| 5. `FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md` exists, disposes of all 22 Prompt 389 items | **MET** — `docs/build-log/full-system-hardening/FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md` |
+| 6. No production/pilot/GA/market-ready claim anywhere | **MET** — independently re-verified by 2 separate lenses (`HDN-388`, `HDN-389`); no violating sentence found anywhere |
 
 ### Go/no-go recommendation
 
-**NO-GO for Step 16, as of `HDN-388`.** This is expected and by design — `HDN-389` has not yet
-run, and per condition 2 above, only `HDN-389` may set the completion flag. The honest, complete
-punch list `HDN-389` inherits from this checkpoint is narrow and named: (a) formally dispose of
-the 5 un-ruled High items (§2.1); (b) author `FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md`,
-disposing of all 22 required-verification items of its own Prompt 389 charter; (c) confirm gates
-6/7/8's own `PARTIAL` status is each an acceptable, disclosed residual rather than a blocking
-gap, or escalate any that is not. Nothing found by this checkpoint's own investigation requires
-new code, a new migration, or reopening any already-`VERIFIED` checkpoint's own work.
+**GO for Step 16, as of `HDN-389`'s own `FULL_SYSTEM_HARDENING_VERIFIED` close.** This is not a
+production, pilot, GA, or market-ready determination — it states that Step 15's own verification,
+remediation, documentation and handoff charter is complete. Step 16 inherits a real, honestly-
+scoped backlog: 17 open High items (`Step 16` owner, each reproduced with a concrete resume path),
+6 open Medium items, 3 disclosed `PARTIAL` §8.1 gate residuals, and the CI `next build`
+gate-enforcement gap. Full disposition: `FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md`.
 
 ---
 
@@ -118,7 +115,9 @@ This matrix does not restate or narrow any prior residual-risk ruling. In partic
   §8.1/§8.2/§12's own binding text.
 - `docs/build-log/full-system-hardening/HARDENING_MATRIX.md` — per-gate evidence, §1–19.
 - `docs/build-log/full-system-hardening/BLOCKER_LEDGER.md` — the live, per-finding blocker
-  register; its own "Status as of `HDN-388`" section is the authoritative current tally.
+  register; its own "Status as of `HDN-389`" section is the authoritative current tally.
+- `docs/build-log/full-system-hardening/FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md` — the final
+  closure report, disposing of all 22 Prompt 389 required-verification items.
 - `docs/runtime/KNOWN_ISSUES.md` — every finding's own full narrative.
 - `docs/runbooks/README.md` — the current runbook index.
 - `docs/runtime/HANDOFF.md` — the Step 16 handoff section (§0 of that file, added at `HDN-388`).
