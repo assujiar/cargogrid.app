@@ -522,8 +522,47 @@ Full disposition: `HDN-374.md` §13.3, `KNOWN_ISSUES.md` `ISS-2026-199`.*
 `HDN-BLK-013` and `HDN-BLK-016` are open release blockers for Step 16 per `00_EXECUTION_INDEX.md`
 §8.1 until fixed by their named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
 
+---
+
+## HDN-BLK-017 — the 5 "hash-chain" transaction-lineage triggers are standalone content fingerprints, not a genuine tamper-evident chain, and no reconciliation ever recomputes or compares them
+
+*Found at `HDN-375`'s own investigation (2026-08-24), same checkpoint. Full disposition:
+`HDN-375.md` §6, `KNOWN_ISSUES.md` `ISS-2026-200`.*
+
+| Field | Value |
+|---|---|
+| **Title** | `app.trg_capture_lineage_job_to_shipment`/`_shipment_to_epod`/`_shipment_to_cost`/`_job_to_profitability`/`_job_to_billing_readiness` (OPS-184) each compute a standalone SHA-256 fingerprint of one row's own content, with no reference to any prior edge's own hash — not a genuine `H_n = f(H_{n-1}, content_n)` chain, despite being named and documented as one. `app.detect_transaction_lineage_anomalies` has no hash-mismatch/tamper-detection anomaly type at all; `source_version_hash` is write-only and display-only everywhere in the repository |
+| **Found by** | `HDN-375` (`CG-S15-HDN-007`), Data Lineage Audit, investigation lens (hash-chain triggers and historical config preservation) — live-forced: a raw tamper to a source row produces a detectable mismatch on manual recomputation, but nothing in the product ever recomputes or compares it |
+| **Severity** | **High** — per `00_EXECUTION_INDEX.md` §7, this lane's own charter states the business value as "make CargoGrid explainable, auditable and recoverable from source to report," and no mechanism anywhere would ever surface a tampered source record or a tampered lineage row to a human. Not Critical: no UI/documentation surfaces "hash chain" to an end user as a tamper-proof guarantee, and RPD-022/the threat model never claims any repository ledger is tamper-proof |
+| **Owning phase** | Operations (transaction lineage, OPS-184) |
+| **Owning lane** | Registered by `HDN-375`; owned by `HDN-386` (Full-System Hardening Integrated Verification) — implementing genuine chaining (canonical ordering, a real `prev_hash` column, backfill of every existing row, extending the anomaly detector) is a design decision outside this bounded-repair checkpoint's own scope |
+| **Reachability** | N/A (a detection/integrity gap, not an access-control reachability issue) — any historical or future tamper to a lineage-tracked source row goes undetected regardless of actor |
+| **Reproduction** | Live-forced: `UPDATE`d a source row's own content directly (bypassing every RPC); manually recomputed `source_version_hash` and confirmed a real mismatch against the stored value; confirmed `detect_transaction_lineage_anomalies`'s own 4 anomaly types never check this. Full transcript `HDN-375.md` §6 |
+| **Blast radius** | Every one of OPS-184's own 5 hash-chained relation types, past and future, until fixed |
+| **Disposition** | **Registered, not fixed.** A narrower, genuinely bounded-repair-sized half of this same area — the evidence ledger's own mutability (`ISS-2026-201`/formerly this same investigation) — was fixed in this checkpoint's own migration |
+| **Required of `HDN-386`** | Decide and implement (or explicitly accept as residual risk with a documented reconciliation procedure): a real per-relation-type chain ordering, a `prev_hash` column, backfill, and a hash-mismatch anomaly type in `detect_transaction_lineage_anomalies` |
+| **Regression test** | Required with the eventual fix — a live-forced proof that a tampered source row is actually detected and surfaced, not merely detectable by hand |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-200` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-375` (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **11** — `HDN-375`'s own investigation opened `HDN-BLK-017` (High, registered not fixed) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial** — unchanged from `HDN-374`'s own close (`HDN-BLK-017` is newly registered, not closed) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017` (5) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `009`, `010` (narrowed), `014` (8, unchanged) |
+| Unresolved **Critical** anywhere | **0** |
+
+`HDN-BLK-013`, `HDN-BLK-016` and `HDN-BLK-017` are open release blockers for Step 16 per
+`00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly ruled an accepted
+exception at `HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-017` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-018` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

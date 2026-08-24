@@ -32,7 +32,7 @@ from zero and no lane rediscovers a known item.
 | 3 | Tenant isolation | `HDN-372` **`COMPLETED`** | **`PARTIAL`** — not a pass. One High cross-tenant read class found and fixed at the root, twice — first 9 functions, then 4 more found by this checkpoint's own Tier C review and fixed in the same checkpoint (`HDN-BLK-011`, 13 direct + 11 transitive = 24 functions total); two same-shape findings remain genuinely open (`HDN-BLK-012`, 13 dashboard functions; `HDN-BLK-014`, ~24 candidate functions, not individually live-verified — both deferred to `HDN-373`); one High app-layer finding registered late and corrected at Tier C (`HDN-BLK-013`); 13 further Medium/Low findings registered | §3 |
 | 4 | RLS / RBAC | `HDN-373` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. Root RBAC gate (`app.evaluate_permission`) never checked tenant membership — fixed (`ISS-2026-180`). The entire Finance manual/period/config/import-export write surface (95 functions) was `SECURITY INVOKER`, completely unreachable by any real session since it shipped — fixed (`HDN-BLK-015`/`ISS-2026-182`, the largest reachability defect found in Step 15 to date). `HDN-BLK-012` (13 dashboard functions, deferred from `HDN-372`) fixed; `HDN-BLK-014` (~30 candidates, deferred from `HDN-372`) narrowed to 16 fixed / ~14 residual (`ISS-2026-186`, owner a future checkpoint); `ISS-2026-139` (loyalty maker/checker) fixed; `ISS-2026-137` re-verified accurate, no change. 6 further findings registered with named forward owners | §4 |
 | 5 | Financial integrity | `HDN-374` **`VERIFIED`** | **`PARTIAL`** — not a pass, Tier C closed. Quote-level tax silently doubled at invoicing — fixed (`ISS-2026-194`). A job order could reach `issued` on two full-amount invoices from two distinct handoffs — fixed at the actual AR/GL posting boundary, `app.issue_finance_invoice` (`ISS-2026-195`; the first fix draft, gating invoice preparation itself, was self-corrected before commit — it would have broken `OPS-181`'s own disclosed legitimate-re-handoff allowance). `HDN-BLK-010`/`ISS-2026-162`'s Finance/HRIS-Payroll scope resolved — 10 functions (6 named plus 4 more this checkpoint's own wider sweep found) fixed with the codebase's own "design note 9(a)" pattern, 2 mechanisms live-forced with a genuine two-process race each. `app.run_loyalty_expiry_sweep`'s own `p_as_of` was silently ignored — fixed (`ISS-2026-196`). **Tier C review found 5 more real, live-forced defects**: `app.lock_finance_period` shared the sweep's own missed shape (fixed); Finding 1's own fix dropped the quote's discount, overbilling (fixed); Finding 2's own guard had no backing constraint and did not survive genuine concurrency (fixed with a real partial unique index); `app.request_finance_settlement_reversal` bypassed period lock entirely (fixed) and posts no reversing GL journal at all (registered, `ISS-2026-199`/`HDN-BLK-016`, owner `HDN-386`). 2 findings registered, not fixed, owner `HDN-386` (`ISS-2026-197`: no FX/multi-currency conversion anywhere in the revenue chain; Operations' own job-profitability planned-vs-actual split). `HDN-BLK-010`'s residual 3 non-Finance functions plus `ISS-2026-163` handed to `HDN-387` | §5 |
-| 6 | Data lineage | `HDN-375` | `NOT_RUN` | §6 |
+| 6 | Data lineage | `HDN-375` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. Canonical lineage chain, downstream projection versioning, historical config preservation and permission-awareness all held clean. `app.transaction_lineage_edges` had no `BEFORE UPDATE/DELETE` guard at all despite its own append-only contract — fixed (`ISS-2026-201`). `app.loyalty_earning_events`/`app.finance_journals` accepted a `source_id` with no DB-layer FK — fixed with a per-`source_type` validation trigger on each (`ISS-2026-202`). The 5 hash-chain triggers are standalone per-row fingerprints, not a genuine chain, with no reconciliation ever recomputing/comparing them — registered, not fixed (`ISS-2026-200`/`HDN-BLK-017`, High, owner `HDN-386`) | §6 |
 | 7 | API compatibility | `HDN-376` | `NOT_RUN` | §7 |
 | 8 | Storage / signed URL | `HDN-377` | `NOT_RUN` | §8 |
 | 9 | Security hardening | `HDN-378` | `NOT_RUN` | §9 |
@@ -362,6 +362,34 @@ release gate.
 | Transaction-lineage hash-chain triggers | 5 of them were among the 20 functions broken by the pgcrypto defect — now fixed | Re-prove they actually chain |
 | Reports / dashboards / AI outputs / exports carry lineage metadata | Phase 9 | Inspect |
 | Orphan records / projections | none known | Register as blockers |
+
+> **Result, 2026-08-24 (`CG-S15-HDN-007`), `COMPLETED`, Tier C review pending:** one
+> additive migration, four independent parallel investigation lenses, each required to
+> live-force its own findings on disposable databases. Canonical lineage chain (lead
+> through prospect, opportunity, quotation, job order, shipment, ePOD, invoice, payment,
+> journal, loyalty), downstream projection versioning, historical config preservation,
+> and permission-awareness all held clean. **2 real, live-forced defects fixed**:
+> `ISS-2026-201` (High, `app.transaction_lineage_edges` — OPS-184's own lineage-evidence
+> ledger — had no `BEFORE UPDATE/DELETE` guard at all despite its own "append-only,
+> never-updated, never-deleted" contract; `service_role` could freely rewrite or erase
+> lineage evidence with no audit trail; fixed by mirroring CPL-325's own proven
+> append-only-guard pattern, scoped to this one table); `ISS-2026-202` (Medium,
+> `app.loyalty_earning_events`/`app.finance_journals` accept a `source_id` with no
+> DB-layer FK, enforced only by RPC discipline — a direct `service_role` insert bypassing
+> the validating RPC could silently create a lineage-less financial/loyalty record; fixed
+> with a `BEFORE INSERT OR UPDATE` per-`source_type` validation trigger on each table).
+> **1 finding registered, not fixed** (`ISS-2026-200`/`HDN-BLK-017`, High, owner
+> `HDN-386`): the 5 "hash-chain" lineage triggers are standalone per-row content
+> fingerprints, not a genuine `H_n = f(H_{n-1}, content_n)` chain, and `app.detect_
+> transaction_lineage_anomalies` has no hash-mismatch/tamper-detection anomaly type at
+> all — a design decision (canonical ordering, real `prev_hash` column, backfill,
+> detector extension), not a bounded repair, outside this checkpoint's own charter. No
+> Critical finding anywhere. Gates: `typecheck` 0, `lint` 0 errors/337 warnings, 5394/5394
+> unit tests, db-tests **228/229 files clean** (320 migrations) — the 229th,
+> `procurement-vendor-performance.sql`, hit a pre-existing, unrelated, incidentally-found
+> wall-clock/day-window defect confirmed independent of this checkpoint's own migration
+> (registered `ISS-2026-204`, Medium, owner `HDN-387`, not this lane's Data Lineage
+> charter). Tier C review required before `VERIFIED`. Full disposition: `HDN-375.md` §6/§12.
 
 **Upstream hard gate:** `HDN-371` `VERIFIED`.
 

@@ -1577,6 +1577,188 @@ of cross-cutting design question before Step 16 go/no-go; forward to `HDN-387`/`
 codebase requires a MANUAL, separately-tracked GL correction -- disclosed here so Finance
 operating procedure can account for it, not discovered in production.
 
+### ISS-2026-200 — the 5 "hash-chain" transaction-lineage triggers are standalone content fingerprints, not a genuine tamper-evident chain, and no reconciliation ever recomputes or compares them (found at `CG-S15-HDN-007`, `OPEN`, High, owner `HDN-386`, ledger `HDN-BLK-017`)
+
+Found by this checkpoint's own investigation lens (hash-chain triggers and historical
+config preservation), live-forced. `app.trg_capture_lineage_job_to_shipment`/
+`_shipment_to_epod`/`_shipment_to_cost`/`_job_to_profitability`/`_job_to_billing_
+readiness` (`supabase/migrations/20260728170000_create_operations_transaction_
+lineage.sql`, OPS-184) each compute `source_version_hash := encode(digest(<that node's
+own current-row fields>, 'sha256'), 'hex')` — a fingerprint of exactly ONE row, with no
+reference anywhere to a prior edge's own hash. A genuine hash chain requires `H_n =
+f(H_{n-1}, content_n)`; nothing in this codebase does that for these 5 functions, despite
+this repository's own commit history (`75278d3`) and `HARDENING_MATRIX.md` §6 both
+describing them as "hash-chain triggers."
+
+**Live-forced**: a raw `UPDATE` tampering with a source row's own content (bypassing every
+RPC) produces a real, detectable mismatch when `source_version_hash` is manually
+recomputed and compared against the stored value — but `app.detect_transaction_lineage_
+anomalies` (the only reconciliation function OPS-184 ships) has exactly 4 anomaly types
+(`orphan_shipment_order`, `orphan_billing_readiness`, `duplicate_target`, `cross_tenant_
+mismatch`) and **no hash-mismatch/tamper-detection type at all** — `source_version_hash`
+is write-only and display-only everywhere in this repository (confirmed via grep across
+every migration and route/query file), never recomputed and compared by anything, DB or
+application layer.
+
+**Severity: High** — not a broken end-user-facing promise (no UI or documentation
+surfaces "hash chain" to a customer, and RPD-022/`docs/security/THREAT_MODEL.md` never
+claims any repository ledger is tamper-proof), but this lane's own charter states the
+business value as "make CargoGrid explainable, auditable and recoverable from source to
+report," and there is currently no mechanism anywhere that would ever surface a tampered
+source record or a tampered lineage row to a human — the exact integrity guarantee this
+naming implies is absent.
+
+**Not fixed here** — implementing a genuine tamper-evident chain requires a design
+decision, not a bounded repair: defining a canonical per-relation-type insert ordering, a
+real `prev_hash` column, backfilling every existing row's own chain position, and
+extending `detect_transaction_lineage_anomalies` with a real hash-mismatch check, all
+outside this checkpoint's own `5-15 files, 1-3 migrations` bounded-repair scope. **Owner:
+`HDN-386`** (Full-System Hardening Integrated Verification) — the first downstream
+checkpoint positioned to rule on this kind of cross-cutting design question before Step 16
+go/no-go; forward to `HDN-387`/`389` if `HDN-386` does not resolve it explicitly. A
+narrower, genuinely bounded-repair-sized half of this same area — the evidence ledger's
+own mutability — was fixed in the same checkpoint's own migration; see `ISS-2026-201`.
+
+### ISS-2026-201 — `app.transaction_lineage_edges` was freely UPDATE/DELETE-able by `service_role` despite its own table comment claiming "append-only, never-updated, never-deleted" (found at `CG-S15-HDN-007`, `RESOLVED` at `HDN-375`, High, owner `HDN-375`)
+
+Found by the same investigation lens as `ISS-2026-200`, live-forced. A raw `UPDATE
+app.transaction_lineage_edges set source_version_hash = ... where id = ...` succeeded
+with zero guard — `pg_trigger` on the table returned 0 rows (no `BEFORE UPDATE`/`DELETE`
+trigger existed at all), and `information_schema.role_table_grants` confirmed
+`service_role` (what every backend call and every `SECURITY DEFINER` function runs as)
+held live `UPDATE`/`DELETE`. The rewrite also bypassed `app.capture_audit_event` entirely
+(only called from the insert path and the explicit, reasoned `app.record_transaction_
+lineage_override` RPC), leaving no audit trail either — directly contradicting the
+table's own documented contract ("OPS-184: one append-only, never-updated, never-deleted
+row...").
+
+This exact class of gap was already found and disclosed once before, for a different set
+of tables: `20260801280000_harden_customer_portal_loyalty_ledger_supreme_admin_
+override.sql` (CPL-325, `ISS-2026-130`) added a shared `BEFORE UPDATE`/`DELETE` guard to
+5 Phase 8 loyalty-ledger tables, and its own migration header explicitly disclosed "does
+NOT retroactively cover `app.inventory_movements` or any other pre-existing
+`append_only_ledger`-family table (disclosed, out of this checkpoint's own authority)."
+`app.transaction_lineage_edges` is exactly one of those other tables.
+
+**Severity: High** — real, live-forced silent tamperability of the one lineage-evidence
+ledger this checkpoint's own charter depends on, reachable by any code path (or
+compromised credential) capable of running as `service_role`, with zero audit trail.
+
+**Fixed** at `20260812000000_harden_data_lineage_audit_findings.sql`: mirrors CPL-325's
+own proven pattern exactly — a dedicated `BEFORE UPDATE`/`DELETE` trigger function scoped
+to this one table, blocking any mutation unless `app.is_supreme_admin(auth.uid())`, with a
+best-effort `app.capture_audit_event` disclosure on the exception path. Per RPD-022/034,
+this is a detective, best-effort-evidenced control, never a tamper-proof claim. Two
+pre-existing db-test fixtures (`scripts/db-tests/operations-security-financial-
+hardening.sql`, `scripts/db-tests/operations-transaction-lineage.sql`) that directly
+`DELETE`d a lineage-edge row to simulate data loss for their own orphan-detection proofs
+were updated to acquire a genuine Supreme Admin session first, mirroring CPL-325's own
+established test convention. Regression test: `operations-transaction-lineage.sql`'s own
+new HDN-375 block (no-actor-context and ordinary-staff mutation both blocked; a genuine
+Supreme Admin mutation succeeds and is audit-captured with correct before/after and actor
+identity).
+
+### ISS-2026-202 — `app.loyalty_earning_events` / `app.finance_journals` accepted a `source_id` that resolves to no real row, enforced only by RPC discipline, not the schema (found at `CG-S15-HDN-007`, `RESOLVED` at `HDN-375`, Medium, owner `HDN-375`)
+
+Found by this checkpoint's own investigation lens (orphan records and no-silent-reentry),
+live-forced. As `service_role` (bypassing the validating RPC entirely — exactly the role
+every real backend call runs as), a direct `INSERT` succeeded on both `app.loyalty_
+earning_events` (a `source_id` matching no row in `app.finance_ar_open_items`) and `app.
+finance_journals` (`source_type='subledger'`, a `source_id` matching no row in `app.
+finance_subledger_batches`). Neither table had a DB-layer FK or trigger requiring
+`source_id` to resolve — only the RPC layer (`app.evaluate_customer_loyalty_earning_for_
+paid_invoice`, `app.create_and_post_finance_system_journal`) validated it. Mitigated in
+practice (no application code ever inserts directly), but not a structural guarantee — a
+future direct-insert path or a compromised service-role key could silently create a
+lineage-less financial/loyalty record, the "no orphaned critical records" business rule
+this lane's own charter states (Prompt 375 §24).
+
+**Severity: Medium** — no live exploitation path found (every real insert path is
+RPC-gated), but the schema itself offered no structural guarantee, only application
+discipline.
+
+**Fixed** at `20260812000000_harden_data_lineage_audit_findings.sql`: a lightweight
+`BEFORE INSERT OR UPDATE` trigger on each table validates `source_id` resolves to a real
+row of the type its own `source_type` claims (`loyalty_earning_events`: `finance_invoice_
+paid` → `finance_ar_open_items`, `reversal` → `loyalty_earning_events` itself, confirmed
+by reading `app.reverse_loyalty_earning_event`'s own insert; `finance_journals`:
+`subledger` → `finance_subledger_batches`, `correction` → `finance_journal_corrections`,
+`manual` → `source_id` may legitimately remain null). Every existing legitimate
+RPC-driven row already satisfies these predicates (confirmed by the full 229-file
+`scripts/db-tests` suite passing unchanged). Regression test: `operations-transaction-
+lineage.sql`'s own new HDN-375 block (a direct insert with an unresolvable `source_id` is
+denied `finance_journal_orphan_source`; a legitimate null-source manual journal still
+inserts).
+
+### ISS-2026-203 — the 4 job-order snapshot JSONB columns do not self-embed their own source-entity id/version, though full lineage is recoverable relationally (found at `CG-S15-HDN-007`, `OPEN`, Low, owner `HDN-386`)
+
+Found by this checkpoint's own investigation lens (downstream projection versioning),
+live-forced. `app.job_orders.revenue_snapshot`/`customer_snapshot`/`cargo_service_
+snapshot`/`acceptance_snapshot` do not embed a `"quotationId"`/`"quotationVersion"` key
+inside their own JSONB payload. Live-forced confirmation that this is genuinely
+recoverable, not a broken lineage claim: `app.quotations` is version-immutable per row (a
+revision inserts a brand-new row, never mutates the old one); `job_orders.quotation_id`
+is a live FK pinned to the exact immutable row the snapshot was captured from, confirmed
+to stay pinned to the original version even after a later revision publishes; `job_
+orders.source_handoff_id`'s own `app.job_order_handoffs.payload->'source'` independently
+carries `quotationId`/`versionNumber`/`quoteNumber` too.
+
+**Severity: Low** — a reader given only the raw snapshot JSONB in isolation (e.g.
+exported to a report or log without the parent row) cannot self-trace its own source
+version without knowing to join back through `job_orders.quotation_id`/`source_handoff_
+id`; not a silent-re-entry or correctness defect, since the relational path is real and
+correct, but the snapshots are not self-describing.
+
+**Not fixed here** — embedding a version marker inside 4 existing JSONB payload shapes
+touches every writer and reader of those columns across Commercial/Operations/Finance, a
+larger consistency change than a bounded repair for a Low-severity, already-recoverable
+gap. **Owner: `HDN-386`** — a documentation/lineage-matrix note at minimum, a JSONB-shape
+addition if judged worth the cross-domain touch.
+
+### ISS-2026-204 — `app._calc_vendor_kpi_rate_validity`'s day-window generation can silently misreport a genuinely non-empty window as zero calendar days when the window spans less than 24h and straddles a specific hour-of-day boundary (found incidentally at `CG-S15-HDN-007`'s own Tier A gate run, `OPEN`, Medium, owner `HDN-387`, not this checkpoint's own charter)
+
+Found incidentally, not by any of `HDN-375`'s own four investigation lenses (Data
+Lineage) — `scripts/db-tests/procurement-vendor-performance.sql` failed a real, fresh,
+independent `db:test` run for this checkpoint (`ERROR: assertion failed: expected New
+Vendor rate_validity to be computable`), live-observed at `2026-08-24T01:09 UTC`.
+Confirmed unrelated to this checkpoint's own migration (`20260812000000_harden_data_
+lineage_audit_findings.sql` touches only `app.transaction_lineage_edges`/`loyalty_
+earning_events`/`finance_journals`; the full remaining 228-file suite, this one file
+excluded, passes clean on the same fresh disposable database) — a genuine pre-existing
+Procurement-domain (PRC-264) production defect, out of this Data-Lineage-Audit
+checkpoint's own charter.
+
+**Root cause, confirmed by direct read of `app._calc_vendor_kpi_rate_validity`
+(`20260730740000_create_procurement_vendor_performance.sql`):** the function's own
+`is_computable` claim ("true whenever the window itself is non-empty, window_days is
+always > 0") is false for a window shorter than 24 hours. `v_den` counts rows of
+`generate_series(p_window_start::date, (p_window_end - interval '1 day')::date, interval
+'1 day')` — for a window like the test's own 21-hour `[now()-1h, now()+20h)`, this
+becomes `generate_series(H::date, (H-4h)::date, '1 day')` where `H = now()-1h`. Whenever
+the current hour-of-day (UTC) is 1, 2 or 3, `H::date` is today while `(H-4h)::date` is
+yesterday — a start date AFTER the end date, so `generate_series` (positive step)
+produces zero rows, `v_den = 0`, and `is_computable` wrongly flips to `false` for a
+window that is genuinely ~21 real hours wide. Deterministically reproducible with literal
+timestamps at any wall-clock time (e.g. `p_window_start = '2026-08-24T01:00:00Z'`,
+`p_window_end = '2026-08-24T22:00:00Z'`) — not merely a today-only observation.
+
+**Severity: Medium** — a scoring/reporting-accuracy defect (a vendor with a real,
+computable 0%-or-better rate-validity score is instead reported "not computable" for that
+category), not a data-corruption or security issue, and narrowly reachable (only for
+callers constructing a sub-24h KPI window whose start hour-of-day falls in `[1,4)` UTC,
+which `app.calculate_vendor_kpi_metrics`'s own real callers do not appear to do routinely
+— not confirmed against every caller). Shares the same wall-clock/day-boundary defect
+class this repository has already named and fixed at the root twice before
+(`HDN-BLK-002`/`ISS-2026-077`/`135`/`154`, `HDN-370`).
+
+**Not fixed here** — Procurement/vendor-performance domain (`PRC-264`), not this
+checkpoint's own Data Lineage Audit charter. **Owner: `HDN-387`** (Release Blocker
+Triage and Remediation), the established landing point this session's own prior
+checkpoints have used for out-of-lane defects found incidentally (`ISS-2026-163`,
+`186`, `197`). Fix shape once owned: replace the `generate_series` day-count with a
+direct half-open-interval day-span computation that cannot invert regardless of the
+window's own start/end hour alignment.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
