@@ -793,8 +793,66 @@ accepted exception at `HDN-387`/`389`.
 | Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
 | **`HDN-381`'s own charter items — first round plus Tier C** | Touch-target sizing on `Button`/`IconButton`/`Checkbox` (first round) and `Input`/`Select` (Tier C), `ToastProvider` viewport-clipping fix, 4 worst unwrapped tables wrapped (first round), permanent `mobile-chrome`/`tablet-chrome`/`iphone-chrome` (Tier C addition) e2e coverage. `ISS-2026-244`/`245` registered at the first round (Safari/Firefox untestable, PWA scoping — too large/out-of-charter to fix). `ISS-2026-246`/`247` registered at the first round, both corrected at Tier C (33 of 50 unused-primitive files, not 6; 95-total/72-before/76-after table count, not the self-contradicting 96/73/77). `ISS-2026-248` registered at Tier C (Low, no automated ESLint guard for the touch-target/table-overflow defect classes). **Tier C review found no Critical or High finding at either round** — 3 real gaps found and fixed (`Input`/`Select` sizing, a `position:fixed` overflow-detection blind spot, and a self-introduced-and-self-fixed `testMatch` anchoring regression); see `HDN-381.md` §13 |
 
+### `HDN-BLK-027` — IAE-030's own real, dedicated alerting system remains unwired from every real failure producer except job dead-lettering (this checkpoint's own fix)
+
+| Field | Value |
+|---|---|
+| **Title** | `app.raise_observability_alert` has zero callers from the three webhook-signature-verification routes' own failure paths, `app.replay_webhook_delivery`'s own post-replay dead-letter divergence, `IAE-008`'s own integration-connection health-check auto-disable, the AI governed-action rejection path, or any security/auth denial path — only `app.record_job_failure`'s own dead-letter transition (this checkpoint's own fix) reaches the alerting system |
+| **Found by** | `HDN-382` (Observability Audit), live/simulated failure testing lens + source-level coverage-mapping lens (first round); widened by the schema-wide completeness sweep lens (Tier C) with 2 additional live-reachable instances |
+| **Severity** | **High** — directly contradicts Prompt 382's own Main Flow ("A job/webhook/API/database failure produces actionable alert") and Business Rule §24 ("no silent DLQ/backpressure accumulation") for the majority of real failure paths this codebase has |
+| **Owning phase** | Phase 9 (`IAE-030` built the alerting schema); the unwired producers span Phase 9 (webhooks, `IAE-012`/`IAE-008`), Phase 9 (AI governance), and cross-cutting security |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | All named producers are live, real, reachable code paths (webhook routes handle real inbound traffic; `IAE-008` health checks are wired into a real UI action; AI governed actions and security denials fire on every real request) |
+| **Reproduction** | Live-forced directly: a job driven through `app.enqueue_job`→`app.claim_next_job`→`app.record_job_failure` to `dead_letter` produced zero incidents before this checkpoint's own fix (now fixed). Every other producer confirmed by direct code trace — grep for `raise_observability_alert`/`record_observability_signal` callers across `app/`, `server/`, and every relevant migration returns only this checkpoint's own new call site |
+| **Blast radius** | Every webhook delivery failure, every AI governed-action rejection, every security/auth denial, every integration-connection auto-disable, and the webhook-delivery-replay divergence case, across every tenant |
+| **Disposition** | **Registered, not fixed** — wiring every producer in one pass exceeds `HDN-382`'s own "5-15 files, bounded repair" charter; the single highest-value path (job dead-lettering, covering every job type this repository has) is fixed at this checkpoint |
+| **Required of the owning task** | Wire `app.raise_observability_alert` into: the 3 webhook-signature-verification routes' own failure paths; the `app.replay_webhook_delivery` post-replay divergence; `IAE-008`'s own health-check auto-disable path; the AI governed-action rejection path; the highest-severity security-denial paths — in that priority order |
+| **Regression test** | Required with each producer's own fix, mirroring this checkpoint's own delta-based db-test pattern (`scripts/db-tests/background-job.sql`) |
+| **Rollback** | N/A — no code fix yet for the unwired producers; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-249` (`OPEN`, High) |
+
+---
+
+### `HDN-BLK-028` — no monitoring/incident dashboard UI exists anywhere; IAE-030's own real, well-built alerting backend has zero consumer
+
+| Field | Value |
+|---|---|
+| **Title** | No page anywhere under `app/(tenant)/` or `app/(internal)/` renders an incident, alert, SLO, or alert-route record — `app.list_incidents_for_tenant`/`app.get_incident_timeline`/`app.list_alert_routes_for_tenant` (real, tenant-safe, `MON:View`-gated RPCs) have zero real callers |
+| **Found by** | `HDN-382` (Observability Audit), coverage-mapping lens + runbook/dashboard review lens |
+| **Severity** | **High** — Prompt 382 §15/§20 explicitly name "monitoring dashboards, incident timelines, alert ownership" as something to verify; the primary artifact to verify does not exist |
+| **Owning phase** | Phase 9 (`IAE-030`/`IAE-358` — self-disclosed at build time: "UI: none — consistent with every other Group 7 capability") |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | N/A — the gap is an absence, not a live attack surface. The backend RPC surface it would consume is already real and tenant-safe (confirmed `SECURITY DEFINER`, `MON:View`-gated, routes through the same `app.evaluate_permission` primitive `HDN-373` hardened for real tenant-membership checking) |
+| **Reproduction** | `grep` for `enterprise-monitoring`/`EnterpriseMonitoring`/`Incident`/`AlertRoute`/`listIncidentsForTenant` across `app/`/`components/` returns zero real matches; `docs/build-log/phase-09/IAE-358.md` self-discloses "UI: none" |
+| **Blast radius** | Every incident this repository's own alerting system creates (including this checkpoint's own new job-dead-letter alerts) is invisible to any real user — visible only via direct SQL/RPC access |
+| **Disposition** | **Registered, not fixed** — building even a minimal incident/alert-list view is a real UI feature addition well outside `HDN-382`'s own "5-15 files, bounded repair"/"no new product features" charter |
+| **Required of the owning task** | Build a minimal incident-list + timeline view (tenant-scoped) consuming the already-real `app.list_incidents_for_tenant`/`app.get_incident_timeline` RPCs |
+| **Regression test** | An e2e test proving a tenant-scoped incident is visible to a `MON:View` holder and invisible cross-tenant, mirroring this repository's own established RLS-forgery-probe pattern |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-250` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-382` Tier C (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **22** — `HDN-382` opened `HDN-BLK-027` (High — IAE-030's own alerting system unwired from every producer except this checkpoint's own job-dead-letter fix; widened at Tier C with 2 more live-reachable instances) and `HDN-BLK-028` (High — no monitoring/incident dashboard UI exists anywhere) at the first round. Tier C review opened no new `HDN-BLK-` entry of its own (its own new finding, `ISS-2026-253`, is Low and registered in `KNOWN_ISSUES.md` only, matching this ledger's own convention for Low/informational findings) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged from `HDN-381`'s own close |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024`, `HDN-BLK-027`, `HDN-BLK-028` (12, 2 new this checkpoint) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9, unchanged) |
+| Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
+| **`HDN-382`'s own charter items — first round plus Tier C** | `app.record_job_failure`'s dead-letter transition wired into `app.raise_observability_alert` (first round); `/api/health`/`/api/ready` built (first round); 2 stale/false runbook references corrected (first round). `ISS-2026-249`/`250` registered at the first round (High, both now paired with `HDN-BLK-027`/`028` above), `ISS-2026-251`/`252` registered at the first round (Medium/Low, `KNOWN_ISSUES.md`-only). **Tier C review found no Critical or High code-correctness defect** — 2 real ledger/documentation defects found and fixed (a wrong "231/231" db-test count propagated across 7 documents, corrected to 229/229; this section's own `HDN-382` Result blockquote found misplaced under `HARDENING_MATRIX.md` §12 instead of its own §13, moved); 2 more concrete live-reachable instances of `ISS-2026-249`'s own gap class found and folded into it; 1 new Low finding registered (`ISS-2026-253`, `/api/ready`'s own unlogged failure path); see `HDN-382.md` §13 |
+
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
+`HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,
+`HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027` and `HDN-BLK-028` are open release blockers
+for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or
+explicitly ruled an accepted exception at `HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-027` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-029` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

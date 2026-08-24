@@ -39,7 +39,7 @@ from zero and no lane rediscovers a known item.
 | 10 | Performance / scalability | `HDN-379` **`VERIFIED`** | **`PASS`** — Tier C closed. `ISS-2026-145` (O(n²) `rbac-enforcement.sql` scan) `RESOLVED`, matched-pair verified, 300×-1200×+ speedup; a real structural weakening in the fix itself found and closed at Tier C. 3 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-238` (Medium, unbounded browser datasets), `ISS-2026-239` (Low, 892 unindexed-FK triage), `ISS-2026-240` (Low, informational `auth_rls_initplan` blind spot) | §10 |
 | 11 | Accessibility | `HDN-380` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. 6 color-contrast token failures fixed; `eslint-plugin-jsx-a11y` `recommended` wired repository-wide, 14 real errors fixed; 463/463 error displays carry `role="alert"` after Tier C found 6 more missed by the first round's own narrower regex; `HDN-BLK-009`/`ISS-2026-160` root-caused (Turbopack dev-mode hydration race, `C-30`) and `RESOLVED` (harness now 18/18). No Critical/High finding either round. 2 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-241` (Medium, missing `<main>` landmarks), `ISS-2026-242` (Medium, accessible form-primitive under-adoption). 1 new Low finding at Tier C: `ISS-2026-243` (`reuseExistingServer` local-dev stale-build footgun, owner a dedicated future task) | §11 |
 | 12 | Browser / device compatibility | `HDN-381` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Matrix defined explicitly: Chrome/Edge (Chromium engine) + mobile/tablet/iPhone viewport+touch emulation all permanently tested (`test:e2e` 34/34, up from 18/18); Safari/Firefox a firm sandbox constraint, registered `ISS-2026-244`/`TRACKED_GAP`. 16/16 route×device combinations live-tested with zero defects. 5 real static gaps fixed first round (touch-target sizing on `Button`/`IconButton`/`Checkbox`, `ToastProvider` narrow-viewport clipping, 4 worst unwrapped tables, permanent mobile/tablet e2e coverage); 3 more fixed at Tier C (`Input`/`Select` touch-target sizing, a `position:fixed` overflow-detection blind spot, the `testMatch` anchoring regression + `iphone-chrome` completeness gap). PWA posture scoping registered (`ISS-2026-245`). Unused shared-UI-primitive surface corrected from an initial 6 to the true 33 of 50 files at Tier C (`ISS-2026-246`); 19 of 95 tables remain unwrapped (`ISS-2026-247`); a new ESLint automated-guard gap registered at Tier C (`ISS-2026-248`). No Critical or High finding either round | §12 |
-| 13 | Observability | `HDN-382` **`COMPLETED`** | **`PARTIAL`** — first round, not a pass, Tier C review pending. Live-reproduced headline finding: IAE-030's own real, well-built alerting/incident schema had zero real production callers anywhere — a job reaching terminal `dead_letter` produced zero incident before this checkpoint. Fixed: `app.record_job_failure`'s dead-letter transition now raises a real, deduplicated alert; `/api/health`/`/api/ready` built (did not exist despite a runbook falsely claiming otherwise); 2 stale/false runbook references corrected. 4 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-249` (High, every other failure producer still unwired), `ISS-2026-250` (High, no monitoring dashboard UI exists anywhere), `ISS-2026-251` (Medium, no escalation/dispatch mechanism), `ISS-2026-252` (Low, stale standards-doc framing). `ISS-2026-155`/`152` independently re-verified live, both accurate, unchanged | §13 |
+| 13 | Observability | `HDN-382` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Live-reproduced headline finding: IAE-030's own real, well-built alerting/incident schema had zero real production callers anywhere — a job reaching terminal `dead_letter` produced zero incident before this checkpoint. Fixed: `app.record_job_failure`'s dead-letter transition now raises a real, deduplicated alert; `/api/health`/`/api/ready` built (did not exist despite a runbook falsely claiming otherwise); 2 stale/false runbook references corrected. No Critical or High finding at either round. `ISS-2026-249` (High, every other failure producer still unwired, widened at Tier C with 2 more concrete instances) and `ISS-2026-250` (High, no monitoring dashboard UI exists anywhere) each now paired with a `HDN-BLK-` entry (`027`/`028`); `ISS-2026-251` (Medium, no escalation/dispatch mechanism), `ISS-2026-252` (Low, stale standards-doc framing), `ISS-2026-253` (Low, `/api/ready`'s own unlogged failure path, found at Tier C). A wrong "231/231" db-test count (corrected to 229/229) and a misplaced Result blockquote (moved from §12 to this section) fixed at Tier C. `ISS-2026-155`/`152` independently re-verified live, both accurate, unchanged | §13 |
 | 14 | Backup / restore | `HDN-383` | `NOT_RUN` | §14 |
 | 15 | Disaster recovery rehearsal | `HDN-384` | `NOT_RUN` | §15 |
 | 16 | Data migration rehearsal | `HDN-385` | `NOT_RUN` | §16 |
@@ -821,55 +821,6 @@ release gate.
 
 **Upstream:** `HDN-380`. Inherits `HDN-380`'s own `HDN-BLK-009` exposure — a harness that cannot reach a guarded route in `HDN-380` cannot reach one here either.
 
-> **Result (`HDN-382` first round, `COMPLETED`, Tier C pending):** Three
-> independent investigation lenses (source-level coverage mapping; live/simulated
-> failure testing against a real disposable Postgres, 328 migrations applied
-> cleanly; runbook/dashboard/alert-ownership review) covered all 8 dimensions
-> Prompt 382 §20 names. **Headline, live-reproduced finding**: IAE-030's own
-> real, well-built alerting/incident schema (`app.raise_observability_alert`
-> — real severity, real owner routing, real concurrency-safe dedup already
-> hardened at its own Tier C) had **zero real production callers anywhere in
-> this codebase** — live-forced directly: a job driven through the real DLQ
-> path to its own terminal `dead_letter` status produced zero incident, zero
-> alert, zero owner notification before this checkpoint, only an audit-log
-> row a human would have to go looking for. Directly contradicts Prompt 382's
-> own Main Flow (§21) and Business Rule §24 ("no silent DLQ/backpressure
-> accumulation") for the single most common real failure path in this
-> repository. **Fixed**: `app.record_job_failure`'s dead-letter transition
-> now raises a real, deduplicated alert (`source_type='job'`,
-> `signal_type='error'`, `severity='high'`), live-verified via a new
-> regression db-test; `/api/health`/`/api/ready` built matching
-> `OBSERVABILITY_STANDARDS.md` §7's own already-fixed contract exactly (a new
-> `app.ping()` RPC backs `/api/ready`'s DB-connectivity check) — neither
-> route existed despite `observability-exporter-outage.md`'s own diagnosis
-> step falsely claiming "implemented Phase 1"; live-HTTP-tested against a
-> real running production server (`/api/health` → 200 ok; `/api/ready`
-> against this sandbox's own genuinely-unreachable placeholder Supabase URL →
-> 503 degraded, never a false ok). 2 stale/false runbook references
-> corrected (the false "implemented Phase 1" claim above; `gps-ingestion-
-> database-outage.md`'s own "no live Supabase project exists yet" note,
-> stale since `HDN-372` established a real, live-verified deployed project).
-> `ISS-2026-155`/`152` independently re-verified directly against the live
-> code (not trusted from ticket text) — both confirmed accurate, unchanged.
-> **4 findings registered, not fixed, each with a named owner**:
-> `ISS-2026-249` (High — every other real failure producer, webhook/AI/
-> security, remains unwired from the alerting system; this checkpoint fixes
-> the single highest-value path, job dead-lettering, covering every job type
-> this repository has); `ISS-2026-250` (High — no monitoring/incident
-> dashboard UI exists anywhere; IAE-030's own real backend has zero
-> consumer, self-disclosed at build time but not previously stated plainly
-> in the Step 15 record); `ISS-2026-251` (Medium — alert routes have real
-> owner/severity/dedup but no escalation/dispatch mechanism at all);
-> `ISS-2026-252` (Low — `OBSERVABILITY_STANDARDS.md` §7's own `NOT_RUN`
-> table is unrevised Phase-0 prose, still gated on a precondition false for
-> 14 phases). No RPD-022/RPD-025 contradiction found anywhere; no
-> tenant-data leakage found on any health/status/metrics surface, including
-> the 2 new routes this checkpoint adds. Independent full gate: `typecheck`
-> 0, `lint` 0/337 warnings, 5443/5443 unit tests, `next build` clean (2 new
-> routes compile and live-HTTP-verified), 231/231 db-tests (329 migrations,
-> 1 new additive migration — `app.record_job_failure` extended,
-> `app.ping()` added). Full disposition: `HDN-382.md`.
-
 > **Result (`HDN-381`, `VERIFIED`, Tier C closed):** Matrix defined
 > explicitly per the seeded instruction — Chrome/Edge (Chromium engine) and
 > mobile/tablet/iPhone viewport+touch emulation are all real and now permanently
@@ -946,6 +897,89 @@ release gate.
 | Alerts actually firing | No deployed environment; no live alerting endpoint | Trigger or simulate; disclose which |
 | Runbook links, severity workflow, alert ownership | partial | Verify |
 | `docs/runbooks/gps-ingestion-database-outage.md` | Carries `NOT_YET_REHEARSED` and a now-stale "no live Supabase project exists yet" note | Refresh against the current baseline |
+
+> **Result (`HDN-382` first round, `COMPLETED`, Tier C pending):** Three
+> independent investigation lenses (source-level coverage mapping; live/simulated
+> failure testing against a real disposable Postgres, 328 migrations applied
+> cleanly; runbook/dashboard/alert-ownership review) covered all 8 dimensions
+> Prompt 382 §20 names. **Headline, live-reproduced finding**: IAE-030's own
+> real, well-built alerting/incident schema (`app.raise_observability_alert`
+> — real severity, real owner routing, real concurrency-safe dedup already
+> hardened at its own Tier C) had **zero real production callers anywhere in
+> this codebase** — live-forced directly: a job driven through the real DLQ
+> path to its own terminal `dead_letter` status produced zero incident, zero
+> alert, zero owner notification before this checkpoint, only an audit-log
+> row a human would have to go looking for. Directly contradicts Prompt 382's
+> own Main Flow (§21) and Business Rule §24 ("no silent DLQ/backpressure
+> accumulation") for the single most common real failure path in this
+> repository. **Fixed**: `app.record_job_failure`'s dead-letter transition
+> now raises a real, deduplicated alert (`source_type='job'`,
+> `signal_type='error'`, `severity='high'`), live-verified via a new
+> regression db-test; `/api/health`/`/api/ready` built matching
+> `OBSERVABILITY_STANDARDS.md` §7's own already-fixed contract exactly (a new
+> `app.ping()` RPC backs `/api/ready`'s DB-connectivity check) — neither
+> route existed despite `observability-exporter-outage.md`'s own diagnosis
+> step falsely claiming "implemented Phase 1"; live-HTTP-tested against a
+> real running production server (`/api/health` → 200 ok; `/api/ready`
+> against this sandbox's own genuinely-unreachable placeholder Supabase URL →
+> 503 degraded, never a false ok). 2 stale/false runbook references
+> corrected (the false "implemented Phase 1" claim above; `gps-ingestion-
+> database-outage.md`'s own "no live Supabase project exists yet" note,
+> stale since `HDN-372` established a real, live-verified deployed project).
+> `ISS-2026-155`/`152` independently re-verified directly against the live
+> code (not trusted from ticket text) — both confirmed accurate, unchanged.
+> **4 findings registered, not fixed, each with a named owner**:
+> `ISS-2026-249` (High — every other real failure producer, webhook/AI/
+> security, remains unwired from the alerting system; this checkpoint fixes
+> the single highest-value path, job dead-lettering, covering every job type
+> this repository has); `ISS-2026-250` (High — no monitoring/incident
+> dashboard UI exists anywhere; IAE-030's own real backend has zero
+> consumer, self-disclosed at build time but not previously stated plainly
+> in the Step 15 record); `ISS-2026-251` (Medium — alert routes have real
+> owner/severity/dedup but no escalation/dispatch mechanism at all);
+> `ISS-2026-252` (Low — `OBSERVABILITY_STANDARDS.md` §7's own `NOT_RUN`
+> table is unrevised Phase-0 prose, still gated on a precondition false for
+> 14 phases). No RPD-022/RPD-025 contradiction found anywhere; no
+> tenant-data leakage found on any health/status/metrics surface, including
+> the 2 new routes this checkpoint adds. Independent full gate: `typecheck`
+> 0, `lint` 0/337 warnings, 5443/5443 unit tests, `next build` clean (2 new
+> routes compile and live-HTTP-verified), 229/229 db-tests (unchanged; 329
+> migrations, 1 new additive migration — `app.record_job_failure` extended,
+> `app.ping()` added). Full disposition: `HDN-382.md`.
+>
+> **Tier C review (4 independent adversarial lenses against commit
+> `2251bf2`) found no Critical or High code-correctness defect.** 2 real
+> ledger/documentation defects found and fixed: this Result blockquote was
+> first committed misplaced under `## 12. Browser / device compatibility`
+> (`HDN-381`'s own section) instead of here, under this section's own
+> dimension table — a real authoring mistake, not a status error; moved to
+> its correct home. The db-test file count above was also corrected from a
+> stale "231/231" (231 was never a real total — this checkpoint extended 2
+> *existing* db-test files with new blocks, it never added a new file; the
+> real total, 229, is unchanged from `HDN-381`) to the correct 229/229,
+> propagated everywhere the wrong figure had spread (`HDN-382.md`
+> §2/§9/§12, `00_EXECUTION_INDEX.md`, `TASK_LEDGER.md`, `HANDOFF.md`,
+> `CARGOGRID_BUILD_STATUS.md`, `CHANGE_MANIFEST.md`). **`ISS-2026-249`
+> widened with 2 more concrete, live-reachable instances of the same gap
+> class** (schema-wide completeness sweep lens): `app.replay_webhook_
+> delivery`'s own post-replay dead-letter divergence (the bridging job's
+> own `attempts` counter restarts at 0 while the delivery's own does not, so
+> a second dead-letter post-replay still produces zero alert); `IAE-008`'s
+> own integration-connection health-check auto-disable path (live-reachable,
+> unlike the already-disclosed-dormant automation-rule-engine class).
+> **`ISS-2026-249`/`250` (both `OPEN`, High) found to have no paired
+> `HDN-BLK-` entry**, breaking an otherwise universal pattern every other
+> `OPEN` High finding this session follows — `HDN-BLK-027`/`028` registered
+> at Tier C to close the gap. **1 new Low finding registered**:
+> `ISS-2026-253` — `/api/ready`'s own failure path is fully unlogged
+> server-side (live-forced: a synchronous `requireEnv()` throw produces a
+> response byte-identical to the genuine DB-unreachable case), so an
+> on-call responder cannot distinguish cause of failure — the route's own
+> security posture held up under the same attack (no secret/stack-trace
+> text can leak through the bare `catch`). Independent full gate re-run:
+> `typecheck` 0, `lint` 0/337 warnings, 5443/5443 unit tests, `next build`
+> clean, 229/229 db-tests (corrected from the first round's own miscounted
+> 231/231; 329 migrations, unchanged). Full disposition: `HDN-382.md` §13.
 
 ---
 

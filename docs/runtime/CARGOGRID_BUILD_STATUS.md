@@ -3,59 +3,47 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-014` — **Observability Audit
-(Prompt 382)** — `COMPLETED`, first round only, Tier C review pending. Three
-independent parallel investigation lenses (source-level coverage mapping;
-live/simulated failure testing against a real disposable Postgres, 328
-migrations applied cleanly; runbook/dashboard/alert-ownership review).
-**Headline, live-reproduced finding**: IAE-030's own real, well-built
-alerting/incident schema (`app.raise_observability_alert`) had zero real
+(Prompt 382)** — `VERIFIED`, Tier C closed. Four independent parallel
+adversarial lenses ran against the committed first-round state (`2251bf2`).
+**No Critical or High code-correctness defect found by any lens.** First
+round: IAE-030's own real, well-built alerting/incident schema had zero real
 production callers anywhere — a job driven through the real DLQ path to its
-own terminal `dead_letter` status produced zero incident, zero alert, zero
-owner notification before this checkpoint, only an audit-log row a human
-would have to go looking for. Directly contradicts Prompt 382's own Main Flow
-(§21) and Business Rule §24 ("no silent DLQ/backpressure accumulation").
-**3 real gaps found and fixed**: `app.record_job_failure`'s dead-letter
-transition now raises a real, deduplicated alert (`source_type='job'`,
-`signal_type='error'`, `severity='high'`), live-verified via a new regression
-db-test that also confirms a second distinct job type dead-lettering within
-the dedup window correctly collapses into the same incident (`ISS-2026-155`'s
-own known, unrelated, separately-owned granularity behavior) and that a
-merely-retryable failure raises no alert; `/api/health`/`/api/ready` built
-matching `docs/standards/OBSERVABILITY_STANDARDS.md` §7's own already-fixed
-contract exactly (a new, trivial, side-effect-free `app.ping()` RPC backs
-`/api/ready`'s DB-connectivity check) — neither route existed despite
-`docs/runbooks/observability-exporter-outage.md`'s own diagnosis step falsely
-claiming "implemented Phase 1"; live-HTTP-verified against a real running
-production server: `/api/health` → `200 {"status":"ok"}`; `/api/ready`
-against this sandbox's own genuinely-unreachable placeholder Supabase URL →
-`503 {"status":"degraded","reason":["database_unreachable"]}`. 2 stale/false
-runbook references corrected (the false "implemented Phase 1" claim above;
-`docs/runbooks/gps-ingestion-database-outage.md`'s own "no live Supabase
-project exists yet" note, stale since `HDN-372` established a real, live-
-verified deployed project). `ISS-2026-155`/`152` independently re-verified
-live against the real code (not trusted from ticket text) — both confirmed
-accurate, unchanged. **4 findings registered, not fixed, each with a named
-owner**: `ISS-2026-249` (High — every other real failure producer, webhook/
-AI/security, remains unwired from the alerting system; this checkpoint fixes
-the single highest-value path, job dead-lettering, covering every job type
-this repository has); `ISS-2026-250` (High — no monitoring/incident
-dashboard UI exists anywhere; IAE-030's own real backend has zero consumer,
-self-disclosed at build time but not previously stated plainly in the Step
-15 record); `ISS-2026-251` (Medium — alert routes have real owner/severity/
-dedup but no escalation/dispatch mechanism at all); `ISS-2026-252` (Low —
-`OBSERVABILITY_STANDARDS.md` §7's own `NOT_RUN` table is unrevised Phase-0
-prose, still gated on a precondition false for 14 phases). No RPD-022/
-RPD-025 contradiction found anywhere; no tenant-data leakage found on any
-health/status/metrics surface, including the 2 new routes this checkpoint
-adds. Independent full gate: `typecheck` 0; `lint` 0 errors/337 warnings;
-`pnpm run test` **5443/5443**; `pnpm exec next build` clean (2 new routes
-compile and live-HTTP-verified); `bash scripts/db-tests/run.sh` **231/231
-files clean** (329 migrations, 1 new additive migration —
-`app.record_job_failure` extended, `app.ping()` added). `CG-S15-HDN-014`
-first round `COMPLETED`; Tier C review required before `VERIFIED`.
-`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it. Not
-a production/pilot/GA/market-ready claim (RPD-001/034/036). Full detail:
-`docs/build-log/full-system-hardening/HDN-382.md`; ledger record:
+own terminal `dead_letter` status produced zero incident before this
+checkpoint. Fixed: `app.record_job_failure`'s dead-letter transition now
+raises a real, deduplicated alert, live-verified via a new regression
+db-test; `/api/health`/`/api/ready` built matching
+`docs/standards/OBSERVABILITY_STANDARDS.md` §7's own already-fixed contract
+(a new `app.ping()` RPC backs `/api/ready`) — neither route existed despite
+a runbook falsely claiming "implemented Phase 1"; live-HTTP-verified against
+a real running production server. 2 stale/false runbook references
+corrected. `ISS-2026-155`/`152` independently re-verified live, both
+accurate, unchanged. **Tier C found and fixed**: correctness re-derivation
+independently reproduced every claim and corrected 2 numeric errors — a
+wrong "231/231 db-test files" figure, propagated across 7 documents,
+corrected to the real, unchanged 229/229 (this checkpoint extended 2
+*existing* files, it never added a new one); a "246 routes" figure
+corrected to the actual, re-counted 243. Schema-wide completeness sweep
+found 2 more concrete, live-reachable instances of `ISS-2026-249`'s own gap
+class (`app.replay_webhook_delivery`'s own post-replay dead-letter
+divergence; `IAE-008`'s own integration-connection health-check auto-disable
+path), folded into that entry. Ledger/documentation consistency found the
+same numeric error independently plus 1 structural defect
+(`HARDENING_MATRIX.md`'s own `HDN-382` Result blockquote was committed
+misplaced under §12 instead of §13, moved) and that `ISS-2026-249`/`250`
+(both High) had no paired `HDN-BLK-` entry, closed with `HDN-BLK-027`/`028`.
+Attack-surface adversarial testing live-forced a real concurrency race
+(held up), an env-var-throw attack on `/api/ready` (held up, no leak),
+`app.ping()`'s own privilege surface (held up), and a repeat db-test run
+(held up, fails loudly). 1 new Low finding registered: `ISS-2026-253`
+(`/api/ready`'s own failure path is fully unlogged server-side). Independent
+full gate re-run: `typecheck` 0; `lint` 0 errors/337 warnings (unchanged);
+`pnpm run test` **5443/5443**; `pnpm exec next build` clean;
+`bash scripts/db-tests/run.sh` **229/229 files clean** (corrected from the
+first round's own miscounted 231/231; 329 migrations, unchanged).
+`CG-S15-HDN-014` is `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED` is not set;
+only Prompt 389 may set it. Not a production/pilot/GA/market-ready claim
+(RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-382.md` §13; ledger record:
 `docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-014` row.)
 
 **Prior update:** 2026-08-24 (`CG-S15-HDN-013` — **Browser and Device Compatibility
