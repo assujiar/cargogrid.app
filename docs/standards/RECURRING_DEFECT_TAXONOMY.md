@@ -551,6 +551,15 @@ full suite passed 18/18 with zero 500s against production — conclusively isola
 dev-mode itself, not the application. Fixed by changing `webServer.command` to
 `next build && next start` (with `webServer.timeout` raised to accommodate the build step), which
 also directly serves this repository's own `next build`-required convention for this lane.
+**Earlier, unrecognized precedent:** `HDN-370` (Full Regression, Prompt 370) had already observed a
+symptom of this same class without naming it as its own — with the sandbox's Playwright browser
+substituted, 11 of 18 e2e tests failed, and the write-up recorded the (correctly attributed)
+`ISS-2026-160` unset-env 500 as the primary cause "compounded by the Next.js dev server itself
+crashing mid-run with `RangeError: Map maximum size exceeded` inside `app-page-turbo.runtime.dev.js`
+after serving repeated 500s" — a dev-mode-runtime-only crash signature, filed only as a secondary
+detail under `ISS-2026-160` rather than recognized as a distinct, generalizable class in its own
+right. `HDN-380`'s Tier C review found this precedent and is the first checkpoint to name the
+general class.
 **Check:** before registering an e2e/browser-harness failure as an application defect (a broken
 guard, a hanging server action, a real regression), check what `webServer.command` (or equivalent)
 the harness is actually running against. If it is a dev-mode server, reproduce the same failure

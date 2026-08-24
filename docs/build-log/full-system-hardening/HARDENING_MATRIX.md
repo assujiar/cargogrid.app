@@ -35,9 +35,9 @@ from zero and no lane rediscovers a known item.
 | 6 | Data lineage | `HDN-375` **`VERIFIED`** | **`PARTIAL`** — not a pass, Tier C closed. Canonical lineage chain, downstream projection versioning, historical config preservation and permission-awareness all held clean at first round. `app.transaction_lineage_edges` had no `BEFORE UPDATE/DELETE` guard at all despite its own append-only contract — fixed (`ISS-2026-201`). `app.loyalty_earning_events`/`app.finance_journals` accepted a `source_id` with no DB-layer FK — fixed with a per-`source_type` validation trigger on each (`ISS-2026-202`). The 5 hash-chain triggers are standalone per-row fingerprints, not a genuine chain — registered, not fixed (`ISS-2026-200`/`HDN-BLK-017`, High, owner `HDN-386`). **Tier C found the append-only-guard pattern is genuinely needed on ~70 more tables schema-wide, including `app.audit_logs` itself** — registered, not fixed (`ISS-2026-205`/`HDN-BLK-018`, High, owner `HDN-386`); the orphan-`source_id` gap recurs on `finance_subledger_batches` and others — registered, not fixed (`ISS-2026-206`, Medium, owner `HDN-387`, after a fix draft was caught before commit breaking a pre-existing test file's own design) | §6 |
 | 7 | API compatibility | `HDN-376` **`VERIFIED`** | **`PASS`** — Tier C closed. A Critical/High authentication bypass fixed on the inbound/outbound webhook signature verification path (`ISS-2026-209`/`210`, a NULL signature silently accepted as verified). 2 Low REST route error-code bugs fixed (`ISS-2026-211`/`212`). `ISS-2026-147` item 1 closed — 44 new route-level tests across all 9 REST `/v1` handlers, via a fetch-stubbing harness (no local PostgREST/Supabase stack available). GraphQL wording corrected (no surface exists). Tier C found and fixed 1 more real defect (`ISS-2026-215`, Low, 2 GET routes conflating a genuine internal RPC failure with the 404 not-found case) and corrected 1 documentation-citation error. 4 findings registered, not fixed: `ISS-2026-207`/`208` (Medium/Low, owner `HDN-387`); `ISS-2026-213`/`214` (both Low, owner `HDN-386`/`HDN-387`) | §7 |
 | 8 | Storage / signed URL | `HDN-377` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. First round: 2 Critical (`ISS-2026-216` storage_path exposure, `ISS-2026-217` dual legal-hold mechanisms) + 1 High (`ISS-2026-218` legal-hold DELETE backstop) + 3 Medium (`ISS-2026-219`/`220`/`221`) defects fixed. Tier C: 1 more Critical self-inflicted gap in the first round's own trigger fixed (`ISS-2026-226`), 1 more High fixed (`ISS-2026-227`), 1 Medium-High validation gap fixed (`ISS-2026-228`), 1 finding self-corrected before commit (`ISS-2026-231`). 6 findings registered, not fixed, all outside this checkpoint's own charter: `ISS-2026-222` High + `229` Critical + `230` High (owner `HDN-386`); `ISS-2026-223`/`225` (corrected High)/`232` (owner `HDN-378`); `ISS-2026-224` Medium (owner `HDN-387`) | §8 |
-| 9 | Security hardening | `HDN-378` | `NOT_RUN` | §9 |
-| 10 | Performance / scalability | `HDN-379` | `NOT_RUN` | §10 |
-| 11 | Accessibility | `HDN-380` | `NOT_RUN` | §11 |
+| 9 | Security hardening | `HDN-378` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. `ISS-2026-150` wired across all 4 named functions, corrected `RESOLVED` → `PARTIALLY RESOLVED` at Tier C once `app.set_integration_connection_status`'s own independent bypass was found and registered (`ISS-2026-235`/`HDN-BLK-023`, Critical, owner `HDN-386`). 2 Critical + 1 High genuine bypass found and fixed in this checkpoint's own first-round work. 1 more High registered (`ISS-2026-236`/`HDN-BLK-024`, owner `HDN-386`), 1 Medium (`ISS-2026-237`, owner `HDN-387`) | §9 |
+| 10 | Performance / scalability | `HDN-379` **`VERIFIED`** | **`PASS`** — Tier C closed. `ISS-2026-145` (O(n²) `rbac-enforcement.sql` scan) `RESOLVED`, matched-pair verified, 300×-1200×+ speedup; a real structural weakening in the fix itself found and closed at Tier C. 3 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-238` (Medium, unbounded browser datasets), `ISS-2026-239` (Low, 892 unindexed-FK triage), `ISS-2026-240` (Low, informational `auth_rls_initplan` blind spot) | §10 |
+| 11 | Accessibility | `HDN-380` **`COMPLETED`** | **`PARTIAL`** — not a pass, Tier C review pending. 6 color-contrast token failures fixed; `eslint-plugin-jsx-a11y` `recommended` wired repository-wide, 14 real errors fixed; 454/454 error displays now carry `role="alert"`; `HDN-BLK-009`/`ISS-2026-160` root-caused (Turbopack dev-mode hydration race, `C-30`) and `RESOLVED` (harness now 18/18). 2 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-241` (Medium, missing `<main>` landmarks), `ISS-2026-242` (Medium, accessible form-primitive under-adoption) | §11 |
 | 12 | Browser / device compatibility | `HDN-381` | `NOT_RUN` | §12 |
 | 13 | Observability | `HDN-382` | `NOT_RUN` | §13 |
 | 14 | Backup / restore | `HDN-383` | `NOT_RUN` | §14 |
@@ -761,7 +761,7 @@ release gate.
 
 `next build` is required from this lane onward.
 
-> **Result (`HDN-380` first round, `COMPLETED`, Tier C pending):** `HDN-BLK-009` was
+> **Result (`HDN-380`, `VERIFIED`, Tier C closed):** `HDN-BLK-009` was
 > checked per this section's own instruction and found stale — `playwright.config.ts`'s
 > own `webServer.env` block (added at `PLT-135`, after `HDN-370`) already made the
 > "unset env var" premise moot. The real remaining symptom (5 `e2e/vendor-registration.spec.ts`
@@ -777,13 +777,36 @@ release gate.
 > WCAG-computed replacements) using the authority `DESIGN_SYSTEM.md` §2.1's own
 > disclosed-pending-validation status provides. `eslint-plugin-jsx-a11y`'s `recommended`
 > preset wired repository-wide (14 real errors found and fixed across 5 files); 454/454
-> inline error displays app-wide now carry `role="alert"` (7 were missing it). 2 large
-> architectural gaps found and registered, not fixed (out of this checkpoint's own
-> bounded charter): `ISS-2026-241` (36 of 38 tenant modules have no `<main>` landmark),
-> `ISS-2026-242` (accessible form primitives adopted in only ~2% of the 200 files that
-> render a form). A prior "565 unlabeled form controls" figure did not reproduce under
-> the authoritative rule for that exact check (now 0 errors app-wide) — corrected, not
-> silently dropped. Full disposition: `HDN-380.md`.
+> inline error displays app-wide carried `role="alert"` at the first round (7 were
+> missing it). 2 large architectural gaps found and registered, not fixed (out of this
+> checkpoint's own bounded charter): `ISS-2026-241` (36 of 38 tenant modules have no
+> `<main>` landmark), `ISS-2026-242` (accessible form primitives adopted in only ~2% of
+> the 200 files that render a form). A prior "565 unlabeled form controls" figure did
+> not reproduce under the authoritative rule for that exact check (now 0 errors
+> app-wide) — corrected, not silently dropped.
+>
+> **Tier C review (4 independent adversarial lenses against commit `4c5802f`) found no
+> Critical or High finding at either round** — unlike `HDN-378`'s and `HDN-379`'s own
+> Tier C passes, every attack held up (label/id collision risk; the `command-menu.tsx`
+> focus-race live-tested with a real Playwright script; background-vs-foreground
+> contrast interaction; the `next build` env-inlining fear checked against real build
+> output; the `role="alert"` conditional-mount pattern confirmed as this codebase's own
+> pre-existing convention). 3 small, real gaps found and fixed same pass: 6 more
+> missing `role="alert"` instances in `vendor-detail-panel.tsx` (used `<span>` not
+> `<p>`, missed by the first round's own narrower sweep regex — re-swept afterward with
+> a broadened pattern, 463/463, 0 missing); a stale doc comment in
+> `e2e/tenant-admin-portal.spec.ts`; `C-30`'s own evidence section missing a
+> cross-reference to an earlier, unrecognized precedent already recorded at `HDN-370`.
+> 1 more ledger inconsistency found and fixed: this very Gate index table (§ near the
+> top of this file) still showed `NOT_RUN` for this lane despite this section's own
+> first-round result — also found stale, pre-existing, for rows 9/10 (`HDN-378`/
+> `HDN-379`); all 3 corrected together. 1 new Low finding registered:
+> `ISS-2026-243` (switching the harness to a production build makes the pre-existing
+> `reuseExistingServer` setting a real local-dev stale-build footgun, owner a dedicated
+> future task). Independent full gate re-run after the fix pass: `typecheck` 0, `lint`
+> 0/337 warnings, 5443/5443 unit tests, `next build` clean, `test:e2e` 18/18, 229/229
+> db-tests (328 migrations, unchanged — no schema change at either round). Full
+> disposition: `HDN-380.md` §13.
 
 ---
 

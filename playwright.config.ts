@@ -55,8 +55,15 @@ export default defineConfig({
   // under `next dev`. `docs/build-log/full-system-hardening/HARDENING_MATRIX.md` §11's own
   // instruction ("`next build` is required from this lane onward") independently pointed
   // the same direction. `timeout` raised from 60s to accommodate the build step (a cold
-  // `next build` in this sandbox takes roughly a minute; `reuseExistingServer` still
-  // skips rebuilding when a dev session already has a server up on this port locally).
+  // `next build` in this sandbox takes roughly a minute).
+  //
+  // KNOWN FOOTGUN (ISS-2026-243, registered not fixed, HDN-380 Tier C): `reuseExistingServer`
+  // (below) is pre-existing, unchanged by this edit -- but switching `command` from `next dev`
+  // to `next build && next start` materially raises its risk. Under `next dev` a reused stale
+  // server was harmless (dev mode self-refreshes on every request); under `next start` a reused
+  // stale server on port 3000 serves a FROZEN, un-rebuilt bundle with no warning if you edit
+  // source and re-run `pnpm run test:e2e` without first stopping it. `CI=true` disables
+  // `reuseExistingServer` entirely, so this is a local-dev-only risk, not a CI risk.
   webServer: {
     command: "pnpm exec next build && pnpm exec next start --port 3000",
     url: "http://127.0.0.1:3000/login",

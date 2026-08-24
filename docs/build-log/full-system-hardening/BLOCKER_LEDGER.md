@@ -763,17 +763,17 @@ named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
 | **Disposition** | **`OPEN`** — retrofitting field-level error association onto ~200 hand-rolled forms is a large, wide-blast-radius undertaking outside `HDN-380`'s own bounded charter |
 | **`KNOWN_ISSUES`** | `ISS-2026-242` |
 
-## Status as of `HDN-380` first round (live — update at every checkpoint that changes it)
+## Status as of `HDN-380` Tier C (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
-| Blockers opened **by** Step 15 to date | **20** — `HDN-380` opened `HDN-BLK-025` (Medium, missing `<main>` landmarks) and `HDN-BLK-026` (Medium, accessible-form-primitive under-adoption) |
-| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged set from `HDN-378`'s own close, plus `HDN-BLK-009` **resolved this checkpoint** (the `e2e` harness's dev-mode hang, `ISS-2026-160`) |
+| Blockers opened **by** Step 15 to date | **20** — `HDN-380` opened `HDN-BLK-025` (Medium, missing `<main>` landmarks) and `HDN-BLK-026` (Medium, accessible-form-primitive under-adoption) at the first round; Tier C review opened no new `HDN-BLK-` entry (its own 1 new finding, `ISS-2026-243`, is Low and registered in `KNOWN_ISSUES.md` only, matching this ledger's own convention for Low/informational findings) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged set from `HDN-378`'s own close, plus `HDN-BLK-009` **resolved at the first round** (the `e2e` harness's dev-mode hang, `ISS-2026-160`), unchanged by Tier C |
 | — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
 | — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024` (10, unchanged) |
-| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9 — `HDN-BLK-009` moved out of this list, resolved; `025`/`026` new this checkpoint) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9, unchanged from the first round) |
 | Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
-| **`HDN-380`'s own charter items** | Color-contrast token fixes (6 tokens, `app/globals.css`), `eslint-plugin-jsx-a11y` `recommended` enablement + 14 real errors fixed, 7 missing `role="alert"` additions, `HDN-BLK-009` root-caused and fixed (harness now 18/18 green), `ISS-2026-241`/`242` newly registered (too large to fix this checkpoint) |
+| **`HDN-380`'s own charter items — first round plus Tier C** | Color-contrast token fixes (6 tokens, `app/globals.css`), `eslint-plugin-jsx-a11y` `recommended` enablement + 14 real errors fixed, 13 total missing `role="alert"` additions (7 first round + 6 more found and fixed at Tier C, `vendor-detail-panel.tsx`), `HDN-BLK-009` root-caused and fixed at the first round (harness 18/18 green, unchanged by Tier C), `ISS-2026-241`/`242` registered at the first round (too large to fix this checkpoint), `ISS-2026-243` registered at Tier C (Low, `reuseExistingServer` stale-build footgun). **Tier C review found no Critical or High finding at either round** — unlike `HDN-378`'s and `HDN-379`'s own Tier C passes, no genuine bypass or structural weakening was found in this checkpoint's own headline fix; only small, mechanically-fixable gaps (see `HDN-380.md` §13) |
 
 `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
 `HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,

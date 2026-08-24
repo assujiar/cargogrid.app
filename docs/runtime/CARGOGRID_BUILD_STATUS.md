@@ -3,6 +3,47 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-012` — **Accessibility Audit (Prompt 380)** —
+`VERIFIED`, Tier C closed. Four independent parallel adversarial lenses ran
+against the committed first-round state (`4c5802f`). **No Critical or High
+finding at either round** — unlike `HDN-378`'s and `HDN-379`'s own Tier C
+passes, every attack held up (label/id collision risk; the
+`command-menu.tsx` autoFocus→useEffect fix live-tested with a real Playwright
+script against a real browser, confirmed redundant-but-harmless given
+Radix's own `FocusScope`; background-vs-foreground contrast interaction,
+computed real; the feared `next build` env-var-inlining gap checked directly
+against real build output and found not to apply to this codebase; the
+`role="alert"` conditional-mount pattern confirmed as this codebase's own
+pre-existing convention, not a checkpoint-introduced gap). The correctness
+lens independently re-derived all 6 first-round claims exactly, including a
+skeptical dev-vs-prod test (temporarily reverted `playwright.config.ts` to
+`next dev`, reproduced the original hang, restored the committed state
+exactly). **3 small, real gaps found and fixed same pass**: 6 more missing
+`role="alert"` instances in `vendor-detail-panel.tsx` (used `<span>` not
+`<p>`, missed by the first round's own narrower sweep regex — re-swept
+afterward, 463/463, 0 missing); a stale doc comment in
+`e2e/tenant-admin-portal.spec.ts` still describing the harness as `next dev`;
+`C-30`'s own evidence section missing a cross-reference to an earlier,
+unrecognized precedent already recorded at `HDN-370`. **1 more ledger
+inconsistency found and fixed**: `HARDENING_MATRIX.md`'s own top-level Gate
+index table still showed `NOT_RUN` for this lane (and, found stale
+pre-existing, for `HDN-378`/`HDN-379` too) despite each being
+`COMPLETED`/`VERIFIED` in its own detailed section — all 3 rows corrected
+together. **1 new Low finding registered**: `ISS-2026-243` (switching the
+e2e harness to a production build makes the pre-existing
+`reuseExistingServer` setting a real local-dev stale-build footgun, owner a
+dedicated future task). Independent full gate re-run after the fix pass:
+`typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5443/5443**
+(unchanged); `pnpm exec next build` clean; `pnpm run test:e2e` **18/18**
+(unchanged); `bash scripts/db-tests/run.sh` **229/229 files clean** (328
+migrations, unchanged — no schema change at either round). `CG-S15-HDN-012`
+is `VERIFIED`. `CG-S15-HDN-013` (`HDN-381`, Prompt 381, Browser and Device
+Compatibility) is now the next eligible prompt.
+`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it. Not
+a production/pilot/GA/market-ready claim (RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-380.md` §13; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-012` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-012` — **Accessibility Audit (Prompt 380)** —
 `COMPLETED`, first round only, Tier C review pending. Three independent parallel
 investigation lenses (live-authenticated axe-core feasibility; source-level
 static-evidence sweep; live axe-core run against reachable routes). 6
