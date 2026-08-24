@@ -3,42 +3,59 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-015` — **Backup and Restore
-(Prompt 383)** — `COMPLETED`, first round only, Tier C review pending. Three
-independent parallel investigation lenses (backup scope/feasibility
-inventory; a real, live restore drill executed against this sandbox's own
-disposable Postgres; RPO/RTO disclosure and runbook-authoring scope). No
-backup/restore runbook or tooling existed at all before this checkpoint.
-**Live-executed and measured**: schema/structure recovery via full
-329-migration replay, 3 runs, ~44-46s each, 0 errors, converging on 603
-tables/2,701 functions/448 RLS policies; row-level data recovery via a real
-`pg_dump`/`pg_restore` cycle on a seeded slice, ~11.6s total, 0 errors,
-object/row counts and job state (byte-for-byte) and RLS all verified
-identical pre/post-restore. **1 real footgun found live**: `pg_dump
---no-owner --no-privileges` silently strips the schema/table grants RLS sits
-on top of, producing a blanket permission denial instead of RLS-scoped
-results post-restore — documented as a "never do this" warning. **Teardown-
-batching constraint corrected**: the seeded "~1,400 objects" threshold is
-stale — real current counts (603 tables/2,149 indexes/4,636 constraints/
-2,701 functions/448 policies) are more than double that; a working batched
-strategy (order by ascending inbound-FK count, per-table auto-committed
-`DROP TABLE ... CASCADE`) found and timed live at 1.96s. `auth.users`/
-`users_pkey` collision reproduced exactly as documented. **1 new,
-non-obvious finding surfaced**: a database restore to a point predating an
-active legal hold silently defeats that hold, no compensating control
-today — registered `ISS-2026-254`, High. Storage/Auth-service/hosted-
-project restore untested, structurally infeasible in this sandbox,
-disclosed per Prompt 383 §22's own alternative flow — registered
-`ISS-2026-255`, High, `TRACKED_GAP`. `ISS-2026-256` (Medium) registered:
-RPO/RTO defaults never operationally confirmed on the real hosted project.
-Authored `docs/runbooks/database-restore.md` (new). No Critical finding
-anywhere. Independent full gate: `typecheck` 0; `lint` 0 errors/337
-warnings; `pnpm run test` **5443/5443**; `pnpm exec next build` clean;
-`bash scripts/db-tests/run.sh` **229/229 files clean** (329 migrations,
-unchanged — no schema change). `CG-S15-HDN-015` first round `COMPLETED`;
-Tier C review required before `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED`
+(Prompt 383)** — `VERIFIED`, Tier C closed. First round: three independent
+parallel investigation lenses (backup scope/feasibility inventory; a real,
+live restore drill executed against this sandbox's own disposable Postgres;
+RPO/RTO disclosure and runbook-authoring scope). No backup/restore runbook
+or tooling existed at all before this checkpoint. **Live-executed and
+measured**: schema/structure recovery via full 329-migration replay, 3
+runs, ~44-46s each, 0 errors, converging on 603 tables/2,701 functions/448
+RLS policies; row-level data recovery via a real `pg_dump`/`pg_restore`
+cycle on a seeded slice, ~11.6s total, 0 errors, object/row counts and job
+state (byte-for-byte) and RLS all verified identical pre/post-restore. 1
+real footgun found live: `pg_dump --no-owner --no-privileges` silently
+strips the schema/table grants RLS sits on top of. Teardown-batching
+constraint corrected: real current counts more than double the stale seeded
+threshold; a working batched strategy found and timed live at 1.96s.
+`auth.users`/`users_pkey` collision reproduced exactly as documented.
+Authored `docs/runbooks/database-restore.md` (new). **Tier C review (4
+independent adversarial lenses against commit `ef8aa1b`) found 5 real,
+live-reproduced gaps in the runbook's own safety claims and procedures —
+not application/database code, none of which changed this checkpoint — all
+corrected directly in the runbook itself, since a false safety claim or an
+incomplete procedure in a runbook is itself a live hazard, not merely a
+disclosure gap.** (1) A canary value in `credential_value`/
+`webhook_secret_value`/`secret_value` survived a full `pg_dump`/`pg_restore`
+cycle verbatim, directly contradicting the first round's own "secrets as
+references only" claim — registered `ISS-2026-257`/`HDN-BLK-031` (High), no
+encryption-at-rest exists for these columns unlike the already-proven
+`pgp_sym_encrypt()` vendor-financial pattern. (2) The security-state-
+reversion risk (`ISS-2026-254`, legal holds) widened with 2 more
+live-reproduced instances — revoked API keys/disabled webhook endpoints, and
+suspended user/membership access (arguably highest blast radius) — paired
+with `HDN-BLK-029`. (3) The RLS-preservation claim was incomplete —
+live-reproduced using the real `ISS-2026-171`/`173`-fixing migration that a
+version-skewed restore carries forward an already-patched vulnerability
+until a mandatory catch-up replay completes, now a required step. (4) A new
+target-role precondition — restoring into a target missing `anon`/
+`authenticated`/`service_role` silently drops every RLS policy while data
+restores cleanly. (5) An interrupted-teardown resume gap — resuming with
+only the documented final sweep reproduces the original out-of-shared-memory
+failure; the correct resume (re-run the full batch script) is now
+documented. `ISS-2026-254`/`255` (both High, first round) had no paired
+`HDN-BLK-` entry — the identical gap class found and fixed at `HDN-382`'s
+own Tier C, recurring one checkpoint later — `HDN-BLK-029`/`030`/`031`
+registered. `ISS-2026-255`/`HDN-BLK-030` (Storage/Auth/hosted-project
+restore untested) re-confirmed unchanged by 2 lenses; `ISS-2026-256`
+(RPO/RTO defaults unconfirmed) unchanged. Runbook bumped to template
+version `0.2.0`. Independent full gate re-run after the fix pass:
+`typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5443/5443**;
+`pnpm exec next build` clean; `bash scripts/db-tests/run.sh` **229/229
+files clean** (329 migrations, unchanged — no schema change at either
+round). `CG-S15-HDN-015` is `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED`
 is not set; only Prompt 389 may set it. Not a production/pilot/GA/market-
 ready claim (RPD-001/034/036). Full detail:
-`docs/build-log/full-system-hardening/HDN-383.md`; ledger record:
+`docs/build-log/full-system-hardening/HDN-383.md` §13; ledger record:
 `docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-015` row.)
 
 **Prior update:** 2026-08-24 (`CG-S15-HDN-014` — **Observability Audit

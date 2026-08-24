@@ -851,8 +851,87 @@ accepted exception at `HDN-387`/`389`.
 for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or
 explicitly ruled an accepted exception at `HDN-387`/`389`.
 
+### `HDN-BLK-029` — a database restore silently reverts a security/compliance decision (legal hold, credential revocation, or user/membership suspension), with no compensating control
+
+| Field | Value |
+|---|---|
+| **Title** | Legal holds (`app.legal_holds`), revoked API keys/disabled webhook endpoints (`app.api_keys.status`, `app.webhook_endpoints.status`), and suspended user/membership access (`app.users.status`, `app.principal_memberships.status`) are all ordinary application data stored in the same schema a database restore recovers — restoring to a point before any of these decisions was made silently reverts it |
+| **Found by** | `HDN-383` (Backup and Restore), live investigation (legal holds, first round); widened by the attack-surface adversarial testing lens (Tier C) with 2 additional live-reproduced instances (API key/webhook revocation; user/membership suspension) |
+| **Severity** | **High** — a real reversion-risk vector against an explicit legal/regulatory control (RPD-025) and ordinary access-control expectations (revocation, offboarding); no compensating control exists for any of the 3 instances |
+| **Owning phase** | Phase 9 (`app.legal_holds`, `app.api_keys`, `app.webhook_endpoints`, `app.principal_memberships` schemas); the gap itself is cross-cutting, exposed by Step 15's own backup/restore charter |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | All 3 categories are ordinary, live, reachable application state changed via real user/admin actions (placing a hold, revoking a key, suspending a member) |
+| **Reproduction** | Live-reproduced 3 times independently: (1) place a legal hold, restore a pre-hold backup — hold gone, `_is_under_legal_hold()` returns false; (2) revoke an API key, restore a pre-revocation backup — key returns `status='active'`; (3) suspend a user/membership, restore a pre-suspension backup — access returns `status='active'` |
+| **Blast radius** | Every tenant's legal holds, revoked credentials, and suspended accounts are all exposed to silent reversion by any restore to a point before the relevant decision — user/membership suspension is the highest-blast-radius instance since offboarding is the most common of the three events |
+| **Disposition** | **Registered, not fixed** — the correct fix (an enforced restore precondition, or a real platform-wide export/reconciliation tool) is a real design decision requiring product/legal/security input, outside `HDN-383`'s own documentation-only "backup/restore runbook" charter. Interim manual-vigilance precheck (with an `app.audit_logs` cross-check) documented in `docs/runbooks/database-restore.md` §3 item 2 |
+| **Required of the owning task** | Build a real, platform-wide, live-queried precheck/reconciliation tool covering legal holds, key/webhook revocation, and user/membership suspension; or enforce a enforced restore precondition against the earliest active instance of any of the three |
+| **Regression test** | An e2e/db-test proving the precheck tool (once built) correctly flags a restore that would revert each of the 3 categories |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-254` (`OPEN`, High, widened at Tier C) |
+
+---
+
+### `HDN-BLK-030` — real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in this sandbox
+
+| Field | Value |
+|---|---|
+| **Title** | No Storage-object restore, no Auth-service-level restore, and no real hosted-project PITR restore have ever been executed or evidenced anywhere in this repository — only database-schema and database-row-level restore against a disposable sandbox Postgres is proven |
+| **Found by** | `HDN-383` (Backup and Restore), live investigation (first round); re-confirmed independently by both the correctness re-derivation and schema-wide completeness sweep lenses (Tier C) |
+| **Severity** | **High**, `TRACKED_GAP` — Prompt 383 §22's own alternative flow explicitly anticipates and permits this exact outcome; a disclosed, expected environmental limitation, not a defect this checkpoint introduced or could have avoided |
+| **Owning phase** | Cross-cutting — the full Supabase stack (Auth service, Storage, PostgREST gateway) is not reachable in this sandbox, matching `HDN-380`'s own documented `RLIMIT_NOFILE`/`runc` container-runtime constraint (`ISS-2026-140`) |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | N/A — the gap is an absence of evidence, not a live attack surface |
+| **Reproduction** | A direct connection attempt to the local Supabase gateway port fails, confirmed live at this checkpoint; `HARDENING_MATRIX.md` §14 item 6 additionally forbids ever targeting the real hosted project's own data for a rehearsal |
+| **Blast radius** | `00_EXECUTION_INDEX.md` §8.1 items 6 ("Backup and restore tested") and 9 ("Runbooks available") are 2 of the ten non-negotiable Step 16 eligibility gates — this finding directly and correctly keeps Step 16 blocked pending real evidence a non-sandboxed environment must produce |
+| **Disposition** | **Registered, not fixed** — requires either a genuinely reachable full Supabase stack in a future environment, or a staging/production-adjacent environment with real Storage/Auth access |
+| **Required of the owning task** | Execute and evidence a real Storage-object restore, a real Auth-service-level restore, and a real hosted-project PITR restore, each recorded via `app.record_dr_restore_test` |
+| **Regression test** | N/A — this is an evidence gap, not a code defect |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-255` (`OPEN`, High, `TRACKED_GAP`) |
+
+---
+
+### `HDN-BLK-031` — a full database backup captures plaintext secret values with no encryption-at-rest, contradicting this repository's own documented export discipline
+
+| Field | Value |
+|---|---|
+| **Title** | `app.integration_connection_credentials.credential_value`, `app.third_party_provider_connections.webhook_secret_value`, and `app.webhook_endpoints.secret_value` are all stored retrievable/non-hashed by design; a full `pg_dump`/`pg_restore` operates at superuser level, bypasses RLS/grants, and captures these values verbatim — contradicting the runbook's original (now-corrected) claim that backup scope covers secrets "as references, never values" |
+| **Found by** | `HDN-383` (Backup and Restore) Tier C review, attack-surface adversarial testing lens, live-reproduced |
+| **Severity** | **High** — a real, live-proved confidentiality gap letting any party with backup-file access recover live, replayable webhook signing secrets and integration credentials for every tenant |
+| **Owning phase** | Phase 9 (the 3 secret-bearing schemas); the encryption-at-rest gap itself is unaddressed anywhere in this repository's history for these specific columns |
+| **Owning lane** | A dedicated future task |
+| **Reachability** | Reachable by anyone with access to a database backup file — the same access class this repository already treats as highly sensitive for other reasons (row-level data for every tenant) |
+| **Reproduction** | Live-proved: a canary value inserted into `secret_value` survived a full `pg_dump -Fc` → `pg_restore --data-only` cycle verbatim; `pg_restore` output shows `SET row_security = off;`, confirming RLS/grants are bypassed entirely at this level |
+| **Blast radius** | Every tenant's webhook signing secrets and integration credentials, for any party who obtains a backup file |
+| **Disposition** | **Registered, not fixed** — extending `pgp_sym_encrypt()`-style encryption-at-rest (the already-proven pattern used for vendor financial columns, `app.vendor_financial_encryption_key()`) to these 3 columns is a real application + migration change, outside `HDN-383`'s own documentation-only charter. Interim mitigation (treat backup files with secrets-equivalent handling discipline) documented in `docs/runbooks/database-restore.md` §2 and §5 |
+| **Required of the owning task** | Extend `app.vendor_financial_encryption_key()`/`pgp_sym_encrypt()` to `credential_value`/`webhook_secret_value`/`secret_value`, migrating every read/write call site accordingly |
+| **Regression test** | A db-test proving these 3 columns are unreadable as plaintext via a direct table `SELECT` post-migration, mirroring the vendor-financial-security test pattern |
+| **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
+| **`KNOWN_ISSUES`** | `ISS-2026-257` (`OPEN`, High) |
+
+---
+
+## Status as of `HDN-383` Tier C (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **25** — `HDN-383` opened `HDN-BLK-029` (High — security-state-reversion-on-restore, widened at Tier C to 3 instances), `HDN-BLK-030` (High, `TRACKED_GAP` — Storage/Auth/real-project restore untested), and `HDN-BLK-031` (High, Tier C — plaintext secret values captured in backups). `ISS-2026-256` (Medium, RPO/RTO defaults unconfirmed) remains `KNOWN_ISSUES.md`-only, matching this ledger's own convention for Medium/informational findings |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged from `HDN-382`'s own close |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`, `HDN-BLK-030`, `HDN-BLK-031` (15, 3 new this checkpoint) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9, unchanged) |
+| Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
+| **`HDN-383`'s own charter items — first round plus Tier C** | `docs/runbooks/database-restore.md` authored (first round) — live-timed schema and row-level restore drills against a disposable sandbox Postgres, the teardown-batching and `auth.users` collision constraints documented and worked around. `ISS-2026-254`/`255`/`256` registered at the first round. **Tier C review found 5 real, live-reproduced gaps in the first round's own procedure and safety claims** — a false "secrets as references only" claim (corrected; `ISS-2026-257`/`HDN-BLK-031` registered), the security-state-reversion risk widened from legal-holds-only to 2 more instances (`ISS-2026-254` widened, paired with `HDN-BLK-029`), an unqualified RLS-preservation claim now scoped to same-migration-version restores with mandatory catch-up replay, a new target-role precondition (missing roles silently drop all RLS policies), and an interrupted-teardown resume gap now documented. All 5 corrections were applied directly to the runbook itself, since a runbook containing a false safety claim or an incomplete procedure is itself a live hazard; see `HDN-383.md` §13 |
+
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
+`HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,
+`HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`, `HDN-BLK-029`,
+`HDN-BLK-030` and `HDN-BLK-031` are open release blockers for Step 16 per
+`00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly
+ruled an accepted exception at `HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-029` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-032` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.
