@@ -162,7 +162,7 @@ unrouted.
 | 9 | `HDN-377` | `CG-S15-HDN-009` | 377 | Storage and Signed URL Audit | File Security Assurance | `HDN-372` **`VERIFIED`** | **`VERIFIED`** — Tier C closed. 4 lenses, first round: 2 Critical + 1 High + 3 Medium defects fixed (`ISS-2026-216` storage_path exposure; `ISS-2026-217` dual legal-hold mechanisms; `ISS-2026-218` legal-hold DELETE backstop; `ISS-2026-219`/`220`/`221`). Tier C: 1 more Critical self-inflicted gap fixed in the first round's own trigger (`ISS-2026-226`), 1 more High fixed (`ISS-2026-227`), 1 Medium-High validation gap fixed (`ISS-2026-228`), 1 finding self-corrected before commit (`ISS-2026-231`), 6 findings registered (`ISS-2026-222` High + `229` Critical + `230` High, all owner `HDN-386`; `ISS-2026-223`/`225`(corrected High)/`232` owner `HDN-378`; `ISS-2026-224` Medium owner `HDN-387`); see `HDN-377.md` |
 | 10 | `HDN-378` | `CG-S15-HDN-010` | 378 | Security Hardening | Security Assurance | `HDN-372` **(hard)** `VERIFIED`, `HDN-373..377` **all `VERIFIED`** | `VERIFIED` — Tier C closed. `ISS-2026-150` (High, "must not be deferred again") wired across all 4 named functions, corrected `RESOLVED` → `PARTIALLY RESOLVED` at Tier C once `app.set_integration_connection_status`'s own independent bypass was found; a self-caught `CREATE OR REPLACE` overload defect corrected before commit (`C-29`); `pg_trgm`/`btree_gist` relocated (`postgis` found non-relocatable, `ISS-2026-234`); OWASP sweep fixed 1 finding (`ISS-2026-233`); `ISS-2026-168`/`169`/`232` fixed first round, `ISS-2026-168`/`232` each had a further Tier C-found bypass fixed same close (`C-27`); `ISS-2026-151`/`149`/`146` reconfirmed and deferred again; 4 runbooks authored. Tier C found and fixed 2 Critical + 1 High genuine bypass in this checkpoint's own work; registered 2 new findings with owner `HDN-386` (`ISS-2026-235`/`HDN-BLK-023` Critical, `ISS-2026-236`/`HDN-BLK-024` High, `C-28`) and 1 with owner `HDN-387` (`ISS-2026-237` Medium). See `HDN-378.md` §13 |
 | 11 | `HDN-379` | `CG-S15-HDN-011` | 379 | Performance and Scalability | Performance Assurance | `HDN-370` | `VERIFIED` — Tier C closed. `ISS-2026-145` (the O(n²) `rbac-enforcement.sql` scan) `RESOLVED`, matched-pair verified twice (300×-1200×+ speedup); a real structural weakening in the fix itself found and closed at Tier C; 892 unindexed-FK advisories categorized and deferred (`ISS-2026-239`); `auth_rls_initplan` regression guard re-verified clean; `ISS-2026-238` (Medium) expanded from 3 to 4 confirmed routes plus 5 new siblings found at Tier C. See `HDN-379.md` §13 |
-| 12 | `HDN-380` | `CG-S15-HDN-012` | 380 | Accessibility | UX Assurance | `HDN-370` | `READY` — `HDN-379` (`CG-S15-HDN-011`) now `VERIFIED` |
+| 12 | `HDN-380` | `CG-S15-HDN-012` | 380 | Accessibility | UX Assurance | `HDN-370` | `COMPLETED` — first round, Tier C pending. 6 color-contrast tokens fixed; `eslint-plugin-jsx-a11y` `recommended` wired repository-wide, 14 real errors fixed; 454/454 error displays now carry `role="alert"`; `HDN-BLK-009`/`ISS-2026-160` root-caused (Turbopack dev-mode hydration race, `C-30`) and `RESOLVED` (harness now 18/18); `ISS-2026-241`/`242` registered (landmark gap, form-primitive under-adoption). See `HDN-380.md` |
 | 13 | `HDN-381` | `CG-S15-HDN-013` | 381 | Browser and Device Compatibility | UX Assurance | `HDN-380` | `BLOCKED` |
 | 14 | `HDN-382` | `CG-S15-HDN-014` | 382 | Observability | Reliability Assurance | `HDN-370` | `BLOCKED` |
 | 15 | `HDN-383` | `CG-S15-HDN-015` | 383 | Backup and Restore | Reliability Assurance | `HDN-382` | `BLOCKED` |
@@ -173,7 +173,7 @@ unrouted.
 | 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `BLOCKED` |
 | 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `BLOCKED` |
 
-**Tally: 21 rows — 1 `COMPLETED` (kickoff), 9 `BLOCKED`, 1 `READY` (`HDN-380`),
+**Tally: 21 rows — 2 `COMPLETED` (kickoff, `HDN-380`), 9 `BLOCKED`, 0 `READY`,
 10 `VERIFIED` (`HDN-370`, `HDN-371`, `HDN-372`, `HDN-373`, `HDN-374`, `HDN-375`, `HDN-376`, `HDN-377`, `HDN-378`, `HDN-379`).**
 
 > **`HDN-371` is `VERIFIED`.** Every chain named in its charter is reconciled against live code
@@ -551,44 +551,57 @@ to `VERIFIED`.
 | 2026-08-24 | `HDN-378` | `CG-S15-HDN-010` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-378.md` §13 | **`VERIFIED`** — Tier C closed. Four independent parallel adversarial lenses (correctness re-derivation; schema-wide completeness sweep; ledger/documentation consistency; attack-surface adversarial testing) ran against the committed first-round state (`ca7f300`). Lens 1 independently re-derived all 7 first-round claims and found no defect; full gates re-run clean. Lens 3 found and this checkpoint corrected 5 real documentation miscounts in its own first-round propagation (commit `3fbf665`, before this close): an entry-gate unit-test count that contradicted its own close-gate figure, a stale "40+ call sites" left beside its own "43" correction, a "9 TS files changed" undercount (real: 16) propagated into 5 documents, a self-contradicting db-test file count, and a "26 vs. actual 27" ESLint-importer count propagated into 7 documents. **2 Critical + 1 High genuine bypass found in this checkpoint's own first-round work, all fixed before close** (`supabase/migrations/20260815400000_harden_ip_restriction_tierc_fixes.sql`): `ISS-2026-232`'s own column-privilege fix was defeated by a second, more fundamental gap — all 3 "revoke" RPCs returned the full composite row including `token_hash` via `RETURNING`/return value, not subject to column-level `SELECT` privileges at all (taxonomy class `C-27`, new); `ISS-2026-168`'s ESLint fix only inspected static `import`/`export` declarations, evaded by `require()`/dynamic `import()`; the schema-wide sweep independently found `app.validate_webhook_url` shares `ISS-2026-233`'s own control-character gap (not exploitable end-to-end, fixed anyway). **The checkpoint's own headline claim required correction**: attack-surface testing found `app.set_integration_connection_status` — the shared, generic primitive `activate_enterprise_idp_connection` delegates to — independently bypasses the IP-restriction fix, the pre-existing IAE-026 lockout guard, and step-up-MFA simultaneously (live-forced end to end); `ISS-2026-150` corrected `RESOLVED` → `PARTIALLY RESOLVED`, registered as `ISS-2026-235`/`HDN-BLK-023` (Critical, owner `HDN-386`, taxonomy class `C-28`, new) — a design decision touching a heavily-reused shared primitive, exceeding what a Tier C pass should rush. The same sweep independently found 3 of `app.is_high_risk_action`'s own 7 hardcoded tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve` — 61 real functions) never received step-up-MFA or IP-restriction wiring across the entire prior lineage, registered as `ISS-2026-236`/`HDN-BLK-024` (High, owner `HDN-386`). A pre-existing (two-weeks-prior, unrelated) `select("*")`-vs-column-restriction defect found in `automation-rule.ts`, registered as `ISS-2026-237` (Medium, owner `HDN-387`), mirroring `HDN-377`'s own `ISS-2026-224` precedent. Also corrected: `ISS-2026-150`'s own mis-cited taxonomy class (`C-24`, wrong — the real, new class for the earlier `CREATE OR REPLACE`-overload self-correction is `C-29`). 3 new taxonomy classes added per §6's own mandate: `C-27`, `C-28`, `C-29`. Independent full gate re-run after the fix pass: `typecheck` 0, `lint` 0 errors/337 warnings, 5443/5443 unit tests, db-tests **229/229 files clean** (328 migrations). One more additive migration (`20260815400000`). **`CG-S15-HDN-010` is `VERIFIED`.** `CG-S15-HDN-011` (`HDN-379`, Prompt 379, Performance and Scalability) is now the next eligible prompt. Full disposition: `HDN-378.md` §13 |
 | 2026-08-24 | `HDN-379` | `CG-S15-HDN-011` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-379.md` | **`COMPLETED`** — first round only, Tier C review pending. Four independent parallel investigation lenses (`rbac-enforcement.sql` ATW-032 O(n²) scan performance; 892 unindexed-FK triage; load/performance-test evidence; `auth_rls_initplan` regression guard + API-boundedness/cross-tenant-cache verification), each required to live-force its own findings. **`ISS-2026-145` (the O(n²) scan, matrix §10 item 1) is `RESOLVED`**: the `edge` CTE rewritten from an `fn c join fn e` self-join to a one-pass `regexp_matches()` extraction, mirroring this same file's own sibling ATW-032/`ISS-2026-033` pattern unmodified — only edge construction changed, the `covered` recursive CTE's own transitive-closure walk untouched. Verified with a same-schema matched-pair run (original vs. rewrite, one transaction, one disposable database, no rebuild in between): original 692,092.8ms (~11.5 min), rewrite 556.4ms, verdicts byte-identical, **1244× speedup**. Full 229-file suite re-run clean. **892 `unindexed_foreign_keys` advisories categorized and deferred** (`ISS-2026-239`): a 4-bucket decision framework built from a 24-FK sample across 7 domains — zero high-confidence "index now" candidates (every hot column already has a serving composite index; cold candidates are write-only/audit-lineage columns where speculative indexing would be pure write-amplification on high-write-volume tables), deferred pending real production query telemetry that does not exist anywhere in this system yet. **`auth_rls_initplan` regression guard re-verified clean** (582 policy statements, 235 call sites, zero regression since the original 65-migration fix); 1 informational blind spot documented (`ISS-2026-240`) — a `default auth.uid()` helper-function pattern, 72 occurrences across 35 migrations, invisible to text-grep-based tooling by construction, the repository's own convention since day one, not a regression. **1 genuine new finding**: 3 production routes (Commercial accounts/quotations/contracts) load an entire tenant-wide dataset to the browser with zero pagination, live-verified via real `EXPLAIN (ANALYZE, BUFFERS)` evidence at a seeded 25,000/10,000-row volume — self-disclosed only in a code comment before this checkpoint, never promoted to `KNOWN_ISSUES.md` (`ISS-2026-238`, Medium, ~10 lower-severity siblings named). Existing `scripts/load-tests/` harness (Phase 5 scope) re-confirmed live and green, 8/8 scenarios, real p50/p95/p99 evidence; new `EXPLAIN` evidence gathered for 9 endpoints across 5 domains. `ISS-2026-141`/`148`'s own overall evidence-gap ruling reconfirmed unchanged. No unbounded `/api/v1`/webhook response, no cross-tenant cache key gap, no queue-backpressure gap found — all verified clean by 2 independent lenses. **No Critical or High finding anywhere.** Full gate: `typecheck` 0, `lint` 0 errors/337 warnings, `pnpm run test` 5443/5443 (unchanged), db-tests **229/229 files clean** (328 migrations, unchanged). Zero migrations, one test-infrastructure file changed (`scripts/db-tests/rbac-enforcement.sql`). Tier C review (§13) required before `VERIFIED`. Full disposition: `HDN-379.md` |
 | 2026-08-24 | `HDN-379` | `CG-S15-HDN-011` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-379.md` §13 | **`VERIFIED`** — Tier C closed. Four independent parallel adversarial lenses (correctness re-derivation; schema-wide completeness sweep; ledger/documentation consistency; attack-surface adversarial testing) ran against the committed first-round state (`57ce9fb`). **Lens 4 (attack-surface) found and this checkpoint fixed a real structural weakening in the checkpoint's own headline fix**: the first-draft `edge` CTE rewrite dropped a `\m` word-boundary anchor and a real join-against-`fn` requirement the original self-join carried "for free" — live-forced 876 spurious edges on the real 2,700-function schema (zero colliding with any real function name, so no wrong verdict today, but a future collision could have silently defeated the guard); fixed by restoring both properties (`and m[1] in (select proname from fn)`, a hash semi-join, not a new cross join), re-timed at **1.66 seconds**, both gaps confirmed closed via live reproduction with 3 scratch functions. **Lens 1 (correctness re-derivation) found the first round's own timing precision did not reproduce**: an independent same-schema matched-pair re-measurement got 212,105.6ms/≈313× rather than 692,092.8ms/1244× — both real, honest measurements, the ~3× spread reflects real sandbox contention variance at measurement time, not a methodology flaw; cite "300×-1200×+" for this fix going forward. Also found `ISS-2026-239`'s claim that no RPC filters through `audit_logs.actor_auth_user_id` was factually wrong — `app.search_audit_logs` does (zero live UI callers today, so the "don't index yet" conclusion is unchanged, the evidence was fixed). **Lens 2 (schema-wide completeness sweep) found 5 new unbounded-dataset instances** `ISS-2026-238` missed, most notably a 4-list unbounded fleet-assets page (`listVehicleOperationalProfiles`/`listDriverOperationalProfiles`/`listGpsDevices`/`listSimCards`); everything else (more O(n²) self-joins, an independent unindexed-FK sample, other RLS-performance patterns, cache/backpressure) came back clean. **Lens 3 (ledger/documentation consistency) found and this checkpoint corrected 6 real documentation miscounts**: `auth.*()` call-site count (236→235), `default auth.uid()` pattern count (73/~40→72/35), a stale "~2,900 functions" figure left beside its own "2,700" correction, 2 never-updated `BLOCKER_LEDGER.md` entries (`HDN-BLK-005`/`006`, both resolved/ruled on this checkpoint), a misleading "1,766 FKs across 424 tables" phrasing (424 is the unindexed-FK-only table count; the full population spans ~570 tables), and a minor line-citation drift. **`ISS-2026-238` corrected and expanded**: `listFilesForTenant` reclassified Medium (a polymorphic, transactional-volume attachment table, not the bounded config table it was originally characterized as) — now 4 confirmed Medium routes, plus 5 new Lens-2-found siblings folded in. No Critical or High finding at either round. Independent full gate re-run after the fix pass: `typecheck` 0, `lint` 0 errors/337 warnings, `pnpm run test` 5443/5443, db-tests **229/229 files clean** (328 migrations, unchanged — zero migrations at either round). **`CG-S15-HDN-011` is `VERIFIED`.** `CG-S15-HDN-012` (`HDN-380`, Prompt 380, Accessibility) is now the next eligible prompt. Full disposition: `HDN-379.md` §13 |
+| 2026-08-24 | `HDN-380` | `CG-S15-HDN-012` | `claude/step-15-hdn-369-kickoff-w6qren` | see `HDN-380.md` | **`COMPLETED`** — first round only, Tier C review pending. Three independent parallel investigation lenses (live-authenticated axe-core feasibility; source-level static-evidence sweep; live axe-core run against reachable routes). 6 color-contrast token failures fixed (`app/globals.css`, WCAG-computed replacements — `--color-primary`/`-hover`, `--color-neutral-400`/`-500`, `--color-success`, `--color-warning`), using the authority `DESIGN_SYSTEM.md` §2.1's own disclosed-pending-validation status provides. `eslint-plugin-jsx-a11y`'s `recommended` preset wired repository-wide (`eslint.config.js`, referencing the plugin `next`'s own config already registers to avoid a flat-config plugin-redefinition collision), surfacing exactly 14 real errors app-wide, all fixed across 5 files (13 `label-has-associated-control`, 1 `no-autofocus`). 454/454 inline error displays app-wide now carry `role="alert"` (7 were missing it, one fix also correcting a dead `text-danger-600` Tailwind class with no backing token). **`HDN-BLK-009`/`ISS-2026-160` root-caused precisely and `RESOLVED`**: 5 `e2e/vendor-registration.spec.ts` failures were live-forced via a standalone reproduction script to a Turbopack dev-mode hydration-timing race (new taxonomy class `C-30`), not an application defect — the identical click resolved in under 500ms against a production build. Fixed at the root by switching `playwright.config.ts`'s `webServer.command` from `next dev` to `next build && next start` (timeout raised 60s→180s); full suite now **18/18**, zero 500s, zero hangs, up from 13 passed/5 failed — directly serves this lane's own "`next build` required from this lane onward" instruction. `ISS-2026-140`/`153` tracked gap widened with a precise `RLIMIT_NOFILE`/`runc` container-runtime root cause (Postgres boots cleanly in this sandbox; every non-Postgres Supabase service container does not) rather than left as the vaguer inherited "no live sign-in flow" description. 2 large architectural gaps found and registered, not fixed (out of this checkpoint's own "5-15 files, bounded repair" charter): `ISS-2026-241` (36 of 38 tenant modules have no `<main>` landmark, independently re-derived directly against the file tree — 38 module directories, only `admin`/`commercial` have one), `ISS-2026-242` (accessible form primitives `FormField`/validation-message adopted in only ~2% of the 200 files that render a form; `aria-invalid` in only 5 files app-wide). A prior investigation's "565 unlabeled form controls across 101 files" figure did not reproduce under the authoritative rule for that exact check (`jsx-a11y/label-has-associated-control`, 0 errors app-wide after this checkpoint's own 14 fixes) — a broader trial with the wrong rule (`control-has-associated-label`, which does not recognize `htmlFor`/`id` pairing) produced 1040 false-positive-heavy flags instead; corrected here rather than silently propagated. No Critical or High finding anywhere. Independent full gate: `typecheck` 0, `lint` 0 errors/337 warnings, `pnpm run test` **5443/5443**, `pnpm exec next build` clean, `pnpm run test:e2e` **18/18**, `bash scripts/db-tests/run.sh` **229/229 `ALL PASSED`** (328 migrations, unchanged — no schema change). Taxonomy: `C-30` added (dev-mode-only e2e harness hang masquerading as an application defect). **`CG-S15-HDN-012` first round `COMPLETED`.** Tier C review (§13) required before `VERIFIED`. Full disposition: `HDN-380.md` |
 
 ---
 
 ## 16. Next eligible prompt
 
-> ### `HDN-380` (Accessibility, `CG-S15-HDN-012`) is next eligible
+> ### `HDN-380` (Accessibility, `CG-S15-HDN-012`) Tier C review is next
 >
-> - **`HDN-379` (Performance and Scalability) is `VERIFIED`.** First round: the
->   `edge` CTE inside the ATW-032/`ISS-2026-032` block rewritten from an
->   `fn c join fn e` self-join to a one-pass `regexp_matches()` extraction,
->   mirroring this same file's own sibling ATW-032/`ISS-2026-033` pattern —
->   `ISS-2026-145` `RESOLVED`, verified with a same-schema matched-pair run, full
->   229-file suite re-run clean. 892 `unindexed_foreign_keys` advisories
->   categorized into a 4-bucket decision framework, zero high-confidence "index
->   now" candidates, deferred pending real production query telemetry
->   (`ISS-2026-239`). `auth_rls_initplan` regression guard re-verified clean; 1
->   informational blind spot documented (`ISS-2026-240`). 1 genuine new finding:
->   3 production routes load unbounded tenant datasets (`ISS-2026-238`, Medium).
->   **Tier C review found and fixed a real structural weakening in this
->   checkpoint's own headline fix**: the first-draft `edge` CTE rewrite dropped a
->   word-boundary anchor and a real join-against-`fn` requirement the original
->   self-join carried "for free" — live-forced 876 spurious edges on the real
->   schema (zero colliding with a real function name, so no wrong verdict today,
->   but a future collision could have silently defeated the guard); fixed by
->   restoring both properties, re-timed at 1.66 seconds, both gaps confirmed
->   closed via live reproduction. **Timing-precision corrected**: an independent
->   re-measurement got 212,105.6ms/≈313× rather than the first round's own
->   692,092.8ms/1244× — both real, the ~3× spread reflects sandbox contention
->   variance, cite "300×-1200×+" going forward, not a fixed multiplier.
->   `ISS-2026-239` corrected (`audit_logs.actor_auth_user_id` is in fact filtered
->   by a real, granted, zero-live-caller RPC). `ISS-2026-238` expanded from 3 to 4
->   confirmed Medium routes (`listFilesForTenant` reclassified) plus 5 new
->   siblings found by the completeness sweep. 6 real documentation miscounts
->   corrected. No Critical or High finding anywhere, at either round. Independent
->   full gate re-run after the Tier C fix pass: `typecheck` 0, `lint` 0/337
->   warnings, 5443/5443 unit tests, 229/229 db-tests (328 migrations, unchanged —
->   zero migrations at either round). Full disposition: `HDN-379.md` §13.
-> - **`CG-S15-HDN-012` (`HDN-380`, Prompt 380, Accessibility) may now begin.**
+> - **`HDN-380` first round is `COMPLETED`.** 6 color-contrast token failures
+>   fixed (`app/globals.css`, WCAG-computed replacements) using the authority
+>   `DESIGN_SYSTEM.md` §2.1's own disclosed-pending-validation status provides —
+>   `--color-primary`/`-hover`, `--color-neutral-400`/`-500`, `--color-success`,
+>   `--color-warning`. `eslint-plugin-jsx-a11y`'s `recommended` preset wired
+>   repository-wide (`eslint.config.js`, referencing the plugin `next`'s own
+>   config already registers rather than re-registering it), surfacing exactly
+>   14 real errors app-wide, all fixed across 5 files (13
+>   `label-has-associated-control`, 1 `no-autofocus`). 454/454 inline error
+>   displays app-wide now carry `role="alert"` (7 were missing it). **`HDN-BLK-
+>   009`/`ISS-2026-160` root-caused precisely and `RESOLVED`**: 5
+>   `e2e/vendor-registration.spec.ts` failures were live-forced to a Turbopack
+>   dev-mode hydration-timing race (new taxonomy class `C-30`), not an
+>   application defect — the identical click resolved instantly under a
+>   production build. Fixed at the root by switching
+>   `playwright.config.ts`'s `webServer.command` from `next dev` to
+>   `next build && next start`; the full suite now passes **18/18**, zero 500s,
+>   zero hangs (up from 13 passed/5 failed). `ISS-2026-140`/`153` widened with a
+>   precise `RLIMIT_NOFILE`/`runc` container-runtime root cause (Postgres boots
+>   cleanly in this sandbox; every non-Postgres Supabase service container does
+>   not). 2 large architectural gaps found and registered, not fixed (out of
+>   this checkpoint's own "5-15 files, bounded repair" charter):
+>   `ISS-2026-241` (36 of 38 tenant modules have no `<main>` landmark,
+>   independently re-derived against the file tree), `ISS-2026-242`
+>   (accessible form primitives adopted in only ~2% of the 200 files that
+>   render a form). A prior "565 unlabeled form controls" figure did not
+>   reproduce under the authoritative rule for that exact check (0 errors
+>   app-wide after this checkpoint's fixes) — corrected, not silently dropped.
+>   No Critical or High finding. Independent full gate: `typecheck` 0, `lint`
+>   0/337 warnings, 5443/5443 unit tests, `next build` clean, `test:e2e` 18/18,
+>   229/229 db-tests (328 migrations, unchanged — no schema change). Full
+>   disposition: `HDN-380.md`.
+> - **Tier C review of `HDN-380` (4 independent adversarial lenses) is next,
+>   against this committed first-round state, before `CG-S15-HDN-013`
+>   (`HDN-381`, Browser/Device Compatibility) may begin.**
+> - **Prior checkpoint summary (`HDN-379`, Performance and Scalability) — is
+>   `VERIFIED`.** `ISS-2026-145` (the O(n²) `rbac-enforcement.sql` scan)
+>   `RESOLVED`, matched-pair verified twice (300×-1200×+ speedup); a real
+>   structural weakening in the fix itself found and closed at Tier C; 892
+>   unindexed-FK advisories categorized and deferred (`ISS-2026-239`);
+>   `auth_rls_initplan` regression guard re-verified clean; `ISS-2026-238`
+>   (Medium) expanded from 3 to 4 confirmed routes plus 5 new siblings found at
+>   Tier C. Full disposition: `HDN-379.md` §13.
 > - **Prior checkpoint summary (`HDN-378`, Security Hardening) — is `VERIFIED`.**
 >   First round wired
 >   `app.assert_ip_allowed`/`app.has_active_ip_allowlist_bypass` into all 4 named
@@ -632,11 +645,20 @@ to `VERIFIED`.
 **Nothing after `HDN-380` may begin until `HDN-380` is `VERIFIED`.**
 `FULL_SYSTEM_HARDENING_VERIFIED` is **not** set and may only ever be set by Prompt 389.
 
-> **Standing warning for `HDN-386` and every lane before it:** CI is currently red on `main`
-> on all three jobs (`HDN-BLK-007/008/009`). **No Step 15 lane may cite CI as evidence for any
-> gate until those are resolved.** Local runs remain valid evidence and are what this range
-> has been using — but the two are not interchangeable, and this lane proved they can be
-> exact inverses of each other.
+> **Standing warning for `HDN-386` and every lane before it, updated at `HDN-380`:** CI was
+> red on `main` on all three jobs (`HDN-BLK-007/008/009`) as of `HDN-370`. **`HDN-BLK-009`
+> is `RESOLVED` as of `HDN-380`** — the `e2e` job's own failure mode was root-caused to a
+> Turbopack dev-mode hydration-timing race (`ISS-2026-160`, `C-30`), not the CI job's missing
+> `env:` block as originally described, and fixed by pointing `playwright.config.ts`'s
+> `webServer` at a production build; since CI runs the identical `pnpm run test:e2e` command
+> against the identical config, this job should go green on `main` once this checkpoint's
+> commit lands and CI actually re-runs against it — **not yet independently confirmed against
+> a real CI run**, since this lane has no CI access, only local reproduction. `HDN-BLK-007`
+> (governance-step skip cascade) and `HDN-BLK-008` (`db` job's cross-container
+> `pg_read_file()`) remain open and unresolved. **No Step 15 lane may cite CI as evidence for
+> the `db`/`quality` jobs' own gates until those two are resolved**, and no lane should assume
+> the `e2e` job is actually green in CI without checking — local runs remain the valid
+> evidence this range has been using throughout.
 >
 > **Amendment, Tier C review of `HDN-370` — this is more than a standing note, it is a real
 > ordering problem, surfaced by the cross-prompt integration lens and not fully resolved by

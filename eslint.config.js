@@ -213,6 +213,99 @@ const serviceRoleImportGuard = {
   },
 };
 
+// HDN-380 (Prompt 380, CG-S15-HDN-012), docs/standards/DESIGN_SYSTEM.md §5's WCAG 2.2
+// AA acceptance criteria: `eslint-config-next`'s own bundled config (object 0 of the
+// `next` array below) already registers the `jsx-a11y` plugin and turns on a small
+// subset of its rules at `"warn"` (alt-text, aria-props/proptypes, aria-unsupported-
+// elements, role-has-required/supports-aria-props) -- it never enables the plugin's
+// own `recommended` preset, which is what actually catches unlabeled form controls
+// (`label-has-associated-control`) and other real defects. This rule set below
+// references the jsx-a11y rule IDs directly (the literal `eslint-plugin-jsx-a11y`
+// `flatConfigs.recommended.rules` object, `eslint-plugin-jsx-a11y@6.10.2`) rather than
+// re-importing and re-registering the plugin -- a second `plugins: { "jsx-a11y": ... }`
+// entry for the same file scope is a flat-config "cannot redefine plugin" error, so
+// this deliberately piggybacks on the registration `next` already performs. Verified
+// with a throwaway trial config before adopting: enabling the full recommended preset
+// surfaces exactly 14 real, fixable errors app-wide (13 `label-has-associated-control`
+// + 1 `no-autofocus`, across 5 files) -- not an unbounded surface, so raising these
+// from "off"/absent to the preset's own severities (mostly "error", a few kept "off"
+// upstream -- e.g. `control-has-associated-label`, `label-has-for` -- are left as-is
+// rather than second-guessed) is a bounded, this-checkpoint-sized fix. Scoped to
+// `.tsx`/`.jsx` only, since jsx-a11y rules operate on JSX nodes and have nothing to
+// check in plain `.ts`.
+const a11yRules = {
+  files: ["**/*.tsx", "**/*.jsx"],
+  rules: {
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-ambiguous-text": "off",
+    "jsx-a11y/anchor-has-content": "error",
+    "jsx-a11y/anchor-is-valid": "error",
+    "jsx-a11y/aria-activedescendant-has-tabindex": "error",
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/aria-proptypes": "error",
+    "jsx-a11y/aria-role": "error",
+    "jsx-a11y/aria-unsupported-elements": "error",
+    "jsx-a11y/autocomplete-valid": "error",
+    "jsx-a11y/click-events-have-key-events": "error",
+    "jsx-a11y/control-has-associated-label": [
+      "off",
+      {
+        ignoreElements: ["audio", "canvas", "embed", "input", "textarea", "tr", "video"],
+        ignoreRoles: ["grid", "listbox", "menu", "menubar", "radiogroup", "row", "tablist", "toolbar", "tree", "treegrid"],
+        includeRoles: ["alert", "dialog"],
+      },
+    ],
+    "jsx-a11y/heading-has-content": "error",
+    "jsx-a11y/html-has-lang": "error",
+    "jsx-a11y/iframe-has-title": "error",
+    "jsx-a11y/img-redundant-alt": "error",
+    "jsx-a11y/interactive-supports-focus": [
+      "error",
+      { tabbable: ["button", "checkbox", "link", "searchbox", "spinbutton", "switch", "textbox"] },
+    ],
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/label-has-for": "off",
+    "jsx-a11y/media-has-caption": "error",
+    "jsx-a11y/mouse-events-have-key-events": "error",
+    "jsx-a11y/no-access-key": "error",
+    "jsx-a11y/no-autofocus": "error",
+    "jsx-a11y/no-distracting-elements": "error",
+    "jsx-a11y/no-interactive-element-to-noninteractive-role": ["error", { tr: ["none", "presentation"], canvas: ["img"] }],
+    "jsx-a11y/no-noninteractive-element-interactions": [
+      "error",
+      {
+        handlers: ["onClick", "onError", "onLoad", "onMouseDown", "onMouseUp", "onKeyPress", "onKeyDown", "onKeyUp"],
+        alert: ["onKeyUp", "onKeyDown", "onKeyPress"],
+        body: ["onError", "onLoad"],
+        dialog: ["onKeyUp", "onKeyDown", "onKeyPress"],
+        iframe: ["onError", "onLoad"],
+        img: ["onError", "onLoad"],
+      },
+    ],
+    "jsx-a11y/no-noninteractive-element-to-interactive-role": [
+      "error",
+      {
+        ul: ["listbox", "menu", "menubar", "radiogroup", "tablist", "tree", "treegrid"],
+        ol: ["listbox", "menu", "menubar", "radiogroup", "tablist", "tree", "treegrid"],
+        li: ["menuitem", "menuitemradio", "menuitemcheckbox", "option", "row", "tab", "treeitem"],
+        table: ["grid"],
+        td: ["gridcell"],
+        fieldset: ["radiogroup", "presentation"],
+      },
+    ],
+    "jsx-a11y/no-noninteractive-tabindex": ["error", { tags: [], roles: ["tabpanel"], allowExpressionValues: true }],
+    "jsx-a11y/no-redundant-roles": "error",
+    "jsx-a11y/no-static-element-interactions": [
+      "error",
+      { allowExpressionValues: true, handlers: ["onClick", "onMouseDown", "onMouseUp", "onKeyPress", "onKeyDown", "onKeyUp"] },
+    ],
+    "jsx-a11y/role-has-required-aria-props": "error",
+    "jsx-a11y/role-supports-aria-props": "error",
+    "jsx-a11y/scope": "error",
+    "jsx-a11y/tabindex-no-positive": "error",
+  },
+};
+
 // PLT-135, CG-S6-PLT-032: `app/`'s first real pages mean `.next/` (the build output
 // directory) now actually gets created locally/in CI -- `eslint-config-next`'s bundled
 // shareable config (consumed directly here as a flat-config array, not through the
@@ -228,6 +321,6 @@ const ignores = {
   ignores: [".next/**", "playwright-report/**", "test-results/**", "services/**"],
 };
 
-const config = [ignores, ...next, boundaryRules, bannedPatterns, chartGovernancePatterns, serviceRoleImportGuard];
+const config = [ignores, ...next, boundaryRules, bannedPatterns, chartGovernancePatterns, serviceRoleImportGuard, a11yRules];
 
 export default config;

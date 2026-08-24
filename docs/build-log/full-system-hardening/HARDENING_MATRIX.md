@@ -761,6 +761,30 @@ release gate.
 
 `next build` is required from this lane onward.
 
+> **Result (`HDN-380` first round, `COMPLETED`, Tier C pending):** `HDN-BLK-009` was
+> checked per this section's own instruction and found stale — `playwright.config.ts`'s
+> own `webServer.env` block (added at `PLT-135`, after `HDN-370`) already made the
+> "unset env var" premise moot. The real remaining symptom (5 `e2e/vendor-registration.spec.ts`
+> failures) was live-forced to a Turbopack dev-mode hydration-timing race, not an
+> application defect (new taxonomy class `C-30`) — fixed at the root by switching
+> `webServer.command` to a production build (`next build && next start`, satisfying this
+> section's own "`next build` is required from this lane onward" instruction directly).
+> Full suite now 18/18, zero 500s. `ISS-2026-140`/`153`'s own root cause widened with a
+> precise `RLIMIT_NOFILE`/`runc` container-runtime finding (Postgres boots cleanly in
+> this sandbox; every non-Postgres Supabase service container does not) rather than left
+> as the vaguer "no live sign-in flow" — the underlying constraint is unchanged and still
+> not this lane's to fix. 6 real color-contrast token failures fixed (`app/globals.css`,
+> WCAG-computed replacements) using the authority `DESIGN_SYSTEM.md` §2.1's own
+> disclosed-pending-validation status provides. `eslint-plugin-jsx-a11y`'s `recommended`
+> preset wired repository-wide (14 real errors found and fixed across 5 files); 454/454
+> inline error displays app-wide now carry `role="alert"` (7 were missing it). 2 large
+> architectural gaps found and registered, not fixed (out of this checkpoint's own
+> bounded charter): `ISS-2026-241` (36 of 38 tenant modules have no `<main>` landmark),
+> `ISS-2026-242` (accessible form primitives adopted in only ~2% of the 200 files that
+> render a form). A prior "565 unlabeled form controls" figure did not reproduce under
+> the authoritative rule for that exact check (now 0 errors app-wide) — corrected, not
+> silently dropped. Full disposition: `HDN-380.md`.
+
 ---
 
 ## 12. Browser / device compatibility — `HDN-381`

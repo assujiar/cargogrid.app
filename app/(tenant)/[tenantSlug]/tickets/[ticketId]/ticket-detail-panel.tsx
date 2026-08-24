@@ -128,6 +128,7 @@ function ReplyForm({ isStaffViewer, replyAction }: { isStaffViewer: boolean; rep
       <textarea name="body" required minLength={1} rows={3} className="w-full rounded border border-neutral-300 p-2 text-sm" placeholder="Write a reply…" />
       {isStaffViewer ? (
         <label className="flex items-center gap-2 text-xs text-neutral-600">
+          Visibility
           <select name="visibility" defaultValue="public" className="rounded border border-neutral-300 p-1.5 text-xs">
             <option value="public">Reply (visible to requester)</option>
             <option value="internal">Internal note (staff only)</option>

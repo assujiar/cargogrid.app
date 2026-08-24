@@ -2,7 +2,43 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-011` — **Performance and Scalability
+**Updated:** 2026-08-24 (`CG-S15-HDN-012` — **Accessibility Audit (Prompt 380)** —
+`COMPLETED`, first round only, Tier C review pending. Three independent parallel
+investigation lenses (live-authenticated axe-core feasibility; source-level
+static-evidence sweep; live axe-core run against reachable routes). 6
+color-contrast token failures fixed (`app/globals.css`, WCAG-computed
+replacements — `--color-primary`/`-hover`, `--color-neutral-400`/`-500`,
+`--color-success`, `--color-warning`), using the authority `DESIGN_SYSTEM.md`
+§2.1's own disclosed-pending-validation status provides.
+`eslint-plugin-jsx-a11y`'s `recommended` preset wired repository-wide, surfacing
+14 real errors app-wide, all fixed across 5 files (13
+`label-has-associated-control`, 1 `no-autofocus`). 454/454 inline error
+displays app-wide now carry `role="alert"` (7 were missing it). **`HDN-BLK-009`/
+`ISS-2026-160` root-caused precisely and `RESOLVED`**: 5
+`e2e/vendor-registration.spec.ts` failures were live-forced to a Turbopack
+dev-mode hydration-timing race (new taxonomy class `C-30`), not an application
+defect — fixed at the root by switching `playwright.config.ts`'s
+`webServer.command` from `next dev` to a production build; full suite now
+**18/18**, zero 500s, zero hangs, up from 13 passed/5 failed. `ISS-2026-140`/
+`153` tracked gap widened with a precise `RLIMIT_NOFILE`/`runc`
+container-runtime root cause. 2 large architectural gaps found and registered,
+not fixed (out of this checkpoint's own bounded charter): `ISS-2026-241` (36 of
+38 tenant modules have no `<main>` landmark), `ISS-2026-242` (accessible form
+primitives adopted in only ~2% of 200 form-bearing files). A prior "565
+unlabeled form controls" figure did not reproduce under the authoritative rule
+for that exact check (0 errors app-wide after this checkpoint's own fixes) —
+corrected, not silently dropped. **No Critical or High finding.** Independent
+full gate: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test`
+**5443/5443**; `pnpm exec next build` clean; `pnpm run test:e2e` **18/18**;
+`bash scripts/db-tests/run.sh` **229/229 files clean** (328 migrations,
+unchanged — no schema change). `CG-S15-HDN-012` first round `COMPLETED`; Tier C
+review required before `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED` is not set;
+only Prompt 389 may set it. Not a production/pilot/GA/market-ready claim
+(RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-380.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-012` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-011` — **Performance and Scalability
 (Prompt 379)** — `VERIFIED`, Tier C closed. Four independent parallel adversarial
 lenses ran against the first-round commit (`57ce9fb`). **Lens 4 (attack-surface)
 found and this checkpoint fixed a real structural weakening in its own headline

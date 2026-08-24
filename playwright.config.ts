@@ -38,11 +38,30 @@ export default defineConfig({
   // enough for the login page's own static render/accessibility check (no real
   // sign-in is exercised — no live Supabase project exists yet, disclosed in
   // docs/build-log/phase-01/PLT-135.md).
+  //
+  // HDN-380 (Accessibility Audit): `command` was `next dev` (Turbopack dev mode) --
+  // changed to a real production build (`next build && next start`) after live-forcing
+  // the root cause of 5 real `e2e/vendor-registration.spec.ts` failures (`net::ERR_ABORTED`/
+  // 30s timeout, `page.url()` returning `""` on `page.goto`/`locator.click`). Directly
+  // reproduced in isolation with a throwaway Playwright script against a manually-started
+  // `next dev` server: `locator.click()` on the vendor-intake form's submit button hangs
+  // forever on "waiting for scheduled navigations to finish" -- a real navigation starts
+  // but its "load" event never fires. The identical click against a `next build && next
+  // start` server on the same route resolves in under 500ms. This is a Turbopack dev-mode
+  // artifact (most likely a hydration-timing race between the button becoming
+  // interactable and React 19's `action={formAction}` Server Action interception
+  // attaching), not an application defect -- confirmed by running the FULL suite against
+  // a production server: **18/18 pass, zero 500s, zero hangs**, vs. 13 passed/5 failed
+  // under `next dev`. `docs/build-log/full-system-hardening/HARDENING_MATRIX.md` §11's own
+  // instruction ("`next build` is required from this lane onward") independently pointed
+  // the same direction. `timeout` raised from 60s to accommodate the build step (a cold
+  // `next build` in this sandbox takes roughly a minute; `reuseExistingServer` still
+  // skips rebuilding when a dev session already has a server up on this port locally).
   webServer: {
-    command: "pnpm exec next dev --port 3000",
+    command: "pnpm exec next build && pnpm exec next start --port 3000",
     url: "http://127.0.0.1:3000/login",
     reuseExistingServer: !process.env["CI"],
-    timeout: 60_000,
+    timeout: 180_000,
     env: {
       NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "e2e-placeholder-anon-key",

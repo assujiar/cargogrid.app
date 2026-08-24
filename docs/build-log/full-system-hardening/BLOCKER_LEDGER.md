@@ -251,12 +251,12 @@ three cases the code under test was correct and the fixture's temporal assumptio
 |---|---|
 | **Title** | The `e2e` job sets no environment variables, so `NEXT_PUBLIC_SUPABASE_URL` is unset and every guarded route throws at env validation, returning 500 where the specs assert `< 500` plus a fail-safe redirect |
 | **Found by** | `HDN-370`, reproduced locally and confirmed against the CI job definition |
-| **Severity** | **Medium** |
+| **Severity** | Medium (was) |
 | **Owning phase** | Phase 1 (portal guards) / Phase 0 (CI) |
 | **Owning lane** | **`HDN-387`**, with input from `HDN-380`/`HDN-381` |
-| **Reproduction** | `pnpm run test:e2e` with no `.env`: `Error: NEXT_PUBLIC_SUPABASE_URL is not set -- see .env.example` at `lib/supabase/server.ts:27`, then `GET /supreme 500`. The CI `e2e` job has no `env:` block and no secrets |
-| **The design question** | Several specs are *named* for a "no-live-Supabase-project condition" and assert the guard **redirects** rather than crashing. Today it crashes, because env validation throws before any guard logic. So either the guard should fail safe on missing configuration, or the specs encode an intent the code never had. **That is a real product question, not a CI-wiring detail** |
-| **Disposition** | **`DEFERRED_TO_HDN-387`** |
+| **Reproduction (historical — no longer reproduces)** | `pnpm run test:e2e` with no `.env`: `Error: NEXT_PUBLIC_SUPABASE_URL is not set -- see .env.example` at `lib/supabase/server.ts:27`, then `GET /supreme 500`. The CI `e2e` job has no `env:` block and no secrets |
+| **The design question** | Several specs are *named* for a "no-live-Supabase-project condition" and assert the guard **redirects** rather than crashing. Today it crashes, because env validation throws before any guard logic. So either the guard should fail safe on missing configuration, or the specs encode an intent the code never had. **That is a real product question, not a CI-wiring detail** — this part is still open, see `KNOWN_ISSUES.md` `ISS-2026-160`'s own `HDN-380` correction |
+| **Disposition** | **`RESOLVED at HDN-380`** — `playwright.config.ts`'s own `webServer.env` block (added at `PLT-135`, after this entry was found) already made the "unset env var" premise stale; the remaining real symptom (5 `e2e/vendor-registration.spec.ts` failures, live-forced to a Turbopack dev-mode hydration-race hang, not a 500) was fixed this checkpoint by switching `webServer.command` from `next dev` to `next build && next start`. Full suite now passes 18/18 with zero 500s. Full narrative: `KNOWN_ISSUES.md` `ISS-2026-160` |
 | **`KNOWN_ISSUES`** | `ISS-2026-160` |
 
 ---
@@ -737,8 +737,52 @@ disposition: `HDN-377.md` §13.2, `KNOWN_ISSUES.md` `ISS-2026-225` (corrected).*
 release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed by their
 named owner or explicitly ruled an accepted exception at `HDN-387`/`389`.
 
+## HDN-BLK-025 — 36 of 38 tenant-module routes render with no `<main>` landmark
+
+| Field | Value |
+|---|---|
+| **Title** | 36 of 38 tenant-module top-level routes have no `<main>`/`role="main"` landmark anywhere in their render tree — no shared tenant-shell layout exists to provide one |
+| **Found by** | `HDN-380` (Accessibility Audit), source-evidence sweep, independently re-derived directly against the file tree |
+| **Severity** | Medium |
+| **Owning phase** | Step 15 (Accessibility) / a future dedicated frontend-architecture task |
+| **Owning lane** | A dedicated future task |
+| **Reproduction** | Grepped `<main` across every `layout.tsx`/`page.tsx` under each of `app/(tenant)/[tenantSlug]/`'s 38 top-level module directories: only `admin` and `commercial` have one. `app/(tenant)/[tenantSlug]/layout.tsx` does not exist; no shared `PortalShell`-style component provides one elsewhere |
+| **Disposition** | **`OPEN`** — the correct fix (one shared tenant-shell layout wrapping all 38 modules) is an architectural change outside `HDN-380`'s own "5-15 files, bounded repair" charter |
+| **`KNOWN_ISSUES`** | `ISS-2026-241` |
+
+## HDN-BLK-026 — accessible form primitives (`FormField`/validation-message) adopted in only a handful of 200 form-bearing files
+
+| Field | Value |
+|---|---|
+| **Title** | `components/forms/form-field.tsx`/`validation-message.tsx` are referenced by only 3-4 of the 200 `.tsx` files that render a `<form>`; `aria-invalid` appears in only 5 files app-wide |
+| **Found by** | `HDN-380` (Accessibility Audit), source-evidence sweep, independently re-derived directly against the source tree |
+| **Severity** | Medium |
+| **Owning phase** | Step 15 (Accessibility) / a future dedicated frontend-architecture task |
+| **Owning lane** | A dedicated future task |
+| **Reproduction** | `grep -rl "<form" app --include="*.tsx" \| wc -l` → 200; `grep -rl "FormField"` → 3; `grep -rl "ValidationSummary\|validation-message usage"` → 1; `grep -rl "aria-invalid"` → 5 |
+| **Disposition** | **`OPEN`** — retrofitting field-level error association onto ~200 hand-rolled forms is a large, wide-blast-radius undertaking outside `HDN-380`'s own bounded charter |
+| **`KNOWN_ISSUES`** | `ISS-2026-242` |
+
+## Status as of `HDN-380` first round (live — update at every checkpoint that changes it)
+
+| | Count |
+|---|---|
+| Blockers opened **by** Step 15 to date | **20** — `HDN-380` opened `HDN-BLK-025` (Medium, missing `<main>` landmarks) and `HDN-BLK-026` (Medium, accessible-form-primitive under-adoption) |
+| Blockers closed **by** Step 15 to date | **1 class + 3 single + 1 partial + 1 single** — unchanged set from `HDN-378`'s own close, plus `HDN-BLK-009` **resolved this checkpoint** (the `e2e` harness's dev-mode hang, `ISS-2026-160`) |
+| — of which **Critical**, open | `HDN-BLK-020`, `HDN-BLK-023` (2, unchanged) |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-007`, `HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-024` (10, unchanged) |
+| — of which **Medium**, still open | `HDN-BLK-003..006`, `008`, `010` (narrowed), `014`, `025`, `026` (9 — `HDN-BLK-009` moved out of this list, resolved; `025`/`026` new this checkpoint) |
+| Unresolved **Critical** anywhere | **2** — unchanged (`HDN-BLK-020`, `HDN-BLK-023`), both owner `HDN-386` |
+| **`HDN-380`'s own charter items** | Color-contrast token fixes (6 tokens, `app/globals.css`), `eslint-plugin-jsx-a11y` `recommended` enablement + 14 real errors fixed, 7 missing `role="alert"` additions, `HDN-BLK-009` root-caused and fixed (harness now 18/18 green), `ISS-2026-241`/`242` newly registered (too large to fix this checkpoint) |
+
+`HDN-BLK-013`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-019`,
+`HDN-BLK-020`, `HDN-BLK-021`, `HDN-BLK-022`, `HDN-BLK-023`, `HDN-BLK-024`,
+`HDN-BLK-025` and `HDN-BLK-026` are open release blockers for Step 16 per
+`00_EXECUTION_INDEX.md` §8.1 until fixed by their named owner or explicitly ruled an
+accepted exception at `HDN-387`/`389`.
+
 ## Reserved
 
-`HDN-BLK-025` onward are unassigned. Every Step 15 finding takes the next free ID and the
+`HDN-BLK-027` onward are unassigned. Every Step 15 finding takes the next free ID and the
 full record format of the execution index §14. A finding missing any field is not
 registered — and an unregistered finding is not a finding.

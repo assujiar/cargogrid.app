@@ -527,6 +527,37 @@ signature-changing `CREATE OR REPLACE` replaced the original; prefer an explicit
 (old signature) + `CREATE FUNCTION` (new signature) + re-`GRANT EXECUTE` whenever the parameter
 list changes at all.
 
+**C-30 — An e2e/browser test harness pointed at a dev-mode server (Turbopack/webpack `next dev`)
+can fail on a client-hydration timing race that never reproduces under a real production build,
+making a tooling artifact look like an application defect.**
+A form submit button becomes "visible, enabled, and stable" (Playwright's own readiness
+definition) before the framework's client-side event interception has actually attached, because
+dev-mode compiles/hydrates routes on demand and more slowly than a production build. The click
+then falls through to a real browser-native navigation the framework's dev-mode runtime does not
+resolve, which never fires its `load` event — the test sees `net::ERR_ABORTED`, an empty
+`page.url()`, or a hang to the full test timeout, with no server-side error, no non-2xx status,
+and no stack trace to point at, because nothing on the server side ever failed. The route's own
+guard logic, server action, and RPC layer are all completely uninvolved. This can also cascade:
+once one test in a file hangs to its own 30s timeout against a still-busy dev server, later tests
+in the same run can fail the same way even though their own routes are individually fine.
+*Evidence:* `HDN-380` (Accessibility Audit) — `e2e/vendor-registration.spec.ts` failed 5 of 7 tests
+(`net::ERR_ABORTED`/timeout, `page.url()` returning `""`) against `playwright.config.ts`'s
+`webServer.command: "pnpm exec next dev --port 3000"`, reproducible in isolation
+(`--workers=1`, ruling out parallel-worker contention) and via a standalone throwaway Playwright
+script clicking the same button against a manually-started `next dev` server (`locator.click()`
+hangs on "waiting for scheduled navigations to finish"). The identical click against a
+`next build && next start` production server on the same route resolved in under 500ms, and the
+full suite passed 18/18 with zero 500s against production — conclusively isolating the failure to
+dev-mode itself, not the application. Fixed by changing `webServer.command` to
+`next build && next start` (with `webServer.timeout` raised to accommodate the build step), which
+also directly serves this repository's own `next build`-required convention for this lane.
+**Check:** before registering an e2e/browser-harness failure as an application defect (a broken
+guard, a hanging server action, a real regression), check what `webServer.command` (or equivalent)
+the harness is actually running against. If it is a dev-mode server, reproduce the same failure
+against a production build (`next build && next start` or equivalent) before trusting the
+diagnosis — a failure that disappears under production is a harness artifact, not a shippable bug,
+and the harness itself should point at a production build rather than being routinely excused.
+
 ## 5. Two process lessons that are not code classes
 
 Recorded here because both cost real rework and both recur.

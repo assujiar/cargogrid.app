@@ -230,7 +230,7 @@ export function ApplicationDetailPanel({
             <div className="mt-2 flex flex-wrap gap-2">
               {iw.interview.status === "scheduled" ? (
                 <>
-                  <FeedbackForm action={submitFeedbackAction(iw.interview.id)} />
+                  <FeedbackForm interviewId={iw.interview.id} action={submitFeedbackAction(iw.interview.id)} />
                   <StageButton label="Mark completed" action={completeInterviewAction(iw.interview.id, iw.interview.recordVersion)} />
                 </>
               ) : null}
@@ -370,13 +370,15 @@ function StageButton({ label, action }: { label: string; action: Bound0 }) {
   );
 }
 
-function AssessmentResultForm({ action }: { assessmentId: string; expectedVersion: number; action: Bound0 }) {
+function AssessmentResultForm({ assessmentId, action }: { assessmentId: string; expectedVersion: number; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="mt-2 flex flex-wrap items-end gap-2">
       <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium text-neutral-700">Score</label>
-        <input name="score" type="number" min="0" step="0.01" required className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <label htmlFor={`assessment-score-${assessmentId}`} className="text-xs font-medium text-neutral-700">
+          Score
+        </label>
+        <input id={`assessment-score-${assessmentId}`} name="score" type="number" min="0" step="0.01" required className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
       </div>
       <input name="notes" placeholder="Notes" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
@@ -391,19 +393,23 @@ function AssessmentResultForm({ action }: { assessmentId: string; expectedVersio
   );
 }
 
-function FeedbackForm({ action }: { action: Bound0 }) {
+function FeedbackForm({ interviewId, action }: { interviewId: string; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <details>
       <summary className="cursor-pointer text-sm text-primary">Submit my feedback</summary>
       <form action={formAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-neutral-700">Rating (1-5)</label>
-          <input name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <label htmlFor={`feedback-rating-${interviewId}`} className="text-xs font-medium text-neutral-700">
+            Rating (1-5)
+          </label>
+          <input id={`feedback-rating-${interviewId}`} name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-neutral-700">Recommendation</label>
-          <select name="recommendation" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+          <label htmlFor={`feedback-recommendation-${interviewId}`} className="text-xs font-medium text-neutral-700">
+            Recommendation
+          </label>
+          <select id={`feedback-recommendation-${interviewId}`} name="recommendation" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
             <option value="strong_yes">Strong yes</option>
             <option value="yes">Yes</option>
             <option value="no">No</option>
