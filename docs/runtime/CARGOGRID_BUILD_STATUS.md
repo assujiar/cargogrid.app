@@ -2,7 +2,46 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-014` — **Observability Audit
+**Updated:** 2026-08-24 (`CG-S15-HDN-015` — **Backup and Restore
+(Prompt 383)** — `COMPLETED`, first round only, Tier C review pending. Three
+independent parallel investigation lenses (backup scope/feasibility
+inventory; a real, live restore drill executed against this sandbox's own
+disposable Postgres; RPO/RTO disclosure and runbook-authoring scope). No
+backup/restore runbook or tooling existed at all before this checkpoint.
+**Live-executed and measured**: schema/structure recovery via full
+329-migration replay, 3 runs, ~44-46s each, 0 errors, converging on 603
+tables/2,701 functions/448 RLS policies; row-level data recovery via a real
+`pg_dump`/`pg_restore` cycle on a seeded slice, ~11.6s total, 0 errors,
+object/row counts and job state (byte-for-byte) and RLS all verified
+identical pre/post-restore. **1 real footgun found live**: `pg_dump
+--no-owner --no-privileges` silently strips the schema/table grants RLS sits
+on top of, producing a blanket permission denial instead of RLS-scoped
+results post-restore — documented as a "never do this" warning. **Teardown-
+batching constraint corrected**: the seeded "~1,400 objects" threshold is
+stale — real current counts (603 tables/2,149 indexes/4,636 constraints/
+2,701 functions/448 policies) are more than double that; a working batched
+strategy (order by ascending inbound-FK count, per-table auto-committed
+`DROP TABLE ... CASCADE`) found and timed live at 1.96s. `auth.users`/
+`users_pkey` collision reproduced exactly as documented. **1 new,
+non-obvious finding surfaced**: a database restore to a point predating an
+active legal hold silently defeats that hold, no compensating control
+today — registered `ISS-2026-254`, High. Storage/Auth-service/hosted-
+project restore untested, structurally infeasible in this sandbox,
+disclosed per Prompt 383 §22's own alternative flow — registered
+`ISS-2026-255`, High, `TRACKED_GAP`. `ISS-2026-256` (Medium) registered:
+RPO/RTO defaults never operationally confirmed on the real hosted project.
+Authored `docs/runbooks/database-restore.md` (new). No Critical finding
+anywhere. Independent full gate: `typecheck` 0; `lint` 0 errors/337
+warnings; `pnpm run test` **5443/5443**; `pnpm exec next build` clean;
+`bash scripts/db-tests/run.sh` **229/229 files clean** (329 migrations,
+unchanged — no schema change). `CG-S15-HDN-015` first round `COMPLETED`;
+Tier C review required before `VERIFIED`. `FULL_SYSTEM_HARDENING_VERIFIED`
+is not set; only Prompt 389 may set it. Not a production/pilot/GA/market-
+ready claim (RPD-001/034/036). Full detail:
+`docs/build-log/full-system-hardening/HDN-383.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-015` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-014` — **Observability Audit
 (Prompt 382)** — `VERIFIED`, Tier C closed. Four independent parallel
 adversarial lenses ran against the committed first-round state (`2251bf2`).
 **No Critical or High code-correctness defect found by any lens.** First
