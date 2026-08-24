@@ -101,11 +101,11 @@ describe("rotateIntegrationConnectionCredential", () => {
 });
 
 describe("setIntegrationConnectionStatus", () => {
-  test("calls set_integration_connection_status with the exact snake_case params", async () => {
+  test("calls request_integration_connection_status_change with the exact snake_case params (HDN-387, HDN-BLK-023)", async () => {
     const { client, calls } = fakeRpcClient({ data: { ...VALID_CONNECTION_ROW, status: "disabled" }, error: null });
     const connection = await setIntegrationConnectionStatus(client, { connectionId: CONNECTION_ID, status: "disabled", reason: "planned maintenance", actorAuthUserId: ACTOR_ID, actorLabel: "tester" });
 
-    assert.equal(calls[0]?.fn, "set_integration_connection_status");
+    assert.equal(calls[0]?.fn, "request_integration_connection_status_change");
     assert.equal(connection.status, "disabled");
   });
 });

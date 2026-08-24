@@ -9,6 +9,7 @@
 
 import { authorizeApiV1Request, recordApiV1Success, apiV1ResponseHeaders, type AuthorizedApiV1Request } from "../../../../../../../lib/api-gateway/authenticate.server.ts";
 import { submitCustomerBookingRequest, CustomerBookingRequestMutationError, type CustomerBookingRequestMutationRpcClient } from "../../../../../../../server/mutations/customer-booking-request.ts";
+import { getCustomerBookingRequest, CustomerBookingRequestQueryError } from "../../../../../../../server/queries/customer-booking-request.ts";
 import { buildApiError } from "../../../../../../../server/contracts/api/api.ts";
 
 /** See app/api/v1/customer/bookings/route.ts's own toBookingClient() for why this cast is needed. */
@@ -43,6 +44,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ boo
     responseBody = { error: buildApiError({ code: "invalid_expected_version", message: "A positive integer expectedVersion is required.", requestId: authorized.request.correlationId }) };
   } else {
     try {
+      // HDN-BLK-013: confirm this booking request's own tenant_id actually matches the
+      // caller's authorized tenant before ever reaching the mutating RPC below --
+      // app.get_customer_booking_request is itself tenant-scoped (p_tenant_id) and
+      // anti-enumerating, throwing record_not_found for a cross-tenant id exactly like
+      // a genuinely missing one.
+      await getCustomerBookingRequest(toBookingClient(authorized.request.rpcClient), authorized.request.tenantId, bookingRequestId, authorized.request.createdByAuthUserId);
+
       const booking = await submitCustomerBookingRequest(toBookingClient(authorized.request.rpcClient), {
         bookingRequestId,
         expectedVersion,
@@ -52,8 +60,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ boo
       statusCode = 200;
       responseBody = { booking };
     } catch (error) {
-      statusCode = error instanceof CustomerBookingRequestMutationError && error.code === "stale_version" ? 409 : 422;
-      responseBody = { error: buildApiError({ code: error instanceof CustomerBookingRequestMutationError ? error.code : "mutation_failed", message: error instanceof Error ? error.message : "Could not submit this booking request.", requestId: authorized.request.correlationId }) };
+      if (error instanceof CustomerBookingRequestQueryError) {
+        statusCode = 404;
+        responseBody = { error: buildApiError({ code: "booking_request_not_found", message: error.message, requestId: authorized.request.correlationId }) };
+      } else {
+        statusCode = error instanceof CustomerBookingRequestMutationError && error.code === "stale_version" ? 409 : 422;
+        responseBody = { error: buildApiError({ code: error instanceof CustomerBookingRequestMutationError ? error.code : "mutation_failed", message: error instanceof Error ? error.message : "Could not submit this booking request.", requestId: authorized.request.correlationId }) };
+      }
     }
   }
 

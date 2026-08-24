@@ -2,7 +2,53 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-018` — **Full-System Hardening
+**Updated:** 2026-08-24 (`CG-S15-HDN-019` — **Release Blocker Triage and
+Remediation (Prompt 387)** — `COMPLETED`, first round only, Tier C review
+pending. 3 independent parallel investigation lenses ran against the open
+blocker backlog from `HDN-386`'s own `VERIFIED` state. Selected 7 bounded
+critical/high repairs, all mechanical or mirroring an already-proven
+pattern in this exact codebase: `HDN-BLK-023` (**Critical**, SSO
+activation-gate bypass — two prior checkpoints had judged the "audit every
+other connection type" scope open-ended, this checkpoint re-ran it and
+found it was a closed, single-item list all along; fixed mirroring
+`app.request_gps_device_status_transition`/`ATW-031`'s own already-proven
+grant-revocation pattern). **The open Critical count for Step 15 is now
+zero for the first time this session.** `HDN-BLK-013` (High, app-layer
+tenant-ownership checks, TS-only), `HDN-BLK-019` (High, `app.file_
+access_logs` legal-hold cascade, mirrors `HDN-386`'s own `app.audit_logs`
+fix), `HDN-BLK-022` (High, partial — 2 of ~35 tables), `HDN-BLK-027`
+(High, partial — 3 webhook-ingestion alert producers), `HDN-BLK-010`
+(Medium, narrowed 3-function remainder plus `ISS-2026-163`), `HDN-BLK-007`
+(High, CI collision-check false-positive narrowed, `ISS-2026-002` control
+unweakened). `HDN-BLK-006` closed administratively (`ACCEPTED_EXCEPTION`,
+re-ruled at the correct authority under §8.2's full 5-condition test).
+**3 real defects caught and fixed live before commit, via live db-tests
+and probe re-runs, not assumed correct**: a webhook-alert fix that
+silently reverted 3 later hardening passes by working from stale source
+migrations instead of true effective definitions — caught by a live
+`db-tests` failure in an unrelated telemetry-arbitration test; a `jsonb`-
+into-`text` parameter mismatch on the new alert calls that would have
+failed the function call outright — caught before any test run; an RLS
+policy dropped under the wrong name, leaving the real, differently-named
+weak policy still live via Postgres's own OR-combination of permissive
+policies — caught by a live RLS probe showing a zero-role actor still
+reading the fixture row. All corrected and re-verified live before
+commit. A genuine two-process race was live-forced against `app.link_
+auth_identity` (`HDN-371.md` §6.2's own proven technique) and the exact
+`ISS-2026-163` unrelated-constraint collision was separately live-forced
+against `app.prepare_job_order` — both on a fresh disposable probe
+database. Gates: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run
+test` **5444/5444**; `pnpm exec next build` clean; `bash
+scripts/db-tests/run.sh` **230/230 files clean** (333 migrations, one new
+committed regression file). `CG-S15-HDN-019` is `COMPLETED`, not
+`VERIFIED` — Tier C review has not yet run; nothing after it may begin
+until it closes and this row moves to `VERIFIED`.
+`FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it.
+Not a production/pilot/GA/market-ready claim (RPD-001/034/036). Full
+detail: `docs/build-log/full-system-hardening/HDN-387.md`; ledger record:
+`docs/runtime/TASK_LEDGER.md`'s `CG-S15-HDN-019` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-018` — **Full-System Hardening
 Integrated Verification (Prompt 386)** — `VERIFIED`, Tier C closed. First
 round: three independent parallel investigation lenses (full compatible-
 checkpoint gate matrix + CI-blindness disposition; blocker ledger

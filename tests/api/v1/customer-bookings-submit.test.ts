@@ -79,6 +79,7 @@ describe("POST /api/v1/customer/bookings/{bookingRequestId}/submit", () => {
   test("a genuine optimistic-concurrency conflict -> 409 stale_version, distinct HTTP class from the 400 malformed-input case (HDN-376 Defect B: these two must never share one error code)", async () => {
     const stub = installRpcFetchStub({
       authenticate_and_authorize_api_request: { data: okAuthRow() },
+      get_customer_booking_request: { data: [fullBookingRow()] },
       submit_customer_booking_request: { error: { message: "stale_version: booking request expected version 2 but found 3" } },
     });
     try {
@@ -94,9 +95,29 @@ describe("POST /api/v1/customer/bookings/{bookingRequestId}/submit", () => {
     }
   });
 
+  test("HDN-BLK-013: a booking request belonging to another tenant (or a genuinely missing id) -> 404 booking_request_not_found, never reaches the mutation RPC", async () => {
+    const stub = installRpcFetchStub({
+      authenticate_and_authorize_api_request: { data: okAuthRow() },
+      get_customer_booking_request: { error: { message: "record_not_found: booking request not found" } },
+    });
+    try {
+      const response = await POST(
+        new Request(`http://localhost/api/v1/customer/bookings/${BOOKING_ID}/submit`, { method: "POST", headers: { authorization: "Bearer cgk_test_valid" }, body: JSON.stringify({ expectedVersion: 1 }) }),
+        { params },
+      );
+      assert.equal(response.status, 404);
+      const body = (await response.json()) as { error: { code: string } };
+      assert.equal(body.error.code, "booking_request_not_found");
+      assert.equal(stub.calls.some((c) => c.fn === "submit_customer_booking_request"), false);
+    } finally {
+      stub.restore();
+    }
+  });
+
   test("a valid submit returns 200 with the updated booking", async () => {
     const stub = installRpcFetchStub({
       authenticate_and_authorize_api_request: { data: okAuthRow() },
+      get_customer_booking_request: { data: [fullBookingRow()] },
       submit_customer_booking_request: { data: [fullBookingRow()] },
     });
     try {

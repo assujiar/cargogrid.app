@@ -1154,7 +1154,7 @@ Found while performing Prompt 369's own step-1 state freeze, which required read
 
 **Third instance of the same class, same owner:** `docs/runtime/CHANGE_MANIFEST.md`'s change entries stop at `CHG-2026-192` (2026-08-15, a Phase 7 batch close). **No manifest entry was written for any Phase 8 or Phase 9 checkpoint** — roughly 60 capability prompts and 8 closure prompts — so its numbering is continuous while its coverage is not. `CG-S15-HDN-001` wrote its own entry (`CHG-2026-193`) and deliberately did **not** backfill the two missing phases, for the same reason the other two instances were left: an opportunistic multi-phase documentation sweep inside an unrelated kickoff is the drift `AGENTS.md`'s "fix only task-caused failures" rule exists to prevent. Backfilling from `TASK_LEDGER.md` and `git log` is mechanical but large; it belongs to `HDN-388`'s own charter alongside the other two instances.
 
-### ISS-2026-158 — `scripts/git/check-worktree-collision.test.ts` can never pass in CI, so the `quality` job fails on every push and six governance steps after it — including the secret scan and the dependency vulnerability audit — are silently skipped (Phase 0 governance tooling, found at `CG-S15-HDN-002`, Prompt 370 Full Regression, `OPEN`, **High**)
+### ISS-2026-158 — `scripts/git/check-worktree-collision.test.ts` can never pass in CI, so the `quality` job fails on every push and six governance steps after it — including the secret scan and the dependency vulnerability audit — are silently skipped (Phase 0 governance tooling, found at `CG-S15-HDN-002`, Prompt 370 Full Regression, `RESOLVED at HDN-387`, was **High**)
 
 Found by `HDN-370`'s CI-versus-local reconciliation. `scripts/git/check-worktree-collision.test.ts:40` asserts unconditionally that the current branch appears in `divergedBranches` with `commitsAheadOfMain > 0`. A CI checkout of `main` **is** `origin/main`, so that count is 0 and the assertion cannot hold; there is no CI guard and no skip anywhere in the file. Verified against real runs, not inferred: workflow runs #105-#109 on `assujiar/cargogrid.app` are **all `failure`**, across both `push` and `pull_request` events, and run #109 is `main` at `e5da061`. Its failing step is `Test`, with exactly this assertion.
 
@@ -1163,6 +1163,8 @@ Found by `HDN-370`'s CI-versus-local reconciliation. `scripts/git/check-worktree
 **Why nine phases missed it:** every gate result in this repository's build logs was produced by a **local** run, where the test passes precisely because a feature branch genuinely is ahead of `origin/main`. Local and CI outcomes are inverses here, so a green local run carries no information about CI. `HDN-369`'s own build log described this failure as "resolves once this checkpoint's commit lands" — true locally, and not true in CI, where it can never resolve.
 
 **Not fixed at `HDN-370`** per `AGENTS.md` "fix only task-caused failures": it is pre-existing, and the test encodes a real control — the `ISS-2026-002` single-writer collision class this repository added after real content corruption (`ERR-2026-001..003`). Deciding what it should assert *in CI* (skip when `GITHUB_ACTIONS` is set? assert the shape only? move the divergence assertion to a PR-only step?) is a design call, not a side-edit inside a regression-baseline lane. **Owner: `HDN-387`** (`CG-S15-HDN-019`, Release Blocker Triage and Remediation); tracked as `HDN-BLK-007`. **Do not delete or skip the test to turn CI green** — that removes the control rather than fixing the gate. Consider also reordering the `quality` job so governance steps run with `if: always()`, so one failure can never again mask seven.
+
+**Fixed at `HDN-387`**: the "the current branch is reported as diverged from origin/main" assertion is now conditioned on the current branch actually matching `checkWorktreeCollision()`'s own candidate pattern (`agent/*`/`claude/*`, per `listCandidateBranches()`) — a checkout of `main` structurally never matches, so that one sub-assertion now `t.skip()`s with an explanation instead of failing, while a genuine session branch (the only case the control is meant to protect) still exercises the real assertion unchanged. The other three tests in the file (well-formed result shape, no genuine collision present, dirtyFiles entries are non-empty strings) are untouched and still run unconditionally regardless of branch. This is a narrowing of a false-positive precondition, not a weakening of the `ISS-2026-002` control itself — no assertion this control relies on to catch a genuine fork was removed or loosened. Not independently re-verified against a live CI run from this session (no CI access) — the next CI push against this fix is the confirming evidence.
 
 ### ISS-2026-159 — the `db` CI job's concurrency tests call `pg_read_file()` on paths written to the runner's `/tmp`, which the Postgres service container cannot see (Phase 5 Advanced TMS/WMS concurrency proofs, found at `CG-S15-HDN-002`, Prompt 370 Full Regression, `OPEN`, Medium)
 
@@ -1196,7 +1198,7 @@ Found by the correctness-review lens during `HDN-370`'s Tier C close, while inde
 
 **Not fixed here** — out of `HDN-370`'s own bounded regression-baseline scope, and the affected caller was this review's own throwaway probe-database script, not any committed file. The real mandatory harness (`run.sh`) is unaffected; this is a footgun for ad hoc/future callers, not a live defect in CI or in `pnpm run db:test`. **Status `OPEN`**, Low severity (no security/data-integrity exposure; the one committed caller is safe) — owner: whichever future checkpoint next touches `scripts/db-tests/lib/setup-disposable-db.sh`, add `set -euo pipefail` inside the function itself (idempotent even when a stricter caller already set it) so the safety property does not depend on every caller remembering the documented contract.
 
-### ISS-2026-162 — 9 of 20 cross-module "prepare/convert/create-from" boundary functions share an identical concurrent-idempotency gap this repository's own codebase demonstrates the fix for elsewhere, spanning 5 domains, live-forced and confirmed for one (found at `CG-S15-HDN-003`, Prompt 371 Cross-Module Transactional Integrity, `OPEN`, Medium — corrected at the same checkpoint's own Tier C review)
+### ISS-2026-162 — 9 of 20 cross-module "prepare/convert/create-from" boundary functions share an identical concurrent-idempotency gap this repository's own codebase demonstrates the fix for elsewhere, spanning 5 domains, live-forced and confirmed for one (found at `CG-S15-HDN-003`, Prompt 371 Cross-Module Transactional Integrity, `RESOLVED at HDN-387`, was Medium — corrected at the same checkpoint's own Tier C review)
 
 **Corrected 2026-08-23, same checkpoint's Tier C review.** The original sweep's regex (`create
 function app.…`) could not see `create or replace function` redefinitions and missed 2 members
@@ -1256,7 +1258,26 @@ order_handoff`, `app.prepare_wms_inbound_from_shipment`, `app.link_auth_identity
 **New owner: `HDN-387`** (Release Blocker Triage and Remediation), mirroring the precedent
 `ISS-2026-179`/`186` already set for handing a residual, cross-domain scope to that checkpoint.
 
-### ISS-2026-163 — `app.prepare_job_order`'s exception handler can silently return an all-NULL row on an unrelated constraint violation (found at `CG-S15-HDN-003`, Prompt 371 Tier C review, `OPEN`, Low)
+**Amended, `HDN-387`.** The remaining 3 non-Finance functions are now **`RESOLVED`**:
+`supabase/migrations/20260819000000_harden_release_blocker_triage_remediation.sql` Part 6 widens
+`app.prepare_job_order_handoff`, `app.prepare_wms_inbound_from_shipment` and `app.link_auth_
+identity` with the identical "design note 9(a)" nested exception-handler shape, each written
+from its true effective (current) definition — re-verified by direct source read against every
+later redefinition before writing the fix (the same discipline this entry's own text already
+required, after a first draft of this migration's unrelated Part 5 was caught NOT following it).
+Live-forced, not merely code-reviewed: a genuine two-process race against `app.link_auth_
+identity` (uncommitted-insert-blocking technique, identical to this entry's own §above) on a
+fresh disposable probe database confirmed the second session blocks on the first's uncommitted
+insert and, on commit, correctly re-selects and returns the winner instead of raising
+`unique_violation` — full transcript `HDN-387.md` §11.1. The other 2 siblings share the
+mechanically identical pattern and were code-verified, not independently re-raced, mirroring
+`HDN-371.md`'s own "one forced proof is sufficient for an identical mechanism" precedent.
+Regression coverage: `scripts/db-tests/release-blocker-triage-remediation.sql` (functional
+coverage for the wider checkpoint); the live two-process race itself is documented evidence in
+the build log rather than a committed test file, matching this exact repository's own precedent
+(no prior checkpoint committed one for this mechanism either).
+
+### ISS-2026-163 — `app.prepare_job_order`'s exception handler can silently return an all-NULL row on an unrelated constraint violation (found at `CG-S15-HDN-003`, Prompt 371 Tier C review, `RESOLVED at HDN-387`, was Low)
 
 Found while verifying `ISS-2026-162`'s "functions with the safe pattern" list is not
 cherry-picked. `app.prepare_job_order`
@@ -1296,6 +1317,20 @@ own bounded-repair scope was already fully committed to the 10-function idempote
 `ISS-2026-162`'s own residual 3 non-Finance functions (same "job order handoff" function family,
 same natural triage session).
 
+**Amended, `HDN-387`.** **`RESOLVED`** — `app.prepare_job_order`'s exception handler now carries
+the missing `if found then return v_job_order; end if; raise;` guard, exactly matching the
+reference shape (`supabase/migrations/20260819000000_harden_release_blocker_triage_remediation.sql`
+Part 6). Live-forced, not merely code-reviewed: a fresh disposable probe database ran a real
+two-lane job-order-handoff pipeline (lead → prospect → opportunity → quotation → acceptance →
+account → handoff, twice, for two independent handoffs), created one real Job Order to allocate
+`job_number` sequence value 1, then manually reset `app.job_order_number_counters.last_seq` to 0
+to force the exact "second, UNRELATED constraint" collision this finding describes (a
+`job_orders_tenant_number_unique` collision, not a `source_handoff_id` one) on the second,
+genuinely distinct handoff's own conversion call. Before the fix this silently returned an
+all-NULL `app.job_orders` composite; after the fix it correctly re-raises the real
+`unique_violation` (`SQLERRM`: `duplicate key value violates unique constraint
+"job_orders_tenant_number_unique"`) instead — full transcript `HDN-387.md` §11.2.
+
 ### ISS-2026-164 — 13 `SECURITY DEFINER` functions evaluated authority against a client-supplied actor UUID, live-forced cross-tenant PII/inventory/audit/notification read (found at `CG-S15-HDN-004`, Prompt 372 Tenant Isolation Audit, `RESOLVED` same checkpoint, was High)
 
 The `ATW-032` sweep's own classification premise — "43 of those are `STABLE`/`IMMUTABLE` — pure reads that perform no side effect, where a forged actor changes nothing a caller could not already read" — is false for a `SECURITY DEFINER` function: it bypasses RLS by construction, so a forged actor is exactly what lets a caller read what they could not otherwise read. A second, narrower gap in the same sweep: its candidate regex looked only for the parameter name `p_actor_auth_user_id`, so `VOLATILE` functions naming it `p_requester_auth_user_id` (`app.query_audit_logs`/`app.export_audit_logs`) were never in the candidate set at all — closed at this checkpoint by broadening the standing sweep's own regex, not just the two instances.
@@ -1312,9 +1347,11 @@ The `ATW-032` sweep's own classification premise — "43 of those are `STABLE`/`
 
 Same severity bound as `ISS-2026-164` (High, not currently reachable via the Data API, same disclosed caveat). **Not fixed at `HDN-372`**: unlike the `ATW-023` family, these 13 have no shared root — each is an independent `language sql` entry point, so closing the class needs 13 separate conversions, a larger unit of work than bundling into an already-large 9-function migration. **Fixed at `HDN-373`**: each converted `language sql` → `language plpgsql` to carry `perform app.assert_actor_is_session_identity(p_actor_auth_user_id);` as the first statement, mirroring `HDN-BLK-011`'s own proven pattern; a position-aware named-list regression check plus a live two-session forced-spoof test added to `scripts/db-tests/rbac-enforcement.sql`. Full detail: `docs/build-log/full-system-hardening/HDN-372.md` §5.5, `HDN-373.md` §6; ledger: `HDN-BLK-012` (closed).
 
-### ISS-2026-166 — the app layer's only defense on several high-privilege actions is the database, single point of failure (found at `CG-S15-HDN-004`, `OPEN`, High, owner `HDN-378`)
+### ISS-2026-166 — the app layer's only defense on several high-privilege actions is the database, single point of failure (found at `CG-S15-HDN-004`, `RESOLVED at HDN-387`, was High, owner `HDN-378`)
 
 Every service-role-mediated action in `app/(tenant)/[tenantSlug]/admin/api-keys/actions.ts` (rotate/revoke API key, rotate webhook secret, disable/reenable endpoint, replay delivery, rotate n8n connector) passes a client-controlled record id straight to a service-role RPC with no `record.tenantId === access.tenant.id` assertion anywhere in TypeScript — the app layer verifies membership in the URL slug's own tenant, never that the *target record* belongs to it. Live-verified **not exploitable today**: `app.check_api_webhook_admin_authority` correctly denies a cross-tenant attempt (`insufficient_authority`). But it is a single point of failure — deleting one `if` in one migration would silently reopen cross-tenant API-key revocation and webhook-signing-secret disclosure, with no second control anywhere. `POST /api/v1/customer/bookings/{id}/submit` shares the same shape: it discards the server-derived `authorized.request.tenantId` entirely, unlike every sibling `/v1` route, making it 100% DB-dependent by construction. **Not fixed here** — `CG-S15-HDN-004` found this via app-layer review but the fix belongs with the security-hardening lane's own defense-in-depth pass. **Owner: `HDN-378`** — add an app-layer tenant-match assertion on every service-role-mediated record mutation as defense-in-depth, not a replacement for the DB-layer check. This is a release blocker for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until fixed or explicitly ruled an accepted exception at `HDN-387`/`HDN-389` — registered late (this entry existed since this checkpoint's first commit but had no `BLOCKER_LEDGER` entry until this checkpoint's own Tier C review corrected it). Ledger: `HDN-BLK-013`.
+
+**`RESOLVED` at `HDN-387`.** Every named action/route now confirms the target record's own tenant ownership at the app layer before the mutating RPC is reached, mirroring the already-established `account.tenantId !== access.tenant.id` idiom (`app/(tenant)/[tenantSlug]/commercial/accounts/[accountId]/page.tsx:37`) — a genuine second control, not a cosmetic one, since it fires from an independently-queried `list_*_for_tenant`/`get_customer_booking_request` RPC result, never merely re-trusting a value the caller supplied. `typecheck` clean; unit tests 5444/5444 including a new cross-tenant-rejection case. One sibling action sharing this exact unchecked shape, `sendTestWebhookDeliveryAction`, was outside this finding's own originally-named list of 7 actions and is flagged, not silently folded in as fixed — a candidate for a future, separately-scoped finding. Full disposition: `BLOCKER_LEDGER.md`'s `HDN-BLK-013`.
 
 ### ISS-2026-167 — cross-tenant existence oracle via verbatim Postgres error text, same class as `ISS-2026-146` (found at `CG-S15-HDN-004`, `OPEN`, Medium, owner `HDN-376`)
 
@@ -2299,7 +2336,7 @@ failed closed, not open — a functional break, not a security disclosure.
 RoleClient()` instead, at both call sites (`recordVendorAssessmentAnswerAction`,
 `updateVendorAssessmentCorrectiveActionStatusAction`).
 
-### ISS-2026-222 — `app.files.legal_hold` does not extend to protect that file's own `app.file_access_logs` evidence rows (found at `CG-S15-HDN-009`, `OPEN`, High, owner `HDN-386`)
+### ISS-2026-222 — `app.files.legal_hold` does not extend to protect that file's own `app.file_access_logs` evidence rows (found at `CG-S15-HDN-009`, `RESOLVED at HDN-387`, was High, owner `HDN-386`)
 
 Found by the file-access-audit-and-retention lens, live-forced. `app.file_access_logs`
 carries zero triggers at all — not even a `BEFORE UPDATE` `touch_row` — and
@@ -2327,6 +2364,20 @@ a one-off for this single table. **Severity: High** — a real, live-forced gap 
 retention/legal-hold coverage for evidence data, but not independently exploitable
 beyond what `ISS-2026-205` already discloses (the same missing-trigger population).
 **Not fixed here. Owner: `HDN-386`.**
+
+**`RESOLVED` at `HDN-387`** for the worst part of this finding — the hold-cascade gap this entry
+names. `HDN-BLK-018`'s own much larger ~70-table append-only-guard rollout remains separately
+`OPEN`. A new `BEFORE UPDATE OR DELETE` trigger, `app.protect_file_access_logs_legal_hold_from_
+mutation()`, joins each row's own `file_id` out to `app.files` and refuses mutation while the
+parent file is under an active hold (native `legal_hold` flag OR the bridged generic
+`app._is_under_legal_hold`), mirroring `app.protect_audit_logs_legal_hold_from_deletion` exactly
+— including that fix's own `BEFORE UPDATE OR DELETE` (never `DELETE`-only) discipline and its
+lazy `auth.uid()` computation, both learned the hard way at `HDN-386`'s own Tier C review.
+Live-forced: a real held file's own access-log row survived both a raw `DELETE` and a raw
+`UPDATE` attempt (both correctly blocked with `file_access_log_legal_hold_blocks_deletion`),
+while a Supreme Admin's own RPD-022 absolute-CRUD override still applied and produced a real,
+correctly-attributed audit row. `supabase/migrations/20260819000000_harden_release_blocker_
+triage_remediation.sql` Part 3; regression: `scripts/db-tests/release-blocker-triage-remediation.sql`.
 
 ### ISS-2026-223 — ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority` misused as "elevated override" rather than its own documented "may approve a grant" meaning, a repository-wide (~35 domain) convention question, not a file-specific bug (found at `CG-S15-HDN-009`, `OPEN`, Low, owner `HDN-378`)
 
@@ -2406,7 +2457,7 @@ review workflow is currently unusable by anyone but the uploader), not a securit
 disclosure — the RPC's own denial path is exactly as safe as before, just
 over-restrictive. **Not fixed here. Owner: `HDN-387`.**
 
-### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs across at least ~35 more Procurement/HR tables that DO carry the `authenticated` grant and ARE live-exploitable, correcting this entry's own first-round "safe by construction" disposition (found at `CG-S15-HDN-009`, `OPEN`, **High** (corrected at Tier C from Low), owner `HDN-378`)
+### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs across at least ~35 more Procurement/HR tables that DO carry the `authenticated` grant and ARE live-exploitable, correcting this entry's own first-round "safe by construction" disposition (found at `CG-S15-HDN-009`, `PARTIALLY RESOLVED at HDN-387`, **High** (corrected at Tier C from Low), owner `HDN-378`)
 
 **Corrected at this checkpoint's own Tier C completeness-sweep lens** — the first-round
 disposition below undercounted the live-exploitable population; the correction follows.
@@ -2439,6 +2490,24 @@ squarely a dedicated sweep-and-fix lane's own charter, not a storage-audit check
 real, large, live-exploitable population requiring prompt remediation." **Not fixed
 here. Owner: `HDN-378`** (Security Hardening) — named list of confirmed-affected
 tables and the full 60-table/58-policy query method: `HDN-377.md` §13.2.
+
+**Amended, `HDN-387`.** **`PARTIALLY RESOLVED`** — the 2 tables this entry's own live-forcing
+proved genuinely exploitable, `app.vendor_kpi_scorecards` and `app.position_grades`, are now
+closed as a first increment, mirroring `ISS-2026-220`'s own already-proven
+`app.check_procurement_authority` fix pattern exactly (`app.check_hris_authority`, a direct
+structural copy for HR). **Caught and fixed a real regression in this same fix's own first
+draft**: the fix initially assumed the pre-existing weak RLS policy was named `*_tenant_read`
+and added a second, differently-named policy alongside it — since Postgres OR-combines multiple
+permissive policies for the same command/role, the real pre-existing policy (correctly named
+`*_select_scoped`, matching `ISS-2026-220`'s own precedent exactly) remained fully live and a
+zero-HRS-role probe actor still read the fixture row after the "fix" landed. Corrected to
+drop-and-replace the correctly-named policy in place; re-verified live (role-switched to
+`authenticated`, not merely claims-set, after a second live-caught bug in the same regression
+test's own first draft — RLS is bypassed for a superuser regardless of `request.jwt.claims`): a
+zero-HRS-role actor now sees 0 rows, an HRS:View holder sees the real row. **The remaining
+~33-table sweep across both domains stays `OPEN`, unchanged owner `HDN-378`** — each table needs
+its own individual action-code verification against its own RPC layer, not a mechanical
+copy-paste, even though the fix shape itself is now proven twice over.
 
 ### ISS-2026-226 — the first round's own new `BEFORE DELETE` legal-hold guard trigger checked only the PLT-128-native `legal_hold` flag, never the bridged generic (IAE-031) hold mechanism the SAME migration's own Finding B added — a file held exclusively via the generic mechanism was still physically destroyable, with zero audit trail (found and fixed at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED`, Critical)
 
@@ -2653,11 +2722,33 @@ The Hardening Matrix's own punch list (§9 item 3) assumed all three non-`pgcryp
 
 **Status `OPEN`**, Medium severity (a structural packaging/data-migration constraint, not an active exploit path — `spatial_ref_sys` is a reference table of coordinate system definitions, not tenant data, so the practical risk of its own `rls_disabled_in_public` is low despite the advisory's ERROR label). **Not fixed by this checkpoint** — genuinely out of a bounded hardening pass's scope (a full extension relocation requires confirming live relocatability against the actual deployed Postgres/PostGIS version, deciding a DROP+recreate-with-backfill strategy for 15 real columns across 12 tables, and a coordinated `CREATE OR REPLACE` sweep of the ~18 functions that call bare `ST_*()`). Owner: a dedicated future task, scoped exactly as above. Correct the Hardening Matrix's own "clears 7 of 8" framing to "clears 2 of 8 this checkpoint; the remaining 6, including the one ERROR, require a full postgis relocation this checkpoint cannot safely deliver."
 
-### ISS-2026-235 — `app.set_integration_connection_status` independently bypasses `ISS-2026-150`'s own IP-restriction fix, IAE-026's lockout guard, and step-up-MFA simultaneously (found at `HDN-378` Tier C attack-surface adversarial testing lens, `OPEN`, Critical, own `HDN-BLK-023` entry, owner `HDN-386`)
+### ISS-2026-235 — `app.set_integration_connection_status` independently bypasses `ISS-2026-150`'s own IP-restriction fix, IAE-026's lockout guard, and step-up-MFA simultaneously (found at `HDN-378` Tier C attack-surface adversarial testing lens, `RESOLVED at HDN-387`, was Critical, own `HDN-BLK-023` entry, owner `HDN-386`)
 
 `app.activate_enterprise_idp_connection` (this checkpoint's own hardened IP-restriction wrapper, one of `ISS-2026-150`'s 4 named target functions) delegates the actual status flip to `app.set_integration_connection_status` — the *generic* status-setter shared by every integration connection type (SSO, webhooks, GPS, everything else), created at `20260803020000` (Prompt 336, IAE-008), long before the SSO-specific wrapper's own extra protections (IAE-026's lockout guard, `CG-S14-IAE-039`'s step-up-MFA, this checkpoint's own IP-restriction) were layered on top in later checkpoints. The generic function is independently `EXECUTE`-granted to `authenticated`, gated only on a bare `INTHUB:Configure` permission check — none of the SSO wrapper's own extra checks. Live-forced end to end: created a disabled enterprise SSO connection with zero verified test logins, under a tenant with an `enforced`-mode IP allowlist; the hardened wrapper correctly denied an actor holding only `INTHUB:Configure` (no `IAM:Configure`, no in-range IP); calling `app.set_integration_connection_status(conn.id, 'active', ...)` **directly**, as that same actor, succeeded — reactivating the connection with zero client IP supplied at all, bypassing the lockout guard, step-up-MFA, and `ISS-2026-150`'s own headline fix in one call.
 
 This is a real, pre-existing architectural gap — nobody, across the IAE-026 → `CG-S14-IAE-039` → `HDN-378` lineage, ever went back to close the loophole in the shared generic primitive each new layer of protection assumed callers would only reach through the specialized wrapper. **Status `OPEN`**, Critical severity (fully defeats 3 independently-shipped, already-`VERIFIED` security controls for a tenant-wide SSO login-routing reconfiguration — one of RPD-023's own named highest-consequence action classes — via a single direct RPC call, requiring only a legitimately-granted `INTHUB:Configure` permission, not zero authority). **Not fixed by this checkpoint** — the correct fix requires a genuine design decision (should every status-flip path for every connection type require the same protections as the SSO-specific one, or only SSO; is `INTHUB:Configure` alone ever sufficient for the generic case, e.g. reactivating a webhook or GPS connection) touching a shared, heavily-reused primitive, exceeding what a Tier C review pass should rush. Owner: `HDN-386` (Integrated Verification), scoped to: (a) decide whether `set_integration_connection_status` needs its own conditional guard for `p_status='active'` mirroring the SSO wrapper's own protections, or whether direct callers should be revoked entirely in favor of forcing all activation through type-specific wrappers, and (b) audit whether any OTHER connection type (webhook, GPS, third-party API) has an equivalent specialized wrapper with extra protections this same generic function also bypasses. This defect is taxonomy class `C-28` (a specialized wrapper's extra protections are bypassed because the generic primitive it delegates to remains independently callable with only its own, weaker check) — new class added this checkpoint, see `docs/standards/RECURRING_DEFECT_TAXONOMY.md`.
+
+**`RESOLVED` at `HDN-387`.** Two prior checkpoints (`HDN-386`'s own first round and Tier C review)
+had investigated and declined to fix this, judging item (b) above — "audit whether any OTHER
+connection type has an equivalent specialized wrapper this same generic function also
+bypasses" — open-ended. `HDN-387` re-ran that exact audit and found it was a closed, single-item
+list all along: grepped every integration migration for a call to `app.set_integration_
+connection_status` and, separately, for the step-up-MFA/IP-restriction/lockout-guard pattern in
+every non-SSO integration file — zero hits outside the SSO-specific files. `app.activate_
+enterprise_idp_connection` is the ONLY specialized activation wrapper anywhere in this schema.
+Fixed per item (a) above's second option — direct callers revoked, forcing all reactivation
+through a new, narrow entry point — mirroring the already-proven `app.request_gps_device_status_
+transition` precedent (`ATW-031`, `ISS-2026-028`): `app.set_integration_connection_status` keeps
+its full status machine and becomes a shared INTERNAL core with its `authenticated`/`service_role`
+grants revoked; `app.request_integration_connection_status_change` carries the grant instead and
+refuses `p_status='active'` for either SSO adapter code outright, delegating every other transition
+unchanged; `app.activate_enterprise_idp_connection` (`SECURITY DEFINER`, same owner) is unaffected
+by the revocation. `server/mutations/integration-hub.ts` repointed to the new entry point in the
+same checkpoint. Live-forced: reactivation through the generic path now correctly refused for the
+SSO connection; a non-active transition on the same connection still works; a non-SSO connection
+reactivates unchanged; the core's grant confirmed revoked, the new entry point's grant confirmed
+present — full transcript `HDN-387.md` §11. `supabase/migrations/
+20260819000000_harden_release_blocker_triage_remediation.sql` Part 1.
 
 ### ISS-2026-236 — 3 of `app.is_high_risk_action`'s own 7 hardcoded platform-default high-risk tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve` — 61 real, reachable functions) received neither step-up-MFA nor IP-restriction wiring across the entire `IAE-037` → `CG-S14-IAE-039` → `HDN-378` lineage (found at `HDN-378` Tier C schema-wide completeness sweep lens, `OPEN`, High, own `HDN-BLK-024` entry, owner `HDN-386`)
 
@@ -2691,7 +2782,7 @@ Confirmed narrow, not systemic: `server/mutations/*.ts` (transactional write API
 
 **Status `OPEN`**, Medium severity (a real, live, unbounded-payload defect on 3 genuinely transactional-volume tables — not yet a measured incident, since seeded volume today is modest, but the cost and payload size are unbounded by construction and will degrade as real tenant data accumulates; this is exactly the class matrix item 7's own business rule names: "No `SELECT *` or client-loaded full datasets on critical paths"). **Not fixed by this checkpoint** — a real fix needs actual pagination UI (cursor state, a count query, a `Pagination` control) on all 3 routes, not a silent query-layer `.limit(500)` cap, which would be exactly the "cosmetic partial fix" this repository's own discipline forbids (silently truncating a list with no UI indication is worse than the current unbounded-but-honest behavior). Owner: a dedicated future task, scoped to building real pagination for `commercial/accounts`, `commercial/quotations`, `commercial/contracts` first (the 3 confirmed transactional-volume cases), then auditing the ~10 lower-severity siblings for whether their own bounded cardinality genuinely makes pagination unnecessary or whether they should get the same treatment defensively.
 
-### ISS-2026-239 — 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real production query telemetry that does not yet exist anywhere in this system (found at `HDN-379` Performance and Scalability, unindexed-FK triage lens, `OPEN`, Low, owner a dedicated future task)
+### ISS-2026-239 — 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real production query telemetry that does not yet exist anywhere in this system (found at `HDN-379` Performance and Scalability, unindexed-FK triage lens, `ACCEPTED_EXCEPTION`, Low, owner: re-open once real production query traffic exists — re-ruled at `HDN-387` per `BLOCKER_LEDGER.md`'s `HDN-BLK-006`, correcting `HDN-379`'s own procedurally-invalid self-acceptance caught at `HDN-386`)
 
 Reproduced the advisory class directly against a live schema (`pg_constraint`/`pg_index`/`pg_attribute`, matching the Supabase advisor's own rule — a FK constraint whose column(s) are not the leading prefix of any index on that table): **892 confirmed unindexed**, spanning 424 distinct tables, out of 1,766 total FK constraints across ~570 distinct tables in `app` — unchanged from the matrix's own seeded count, no drift since `HDN-378`.
 
@@ -2701,7 +2792,7 @@ Sampled 24 FKs across Finance, Advanced TMS/WMS, Procurement, HRIS, Customer Por
 
 **Correction (Tier C correctness re-derivation lens): `audit_logs.actor_auth_user_id` was miscategorized as cold — a real, granted RPC does filter on it.** `app.search_audit_logs` (`supabase/migrations/20260807300000_create_intelligence_advanced_audit_impersonation.sql:166`) filters `and (p_actor_auth_user_id_filter is null or actor_auth_user_id = p_actor_auth_user_id_filter)`, is `EXECUTE`-granted to `authenticated`, and has a real TS wrapper (`searchAuditLogs`, `server/queries/advanced-audit.ts`) — but has **zero live UI callers anywhere under `app/`** (dead at the page layer, live and callable at the RPC layer). This doesn't overturn the "don't index yet" conclusion for this column specifically (an unreachable-from-the-UI filter is not yet a real production access pattern), but the original claim that no RPC filters through it at all was factually wrong, not merely a severity judgment call — corrected here rather than left standing.
 
-**Status `OPEN`**, Low severity — a genuine, sample-verified absence of any small, high-confidence, low-risk indexing opportunity, not a disguised defect. **Not fixed by this checkpoint** — blindly indexing the cold candidates would be pure write-amplification cost for zero read benefit on some of the highest-write-volume tables in the system (every invoice/journal/bill line posting writes these), exactly the "blindly index" failure mode this checkpoint's own charter forbids; and the tool that would resolve the remaining ambiguous ~300-row candidate population definitively — real production query telemetry (`pg_stat_statements` or equivalent) — does not exist anywhere in this system yet (confirmed by this same matrix section's own item 3, "982 `unused_index` advisories... the database has served no queries... not actionable until it has"). Owner: a dedicated future task, to be executed once real production/load query telemetry exists at declared target volume — re-run this categorization against the ~300-row ambiguous candidate list and apply confirmed-hot indexes only, per the decision framework recorded in `docs/build-log/full-system-hardening/HDN-379.md`.
+**Status `ACCEPTED_EXCEPTION`** (re-ruled at `HDN-387` under `00_EXECUTION_INDEX.md` §8.2's full 5-condition test, correcting `HDN-379`'s own procedurally-invalid self-acceptance), Low severity — a genuine, sample-verified absence of any small, high-confidence, low-risk indexing opportunity, not a disguised defect. **Not fixed by this checkpoint** — blindly indexing the cold candidates would be pure write-amplification cost for zero read benefit on some of the highest-write-volume tables in the system (every invoice/journal/bill line posting writes these), exactly the "blindly index" failure mode this checkpoint's own charter forbids; and the tool that would resolve the remaining ambiguous ~300-row candidate population definitively — real production query telemetry (`pg_stat_statements` or equivalent) — does not exist anywhere in this system yet (confirmed by this same matrix section's own item 3, "982 `unused_index` advisories... the database has served no queries... not actionable until it has"). Owner: a dedicated future task, to be executed once real production/load query telemetry exists at declared target volume — re-run this categorization against the ~300-row ambiguous candidate list and apply confirmed-hot indexes only, per the decision framework recorded in `docs/build-log/full-system-hardening/HDN-379.md`.
 
 ### ISS-2026-240 — the `auth_rls_initplan` regression guard is structurally blind to the equivalent `default auth.uid()` helper-function pattern, used 72 times across 35 migrations since the very first migration (found at `HDN-379` Performance and Scalability, SELECT*/cache-safety verification lens, `OPEN`, Low, owner a dedicated future task)
 
@@ -2781,7 +2872,7 @@ The source-sweep lens found 23 of 95 tables (24%) with zero overflow handling; t
 
 **Status `OPEN`**, Low severity (a tooling/guard-rail gap, not a live defect — nothing in the shipped product is broken by this entry's own absence). **Not fixed by this checkpoint** — a `no-restricted-syntax` selector precise enough to catch a genuinely unwrapped table or an under-sized touch target without false-positiving on, e.g., a deliberately small icon-only decorative element, needs careful regex/AST-selector design and its own validation pass against the existing codebase; that scope is outside this checkpoint's own bounded "5-15 files" repair charter. Owner: a dedicated future task, scoped to designing and landing the `no-restricted-syntax` selector(s) plus a false-positive sweep against the current tree before enabling it as a lint error (not just a warning).
 
-### ISS-2026-249 — IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's own job-dead-letter fix — webhook delivery failure, AI governed-action failure, and security/auth denials still produce zero incident (found at `HDN-382` Observability Audit, live/simulated failure testing lens + source sweep lens, `OPEN`, High, owner a dedicated future task)
+### ISS-2026-249 — IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's own job-dead-letter fix — webhook delivery failure, AI governed-action failure, and security/auth denials still produce zero incident (found at `HDN-382` Observability Audit, live/simulated failure testing lens + source sweep lens, `PARTIALLY RESOLVED at HDN-387`, High, owner a dedicated future task)
 
 Live-reproduced directly (not assumed): a job driven through the real DLQ path (`app.enqueue_job` → `app.claim_next_job` → `app.record_job_failure`) reaching its own terminal `dead_letter` status produced **zero incident, zero alert, zero owner notification** before this checkpoint's own fix — only an `app.audit_logs` row a human would have to go looking for. This checkpoint's own migration (`20260816000000_harden_observability_audit_findings.sql`) wires the single highest-value, most common failure path — `app.record_job_failure`'s own dead-letter transition — into `app.raise_observability_alert`, live-verified via a real regression db-test (`scripts/db-tests/background-job.sql`).
 
@@ -2792,7 +2883,27 @@ Live-reproduced directly (not assumed): a job driven through the real DLQ path (
 - **Outbound webhook-delivery replay divergence** — `app.replay_webhook_delivery` (`20260804060000_harden_intelligence_batch3_tier_c_review_fixes.sql`) grants a dead-lettered delivery a *cumulative* attempts budget (`max_attempts = attempts + max_attempts`) but enqueues a **fresh job** whose own `attempts` counter restarts at 0, while the delivery's own `attempts` continues from where it left off. The delivery reaches its own terminal `dead_letter` several attempts *before* the bridging job does — when the worker (`lib/webhooks/process-webhook-delivery-job.server.ts`) next claims that job and sees `dispatchInfo.status === 'dead_letter'`, it calls `completeJob`, never `recordJobFailure`. **A webhook delivery that dead-letters a second time, post-replay, produces zero alert even after this checkpoint's own fix** — narrower and more specific than the general "webhook signature failures" framing above.
 - **Integration connection health-check auto-disable** (`app.record_integration_health_check`, `IAE-008`, `20260803020000_create_intelligence_integration_hub.sql`) auto-disables an `app.integration_connections` row at 10 consecutive unhealthy checks, with no alert call — and unlike the dormant `app.evaluate_workload_budget`/automation-rule-engine class this repository already discloses as out of scope (zero live callers), this path **is** live-reachable (`server/mutations/integration-hub.ts` → `app/(tenant)/[tenantSlug]/integrations/actions.ts` → wired into the real `[connectionId]/page.tsx`).
 
-**Status `OPEN`**, High severity (this directly contradicts Prompt 382's own Main Flow — "A job/webhook/API/database failure produces actionable alert" — for the majority of real failure paths this codebase has, and Business Rule §24's "no silent DLQ/backpressure accumulation" for webhook/AI/security failures specifically). **Not fixed by this checkpoint** — wiring every one of these producers in one pass would exceed this lane's own "5-15 files, bounded repair" charter; the highest-value single path (job dead-lettering) is fixed here, closing the gap for every job type this repository has. Owner: a dedicated future task, scoped to wiring `app.raise_observability_alert` calls into the three webhook-signature-verification routes' own failure paths, the webhook-delivery-replay divergence, the `IAE-008` integration health-check auto-disable path, the AI governed-action rejection path, and the highest-severity security-denial paths, in that priority order (mirroring blast radius and live-reachability: every job type already covered by this checkpoint; the two Tier C-found live-reachable gaps next; webhooks/AI/security last since all three already have strong audit-trail coverage as a partial mitigation).
+**Status `PARTIALLY RESOLVED at HDN-387`**, High severity (this directly contradicts Prompt 382's own Main Flow — "A job/webhook/API/database failure produces actionable alert" — for the majority of real failure paths this codebase has, and Business Rule §24's "no silent DLQ/backpressure accumulation" for webhook/AI/security failures specifically). **Not fixed by this checkpoint** — wiring every one of these producers in one pass would exceed this lane's own "5-15 files, bounded repair" charter; the highest-value single path (job dead-lettering) is fixed here, closing the gap for every job type this repository has. Owner: a dedicated future task, scoped to wiring `app.raise_observability_alert` calls into the three webhook-signature-verification routes' own failure paths, the webhook-delivery-replay divergence, the `IAE-008` integration health-check auto-disable path, the AI governed-action rejection path, and the highest-severity security-denial paths, in that priority order (mirroring blast radius and live-reachability: every job type already covered by this checkpoint; the two Tier C-found live-reachable gaps next; webhooks/AI/security last since all three already have strong audit-trail coverage as a partial mitigation).
+
+**Amended, `HDN-387`.** **`PARTIALLY RESOLVED`** — closes the first-named producer, the 3 inbound
+webhook-signature-verification INGESTION functions' own `signature_verification_failed` branch
+(`app.ingest_finance_payment_gateway_webhook_event`, `app.ingest_logistics_partner_webhook_event`,
+`app.ingest_third_party_provider_webhook_event`; NOT the pure, `stable` `verify_*_webhook_signature`
+functions themselves, which correctly stay side-effect-free — the real failure-recording point is
+the ingestion function's own branch, mirroring `app.record_job_failure`'s already-fixed shape
+exactly). **Two real defects caught and fixed while writing this migration, before any db-tests
+run confirmed them**: a first draft based each function's "verbatim reproduction" on its original
+create-table migration, silently reverting later hardening (advisory-lock rate limiting, ATW-226F's
+canonical-telemetry-arbitration call, ATW-226I's auto-disable wiring, ATW-027's exception-boundary
+widening) — caught by a live full-suite `db-tests` run failing an unrelated telemetry-arbitration
+test; rewritten from each function's true latest body. The new alert calls also initially passed
+`p_detail` (declared `text`) a `jsonb` value, which would have failed to resolve the function call
+entirely — caught before any test run, fixed to a plain text string. Live-forced: a bad signature
+against a real connection still records the ingestion attempt exactly as before AND now produces a
+real `app.incidents` row. **The remaining named producers (webhook-delivery-replay divergence,
+`IAE-008` health-check auto-disable, AI-governance rejection, security-denial paths) remain
+`OPEN`, unchanged owner, not attempted here.** `supabase/migrations/
+20260819000000_harden_release_blocker_triage_remediation.sql` Part 5.
 
 ### ISS-2026-250 — no monitoring/incident dashboard UI exists anywhere in the application — IAE-030's own real, well-built alerting backend has zero consumer (found at `HDN-382` Observability Audit, coverage-mapping lens + runbook/dashboard review lens, `OPEN`, High, owner a dedicated future task)
 
