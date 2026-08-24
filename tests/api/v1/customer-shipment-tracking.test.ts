@@ -28,16 +28,32 @@ describe("GET /api/v1/customer/shipments/{shipmentOrderId}/tracking", () => {
     }
   });
 
-  test("a shipment not found or not owned by this account -> 404 shipment_order_not_found (never leaks whether the id exists for another account)", async () => {
+  test("a shipment not found or not owned by this account -> 404 shipment_order_not_found (never leaks whether the id exists for another account) -- the real RPC's own record_not_found exception path, not an empty-array success", async () => {
     const stub = installRpcFetchStub({
       authenticate_and_authorize_api_request: { data: okAuthRow() },
-      get_customer_shipment_tracking: { data: [] },
+      get_customer_shipment_tracking: { error: { message: "record_not_found: no permitted shipment order exists for the given id" } },
     });
     try {
       const response = await GET(new Request(`http://localhost/api/v1/customer/shipments/${SHIPMENT_ID}/tracking`, { headers: { authorization: "Bearer cgk_test_valid" } }), { params });
       assert.equal(response.status, 404);
       const body = (await response.json()) as { error: { code: string } };
       assert.equal(body.error.code, "shipment_order_not_found");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("HDN-376 Tier C regression: a genuine internal RPC failure is surfaced as 422 mutation_failed, never silently presented as the domain 404 not-found case", async () => {
+    const stub = installRpcFetchStub({
+      authenticate_and_authorize_api_request: { data: okAuthRow() },
+      get_customer_shipment_tracking: { error: { message: "could not serialize access due to concurrent update" } },
+    });
+    try {
+      const response = await GET(new Request(`http://localhost/api/v1/customer/shipments/${SHIPMENT_ID}/tracking`, { headers: { authorization: "Bearer cgk_test_valid" } }), { params });
+      assert.equal(response.status, 422);
+      const body = (await response.json()) as { error: { code: string } };
+      assert.equal(body.error.code, "mutation_failed");
+      assert.notEqual(body.error.code, "shipment_order_not_found");
     } finally {
       stub.restore();
     }

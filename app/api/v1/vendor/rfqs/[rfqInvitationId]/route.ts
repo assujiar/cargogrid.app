@@ -34,8 +34,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ rfqI
       statusCode = 200;
       body = { rfq };
     } catch (error) {
-      statusCode = 404;
-      body = { error: buildApiError({ code: error instanceof VendorApiError ? "rfq_invitation_not_found" : "mutation_failed", message: error instanceof Error ? error.message : "RFQ invitation not found or not available to this vendor.", requestId: authorized.request.correlationId }) };
+      if (error instanceof VendorApiError && error.code === "rfq_invitation_not_found") {
+        statusCode = 404;
+        body = { error: buildApiError({ code: "rfq_invitation_not_found", message: error.message, requestId: authorized.request.correlationId }) };
+      } else {
+        statusCode = 422;
+        body = { error: buildApiError({ code: "mutation_failed", message: error instanceof Error ? error.message : "Could not retrieve this RFQ invitation.", requestId: authorized.request.correlationId }) };
+      }
     }
   }
 

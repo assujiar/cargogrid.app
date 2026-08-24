@@ -34,10 +34,18 @@ export interface VendorApiRpcClient {
   rpc(fn: "get_rfq_for_vendor_api", args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
+const KNOWN_VENDOR_API_QUERY_ERROR_CODES = ["rfq_invitation_not_found"] as const;
+type KnownVendorApiQueryErrorCode = (typeof KNOWN_VENDOR_API_QUERY_ERROR_CODES)[number];
+export type VendorApiErrorCode = KnownVendorApiQueryErrorCode | "query_failed";
+
 export class VendorApiError extends Error {
+  readonly code: VendorApiErrorCode;
+
   constructor(message: string) {
     super(message);
     this.name = "VendorApiError";
+    const prefix = message.split(":")[0]?.trim();
+    this.code = (KNOWN_VENDOR_API_QUERY_ERROR_CODES as readonly string[]).includes(prefix ?? "") ? (prefix as KnownVendorApiQueryErrorCode) : "query_failed";
   }
 }
 

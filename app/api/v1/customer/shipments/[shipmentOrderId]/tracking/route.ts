@@ -8,7 +8,7 @@
  */
 
 import { authorizeApiV1Request, recordApiV1Success, apiV1ResponseHeaders, type AuthorizedApiV1Request } from "../../../../../../../lib/api-gateway/authenticate.server.ts";
-import { getCustomerShipmentTracking, type CustomerShipmentTrackingQueryClient } from "../../../../../../../server/queries/customer-shipment-tracking.ts";
+import { getCustomerShipmentTracking, CustomerShipmentTrackingQueryError, type CustomerShipmentTrackingQueryClient } from "../../../../../../../server/queries/customer-shipment-tracking.ts";
 import { buildApiError } from "../../../../../../../server/contracts/api/api.ts";
 
 /** See app/api/v1/customer/bookings/route.ts's own toBookingClient() for why this cast is needed. */
@@ -30,8 +30,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ ship
     const tracking = await getCustomerShipmentTracking(toTrackingClient(authorized.request.rpcClient), authorized.request.tenantId, authorized.request.createdByAuthUserId, shipmentOrderId);
     body = { tracking };
   } catch (error) {
-    statusCode = 404;
-    body = { error: buildApiError({ code: "shipment_order_not_found", message: error instanceof Error ? error.message : "Shipment not found or not available to this account.", requestId: authorized.request.correlationId }) };
+    const isAntiEnumeratedNotFound = error instanceof CustomerShipmentTrackingQueryError && (error.code === "record_not_found" || error.code === "actor_identity_mismatch");
+    if (isAntiEnumeratedNotFound) {
+      statusCode = 404;
+      body = { error: buildApiError({ code: "shipment_order_not_found", message: error.message, requestId: authorized.request.correlationId }) };
+    } else {
+      statusCode = 422;
+      body = { error: buildApiError({ code: "mutation_failed", message: error instanceof Error ? error.message : "Could not retrieve this shipment's own tracking data.", requestId: authorized.request.correlationId }) };
+    }
   }
 
   await recordApiV1Success(authorized.request, { operation: "get_customer_shipment_tracking", httpMethod: "GET", path: `/api/v1/customer/shipments/${shipmentOrderId}/tracking`, statusCode, startedAt });

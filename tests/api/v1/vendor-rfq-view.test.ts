@@ -40,16 +40,32 @@ describe("GET /api/v1/vendor/rfqs/{rfqInvitationId}", () => {
     }
   });
 
-  test("an invitation that does not exist or does not belong to this vendor -> 404 rfq_invitation_not_found (never discloses which)", async () => {
+  test("an invitation that does not exist or does not belong to this vendor -> 404 rfq_invitation_not_found (never discloses which) -- the real RPC's own rfq_invitation_not_found exception path, not an empty-array success", async () => {
     const stub = installRpcFetchStub({
       authenticate_and_authorize_api_request: { data: okAuthRow({ vendorMasterRecordId: VENDOR_ID }) },
-      get_rfq_for_vendor_api: { data: [] },
+      get_rfq_for_vendor_api: { error: { message: "rfq_invitation_not_found: no rfq invitation for this vendor in tenant" } },
     });
     try {
       const response = await GET(new Request(`http://localhost/api/v1/vendor/rfqs/${RFQ_INVITATION_ID}`, { headers: { authorization: "Bearer cgk_test_vendor" } }), { params });
       assert.equal(response.status, 404);
       const body = (await response.json()) as { error: { code: string } };
       assert.equal(body.error.code, "rfq_invitation_not_found");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("HDN-376 Tier C regression: a genuine internal RPC failure is surfaced as 422 mutation_failed, never silently presented as the domain 404 not-found case", async () => {
+    const stub = installRpcFetchStub({
+      authenticate_and_authorize_api_request: { data: okAuthRow({ vendorMasterRecordId: VENDOR_ID }) },
+      get_rfq_for_vendor_api: { error: { message: "could not serialize access due to concurrent update" } },
+    });
+    try {
+      const response = await GET(new Request(`http://localhost/api/v1/vendor/rfqs/${RFQ_INVITATION_ID}`, { headers: { authorization: "Bearer cgk_test_vendor" } }), { params });
+      assert.equal(response.status, 422);
+      const body = (await response.json()) as { error: { code: string } };
+      assert.equal(body.error.code, "mutation_failed");
+      assert.notEqual(body.error.code, "rfq_invitation_not_found");
     } finally {
       stub.restore();
     }

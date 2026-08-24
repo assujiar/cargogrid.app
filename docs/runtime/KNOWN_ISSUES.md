@@ -2004,6 +2004,125 @@ live by 6 of the 44 new HDN-376 route-level tests across `tests/api/v1/customer-
 bookings-submit.test.ts`, `tests/api/v1/vendor-assignment-accept.test.ts`,
 `tests/api/v1/vendor-assignment-decline.test.ts`.
 
+### ISS-2026-213 — 6 self-approval/maker-checker functions share `ISS-2026-209`'s own "boolean-equality-on-a-nullable-column fails open" comparison shape, though none is live-forced exploitable (found at `CG-S15-HDN-008`'s own Tier C review, `OPEN`, Low, owner `HDN-386`)
+
+Found by this checkpoint's own Tier C schema-wide completeness-sweep lens, live-forced
+against a fresh disposable database via a direct `pg_proc.prosrc` regex sweep (161 raw
+candidates) cross-referenced against `information_schema.columns` nullability, not a
+naming-pattern grep alone. `app.decide_approval_step`, `app.approve_cycle_count_
+variance`/`app.reject_cycle_count_variance`, `app.approve_dedicated_deployment_
+qualification`, `app.approve_region_assignment`, and `app.approve_warehouse_billing_
+event` each gate a self-approval check with `if v_record.&lt;actor_column&gt; = p_actor_
+auth_user_id then &lt;raise self-approval-forbidden&gt;` against a nullable `&lt;actor_
+column&gt;` — the identical shape `ISS-2026-209` found live-exploitable on the inbound
+webhook signature check (a comparison against a nullable value, used as a security
+gate, with no explicit `IS NULL`/`IS DISTINCT FROM` guard).
+
+**Live-forced, and confirmed NOT exploitable in any of the 6 cases** — the
+architectural difference from `ISS-2026-209`: every one of these 6 functions sits
+*behind* an `app.evaluate_permission()`/`app.has_active_tenant_membership()`-gated
+authority check on the SAME mutation path that would need to populate the nullable
+column with `NULL` in the first place, and that authority check structurally excludes a
+NULL actor already — live-forced directly (`app.check_risk_authority('Create', &lt;tenant&gt;,
+null)` → `f`). `ISS-2026-209`, by contrast, sat at the true unauthenticated external
+boundary (an inbound webhook, no prior authority check of any kind), which is exactly
+why it was live-exploitable and these 6 are not.
+
+**Severity: Low** — a real defense-in-depth gap (an `IS DISTINCT FROM`/explicit
+null-guard is still the more correct, self-documenting way to write a security-relevant
+equality check, and a future refactor that removes or weakens the upstream authority
+gate on any of these 6 functions would silently reintroduce a live `ISS-2026-209`-shaped
+bug with no local defense at the comparison site itself), not a live vulnerability.
+
+**Not fixed here** — 6 functions across 5 different domains (Risk/AI governance,
+Advanced TMS/WMS cycle counts, Enterprise Deployment, Enterprise Region Assignment,
+Advanced TMS/WMS warehouse billing), a cross-cutting hardening sweep genuinely wider
+than this checkpoint's own API-compatibility charter. **Owner: `HDN-386`** (Full-System
+Hardening Integrated Verification) — mirror `ISS-2026-210`'s own already-proven fix
+shape (add `if p_actor_auth_user_id is null or v_record.&lt;actor_column&gt; is null then
+return/raise &lt;deny&gt;; end if;` before the equality check) across all 6, plus a
+regression test per function proving a (structurally-unreachable-today but
+future-proofed) NULL actor is denied rather than silently passing.
+
+### ISS-2026-214 — 4 REST `/v1` mutation routes leak a raw Zod `ZodError` JSON structure into a 422 `mutation_failed` response body for a malformed path-parameter UUID (found at `CG-S15-HDN-008`'s own Tier C review, `OPEN`, Low, owner `HDN-387`)
+
+Found by this checkpoint's own Tier C attack-surface adversarial-testing lens,
+live-forced with malformed (non-UUID) path parameters against all 9 REST `/v1` routes.
+4 routes (`vendor/assignments/{invitationId}/accept`, `.../decline`, `vendor/rfqs/
+{rfqInvitationId}/response`, `customer/bookings/{bookingRequestId}/submit`) reach their
+own underlying mutation function's `z.string().uuid().parse(...)` input validation for
+the path id; a malformed id throws a raw `ZodError`, caught by the route's own generic
+`catch` block and mapped to `422 mutation_failed` with `message` containing the full
+Zod issue array (`code`, `format`, the UUID regex `pattern`, `path`) verbatim, rather
+than a clean, human-readable message or a `400` (a locally-malformed id, never sent to
+the database, is arguably the same class Prompt 376's own `ISS-2026-212` already fixed
+for `expectedVersion` — a client-side validation failure, not a real conflict).
+
+**Severity: Low** — not a raw HTTP 500 (every route still returns a structured
+`ApiError` envelope), not a new information-disclosure risk beyond "here is our UUID
+validation regex" (no tenant/record data, no cross-tenant leak), and not a live crash.
+The other 5 routes (whose underlying query functions pass the raw path string straight
+to the RPC instead of validating it client-side first) do not exhibit this shape — a
+malformed id there produces a normal RPC-sourced error, generically mapped to the
+route's own anti-enumeration `404`.
+
+**Not fixed here** — out of `HDN-376`'s own bounded-repair scope for this Tier C close
+(a genuinely new, incidentally-found hygiene item, not a regression of anything this
+checkpoint shipped). **Owner: `HDN-387`.** Fix shape once owned: catch the `ZodError`
+specifically (before the generic `catch`) on all 4 routes, map it to `400 invalid_path_
+parameter` (or similar) with a clean message, mirroring `ISS-2026-212`'s own already-
+shipped `invalid_expected_version` precedent rather than surfacing the raw validation
+issue array.
+
+### ISS-2026-215 — 2 REST `/v1` GET routes collapsed every RPC error, including a genuine internal failure, into the domain 404 "not found" response, contradicting this checkpoint's own error-shape-consistency claim (found and fixed at `CG-S15-HDN-008`'s own Tier C review, `RESOLVED` at `HDN-376`, Low)
+
+Found by this checkpoint's own Tier C correctness-re-derivation lens, live-forced.
+`GET /api/v1/customer/shipments/{shipmentOrderId}/tracking` and `GET /api/v1/vendor/
+rfqs/{rfqInvitationId}` both unconditionally mapped ANY thrown error from their own
+underlying query function to a `404` domain-not-found response, never inspecting the
+error's own classified `code`. Live-forced: mocking `get_customer_shipment_tracking`'s
+RPC call to return a genuine internal-failure error (`"could not serialize access due
+to concurrent update"`, a real Postgres serialization-conflict message shape) still
+produced `HTTP 404 shipment_order_not_found` — identical to a real not-found case.
+Same shape confirmed on the vendor RFQ view route. Root cause: `Customer
+ShipmentTrackingQueryError` already classifies into `record_not_found`/`actor_identity_
+mismatch`/`query_failed`, but the route's own `catch` block never read `.code`; `Vendor
+ApiError` did not classify errors at all, so the route's own `error instanceof
+VendorApiError ? "rfq_invitation_not_found" : "mutation_failed"` ternary was a no-op
+that always selected the not-found branch. This directly contradicted `HDN-376.md`
+§6.2's own first-round claim that "error-shape consistency across all 9 routes... no
+deviation" held — the 5 POST/mutation routes this checkpoint's own first round touched
+correctly branch on a specific classified code and fall back to a generic `mutation_
+failed` at `422` for anything unclassified; these 2 GET routes did not follow that same
+established pattern. **Root cause of the miss matches this checkpoint's own §6.1
+narrative for how `ISS-2026-209` itself first shipped**: neither route's own first-round
+test file (`tests/api/v1/customer-shipment-tracking.test.ts`, `tests/api/v1/vendor-rfq-
+view.test.ts`) had a negative-RPC-error test case — both only exercised the (in
+practice unreachable, since the real RPCs always raise a real exception rather than
+returning an empty array on genuine not-found) empty-array "not found" shape.
+
+**Severity: Low** — no security impact (both endpoints are already anti-enumeration-by-
+design; a genuinely-not-found case and a genuinely-broken case both already resolved to
+`404` either way, so no cross-tenant/enumeration leak was introduced or closed by this
+distinction) — a correctness/consistency and operability gap: a transient internal
+failure (e.g. a serialization conflict a client could usefully retry) was
+indistinguishable from "this resource does not exist," which could cause client retry
+logic to give up incorrectly.
+
+**Fixed**: `VendorApiError` (`server/queries/vendor-api.ts`) now classifies into
+`rfq_invitation_not_found`/`query_failed`, mirroring `CustomerShipmentTrackingQueryError`'s
+own already-established pattern exactly (verified this is the class's own sole
+consumer — `getRfqForVendorApi` — before adding classification, so no other caller's
+behavior changes). Both routes now branch on the classified code: the anti-enumeration
+`404` only for the specific known not-found-shaped codes, a generic `422 mutation_
+failed` for anything else (including `query_failed`, the genuine-internal-failure
+catch-all) — mirroring the 5 mutation routes' own established pattern exactly. The 2
+pre-existing "not found" tests were corrected to use the real RPC's own exception-based
+not-found signal (`error: {message: "record_not_found: ..."}` / `"rfq_invitation_not_
+found: ..."`) instead of the unrealistic empty-array shape, and 2 new regression tests
+added proving a genuine internal failure now returns `422 mutation_failed`, never the
+`404` not-found code.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
