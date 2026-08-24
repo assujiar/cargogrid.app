@@ -3,8 +3,8 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-019` — **Release Blocker Triage and
-Remediation (Prompt 387)** — `COMPLETED`, first round only, Tier C review
-pending. 3 independent parallel investigation lenses ran against the open
+Remediation (Prompt 387)** — `VERIFIED`, Tier C closed. 3 independent
+parallel investigation lenses ran against the open
 blocker backlog from `HDN-386`'s own `VERIFIED` state. Selected 7 bounded
 critical/high repairs, all mechanical or mirroring an already-proven
 pattern in this exact codebase: `HDN-BLK-023` (**Critical**, SSO
@@ -37,12 +37,35 @@ commit. A genuine two-process race was live-forced against `app.link_
 auth_identity` (`HDN-371.md` §6.2's own proven technique) and the exact
 `ISS-2026-163` unrelated-constraint collision was separately live-forced
 against `app.prepare_job_order` — both on a fresh disposable probe
-database. Gates: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run
-test` **5444/5444**; `pnpm exec next build` clean; `bash
-scripts/db-tests/run.sh` **230/230 files clean** (333 migrations, one new
-committed regression file). `CG-S15-HDN-019` is `COMPLETED`, not
-`VERIFIED` — Tier C review has not yet run; nothing after it may begin
-until it closes and this row moves to `VERIFIED`.
+database. Gates at the first round: `typecheck` 0; `lint` 0 errors/337
+warnings; `pnpm run test` **5444/5444**; `pnpm exec next build` clean;
+`bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations,
+one new committed regression file). Commit `e152f4f`.
+
+**Tier C review (4 independent adversarial lenses against `e152f4f`)
+found and fixed 2 more real gaps, plus disclosed one adjacent gap not a
+regression of this checkpoint's own fix.** Correctness re-derivation:
+clean PASS. Attack-surface testing: HELD for `HDN-BLK-023`/`019`/`027`/
+`010` (a stronger-than-documented guarantee found for `HDN-BLK-019` — a
+real FK `RESTRICT` independently blocks deletion of any file carrying
+access-log rows, held or not); `HDN-BLK-022`'s own RLS fix HELD under
+every direct attack, but a live-demonstrated adjacent gap was disclosed
+(a `customer_user`-layer actor who also holds a staff role can still
+read the same data via pre-existing, unguarded RPCs), folded into
+`ISS-2026-225`'s own still-open ~33-table remainder, owner unchanged
+`HDN-378`. Schema-wide completeness sweep found and fixed: 3 own-charter
+ledger entries (`HDN-BLK-008`, `HDN-BLK-014`'s residual, `HDN-BLK-039`)
+left with no disposition update at the first round — corrected, with
+`HDN-BLK-039` (14 unowned blockers) formally accepted under §8.2, real
+owner `Step 16` assigned, closing `RESOLVED`; and a newly-surfaced
+sibling gap (`sendTestWebhookDeliveryAction`) disclosed in prose but
+never registered — closed directly. Ledger-consistency lens found and
+fixed one minor gap: `HDN-387.md` §10 omitted `HARDENING_MATRIX.md`. No
+Critical or unowned High finding survives Tier C. Independent full gate
+re-run after the fix pass: `typecheck` 0; `lint` 0 errors/337 warnings;
+`pnpm run test` **5444/5444**; `pnpm exec next build` clean; `bash
+scripts/db-tests/run.sh` **230/230 files clean** (333 migrations,
+unchanged). `CG-S15-HDN-019` is `VERIFIED` — Tier C review closed.
 `FULL_SYSTEM_HARDENING_VERIFIED` is not set; only Prompt 389 may set it.
 Not a production/pilot/GA/market-ready claim (RPD-001/034/036). Full
 detail: `docs/build-log/full-system-hardening/HDN-387.md`; ledger record:

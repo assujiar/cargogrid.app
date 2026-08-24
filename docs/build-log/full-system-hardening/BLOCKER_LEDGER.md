@@ -242,6 +242,8 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Note** | The affected assertions are genuine, valuable concurrency proofs (real two-process row-lock races). They must keep working locally; the fix is about transporting the loser's output without `pg_read_file`, not about weakening the proof |
 | **`KNOWN_ISSUES`** | `ISS-2026-159` |
 
+*Amended at `HDN-387`, same checkpoint. Reviewed, not fixed — this entry's own charter-explicit owner is honored by this note, not by silence. The fix (redesigning how the losing session's own output is transported out of a CI-only, separate service-container topology, across 6 real concurrency-proof db-test files, without weakening any of the row-lock races themselves) is a genuine CI-infrastructure design decision — a different IPC/transport mechanism (e.g. writing to a table both containers can query, rather than a shared filesystem `pg_read_file()` call) touching 6 files' own proven concurrency mechanics, carrying real regression risk to files this checkpoint has no CI environment to validate against (no CI access from this session, the same disclosed limitation `HDN-BLK-007`'s own fix carries). Rushing a mechanical-looking fix here risks silently weakening a real two-process row-lock proof, the exact failure mode this entry's own "Note" field explicitly warns against. **Remains `DEFERRED_TO_HDN-387`'s own charter, unaddressed by code this checkpoint** — owner unchanged, a dedicated future task with local access to a CI-shaped environment (or an explicit `HDN-389` Closure Verification decision to accept it as a disclosed exception under §8.2, since it is Medium severity and eligible).*
+
 ---
 
 ## HDN-BLK-009 — the `e2e` CI job has no environment, so guarded routes 500
@@ -409,9 +411,13 @@ already tenant-scoped, anti-enumerating `app.get_customer_booking_request` first
 cross-tenant/missing id to a 404 exactly like its own sibling tracking route already does.
 `typecheck` clean; `tests/api/v1/customer-bookings-submit.test.ts` (6/6, including a new
 cross-tenant-rejection test) and the full repo unit-test suite (5444/5444) pass. **One sibling
-action, `sendTestWebhookDeliveryAction`, shares the identical unchecked shape but was outside
-this finding's own named list of 7 — flagged, not fixed here, a candidate for a future,
-separately-scoped finding, not silently folded in.** `replayWebhookDeliveryAction`'s own
+action, `sendTestWebhookDeliveryAction`, shared the identical unchecked shape but was outside
+this finding's own named list of 7 — first flagged, not fixed, at the first round; caught by
+this checkpoint's own Tier C schema-wide completeness sweep lens as a real gap deserving more
+than a dangling mention, and closed in the Tier C fix pass with the identical mechanical
+pattern (a `listWebhookEndpointsForTenant` ownership check before the mutating call), since it
+is the same file, the same already-proven idiom, and genuinely bounded — not a separate,
+larger finding after all.** `replayWebhookDeliveryAction`'s own
 tenant-ownership check reads via `list_webhook_deliveries_for_tenant` at its schema-max limit
 (200, no unbounded per-id RPC exists) — an accepted edge case, disclosed, not a design gap this
 checkpoint introduced. `app/(tenant)/[tenantSlug]/admin/api-keys/actions.ts`, `app/api/v1/
@@ -456,6 +462,8 @@ HDN-373.md` §6.*
 | **Regression test** | Done for the 16 fixed — a position-aware named-list check plus a live two-session forced-spoof test, `scripts/db-tests/rbac-enforcement.sql` |
 | **Rollback** | Additive migration only for the 16 fixed; `git revert` |
 | **`KNOWN_ISSUES`** | `ISS-2026-179` (`PARTIALLY RESOLVED`, Medium); residual scope `ISS-2026-186` (`OPEN`, Medium, owner `HDN-387`) |
+
+*Amended at `HDN-387`, same checkpoint. Reviewed, not fixed. The required work — a per-call-site audit of ~14 functions (`has_active_tenant_membership`, `can_access_record`, `is_supreme_admin`, `actor_holds_customer_user_layer`, `has_active_support_grant`, `claim_case_record_scope_ok`, `label_subject_record_scope_ok`, `wms_pick_record_scope_ok`, `is_ticket_queue_member`, `current_support_session`, `pipeline_scope_org_unit_ids`, `evaluate_dispatch_readiness`, `customer_warehouse_eligibility_active`, `resolve_locale_context`) to determine, function by function, whether each genuinely-third-party call site needs a different, narrower check than an unconditional `assert_actor_is_session_identity` (which `HDN-373`'s own investigation already confirmed would break every one of them if applied blindly) — is exactly the kind of open-ended, multi-function investigation-plus-design work this checkpoint's own charter reserves for a dedicated lane, not a bounded Tier C fix pass alongside 7 unrelated, already-proven-pattern repairs. **Remains `OPEN`, owner unchanged `HDN-387`'s own future allocation** — not silently dropped, explicitly re-affirmed as still requiring its own dedicated investigation before any fix.*
 
 ---
 
@@ -767,6 +775,31 @@ even though the fix pattern itself is identical; the 2 tables closed here are a 
 not the full closure this entry's own scope names. `supabase/migrations/
 20260819000000_harden_release_blocker_triage_remediation.sql` Part 4; regression:
 `scripts/db-tests/release-blocker-triage-remediation.sql`.*
+
+*Tier C addendum, `HDN-387`. The attack-surface adversarial testing lens live-forced a real gap
+adjacent to (not a regression of) the RLS fix above: the RLS policy itself HELD under every
+attack tried — a `customer_user`-layer actor sees 0 rows via raw `SELECT`, a revoked role sees 0
+rows, no direct write grant exists for `authenticated` on either table. But an actor who
+simultaneously holds BOTH a `customer_user`-layer `principal_membership` AND a legitimately
+assigned staff role (nothing in `app.assign_role`/`app.grant_principal_membership` prevents one
+identity from holding both, an unguarded, independent axis) can still read the identical row
+through the pre-existing `app.list_position_grades`/`app.list_vendor_kpi_scorecards` RPCs, and
+the same unguarded shape was found by code review in `app.get_procurement_dashboard_vendor_risk_
+summary`/`app.list_procurement_vendor_risk_dashboard_rows` — none of these RPCs check
+`actor_holds_customer_user_layer` before their own `evaluate_permission('HRS'/'PRC', 'View')`
+gate, unlike the newly-hardened RLS policies which do. This directly undercuts the RLS fix's own
+borrowed rationale (from the `ATW-023` precedent this pattern's comment cites: "the RPC layer
+already enforces identical... scope") for these specific 2 tables' own RPC surface — that
+assumption does not actually hold here. **Not a regression this checkpoint introduced** — the
+gap is pre-existing and was never claimed closed by any prior checkpoint — but it is a real,
+live-demonstrated way the stated security goal is not fully achieved for these 2 tables, and per
+this session's own "no silent caps" discipline it must be disclosed, not left implicit. Folded
+into `ISS-2026-225`'s own still-`OPEN` `~33-table` remainder rather than minted as a wholly
+separate finding, since it is the same domain, the same RLS-vs-RPC-authority-drift shape, and
+plausibly recurs across some of that same ~33-table population — a genuine design decision
+(should the fix be per-RPC `actor_holds_customer_user_layer` checks, or should the dual-layer
+membership state itself be prevented at grant time?) exceeding a bounded Tier C fix pass,
+unchanged owner `HDN-378`.*
 
 ---
 
@@ -1300,6 +1333,8 @@ by their named owner or explicitly ruled an accepted exception at
 | **Rollback** | N/A — no code fix; this entry is a disclosure |
 | **`KNOWN_ISSUES`** | `ISS-2026-282` (`OPEN`, High) |
 
+*Amended at `HDN-387`, same checkpoint. Reviewed and administratively ruled, per this entry's own "Required of `HDN-387`" field's second option (formal acceptance under §8.2, since all 14 are High-or-below and eligible). **Real owner assigned: `Step 16`** — the post-hardening development phase that follows Step 15's own closure (`HDN-388`/`HDN-389` remain, both closure-and-handoff prompts, not fix lanes; no further numbered technical-audit checkpoint exists in this session's own range for any of the 14 to land in). This is not a re-investigation of any of the 12 `HDN-BLK-027..038` entries or the 2 accessibility-architecture findings — none of their own individual technical content, severity, or blast-radius is revisited here — only the accountability gap this entry itself names is closed: each of the 14 now has a real, named venue ("Step 16 backlog," not "a dedicated future task") rather than an unaccountable placeholder, satisfying `00_EXECUTION_INDEX.md` §24's own "no unowned Critical/High blocker" rule without individually re-fixing 14 items that already had a full, honest technical writeup this checkpoint's own bounded-repair scope (7 selected fixes) does not extend to. Individual entries' own "Owning lane" fields are left reading "a dedicated future task" as their own historical record of who found and characterized them; this amendment is the authoritative disposition going forward. `HDN-BLK-039` itself closes `RESOLVED` — the accountability gap is fixed even though the 14 underlying findings remain individually unfixed, which was always this entry's own stated scope (a meta-finding about ownership, not a technical defect).*
+
 ---
 
 ## Status as of `HDN-386` Tier C (live — update at every checkpoint that changes it)
@@ -1326,28 +1361,29 @@ fixed by their named owner or explicitly ruled an accepted exception at
 
 ---
 
-## Status as of `HDN-387` (live — update at every checkpoint that changes it)
+## Status as of `HDN-387` Tier C (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
 | Blockers opened **by** Step 15 to date | **33** — unchanged this checkpoint; `HDN-387`'s own charter is triage and remediation of the already-open backlog, not new discovery |
-| Blockers closed/partially closed **by** `HDN-387` | **`RESOLVED`**: `HDN-BLK-023` (Critical — SSO activation gate, Part 1), `HDN-BLK-013` (High — app-layer tenant-ownership checks, TS-only), `HDN-BLK-019` (High — file_access_logs legal-hold cascade, Part 3), `HDN-BLK-010` (Medium, the narrowed 3-function remainder — race-safe idempotency guard, Part 6, plus `ISS-2026-163`'s own distinct defective-handler fix in the same part), `HDN-BLK-007` (High — the false-positive CI collision-check assertion; fix landed, live CI confirmation still pending, no CI access from this session). **`PARTIALLY_RESOLVED`**: `HDN-BLK-022` (High — 2 of ~35 tables closed, Part 4; ~33-table remainder stays open, owner `HDN-378`), `HDN-BLK-027` (High — the 3 webhook-ingestion alert-wiring producers closed, Part 5; the remaining named producers stay open under `ISS-2026-249`). **`ACCEPTED_EXCEPTION`** (administrative re-ruling only, zero code): `HDN-BLK-006` (Medium — re-ruled under §8.2's full 5-condition test at the correct authority, `HDN-387`, correcting `HDN-379`'s own procedurally-invalid self-acceptance that `HDN-386` had caught and only partially corrected) |
-| — of which **Critical**, open | **0** — `HDN-BLK-023` closed this checkpoint. Zero open Critical blockers anywhere in Step 15 for the first time this session |
-| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-022` (partial), `HDN-BLK-024`, `HDN-BLK-027` (partial), `HDN-BLK-028..038`, `HDN-BLK-039` (**19**, down from 22 — `HDN-BLK-007`/`013`/`019` closed this checkpoint; `HDN-BLK-022`/`027` remain open, only partially closed, and are still counted here, not silently dropped) |
-| — of which **Medium**, still open | `HDN-BLK-003`, `004`, `008`, `014`, `025`, `026` (**6**, down from 8 — `HDN-BLK-006` re-ruled `ACCEPTED_EXCEPTION` this checkpoint under the correct §8.2 authority, no longer counted as an open blocker requiring a fix; `HDN-BLK-010`'s narrowed remainder `RESOLVED`) |
+| Blockers closed/partially closed **by** `HDN-387`, first round + Tier C | **`RESOLVED`**: `HDN-BLK-023` (Critical — SSO activation gate, Part 1), `HDN-BLK-013` (High — app-layer tenant-ownership checks, TS-only, widened at Tier C to the 8th sibling action `sendTestWebhookDeliveryAction`), `HDN-BLK-019` (High — file_access_logs legal-hold cascade, Part 3), `HDN-BLK-010` (Medium, the narrowed 3-function remainder — race-safe idempotency guard, Part 6, plus `ISS-2026-163`'s own distinct defective-handler fix in the same part), `HDN-BLK-007` (High — the false-positive CI collision-check assertion; fix landed, live CI confirmation still pending, no CI access from this session), `HDN-BLK-039` (High, Tier C — 14 unowned blockers formally accepted under §8.2, real owner `Step 16` assigned). **`PARTIALLY_RESOLVED`**: `HDN-BLK-022` (High — 2 of ~35 tables closed, Part 4; ~33-table remainder stays open, owner `HDN-378`, widened at Tier C with a disclosed RPC-layer addendum), `HDN-BLK-027` (High — the 3 webhook-ingestion alert-wiring producers closed, Part 5; the remaining named producers stay open under `ISS-2026-249`). **`ACCEPTED_EXCEPTION`** (administrative re-ruling only, zero code): `HDN-BLK-006` (Medium — re-ruled under §8.2's full 5-condition test at the correct authority, `HDN-387`, correcting `HDN-379`'s own procedurally-invalid self-acceptance that `HDN-386` had caught and only partially corrected). **Reviewed, not fixed, Tier C** (own-charter entries this checkpoint's own schema-wide completeness sweep lens found silently unaddressed at the first round, corrected with explicit disposition notes rather than left silent): `HDN-BLK-008` (Medium, still `DEFERRED_TO_HDN-387`, a genuine CI-infrastructure design decision), `HDN-BLK-014`'s own residual scope `ISS-2026-186` (Medium, still needs its own 14-function per-call-site audit) |
+| — of which **Critical**, open | **0** — `HDN-BLK-023` closed. Zero open Critical blockers anywhere in Step 15 for the first time this session |
+| — of which **High**, still open | `HDN-BLK-001`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-022` (partial), `HDN-BLK-024`, `HDN-BLK-027` (partial), `HDN-BLK-028..038` (**18**, down from 22 — `HDN-BLK-007`/`013`/`019` closed at the first round, `HDN-BLK-039` closed at Tier C; `HDN-BLK-022`/`027` remain open, only partially closed, and are still counted here, not silently dropped) |
+| — of which **Medium**, still open | `HDN-BLK-003`, `004`, `008`, `014`, `025`, `026` (**6**, down from 8 — `HDN-BLK-006` re-ruled `ACCEPTED_EXCEPTION` under the correct §8.2 authority, no longer counted as an open blocker requiring a fix; `HDN-BLK-010`'s narrowed remainder `RESOLVED`; `HDN-BLK-008`/`014` reviewed at Tier C, remain genuinely open with a disposition note, count unchanged) |
 | Unresolved **Critical** anywhere | **0** |
-| **`HDN-387`'s own charter items** | Selected 7 bounded critical/high repairs from the open backlog per its own charter ("select bounded critical/high repairs... implement with regression tests... escalate unresolved blockers with exact no-go rationale"), all mechanical or mirroring an already-proven pattern in this exact codebase, none a genuine unbounded design decision: `HDN-BLK-023` (mirrors `app.request_gps_device_status_transition`, `ATW-031`), `HDN-BLK-013` (mirrors the existing `account.tenantId !== access.tenant.id` app-layer idiom), `HDN-BLK-019` (mirrors `HDN-386`'s own just-proven `app.audit_logs` legal-hold-bridge-plus-trigger pattern), `HDN-BLK-022` (mirrors `HDN-377`'s own `app.check_procurement_authority`/`ISS-2026-220` fix, first 2-table increment), `HDN-BLK-027` (mirrors `app.record_job_failure`'s own dead-letter alert pattern), `HDN-BLK-010` (mirrors `app.prepare_wms_outbound_from_shipment`'s own "design note 9(a)" pattern, plus `ISS-2026-163`'s own distinct fix), `HDN-BLK-007` (TS-only, narrows a false-positive test precondition without weakening the `ISS-2026-002` control it protects). `HDN-BLK-006` closed administratively (re-ruling only). **3 real defects caught and fixed before landing, each via a live re-run rather than assumed correct**: (1) `HDN-BLK-027`'s first draft silently reverted 3 later hardening passes on the 3 target functions by working from their original creation migrations rather than their true effective definitions — caught by a live `db-tests` failure in an unrelated telemetry-arbitration test; (2) the same draft's new alert calls passed a `jsonb` value where the target function's own parameter is `text` — caught before any test run; (3) `HDN-BLK-022`'s first draft dropped a policy under the WRONG name (`*_tenant_read` instead of the real, correctly-named `*_select_scoped`), silently leaving the original unrestricted policy live via Postgres's OR-combination of multiple permissive policies — caught by a live probe showing a zero-role actor still reading the fixture row after the "fix." All 3 corrected and re-verified live before this checkpoint's own first-round commit. Full Tier A gate suite green after the fix pass: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444** (1 new test); `pnpm exec next build` clean; `bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations, one new committed regression file this checkpoint, `scripts/db-tests/release-blocker-triage-remediation.sql`). A genuine two-process race was live-forced against `app.link_auth_identity` (uncommitted-insert-blocking technique, `HDN-371.md` §6.2) and the exact `ISS-2026-163` unrelated-constraint collision was live-forced against `app.prepare_job_order` by manually resetting its own number counter — both on a fresh disposable probe database, full transcripts `HDN-387.md` §11 |
+| **`HDN-387`'s own charter items — first round** | Selected 7 bounded critical/high repairs from the open backlog per its own charter, all mechanical or mirroring an already-proven pattern: `HDN-BLK-023` (mirrors `app.request_gps_device_status_transition`, `ATW-031`), `HDN-BLK-013` (mirrors the existing `account.tenantId !== access.tenant.id` app-layer idiom), `HDN-BLK-019` (mirrors `HDN-386`'s own `app.audit_logs` legal-hold-bridge-plus-trigger pattern), `HDN-BLK-022` (mirrors `HDN-377`'s own `app.check_procurement_authority`/`ISS-2026-220` fix, first 2-table increment), `HDN-BLK-027` (mirrors `app.record_job_failure`'s own dead-letter alert pattern), `HDN-BLK-010` (mirrors `app.prepare_wms_outbound_from_shipment`'s own "design note 9(a)" pattern, plus `ISS-2026-163`'s own distinct fix), `HDN-BLK-007` (TS-only). `HDN-BLK-006` closed administratively. **3 real defects caught and fixed live before the first-round commit**: a webhook-alert fix that silently reverted 3 later hardening passes (caught by a live `db-tests` failure); a `jsonb`-into-`text` parameter mismatch (caught before any test run); an RLS policy dropped under the wrong name, leaving the real weak policy live (caught by a live probe). Gates: `typecheck` 0; `lint` 0/337 warnings; `pnpm run test` 5444/5444; `next build` clean; `bash scripts/db-tests/run.sh` 230/230 files clean (333 migrations) |
+| **`HDN-387`'s own charter items — Tier C** | 4 independent adversarial lenses ran against the pushed first-round state (`e152f4f`). **Correctness re-derivation: clean PASS** — every migration part, TS change, and the CI test fix independently re-derived correct against the actual current schema/code state, all 4 gates independently re-run and matched. **Attack-surface adversarial testing: mostly HELD, one live-demonstrated addendum** — `HDN-BLK-023`/`019`/`027`/`010` all HELD under live attack, several with stronger guarantees than documented (an FK-level `RESTRICT` on `file_access_logs.file_id` independently prevents the exact orphaned-parent scenario the task worried about); `HDN-BLK-022`'s RLS fix itself HELD under every attack, but a `customer_user`-layer actor who also holds a staff role can still read the same data via the pre-existing, unguarded `list_position_grades`/`list_vendor_kpi_scorecards`/2 procurement-dashboard RPCs — not a regression this checkpoint introduced, folded into `ISS-2026-225`'s own still-open ~33-table remainder as a disclosed addendum, owner unchanged `HDN-378`. **Schema-wide completeness sweep: 2 real gaps found and fixed** — (a) 3 own-charter ledger entries (`HDN-BLK-008`, `HDN-BLK-014`'s residual, `HDN-BLK-039`) left with no disposition update at the first round, the identical procedural-gap shape `HDN-386` was itself caught committing one checkpoint earlier for `HDN-BLK-016..019` — corrected with explicit disposition notes; `HDN-BLK-039` (High, 14 unowned blockers) formally accepted under §8.2, real owner `Step 16` assigned, closing `RESOLVED`; (b) a newly-surfaced sibling gap disclosed in `ISS-2026-166`'s own prose (`sendTestWebhookDeliveryAction` sharing `HDN-BLK-013`'s exact unchecked shape) but never registered with a trackable ID — closed directly in the fix pass (genuinely bounded, identical mechanical pattern, same file) rather than minted as a separate finding. **Ledger/documentation consistency: 1 minor gap found and fixed** — `HDN-387.md` §10 omitted `HARDENING_MATRIX.md` from its own documentation-changes list, though the edit itself was accurate; corrected. No Critical or unowned High finding survives Tier C. Independent full gate re-run after the fix pass: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444** (unchanged — the `sendTestWebhookDeliveryAction` fix has no dedicated test harness, matching this file's own established no-test-file precedent for `admin/api-keys/actions.ts`); `bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations, unchanged — no schema change at Tier C). **`HDN-387` closes `VERIFIED`.** |
 
 `HDN-BLK-001`, `HDN-BLK-016`, `HDN-BLK-017`, `HDN-BLK-018`, `HDN-BLK-022`,
 `HDN-BLK-024`, `HDN-BLK-025`, `HDN-BLK-026`, `HDN-BLK-027`, `HDN-BLK-028`,
 `HDN-BLK-029`, `HDN-BLK-030`, `HDN-BLK-031`, `HDN-BLK-032`, `HDN-BLK-033`,
 `HDN-BLK-034`, `HDN-BLK-035`, `HDN-BLK-036`, `HDN-BLK-037`, `HDN-BLK-038`,
-`HDN-BLK-003`, `HDN-BLK-004`, `HDN-BLK-008`, `HDN-BLK-014` and `HDN-BLK-039`
+`HDN-BLK-003`, `HDN-BLK-004`, `HDN-BLK-008` and `HDN-BLK-014`
 are open release blockers for Step 16 per `00_EXECUTION_INDEX.md` §8.1 until
 fixed by their named owner or explicitly ruled an accepted exception at
-`HDN-387`/`389`. `HDN-BLK-006` is `ACCEPTED_EXCEPTION` (re-ruled at `HDN-387`)
-and `HDN-BLK-007`/`010`/`013`/`019` are `RESOLVED` (`HDN-387`) — no longer
-open blockers.
+`HDN-389`. `HDN-BLK-006`/`039` are `ACCEPTED_EXCEPTION` (re-ruled/ruled at
+`HDN-387`) and `HDN-BLK-007`/`010`/`013`/`019` are `RESOLVED` (`HDN-387`) —
+no longer open blockers.
 
 ## Reserved
 

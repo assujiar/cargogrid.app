@@ -323,6 +323,10 @@ export async function sendTestWebhookDeliveryAction(tenantSlug: string, endpoint
   const client = toWebhookManagementClient(createSupabaseServiceRoleClient());
   let delivery: WebhookDeliveryRow;
   try {
+    const ownedEndpoints = await listWebhookEndpointsForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedEndpoints.some((endpoint) => endpoint.id === endpointId)) {
+      throw new WebhookManagementMutationError("webhook_endpoint_not_found", "webhook_endpoint_not_found: This endpoint does not belong to your organization.");
+    }
     delivery = await sendTestWebhookDelivery(client, { endpointId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof WebhookManagementMutationError) return { error: `Could not send a test delivery: ${error.message}`, delivery: null };

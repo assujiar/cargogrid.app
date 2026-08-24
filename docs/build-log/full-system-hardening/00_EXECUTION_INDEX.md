@@ -169,12 +169,12 @@ unrouted.
 | 16 | `HDN-384` | `CG-S15-HDN-016` | 384 | Disaster Recovery Rehearsal | Reliability Assurance | `HDN-383` | `VERIFIED` — Tier C closed. Data corruption and security incident scenarios live-rehearsed; major outage/provider failure tabletop-only. A real bug found and fixed in `database-restore.md`'s own composed in-place restore procedure at the first round. **Tier C found 7 more real gaps, all corrected directly in the runbooks**: the `TRUNCATE` step itself silently bypasses 9 protective triggers with zero audit trail (`ISS-2026-265`/`HDN-BLK-034`, High); session revocation in the incident-response flow confirmed inert, never enforced anywhere (`ISS-2026-264`/`HDN-BLK-035`, High); no mutual-exclusion for concurrent restore attempts (`ISS-2026-267`/`HDN-BLK-036`, High); materialized views never restored (`ISS-2026-266`, Medium); `ISS-2026-263` re-scoped from an unreproduced anomaly to a confirmed, root-caused defect; 2 nuance corrections (`ISS-2026-259`/`261`); RTO corrected to a measured range. No Critical finding anywhere. See `HDN-384.md` §13 |
 | 17 | `HDN-385` | `CG-S15-HDN-017` | 385 | Data Migration Rehearsal | Migration Assurance | `HDN-371` | `VERIFIED` — first round + Tier C both closed. Generic import framework + `employee_import` adapter live-rehearsed; a real duplicate-swallowing defect fixed, confirmed defect-free at Tier C. 11 findings registered (`ISS-2026-269..279`); Tier C also fixed a pre-existing `HDN-378`-era ledger ID collision (`ISS-2026-235`/`236`). See `HDN-385.md` |
 | 18 | `HDN-386` | `CG-S15-HDN-018` | 386 | Integrated Verification | Hardening Closure | `HDN-370..385` **all `VERIFIED`** | `VERIFIED` — first round + Tier C both closed. Reconciled all Step 15 evidence to one compatible checkpoint (`d57ad0b`); full Tier A gate suite re-run fresh, all green; CI-blindness gap confirmed by exact mechanism (`security:audit` never ran in CI, sharpens `HDN-BLK-007`). Fixed `HDN-BLK-020`/`021` (Critical/High legal-hold bridge) at the root; `HDN-BLK-023`/`024`/`016`/`017`/`018`/`019` formally handed to `HDN-387`. Tier C found and fixed a Critical UPDATE-path bypass in the same fix, plus a real, previously-unregistered lockfile-drift CI outage. 4 findings registered (`ISS-2026-280..283`). See `HDN-386.md` |
-| 19 | `HDN-387` | `CG-S15-HDN-019` | 387 | Release Blocker Triage and Remediation | Hardening Closure | `HDN-386` | `COMPLETED` — first round pushed, Tier C review pending |
-| 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `BLOCKED` |
+| 19 | `HDN-387` | `CG-S15-HDN-019` | 387 | Release Blocker Triage and Remediation | Hardening Closure | `HDN-386` | `VERIFIED` — Tier C closed |
+| 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `READY` — dependency satisfied this checkpoint (`HDN-387` reached `VERIFIED`) |
 | 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `BLOCKED` |
 
-**Tally: 21 rows — 1 `COMPLETED` (kickoff), 1 `COMPLETED` (`HDN-387`, Tier C pending), 2 `BLOCKED`,
-17 `VERIFIED` (`HDN-370`, `HDN-371`, `HDN-372`, `HDN-373`, `HDN-374`, `HDN-375`, `HDN-376`, `HDN-377`, `HDN-378`, `HDN-379`, `HDN-380`, `HDN-381`, `HDN-382`, `HDN-383`, `HDN-384`, `HDN-385`, `HDN-386`).**
+**Tally: 21 rows — 1 `COMPLETED` (kickoff), 1 `READY` (`HDN-388`), 1 `BLOCKED` (`HDN-389`),
+18 `VERIFIED` (`HDN-370`, `HDN-371`, `HDN-372`, `HDN-373`, `HDN-374`, `HDN-375`, `HDN-376`, `HDN-377`, `HDN-378`, `HDN-379`, `HDN-380`, `HDN-381`, `HDN-382`, `HDN-383`, `HDN-384`, `HDN-385`, `HDN-386`, `HDN-387`).**
 
 > **`HDN-371` is `VERIFIED`.** Every chain named in its charter is reconciled against live code
 > and existing passing evidence, with one honestly disclosed gap (the loyalty/portal chain was
@@ -571,55 +571,52 @@ to `VERIFIED`.
 
 ## 16. Next eligible prompt
 
-> ### `HDN-387` (Release Blocker Triage and Remediation, `CG-S15-HDN-019`) first round is `COMPLETED` — Tier C review pending
+> ### `HDN-387` (Release Blocker Triage and Remediation, `CG-S15-HDN-019`) is `VERIFIED` — `HDN-388` is next
 >
-> - **`HDN-387` first round pushed, not yet `VERIFIED`.** Selected 7 bounded
->   critical/high repairs from the open blocker backlog, all mechanical or
->   mirroring an already-proven pattern in this exact codebase: `HDN-BLK-023`
->   (Critical — the SSO activation-gate bypass, mirrors `app.request_gps_
->   device_status_transition`/`ATW-031` exactly — grant-revocation-plus-narrow-
->   entry-point), `HDN-BLK-013` (High — app-layer tenant-ownership checks on 7
->   Server Actions + 1 route, TS-only), `HDN-BLK-019` (High — `app.file_
->   access_logs` legal-hold cascade, mirrors `HDN-386`'s own just-proven
->   `app.audit_logs` bridge-plus-trigger pattern), `HDN-BLK-022` (High,
->   partial — 2 of ~35 tables, mirrors `HDN-377`'s own `app.check_
->   procurement_authority`/`ISS-2026-220` fix), `HDN-BLK-027` (High, partial —
->   3 webhook-ingestion functions' own signature-failure branch now alerts,
->   mirrors `app.record_job_failure`'s own dead-letter pattern), `HDN-BLK-010`
->   (Medium, the narrowed 3-function remainder — mirrors `app.prepare_wms_
->   outbound_from_shipment`'s own "design note 9(a)" pattern, plus
->   `ISS-2026-163`'s own distinct defective-handler fix), `HDN-BLK-007` (High
->   — narrows the CI collision-check's own false-positive precondition on
->   `main`, TS-only, does not weaken the `ISS-2026-002` control). `HDN-BLK-006`
->   closed administratively (re-ruled `ACCEPTED_EXCEPTION` under §8.2's full
->   5-condition test, correcting `HDN-379`'s own procedurally-invalid
->   self-acceptance `HDN-386` had only partially corrected).
->   **The open Critical count for Step 15 is now zero** for the first time
->   this session. **3 real defects caught and fixed live before this round's
->   own commit, none assumed correct**: (1) the webhook-alert-wiring fix's
->   first draft silently reverted 3 later hardening passes on the target
->   functions by working from their original creation migrations instead of
->   their true effective definitions — caught by a live `db-tests` failure in
->   an unrelated telemetry-arbitration test, not by inspection; (2) the same
->   fix's new alert calls passed a `jsonb` value to a `text`-typed parameter,
->   which would have failed the function call entirely — caught before any
->   test run; (3) the HRIS/Procurement RLS fix's first draft dropped a policy
->   under the WRONG name, leaving the real, differently-named pre-existing
->   policy still live via Postgres's own OR-combination of permissive
->   policies — a zero-role probe actor still read the fixture row after the
->   "fix" — caught by a live RLS probe, not code review. All 3 corrected and
->   re-verified live before commit. A genuine two-process race was live-forced
->   against `app.link_auth_identity` (`HDN-371.md` §6.2's own proven
->   technique) and the exact `ISS-2026-163` unrelated-constraint collision was
->   separately live-forced against `app.prepare_job_order` — both on a fresh
->   disposable probe database, not merely code-inferred. Full Tier A gate
->   suite green: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test`
->   **5444/5444**; `pnpm exec next build` clean; `bash scripts/db-tests/run.sh`
->   **230/230 files clean** (333 migrations, one new committed regression
->   file). Full disposition: `HDN-387.md`.
-> - **Tier C review (4 independent adversarial lenses) not yet run.**
->   `CG-S15-HDN-019` remains the active prompt until Tier C closes it
->   `VERIFIED`.
+> - **`HDN-387` is `VERIFIED`** — first round + Tier C review both closed at
+>   commit `e152f4f` (first round). Selected 7 bounded critical/high repairs
+>   from the open blocker backlog, all mechanical or mirroring an
+>   already-proven pattern in this exact codebase: `HDN-BLK-023` (Critical —
+>   the SSO activation-gate bypass, mirrors `app.request_gps_device_status_
+>   transition`/`ATW-031` exactly), `HDN-BLK-013` (High — app-layer
+>   tenant-ownership checks, TS-only), `HDN-BLK-019` (High — `app.file_
+>   access_logs` legal-hold cascade), `HDN-BLK-022` (High, partial — 2 of ~35
+>   tables), `HDN-BLK-027` (High, partial — 3 webhook-ingestion alert
+>   producers), `HDN-BLK-010` (Medium, narrowed 3-function race guard plus
+>   `ISS-2026-163`), `HDN-BLK-007` (High — CI collision-check false-positive
+>   narrowed). `HDN-BLK-006` closed administratively (`ACCEPTED_EXCEPTION`).
+>   **The open Critical count for Step 15 is zero for the first time this
+>   session.** **3 real defects caught and fixed live before the first-round
+>   commit**: a webhook-alert fix that silently reverted 3 later hardening
+>   passes by working from stale source (caught by a live `db-tests`
+>   failure); a `jsonb`-into-`text` parameter mismatch (caught before any
+>   test run); an RLS policy dropped under the wrong name, leaving the real
+>   weak policy still live via Postgres's own OR-combination of permissive
+>   policies (caught by a live probe). All corrected and re-verified live.
+>   **Tier C's 4 adversarial lenses found and fixed 2 more real gaps**:
+>   correctness re-derivation and most of attack-surface testing held clean,
+>   but the schema-wide completeness sweep found 3 own-charter ledger entries
+>   (`HDN-BLK-008`, `HDN-BLK-014`'s residual, `HDN-BLK-039`) left with no
+>   disposition update — the identical procedural gap `HDN-386` was itself
+>   caught committing one checkpoint earlier — corrected, with `HDN-BLK-039`
+>   (14 unowned blockers) formally accepted and closed, real owner `Step 16`
+>   assigned; and a newly-surfaced sibling gap (`sendTestWebhookDeliveryAction`
+>   sharing `HDN-BLK-013`'s own exact unchecked shape) disclosed in prose but
+>   never registered — closed directly, being genuinely bounded. Attack-surface
+>   testing found `HDN-BLK-022`'s own RLS fix HELD under every direct attack,
+>   but disclosed a real, live-demonstrated adjacent gap (a `customer_user`-
+>   layer actor who also holds a staff role can still read the same data via
+>   pre-existing, unguarded RPCs) — folded into `ISS-2026-225`'s own still-open
+>   ~33-table remainder as a disclosed addendum, not a regression this
+>   checkpoint introduced. Ledger-consistency lens found and fixed one minor
+>   gap: `HDN-387.md` §10 omitted `HARDENING_MATRIX.md` from its own
+>   documentation-changes list. No Critical or unowned High finding survives
+>   Tier C. Independent full gate re-run after the fix pass: `typecheck` 0;
+>   `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444**; `pnpm exec
+>   next build` clean; `bash scripts/db-tests/run.sh` **230/230 files clean**
+>   (333 migrations, unchanged). **`CG-S15-HDN-019` is `VERIFIED`.**
+>   `CG-S15-HDN-020` (`HDN-388`, Prompt 388, Documentation Handoff) is now the
+>   next eligible prompt. Full disposition: `HDN-387.md` §14.
 >
 > ### `HDN-386` (Full-System Hardening Integrated Verification, `CG-S15-HDN-018`) is `VERIFIED`
 >
