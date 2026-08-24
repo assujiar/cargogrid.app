@@ -248,6 +248,14 @@ Sized 1–3 slices each, sequenced to `01_*.md`'s phase order and this document'
 | Reporting-replica graduation | 5 (or when §9.1's trigger fires) | Provision read replica per Tech Arch §6's Scale-up diagram once §9.1's measured trigger fires; not scheduled by phase number alone | Observability foundation (to measure the trigger), Reporting full (`05_*.md` §12) |
 | Release-artifact provenance tooling | 0 | Commit-SHA/pipeline-run tagging, SCA report publishing, release-notes template (§9.4) | CI pipeline foundation |
 
+> **Note (2026-08-24, `HDN-388`, Prompt 388 Documentation Handoff, Tier C).** Several rows above
+> cite `docs/runbooks/` filenames from §8.5's own planning table — `deployment-rollback.md`,
+> `security-incident.md`, `tenant-isolation-failure.md`, `job-dlq-requeue.md`,
+> `webhook-endpoint-recovery.md` — that were never built under those names; see §8.5's own dated
+> amendment note for the reconciliation. `docs/runbooks/README.md` is the current, authoritative
+> index of what actually exists in `docs/runbooks/` — consult it, not this table's own filenames,
+> for what to open.
+
 ## 12. Go-live blockers
 
 DevOps-owned rows from Blueprint §27.1's 19-item Go-Live Checklist (reproduced by reference, not re-typed — `10_*.md` §9's Phase 16 row already binds the full checklist to test evidence): "DevOps — Backup and rollback ready" and "DevOps — Monitoring and alerting active" are hard blockers per Blueprint §27.2's Go/No-Go table (No-Go on any critical gate failure). This document's own hard blockers, not separately listed in Blueprint §27.1 but implied by §5–§9 above: no Production secret may be stored outside the resolved secret mechanism (`ADR-CAND-ARCH-025`); no Production deploy may originate from an artifact that skipped the migration-check stage (§3); the Cross-tenant-policy-test-failure alert (§6.1) must be wired and verified firing correctly in Staging before the first Production tenant onboarding, since it is the single immediate-Sev1 signal for the costliest failure class this entire blueprint defends against (`06_*.md`/`10_*.md` §5.2).

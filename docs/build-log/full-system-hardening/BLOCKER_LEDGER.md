@@ -159,11 +159,11 @@ three cases the code under test was correct and the fixture's temporal assumptio
 | **Owning phase** | Phase 9 (`IAE-027`) |
 | **Owning lane** | **`HDN-378`** |
 | **Reachability** | A privileged integration-connection creation proceeds without a step-up challenge that RPD-023 requires |
-| **Blast radius** | **40+ call sites across 16 files** — measured at Prompt 367, not estimated. This is why it was deliberately left rather than mass-edited under time pressure |
-| **Disposition** | **`DEFERRED_TO_HDN-378`** |
-| **Required of `HDN-378`** | Wire it with real step-up fixtures and a negative-path regression proving genuine enforcement, **or** rule on it explicitly with a compensating control. Silence is not an option |
+| **Blast radius** | **43 real call sites across 16 files** (precise-pattern re-measurement at `HDN-378`, superseding the earlier "40+" estimate — 4 negative-path/unaffected, 39 requiring the gate, collapsible to 27 distinct step-up sequences since the check does not consume a verified challenge on use) |
+| **Disposition** | ~~`DEFERRED_TO_HDN-378`~~ **Corrected at `HDN-388`: `HDN-378` did not stay silent — it satisfied this entry's own "rule on it explicitly" requirement, just never got its own ledger amendment.** `HDN-378` re-derived the exact blast radius with a precise-pattern grep (not the looser substring estimate), confirmed the only real production caller (`app/(tenant)/[tenantSlug]/integrations/actions.ts`) is an interactive Server Action with no exempt-caller design question, and made a reasoned, written ruling to defer again: its own bounded-repair budget that checkpoint was consumed by `ISS-2026-150`'s IP-restriction closure, and stacking a 16-file/27-sequence fixture adaptation on top would repeat the exact "rushed, under-tested wide edit" risk `CG-S14-IAE-039` had already declined once. Still `OPEN`, Medium, owner unchanged in shape, now precise: 1 additive migration line plus 27 step-up sequences across the same 16 named files (`integration-hub.sql` first, `batch4-tier-c-review-fixes.sql`/`enterprise-iam-sso-scim.sql` last per `HDN-378`'s own risk-ordering) — full detail `KNOWN_ISSUES.md`'s `ISS-2026-151` |
+| **Required of `HDN-378`** | Wire it with real step-up fixtures and a negative-path regression proving genuine enforcement, **or** rule on it explicitly with a compensating control. Silence is not an option. **Done — ruled, not silent; see Disposition** |
 | **Rollback** | Additive migration; `git revert` |
-| **`KNOWN_ISSUES`** | `ISS-2026-151` (`PARTIALLY RESOLVED`, Medium) |
+| **`KNOWN_ISSUES`** | `ISS-2026-151` (`OPEN`, Medium, re-scoped precisely at `HDN-378`) |
 
 ---
 
@@ -573,6 +573,15 @@ Full disposition: `HDN-374.md` §13.3, `KNOWN_ISSUES.md` `ISS-2026-199`.*
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
 | **`KNOWN_ISSUES`** | `ISS-2026-199` (`OPEN`, High) |
 
+*Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
+`HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
+its named recipient — unlike `HDN-BLK-008`/`014`/`039`, which each received an explicit
+"reviewed, not fixed" or ruling note at `HDN-387` Tier C for the identical no-disposition-update
+shape. Still `OPEN`, High, requiring a genuine design decision (GL account mapping, automatic-vs-
+governed-step shape) this documentation-handoff checkpoint has no standing to make. Folded into
+the aggregate 5-item punch list `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to
+`HDN-389` as the only remaining §8.2 ruling authority.*
+
 ---
 
 ## Status as of `HDN-374` (live — update at every checkpoint that changes it)
@@ -611,6 +620,13 @@ Full disposition: `HDN-374.md` §13.3, `KNOWN_ISSUES.md` `ISS-2026-199`.*
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
 | **`KNOWN_ISSUES`** | `ISS-2026-200` (`OPEN`, High) |
 
+*Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
+`HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
+its named recipient — the identical gap as `HDN-BLK-016`. Still `OPEN`, High, requiring a genuine
+design decision (canonical ordering across 5 relation types, a real `prev_hash` column, backfill,
+a new anomaly-detector type). Folded into the aggregate 5-item punch list
+`docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to `HDN-389`.*
+
 ---
 
 ## HDN-BLK-018 — the append-only-guard pattern `HDN-BLK-017`'s own sibling finding (`ISS-2026-201`) applied to one table is genuinely needed on roughly 70 more tables schema-wide, including `app.audit_logs` itself
@@ -634,6 +650,12 @@ completeness-sweep lens. Full disposition: `HDN-375.md` §13.2, `KNOWN_ISSUES.md
 | **Regression test** | Required with each table's own fix — a live-forced proof mirroring `ISS-2026-201`'s own regression blocks (no-actor-context and ordinary-staff denial, genuine Supreme Admin override with audit capture) |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
 | **`KNOWN_ISSUES`** | `ISS-2026-205` (`OPEN`, High) |
+
+*Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
+`HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
+its named recipient — the identical gap as `HDN-BLK-016`/`017`. Still `OPEN`, High, requiring a
+genuine table-by-table audit-and-fix across ~69 remaining tables. Folded into the aggregate
+5-item punch list `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to `HDN-389`.*
 
 ---
 
@@ -883,6 +905,12 @@ Part 1; regression: `scripts/db-tests/release-blocker-triage-remediation.sql`.*
 | **Regression test** | Required with each tuple's own fix, mirroring the `ISS-2026-150`/`151` fixture-adaptation shape |
 | **Rollback** | N/A — no code fix yet; this entry is a disclosure, not a change |
 | **`KNOWN_ISSUES`** | `ISS-2026-236` (`OPEN`, High) |
+
+*Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), disclosure only, zero code.
+`HDN-387` closed `VERIFIED` without adding its own disposition note to this entry, despite being
+its named recipient — the identical gap as `HDN-BLK-016`/`017`/`018`. Still `OPEN`, High,
+requiring a re-derived wiring plan across 61 functions in 3 domains. Folded into the aggregate
+5-item punch list `docs/runtime/RELEASE_READINESS_MATRIX.md` §2.1 hands to `HDN-389`.*
 
 ---
 
@@ -1397,7 +1425,7 @@ fixed by their named owner or explicitly ruled an accepted exception at
 `HDN-387`) and `HDN-BLK-001`/`007`/`010`/`013`/`019` are `RESOLVED`
 (`HDN-BLK-001` at `HDN-388`, the rest at `HDN-387`) — no longer open blockers.
 
-## Status as of `HDN-388` (live — update at every checkpoint that changes it)
+## Status as of `HDN-388` Tier C (live — update at every checkpoint that changes it)
 
 | | Count |
 |---|---|
@@ -1408,7 +1436,8 @@ fixed by their named owner or explicitly ruled an accepted exception at
 | — of which **Medium**, still open | `HDN-BLK-003`, `004`, `008`, `014`, `025`, `026` (**6**, unchanged — `HDN-BLK-004`'s text corrected but its own postgis-remainder, `ISS-2026-234`, stays genuinely open, so the tally does not change) |
 | Unresolved **Critical** anywhere | **0** |
 | **§8.2 disposition gap disclosed, not ruled here** | Of the 17 open High items, 12 (`HDN-BLK-027..038`) were formally ruled `ACCEPTED_EXCEPTION` under §8.2 by `HDN-BLK-039` at `HDN-387` Tier C, owner `Step 16`. **5 remain neither fixed-with-regression-proof nor formally ruled**: `HDN-BLK-016`, `017`, `018`, `022` (partial remainder), `024` — each carries a named prior owner (`HDN-386`, `HDN-378`) whose own checkpoint has since closed `VERIFIED` without making that ruling, and per `00_EXECUTION_INDEX.md` §8.2 condition 5 a ruling may only be made "at `HDN-387` or `HDN-389`," never by the lane that found it and never by this documentation-handoff checkpoint. `HDN-387` is closed; **`HDN-389` is therefore the only remaining authority that can either see these 5 items fixed with regression proof or formally rule them `ACCEPTED_EXCEPTION` before Step 16 eligibility can be reached** (`00_EXECUTION_INDEX.md` §12 condition 4). This gap is not new — it existed identically at `HDN-387`'s own close — but no prior checkpoint's own ledger synthesis stated it this explicitly. Folded into `docs/runtime/RELEASE_READINESS_MATRIX.md`'s own go/no-go section |
-| **`HDN-388`'s own charter items** | Documentation-handoff checkpoint: 2 stale ledger-text corrections (`HDN-BLK-001`/`004`, both zero-code); runbook checklist reconciled (`00_EXECUTION_INDEX.md` §11.4 — performance/capacity and on-call-ownership runbooks authored, deployment/migration re-run-guard consolidated, `ISS-2026-262`'s stale catalogue corrected); `HARDENING_MATRIX.md` reconciled with `HDN-386`/`HDN-387` narrative sections and a refreshed gate-index note; `docs/runtime/RELEASE_READINESS_MATRIX.md` authored (did not exist); `docs/runtime/HANDOFF.md` given an explicit Step 16 go/no-go section. See `HDN-388.md` for full disposition |
+| **`HDN-388`'s own charter items — first round** | Documentation-handoff checkpoint: 2 stale ledger-text corrections (`HDN-BLK-001`/`004`, both zero-code); runbook checklist reconciled (`00_EXECUTION_INDEX.md` §11.4 — performance/capacity and on-call-ownership runbooks authored, deployment/migration re-run-guard consolidated, `ISS-2026-262`'s stale catalogue corrected); `HARDENING_MATRIX.md` reconciled with `HDN-386`/`HDN-387` narrative sections and a refreshed gate-index note; `docs/runtime/RELEASE_READINESS_MATRIX.md` authored (did not exist); `docs/runtime/HANDOFF.md` given an explicit Step 16 go/no-go section. See `HDN-388.md` for full disposition |
+| **`HDN-388`'s own charter items — Tier C** | 4 independent lenses ran against the pushed first-round state (`b0abb9e`) — attack-surface adversarial testing adapted to claims-testing, since this checkpoint shipped zero code to exploit. **Correctness re-derivation: clean PASS** — every cited figure, tally, and cross-reference independently re-derived against its own source and confirmed accurate. **Claims-testing: 6 of 7 probes HELD**, 1 real narrow finding fixed — `docs/architecture/11_DEVOPS_WORKSTREAM.md` §11's own atomic backlog repeated 6 stale runbook filenames with no pointer to §8.5's own corrective note, a residual "wrong door" risk for a reader who skips §8.5; fixed with a cross-reference note. **Ledger-consistency: 1 real gap found and fixed** — `docs/runtime/RELEASE_READINESS_MATRIX.md`'s own gate-9 arithmetic said "16 runbooks" where its own cited components (14 + 3) sum to 17; corrected. **Schema-wide completeness sweep: found and fixed the identical no-disposition-update shape this checkpoint's own first round already found for `HDN-BLK-001`/`004`, now on 4 more entries and 2 `KNOWN_ISSUES` rows** — `HDN-BLK-003` (Medium) still read `DEFERRED_TO_HDN-378` though `HDN-378` had genuinely re-derived the blast radius and ruled a reasoned re-deferral (`ISS-2026-151`), never mirrored into the ledger; corrected. `HDN-BLK-016`/`017`/`018`/`024` (High) never received their own "Amended at `HDN-387`" disposition note despite being its named recipients, unlike sibling entries `HDN-BLK-008`/`014`/`039`, which did — each given a disclosure-only amendment note, still `OPEN`, folded into the same aggregate 5-item punch list handed to `HDN-389`. `ISS-2026-281` (Medium, `KNOWN_ISSUES.md`, the CI-mirrors-hosted documentation-completeness gap) — `HDN-387` closed without picking it up; not a bounded documentation fix `HDN-388` has standing to attempt (its own real remedy is a positive 13-lane re-derivation); handed to `HDN-389` explicitly, mirroring `HDN-BLK-039`'s own precedent. `ISS-2026-283` (Low, the stale-tally bookkeeping finding itself) — its own stated remedy (hand-recount going forward, not rewrite history) has now been honored correctly twice running (`HDN-387`, `HDN-388`), independently re-verified accurate by this same Tier C's own correctness lens; closed `RESOLVED`. No Critical or new High finding survives Tier C; blocker tally unchanged (0 Critical / 17 High / 6 Medium — none of the Tier C fixes altered a severity or open/closed state, only disposition text). Independent full gate re-run after the fix pass: `typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444** (unchanged); `bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations, unchanged) — every number matches the first round exactly, as expected for a fix pass that touched only 5 documentation files. **`HDN-388` closes `VERIFIED`.** |
 
 ## Reserved
 

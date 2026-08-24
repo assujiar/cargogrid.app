@@ -1362,7 +1362,13 @@ The Gate Index table above (§2) is intentionally headed **"Status at kickoff"**
 rewritten when later checkpoints close findings, by design, so the table stays a stable record
 of what each gate looked like when Step 15 began auditing it. Consult each row's own linked
 section (or `BLOCKER_LEDGER.md`'s live "Status as of `HDN-388`" section) for current state.
-One reconciliation is worth flagging explicitly since it closes a Critical: **row 9 (Security
-hardening)** cites `ISS-2026-235`/`HDN-BLK-023` as an open Critical, owner `HDN-386` — that
-finding is `RESOLVED` as of `HDN-387` (§19 above); the open-Critical count for all of Step 15 is
-now zero and has been since `HDN-387` closed.
+Two reconciliations are worth flagging explicitly: **row 9 (Security hardening)** cites
+`ISS-2026-235`/`HDN-BLK-023` as an open Critical, owner `HDN-386` — that finding is `RESOLVED`
+as of `HDN-387` (§19 above); the open-Critical count for all of Step 15 is now zero and has been
+since `HDN-387` closed. **Row 8 (Storage / signed URL)** cites `ISS-2026-222` (High), `229`
+(Critical) and `230` (High) as registered-not-fixed, owner `HDN-386` — `229`/`230` closed at
+`HDN-386` itself and `222` (`app.files.legal_hold` not extending to `app.file_access_logs`)
+closed `RESOLVED` at `HDN-387` (`BLOCKER_LEDGER.md`'s `HDN-BLK-019` entry — the `app.file_
+access_logs` legal-hold cascade, mirroring `HDN-386`'s own `app.audit_logs` bridge pattern).
+Neither row is rewritten, per this section's own stated convention — consult
+`BLOCKER_LEDGER.md`'s live "Status as of" section for current state, not this table.

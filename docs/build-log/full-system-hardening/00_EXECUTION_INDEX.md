@@ -170,11 +170,11 @@ unrouted.
 | 17 | `HDN-385` | `CG-S15-HDN-017` | 385 | Data Migration Rehearsal | Migration Assurance | `HDN-371` | `VERIFIED` — first round + Tier C both closed. Generic import framework + `employee_import` adapter live-rehearsed; a real duplicate-swallowing defect fixed, confirmed defect-free at Tier C. 11 findings registered (`ISS-2026-269..279`); Tier C also fixed a pre-existing `HDN-378`-era ledger ID collision (`ISS-2026-235`/`236`). See `HDN-385.md` |
 | 18 | `HDN-386` | `CG-S15-HDN-018` | 386 | Integrated Verification | Hardening Closure | `HDN-370..385` **all `VERIFIED`** | `VERIFIED` — first round + Tier C both closed. Reconciled all Step 15 evidence to one compatible checkpoint (`d57ad0b`); full Tier A gate suite re-run fresh, all green; CI-blindness gap confirmed by exact mechanism (`security:audit` never ran in CI, sharpens `HDN-BLK-007`). Fixed `HDN-BLK-020`/`021` (Critical/High legal-hold bridge) at the root; `HDN-BLK-023`/`024`/`016`/`017`/`018`/`019` formally handed to `HDN-387`. Tier C found and fixed a Critical UPDATE-path bypass in the same fix, plus a real, previously-unregistered lockfile-drift CI outage. 4 findings registered (`ISS-2026-280..283`). See `HDN-386.md` |
 | 19 | `HDN-387` | `CG-S15-HDN-019` | 387 | Release Blocker Triage and Remediation | Hardening Closure | `HDN-386` | `VERIFIED` — Tier C closed |
-| 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `COMPLETED` — first round only, zero code/migration, Tier C review pending |
-| 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `BLOCKED` |
+| 20 | `HDN-388` | `CG-S15-HDN-020` | 388 | Documentation Handoff | Hardening Closure | `HDN-387` | `VERIFIED` — Tier C closed, zero code/migration throughout |
+| 21 | `HDN-389` | `CG-S15-HDN-021` | 389 | Closure Verification | Hardening Closure | `HDN-388` | `READY` — dependency satisfied this checkpoint (`HDN-388` reached `VERIFIED`) |
 
-**Tally: 21 rows — 1 `COMPLETED` (kickoff), 1 `COMPLETED` (`HDN-388`, first round only, Tier C pending), 1 `BLOCKED` (`HDN-389`),
-18 `VERIFIED` (`HDN-370`, `HDN-371`, `HDN-372`, `HDN-373`, `HDN-374`, `HDN-375`, `HDN-376`, `HDN-377`, `HDN-378`, `HDN-379`, `HDN-380`, `HDN-381`, `HDN-382`, `HDN-383`, `HDN-384`, `HDN-385`, `HDN-386`, `HDN-387`).**
+**Tally: 21 rows — 1 `COMPLETED` (kickoff), 1 `READY` (`HDN-389`), 19 `VERIFIED`
+(`HDN-370`, `HDN-371`, `HDN-372`, `HDN-373`, `HDN-374`, `HDN-375`, `HDN-376`, `HDN-377`, `HDN-378`, `HDN-379`, `HDN-380`, `HDN-381`, `HDN-382`, `HDN-383`, `HDN-384`, `HDN-385`, `HDN-386`, `HDN-387`, `HDN-388`).**
 
 > **`HDN-371` is `VERIFIED`.** Every chain named in its charter is reconciled against live code
 > and existing passing evidence, with one honestly disclosed gap (the loyalty/portal chain was
@@ -582,14 +582,15 @@ to `VERIFIED`.
 
 ## 16. Next eligible prompt
 
-> ### `HDN-388` (Documentation Handoff, `CG-S15-HDN-020`) first round is `COMPLETED` — Tier C review pending
+> ### `HDN-388` (Documentation Handoff, `CG-S15-HDN-020`) is `VERIFIED` — `HDN-389` is next
 >
-> - **First round `COMPLETED`, zero code, zero migration** — a pure
->   documentation-reconciliation checkpoint, matching its own charter exactly.
->   3 independent investigation lenses (runbook completeness audit;
+> - **`HDN-388` is `VERIFIED`** — first round + Tier C review both closed at
+>   commit `b0abb9e` (first round). Zero code, zero migration throughout — a
+>   pure documentation-reconciliation checkpoint, matching its own charter
+>   exactly. 3 independent investigation lenses (runbook completeness audit;
 >   ledger/matrix reconciliation and Step 16 eligibility; RPD-disclosure and
->   handoff-package audit) confirmed all 19 prior checkpoints `VERIFIED`,
->   no RPD contradiction anywhere, no production/pilot/GA/market-ready claim
+>   handoff-package audit) confirmed all 19 prior checkpoints `VERIFIED`, no
+>   RPD contradiction anywhere, no production/pilot/GA/market-ready claim
 >   anywhere — and found: `HARDENING_MATRIX.md` missing its own §18/§19 for
 >   `HDN-386`/`HDN-387`; no `docs/runtime/RELEASE_READINESS_MATRIX.md`;
 >   `HANDOFF.md` reading only as a chronological log with no explicit Step 16
@@ -612,12 +613,35 @@ to `VERIFIED`.
 >   `HARDENING_MATRIX.md` §18/§19 added; `docs/runtime/RELEASE_READINESS_
 >   MATRIX.md` authored (new); `HANDOFF.md` given an explicit Step 16 go/no-go
 >   section (§0) — **NO-GO recommended, as expected, pending `HDN-389`**.
+> - **Tier C's 4 lenses (attack-surface adapted to claims-testing, since
+>   zero code shipped to exploit) found and fixed 3 more real gaps.**
+>   Correctness re-derivation: clean PASS. Claims-testing: 6 of 7 probes
+>   held, 1 fixed — `11_DEVOPS_WORKSTREAM.md` §11 repeated stale runbook
+>   filenames with no pointer to §8.5's own corrective note, fixed with a
+>   cross-reference. Ledger-consistency: `RELEASE_READINESS_MATRIX.md`'s own
+>   "16 runbooks" arithmetic (14+3 sums to 17) corrected. Schema-wide
+>   completeness sweep: found the identical no-disposition-update shape the
+>   first round already found for `HDN-BLK-001`/`004`, now on `HDN-BLK-003`
+>   (stale text, `HDN-378`'s own reasoned re-deferral never mirrored in) and
+>   `HDN-BLK-016`/`017`/`018`/`024` (never got their own "Amended at
+>   `HDN-387`" note, unlike `HDN-BLK-008`/`014`/`039`) — all corrected with
+>   disclosure notes; `ISS-2026-281` (documentation-completeness gap
+>   `HDN-387` never picked up) handed to `HDN-389`, mirroring `HDN-BLK-039`'s
+>   own precedent; `ISS-2026-283` (stale-tally bookkeeping finding) closed
+>   `RESOLVED`, its own remedy now honored twice running. No Critical or new
+>   High finding survives Tier C; blocker tally unchanged (0 Critical / 17
+>   High / 6 Medium — disposition text only, no severity/state change).
 > - **The 5-item §8.2 disposition gap is disclosed, not ruled here** —
 >   `HDN-388` has no fix or acceptance authority of its own; handed to
 >   `HDN-389` as the only remaining authority, alongside authoring
 >   `FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md`.
-> - Tier A gates and Tier C review still to run before `VERIFIED`. Full
->   disposition: `HDN-388.md`.
+> - **Independent full gate re-run after the fix pass**: `typecheck` 0;
+>   `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444**;
+>   `bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations,
+>   unchanged). **`CG-S15-HDN-020` is `VERIFIED`.**
+>   `CG-S15-HDN-021` (`HDN-389`, Prompt 389, Closure Verification) is now the
+>   next eligible prompt — the only prompt authorized to set
+>   `FULL_SYSTEM_HARDENING_VERIFIED`. Full disposition: `HDN-388.md` §14.
 
 > ### `HDN-387` (Release Blocker Triage and Remediation, `CG-S15-HDN-019`) is `VERIFIED` — `HDN-388` is next
 >

@@ -3,9 +3,9 @@
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
 **Updated:** 2026-08-24 (`CG-S15-HDN-020` — **Documentation Handoff (Prompt
-388)** — `COMPLETED`, first round only, Tier C review pending. Pure
-documentation reconciliation — **zero code, zero migration, zero schema
-change**, the first Step 15 checkpoint of this kind. 3 independent parallel
+388)** — `VERIFIED`, Tier C closed. Pure documentation reconciliation —
+**zero code, zero migration, zero schema change throughout both rounds**,
+the first Step 15 checkpoint of this kind. 3 independent parallel
 investigation lenses (runbook completeness audit; ledger/matrix
 reconciliation and Step 16 eligibility; RPD-disclosure and handoff-package
 audit) confirmed all 19 prior checkpoints `VERIFIED`, no RPD-021/022/023/
@@ -28,26 +28,38 @@ its own blocking dependency, `HDN-BLK-023`, closed at `HDN-387`; this
 entry's text was never revisited, corrected `RESOLVED`. `HDN-BLK-004`
 (Medium) — `HDN-378` already relocated 2 of 3 extensions and registered
 `ISS-2026-234` for the non-relocatable `postgis` remainder; corrected to
-`PARTIALLY RESOLVED`. **The load-bearing finding, disclosed not fixed (no
-ruling authority at this checkpoint)**: 5 open High blockers (`HDN-BLK-016`/
-`017`/`018`/`022`/`024`) whose owning checkpoints have all since closed
-`VERIFIED` without a formal §8.2 disposition — per §8.2 condition 5, only
-`HDN-387` or `HDN-389` may make that ruling, and `HDN-387` is closed; handed
-to `HDN-389` explicitly as the only remaining authority, alongside
-`FULL_SYSTEM_HARDENING_CLOSURE_REPORT.md`'s own authorship (does not exist
-yet, Step 16 eligibility condition 5, `HDN-389`'s own deliverable, not
-`HDN-388`'s). **`RELEASE_READINESS_MATRIX.md`'s own explicit go/no-go
-recommendation: NO-GO for Step 16, as of `HDN-388`** — expected, not a
-setback; only `HDN-389` may ever set `FULL_SYSTEM_HARDENING_VERIFIED`.
-Gates re-run in full despite the documentation-only scope, per this
-session's own standing discipline that "docs-only" is never assumed safe
-without verification: `typecheck` 0; `lint` 0 errors/337 warnings;
-`pnpm run test` **5444/5444** (unchanged); `pnpm exec next build` clean;
-`bash scripts/db-tests/run.sh` **230/230 files clean** (333 migrations,
-unchanged) — every number matches `HDN-387`'s own Tier C close exactly, as
-expected for a checkpoint that touched zero code. **`CG-S15-HDN-020` first
-round `COMPLETED`.** Tier C review required before `VERIFIED`. Full
-disposition: `docs/build-log/full-system-hardening/HDN-388.md`.)
+`PARTIALLY RESOLVED`. **Tier C's 4 lenses (attack-surface adapted to
+claims-testing, since zero code shipped) found and fixed 3 more real
+gaps**: correctness re-derivation clean PASS; claims-testing 6 of 7 probes
+held, 1 fixed (`11_DEVOPS_WORKSTREAM.md` §11's own stale runbook-filename
+repeat given a cross-reference to §8.5's amendment); ledger-consistency
+fixed a "16 vs 17 runbooks" arithmetic error in `RELEASE_READINESS_
+MATRIX.md`; schema-wide completeness sweep found the identical
+no-disposition-update shape the first round already found for `HDN-BLK-
+001`/`004`, now on `HDN-BLK-003`/`016`/`017`/`018`/`024` and 2 `KNOWN_
+ISSUES` rows (`ISS-2026-281` handed to `HDN-389`; `ISS-2026-283` closed
+`RESOLVED`) — all corrected or explicitly disclosed. **The load-bearing
+finding, disclosed not fixed (no ruling authority at this checkpoint)**: 5
+open High blockers (`HDN-BLK-016`/`017`/`018`/`022`/`024`) whose owning
+checkpoints have all since closed `VERIFIED` without a formal §8.2
+disposition — per §8.2 condition 5, only `HDN-387` or `HDN-389` may make
+that ruling, and `HDN-387` is closed; handed to `HDN-389` explicitly as the
+only remaining authority, alongside `FULL_SYSTEM_HARDENING_CLOSURE_
+REPORT.md`'s own authorship (does not exist yet, Step 16 eligibility
+condition 5, `HDN-389`'s own deliverable, not `HDN-388`'s).
+**`RELEASE_READINESS_MATRIX.md`'s own explicit go/no-go recommendation:
+NO-GO for Step 16, as of `HDN-388`'s own `VERIFIED` close** — expected, not
+a setback; only `HDN-389` may ever set `FULL_SYSTEM_HARDENING_VERIFIED`.
+Gates re-run in full at both rounds despite the documentation-only scope,
+per this session's own standing discipline that "docs-only" is never
+assumed safe without verification: `typecheck` 0; `lint` 0 errors/337
+warnings; `pnpm run test` **5444/5444** (unchanged); `pnpm exec next build`
+clean; `bash scripts/db-tests/run.sh` **230/230 files clean** (333
+migrations, unchanged) — every number matches `HDN-387`'s own Tier C close
+exactly, as expected for a checkpoint that touched zero code throughout.
+**`CG-S15-HDN-020` is `VERIFIED`.** `CG-S15-HDN-021` (`HDN-389`, Closure
+Verification) is now the next eligible prompt. Full disposition:
+`docs/build-log/full-system-hardening/HDN-388.md` §14.)
 
 **Prior update:** 2026-08-24 (`CG-S15-HDN-019` — **Release Blocker Triage and
 Remediation (Prompt 387)** — `VERIFIED`, Tier C closed. 3 independent
