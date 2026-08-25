@@ -7980,3 +7980,22 @@ corrections below. Corrected rather than left standing.*
 | Status | **`COMPLETED`** — first round. Tier C review required before `VERIFIED`. Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. `RGL-BLK-001`/`003` remain open and undisposed. The staging-tier gap remains open, owner `RGL-404`. Next eligible prompt: `CG-S16-RGL-010` (Prompt 400, UAT Deployment) |
 | Date | 2026-08-25 |
 
+### CHG-2026-241 — UAT Deployment: no UAT tier and no named business acceptor exist; prepared the human-independent readiness (scenarios, data plan, roles, evidence-capture) but left `UAT_READY`/`UAT_ACCEPTED` deliberately unset, escalating the sign-off gap to the operator (Step 16, Prompt 400)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-010` (Prompt 400, UAT Deployment), package document `CG-AABPP-RGL-400`, package version `0.17.0`. Continuing the operator's own "jalankan semua step 16" instruction, sequentially from `RGL-399`. |
+| Change type | DOCS ONLY. 1 new build log, 4 standing-doc updates. Zero migration, zero application/TypeScript code, zero infrastructure or environment mutated |
+| Authorization | Operator instruction to run the full remaining Step 16 range, executed one task at a time per `AGENTS.md`'s never-batch rule |
+| Build process | Re-verified no UAT tier exists (same check as `RGL-399`'s own staging finding) and searched `docs/runtime/`/`docs/build-log/` for any named business acceptor — none found, matching execution index §7.2. Built a 9-scenario acceptance catalogue from Prompt 400 §29's own named regression/E2E flows, a representative non-real data plan reusing `RGL-398`'s own verified-safe conventions, a roles/accounts plan mapped onto the existing schema role model, and an evidence-capture method mirroring `app.capture_audit_event`'s own shape |
+| Findings and disposition | No UAT tier, no named acceptor — both re-confirmed rather than assumed. `UAT_READY` deliberately not set: Prompt 400's own objective bundles environment deployment with data/roles/scenario readiness as one state, and the environment half cannot be completed. `UAT_ACCEPTED` deliberately not set and never will be by any agent — a human business sign-off cannot be produced or simulated by an agent-run pass, however thorough; recorded as a tracked gap, owner `RGL-404`/`RGL-412`, escalated to the operator |
+| Files edited | `docs/build-log/release-go-live/RGL-400.md` (new); `docs/runtime/TASK_LEDGER.md`; `docs/runtime/CARGOGRID_BUILD_STATUS.md`; `docs/runtime/HANDOFF.md` |
+| Migration | None. No infrastructure provisioned, no live database touched |
+| Risk | None — this checkpoint is a documentation/planning exercise only |
+| Scope justification | Direct execution of this task's own charter, constrained by the execution index's own binding rule (§7.2: no agent may produce or simulate `UAT_ACCEPTED`) |
+| Gates | `typecheck` 0; `lint` 0/337 warnings (unchanged); `docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze` all passed |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` — docs-only change, no functional impact either way |
+| Status | **`COMPLETED`** — first round. Tier C review required before `VERIFIED`. Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. `RGL-BLK-001`/`003` remain open and undisposed. The staging-tier gap (`RGL-399`) and this checkpoint's own UAT-acceptor gap both remain open, owner `RGL-404`/`RGL-412`. Next eligible prompt: `CG-S16-RGL-011` (Prompt 401, Smoke Test) |
+| Date | 2026-08-25 |
+
