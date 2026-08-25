@@ -896,6 +896,107 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-269 (Step 16 historical-issue-backlog remediation) fix regression: a fresh, auto-numbered re-import of an un-keyed row sharing an existing employee''s own work_email/full_name is flagged into app.employee_duplicate_candidates for human review -- the exact HDN-385 live reproduction (a genuine duplicate person record, silently created, zero flag) -- the import itself still succeeds (never a hard block)'
+do $$
+declare
+  v_tenant1 uuid;
+  v_staff uuid;
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_first_employee_count integer;
+  v_second_employee_count integer;
+  v_first_id uuid;
+  v_second_id uuid;
+  v_candidate app.employee_duplicate_candidates;
+begin
+  select id into v_tenant1 from app.tenants where slug = 'hrmemp1';
+  select auth_user_id into v_staff from app.users where email = 'staff@hrmemp1.test';
+
+  -- First import: a single, un-keyed (no employee_number) row.
+  v_source_file1 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-unkeyed-1.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-unkeyed-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', null, v_staff, 'staff');
+  v_job1 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file1.id, '{}'::jsonb, 'idem-empimport-unkeyed-job-1', v_staff, 'staff');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Repeat Import Person', 'work_email', 'repeat.import@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job1.job_id, false, v_staff, 'staff');
+
+  select count(*) into v_first_employee_count from app.employees
+    where tenant_id = v_tenant1 and full_name = 'Repeat Import Person';
+  select master_record_id into v_first_id from app.employees
+    where tenant_id = v_tenant1 and full_name = 'Repeat Import Person' limit 1;
+  if v_first_employee_count <> 1 then
+    raise exception 'assertion failed: expected exactly one employee created by the first import, got %', v_first_employee_count;
+  end if;
+
+  -- Second import: the SAME source row, re-imported as a genuinely new, un-keyed staging
+  -- row in a fresh job -- exactly HDN-385''s own "a fresh re-import of the same source
+  -- file" reproduction. app.next_employee_number() mints a DIFFERENT number, so
+  -- master_records'' own unique constraint never fires; this is the precise gap
+  -- ISS-2026-269 exists to close.
+  v_source_file2 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-unkeyed-2.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-unkeyed-source-2', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', null, v_staff, 'staff');
+  v_job2 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file2.id, '{}'::jsonb, 'idem-empimport-unkeyed-job-2', v_staff, 'staff');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Repeat Import Person', 'work_email', 'repeat.import@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+
+  -- The import itself still succeeds -- never a hard block.
+  perform app.commit_employee_import_job(v_job2.job_id, false, v_staff, 'staff');
+
+  select count(*) into v_second_employee_count from app.employees where tenant_id = v_tenant1 and full_name = 'Repeat Import Person';
+  if v_second_employee_count <> 2 then
+    raise exception 'assertion failed: expected the second, genuinely-duplicate employee record to still be created (never a hard block on import), found % rows total', v_second_employee_count;
+  end if;
+  select master_record_id into v_second_id from app.employees where tenant_id = v_tenant1 and full_name = 'Repeat Import Person' and master_record_id <> v_first_id;
+
+  -- ...but now flagged, where before this fix there was zero flag at all.
+  select * into v_candidate from app.employee_duplicate_candidates
+    where tenant_id = v_tenant1 and source_master_record_id = v_second_id and candidate_master_record_id = v_first_id;
+  if not found then
+    raise exception 'assertion failed: expected a pending app.employee_duplicate_candidates row linking the re-imported duplicate back to the original employee -- ISS-2026-269''s own "zero duplicate detection" gap has reappeared';
+  end if;
+  if v_candidate.decision <> 'pending' or v_candidate.similarity_basis <> 'work_email+full_name' then
+    raise exception 'assertion failed: expected decision=pending/similarity_basis=work_email+full_name (both fields matched), got decision=%, similarity_basis=%', v_candidate.decision, v_candidate.similarity_basis;
+  end if;
+
+  -- A THIRD import, un-keyed, with a genuinely different person (different work_email
+  -- AND full_name) must NOT be flagged -- proving this is a real match, not "every
+  -- auto-numbered row gets flagged unconditionally."
+  declare
+    v_job3 app.jobs;
+    v_source_file3 app.files;
+    v_row3 app.import_staging_rows;
+    v_third_id uuid;
+  begin
+    v_source_file3 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-unkeyed-3.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-unkeyed-source-3', v_staff, 'staff');
+    perform app.record_file_scan_result(v_source_file3.id, 'clean', null, v_staff, 'staff');
+    v_job3 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file3.id, '{}'::jsonb, 'idem-empimport-unkeyed-job-3', v_staff, 'staff');
+    perform app.stage_import_rows(v_job3.job_id, jsonb_build_array(jsonb_build_object(
+      'full_name', 'Genuinely Distinct Person', 'work_email', 'distinct.person@hrmemp1.test', 'employment_type', 'full_time'
+    )), v_staff, 'staff');
+    select * into v_row3 from app.import_staging_rows where job_id = v_job3.job_id and row_number = 1;
+    perform app.validate_employee_import_row(v_row3.id, v_staff, 'staff');
+    perform app.commit_employee_import_job(v_job3.job_id, false, v_staff, 'staff');
+    select master_record_id into v_third_id from app.employees where tenant_id = v_tenant1 and full_name = 'Genuinely Distinct Person';
+
+    if exists (select 1 from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_third_id) then
+      raise exception 'assertion failed: expected a genuinely distinct new employee (no shared work_email/full_name with anyone) to NOT be flagged as a duplicate candidate';
+    end if;
+  end;
+
+  raise notice 'ISS-2026-269 duplicate-import-detection proof: a re-imported, auto-numbered duplicate person is flagged into app.employee_duplicate_candidates for human review (import still succeeds, never a hard block); a genuinely distinct new employee is not flagged';
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth (ERR-2026-004): anon holds no direct table/EXECUTE access to any new employee object; authenticated has RLS-scoped SELECT but no direct INSERT/UPDATE/DELETE; app.validate_employee_import_row is service_role-only (ATW-032''s own live rbac-enforcement.sql gate independently proves the transitive-authority half of this); CRITICAL fix regression -- authenticated''s SELECT on app.employees/app.employee_emergency_contacts/app.employee_change_requests is column-scoped, never full-row (this checkpoint''s own review-round fix, PLT-114''s exact established pattern)'
 do $$
 declare

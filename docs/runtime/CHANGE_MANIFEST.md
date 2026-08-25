@@ -8199,3 +8199,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 5 of 168 backlog items resolved (one explicitly partial by design). 163 remain (0 Critical, 12 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-252 — Historical issue backlog remediation, item 6: `ISS-2026-269` (employee import duplicate detection)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-251`. Item 6 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Read the entry's own live reproduction to pin the matching heuristic to exactly the definition already demonstrated (`work_email`/`full_name`), avoiding an invented fuzzier heuristic the entry itself flagged as needing further HR-domain input. Deliberately did not route through the existing `app.flag_employee_duplicate_candidate` RPC after recognizing it would silently add an `HRS:Edit` authority requirement to every import. First local `db-tests` run caught a `min(uuid)` bug in this pass's own new test (no such Postgres aggregate) — fixed before applying live |
+| Findings and disposition | `ISS-2026-269`: `RESOLVED` — a fresh, auto-numbered import row matching an existing employee's `work_email`/`full_name` is now flagged into `app.employee_duplicate_candidates` for human review; the import itself still succeeds (never a hard block) |
+| Files edited | `supabase/migrations/20260826070000_harden_employee_import_duplicate_detection.sql` (new); `scripts/db-tests/hris-employee-master.sql` (widened); `scripts/release/check-release-freeze.ts` (ninth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-269` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826070000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` (zero existing rows in `app.employees`/`app.import_staging_rows`, confirmed live before applying) |
+| Risk | Low-medium — touches a real write path (`app.commit_employee_import_job`, already redefined once at `20260817000000`), mitigated by keeping the fix strictly additive (a new flagging block after the existing insert logic, no existing behavior altered) and a full-suite regression run |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (2 runs — first caught the `min(uuid)` test bug, second clean, both confirmed via the script's own real exit code). `pnpm run typecheck`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema change would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 6 of 168 backlog items resolved (one explicitly partial by design). 162 remain (0 Critical, 11 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |

@@ -276,6 +276,46 @@ import { readFileSync } from "node:fs";
  * db-test suite run (340 migrations, 233 runner files, ALL PASSED) before
  * this digest was changed, and applied to the live hosted project via
  * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (ninth pass), migrationSetSha256 only (dbTestSetSha256
+ * unchanged -- an existing file widened, no file added or removed). Ruling:
+ * docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section, item 6: `ISS-2026-269` -- an auto-generated-employee-
+ * number import row has zero duplicate detection against an existing
+ * employee sharing the same identity, live-reproduced at `HDN-385` (a fresh
+ * re-import of an identical un-keyed row silently creates a second,
+ * genuinely duplicate employee -- distinct from, and unfixed by, `HDN-385`'s
+ * own `20260817000000` fix, which only catches a collision on an EXPLICIT
+ * employee_number). Fixed additively by
+ * supabase/migrations/20260826070000_harden_employee_import_duplicate_
+ * detection.sql (341 files total) -- `app.commit_employee_import_job`
+ * (already `CREATE OR REPLACE`d once at `20260817000000`) redefined again on
+ * its identical signature, never editing either already-applied file.
+ * Matching heuristic: exact case-insensitive `work_email` match OR exact
+ * `full_name` match against any existing tenant employee -- the same
+ * definition of "duplicate" `HDN-385`'s own live reproduction used, not an
+ * invented fuzzier heuristic (Levenshtein/phonetic matching), which this
+ * finding's own text explicitly flagged as needing further HR-domain design
+ * input beyond a bounded fix. Deliberately a review flag into the
+ * already-established `app.employee_duplicate_candidates` mechanism, never a
+ * hard block -- the import still succeeds. Deliberately NOT routed through
+ * the existing `app.flag_employee_duplicate_candidate` RPC, which re-checks
+ * `HRS:Edit` authority independent of the `HRS:Import` authority the commit
+ * function already verified once -- composing it would have silently
+ * required every importer to also hold `HRS:Edit`, a real authority
+ * regression this fix avoids by inserting directly into the review table
+ * from within the already-authority-checked commit function. New regression
+ * in `scripts/db-tests/hris-employee-master.sql`: a genuine re-import
+ * reproduces `HDN-385`'s own scenario and is now flagged (import still
+ * succeeds); a genuinely distinct new employee (no shared `work_email`/
+ * `full_name`) is confirmed NOT flagged, proving this is a real match, not
+ * an unconditional flag-everything rule. Re-verified via a fresh full local
+ * db-test suite run (341 migrations, 233 runner files, ALL PASSED) before
+ * this digest was changed (the first attempt surfaced a `min(uuid)` bug in
+ * this pass's own new test, fixed before the digest was touched), and
+ * applied to the live hosted project via `apply_migration` before this local
+ * run (zero existing rows in `app.employees`/`app.import_staging_rows`,
+ * confirmed live before applying).
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -321,7 +361,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-265 fix (340
   // files: +1, 20260826060000_harden_database_restore_audit_trail.sql). See
   // the class-level doc comment above.
-  migrationSetSha256: "9ed06519551ea6bad34bcbd4cb0084b3b5a4c9df2e83bcd4cca1dad96f1271ba",
+  // History: 9ed06519551ea6bad34bcbd4cb0084b3b5a4c9df2e83bcd4cca1dad96f1271ba
+  // (340 files, eighth-pass amendment above). Superseded 2026-08-25 (ninth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-269 fix (341
+  // files: +1, 20260826070000_harden_employee_import_duplicate_detection.sql).
+  // See the class-level doc comment above.
+  migrationSetSha256: "129a7340fe49515b3c11aa34a604cc79446f4848c82eece13772124b85fc2c4a",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -365,7 +410,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-265 fix (233
   // files unchanged in count -- database-restore-lock.sql widened, no file
   // added or removed). See the class-level doc comment above.
-  dbTestSetSha256: "83e37b49ef1dbde855586a3a3899466b4894f458861f0c8dfb4adecf0bb256fa",
+  // History: 83e37b49ef1dbde855586a3a3899466b4894f458861f0c8dfb4adecf0bb256fa
+  // (233 files, eighth-pass amendment above). Superseded 2026-08-25 (ninth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-269 fix (233
+  // files unchanged in count -- hris-employee-master.sql widened). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "e135017ae8d8ce9d6a0fa9782cca9143fe1c24a7534372b2b5a2be8714d75d65",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
