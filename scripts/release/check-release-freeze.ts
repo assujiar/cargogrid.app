@@ -86,6 +86,32 @@ import { readFileSync } from "node:fs";
  * widened). Re-verified via a fresh full local db-test suite run (336
  * migrations, 231 runner files, ALL PASSED) before this digest was changed,
  * and applied to the live hosted project only after that local run passed.
+ *
+ * AMENDED 2026-08-25 (fourth pass), dbTestSetSha256 only. Ruling:
+ * docs/build-log/release-go-live/RGL-395.md (CG-S16-RGL-005, CI/CD Gate
+ * Validation) -- this task's own charter is the CI gate-enforcement gap that
+ * produced RGL-BLK-005 (reclassified High at RGL-394): `pg_read_file()` is a
+ * Postgres SERVER-side function reading the SERVER's filesystem, but the
+ * concurrency-race helper scripts write their output files on the psql
+ * CLIENT's filesystem. Locally client and server share a host so this
+ * happened to work; in CI Postgres runs as a separate `postgis/postgis:
+ * 17-3.4` Docker service container with its own filesystem, so the file
+ * genuinely does not exist server-side. Fixed, structurally not
+ * coincidentally, in all 6 affected files (advanced-tms-wms-outbound.sql,
+ * advanced-tms-wms-packing.sql, advanced-tms-wms-picking.sql,
+ * automation-rule-engine.sql, procurement-vendor-contract.sql, public-api-
+ * platform.sql) by capturing each race-output file's CONTENT client-side via
+ * psql's `` \set var `cat "$RACE_OUT_A" ...` `` backtick-subshell syntax
+ * (which inherits psql's own process environment) instead of asking the
+ * server to read a client-local path with `pg_read_file()`; bridged into
+ * `do $$...$$` blocks via the pre-existing `set_config`/`current_setting`
+ * GUC pattern where required. No file added or removed (232 files
+ * unchanged); only these 6 files' content changed. Re-verified via a fresh
+ * full local db-test suite run (336 migrations, 231 runner files, ALL
+ * PASSED) before this digest was changed. See RGL-395.md for the CI-run
+ * evidence obtained separately from this local run, per RGL-392's standing
+ * constraint that no lane may report a CI gate as passing on the strength of
+ * a local run alone.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -130,7 +156,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // RGL-393.md §4. The fixture is not incidental — HDN-369 had to correct a
   // stale, load-bearing claim inside it, and its content changes what every
   // db-test runs against.
-  dbTestSetSha256: "746030c4f93ef1f16da79f87154547cb78e9cad0c8020efadc78a184f4c7aa05",
+  // History: 746030c4f93ef1f16da79f87154547cb78e9cad0c8020efadc78a184f4c7aa05
+  // (232 files, prior amendment above). Superseded 2026-08-25 (fourth pass) by
+  // RGL-395's own RGL-BLK-005 fix: 6 files' content changed (no file added or
+  // removed, still 232 files). See the class-level doc comment above.
+  dbTestSetSha256: "e531723a2160096d28c778784f53723f07afe36ff9529623964998ad4c4ca07a",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

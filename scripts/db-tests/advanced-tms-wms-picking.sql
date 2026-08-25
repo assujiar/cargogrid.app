@@ -1447,10 +1447,18 @@ select current_database() as pg_test_db \gset
 
 -- psql does not interpolate :variables inside a do $$ ... $$ body (confirmed empirically
 -- during the ISS-2026-023 fix, CG-S10-ATW-027 -- the same limitation the L5 block's own
--- comment below already documented). Smuggle the two real, PID-suffixed output paths into
--- the upcoming do block via a session-level GUC instead, read back with current_setting().
-select set_config('cargogrid.race_out_keyrace_a', :'race_out_keyrace_a', false),
-       set_config('cargogrid.race_out_keyrace_b', :'race_out_keyrace_b', false);
+-- comment below already documented). Smuggle the captured content into the upcoming do
+-- block via a session-level GUC instead, read back with current_setting().
+--
+-- RGL-BLK-005 fix: this used to smuggle the two PID-suffixed PATHS and read them with
+-- pg_read_file() inside the do block -- but pg_read_file() reads the *server's*
+-- filesystem, while the helper above writes its race-output files on the *client's*.
+-- Identical locally (same host), genuinely different in CI (Postgres in its own Docker
+-- service container). \set's backtick form runs client-side, so it is captured here,
+-- before the do block, and the already-established GUC bridge now carries the CONTENT
+-- rather than the path.
+\set loser_out `cat "$RACE_OUT_A" "$RACE_OUT_B"`
+select set_config('cargogrid.loser_out', :'loser_out', false);
 
 do $$
 declare
@@ -1475,9 +1483,10 @@ begin
 
   -- The loser's own process output must carry the clean, classified error -- never the
   -- raw, uncaught Postgres constraint-violation message this migration used to leak.
-  -- Paths read back via current_setting(), not psql :interpolation (does not reach inside
-  -- a dollar-quoted do body -- see the set_config() call immediately before this do block).
-  select pg_read_file(current_setting('cargogrid.race_out_keyrace_a')) || pg_read_file(current_setting('cargogrid.race_out_keyrace_b')) into v_loser_out;
+  -- Content read back via current_setting(), not psql :interpolation (does not reach
+  -- inside a dollar-quoted do body -- see the set_config() call immediately before this
+  -- do block, which now carries the captured content, not a path -- RGL-BLK-005 fix).
+  v_loser_out := current_setting('cargogrid.loser_out');
   if v_loser_out not like '%idempotency_key_conflict%' then
     raise exception 'assertion failed: expected the losing process''s own output to carry a clean idempotency_key_conflict error, got: %', v_loser_out;
   end if;

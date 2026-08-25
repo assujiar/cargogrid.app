@@ -991,6 +991,15 @@ select current_database() as pg_test_db \gset
 
 \! bash scripts/db-tests/wms-picking-concurrency-helper.sh
 
+-- RGL-BLK-005 fix: pg_read_file() reads the server's filesystem, but the helper
+-- above writes its race-output files on the client's -- identical locally,
+-- genuinely different in CI (Postgres in its own Docker service container). \set's
+-- backtick form runs client-side, sidestepping the mismatch. Bridged into the
+-- do block via a session-level GUC (psql does not interpolate :variables inside
+-- a do $$ ... $$ body).
+\set loser_out `cat "$RACE_OUT_A" "$RACE_OUT_B"`
+select set_config('cargogrid.loser_out', :'loser_out', false);
+
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'wmspack1');
@@ -1010,7 +1019,7 @@ begin
     raise exception 'assertion failed: expected exactly ONE of the two concurrent 15-unit requests to have won, got % real package lines', v_line_count;
   end if;
 
-  select pg_read_file('/tmp/cargogrid-wms-pack-race-a.out') || pg_read_file('/tmp/cargogrid-wms-pack-race-b.out') into v_loser_out;
+  v_loser_out := current_setting('cargogrid.loser_out');
   if v_loser_out not like '%over_pack_rejected%' then
     raise exception 'assertion failed: expected the losing process''s own output to carry a clean over_pack_rejected error, got: %', v_loser_out;
   end if;

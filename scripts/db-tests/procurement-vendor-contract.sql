@@ -508,20 +508,25 @@ select pg_backend_pid()::text as race_bpid \gset
 
 \! bash scripts/db-tests/wms-picking-concurrency-helper.sh
 
--- pg_read_file requires superuser/pg_read_server_files, which the postgres role this
--- whole db-test suite connects as already has. A plain top-level SELECT (not inside a
--- do $$ ... $$ body -- psql does not interpolate :variables there, the same gotcha
--- procurement-vendor-capacity.sql's own race test discloses) that raises a genuine
--- SQL error aborts the script under ON_ERROR_STOP exactly like an uncaught
--- `raise exception` inside a do block does. The divisor is deliberately NOT a bare
--- integer literal (`1 / 0`) -- Postgres's planner constant-folds a literal-only
--- division at PLAN time, raising division-by-zero regardless of which CASE branch
--- would actually be chosen at runtime (empirically confirmed against this session's
--- own psql: `case when false then 1/0 else 1 end` still errors). `generate_series`
--- forces genuine per-row runtime evaluation, so the THEN branch only executes when
--- the WHEN condition is actually true.
+-- RGL-BLK-005 fix: pg_read_file() reads the server's filesystem, but the helper
+-- above writes its race-output files on the client's -- identical locally (same
+-- host), genuinely different in CI (Postgres in its own Docker service
+-- container). \set's backtick form runs client-side, so it is captured here,
+-- and interpolated directly below -- a plain top-level SELECT (not inside a
+-- do $$ ... $$ body) DOES interpolate :variables, unlike the gotcha
+-- procurement-vendor-capacity.sql's own race test discloses for do-block bodies.
+\set loser_out `cat "$RACE_OUT_A" "$RACE_OUT_B"`
+-- A plain top-level SELECT that raises a genuine SQL error aborts the script
+-- under ON_ERROR_STOP exactly like an uncaught `raise exception` inside a do
+-- block does. The divisor is deliberately NOT a bare integer literal (`1 / 0`)
+-- -- Postgres's planner constant-folds a literal-only division at PLAN time,
+-- raising division-by-zero regardless of which CASE branch would actually be
+-- chosen at runtime (empirically confirmed against this session's own psql:
+-- `case when false then 1/0 else 1 end` still errors). `generate_series`
+-- forces genuine per-row runtime evaluation, so the THEN branch only executes
+-- when the WHEN condition is actually true.
 select case
-  when (pg_read_file('/tmp/cargogrid-vc-race-a-' || :'race_bpid' || '.out') || pg_read_file('/tmp/cargogrid-vc-race-b-' || :'race_bpid' || '.out')) ~* 'deadlock detected|could not serialize access'
+  when :'loser_out' ~* 'deadlock detected|could not serialize access'
   then 1 / (select count(*) from generate_series(1, 0))
   else 1
 end;
