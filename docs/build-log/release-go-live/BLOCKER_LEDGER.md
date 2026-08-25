@@ -1059,6 +1059,17 @@ resolved by, the operator's `RGL-BLK-001` instruction. **`NO_GO` continues to ho
 of §3.4's three tracked gaps alone.** Full updated decision record:
 `docs/build-log/release-go-live/GO_NO_GO_REPORT.md`'s own second addendum.
 
+**Further update, same checkpoint.** Asked directly how to handle the three tracked gaps, the
+operator instructed they be accepted the same way as `RGL-BLK-001` — see
+`GO_NO_GO_REPORT.md` §3.4's own third addendum. **Mechanically, nothing left in this ledger
+continues to force `NO_GO`.** This report nonetheless keeps the verdict at `NO_GO`, now by
+deliberate choice: declaring `GO_DECIDED` would make `RGL-405` eligible against a still-armed
+auto-deploy mechanism, and the operator's own next instruction (given in the same turn) was to
+resolve the full historical project-wide issue backlog (`docs/runtime/KNOWN_ISSUES.md`, every
+prior phase, not only this range), not to deploy. **`RGL-405`–`412` remain `BLOCKED` pending an
+explicit, separate operator instruction to proceed to `GO_DECIDED`.** See `RGL-404.md`'s own new
+section for the backlog survey and remediation work this instruction produced.
+
 ---
 
 ## Status summary as of `RGL-402` (Penetration Test Evidence), 2026-08-25

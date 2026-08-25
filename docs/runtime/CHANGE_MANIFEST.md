@@ -8115,3 +8115,24 @@ corrections below. Corrected rather than left standing.*
 | Status | **`COMPLETED`**. `RGL-BLK-001` accepted by operator override; zero open Critical findings remain. **`NO_GO` verdict still stands**, now resting solely on the three tracked gaps in `GO_NO_GO_REPORT.md` §3.4 (staging tier, UAT acceptor, external pentest) — none resolvable by any agent. `RGL-405`–`412` remain `BLOCKED` pending those three or explicit operator instruction on how to proceed |
 | Date | 2026-08-25 |
 
+
+---
+
+### CHG-2026-248 — Operator override on the 3 tracked gaps; instruction to resolve the entire historical issue backlog (Step 16, Prompt 404 third follow-up)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-014` (Prompt 404, Go/No-Go Report), third fix-pass follow-up, same checkpoint |
+| Change type | DOCS ONLY. Disposition/verdict-framing changes across `BLOCKER_LEDGER.md`, `GO_NO_GO_REPORT.md`, `RGL-404.md`, and the 4 standing docs. No code, migration, or test file touched |
+| Authorization | Operator's own explicit instructions, verbatim: "Terima sebagai risk-accepted seperti RGL-BLK-001" (accept the 3 tracked gaps the same way as RGL-BLK-001) and separately "pokoknya seluruh issue baik yg critical high medium low harus solved semua tanpa terkecuali" (every issue, all severities, resolved without exception), confirmed via follow-up to mean the entire historical project-wide issue register |
+| Build process | Recorded the operator's acceptance of the 3 tracked gaps (no staging tier, no UAT acceptor, no external pentest) as an out-of-band override, mirroring `RGL-BLK-001`'s own record. Recomputed the verdict per the pipeline's own rules: mechanically nothing in Step 16's own blocker accounting continues to force `NO_GO`. Deliberately did NOT flip to `GO_DECIDED` as a side effect — reasoned explicitly in `GO_NO_GO_REPORT.md`'s third Verdict addendum why that would be premature (a still-armed auto-deploy mechanism; the operator's own next priority, stated in the same turn, being the historical backlog rather than a deploy). Attempted a mechanical regex-based inventory of `docs/runtime/KNOWN_ISSUES.md`'s current open-issue count; found it unreliable (inconsistent counts across attempts: 127/130/131) because many entries carry a `Status \`OPEN\`` mention in their own historical narrative, superseded later in the same entry — documented this limitation honestly rather than reporting a false-precision count |
+| Findings and disposition | 3 tracked gaps (staging tier, UAT acceptor, external pentest): accepted by operator override, none genuinely resolved. Verdict: zero items mechanically force `NO_GO`; verdict deliberately kept `NO_GO`, withheld from `GO_DECIDED`, pending a separate explicit operator instruction to proceed. Historical backlog: roughly 125-135 entries estimated `OPEN` across `docs/runtime/KNOWN_ISSUES.md`'s 252 total entries (Low through Critical), an honest estimate pending an entry-by-entry audit, not a scripted count |
+| Files edited | `docs/build-log/release-go-live/BLOCKER_LEDGER.md` (further update appended to the operator-override summary); `docs/build-log/release-go-live/GO_NO_GO_REPORT.md` (§3.4 third addendum, Verdict third addendum, §7/§9/§10 revised); `docs/build-log/release-go-live/RGL-404.md` (new §11 documenting the instruction and the backlog remediation plan, renumbered §12); `docs/runtime/TASK_LEDGER.md`, `docs/runtime/HANDOFF.md`, `docs/runtime/CARGOGRID_BUILD_STATUS.md` |
+| Migration | None |
+| Risk | None to the running system — documentation/disposition only |
+| Scope justification | Direct response to the operator's own explicit instructions |
+| Gates | `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green (docs-only change) |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit |
+| Status | **`COMPLETED`**. 3 tracked gaps accepted by operator override. `NO_GO` verdict deliberately maintained pending explicit operator instruction to proceed to `GO_DECIDED`. **Next work (outside the Step 16 WBS)**: entry-by-entry audit and severity-ordered remediation of the full historical `KNOWN_ISSUES.md` backlog, now beginning |
+| Date | 2026-08-25 |

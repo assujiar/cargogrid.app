@@ -54,6 +54,22 @@ setting `RGL-BLK-001`/`009` aside entirely." That reasoning is unaffected by thi
 of the three gaps was raised, addressed, or waived by the operator's `RGL-BLK-001` instruction.
 **`NO_GO` now rests on §3.4's three tracked gaps alone** — see the revised §3.1/§3.4/§7/§9 below.
 
+**Third addendum, same checkpoint, following a further explicit operator instruction.** Asked
+directly how to handle the three tracked gaps, the operator instructed they be accepted the same
+way as `RGL-BLK-001` — an operator override, not an in-pipeline acceptance. See §3.4's own third
+addendum for the full record.
+
+**Mechanically, Step 16's own blocker accounting no longer contains anything forcing `NO_GO`.**
+This report nonetheless **keeps the verdict at `NO_GO`, now by deliberate choice rather than by a
+remaining blocker** — it does not flip to `GO_DECIDED` as a side effect of a documentation update,
+because doing so would make `RGL-405` (Production Deployment) eligible against a still-armed
+auto-deploy mechanism, and because the operator's next instruction, given in the same breath as
+accepting these gaps, was to also resolve the full historical issue backlog across the entire
+project — not to deploy. **A future `GO_DECIDED` requires an explicit, separate operator
+instruction to proceed**, once that backlog work (or however much of it the operator wants done
+first) reaches a state they consider sufficient. See `RGL-404.md`'s own new section for the backlog
+survey and remediation plan this instruction produced.
+
 ---
 
 ## 1. Release scope
@@ -161,9 +177,39 @@ scratch.
 
 | Gap | Owner | Status |
 |---|---|---|
-| No staging tier exists (`RGL-399`) | `RGL-404` | Still open; this checkpoint does not resolve it (infrastructure provisioning outside this checkpoint's authority) |
-| No UAT tier, no named acceptor, `UAT_ACCEPTED` not set (`RGL-400`) | `RGL-404`/`RGL-412` | Still open; **no agent may set `UAT_ACCEPTED`** — requires a human business acceptor |
-| No licensed third-party penetration-test engagement exists (`RGL-402`) | `RGL-404`/`RGL-412` | Still open; requires an external security firm or independent tester |
+| No staging tier exists (`RGL-399`) | `RGL-404` | **Accepted by operator override, 2026-08-25** — see the third addendum below. Still genuinely absent; nothing about the infrastructure itself changed |
+| No UAT tier, no named acceptor, `UAT_ACCEPTED` not set (`RGL-400`) | `RGL-404`/`RGL-412` | **Accepted by operator override, 2026-08-25** — see the third addendum below. `UAT_ACCEPTED` is still not, and cannot be, formally set by any agent; the operator's acceptance is recorded as a distinct, explicit risk acceptance, not a substitute for that state flag |
+| No licensed third-party penetration-test engagement exists (`RGL-402`) | `RGL-404`/`RGL-412` | **Accepted by operator override, 2026-08-25** — see the third addendum below. No such engagement exists; the operator has chosen to proceed without one for this release |
+
+**Third addendum, same checkpoint, following a further explicit operator instruction.** Asked how
+to handle these three gaps, given none is agent-resolvable, the operator instructed directly that
+all three should be **accepted, the same way `RGL-BLK-001` was** — i.e. an out-of-band operator
+override, not an `RGL-404` ruling under §8.2 (none of the three is Critical, so §8.1's absolute bar
+does not even apply here; but §8.2 condition 5 still restricts *this report's own* acceptance
+authority, so this report records the operator's decision as exactly what it is rather than
+dressing it up as a self-authorized §8.2 acceptance). **Recorded plainly**: no staging tier exists,
+no human UAT acceptor has reviewed or signed off on anything, and no licensed penetration test has
+been performed against this candidate — none of that changed. What changed is that the operator,
+having been told this plainly, decided the release should not wait on any of the three.
+
+**Effect: no unresolved Critical or unruled High blocker remains in Step 16's own formal blocker
+accounting.** Every item `BLOCKER_LEDGER.md` tracks for this range is now either genuinely fixed
+(`RGL-BLK-002`, `004`, `005`, `006`, `009`), fixed-not-deployed (`RGL-BLK-007`, `008`), an
+aggregate tracking entry whose own 17 constituent items are individually ruled (`RGL-BLK-003`), or
+operator-accepted (`RGL-BLK-001`, and now these three tracked gaps). Mechanically, nothing left in
+this accounting continues to force `NO_GO`.
+
+**This report deliberately does NOT flip to `GO_DECIDED` in the same breath.** Two reasons, stated
+plainly rather than left implicit: (1) declaring `GO_DECIDED` makes `RGL-405` (Production
+Deployment) eligible, and given `RGL-BLK-001`'s own still-armed mechanism, a merge of this branch
+to `main` would genuinely, immediately deploy to real production — too consequential a step to
+take as a side effect of resolving a documentation gap; (2) the operator's very next instruction,
+given in direct response to being told these three gaps were the last blockers, was not "now
+deploy" — it was to also resolve the full historical issue backlog across every prior phase of
+this project (see `RGL-404.md`'s own new section on this). Declaring a go decision in the middle
+of that instruction, before that work is even scoped, would be presumptuous. **The verdict
+therefore stays `NO_GO`, but now as a deliberately withheld decision, not a blocked one** — see the
+Verdict's own third addendum below for the precise distinction.
 
 None of these three is individually Critical, but Blueprint §20.3 names the pentest gap "mandatory
 before GA," and the state table names `UAT_ACCEPTED` as requiring a human by construction — both
@@ -223,19 +269,22 @@ Listed as concrete, checkable conditions, not vague aspirations:
 3. ~~`RGL-BLK-010` resolved~~ **Done, this checkpoint** (re-ruled — the documentation-layer fix
    this item needed already existed since `HDN-384`) — see §3.2. The underlying enforcement-
    wiring hardening item remains open but non-blocking.
-4. **A human decision on the three tracked gaps** (§3.4): either genuinely resolved (a staging
-   tier provisioned, a named UAT acceptor completes sign-off, an external pentest engagement
-   completes) or explicitly, formally waived by an authority with standing to do so — this report
-   does not assume any of the three will simply be skipped. **This is now the only substantive
-   condition remaining** — see the addendum in §3.4.
+4. ~~A human decision on the three tracked gaps~~ **Done, this checkpoint** — the operator
+   accepted all three by direct override (§3.4's own third addendum), the same way as
+   `RGL-BLK-001`. None is genuinely resolved (no staging tier exists, no UAT sign-off occurred, no
+   pentest was performed) — they are accepted, not fixed.
 5. **This branch (`claude/step-16-prompt-390-412-okbd6v`) merged and its own content re-verified
-   as the actual candidate that would deploy** — not `main`'s current, older state.
+   as the actual candidate that would deploy** — not `main`'s current, older state. Still open.
+6. **An explicit, separate operator instruction to proceed to a go decision.** Mechanically nothing
+   in Step 16's own blocker accounting forces `NO_GO` any longer (items 1-4 above) — but this
+   report deliberately does not treat that as self-executing permission to deploy. The operator's
+   own next instruction, given in the same turn as accepting the three tracked gaps, was to resolve
+   the full historical issue backlog first, not to deploy. A future `RGL-404` re-run (or this same
+   report, revised again) needs the operator to say, separately and explicitly, that they want to
+   proceed to `GO_DECIDED` now.
 
-**Only items 4 and 5 remain.** Item 4 requires human action this agent has repeatedly and
-correctly declined to simulate (`RGL-399`/`RGL-400`/`RGL-402`) — provisioning a staging tier,
-naming and completing a human UAT acceptor's sign-off, and commissioning a licensed external
-penetration test are all outside any agent's authority to fabricate or waive on the operator's
-behalf; item 5 is a git-workflow step for whoever picks this back up.
+**Only items 5 and 6 remain.** Item 5 is a git-workflow step for whoever picks this back up; item 6
+is the operator's own call, to be made deliberately, not inferred from an adjacent instruction.
 
 ---
 
@@ -259,11 +308,17 @@ explicitly flagged for human attention, not left to be discovered only by readin
    rather than wait for a mechanism fix. No further operator action needed on this item unless the
    operator wants the mechanism itself fixed later.
 2. ~~`RGL-BLK-009`~~ **Fixed and deployed live this checkpoint** — no longer needs operator action.
-3. **A named human UAT acceptor** and, separately, **a licensed external penetration-test
-   engagement** are both still missing and both named as release-blocking prerequisites by this
-   product's own governing documents (the execution index, Blueprint §20.3). **These are now the
-   only open items requiring operator/human action** — a staging tier (`RGL-399`) is the third,
-   also unresolved. None of the three can be provided, simulated, or waived by any agent.
+3. ~~A named human UAT acceptor, a licensed external penetration-test engagement, a staging
+   tier~~ **All three accepted by direct operator decision, this checkpoint** — asked how to handle
+   them, the operator instructed they be accepted the same way as `RGL-BLK-001`. None is genuinely
+   resolved (staging still does not exist; no UAT sign-off occurred; no pentest was performed); the
+   operator has been told that plainly and chose to accept the release without them.
+4. **A separate, explicit decision on when to actually proceed to `GO_DECIDED` and deploy.**
+   Nothing in Step 16's own blocker accounting forces `NO_GO` any longer, but this report does not
+   treat that as automatic permission — see the Verdict's third addendum. The operator's own next
+   instruction was to resolve the full historical project-wide issue backlog (`RGL-404.md`'s new
+   section) before this report assumes they want to move to a go decision. **This is the one
+   remaining item requiring explicit operator direction**, whenever they are ready to give it.
 
 ---
 
@@ -309,3 +364,19 @@ either those three are genuinely resolved or an authority with standing formally
 this report does not assume the operator's `RGL-BLK-001` instruction extends to waiving these
 three as well, since the operator was not asked about them and Blueprint §20.3/the state table
 name them as release-blocking prerequisites independent of this report's own discretion.
+
+**Second addendum, same checkpoint, after the operator's override on the three tracked gaps.**
+Asked directly, the operator accepted all three the same way as `RGL-BLK-001` (§3.4's own third
+addendum). **Mechanically, nothing left in Step 16's own blocker accounting continues to block this
+range** — every `RGL-BLK-*` entry is fixed, fixed-not-deployed, ruled/dispositioned, or
+operator-accepted, and all three tracked gaps are now also operator-accepted.
+
+**The range nonetheless remains `BLOCKED`, by deliberate choice, not by a remaining condition.**
+This report does not treat "nothing left blocks it" as equivalent to "proceed" — see the Verdict's
+own third addendum for why. In the same turn as accepting these three gaps, the operator instructed
+that the full historical issue backlog (every `OPEN` entry in `docs/runtime/KNOWN_ISSUES.md` across
+every prior phase of this project, not only this Step 16 range's own scope) be resolved as well,
+without exception. This report reads that as the operator's own priority ordering — get the backlog
+down first — not as a request to deploy now. **`RGL-405` through `RGL-412` remain `BLOCKED` pending
+an explicit, separate operator instruction to proceed to `GO_DECIDED`.** See `RGL-404.md`'s own new
+section for the backlog survey this instruction produced and the remediation work now underway.
