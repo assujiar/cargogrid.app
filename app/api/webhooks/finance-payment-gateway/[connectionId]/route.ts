@@ -51,13 +51,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ con
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   const client = createSupabaseServiceRoleClient() as unknown as FinanceIntegrationsMutationRpcClient;
-  const result = await ingestFinancePaymentGatewayWebhookEvent(client, {
-    connectionId,
-    clientKey,
-    rawPayload,
-    timestamp,
-    signature,
-  });
-
-  return Response.json({ ingestStatus: result.ingestStatus, eventId: result.eventId }, { status: STATUS_BY_INGEST_STATUS[result.ingestStatus] ?? 200 });
+  // RGL-402: connectionId is unvalidated, attacker-controlled URL-path text -- a
+  // non-UUID value fails ingestFinancePaymentGatewayWebhookEvent's own internal Zod
+  // .uuid() parse, which throws rather than returning an ingestStatus. Uncaught,
+  // that surfaced as a raw 500 instead of a clean 400 -- live-forced against the
+  // identical sibling route (third-party-gps), the same bug class.
+  try {
+    const result = await ingestFinancePaymentGatewayWebhookEvent(client, {
+      connectionId,
+      clientKey,
+      rawPayload,
+      timestamp,
+      signature,
+    });
+    return Response.json({ ingestStatus: result.ingestStatus, eventId: result.eventId }, { status: STATUS_BY_INGEST_STATUS[result.ingestStatus] ?? 200 });
+  } catch {
+    return Response.json({ ingestStatus: "invalid" }, { status: 400 });
+  }
 }

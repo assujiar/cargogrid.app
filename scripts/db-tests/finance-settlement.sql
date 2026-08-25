@@ -430,6 +430,93 @@ begin
 end;
 $$;
 
+\echo '>> RGL-BLK-009 (HDN-BLK-016/ISS-2026-199) regression: reversing a posted settlement must also post a reversing GL journal -- the original journal stays posted and untouched, a new correction-sourced journal exists with every line direction flipped and amounts/accounts identical, the subledger batch is marked reversed, and a posted app.finance_journal_corrections row records the whole chain'
+do $$
+declare
+  v_tenant_a uuid;
+  v_vendor_id uuid;
+  v_item app.finance_ap_open_items;
+  v_settlement app.finance_settlements;
+  v_batch app.finance_subledger_batches;
+  v_original app.finance_journals;
+  v_reversal app.finance_journals;
+  v_correction app.finance_journal_corrections;
+  v_original_line_count integer;
+  v_reversal_line_count integer;
+  v_mismatched_count integer;
+  v_can_authenticated_exec boolean;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
+  v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
+
+  select has_function_privilege('authenticated', 'app.request_finance_settlement_reversal(uuid,text,uuid,text)', 'EXECUTE') into v_can_authenticated_exec;
+  if not v_can_authenticated_exec then
+    raise exception 'assertion failed: authenticated must retain EXECUTE on app.request_finance_settlement_reversal -- RGL-BLK-009''s own reachability regression';
+  end if;
+
+  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 400, '2026-03-09'::date, '2026-04-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-GL-REV-1', 'Bank ***1234', 'USD', '2026-03-23'::date,
+    jsonb_build_array(jsonb_build_object('apOpenItemId', v_item.id, 'amount', 400)), 0, 'prep-gl-rev-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.submit_finance_settlement_for_approval(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.approve_finance_settlement(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.execute_finance_settlement(v_settlement.id, v_settlement.record_version, 'TXN-GL-REV-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_settlement from app.post_finance_settlement(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+
+  select * into v_batch from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'settlement' and source_id = v_settlement.id;
+  select * into v_original from app.finance_journals where id = v_batch.gl_journal_id;
+
+  select * into v_settlement from app.request_finance_settlement_reversal(v_settlement.id, 'duplicate payment, GL must also reverse', '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  if v_settlement.status <> 'reversed' then
+    raise exception 'assertion failed: expected settlement status reversed, got %', v_settlement.status;
+  end if;
+
+  -- the original journal must be untouched -- still posted, same line count
+  select * into v_original from app.finance_journals where id = v_original.id;
+  if v_original.status <> 'posted' then
+    raise exception 'assertion failed: the ORIGINAL GL journal must remain posted after a reversal, not be mutated in place, got status=%', v_original.status;
+  end if;
+
+  select * into v_batch from app.finance_subledger_batches where id = v_batch.id;
+  if v_batch.status <> 'reversed' then
+    raise exception 'assertion failed: expected the settlement''s own subledger batch marked reversed, got %', v_batch.status;
+  end if;
+
+  select * into v_correction from app.finance_journal_corrections where tenant_id = v_tenant_a and original_journal_id = v_original.id and correction_type = 'reversal';
+  if not found then
+    raise exception 'assertion failed: expected a posted app.finance_journal_corrections row recording this reversal -- none found';
+  end if;
+  if v_correction.status <> 'posted' or v_correction.correction_journal_id is null then
+    raise exception 'assertion failed: expected the correction row status=posted with a non-null correction_journal_id, got status=% correction_journal_id=%', v_correction.status, v_correction.correction_journal_id;
+  end if;
+
+  select * into v_reversal from app.finance_journals where id = v_correction.correction_journal_id;
+  if v_reversal.status <> 'posted' or v_reversal.source_type <> 'correction' then
+    raise exception 'assertion failed: expected the reversal journal posted with source_type=correction, got status=% source_type=%', v_reversal.status, v_reversal.source_type;
+  end if;
+
+  select count(*) into v_original_line_count from app.finance_journal_lines where journal_id = v_original.id;
+  select count(*) into v_reversal_line_count from app.finance_journal_lines where journal_id = v_reversal.id;
+  if v_original_line_count <> v_reversal_line_count or v_original_line_count = 0 then
+    raise exception 'assertion failed: expected the reversal journal to carry exactly as many lines as the original (%), got %', v_original_line_count, v_reversal_line_count;
+  end if;
+
+  -- every original line must have exactly one reversal line on the same account/amount with the flipped direction
+  select count(*) into v_mismatched_count
+  from app.finance_journal_lines o
+  where o.journal_id = v_original.id
+    and not exists (
+      select 1 from app.finance_journal_lines r
+      where r.journal_id = v_reversal.id
+        and r.account_id = o.account_id
+        and r.amount = o.amount
+        and r.direction = (case when o.direction = 'debit' then 'credit' else 'debit' end)
+    );
+  if v_mismatched_count > 0 then
+    raise exception 'assertion failed: % original journal line(s) have no matching flipped-direction reversal line on the same account/amount', v_mismatched_count;
+  end if;
+end;
+$$;
+
 \echo '>> HDN-374 Tier C regression: app.request_finance_settlement_reversal must deny reversing a settlement whose own original posting period is locked -- period lock cannot be bypassed by a normal FIN:Approve role via the reversal path any more than via the posting path'
 do $$
 declare
@@ -464,13 +551,24 @@ begin
     raise exception 'assertion failed: expected the fixture period to be locked, got %', v_lock.status;
   end if;
 
+  -- RGL-BLK-009: this function's own pre-existing posting_eligible check (HDN-374 Tier C)
+  -- only ever reflects app.finance_fiscal_periods.status ('open'/'closed') -- app.
+  -- lock_finance_period never touches that column, it only writes app.finance_period_locks,
+  -- so this specific scenario (locked via lock_finance_period, status left 'open') was
+  -- ALWAYS structurally unreachable by that check alone; found live while implementing this
+  -- checkpoint's own GL-reversal fix, not a regression it introduced. The lock is still
+  -- correctly enforced -- via app.create_and_post_finance_system_journal's own (separately
+  -- hardened, later-migration) call to app.assert_finance_period_open_for_posting, now
+  -- reached by this function's own new GL-reversal code path -- just surfaced as
+  -- finance_period_locked, a more specific and accurate error than the original
+  -- finance_settlement_reversal_period_not_open ever was for this exact scenario.
   begin
     perform app.request_finance_settlement_reversal(v_settlement.id, 'attempted reversal against a locked period', '00000000-0000-0000-0000-000000029602', 'financemanagera');
-    raise exception 'assertion failed: HDN-374 Tier C regressed -- expected finance_settlement_reversal_period_not_open, a locked period must never be bypassed by the reversal path';
+    raise exception 'assertion failed: HDN-374 Tier C regressed -- expected finance_period_locked or finance_settlement_reversal_period_not_open, a locked period must never be bypassed by the reversal path';
   exception
     when others then
-      if sqlerrm !~ 'finance_settlement_reversal_period_not_open' then
-        raise exception 'assertion failed: expected finance_settlement_reversal_period_not_open, got %', sqlerrm;
+      if sqlerrm !~ 'finance_period_locked' and sqlerrm !~ 'finance_settlement_reversal_period_not_open' then
+        raise exception 'assertion failed: expected finance_period_locked or finance_settlement_reversal_period_not_open, got %', sqlerrm;
       end if;
   end;
 

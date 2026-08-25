@@ -816,11 +816,20 @@ select pg_backend_pid()::text as race_bpid \gset
 
 -- psql does not interpolate :variables inside a do $$ ... $$ body (the same
 -- limitation scripts/db-tests/advanced-tms-wms-picking.sql's own L6-keyrace
--- block already documented, ISS-2026-023/CG-S10-ATW-027) -- smuggle the two
--- real, PID-suffixed output paths in via a session-level GUC instead, read
--- back with current_setting().
-select set_config('cargogrid.race_out_a', :'race_out_a', false),
-       set_config('cargogrid.race_out_b', :'race_out_b', false);
+-- block already documented, ISS-2026-023/CG-S10-ATW-027) -- smuggle the
+-- captured content in via a session-level GUC instead, read back with
+-- current_setting().
+--
+-- RGL-BLK-005 fix: this used to smuggle the two PID-suffixed PATHS and read
+-- them with pg_read_file() inside the do block -- but pg_read_file() reads the
+-- *server's* filesystem, while the helper above writes its race-output files
+-- on the *client's*. Identical locally (same host), genuinely different in CI
+-- (Postgres in its own Docker service container). \set's backtick form runs
+-- client-side, so it is captured here, before the do block.
+\set out_a `cat "$RACE_OUT_A"`
+\set out_b `cat "$RACE_OUT_B"`
+select set_config('cargogrid.race_out_a', :'out_a', false),
+       set_config('cargogrid.race_out_b', :'out_b', false);
 
 do $$
 declare
@@ -849,8 +858,8 @@ begin
   -- unique_violation (the exact regression this finding closed) -- both must
   -- have returned a clean status (completed), captured in their own output
   -- file by the helper script above.
-  select pg_read_file(current_setting('cargogrid.race_out_a')) into v_out_a;
-  select pg_read_file(current_setting('cargogrid.race_out_b')) into v_out_b;
+  v_out_a := current_setting('cargogrid.race_out_a');
+  v_out_b := current_setting('cargogrid.race_out_b');
   if v_out_a ~ 'ERROR' or v_out_b ~ 'ERROR' then
     raise exception 'assertion failed: expected BOTH racing processes to complete cleanly with no ERROR -- process A output=[%] process B output=[%]', v_out_a, v_out_b;
   end if;

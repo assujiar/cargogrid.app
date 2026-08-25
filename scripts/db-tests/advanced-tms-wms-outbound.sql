@@ -801,6 +801,17 @@ select current_database() as pg_test_db \gset
 
 \! bash scripts/db-tests/wms-picking-concurrency-helper.sh
 
+-- RGL-BLK-005 fix: pg_read_file() reads the *server's* filesystem, but the helper
+-- above writes its two race-output files on the *client's* -- identical locally
+-- (same host), genuinely different in CI (Postgres runs in its own Docker service
+-- container). \set's own backtick form runs the shell command on the CLIENT, the
+-- same host the helper script just wrote to, sidestepping the mismatch entirely.
+-- Bridged into the upcoming do block via a session-level GUC, the same pattern
+-- already established for paths (advanced-tms-wms-picking.sql, automation-rule-
+-- engine.sql) -- psql does not interpolate :variables inside a do $$ ... $$ body.
+\set loser_out `cat "$RACE_OUT_A" "$RACE_OUT_B"`
+select set_config('cargogrid.loser_out', :'loser_out', false);
+
 \echo '>> asserting the concurrent double-ship-confirm race resolved to exactly one winner'
 do $$
 declare
@@ -831,7 +842,7 @@ begin
     raise exception 'assertion failed: expected exactly one issue-line row for SH-C';
   end if;
 
-  select pg_read_file('/tmp/cargogrid-wms-outbound-race-a.out') || pg_read_file('/tmp/cargogrid-wms-outbound-race-b.out') into v_loser_out;
+  v_loser_out := current_setting('cargogrid.loser_out');
   if v_loser_out not like '%invalid_transition%' then
     raise exception 'assertion failed: expected the losing process''s own output to carry a clean invalid_transition error, got: %', v_loser_out;
   end if;

@@ -64,8 +64,13 @@ enabled = true
 schema_paths = []
 
 [db.seed]
-# If enabled, seeds the database after migrations during a db reset.
-enabled = true
+# CG-S16-RGL-006 (Clean Database Rebuild, Prompt 396) found this block enabled with
+# sql_paths pointing at ./seed.sql, a file that has never existed in this repository (confirmed
+# via `git log --follow`) -- an uncleaned `supabase init` default. This project seeds no
+# reference/fixture data via the Supabase CLI: local test data comes only from
+# scripts/db-tests/fixtures/ (a schema stub, not seed data) and supabase/migrations/ themselves.
+# Disabled so `supabase db reset` does not depend on a file that was never created.
+enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
 sql_paths = ["./seed.sql"]

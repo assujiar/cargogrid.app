@@ -190,6 +190,12 @@ Discovered `2026-08-09` during `CG-S11-PRC-020` (Prompt 269 Hardening)'s own adv
 
 **Handling:** Not fixed by this checkpoint. `app._calc_vendor_kpi_rate_validity` lives in `PRC-264`'s own migration (`20260730740000_create_procurement_vendor_performance.sql`), a different capability/checkpoint than the six findings `CG-S11-PRC-020` (Prompt 269) was chartered to fix, and this checkpoint's own adversarial-review mandate is to close the three lenses' CONFIRMED findings against Prompt 269's own fix pass, not to open and fix an unrelated capability's pre-existing defect discovered incidentally — the same scope-discipline reasoning `docs/build-log/phase-06/PRC-269.md` §6 already applied when it first disclosed this failure in prose without registering it. The eventual fix is bounded and low-risk once undertaken: replace the `(p_window_end - interval '1 day')::date` upper bound with an inclusive-end computation that does not depend on time-of-day sign (e.g. `(p_window_end - interval '1 second')::date`, or deriving the day count directly via `date(p_window_end) - date(p_window_start)` with an explicit floor/ceiling decision on partial trailing days) — a `CREATE OR REPLACE FUNCTION` against this same function, plus a regression test that pins the window to specific UTC hours (e.g. `01:00`–`22:00` AND `10:00`–`11:00`) rather than a `now()`-relative window whose pass/fail depends on when the suite happens to run. **Status `OPEN`**, Low severity (self-heals outside the ~4-hour daily UTC band; no data-integrity impact — the metric value that would be recomputed with the wrong `is_computable` is never published as a scorecard line in a way that silently fabricates a value, since `is_computable=false` correctly still routes the vendor into `insufficient_kpi_coverage`/reduced-coverage handling rather than showing a wrong number) — but a real, currently-red `db:test` gate for roughly one-sixth of any given day; owner: PRC-264, a future task with an explicit mandate to touch `20260730740000`'s own capability.
 
+**`RESOLVED`, 2026-08-25, at `RGL-394` (Step 16, Defect Triage, `RGL-BLK-004`).** This exact
+defect — found here in 2026-08-09, again at `ISS-2026-204` (2026-08-24), and a third time live
+by `RGL-391` (2026-08-25, registered `RGL-BLK-004`) — is fixed. See `ISS-2026-204`'s own
+`RESOLVED` annotation for the fix detail (identical fix, one entry, cross-referenced rather than
+duplicated); full record `docs/build-log/release-go-live/RGL-394.md`.
+
 ### ISS-2026-060 — Vendor rate engine (PRC-255) has no `zone`/`distance` pricing dimension (OPEN, Medium)
 
 Discovered `2026-08-09` during `CG-S11-PRC-022` (Prompt 271, Closure Verification), by the commercial-engine verification lens plus an independent synthesis-pass re-check. `255_VENDOR_RATE_PRICELIST_PROMPT.md` (lines 60, 76, 100) names `zone`/`distance` explicitly, twice, as required rate-engine tiering dimensions alongside route/service/mode/fleet/container/weight/volume — all of which are genuinely implemented. `ADR-0015` (the founding Phase 2 rate-engine decision) also names both dimensions. Independently `grep`-confirmed this checkpoint: `zone|distance` returns zero real matches (only unrelated prose) across both `supabase/migrations/20260724150000_create_commercial_rate_cost_lookup.sql` and `supabase/migrations/20260730620000_extend_commercial_vendor_rate_for_procurement.sql` — the two migrations that jointly define the rate engine's tiering surface. `docs/build-log/phase-06/PRC-255.md` §9/§10 discloses the rate engine's tax-dimension absence in detail (registered as `ISS-2026-039`) but names zone/distance nowhere; the gap is absent from `KNOWN_ISSUES.md` and the Phase 6 WBS prior to this checkpoint.
@@ -1652,6 +1658,26 @@ operating procedure can account for it, not discovered in production.
 5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
 `Step 16`.
 
+**Re-examined and escalated at `RGL-404` (Go/No-Go Report), 2026-08-25.** Against a production
+go-live bar (not Step 15's own closure bar this `ACCEPTED_EXCEPTION` ruling was made against),
+this finding is a live-forced, deterministic **financial mis-posting** — the exact phrase
+`docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §8.1 uses to define
+**Critical**, not High. Registered `RGL-BLK-009` (Critical, escalated).
+
+**`RESOLVED`, same checkpoint, following an explicit operator instruction to run all available
+fixes.** `app.request_finance_settlement_reversal` now locates the settlement's own posted GL
+journal, flips its lines debit↔credit (the identical technique `app.post_finance_correction`
+already uses), and posts the flipped lines as a new governed `'correction'`-sourced journal via
+`app.create_and_post_finance_system_journal` — the GL and AP subledger no longer desync on a
+settlement reversal. A second, previously undiscovered live defect was found and fixed in the same
+pass: the function had been silently reverted to `SECURITY INVOKER` by a later same-day migration
+that recreated it without restating `SECURITY DEFINER`, making it completely unreachable by any
+real authenticated tenant user since — fixed by restoring `SECURITY DEFINER` (and its `public.*`
+wrapper, which had inherited the same mismatch). Applied live to the hosted project via
+`apply_migration`, not merely committed to this branch. New db-test regression added and full local
+`db-tests` suite re-run clean. Full detail: `docs/build-log/release-go-live/BLOCKER_LEDGER.md`
+`RGL-BLK-009`, `docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
+
 ### ISS-2026-200 — the 5 "hash-chain" transaction-lineage triggers are standalone content fingerprints, not a genuine tamper-evident chain, and no reconciliation ever recomputes or compares them (found at `CG-S15-HDN-007`, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-017`)
 
 Found by this checkpoint's own investigation lens (hash-chain triggers and historical
@@ -1837,6 +1863,20 @@ checkpoints have used for out-of-lane defects found incidentally (`ISS-2026-163`
 `186`, `197`). Fix shape once owned: replace the `generate_series` day-count with a
 direct half-open-interval day-span computation that cannot invert regardless of the
 window's own start/end hour alignment.
+
+**`RESOLVED`, 2026-08-25, at `RGL-394` (Step 16, Defect Triage), registered there as
+`RGL-BLK-004`.** `HDN-387` did not pick this up (its own build log shows it landed on 7
+other bounded items that checkpoint); the defect resurfaced a third time as `RGL-BLK-004`,
+found live by `RGL-391`'s own Tier A baseline run, and `RGL-394` fixed it directly, exactly
+matching the fix shape this entry already predicted: `supabase/migrations/20260826020000_
+harden_vendor_kpi_rate_validity_window_calc.sql` replaces the day-count upper bound with
+`(p_window_end - interval '1 microsecond')::date`, which cannot invert regardless of the
+window's own start/end hour alignment. A new hardcoded (non-`now()`-relative) regression
+assertion was added to `scripts/db-tests/procurement-vendor-performance.sql` pinning the
+exact previously-collapsing window shape, so this class fails or passes identically at
+every hour rather than only inside the historical dead band. Full record:
+`docs/build-log/release-go-live/RGL-394.md`, `docs/build-log/release-go-live/BLOCKER_LEDGER.md`
+`RGL-BLK-004`.
 
 ### ISS-2026-205 — the append-only-guard pattern `ISS-2026-201` applied to `app.transaction_lineage_edges` is genuinely needed on roughly 70 more tables schema-wide, including `app.audit_logs` itself (found at `CG-S15-HDN-007`'s own Tier C review, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-018`)
 
@@ -3052,6 +3092,36 @@ Originally reported at the first round as an unreproduced anomaly (2 identical c
 
 **Status `OPEN`**, High severity (a real, live-proved gap between a documented security control's own stated effect and its actual, verified-zero enforcement effect — the kind of gap that could cause a real incident to be declared resolved while the attacker retains full access). **Not fixed by this checkpoint** — either wire `app.user_sessions.status` into a real enforcement path (e.g. a session-validity check inside `app.evaluate_permission` or a dedicated session-gate RPC), or correct `incident-response.md`'s own claim and re-order its resolution steps to lead with role/membership revocation as the actually-enforced primary lockout mechanism, demoting session revocation to audit-trail/bookkeeping status. Disclosed and partially addressed (re-ordered guidance) in `docs/runbooks/disaster-recovery.md` §4 item 2 in the interim. Owner: a dedicated future task.
 
+**Corrected at `RGL-404` (Go/No-Go Report), 2026-08-25 — this trailing paragraph was stale.** It
+was written before `HDN-384`'s own same-checkpoint Tier C round finished; `docs/runbooks/
+incident-response.md` §4 items 1-2 have in fact **already carried the exact "correct
+incident-response.md's own claim" remedy this paragraph names as still needed**, since `HDN-384`
+Tier C — item 1 is titled *"Pull authority the identity should not have — do this FIRST, it is
+the layer that is actually enforced"*, item 2 is titled *"Also revoke sessions and API keys —
+audit-trail hygiene, not the primary lockout"* and states this exact finding verbatim, plus
+guidance to escalate to the Supabase Admin API for real JWT invalidation. `RGL-404` initially
+re-escalated this finding as `RGL-BLK-010` (High, not accepted) without first re-reading the
+runbook's current content; corrected once the omission was found (`docs/build-log/release-go-live/
+BLOCKER_LEDGER.md` `RGL-BLK-010`) — **re-ruled to Medium**, folded into `RGL-BLK-003`'s own
+15-item "tenant zero" conditional-acceptance group. The underlying `app.user_sessions.status`
+enforcement-wiring gap remains genuinely open (a real hardening item, not a documentation
+problem any more) — attempting to wire real enforcement was considered and deliberately not
+attempted this checkpoint: it would require either modifying `app.evaluate_permission` (the
+single RBAC gate ~1,124 functions call transitively — a change of that blast radius needs far
+more testing than this checkpoint's own remaining scope allows) or calling Supabase's Auth Admin
+API to invalidate live JWTs (an application-layer, not pure-SQL, change this session has no way
+to verify against a real session). Left for a dedicated future task, as originally named.
+
+**Re-examined at `RGL-404` (Go/No-Go Report), 2026-08-25.** Against a production go-live bar,
+this finding is not routinely acceptable as residual risk: `docs/runbooks/incident-response.md`
+actively documents session revocation as a working containment step, when it is not — a false
+safety claim an incident responder could reasonably rely on. Registered `RGL-BLK-010` (High,
+`OPEN`, not accepted without a fix or a corrected runbook) — kept below `RGL-BLK-009`'s own
+Critical escalation since the finding does not grant access, it fails to remove already-granted
+access, but flagged as needing resolution before real users exist ("tenant zero" gate). Full
+ruling: `docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-010`,
+`docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
+
 ### ISS-2026-265 — the composed in-place restore procedure's own `TRUNCATE` step silently bypasses 9 security/integrity row-level triggers with zero audit trail, independent of `--disable-triggers` (found at `HDN-384` Disaster Recovery Rehearsal Tier C review, schema-wide completeness sweep + attack-surface lenses, both independently live-reproduced, `OPEN`, High, owner a dedicated future task)
 
 `docs/runbooks/database-restore.md` §4 item 4's own composed in-place restore procedure (added at `HDN-384`'s first round) added a `TRUNCATE` of every `app.*` table before restore, to fix a real PK-collision defect (`ISS-2026-254`'s own sibling finding). `TRUNCATE` never fires `FOR EACH ROW` triggers at all — standard, documented Postgres behavior, but a property of `TRUNCATE` itself, independent of the `--disable-triggers` flag on the later `pg_restore` step. Live-proved: inserted a `status='posted'` row into `app.finance_journals` (protected by a `BEFORE DELETE OR UPDATE` guard trigger that correctly blocks a plain `DELETE`); `TRUNCATE app.finance_journals CASCADE;` on the identical row succeeded silently, 0 errors, and left **zero rows in `app.audit_logs`** even though the same trigger function calls `app.capture_audit_event` on its own legitimate-deletion exception path.
@@ -3175,6 +3245,370 @@ A full sweep of `BLOCKER_LEDGER.md`'s 32 currently-open entries found 14 (`HDN-B
 **Status `OPEN`**, Low severity (a documentation-accuracy issue only — the true current Medium-open count is 8, not 9, as `HDN-386`'s own new "Status as of" section below states correctly). **Not fixed retroactively** — editing 6 prior checkpoints' own historical "Status as of" snapshots would misrepresent what each checkpoint actually stated at the time; the correct remedy is stating the true count going forward, done in this checkpoint's own section, and treating this as a standing reminder for `HDN-387`/`389` to hand-recount rather than trust a carried-forward figure. Owner: `HDN-387`.
 
 **`RESOLVED` at `HDN-388`.** This finding's own stated remedy — "stating the true count going forward" rather than retroactively editing history — has now been honored correctly twice running: `HDN-387`'s own Tier C hand-recounted its tally from scratch (independently re-verified accurate by `HDN-388`'s own Tier C correctness re-derivation lens), and `HDN-388`'s own new "Status as of `HDN-388`" section (0 Critical / 17 High / 6 Medium) was likewise hand-recounted entry-by-entry, not carried forward, and independently confirmed accurate by the same lens. The "standing reminder" this finding registered is no longer a live risk in the current live tally — closing it here does not touch any of the 6 historical "Status as of" snapshots it correctly declined to rewrite.
+
+### ISS-2026-284 — A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpoint ever re-verified it against the provider (found at `RGL-391`, Step 16 kickoff, Medium)
+
+`docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` §2 froze, and its §10 built an entire structural constraint on, the statement: *"Deployed environment: **None.** No Vercel deployment, no CI-driven deploy pipeline, no real sign-in flow. The live Supabase project is a migrated database, **not** a running system."* That statement was **already untrue when it was written**, and stayed untrue and uncorrected through every one of Step 15's 21 checkpoints.
+
+**What is actually true**, verified live at `RGL-391` against the Vercel management API and by unauthenticated HTTP probe (not inferred, not re-cited): a Vercel project `cargogrid-app` (`prj_9ND1BsfbppHiqeKrSEldYh8xbC68`, team `saiki-tech`) was created **2026-08-10T06:29:46Z** — 13 days before `HDN-369` froze the claim — Git-linked to `assujiar/cargogrid.app`, deploying `main` to `target: production` automatically. The current `main` HEAD `2670cb5` carries a `READY` production deployment. Production is publicly reachable unauthenticated (`GET /login` → `200`) and currently degraded (`/api/ready` → `503 database_unreachable`, `/api/v1/status` → `500`). 14 of the 20 most recent deployments are `ERROR`, including a `target: production` build at `20a2cc9` that left production broken for roughly 12 hours during Step 15 — unnoticed, precisely because the frozen claim said this environment did not exist.
+
+**Root cause is process, not carelessness about code.** Step 15's checkpoints were rigorous about everything they re-derived; this fact was simply never in the re-derivation set. It was frozen once at kickoff and then cited as established by 20 successive checkpoints. The generalizable defect: **a state freeze is only as trustworthy as its most recent verification, and an external-provider fact has no reason to stay frozen.**
+
+**Status `OPEN`**, Medium (a process/documentation-accuracy issue; the technical consequences are separately registered as `RGL-BLK-001` and `RGL-BLK-002` in `docs/build-log/release-go-live/BLOCKER_LEDGER.md`, which carry their own owners). **Step 15's historical records are deliberately not rewritten** — they accurately record what their authors observed, and `docs/runtime/` is append-only per `AGENTS.md`; only *current-state* assertions were corrected, in Step 16's own documents. Owner: `RGL-409` (Post-Implementation Review) as a mandatory PIR input, with forward-document propagation owned by `RGL-411`.
+
+### ISS-2026-285 — `app._calc_vendor_kpi_rate_validity` returns not-computable for sub-24-hour windows, contradicting its own documented guarantee and failing `db:test` for 3 hours of every 24 (found live at `RGL-391`, High)
+
+Found by **running the Tier A gate**, not by reading code. `app._calc_vendor_kpi_rate_validity` (`supabase/migrations/20260730740000_create_procurement_vendor_performance.sql:1186`) computes its denominator as `generate_series(p_window_start::date, (p_window_end - interval '1 day')::date, interval '1 day')`. For a window shorter than 24 hours, `(p_window_end - 1 day)::date` can fall **before** `p_window_start::date`, producing an empty series, so `window_days = 0`, `is_computable = false`, and `computed_value = NULL`.
+
+**This contradicts the function's own `comment on function`**, which asserts *"is_computable is true whenever the window itself is non-empty (window_days is always > 0) — a vendor with zero coverage genuinely scores 0%, a real, meaningful result, not a missing-data case"*. `window_days` is not always > 0. That makes this a **product** defect and not merely a fixture problem: a real caller requesting a short intraday window silently receives "no data" instead of the real 0% the design promises.
+
+**Empirical reproduction** (evaluated across all 24 hours on a live Postgres, session timezone `Etc/UTC`): `window_days` is `0` at hours **01, 02 and 03**, and `1` at every other hour. `scripts/db-tests/procurement-vendor-performance.sql:911` uses `window_start = date_trunc('hour', now()) - 1 hour` and `window_end = date_trunc('hour', now()) + 20 hours`; the suite ran at 02:32 UTC and failed at line 978 with `assertion failed: expected New Vendor rate_validity to be computable (a real 0%, not a missing-data case)`.
+
+**Blast radius on the release gate.** `scripts/db-tests/run.sh` runs under `set -euo pipefail`, so the suite **aborts** at the first failing file: at `RGL-391` that meant **202 of 230 test files passed, file 203 failed, and 27 never ran**. `==> db-tests: ALL PASSED` was never printed, and the disposable database is left undropped because the drop follows the loop. **Step 15's `230/230 ALL PASSED` therefore cannot be carried forward as a Step 16 baseline** — it was true at the hour it ran, which is exactly the caution Step 15's own day-of-week disclosures kept raising.
+
+This is a new, previously-unregistered instance of the wall-clock-dependent class that `ISS-2026-077` and `ISS-2026-154` already register — but in Procurement rather than HRIS, and with a product-code root cause rather than a fixture-only one.
+
+**Status `OPEN`**, High. **Not fixed at `RGL-391`**: pre-existing (migration dated 2026-07-30, long before Step 16), and `AGENTS.md` directs a checkpoint to fix only task-caused failures and register pre-existing ones with a named owner; Prompt 391's charter is additionally zero-code/zero-migration, and a repair requires an additive migration. Registered as `RGL-BLK-004`. Owner: `RGL-394` (Defect Triage) for the binding severity ruling, with the fix landing at `RGL-394` or `RGL-395`.
+
+### ISS-2026-286 — CI has failed on every one of its 30 most recent runs since at least 2026-08-10; the `db` job aborts at test file 34 of 230, so 196 database test files have had zero CI enforcement while 21 checkpoints reported green gates (found at `RGL-391`, Critical proposed; `RESOLVED` at `RGL-395`)
+
+Found by **querying the GitHub Actions API**, not by reading `.github/workflows/ci.yml` — which is the check every prior checkpoint effectively performed, and which cannot surface this.
+
+**The `CI` workflow has failed on all 30 of its most recent runs**, `push` and `pull_request` alike, continuously from at least **2026-08-10** through the current `main` HEAD `2670cb5` (run 114, conclusion `failure`). Across that same window, 21 Step 15 checkpoints each reported their gate suites green.
+
+**Both statements are true, and the gap between them is the entire finding: those gates were green *locally*. The *CI* gate — the one Prompt 412 required-verification item 4 actually names — was red the whole time.** Nothing in the reporting chain distinguished "the suite passed on this machine" from "the repository's release gate passed", so the difference stayed invisible to every process meant to catch it.
+
+**Current root cause, diagnosed exactly.** Only the `db` job fails now; `quality` and `e2e` pass, confirming `HDN-386`'s lockfile-drift fix genuinely worked. The failure is `scripts/db-tests/advanced-tms-wms-outbound.sql:850`: `could not open file "/tmp/cargogrid-wms-outbound-race-a.out" for reading: No such file or directory`, from `select pg_read_file('/tmp/cargogrid-wms-outbound-race-a.out') || pg_read_file(...)`. `scripts/db-tests/wms-picking-concurrency-helper.sh` is launched through psql's `\!` meta-command, so it runs on the **client** and writes to the **client's** `/tmp`; the assertion reads it back with **`pg_read_file()`, which reads the *server's* filesystem**. Locally client and server are the same host and the same `/tmp`, so it passes — confirmed firsthand at `RGL-391`, whose local run sailed past file 34 and reached file 203. In CI, Postgres is a Docker **service container** with its own filesystem, so the file genuinely is not there. This is the **exact inverse** of the "CI-mirrors-hosted" property Step 15 §2.2 made a standing constraint on every lane — written about extension layout and `search_path`, while the same class of divergence sat in the test harness all along.
+
+**Blast radius.** `advanced-tms-wms-outbound.sql` is **file 34 of 230** in glob order and `scripts/db-tests/run.sh` runs under `set -euo pipefail`, so the CI suite aborts there: **196 of the 230 database test files — every migration-integrity, RLS, tenant-isolation, RBAC and financial-posting assertion they carry — have had zero CI enforcement for the entire window.** A release gate that executes 15% of its suite and dies, while every status report reads `230/230 ALL PASSED`, is functionally a disabled test suite. The `230/230` figure was never false; it was simply never a *CI* figure.
+
+**What this does not claim.** No product defect is proven. Those 196 files pass locally, and even the failing block's substantive guarantee is proven — the winner / one-confirmation / one-consumption-movement assertions all pass, and only the assertion about the *losing process's output text* fails. Severity is proposed **Critical** on release-gate-integrity grounds, not product-correctness grounds.
+
+**No prior checkpoint is faulted.** `HDN-386` found and fixed one real CI outage (the lockfile drift, visible in run 112 where all three jobs died ~14s in) and, understandably, did not discover a second, older one sitting behind it. The generalizable gap is that nobody queried the Actions API afterward to confirm CI had actually gone green.
+
+**Related, folded in rather than registered separately:** every recent checkpoint commit fails this repository's own `scripts/git/check-commit-message.ts` gate, which CI runs on PR head commits — verified directly against `3fe4bf6` (`HDN-389`), `00403cb` (`HDN-388`) and `568be15` (`HDN-387`). `RGL-391`'s own first commit had the same shape and was amended to comply before anything was pushed. It is a sub-case of the same "nobody was reading CI" root cause.
+
+**Status `OPEN`**, Critical proposed. **Not fixed at `RGL-391`**: pre-existing, outside a zero-code kickoff's charter, and the repair is a real design choice (rewrite the assertion to avoid `pg_read_file`, or run the helper server-side) rather than a mechanical edit. Registered as `RGL-BLK-005`. Owner: `RGL-395` (Full CI Gate); binding severity ruling at `RGL-394`. **Binding on the range: `RGL-395` may not certify the CI gate, and `RGL-404` may not reach a go decision, until CI is verified green against the Actions API — never on the strength of a local run.**
+
+**Severity ruling (`RGL-394`, 2026-08-25): reclassified High, down from the proposed Critical.**
+Re-verified live before ruling (`list_workflow_runs` against `main`: still `conclusion: failure`
+on run 114 — the finding is unchanged, only the classification). Applying the severity model's
+own product-impact test: this is not a tenant isolation breach, auth bypass, financial
+mis-posting, data loss, migration failure, broken rollback or production outage — this entry's
+own text already proves the opposite for the one root-caused failure (the WMS concurrency
+guarantee under test is itself proven; only a loser's-output-text assertion fails). It matches
+Sev-2/High precisely: "a support/monitoring gate absent at go-live." Still blocks go-live absent a
+formal `RGL-404` acceptance; `RGL-395` still owns the root-cause repair unchanged. Full reasoning:
+`docs/build-log/release-go-live/RGL-394.md`, `BLOCKER_LEDGER.md` `RGL-BLK-005`.
+
+**`RESOLVED` (`RGL-395`, 2026-08-25).** Root cause fixed in all 6 files that called
+`pg_read_file()` against a client-written race-output path (only the first, this entry's own
+`advanced-tms-wms-outbound.sql`, had ever actually been reached and observed failing — CI's own
+abort-on-first-failure hid the other 5 as latent instances of the identical defect class). Fixed
+structurally by capturing each race-output file's content client-side, in the same process that
+wrote it, via psql's `` \set var `cat ...` `` backtick-subshell syntax, instead of asking the
+server to read a client-local path. Verified genuinely in CI, not merely locally: GitHub Actions
+run [`32818026784`](https://github.com/assujiar/cargogrid.app/actions/runs/32818026784) (commit
+`b60dccf`, PR #68) — all three jobs `quality`/`db`/`e2e` `conclusion: success`, the first CI-green
+run for this repository since at least 2026-08-10. Full record:
+`docs/build-log/release-go-live/RGL-395.md`, `BLOCKER_LEDGER.md` `RGL-BLK-005`.
+
+### ISS-2026-287 — The Vercel production build runs Node `24.x` while every gate in this repository runs and is pinned against Node 22, an untested runtime divergence between the environment that verifies the candidate and the environment that builds it (found at `RGL-392`, Medium)
+
+Recorded at the release-candidate freeze, where "the environment the evidence came from" is a load-bearing freeze fact rather than a detail.
+
+`package.json` declares `engines.node` `>=22.11.0`; the local toolchain that produced every Tier A result in this build is `v22.22.2`; `.github/workflows/ci.yml` uses `node-version-file: package.json`, so CI also resolves to a Node 22 line. The Vercel project `cargogrid-app` reports **`nodeVersion: "24.x"`** (`get_project`, verified live at `RGL-392`). So the artifact actually served in production is built and executed on a **major Node version that no gate in this repository has ever run against.**
+
+`engines.node >= 22.11.0` does not exclude 24.x, so this is not a manifest violation — which is precisely why it went unnoticed: nothing fails, and no tool reports a divergence. The production deployment at `2670cb5` did build successfully on 24.x, so there is no evidence of an actual break; the finding is that **the verification environment and the production environment differ by a major runtime version, and nothing tests the difference.**
+
+This is the same *class* as the "CI-mirrors-hosted" property Step 15 §2.2 made a standing constraint after pgcrypto/`search_path` divergences broke 20 functions only at call time in the hosted environment — an environment axis assumed equivalent, never verified. Registered now rather than after it produces a defect.
+
+**Status `OPEN`**, Medium (no break observed; the risk is untested surface, not a known failure). **Not fixed at `RGL-392`**, whose charter is to freeze state, not change it — and the remedy is a real decision (pin Vercel to 22.x to match the gates, or widen the gates to test 24.x) rather than a mechanical edit. Owner: `RGL-399` (Staging Deployment), which owns environment configuration diagnosis, with `RGL-395` (Full CI Gate) owning any gate-matrix widening.
+
+### ISS-2026-288 — `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the parallel-lineage collision class that caused `ERR-2026-001..003` (found at `RGL-393`, Medium)
+
+Found by `RGL-393`'s branch audit, which diffed all 47 remote branches against `origin/main` for both commit-ahead count and non-`docs` content delta. **16 of the 17 branches carrying commits not on `main` have a zero-file non-`docs` delta** — stale but inert, their content already merged. One does not.
+
+`origin/claude/prompt-206-210-dpxtmu` (head `f364c15`, *"Add Finance Dashboard and Reports (FIN-213, CG-S9-FIN-024)"*, merge-base `6f4bd23` dated 2026-07-29) carries a **7-file, 939-insertion non-`docs` delta**. Crucially, **this is not lost work**: `main` already contains every one of those paths, the Finance Dashboard shipped, and nothing is missing from the release candidate. The risk is the opposite one — the branch's copies **differ substantially** from the merged ones:
+
+| File | Branch vs `main` |
+|---|---|
+| `supabase/migrations/20260729270000_create_finance_dashboard.sql` | **113 insertions / 236 deletions** |
+| `server/queries/finance-dashboard.ts` | 47 insertions / 108 deletions |
+| `app/(tenant)/[tenantSlug]/finance/dashboard/page.tsx` | 102 insertions / 199 deletions |
+
+So the branch holds a **divergent copy of an already-applied migration under an identical filename**. Merging it would either conflict or replace an applied migration's content in place — violating `AGENTS.md`'s "Never edit an applied migration" rule and reproducing precisely the parallel-lineage collision class that produced `ERR-2026-001`, `ERR-2026-002` and `ERR-2026-003` in this repository's own history. That history is why `ISS-2026-002`'s pre-flight collision check exists at all.
+
+**Status `OPEN`**, Medium — a dormant risk, not an active defect. Nothing has entered `RC-2026.08.25-1`: the freeze digests verified green by `pnpm run release:check-freeze` at `RGL-393` prove the candidate's migration and db-test sets are unchanged. **Deliberately not remediated at `RGL-393`**: the obvious fix is deleting the remote branch, and `AGENTS.md` forbids destructive Git operations on shared history without explicit authorization, which this lane does not hold. Not escalated to Prompt 393 §23's exception flow either — §23 names "unauthorized scope change", and an unmerged branch is a risk, not a change that crossed into the candidate. On the freeze watch list; must be re-checked at `RGL-410`. Owner: `RGL-404`, which holds the release-decision authority that could justify requesting branch deletion before promotion.
+
+### ISS-2026-289 — GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repository's own "pull request is mandatory" policy has never been enforceable (found at `RGL-393`, High)
+
+`RGL-393`'s ingress audit queried the GitHub API for all 47 branches. **Every one, `main` included, reports `"protected": false`.** No branch protection, no required reviewers, no required status checks, anywhere.
+
+`docs/architecture/11_DEVOPS_WORKSTREAM.md` §3 (reproducing Tech Arch §27.2) ratifies that "`main` is always production-ready; a pull request is mandatory for every code change". `docs/git/GIT_STRATEGY.md` §3 reproduces that policy and is admirably honest about not having implemented it: its scope note records that `PH0-087` "does **not** configure GitHub branch protection, required-status-checks, CODEOWNERS enforcement … those require external repository mutation, which is explicitly forbidden for this task." §4 then defers explicitly — squash-merge becomes the default "once GitHub branch protection is actually configured (`PH0-088`, CI/CD Baseline — out of scope here)".
+
+**`PH0-088` produced `.github/workflows/ci.yml` and did not configure branch protection either.** The deferral was handed forward once and then dropped, and nothing in the ~180 prompts since has re-checked it. `GIT_STRATEGY.md` was correct to refuse to "invent unavailable protection"; the defect is that the named follow-up owner never closed the loop.
+
+**Combined effect, which is why this is High rather than Medium.** With no protection on `main`, no required review, no required status checks, CI red anyway (`ISS-2026-286`), and Vercel auto-deploying `main` to production (`RGL-BLK-001`), a change can travel from a keyboard to the public production URL with **no review, no passing test, and no approval** — and this is true during a declared release freeze. Four of the six ingress paths `RGL-393` enumerated have no control at all.
+
+**Status `OPEN`**, High. **Not remediated at `RGL-393`**: configuring branch protection is a repository setting outside this repository's contents and outside this lane's authority — the same constraint `PH0-087` correctly recognized. **No new release blocker opened**, because `RGL-BLK-001` and `RGL-BLK-005` already carry the consequence between them and a duplicate would inflate the count without adding information. Owner: `RGL-404`, which holds the release-decision authority that would justify requesting the setting before promotion. Related in shape to `ISS-2026-284`: a control assumed in place at Phase 0 and never re-verified against the provider.
+
+### ISS-2026-290 — 17 already-committed Step 15 hardening migrations, including fixes for multiple live Critical vulnerabilities, were never applied to the live hosted Supabase project — production ran on schema state frozen at `20260809200000` while the repository's own migration history had already advanced to `20260819000000` (found during the `RGL-BLK-002` Option 2 remediation, 2026-08-25, Critical)
+
+Discovered as a necessary precondition, not the original goal: before applying the new `public.*` wrapper migration (`RGL-BLK-002`'s own fix) to the live project, its wrapper signatures/grants had to be checked against the live schema's *actual* state. `list_migrations` against project `awdlicmwzdxquopwtcfd` showed the live migration history stopped at `20260809200000_harden_intelligence_iae039_closure_step_up_wiring`, while `supabase/migrations/` on `main` already carried 17 further, already-committed, already-reviewed files dated `20260810000000` through `20260819000000` — none ever applied to production.
+
+**This is independent in significance from `RGL-BLK-002` itself.** Among the 17 unapplied migrations, at least four close previously-disclosed **live, unpatched Critical/High security findings** that Step 15's own build log had already recorded as fixed in the repository, while production continued running the pre-fix code the entire time:
+
+| Migration | What was live-unpatched until this checkpoint |
+|---|---|
+| `20260813000000_harden_api_compatibility_audit_findings.sql` | An unauthenticated webhook-signature-verification bypass |
+| `20260814000000_harden_storage_signed_url_audit_findings.sql` | `app.files.storage_path` column-level grant leak (raw storage path readable by any `authenticated` role via direct table SELECT); a legal-hold `BEFORE DELETE` bridging gap |
+| `20260811000000_harden_financial_integrity_invoicing_and_idempotency.sql` | An ~11% tax-doubling bug in invoice generation; a double-invoicing guard gap; race-unsafe idempotent-insert handling across 10 functions |
+| `20260810000000`/`20260810100000_harden_tenant_isolation_actor_identity_gaps*.sql` | Actor-identity/tenant-isolation gaps (IDOR-class, forged-actor risk) |
+
+Every one of these had already been diagnosed, fixed, reviewed, and merged to `main` by the time Step 15 closed — **the defect was never "unfixed code," it was "fixed code that was never deployed."** No mechanism in this build's process (until this checkpoint) verified that a merge to `main` actually reached the live database; `db-tests` runs entirely against local disposable databases and has no visibility into the hosted project's own applied-migration state.
+
+**Remediated the same checkpoint, not merely registered.** All 17 migrations applied to `awdlicmwzdxquopwtcfd` in exact chronological order via `apply_migration`, each read in full from its committed file immediately before applying (transcription-risk discipline, given financially/security-sensitive content), each confirmed `{"success":true}` individually. Live migration history re-verified via `list_migrations` afterward: exact match against the local 333-file baseline through `20260819000000`, before the same-day `RGL-BLK-002` wrapper migration and its own Tier C fix (`ISS-2026-291`/`ISS-2026-292`) were applied on top.
+
+**Status `RESOLVED`, 2026-08-25**, same checkpoint as discovery. Severity **Critical** — not because any exploitation is known to have occurred (no evidence either way was sought or is available from this vantage point), but because live production carried multiple disclosed, already-fixed-in-repository Critical/High vulnerabilities, unpatched, for the entire window between each migration's original merge and this checkpoint. **Standing gap this leaves unresolved**: nothing in this build's CI/CD pipeline or release process automatically applies a merged migration to the live project, or alerts when live drifts behind `main` — this checkpoint's own `list_migrations` comparison was a manual, one-time catch, not a durable control. Registering that gap is owner `RGL-395`/`RGL-404`'s to assign a durable fix (e.g., a CI step that fails when live `list_migrations` lags the repository's own migration set); not attempted here, out of this checkpoint's own bounded scope.
+
+**Correction (`RGL-397`, 2026-08-25): the "17" count and the "exact match" re-verification claim
+above were both wrong.** `RGL-397`'s own migration validation — a full name-for-name diff of every
+local migration filename against live's registry, not a row count — found **10 more
+already-committed migrations sitting inside this exact same window** (`20260810200000` through
+`20260811200000`) that this checkpoint's own enumeration missed and its own re-verification failed
+to catch. See `ISS-2026-293` for the full corrected finding and fix; `RGL-BLK-006` in
+`BLOCKER_LEDGER.md`. This does not change anything about the 17 migrations this entry itself
+covers — they were correctly identified and correctly applied — it corrects the claim that they
+were the *complete* set of drift.
+
+### ISS-2026-291 — The `RGL-BLK-002` Option 2 wrapper migration's own committed file hardcoded `security definer` on 140 of 2,367 `public.*` wrapper functions despite their `app.*` counterpart being `security invoker` — a live-forced RLS-bypass regression in content the same checkpoint's own pre-application verification had claimed was clean (found live, during the same migration's application to production, 2026-08-25, Critical)
+
+`supabase/migrations/20260826000000_create_public_api_data_wrappers.sql`'s own header comment (lines 54-73) explicitly documents that `security definer`/`invoker` mode must be copied per-function from each wrapped `app.*` function, specifically to avoid a `SECURITY DEFINER` wrapper silently executing an underlying `security invoker` function as `postgres` (which has `BYPASSRLS`) instead of the real caller — and `RGL-BLK-002-OPTION2-REMEDIATION.md` §5/§6 records this exact class as already-found-and-fixed pre-application, with a claimed "0 mismatches" exhaustive result. **That claim did not hold for the file as actually committed and applied**: a direct live `pg_proc.prosecdef` comparison against every corresponding `app.*` function, run immediately after applying the migration to `awdlicmwzdxquopwtcfd`, found 140 wrapper functions — all in the Finance module (`app.acknowledge_finance_period_checklist_item`, `app.activate_finance_account`, `app.allocate_finance_receipt`, `app.apply_finance_ap_settlement` and 136 others of the same shape) — with `security definer` hardcoded in the wrapper despite `app.<name>` itself being `security invoker`. Confirmed as a defect in the committed file's own text (direct `grep` against the migration file itself), not an artifact of how it was applied.
+
+**Impact.** For each of the 140, the `public.*` entry point ran as `postgres` (BYPASSRLS) rather than the real calling role — any RLS policy the underlying `app.<name>` function depended on for tenant isolation was silently bypassed for any caller reaching the function through its `public.*` wrapper, for the window between the migration's live application and this fix.
+
+**Fix.** `supabase/migrations/20260826010000_harden_public_api_data_wrappers_tierc_fixes.sql` (additive — the applied migration is never edited): a `DO` block that re-derives the correct security mode directly from each function's live `app.*` counterpart and issues `ALTER FUNCTION ... SECURITY INVOKER`/`DEFINER` accordingly, idempotent, exhaustive (not a fixed list of 140 — re-derives from the live catalog every run). `search_path` is untouched by this ALTER (not a security-mode property) and remains correct.
+
+**Status `RESOLVED`, 2026-08-25**, same checkpoint. Severity **Critical** (silent RLS bypass on financial-domain functions). Exhaustively re-verified live after the fix: security-mode mismatches 140 → 0; grant parity, return-type, volatility and return-set parity all independently re-checked at 0 mismatches (confirming the fix did not disturb anything outside its own scope). **Open question this finding leaves honestly unresolved**: why the pre-application verification pass recorded in `RGL-BLK-002-OPTION2-REMEDIATION.md` §5/§6 did not catch this — whether the file was modified after that verification ran, or the verification did not in fact reach completion as recorded, could not be reconstructed from available session context. The corrective control going forward is procedural, not diagnostic: `scripts/db-tests/public-api-wrapper-regression.sql`'s own security-mode assertion (which does correctly catch this class) must be run to a real, current, passing completion against the exact final file content immediately before any future live application — never inferred from an earlier run against a possibly-since-edited file.
+
+### ISS-2026-292 — This Supabase project's platform-level default privileges silently granted `EXECUTE` on all 2,367 new `public.*` wrapper functions to `anon`/`authenticated`, defeating the migration's own per-function `revoke ... from public` cleanup and widening authorization on 2,359 of them beyond their `app.*` counterpart — live-forced end-to-end against the real PostgREST endpoint (found live, during the same migration's application to production, 2026-08-25, Critical)
+
+This Supabase project carries a standard platform-provisioning default — `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role` — so that an ordinary `create function` in `public` (the platform's default PostgREST-exposed schema) "just works" through the API without manual grants. Because migrations apply as role `postgres`, every one of the 2,367 `create function public.*` statements in `20260826000000_create_public_api_data_wrappers.sql` silently inherited this grant to `anon` **and** `authenticated` at creation time, in addition to whatever the migration explicitly granted afterward. The migration's own cleanup step (`revoke execute on function public.<name>(...) from public`) does not undo this: revoking from the `PUBLIC` pseudo-role never touches a grant a default-privilege rule already attached to `anon`/`authenticated` by name.
+
+**Live-forced, end-to-end, over the real network** (not a catalog-only finding): `app.ping()` is `service_role`-only by design (`HDN-382`). Before this fix, `POST /rest/v1/rpc/ping` against the live PostgREST endpoint using only the public **anon** key returned `200 true` — full unauthenticated success on a function designed to be unreachable by anyone but the service role. After the fix, the identical request returns `401 {"code":"42501","message":"permission denied for function ping"}`. An exhaustive live catalog comparison found **2,359 of 2,367** wrapper functions carried at least one EXECUTE grant (`anon` and/or `authenticated`) that their own `app.*` counterpart did not have.
+
+**Root-cause fix is not available from a migration**: `alter default privileges for role postgres in schema public ...` was live-forced to fail with `42501: permission denied to change default privileges` — this platform-level configuration is reserved to Supabase's own internal provisioning role and is deliberately unreachable by the `postgres` role migrations run as. This is a correct, expected platform boundary, not something to route around.
+
+**Fix applied**: `supabase/migrations/20260826010000_harden_public_api_data_wrappers_tierc_fixes.sql` resets every wrapper function's ACL to exactly mirror its live `app.*` counterpart's real grants (idempotent, re-derived from the catalog every run, not a fixed list). **Standing convention amended** (`20260826000000`'s own header, and `RGL-BLK-002-OPTION2-REMEDIATION.md` §9): any future `public.*` wrapper must explicitly `revoke execute on function public.<name>(...) from anon, authenticated, service_role, public` — revoking from `PUBLIC` alone is insufficient in this specific schema, unlike everywhere else in this codebase.
+
+**Status `RESOLVED`, 2026-08-25**, same checkpoint. Severity **Critical** (unauthenticated/under-authenticated access to functions never intended to be so reachable, live-forced against real production infrastructure, not merely reasoned about). Exhaustively re-verified live after the fix: grant-parity mismatches 2,359 → 0; zero-PUBLIC-role-leak check independently re-confirmed at 0. **Same open-question caveat as `ISS-2026-291`** applies to why this was not caught locally before live application — though this specific defect is plausibly explained by a genuine local/live environment divergence (this session's local `scripts/db-tests/` harness creates its `anon`/`authenticated`/`service_role` roles on a bare Postgres instance with no Supabase-platform-specific default-privilege bootstrap, so the same `create function public.*` statement would not reproduce this leak locally even on an otherwise-identical migration set) — unlike `ISS-2026-291`, which has no such environmental explanation available.
+
+### ISS-2026-293 — `ISS-2026-290`'s "17 already-committed migrations behind" undercounted by 10; live production was missing real security and financial-integrity fixes, including a total Finance-write outage for genuine authenticated users (found at `RGL-397`, Migration Validation, 2026-08-25, Critical, `RESOLVED` same checkpoint)
+
+Found by `RGL-397`'s own migration-validation charter: a full name-for-name diff of every one of
+the 336 local migration filenames against live `supabase_migrations.schema_migrations`, not a bare
+row count and not trust in `ISS-2026-290`'s own prior enumeration. Live's registry (326 rows) was a
+**strict subset** of the local filename set — every live migration name existed locally, but 10
+local names, all dated `20260810200000` through `20260811200000`, sitting chronologically inside
+the exact `20260810000000`–`20260819000000` window `ISS-2026-290` itself already described, did
+not exist live. `git log --follow` confirms all 10 were committed at `HDN-373`/`HDN-374` (Step 15),
+well before this session began — this is not new drift accumulating since `ISS-2026-290`'s own
+checkpoint, it is 10 files that checkpoint's own "17" enumeration simply missed, and whose own
+"exact match" live re-verification (see the correction appended to `ISS-2026-290` above) failed to
+catch.
+
+**What was missing, by content:** the RBAC evaluator's tenant-membership check on revocation
+(`app.evaluate_permission`, the single gate ~1,124 functions call transitively); actor-identity
+forgery across 29 dashboard/CRM functions (unmasking cost/margin/selling-price data via a forged
+UUID); an own-row RLS gap letting a revoked ex-member keep reading their own past
+notifications/saved views; a loyalty-redemption maker/checker collapse (one identity could submit
+and instantly fulfill any account's discount-voucher redemption); and, most severe, **95 Finance-
+domain functions plus the generic job-enqueue path were `SECURITY INVOKER` instead of `SECURITY
+DEFINER`, making every Finance write RPC in production completely unreachable by any real
+authenticated tenant user since it shipped** — a functional Finance-write outage, not merely a
+security gap, invisible to this repository's own `db-tests` suite because it runs every test as
+the Postgres superuser, bypassing the exact grant chain this defect broke. Full per-migration
+detail: `docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-006`.
+
+**Fix.** All 10 pre-existing, already-reviewed migrations applied to live in exact chronological
+order via `apply_migration`, each read in full before applying. Two exceeded the model's own
+single-response output-token limit when reproduced whole and were split into 6 and 3 sequential
+`apply_migration` calls respectively at clean statement boundaries — a chunking technique only,
+not a content change (live's migration registry now carries 17 rows for these 10 files, 326 → 343,
+disclosed rather than presented as a clean 10-to-10 mapping).
+
+**Status `RESOLVED`, 2026-08-25**, same checkpoint as discovery. Severity **Critical** — the
+Finance-write outage alone would qualify (genuine tenant users could not create, submit, approve,
+post, or reconcile real Finance records in production for the entire window since `HDN-373`/
+`HDN-374`), and it is compounded by the actor-identity-forgery, RBAC-persistence-after-revocation,
+and maker/checker findings alongside it. Verified live via direct catalog/RLS inspection (not
+assumed from applied SQL text): `prosecdef` now `true` on the previously-`INVOKER` functions
+spot-checked, the RBAC/self-approval/view-gate/own-row/maker-checker fix literals all present in
+each function's live body, `app.finance_journals`'s RLS policy now requires `FIN:View`. Security
+advisors re-pulled after all 10: one pre-existing `ERROR` (`spatial_ref_sys`, PostGIS, unrelated),
+no new `ERROR`-level finding attributable to this batch. **Standing gap this reinforces, not a new
+one**: the same "nothing in CI/CD automatically applies a merged migration to live, or alerts on
+drift" gap `ISS-2026-290` already registered — this finding is further, stronger evidence for it,
+not a separate root cause. Owner for a durable fix remains `RGL-395`/`RGL-404` per that entry;
+not attempted here, out of this checkpoint's own bounded scope.
+
+### ISS-2026-294 — One orphaned, unlinked `auth.users` row exists on the live hosted Supabase project — synthetic (not real customer PII), no tenant membership, no access path, but a stray artifact that does not belong in production (found at `RGL-398`, Seed Validation, 2026-08-25, Low)
+
+Found by `RGL-398`'s own charter — verifying no tenant-real data exists anywhere, including live
+production itself, not only source control. `select count(*) from auth.users` on
+`awdlicmwzdxquopwtcfd` returns **1**, while every tenant-scoped table this session queried
+(`app.tenants`, `app.tenant_user_identities`, `app.accounts`, `app.job_orders`,
+`app.finance_journals`) returns **0** — the live project is otherwise genuinely empty, the
+expected, safe state for a pre-launch release candidate.
+
+**Not real customer data.** The row's email domain is `cargogrid.net` (a placeholder domain, not
+the product's own `cargogrid.app` domain and not a real customer's), `raw_user_meta_data` is an
+empty object, and — critically — it holds **zero rows in `app.tenant_user_identities`**, meaning
+this identity has no tenant membership and therefore no path into any application data whatsoever
+under this schema's own access model. `created_at` is `2026-08-25 04:58:25 UTC`, inside this same
+session's own working window, before this checkpoint began — most likely a leftover artifact from
+earlier live-forced authenticated-session testing during the `RGL-BLK-002` remediation or a nearby
+checkpoint this same day, though no build log this session explicitly records creating it, so the
+exact origin could not be reconstructed with certainty from available context.
+
+**Not fixed at this checkpoint, deliberately.** Prompt 398 (`CG-S16-RGL-008`) §12 explicitly
+forbids "production mutation... in this prompt" — Seed Validation's own charter is to validate and
+report, not to mutate live data, even a stray non-sensitive row. Deleting it is a one-line,
+low-risk cleanup (`delete from auth.users where id = '2d0b7791-...'`, cascades to nothing since no
+`tenant_user_identities` row references it), but is left for a checkpoint actually authorized to
+mutate production — `RGL-015` (Production Deployment) or an operator-directed action — rather than
+taken here under a prompt that forbids it.
+
+**Status `OPEN`**, Severity **Low** — no tenant-real data, no access path, no security impact; the
+only real content is that production's `auth.users` table is not perfectly empty, which is a
+hygiene finding, not a defect. Owner: whichever checkpoint next has authorized production-mutation
+scope (`RGL-015` or later, at operator discretion).
+
+### ISS-2026-295 — Every `app/api/v1/**` route returned an uncaught `500` in live production for any invalid/unrecognized Bearer key instead of a clean `401` (found and fixed at `RGL-401`, Smoke Test, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
+
+Found by `RGL-401`'s own charter — live-probing `/api/v1/status` with the range of caller states a
+genuine external API consumer would present, not merely reading the code. No `Authorization`
+header correctly returned `401`; a present-but-never-issued Bearer key returned an uncaught `500`
+with an empty body — arguably the single most common real-world failure mode for any API consumer
+(a typo'd, expired, or revoked key).
+
+**Root cause, isolated via direct SQL against the live hosted project.**
+`lib/api-gateway/authenticate.server.ts`'s denial-logging branch unconditionally logged
+`actorType: "api_key"` for every denied request, regardless of outcome. `app.api_logs`'s own
+`api_logs_actor_shape_check` CHECK constraint requires a non-null `api_key_id` whenever
+`actor_type = 'api_key'`. For `rate_limited`/`forbidden_scope` denials the key was always found, so
+`api_key_id` is always resolved — correct. For `unauthenticated`, the key was never found at all,
+so `api_key_id` is genuinely `null` — logging `"api_key"` against a `null` id threw a `23514`
+constraint violation inside `recordApiRequest()`, uncaught by the caller, surfacing as a generic
+Next.js `500` instead of the intended clean `401`. Confirmed live by calling
+`public.record_api_request(...)` directly with the exact pre-fix parameter shape.
+
+**Blast radius: all 9 `app/api/v1/**` routes**, not one. `authorizeApiV1Request()` is the single
+shared gateway function every `/v1` route calls (confirmed via
+`grep -rln "authorizeApiV1Request" app/api/v1`) — every route sharing this one function shared this
+identical defect against any invalid key.
+
+**Why invisible to existing tests.** `tests/api/v1/support/rpc-fetch-stub.ts`'s own header comment
+discloses `record_api_request` "always succeeds trivially in these tests" — the Node unit-test
+layer never exercised the real constraint. `scripts/db-tests/public-api-platform.sql` only ever
+calls `app.authenticate_and_authorize_api_request` in isolation, never the full
+auth-check-then-log-denial route-handler sequence that actually triggers this.
+
+**Fix.** One line, `lib/api-gateway/authenticate.server.ts`: `actorType: "api_key"` →
+`actorType: authResult.apiKeyId ? "api_key" : "anon"`. No migration, no schema change — the
+constraint itself is correct; the application code violated it. New regression test added
+(`tests/api/v1/status.test.ts`) pinning the previously-broken case; two adjacent existing tests
+tightened to realistic fixtures matching the real DB contract. `node --experimental-strip-types
+--test tests/api/v1/status.test.ts`: 5/5 pass. Full suite `pnpm run test`: 5453/5453 pass. Fix's
+exact live database interaction re-verified directly against the hosted project; the one synthetic
+`app.api_logs` row this created was deleted immediately after, leaving production's table exactly
+as found otherwise. Full detail: `docs/build-log/release-go-live/RGL-401.md`,
+`docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-007`.
+
+**Status `RESOLVED` in code on branch `claude/step-16-prompt-390-412-okbd6v`, `NOT YET DEPLOYED` to
+production** — Prompt 401 §12 forbids production mutation/deployment in this prompt, so
+production's running application binary is unchanged by this checkpoint. Severity **High**: no
+tenant data, financial record, or security boundary is broken — the fix is a reliability/contract
+break in the public REST API's own error-handling path, not a data-integrity or tenant-isolation
+failure — but it breaks the documented error contract for the single most common real-world
+API-consumer failure mode across all 9 public `/v1` routes. Owner: `RGL-404`/`RGL-015` must treat
+this as an outstanding "fix ready, not yet deployed" item.
+
+### ISS-2026-296 — All 3 externally-reachable, unauthenticated webhook ingestion routes crashed with an uncaught `500` on a malformed `connectionId` in live production (found and fixed at `RGL-402`, Penetration Test Evidence, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
+
+Found by `RGL-402`'s own charter — live-probing the third-party-gps webhook route with a
+SQL-injection-shaped and a path-traversal-shaped `connectionId`, as a genuine anonymous internet
+caller could (this route requires **no credentials at all** at the HTTP layer; authenticity is
+established entirely by an HMAC signature verified inside the RPC). Both probes returned an
+uncaught, empty-body `500` instead of the clean `400 {"ingestStatus":"invalid"}` the route's own
+header comment already documents as its contract.
+
+**Root cause.** The route passes the raw, unvalidated URL path segment straight into
+`ingestThirdPartyProviderWebhookEvent()` (`server/mutations/third-party-provider-adapter.ts`),
+which begins with a **throwing** Zod `.parse()` call whose schema validates `connectionId` as
+`z.string().uuid()`. A malformed value fails this validation before any RPC call is even
+attempted, throwing a `ZodError` the route's own call site never wrapped in `try`/`catch` —
+uncaught, it surfaced as Next.js's generic `500`. **Not the same root cause as `ISS-2026-295`**
+(a Postgres check-constraint violation inside a completed RPC call) but the same failure *class*.
+**Not an actual SQL-injection vulnerability**: every domain call in this codebase is a
+parameterized RPC call, so no query text is ever constructed from caller input.
+
+**Blast radius: all 3 externally-reachable webhook ingestion routes**, confirmed identical by
+direct code inspection: `app/api/webhooks/third-party-gps/[connectionId]/route.ts`,
+`app/api/webhooks/finance-payment-gateway/[connectionId]/route.ts`,
+`app/api/webhooks/logistics-partner/[connectionId]/route.ts` — each calling its own sibling
+mutation function with an identical `z.string().uuid()`-validated, throwing-parse `connectionId`
+field, none wrapped in a local `try`/`catch` at the route layer.
+
+**Why invisible to existing tests.** No route-level HTTP-layer test existed for any of the 3
+webhook routes before this checkpoint. The `db-tests` suite exercises the underlying RPC directly
+with well-formed UUIDs, never through the TypeScript route layer where this defect lives.
+
+**Fix.** Wrapped each route's own ingest call in a local `try`/`catch`, returning the same
+`{ ingestStatus: "invalid" }`, `400` shape each route already uses for its other early-rejection
+cases. New test files for all 3 routes (`tests/api/webhooks/*.test.ts`, none existed before), 4
+tests each. `node --experimental-strip-types --test tests/api/webhooks/*.test.ts`: 10/10 pass.
+Full suite `pnpm run test`: 5463/5463 pass. Full detail:
+`docs/build-log/release-go-live/RGL-402.md`, `docs/build-log/release-go-live/BLOCKER_LEDGER.md`
+`RGL-BLK-008`.
+
+**Status `RESOLVED` in code on branch `claude/step-16-prompt-390-412-okbd6v`, `NOT YET DEPLOYED` to
+production** — Prompt 402 §12 forbids production mutation/deployment in this prompt. Severity
+**High**: no data is mutated, no auth boundary is bypassed, no injection actually executes — the
+defect is a reliability/error-handling break on 3 externally-reachable, **unauthenticated**
+production endpoints, for a failure mode any anonymous caller, bot, or misconfigured client can
+trigger with zero credentials (a wider reach than `ISS-2026-295`'s "any presented key"). Owner:
+`RGL-404`/`RGL-015` must treat this, alongside `ISS-2026-295`, as an outstanding "fix ready, not
+yet deployed" item.
+
+### ISS-2026-297 — `GET /api/ready`'s live production p50 latency (837ms) exceeds the 500ms common-REST-query budget, though its max (1,698ms) stays under the 2s complex-query ceiling (found at `RGL-403`, Performance Evidence, 2026-08-25, Low)
+
+Found by `RGL-403`'s own charter — the first real live-deployed-target latency measurement this
+Step 16 range has taken. 10 read-only `curl` samples each against 3 production endpoints:
+`GET /api/health` (liveness only, zero dependency check) measured p50=195ms/p95=243ms;
+`GET /api/v1/status` (no-auth denial path, full gateway short-circuit) measured
+p50=463ms/p95=838ms; **`GET /api/ready` (readiness — calls `app.ping()` via the service-role
+client, a real Supabase round trip) measured p50=837ms/p95=1,698ms/max=1,698ms**.
+
+**Applicable budget** (`docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` §12): "Common
+REST/GraphQL query: 500ms (query-plan threshold)"; "Complex report query: 2s." `/api/health` and
+`/api/v1/status` both sit inside the 500ms budget at p50; `/api/ready`'s p50 exceeds it, though its
+max stays under the 2s ceiling. The ~640ms delta versus `/api/health` (which performs zero database
+work) is attributable to the real Supabase round trip `app.ping()` performs — plausibly a
+cross-region call (Vercel's own deployment region vs. Supabase `ap-northeast-1`), not independently
+confirmed against a region-latency baseline, since no tool in this session's toolset can measure
+that directly.
+
+**Not registered as a blocker.** `/api/ready` is an internal orchestrator health probe, not a
+customer-facing capability named in Blueprint §21.1's own 19-row performance-target table; the
+sample size (n=10) is too small to be a confident SLA measurement; every probe returned a
+functionally correct `200 {"status":"ok"}`, no failure occurred.
+
+**Status `OPEN`, Severity Low** — a genuine, disclosed observation, not a fabricated pass and not
+inflated into a blocker it does not rise to. Owner: `RGL-404`/`RGL-406` (Post-Deployment
+Validation), for awareness at go/no-go and re-measurement after `RGL-015` actually deploys this
+branch to production. Full detail: `docs/build-log/release-go-live/RGL-403.md` §3.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.

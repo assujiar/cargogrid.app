@@ -208,8 +208,16 @@ select pg_backend_pid()::text as pubapi_race_bpid \gset
 
 \! bash scripts/db-tests/wms-picking-concurrency-helper.sh
 
-select set_config('cargogrid.pubapi_race_out_a', :'race_out_a', false),
-       set_config('cargogrid.pubapi_race_out_b', :'race_out_b', false);
+-- RGL-BLK-005 fix: this used to smuggle the two PID-suffixed PATHS and read
+-- them with pg_read_file() inside the do block -- but pg_read_file() reads the
+-- *server's* filesystem, while the helper above writes its race-output files
+-- on the *client's*. Identical locally (same host), genuinely different in CI
+-- (Postgres in its own Docker service container). \set's backtick form runs
+-- client-side, so it is captured here, before the do block.
+\set out_a `cat "$RACE_OUT_A"`
+\set out_b `cat "$RACE_OUT_B"`
+select set_config('cargogrid.pubapi_race_out_a', :'out_a', false),
+       set_config('cargogrid.pubapi_race_out_b', :'out_b', false);
 
 do $$
 declare
@@ -222,8 +230,8 @@ declare
 begin
   select key_id into v_key_id from tmp_pubapi_race_key;
 
-  select pg_read_file(current_setting('cargogrid.pubapi_race_out_a')) into v_out_a;
-  select pg_read_file(current_setting('cargogrid.pubapi_race_out_b')) into v_out_b;
+  v_out_a := current_setting('cargogrid.pubapi_race_out_a');
+  v_out_b := current_setting('cargogrid.pubapi_race_out_b');
 
   if trim(both E' \n\r\t' from v_out_a) = 't' then v_true_count := v_true_count + 1; else v_false_count := v_false_count + 1; end if;
   if trim(both E' \n\r\t' from v_out_b) = 't' then v_true_count := v_true_count + 1; else v_false_count := v_false_count + 1; end if;
