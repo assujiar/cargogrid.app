@@ -8,6 +8,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaeaigov with a real openai_multimodal integration connection; a rep (AI:Create+View, INTHUB:Configure), an approver (AI:Approve+View), a viewer (AI:View only); a second tenant (iaeaigov2) for cross-tenant isolation'
 do $$
 declare

@@ -13,6 +13,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: one tenant, an OPS:Edit admin, a Supreme Admin, one active vehicle with a provider_vehicle_mapping for provider_code=acmegps, and one webhook-mode connection'
 create temporary table provider_test_state (key text primary key, value text not null);
 do $$
@@ -504,13 +509,13 @@ begin
   end if;
 end $$;
 
-\echo '>> CG-S10-ATW-027 Finding 1 regression: webhook_secret_value is no longer readable by a same-tenant authenticated member with ZERO role/permission assignment via a direct table SELECT -- every other legitimate column remains readable for that same tenant-scoped row'
+\echo '>> CG-S10-ATW-027 Finding 1 regression: webhook_secret_value_encrypted (ISS-2026-257: renamed from the plaintext webhook_secret_value, now pgp_sym_encrypt''d at rest) is no longer readable by a same-tenant authenticated member with ZERO role/permission assignment via a direct table SELECT -- every other legitimate column remains readable for that same tenant-scoped row'
 do $$
 declare
   v_tenant1 uuid := (select value::uuid from provider_test_state where key = 'tenant_id');
   v_connection_id uuid := (select value::uuid from provider_test_state where key = 'connection_id');
   v_real_secret text := (select value from provider_test_state where key = 'webhook_secret');
-  v_leaked_secret text;
+  v_leaked_secret bytea;
   v_denied boolean := false;
   v_status text;
   v_provider_code text;
@@ -526,7 +531,7 @@ begin
   set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000044188", "role": "authenticated"}';
 
   begin
-    select webhook_secret_value into v_leaked_secret from app.third_party_provider_connections where id = v_connection_id;
+    select webhook_secret_value_encrypted into v_leaked_secret from app.third_party_provider_connections where id = v_connection_id;
   exception
     when insufficient_privilege then
       v_denied := true;
@@ -538,7 +543,7 @@ begin
   reset role;
 
   if not v_denied then
-    raise exception 'assertion failed (Finding 1 REGRESSED): a zero-permission same-tenant authenticated member read webhook_secret_value (got %, real value %) via a direct table SELECT instead of being denied', v_leaked_secret, v_real_secret;
+    raise exception 'assertion failed (Finding 1 REGRESSED): a zero-permission same-tenant authenticated member read webhook_secret_value_encrypted (got %, real value %) via a direct table SELECT instead of being denied', v_leaked_secret, v_real_secret;
   end if;
 
   if v_status is distinct from 'active' or v_provider_code is distinct from 'acmegps' then

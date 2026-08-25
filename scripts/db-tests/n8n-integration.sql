@@ -15,6 +15,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaen8n (tenant_admin with a real role holding OPS:View/TKT:View/TKT:Create/INTHUB:View -- exactly the seeded allowlist -- plus a plain PRC:View-only staff member with none of those scopes) and a second tenant iaen8n2 (its own tenant_admin, for cross-tenant isolation). A Supreme Admin for allowlist registration. One real webhook endpoint in tenant1.'
 do $$
 declare
@@ -201,7 +206,18 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaen8n');
   v_admin1 uuid := '00000000-0000-0000-0000-000015000001';
-  v_endpoint_a uuid := (select id from app.webhook_endpoints where tenant_id = v_tenant1 limit 1);
+  -- ISS-2026-156 fix: this lookup previously had no ORDER BY/status filter --
+  -- latent nondeterminism (any row among possibly several for this tenant, in
+  -- whatever physical order Postgres happens to return them, no LIMIT
+  -- guarantee at all) that a later, unrelated schema change to app.
+  -- webhook_endpoints (an ALTER TABLE row rewrite) was enough to flip from
+  -- "happened to pick the active endpoint" to "picks the disabled one created
+  -- below at this file's own line ~159", breaking this test with
+  -- webhook_endpoint_not_active. Filtering on status = 'active' is the
+  -- semantically correct fix, not merely a stable ORDER BY -- this test's own
+  -- intent is "any active endpoint for this tenant," and correctness must not
+  -- depend on which one physical storage order happens to return.
+  v_endpoint_a uuid := (select id from app.webhook_endpoints where tenant_id = v_tenant1 and status = 'active' order by created_at limit 1);
   v_created record;
   v_rotated record;
   v_listed record;

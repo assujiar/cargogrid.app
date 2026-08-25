@@ -8157,3 +8157,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit for the repository side; the live `evaluate_permission` change would need a separate corrective migration to undo (this repo's own "never edit an applied migration" convention) — not expected to be needed |
 | Status | **`COMPLETED`**. 2 of 168 backlog items resolved. 166 remain; work continues per `RGL-404.md` §12 |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-250 — Historical issue backlog remediation, items 3-4: `ISS-2026-257` (integration/webhook secret encryption-at-rest) and `ISS-2026-156` (n8n test nondeterminism, found incidentally)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-249`. Items 3-4 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | A background research agent mapped every writer/reader call site for the 3 target columns before implementation (design/implementation retained directly). New migration extends the already-proven vendor-financial `pgp_sym_encrypt` pattern. Full local `db-tests` suite run after implementation surfaced a real, unexpected regression (`ISS-2026-156`, already in the audited backlog) triggered by this migration's own `ALTER TABLE` row rewrite — root-caused and fixed in the same pass rather than worked around |
+| Findings and disposition | `ISS-2026-257`: `RESOLVED` — 3 plaintext secret columns now `pgp_sym_encrypt`'d at rest; 6 writers + 11 readers redefined, zero call-site changes. `ISS-2026-156`: `RESOLVED` — a webhook-endpoint lookup with no `ORDER BY`/status filter, now filtered on `status = 'active'`; this entry's own prior "confirmed non-reproducing" claim held only for the specific trigger it tested (cross-file execution order), not for a schema-level physical row-order change, corrected in place |
+| Files edited | `supabase/migrations/20260826050000_harden_integration_secrets_encryption_at_rest.sql` (new); `scripts/release/check-release-freeze.ts` (seventh-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-257`/`ISS-2026-156` resolution notes); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended, arithmetic correction to the running tally); 26 `scripts/db-tests/*.sql` files (GUC wiring for the new encryption key; 3 files also carry functional fixes: `advanced-tms-third-party-provider-adapter.sql`/`integration-hub.sql` decrypt-and-compare instead of raw-column-compare, `n8n-integration.sql` the `ISS-2026-156` fix) |
+| Migration | 1 new migration (`20260826050000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — all 3 target tables held zero rows (confirmed live before applying), so the backfill `UPDATE` statements were no-ops; live-reconfirmed via `information_schema.columns` |
+| Risk | A schema change touching 17 functions across 6 migration files (5 pre-existing + this one) — mitigated by zero call-site/signature changes anywhere, a self-caught grant gap (mixed SECURITY DEFINER/INVOKER callers, mirroring HDN-373's own self-caught class), and a full-suite regression run (not only new dedicated assertions) that caught a real, unrelated regression before it shipped |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (confirmed via the script's own real exit code this time, not a trailing `echo` that always reports 0 regardless — an earlier check in this same session's own work mistakenly relied on that and needed a second, correctly-verified run). `pnpm run typecheck`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit for the repository side; the live schema change would need a separate corrective migration to undo (this repo's own "never edit an applied migration" convention) — not expected to be needed, no real secret data existed to lose either way |
+| Status | **`COMPLETED`**. 4 of 168 backlog items resolved. 164 remain (0 Critical, 13 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |

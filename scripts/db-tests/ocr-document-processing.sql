@@ -7,6 +7,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaeocr with a real openai_multimodal connection, an ocr_scan_source document type published for the tenant, a ticket queue/category, one active employee (requester), and five actors -- admin1 (bootstrap), reviewer1 (AI:Create/View/Approve + TKT:Edit), agent1 (AI:Create/View + TKT:Edit, NO AI:Approve), viewer1 (AI:View only), notkt1 (AI:Create/View/Approve, NO TKT:Edit), outsider1 (no AI role, owns a file in a different org unit); a second tenant (iaeocr2) for cross-tenant isolation'
 do $$
 declare

@@ -22,6 +22,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: one tenant (iaepubapi) with a Supreme Admin, a tenant_admin (key-management authority), a plain member (no admin authority), a customer_user portal principal, and a second tenant (iaepubapi2) with one lone member for cross-tenant isolation'
 do $$
 declare

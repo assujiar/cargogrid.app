@@ -7,6 +7,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaeaiq with a real openai_multimodal integration connection, a real opportunity->costing->rate->margin chain (mirroring the established costing golden path); rep1 (COM full set + AI:Create/View), viewer1 (COM:View only), juniorrep1 (COM:Create/Edit/View but no View cost/selling price/margin -- can draft a quotation but not see wholesale figures); a second tenant (iaeaiq2) for cross-tenant isolation'
 do $$
 declare

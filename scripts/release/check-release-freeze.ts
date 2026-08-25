@@ -204,6 +204,46 @@ import { readFileSync } from "node:fs";
  * the live hosted project via `apply_migration` before this local run,
  * live-reconfirmed present via a direct `pg_get_functiondef`/`pg_proc.
  * prosecdef` query against the hosted project afterward.
+ *
+ * AMENDED 2026-08-25 (seventh pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section, item 3: `ISS-2026-257` -- a full database backup
+ * (`pg_dump`/`pg_restore`) captured 3 plaintext secret columns verbatim, no
+ * encryption-at-rest (`app.integration_connection_credentials.
+ * credential_value`, `app.third_party_provider_connections.
+ * webhook_secret_value`, `app.webhook_endpoints.secret_value`), contradicting
+ * this repository's own documented "references, never values" export
+ * discipline. Fixed additively by
+ * supabase/migrations/20260826050000_harden_integration_secrets_encryption_
+ * at_rest.sql (339 files total) -- no already-applied migration is edited.
+ * Mirrors the already-established, already-proven vendor-financial encryption
+ * pattern (`pgp_sym_encrypt`/`pgp_sym_decrypt` via `pgcrypto`): a fail-closed
+ * GUC-keyed symmetric key shared by all 3 columns, 2 private encrypt/decrypt
+ * helpers, and a rename-the-plaintext-column-out-in-one-migration technique
+ * (never a second plaintext column, never a backfill-then-drop-later
+ * straddle). 6 writer and 11 reader functions across 5 other, already-applied
+ * migration files redefined via `CREATE OR REPLACE` on their identical
+ * existing signatures -- zero call-site changes anywhere, zero `public.*`
+ * wrapper or TypeScript changes needed (confirmed no wrapper exposes any of
+ * the 3 raw column names, and the writer RPCs' own one-time-reveal return
+ * shapes are unchanged). Self-caught before shipping (the identical class of
+ * gap HDN-373's own migration self-caught for
+ * `app.has_active_tenant_membership`): this domain's callers are a MIX of
+ * `SECURITY DEFINER` and `SECURITY INVOKER` (unlike vendor-financial's
+ * uniformly-DEFINER callers), so the private encrypt/decrypt helpers are
+ * explicitly granted to `service_role` rather than left ungranted. While
+ * verifying, this pass's own schema change (an `ALTER TABLE` row rewrite on
+ * `app.webhook_endpoints`) incidentally surfaced a second, independent,
+ * already-tracked defect -- `ISS-2026-156` (a webhook-endpoint lookup in
+ * `scripts/db-tests/n8n-integration.sql` with no `ORDER BY`/status filter,
+ * latent nondeterminism that had previously happened to pick the right row) --
+ * fixed in the same pass by filtering on `status = 'active'`, the
+ * semantically correct fix matching that test's own intent. Re-verified via a
+ * fresh full local db-test suite run (339 migrations, 233 runner files, ALL
+ * PASSED) before this digest was changed, and applied to the live hosted
+ * project via `apply_migration` (zero existing rows in any of the 3 tables,
+ * confirmed live before applying, so the backfill `UPDATE` statements were
+ * no-ops), live-reconfirmed via `information_schema.columns` afterward.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -239,7 +279,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-072 fix
   // (338 files: +1, 20260826040000_harden_rbac_evaluator_platform_user_
   // status_check.sql). See the class-level doc comment above.
-  migrationSetSha256: "07611ff2691d0e1e48937062a1d84e3a3bb4fe26ff019dd49e325a516c32d703",
+  // History: 07611ff2691d0e1e48937062a1d84e3a3bb4fe26ff019dd49e325a516c32d703
+  // (338 files, sixth-pass amendment above). Superseded 2026-08-25 (seventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-257 fix
+  // (339 files: +1, 20260826050000_harden_integration_secrets_encryption_
+  // at_rest.sql). See the class-level doc comment above.
+  migrationSetSha256: "bfa32177ec2cd98323484c900e32c94175d102a7aaf378854061f56c2d684408",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -272,7 +317,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation (233 files: +1,
   // database-restore-lock.sql; rbac-enforcement.sql also widened). See the
   // class-level doc comment above.
-  dbTestSetSha256: "f00bfda7738cb225dd77ec978d3752332f2e9865546987599574130c257b6cd7",
+  // History: f00bfda7738cb225dd77ec978d3752332f2e9865546987599574130c257b6cd7
+  // (233 files, sixth-pass amendment above). Superseded 2026-08-25 (seventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-257 fix (233
+  // files unchanged in count -- 26 files widened with the new encryption-key
+  // GUC/decrypt fixes, plus the ISS-2026-156 fix, no file added or removed).
+  // See the class-level doc comment above.
+  dbTestSetSha256: "e54ed5a03d8f13dcdfaedd41da3c8837480e0032b92e6e743649dc7f3c7a6d19",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

@@ -16,6 +16,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaemsg with a real, published notification template declaring all four channels (in_app/email/whatsapp/sms), a real recipient with an active membership, and a real active email_smtp connection'
 do $$
 declare

@@ -11,6 +11,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: one tenant, one confirmed land-freight Shipment Order with an assigned vehicle+driver, an installed GPS device on that vehicle, a webhook-mode third-party connection mapped to that vehicle, and an already-started driver_mobile ATW-225 tracking session'
 create temporary table canon_test_state (key text primary key, value text not null);
 do $$

@@ -7,6 +7,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaerisk with a real openai_multimodal connection; admin1 (bootstrap, INTHUB:Configure), rep1 (AI:Create/View/Approve -- may confirm signals and hold/release), agent1 (AI:Create/View only -- no Approve, cannot hold/release), viewer1 (AI:View only); a second tenant (iaerisk2) for cross-tenant isolation'
 do $$
 declare

@@ -17,6 +17,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: one tenant (iaehubco) with a Supreme Admin, an INTHUB:Configure holder, a plain member, a customer_user portal principal, and a second tenant (iaehubco2) with one lone member for cross-tenant isolation'
 do $$
 declare
@@ -145,9 +150,12 @@ begin
   if v_credential_count <> 1 then
     raise exception 'assertion failed: expected exactly one real credential row, got %', v_credential_count;
   end if;
-  select credential_value into v_credential_value from app.integration_connection_credentials where connection_id = v_connection.id;
+  -- ISS-2026-257: the column is now pgp_sym_encrypt''d at rest -- decrypt it back
+  -- (via the same private helper the RPCs themselves use) to confirm the real
+  -- plaintext round-trips correctly, not merely that SOME bytes are stored.
+  select app._decrypt_integration_secret(credential_value_encrypted) into v_credential_value from app.integration_connection_credentials where connection_id = v_connection.id;
   if v_credential_value <> 'sk_live_real_secret_value' then
-    raise exception 'assertion failed: expected the real supplied credential value to be stored verbatim';
+    raise exception 'assertion failed: expected the real supplied credential value to decrypt back verbatim';
   end if;
 
   if exists (
@@ -182,7 +190,7 @@ begin
   end if;
 
   perform app.rotate_integration_connection_credential(v_connection_id, 'sk_live_rotated_secret_value', '00000000-0000-0000-0000-000010000002', 'tester');
-  select credential_value into v_credential_value from app.integration_connection_credentials where connection_id = v_connection_id;
+  select app._decrypt_integration_secret(credential_value_encrypted) into v_credential_value from app.integration_connection_credentials where connection_id = v_connection_id;
   if v_credential_value <> 'sk_live_rotated_secret_value' then
     raise exception 'assertion failed: expected the credential to actually rotate to the new supplied value';
   end if;

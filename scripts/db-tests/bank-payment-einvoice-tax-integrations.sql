@@ -8,6 +8,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaebpet with a real commercial->job-order->billing-readiness->issued-invoice pipeline, a real bank account with one imported statement transaction, and 4 real integration connections (one per adapter); a second tenant (iaebpet2) for cross-tenant isolation; a FIN:View-only viewer for authority-denial tests'
 do $$
 declare

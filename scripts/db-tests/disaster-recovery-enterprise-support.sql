@@ -11,6 +11,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaedr with admin1 (tenant_admin + SUP:Configure/View + DEPLOY:Configure/Approve/View + INTHUB:Configure), approver1 (SUP:Approve/View), viewer1 (SUP:View only), rep1 (plain org_user, no SUP grants); a second tenant iaedr2 with admin2 (tenant_admin + SUP:Configure/View) for cross-tenant isolation; a platform-wide supreme admin'
 do $$
 declare
