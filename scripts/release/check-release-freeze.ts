@@ -379,6 +379,37 @@ import { readFileSync } from "node:fs";
  * `has_table_privilege`/`pg_class.relrowsecurity` for the table) before
  * this digest was changed -- the mitigation practice `ISS-2026-298`
  * established, now applied to both functions and tables.
+ *
+ * AMENDED 2026-08-25 (eleventh pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-
+ * backlog remediation section, item 8: `ISS-2026-263` --
+ * `app.transition_user_status`'s own `event_type` `CASE` mapping had an
+ * `else` fallback assigning the raw target-status value (e.g. `'suspended'`)
+ * as the history `event_type`, instead of a verb-form value
+ * `app.user_lifecycle_history_event_type_check` actually accepts -- any
+ * transition outside 5 explicit pairs, including a true no-op, deterministically
+ * failed with a spurious `CHECK`-constraint violation rather than a clear
+ * error. One migration added (345 files: +1,
+ * `20260826100000_harden_user_status_transition_invalid_event_type.sql`) --
+ * `CREATE OR REPLACE` on the identical existing signature, changing the
+ * `else` branch to `null` and adding an explicit `invalid_status_transition`
+ * rejection before the history insert, mirroring this repository's own
+ * established convention for this exact error shape (see
+ * `advanced-tms-label-barcode-operations.sql`'s own `invalid_status_transition`
+ * regression). No new `public.*` object created (function body only, grant
+ * set untouched), so the `ISS-2026-298`/`ISS-2026-299` live-verification
+ * mitigation does not apply here; `pg_get_functiondef` re-confirmed the live
+ * fix took effect instead, the same pattern used for `ISS-2026-072`.
+ * dbTestSetSha256 changed (an existing file widened, no file added or
+ * removed): `scripts/db-tests/user-lifecycle.sql` gained a new regression
+ * block proving all 5 real transitions still succeed with the correct
+ * `event_type` (including a full round-trip through every history row), and
+ * that 3 no-op/unrecognized calls (`invited->invited`, `active->active`,
+ * `suspended->suspended` -- the exact scenario `HDN-384` originally
+ * reproduced) are now rejected with the new, clear error. Re-verified via a
+ * fresh full local db-test suite run (345 migrations, 233 runner files, ALL
+ * PASSED, first attempt clean) before this digest was changed, and applied
+ * to the live hosted project via `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -437,7 +468,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // database_restore_event_wrapper_grant_leak.sql, and 20260826090000_harden_
   // security_state_snapshots_table_privilege_leak.sql). See the class-level
   // doc comment above.
-  migrationSetSha256: "15c04e9af0c803e83ed66f188f1d16109275afc97476776e44720b73916f5a16",
+  // History: 15c04e9af0c803e83ed66f188f1d16109275afc97476776e44720b73916f5a16
+  // (344 files, tenth-pass amendment above). Superseded 2026-08-25 (eleventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-263 fix (345
+  // files: +1, 20260826100000_harden_user_status_transition_invalid_event_
+  // type.sql). See the class-level doc comment above.
+  migrationSetSha256: "0593e6a0e53ee7abdb92c0bf0838b423f15f20c16a28c44d2cb072457d16a33f",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -492,7 +528,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-299 fix (233 files unchanged in count --
   // database-restore-lock.sql widened twice, no file added or removed). See
   // the class-level doc comment above.
-  dbTestSetSha256: "44f48a6bd042c6304810db54d8bd24157fb46a0a94d82a79530337c75ca6d26b",
+  // History: 44f48a6bd042c6304810db54d8bd24157fb46a0a94d82a79530337c75ca6d26b
+  // (233 files, tenth-pass amendment above). Superseded 2026-08-25 (eleventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-263 fix (233
+  // files unchanged in count -- user-lifecycle.sql widened, no file added or
+  // removed). See the class-level doc comment above.
+  dbTestSetSha256: "f573d9f0df1a5652a658aac531b690217f380678bf933051cc1c93d4dfa0da3a",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

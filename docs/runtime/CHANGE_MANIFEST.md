@@ -8241,3 +8241,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema additions would need separate corrective migrations to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 7 of 168 backlog items resolved (2 explicitly partial by design). 161 remain (0 Critical, 10 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12. 2 additional self-caught regressions (not counted against the 168) found and closed same-day |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-254 — Historical issue backlog remediation, item 8: `ISS-2026-263` (user status transition invalid event_type)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-253`. Item 8 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Diffed the new function body against the prior definition to confirm the change was exactly the entry's own proposed fix (else branch to null, plus an explicit rejection) and nothing else — no accidental drop of the later HRT-295/ISS-2026-072 role_assignments cascade block that was appended after this function's original body. Checked all real call sites (HRIS onboarding/offboarding, effective-dating, ~150+ db-tests fixture calls) confirmed none rely on the old spurious-CHECK-violation error text |
+| Findings and disposition | `ISS-2026-263`: `RESOLVED` — an unrecognized or no-op `app.transition_user_status` call is now rejected with a clear `invalid_status_transition` error before the history insert is attempted, instead of a spurious `CHECK`-constraint violation; all 5 real transitions unchanged |
+| Files edited | `supabase/migrations/20260826100000_harden_user_status_transition_invalid_event_type.sql` (new); `scripts/db-tests/user-lifecycle.sql` (widened); `scripts/release/check-release-freeze.ts` (eleventh-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-263` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826100000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — `CREATE OR REPLACE` on an identical existing signature, no new `public.*` object |
+| Risk | Low — the only behavior change is that calls which already deterministically failed (no-op/unrecognized transitions) now fail with a clearer, purpose-built error instead of a confusing downstream `CHECK` violation; no previously-succeeding call path is altered |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. `pg_get_functiondef` re-confirmed the live fix took effect |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live function replacement would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 8 of 168 backlog items resolved (2 explicitly partial by design). 160 remain (0 Critical, 10 High, 77 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
