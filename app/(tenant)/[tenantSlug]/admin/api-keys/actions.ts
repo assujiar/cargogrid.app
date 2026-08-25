@@ -21,6 +21,9 @@ import { createApiKey, rotateApiKey, revokeApiKey, registerWebhookEndpoint, rota
 import { createVendorApiKey, VendorApiMutationError, type VendorApiMutationRpcClient } from "../../../../../server/mutations/vendor-api.ts";
 import { sendTestWebhookDelivery, replayWebhookDelivery, WebhookManagementMutationError, type WebhookManagementMutationRpcClient } from "../../../../../server/mutations/webhook-management.ts";
 import { createN8nConnector, rotateN8nConnector, N8nIntegrationMutationError, type N8nIntegrationMutationRpcClient } from "../../../../../server/mutations/n8n-integration.ts";
+import { listApiKeysForTenant, listWebhookEndpointsForTenant, type ApiKeyWebhookQueryRpcClient } from "../../../../../server/queries/api-key-webhook.ts";
+import { listWebhookDeliveriesForTenant, type WebhookManagementQueryRpcClient } from "../../../../../server/queries/webhook-management.ts";
+import { listN8nConnectorsForTenant, type N8nIntegrationQueryRpcClient } from "../../../../../server/queries/n8n-integration.ts";
 import type { CreatedApiKey, CreatedWebhookEndpoint } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
 import type { CreatedVendorApiKey } from "../../../../../server/contracts/vendor-api/vendor-api.ts";
 import type { WebhookDeliveryRow } from "../../../../../server/contracts/webhook-management/webhook-management.ts";
@@ -73,6 +76,19 @@ function toVendorApiClient(client: ReturnType<typeof createSupabaseServiceRoleCl
 
 function toWebhookManagementClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): WebhookManagementMutationRpcClient {
   return client as unknown as WebhookManagementMutationRpcClient;
+}
+
+/**
+ * `SupabaseClient.rpc()` returns a `PostgrestFilterBuilder` (thenable, but not
+ * structurally a `Promise`), so it never satisfies a narrow `Promise<{data,error}>`-
+ * returning RPC client interface by direct structural assignment -- the same cast
+ * this file's own `page.tsx` sibling's `toQueryClient()` already established. Used
+ * only for the tenant-ownership pre-checks below (HDN-BLK-013): each `list_*_for_tenant`
+ * RPC is `authenticated`-callable and itself scoped to `access.tenant.id`, so a
+ * client-supplied id absent from its result never belongs to the caller's own tenant.
+ */
+function toQueryClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): ApiKeyWebhookQueryRpcClient & WebhookManagementQueryRpcClient & N8nIntegrationQueryRpcClient {
+  return client as unknown as ApiKeyWebhookQueryRpcClient & WebhookManagementQueryRpcClient & N8nIntegrationQueryRpcClient;
 }
 
 function parseScopes(raw: FormDataEntryValue | null): string[] {
@@ -135,6 +151,10 @@ export async function rotateApiKeyAction(tenantSlug: string, keyId: string, _pre
   const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
   let rotatedKey: CreatedApiKey;
   try {
+    const ownedKeys = await listApiKeysForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedKeys.some((key) => key.id === keyId)) {
+      throw new ApiKeyWebhookMutationError("api_key_not_found", "api_key_not_found: This key does not belong to your organization.");
+    }
     rotatedKey = await rotateApiKey(client, { keyId, overlapMinutes, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not rotate this key: ${error.message}`, createdKey: null };
@@ -153,6 +173,10 @@ export async function revokeApiKeyAction(tenantSlug: string, keyId: string, _pre
 
   const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
   try {
+    const ownedKeys = await listApiKeysForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedKeys.some((key) => key.id === keyId)) {
+      throw new ApiKeyWebhookMutationError("api_key_not_found", "api_key_not_found: This key does not belong to your organization.");
+    }
     await revokeApiKey(client, { keyId, reason: reason.length > 0 ? reason : null, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not revoke this key: ${error.message}`, createdKey: null };
@@ -235,6 +259,10 @@ export async function rotateWebhookSecretAction(tenantSlug: string, endpointId: 
   const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
   let createdEndpoint: CreatedWebhookEndpoint;
   try {
+    const ownedEndpoints = await listWebhookEndpointsForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedEndpoints.some((endpoint) => endpoint.id === endpointId)) {
+      throw new ApiKeyWebhookMutationError("webhook_endpoint_not_found", "webhook_endpoint_not_found: This endpoint does not belong to your organization.");
+    }
     createdEndpoint = await rotateWebhookSecret(client, { endpointId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not rotate this endpoint's secret: ${error.message}`, createdEndpoint: null };
@@ -253,6 +281,10 @@ export async function disableWebhookEndpointAction(tenantSlug: string, endpointI
 
   const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
   try {
+    const ownedEndpoints = await listWebhookEndpointsForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedEndpoints.some((endpoint) => endpoint.id === endpointId)) {
+      throw new ApiKeyWebhookMutationError("webhook_endpoint_not_found", "webhook_endpoint_not_found: This endpoint does not belong to your organization.");
+    }
     await disableWebhookEndpoint(client, { endpointId, reason: reason.length > 0 ? reason : null, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not disable this endpoint: ${error.message}`, createdEndpoint: null };
@@ -269,6 +301,10 @@ export async function reenableWebhookEndpointAction(tenantSlug: string, endpoint
 
   const client = toApiKeyWebhookClient(createSupabaseServiceRoleClient());
   try {
+    const ownedEndpoints = await listWebhookEndpointsForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedEndpoints.some((endpoint) => endpoint.id === endpointId)) {
+      throw new ApiKeyWebhookMutationError("webhook_endpoint_not_found", "webhook_endpoint_not_found: This endpoint does not belong to your organization.");
+    }
     await reenableWebhookEndpoint(client, { endpointId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof ApiKeyWebhookMutationError) return { error: `Could not re-enable this endpoint: ${error.message}`, createdEndpoint: null };
@@ -287,6 +323,10 @@ export async function sendTestWebhookDeliveryAction(tenantSlug: string, endpoint
   const client = toWebhookManagementClient(createSupabaseServiceRoleClient());
   let delivery: WebhookDeliveryRow;
   try {
+    const ownedEndpoints = await listWebhookEndpointsForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedEndpoints.some((endpoint) => endpoint.id === endpointId)) {
+      throw new WebhookManagementMutationError("webhook_endpoint_not_found", "webhook_endpoint_not_found: This endpoint does not belong to your organization.");
+    }
     delivery = await sendTestWebhookDelivery(client, { endpointId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof WebhookManagementMutationError) return { error: `Could not send a test delivery: ${error.message}`, delivery: null };
@@ -305,6 +345,10 @@ export async function replayWebhookDeliveryAction(tenantSlug: string, deliveryId
   const client = toWebhookManagementClient(createSupabaseServiceRoleClient());
   let delivery: WebhookDeliveryRow;
   try {
+    const ownedDeliveries = await listWebhookDeliveriesForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, limit: 200 });
+    if (!ownedDeliveries.some((candidate) => candidate.id === deliveryId)) {
+      throw new WebhookManagementMutationError("webhook_delivery_not_found", "webhook_delivery_not_found: This delivery does not belong to your organization.");
+    }
     delivery = await replayWebhookDelivery(client, { deliveryId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof WebhookManagementMutationError) return { error: `Could not replay this delivery: ${error.message}`, delivery: null };
@@ -377,6 +421,10 @@ export async function rotateN8nConnectorAction(tenantSlug: string, connectorId: 
   const client = toN8nIntegrationClient(createSupabaseServiceRoleClient());
   let rotatedConnector: CreatedN8nConnector;
   try {
+    const ownedConnectors = await listN8nConnectorsForTenant(toQueryClient(await createSupabaseServerClient()), { tenantId: access.tenant.id, actorAuthUserId: access.authUserId });
+    if (!ownedConnectors.some((connector) => connector.connectorId === connectorId)) {
+      throw new N8nIntegrationMutationError("n8n_connector_not_found", "n8n_connector_not_found: This connector does not belong to your organization.");
+    }
     rotatedConnector = await rotateN8nConnector(client, { connectorId, overlapMinutes, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof N8nIntegrationMutationError) return { error: `Could not rotate this connector: ${error.message}`, createdConnector: null };

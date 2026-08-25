@@ -148,6 +148,45 @@ begin
 end;
 $$;
 
+\echo '>> HDN-386 (Full-System Hardening Integrated Verification) regression, closing HDN-BLK-021 (High): a generic (IAE-031) app.legal_holds hold on scope app.tenants now also blocks termination, not just the PLT-105-native app.tenants.legal_hold flag -- previously app.enforce_tenant_status_transition checked only the native flag, live-forced not to block termination at HDN-377''s own Tier C review'
+do $$
+declare
+  v_tenant app.tenants;
+  v_placer uuid := '00000000-0000-0000-0000-000000000386';
+begin
+  insert into auth.users (id, email) values (v_placer, 'hdn386-tenants-holdplacer@example.test');
+
+  select * into v_tenant from app.provision_tenant('umbrella', 'Umbrella Corp', 'idem-umbrella-1', 'tester');
+  perform app.transition_tenant_status(v_tenant.id, 'active', 'bootstrap complete', 'tester');
+
+  -- Native flag stays false throughout -- this is a PURELY generic hold, the exact
+  -- shape the first-round fix's own live-forced reproduction used.
+  insert into app.legal_holds (tenant_id, record_class, scope_record_table, scope_record_id, reason, placed_by_auth_user_id, placed_by)
+  values (v_tenant.id, 'operational', 'app.tenants', v_tenant.id, 'HDN-386 bridge regression', v_placer, 'tester');
+
+  if exists (select 1 from app.tenants where id = v_tenant.id and legal_hold = true) then
+    raise exception 'assertion failed: test setup error -- the native app.tenants.legal_hold flag must remain false for this to be a genuine generic-only-hold regression';
+  end if;
+
+  begin
+    perform app.transition_tenant_status(v_tenant.id, 'terminated', 'attempted termination under a generic-only hold', 'tester');
+    raise exception 'assertion failed: expected termination under an active GENERIC (app.legal_holds) hold to be rejected, but it succeeded -- this is the exact gap HDN-BLK-021 found';
+  exception
+    when check_violation then
+      null; -- expected
+  end;
+
+  update app.legal_holds set status = 'released', released_by_auth_user_id = null, released_at = now(), release_reason = 'HDN-386 regression cleanup'
+  where tenant_id = v_tenant.id and scope_record_table = 'app.tenants';
+  perform app.transition_tenant_status(v_tenant.id, 'terminated', 'generic hold released, termination proceeds', 'tester');
+
+  perform 1 from app.tenants where id = v_tenant.id and canonical_status = 'terminated';
+  if not found then
+    raise exception 'assertion failed: expected termination to succeed once the generic hold was released';
+  end if;
+end;
+$$;
+
 \echo '>> transitioning a non-existent tenant fails cleanly, not silently'
 do $$
 begin

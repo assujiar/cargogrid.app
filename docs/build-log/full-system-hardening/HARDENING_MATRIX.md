@@ -40,9 +40,9 @@ from zero and no lane rediscovers a known item.
 | 11 | Accessibility | `HDN-380` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. 6 color-contrast token failures fixed; `eslint-plugin-jsx-a11y` `recommended` wired repository-wide, 14 real errors fixed; 463/463 error displays carry `role="alert"` after Tier C found 6 more missed by the first round's own narrower regex; `HDN-BLK-009`/`ISS-2026-160` root-caused (Turbopack dev-mode hydration race, `C-30`) and `RESOLVED` (harness now 18/18). No Critical/High finding either round. 2 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-241` (Medium, missing `<main>` landmarks), `ISS-2026-242` (Medium, accessible form-primitive under-adoption). 1 new Low finding at Tier C: `ISS-2026-243` (`reuseExistingServer` local-dev stale-build footgun, owner a dedicated future task) | §11 |
 | 12 | Browser / device compatibility | `HDN-381` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Matrix defined explicitly: Chrome/Edge (Chromium engine) + mobile/tablet/iPhone viewport+touch emulation all permanently tested (`test:e2e` 34/34, up from 18/18); Safari/Firefox a firm sandbox constraint, registered `ISS-2026-244`/`TRACKED_GAP`. 16/16 route×device combinations live-tested with zero defects. 5 real static gaps fixed first round (touch-target sizing on `Button`/`IconButton`/`Checkbox`, `ToastProvider` narrow-viewport clipping, 4 worst unwrapped tables, permanent mobile/tablet e2e coverage); 3 more fixed at Tier C (`Input`/`Select` touch-target sizing, a `position:fixed` overflow-detection blind spot, the `testMatch` anchoring regression + `iphone-chrome` completeness gap). PWA posture scoping registered (`ISS-2026-245`). Unused shared-UI-primitive surface corrected from an initial 6 to the true 33 of 50 files at Tier C (`ISS-2026-246`); 19 of 95 tables remain unwrapped (`ISS-2026-247`); a new ESLint automated-guard gap registered at Tier C (`ISS-2026-248`). No Critical or High finding either round | §12 |
 | 13 | Observability | `HDN-382` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Live-reproduced headline finding: IAE-030's own real, well-built alerting/incident schema had zero real production callers anywhere — a job reaching terminal `dead_letter` produced zero incident before this checkpoint. Fixed: `app.record_job_failure`'s dead-letter transition now raises a real, deduplicated alert; `/api/health`/`/api/ready` built (did not exist despite a runbook falsely claiming otherwise); 2 stale/false runbook references corrected. No Critical or High finding at either round. `ISS-2026-249` (High, every other failure producer still unwired, widened at Tier C with 2 more concrete instances) and `ISS-2026-250` (High, no monitoring dashboard UI exists anywhere) each now paired with a `HDN-BLK-` entry (`027`/`028`); `ISS-2026-251` (Medium, no escalation/dispatch mechanism), `ISS-2026-252` (Low, stale standards-doc framing), `ISS-2026-253` (Low, `/api/ready`'s own unlogged failure path, found at Tier C). A wrong "231/231" db-test count (corrected to 229/229) and a misplaced Result blockquote (moved from §12 to this section) fixed at Tier C. `ISS-2026-155`/`152` independently re-verified live, both accurate, unchanged | §13 |
-| 14 | Backup / restore | `HDN-383` **`COMPLETED`** | **`PARTIAL`** — first round, not a pass, Tier C review pending. Live-executed and measured: schema/structure recovery via full migration replay (~44-46s, 3 runs, 0 errors); row-level data recovery via a real `pg_dump`/`pg_restore` cycle (~11.6s, 0 errors, object/row counts, job state, and RLS all verified identical pre/post-restore); teardown-batching constraint reproduced and corrected (stale "~1,400 objects" figure updated with real current counts and a tested batching strategy); `auth.users`/`users_pkey` collision reproduced live. 1 real footgun found (`pg_dump --no-owner --no-privileges` silently strips RLS-supporting grants). 3 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-254` (High, a restore predating an active legal hold silently defeats it, no compensating control), `ISS-2026-255` (High, `TRACKED_GAP`, Storage/Auth/hosted-project restore untested, structurally infeasible in this sandbox), `ISS-2026-256` (Medium, RPO/RTO defaults never operationally confirmed on the real project) | §14 |
-| 15 | Disaster recovery rehearsal | `HDN-384` | `NOT_RUN` | §15 |
-| 16 | Data migration rehearsal | `HDN-385` | `NOT_RUN` | §16 |
+| 14 | Backup / restore | `HDN-383` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Live-executed and measured: schema/structure recovery via full migration replay (~44-46s, 3 runs, 0 errors); row-level data recovery via a real `pg_dump`/`pg_restore` cycle (~11.6s, 0 errors, object/row counts, job state, and RLS all verified identical pre/post-restore); teardown-batching constraint reproduced and corrected (stale "~1,400 objects" figure updated with real current counts and a tested batching strategy); `auth.users`/`users_pkey` collision reproduced live. 1 real footgun found (`pg_dump --no-owner --no-privileges` silently strips RLS-supporting grants). **Tier C found 5 real, live-reproduced gaps in the runbook's own safety claims/procedures, all corrected directly in the runbook** (not merely disclosed, since a false safety claim in a runbook is itself a hazard): a false "secrets as references only" claim (`ISS-2026-257`/`HDN-BLK-031`, High — plaintext values verified to survive dump/restore); the security-state-reversion risk widened from legal-holds-only to API-key/webhook revocation and user/membership suspension (`ISS-2026-254` widened, `HDN-BLK-029`); an incomplete RLS-preservation claim now scoped to same-migration-version restores with mandatory catch-up replay; a new target-role precondition (missing roles silently drop all RLS policies); an interrupted-teardown resume gap now documented. No defect found in the live-measured mechanics themselves — all first-round timings independently reproduced. 3 findings registered, not fixed, each owner a dedicated future task: `ISS-2026-254` (High, widened, paired `HDN-BLK-029`), `ISS-2026-255` (High, `TRACKED_GAP`, paired `HDN-BLK-030`, Storage/Auth/hosted-project restore untested, structurally infeasible in this sandbox), `ISS-2026-256` (Medium, RPO/RTO defaults never operationally confirmed on the real project), `ISS-2026-257` (High, paired `HDN-BLK-031`, plaintext secrets in backups, no encryption-at-rest) | §14 |
+| 15 | Disaster recovery rehearsal | `HDN-384` **`VERIFIED`** | **`PARTIAL`** — Tier C closed, not a full pass. Data corruption and security incident scenarios live-rehearsed; major outage/provider failure tabletop-only, disclosed. First round: a real bug found and fixed in `database-restore.md`'s own composed in-place restore procedure (80 silent errors). **Tier C found 7 more real gaps, all corrected directly in the runbooks**: the `TRUNCATE` step itself silently bypasses 9 security/integrity triggers with zero audit trail (`ISS-2026-265`/`HDN-BLK-034`, High); session revocation in the incident-response flow confirmed inert, never enforced anywhere (`ISS-2026-264`/`HDN-BLK-035`, High); materialized views never restored by `pg_restore --data-only` (`ISS-2026-266`, Medium, new required step); no mutual-exclusion for concurrent restore attempts (`ISS-2026-267`/`HDN-BLK-036`, High); `ISS-2026-263` re-scoped from an unreproduced anomaly to a confirmed, root-caused defect (Medium); 2 nuance corrections (`ISS-2026-259`/`261`); RTO corrected from a single figure to a measured range. No Critical finding anywhere. 3 findings unchanged from the first round: `ISS-2026-258`/`HDN-BLK-032` (High, no DR communication mechanism), `ISS-2026-260` (Medium), `ISS-2026-262` (Low), plus `ISS-2026-268` (Low, new — `app.files` DR-drill coverage gap now tracked) | §15 |
+| 16 | Data migration rehearsal | `HDN-385` **`VERIFIED`** | **`PASS`** — first round + Tier C review both complete. The generic Import/Export Job Framework (`PLT-131`, Phase 1) and its `employee_import` adapter live-rehearsed end-to-end; a real duplicate-swallowing defect found and fixed, mirroring an already-proven sibling-adapter fix, confirmed defect-free by Tier C's own correctness re-derivation and attack-surface testing. 11 findings registered, not fixed: `ISS-2026-269`/`HDN-BLK-037` (High, no duplicate detection for un-keyed rows), `ISS-2026-273`/`HDN-BLK-038` (High, no bulk opening-balance path), `ISS-2026-270`/`272`/`274`/`275` (Medium), `ISS-2026-279` (Medium, found at Tier C — case/whitespace-insensitive uniqueness bypass), `ISS-2026-271`/`276`/`277`(corrected)/`278` (Low). Tier C also fixed a pre-existing `HDN-378`-era `ISS-2026-235`/`236` duplicate-ID ledger defect | §16 |
 | X | **Cross-cutting: CI-mirrors-hosted** | **all lanes** | `PASS` at kickoff | §17 |
 
 ---
@@ -549,7 +549,7 @@ release gate.
 | 4 | `ISS-2026-149` — anonymous cross-tenant SSO-config enumeration oracle | Low | Throttle or gate — **Reconfirmed unchanged, still deferred** (still dead code at the HTTP layer; building attempt-tracking infrastructure for a zero-caller resolver is disproportionate). |
 | 5 | `ISS-2026-146` — `tenant_id` disclosure via exception text | Low | Re-assess reachability — **Reconfirmed and re-measured: 2,335 occurrences (up from 2,087), 10/10-sampled reachability, severity held at Low**, still deferred as a repository-wide sweep. |
 | 6 | `auth_leaked_password_protection` advisory | Low | **Dashboard setting, not a migration.** Record as a deployment-runbook item — **Done**: `docs/runbooks/production-configuration-checklist.md`. |
-| 7 | Dependency scan | — | `pnpm run security:check` / `security:audit`. Note `ISS-2026-007`'s lesson: a broken audit gate hid 20 real advisories, 11 high, for a whole phase. The gate now fails when the advisory service is unreachable — **keep that property**. **`HDN-BLK-007`/`ISS-2026-158` (High, added at `HDN-370`) means this exact gate does not run in CI on a push right now.** `HDN-378` cannot treat "the gate exists" as evidence it is enforced anywhere but a local run — it must run `security:audit` itself and record the result, the same gap this row's own note warns about one level up. Do not close this item on CI's silence being green; CI is not currently running it. — **Ran live: both clean.** `ISS-2026-158`'s CI-enforcement gap reconfirmed unchanged, owner unchanged `HDN-387`. |
+| 7 | Dependency scan | — | `pnpm run security:check` / `security:audit`. Note `ISS-2026-007`'s lesson: a broken audit gate hid 20 real advisories, 11 high, for a whole phase. The gate now fails when the advisory service is unreachable — **keep that property**. **`HDN-BLK-007`/`ISS-2026-158` (High, added at `HDN-370`) means this exact gate does not run in CI on a push right now.** `HDN-378` cannot treat "the gate exists" as evidence it is enforced anywhere but a local run — it must run `security:audit` itself and record the result, the same gap this row's own note warns about one level up. Do not close this item on CI's silence being green; CI is not currently running it. — **Ran live: both clean.** `ISS-2026-158`'s CI-enforcement gap reconfirmed unchanged, owner unchanged `HDN-387`. **`HDN-387` fixed the root cause**: `check-worktree-collision.test.ts`'s own false-positive assertion on a `main` checkout narrowed to skip for a non-`agent/*`/`claude/*` branch, without weakening the `ISS-2026-002` control itself — the governance-step cascade this row describes should clear on the next CI run, not independently confirmed against a live CI run from this session (no CI access). |
 | 8 | OWASP-style abuse: CSRF, XSS, SQLi, IDOR, SSRF, open redirect, file upload, API abuse, webhook spoofing, prompt injection | — | Test per Prompt 389 item 10 — **Done, live-forced across all 10 categories.** 9 HELD; 1 Medium finding (open-redirect control-character bypass) found and fixed (`ISS-2026-233`). |
 | 9 | Service-role / secrets server-only; logs redacted | — | Verify — **Done.** `ISS-2026-168` fixed (ESLint import-boundary guard); audit-redaction spot-check clean; 2 more findings surfaced and fixed in the process (`ISS-2026-169`, `ISS-2026-232`). |
 | 10 | Incident response, key rotation, privileged access audit | — | Test — **Done.** 3 new runbooks authored: `docs/runbooks/incident-response.md`, `key-rotation.md`, `privileged-access-audit.md`, each naming real, verified-to-exist primitives and disclosing the still-open gaps (`ISS-2026-151`, and 3-of-4 IP-restricted functions' own missing live HTTP route) rather than overstating coverage. |
@@ -990,13 +990,13 @@ release gate.
 | 1 | **Teardown must batch `drop schema app cascade` per transaction** | `max_locks_per_transaction` is too low: fails with **`53200: out of shared memory`**. **`HDN-383` correction**: the "~1,400 objects" figure above is now stale and understated — a live schema census found 603 tables, 2,149 indexes, 4,636 constraints, 2,701 functions, 1,316 types, 305 triggers, 37 views, 1 matview, 448 RLS policies (tables+indexes+views+matviews+sequences+triggers alone already total 3,098, over double the old figure), and `DROP SCHEMA app CASCADE` in one transaction was live-reproduced to fail identically today. A working batched strategy was found and timed live: order tables by ascending inbound-FK count (leaves first, `app.tenants` — 524 inbound FKs — last), `DROP TABLE IF EXISTS ... CASCADE` per table as separate auto-committed statements, then a final `DROP SCHEMA app CASCADE` sweep — **1.96s, 0 errors**. Full detail: `docs/runbooks/database-restore.md` §3 |
 | 2 | **Migrations are not idempotent** | Bare `create table`, no explicit transaction wrapper. Re-running any applied migration fails. `supabase_migrations.schema_migrations` is the **only** re-run guard — state this explicitly in the deployment runbook |
 | 3 | **`auth.users` survives a schema reset** | It is Supabase's schema, untouched by dropping `app`. Any live test cycle must clear it in teardown, or **every rerun collides on `users_pkey`** — live-reproduced exactly at `HDN-383` |
-| 4 | Scope | Database, files, configuration, secrets **references** (never secret values), jobs, deployment state |
+| 4 | Scope | Database, files, configuration, secrets, jobs, deployment state. **`HDN-383` Tier C correction**: a full `pg_dump`/`pg_restore` captures plaintext secret *values*, not merely references — the original "references, never secret values" framing was false; see item 1's own linked runbook §2 |
 | 5 | Evidence | An actual restore drill in a safe environment, reconciled on counts, integrity, RLS, files and jobs — plus RPO/RTO actuals versus the disclosed default |
 | 6 | Target | **Never the live project's data.** State the target explicitly before executing |
 
 **Block release if restore evidence is absent for required scope.**
 
-> **Result (`HDN-383` first round, `COMPLETED`, Tier C pending):** Three
+> **Result (`HDN-383` first round, `VERIFIED` at Tier C below):** Three
 > independent investigation lenses (backup scope/feasibility inventory;
 > live restore drill execution against a real disposable Postgres; RPO/RTO
 > and runbook-authoring scope review) covered all 6 seeded constraints and
@@ -1037,6 +1037,49 @@ release gate.
 > matching the same charter boundary `HDN-382`'s own `ISS-2026-250` already
 > established for observability dashboards. Full disposition:
 > `HDN-383.md`.
+>
+> **Result (`HDN-383` Tier C, `VERIFIED`):** 4 independent adversarial
+> lenses (correctness re-derivation; schema-wide completeness sweep;
+> ledger/documentation consistency; attack-surface adversarial testing) each
+> independently re-ran or extended the live drill against `ef8aa1b`.
+> **Unlike `HDN-381`/`382`'s own Tier C rounds, this one found real,
+> confirmed High-severity gaps — not in application/database code (none
+> changed this checkpoint), but in the runbook's own safety claims and
+> procedures, which are this checkpoint's actual deliverable.** 5 findings,
+> all corrected directly in `docs/runbooks/database-restore.md` (§2–§6,
+> bumped to template version `0.2.0`) rather than merely disclosed, since a
+> runbook containing a false safety claim or an incomplete procedure is
+> itself a live hazard: (1) **plaintext secrets in backups** — the original
+> "references, never values" claim was false; a canary value in
+> `credential_value`/`webhook_secret_value`/`secret_value` survived a full
+> dump/restore cycle verbatim, since `pg_dump`/`pg_restore` bypass RLS/grants
+> entirely (`SET row_security = off;`) — registered as `ISS-2026-257`/
+> `HDN-BLK-031` (High), no encryption-at-rest exists for these columns
+> unlike the already-proven `pgp_sym_encrypt()` pattern for vendor financial
+> data; (2) **security-state-reversion widened** — the legal-hold risk
+> (`ISS-2026-254`) extends identically, live-reproduced, to API-key/webhook
+> revocation and user/membership suspension (arguably the highest blast
+> radius of the three) — `ISS-2026-254` widened, paired with `HDN-BLK-029`;
+> (3) **RLS-preservation claim was incomplete** — live-reproduced using the
+> real `ISS-2026-171`/`173`-fixing migration that a version-skewed restore
+> (older backup, current-migration target) carries forward an
+> already-patched RLS vulnerability until a mandatory catch-up replay
+> completes, now a required step; (4) **target-role precondition** — a
+> cross-environment restore into a target missing `anon`/`authenticated`/
+> `service_role` silently drops every RLS policy while data restores
+> cleanly (~4,500 role-does-not-exist errors easy to mistake for noise),
+> now a documented precheck with a required `pg_policies` count
+> verification; (5) **interrupted-teardown gap** — resuming a partial
+> per-table teardown with only the documented final sweep reproduces the
+> original out-of-shared-memory failure; the correct resume (re-run the
+> entire batch script) is now documented. `ISS-2026-255`/`HDN-BLK-030`
+> (Storage/Auth/hosted-project restore untested) re-confirmed unchanged by
+> 2 independent lenses, still structurally infeasible in this sandbox.
+> **No defect found in the live-measured mechanics themselves** — every
+> timing figure from the first round (schema rebuild ~44–46s, row-level
+> dump/restore ~11.6s, teardown-batching ~1.96s) was independently
+> reproduced within the same order of magnitude by the correctness
+> re-derivation lens. Full synthesis: `HDN-383.md` §13.
 
 ---
 
@@ -1052,6 +1095,98 @@ release gate.
 
 **Upstream:** `HDN-383`.
 
+> **Result (`HDN-384` first round, `COMPLETED`, Tier C pending):** Three
+> independent investigation lenses (scenario definition and sandbox
+> feasibility; a real, live DR drill executed against this sandbox's own
+> disposable Postgres; communication/ownership/enterprise-DR-controls
+> review), each required to live-verify its own claims. **Sandbox
+> constraint confirmed tighter than previously documented**: no Docker
+> daemon at all in this session (a step further than `HDN-380`'s own
+> reproducible `runc`/`RLIMIT_NOFILE` error) — the only live-executable
+> substrate is raw Postgres. **Data corruption and security incident
+> scenarios live-rehearsed**: a full drill (build/seed, T0 backup, post-T0
+> security-state actions, simulated corruption via a raw `DELETE` with no
+> `WHERE`, recovery via `database-restore.md`'s own composed in-place
+> restore procedure) found and fixed a real defect in that procedure — 80
+> silently-ignored `pg_restore` errors from migration-seeded PK collisions
+> plus a parallel-restore FK race under `-j 4`, fixed with a `TRUNCATE`
+> step and `--disable-triggers`, re-verified live with 0 errors, RTO
+> ≈49.65s. `ISS-2026-254` (security-state reversion) independently
+> reconfirmed against this second, distinct restore procedure. A live
+> security-incident revoke chain (`app.revoke_all_actor_sessions`/
+> `app.revoke_role_assignment`/`app.revoke_ip_allowlist_entry`) confirmed
+> effective, the first real rehearsal-history entry for
+> `docs/runbooks/incident-response.md` itself. **Major outage and provider
+> failure tabletop-rehearsed**, disclosed as `NOT_YET_REHEARSED` beyond
+> that, per Prompt 384 §22's own alternative flow — this sandbox has
+> nothing to fail over to or restart. Authored `docs/runbooks/
+> disaster-recovery.md` (new). **6 findings registered, not fixed, each
+> with a named owner**: `ISS-2026-258`/`HDN-BLK-032` (High — no real DR
+> communication mechanism exists anywhere: no channel, no template, no
+> customer-impact assessment tool); `ISS-2026-261`/`HDN-BLK-033` (High —
+> CargoGrid has no second infrastructure vendor, a genuine Supabase-wide
+> outage has no failover path); `ISS-2026-259` (Medium — `app.audit_logs`
+> is structurally blind to raw-SQL/infra-level corruption); `ISS-2026-260`
+> (Medium — `app.record_dr_restore_test`'s own `component_scope` enum has
+> no slot for 3 of the 4 DR scenarios); `ISS-2026-262` (Low — a runbook
+> catalogue in `11_DEVOPS_WORKSTREAM.md` §8.5 names 6 files that don't
+> exist); `ISS-2026-263` (Low — an unreproduced anomaly in
+> `app.transition_user_status` observed mid-drill, not confirmed as a
+> defect). No Critical finding anywhere. Full disposition: `HDN-384.md`.
+>
+> **Result (`HDN-384` Tier C, `VERIFIED`):** 4 independent adversarial
+> lenses (correctness re-derivation; schema-wide completeness sweep;
+> ledger/documentation consistency; attack-surface adversarial testing)
+> ran against the committed first-round state (`9c476b5`). **Unlike
+> `HDN-381`/`382`'s own clean Tier C rounds, and mirroring `HDN-383`'s own
+> Tier C, this one found real, confirmed gaps — again concentrated in the
+> runbooks' own procedures and claims (this checkpoint's actual
+> deliverable), not in application/database code, which stayed
+> untouched.** Correctness re-derivation independently reproduced every
+> timing and mechanism claim within the same order of magnitude, and
+> found the precise, deterministic root cause of `ISS-2026-263`
+> (previously an "unreproduced anomaly") — a real `CASE`-fallback defect
+> in `app.transition_user_status`, re-scoped from Low to Medium.
+> Schema-wide completeness sweep found the `TRUNCATE`-before-restore fix
+> (added at this checkpoint's own first round) silently bypasses 9
+> security/integrity row-level triggers with zero audit trail, live-proved
+> on `app.finance_journals`'s own posted-journal-immutability guard —
+> registered `ISS-2026-265`/`HDN-BLK-034` (High); also found the literal
+> "`TRUNCATE` every table" instruction wasn't directly executable (FK
+> errors, corrected to a single `CASCADE` statement), and that `HDN-385`'s
+> own seeded state didn't yet forward-link `HDN-384`'s durable findings
+> (corrected below). Ledger/documentation consistency lens found 11 of 12
+> checks clean and 1 pre-existing staleness (a `CARGOGRID_BUILD_STATUS.md`
+> phase-status table row last touched at `HDN-374`, 9 checkpoints ago,
+> unrelated to this checkpoint's own diff but corrected while found).
+> **Attack-surface adversarial testing found the most severe gaps**:
+> materialized views are never restored by `pg_restore --data-only`,
+> silently left stale (`ISS-2026-266`, new required refresh step); no
+> mutual-exclusion mechanism exists for two concurrent restore attempts,
+> live-reproduced to race (`ISS-2026-267`/`HDN-BLK-036`, High); and —
+> the headline finding — **`app.revoke_all_actor_sessions`'s own
+> session-status flip is never consulted by any enforcement path
+> anywhere in this codebase**, contradicting `incident-response.md`'s own
+> claim; the security-incident drill's real lockout traced entirely to
+> role/IP-allowlist revocation, not session revocation as the first round
+> implied (`ISS-2026-264`/`HDN-BLK-035`, High) — resolution guidance
+> re-ordered in `disaster-recovery.md` §4 item 2 to lead with the
+> actually-enforced mechanism. 2 nuance corrections to first-round
+> findings (`ISS-2026-259`'s "blind for every table" narrowed for a
+> 2-table exception, itself still defeated by `TRUNCATE`; `ISS-2026-261`'s
+> "no failover path" sharpened — Supabase Read Replicas exist but are
+> plan-gated to paid tiers and Auth-excluded regardless). RTO corrected
+> from a single point figure (≈49.65s) to a measured range (≈50-60s)
+> after 2 independent re-runs came in 14-20% higher. `app.files`'s
+> 2-consecutive-checkpoint DR-drill coverage gap formally tracked
+> (`ISS-2026-268`, Low). No Critical finding anywhere. All 7 real gaps
+> corrected directly in `database-restore.md`/`disaster-recovery.md`
+> rather than merely disclosed. Independent full gate re-run: `typecheck`
+> 0; `lint` 0/337 warnings; `pnpm run test` 5443/5443; `next build` clean;
+> `bash scripts/db-tests/run.sh` 229/229 files clean (329 migrations,
+> unchanged — no schema change at either round). Full synthesis:
+> `HDN-384.md` §13.
+
 ---
 
 ## 16. Data migration rehearsal — `HDN-385`
@@ -1060,11 +1195,89 @@ release gate.
 |---|---|---|
 | Real precedent | **306/306 migrations applied cleanly to a real hosted project**, ledger in sync — the strongest single piece of migration evidence this repository has | Cite it; do not re-derive it |
 | Non-idempotency | §14 item 2 applies | Rollback/rerun idempotency must be tested honestly against it |
-| Mapping, preview, validation, duplicate handling | Import/Export Job Framework (Phase 5) | Exercise |
+| Mapping, preview, validation, duplicate handling | Import/Export Job Framework (`PLT-131`, built at **Phase 1 — Platform Core**, not Phase 5 as originally seeded here — corrected at `HDN-385`'s own investigation; Phase 5/6/7 modules are later consumers/adopters of it, not its origin) | Exercise |
 | Commit + reconcile counts/totals/files/lineage | — | Rehearsal environment only |
 | Do not fabricate historical data | ratified | Hard rule |
+| **`HDN-384`'s own durable findings, forward-linked at Tier C (added — schema-wide completeness sweep lens found this dimension row was missing entirely)** | The Docker-daemon-absent-entirely sandbox constraint (§15 item 1, a firmer version of §11's own `runc`/`RLIMIT_NOFILE` constraint) will almost certainly recur — do not rediscover it from scratch. The TRUNCATE-before-restore / migration-seeded-PK-collision defect class (`database-restore.md` §4 item 4, `ISS-2026-265`) is directly relevant to this checkpoint's own "duplicate handling" dimension above — the identical shape (migration-seeded rows colliding with imported/restored rows on PK) is a plausible failure mode for a data-migration rehearsal too, test for it explicitly rather than assuming import tooling is immune. Never trust `pg_restore`'s exit code or an "N errors ignored" summary as a pass signal — verify row counts per table | Cite and test against, do not re-derive |
 
-**Upstream:** `HDN-371`.
+**Upstream:** `HDN-371`, `HDN-384` (for the durable sandbox/restore-mechanics findings named above — `HDN-384` itself is not a hard dependency for this checkpoint's own charter, but its findings are directly relevant and should not be silently rediscovered).
+
+> **Result (`HDN-385` first round, `COMPLETED`, Tier C pending):** Three
+> independent investigation lenses (migration/import framework inventory and
+> feasibility; a real, live migration rehearsal executed against this
+> sandbox's own disposable Postgres; financial reconciliation and
+> business-rule compliance review), each required to live-force its own
+> claims. **Real precedent correction**: the Import/Export Job Framework
+> (`PLT-131`) was seeded here as Phase 5 in error — corrected to Phase 1,
+> Platform Core; Phase 5/6/7 modules are later consumers, not its origin.
+> **The generic framework's full pipeline is real and live-tested**, via the
+> only adapter this checkpoint exercised end-to-end (`employee_import`):
+> mapping → preview → validation → commit, a real 7-row batch (valid/
+> duplicate/formula-injection/missing-field cases), all correctly
+> classified. **1 real, live-reproduced defect found and fixed**: a genuine
+> `employee_number` collision was silently swallowed instead of surfaced —
+> the identical defect class an earlier commit already found and fixed in a
+> sibling adapter (`app.commit_vendor_rate_import_job`, PRC-255), simply
+> never applied to `employee_import`. Fixed this checkpoint
+> (`supabase/migrations/20260817000000_harden_employee_import_duplicate_swallow.sql`),
+> mirroring the proven pattern exactly, with a new db-test regression.
+> **10 findings registered, not fixed, each with a named owner**:
+> `ISS-2026-269`/`HDN-BLK-037` (High — auto-generated-employee-number rows
+> have zero duplicate detection on a fresh re-import, a real live-reproduced
+> duplicate person record); `ISS-2026-273`/`HDN-BLK-038` (High — no bulk
+> financial opening-balance import path exists at all, and the single-record
+> path self-discloses never reaching the GL journal, confirmed live);
+> `ISS-2026-270` (Medium — no safe import path for migration-seeded
+> reference tables); `ISS-2026-272` (Medium — no migration-rehearsal
+> tracking mechanism, mirrors `ISS-2026-258`'s own shape); `ISS-2026-274`
+> (Medium — no master-data or tenant-setup bulk-import mechanism exists
+> anywhere); `ISS-2026-275` (Medium — `finance_journals_protect_posted`
+> never fires on INSERT, the same root cause as `HDN-384`'s own
+> `ISS-2026-265`, reached via a migration-realistic INSERT instead of
+> `TRUNCATE`); `ISS-2026-271`/`276`/`277`/`278` (Low). No Critical finding
+> anywhere. Authored `docs/runbooks/data-migration-rehearsal.md` (new).
+> Full disposition: `HDN-385.md`.
+>
+> **Result (`HDN-385` Tier C, `VERIFIED`):** 4 independent adversarial
+> lenses (correctness re-derivation; schema-wide completeness sweep;
+> ledger/documentation consistency; attack-surface adversarial testing)
+> ran against the committed first-round state (`c524bf0`). **Unlike
+> `HDN-384`'s own Tier C, which found real gaps concentrated in that
+> checkpoint's own runbook, this round's fix itself came through clean —
+> the findings were entirely a pre-existing ledger defect and a
+> first-round factual overstatement, plus one genuinely new live-reproduced
+> gap.** Correctness re-derivation independently re-diffed the new
+> migration against the original function body, confirmed no legitimate
+> self-idempotency case exists at the `master_records` insert, confirmed
+> the `employees` insert's own exemption constraint is exactly right, and
+> found no defect anywhere in the fix, its transaction semantics, its
+> concurrency behavior, or its error-message disclosure surface. Attack-
+> surface testing live-executed 5 scenarios against a fresh disposable
+> database — baseline re-run, a partial-batch interaction, a concurrent-
+> commit race, and a cross-tenant disclosure probe all confirmed correct
+> behavior — but live-reproduced a real, narrower sibling gap to
+> `ISS-2026-269`: explicit `employee_number` values differing only by
+> case or trailing whitespace (`EMP-001`/`emp-001`/`EMP-001 `) commit as 3
+> distinct employees, bypassing this checkpoint's own duplicate-collision
+> fix entirely — registered `ISS-2026-279` (Medium). Schema-wide
+> completeness sweep independently re-confirmed the adapter-count and
+> opening-balance/trigger-gap findings, and found `ISS-2026-277`'s own
+> first-round text factually wrong (claimed 1 call site / no table
+> trigger for `app._is_under_legal_hold()`; actually 3 call sites, one
+> already a real table-level trigger on `app.files`) — corrected in
+> place, narrower gap than first described. Ledger/documentation
+> consistency lens swept every High-severity `OPEN` `KNOWN_ISSUES.md`
+> finding against its `BLOCKER_LEDGER.md` pairing and found one real,
+> **pre-existing** defect predating this checkpoint by 7 checkpoints:
+> `KNOWN_ISSUES.md` had two distinct findings both numbered
+> `ISS-2026-235` (a Critical SSO-bypass finding from `HDN-378`'s own
+> Tier C and a separate High `is_high_risk_action` wiring-gap finding),
+> leaving `HDN-BLK-024`'s own cross-reference to `ISS-2026-236` dangling
+> since `HDN-378`'s own Tier C — undetected by `HDN-379` through
+> `HDN-384`'s own Tier C ledger-consistency sweeps. Renumbered the second
+> "235" to "236" to match the already-correct `BLOCKER_LEDGER.md`
+> cross-reference. No Critical or new High finding at Tier C. Full
+> disposition: `HDN-385.md`.
 
 ---
 
@@ -1084,3 +1297,78 @@ easily broken by an unrelated edit.
 **Every lane's Tier B walk must check its own diff against this table.** A hardening change
 that reintroduces the divergence re-blinds CI to the exact class the live migration exposed —
 the one class that, by construction, no single environment can catch.
+
+---
+
+## 18. `HDN-386` — Full-System Hardening Integrated Verification
+
+**Not a per-gate row** — `HDN-386` and `HDN-387` are cross-checkpoint synthesis/remediation
+lanes over the already-open backlog from gates 1–16 above, not a WBS phase gate of their own,
+so they carry no Gate Index row. This section (added at `HDN-388`, reconciling a gap this
+document itself was found to have — no §18/§19 existed for either closed checkpoint) records
+what each one actually did.
+
+> **Result (`HDN-386` Tier C, `VERIFIED`):** Three independent parallel investigation lenses
+> (full compatible-checkpoint gate matrix + CI-blindness disposition; blocker-ledger
+> reconciliation; cross-lane consistency and completeness sweep) confirmed no mixed-checkpoint
+> evidence across 16 lanes and a real, exactly-diagnosed CI-blindness gap (`security:audit`
+> never executed in CI on any run, cascading from `HDN-BLK-007`'s already-tracked collision-check
+> failure). Fixed at the root, bounded: `HDN-BLK-020` (Critical, `app.audit_logs.legal_hold`
+> enforced nowhere) and `HDN-BLK-021` (High, `app.tenants` generic-hold bridge gap), both
+> mirroring `HDN-377`'s own already-proven `app.files` legal-hold bridge pattern. Formally
+> handed to `HDN-387`, not attempted: `HDN-BLK-023` (Critical, `set_integration_connection_status`
+> bypass) and `HDN-BLK-024` (High, 61-function wiring gap) — both genuine design decisions
+> exceeding a bounded-repair pass. Tier C found and fixed a real Critical-severity gap in its own
+> first-round fix (`app.protect_audit_logs_legal_hold_from_deletion` was `BEFORE DELETE` only,
+> leaving a raw `UPDATE` bypass — widened to `BEFORE UPDATE OR DELETE`) and a real, previously-
+> unregistered, currently-live CI outage (`pnpm-lock.yaml` out of sync with `package.json` since
+> `HDN-380`, breaking `pnpm install --frozen-lockfile` on every CI job since — fixed, lockfile
+> regenerated). 3 pre-existing ledger inconsistencies found and fixed, none `HDN-386`'s own
+> regression. Full disposition: `HDN-386.md`.
+
+---
+
+## 19. `HDN-387` — Release Blocker Triage and Remediation
+
+> **Result (`HDN-387` Tier C, `VERIFIED`):** Selected 7 bounded critical/high repairs from the
+> open backlog, each mechanical or mirroring an already-proven pattern, plus 1 administrative
+> re-ruling. **`HDN-BLK-023` (Critical) `RESOLVED`** — the SSO activation-gate bypass two prior
+> checkpoints had judged an open-ended design decision was found, on re-audit, to be a closed,
+> single-item list all along; fixed by mirroring `app.request_gps_device_status_transition`'s own
+> already-proven grant-revocation pattern. **The open Critical count for Step 15 reached zero for
+> the first time this session and remains zero.** `HDN-BLK-013`/`019`/`010`/`007` `RESOLVED`;
+> `HDN-BLK-022`/`027` `PARTIALLY_RESOLVED` (bounded first increments, remainder stays open,
+> disclosed); `HDN-BLK-006` `ACCEPTED_EXCEPTION` (re-ruled at the correct §8.2 authority). 3 real
+> defects caught and fixed live before the first-round commit, none shipped uncorrected: a
+> webhook-alert fix that silently reverted 3 later hardening passes by working from a function's
+> original creation migration instead of its true effective definition; a `jsonb`-into-`text`
+> parameter mismatch; an RLS policy dropped under the wrong name, leaving the real weak policy
+> live (Postgres OR-combines permissive policies). **Tier C**: correctness re-derivation clean
+> PASS; attack-surface testing mostly HELD with one disclosed addendum (an RPC-layer bypass of
+> the `HDN-BLK-022` RLS fix for actors holding both a `customer_user`-layer membership and a
+> staff role, folded into `ISS-2026-225`'s own still-open remainder); schema-wide completeness
+> sweep found and fixed 2 real gaps (3 own-charter ledger entries left with no first-round
+> disposition, the identical procedural-gap shape `HDN-386` was itself caught committing one
+> checkpoint earlier; a disclosed-but-unregistered sibling gap, `sendTestWebhookDeliveryAction`,
+> closed directly); ledger-consistency found and fixed 1 disclosure gap (`HARDENING_MATRIX.md`
+> omitted from `HDN-387.md`'s own documentation-changes list — this exact fact corrected by this
+> same edit). Full disposition: `HDN-387.md`.
+
+---
+
+## Gate index — reconciliation note (added at `HDN-388`)
+
+The Gate Index table above (§2) is intentionally headed **"Status at kickoff"** — it is not
+rewritten when later checkpoints close findings, by design, so the table stays a stable record
+of what each gate looked like when Step 15 began auditing it. Consult each row's own linked
+section (or `BLOCKER_LEDGER.md`'s live "Status as of `HDN-388`" section) for current state.
+Two reconciliations are worth flagging explicitly: **row 9 (Security hardening)** cites
+`ISS-2026-235`/`HDN-BLK-023` as an open Critical, owner `HDN-386` — that finding is `RESOLVED`
+as of `HDN-387` (§19 above); the open-Critical count for all of Step 15 is now zero and has been
+since `HDN-387` closed. **Row 8 (Storage / signed URL)** cites `ISS-2026-222` (High), `229`
+(Critical) and `230` (High) as registered-not-fixed, owner `HDN-386` — `229`/`230` closed at
+`HDN-386` itself and `222` (`app.files.legal_hold` not extending to `app.file_access_logs`)
+closed `RESOLVED` at `HDN-387` (`BLOCKER_LEDGER.md`'s `HDN-BLK-019` entry — the `app.file_
+access_logs` legal-hold cascade, mirroring `HDN-386`'s own `app.audit_logs` bridge pattern).
+Neither row is rewritten, per this section's own stated convention — consult
+`BLOCKER_LEDGER.md`'s live "Status as of" section for current state, not this table.

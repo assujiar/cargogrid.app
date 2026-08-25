@@ -8,6 +8,15 @@
  * app.register_integration_adapter is deliberately NOT wrapped here --
  * service_role-only (a Supreme-Admin/ops seeding action), never callable
  * from a live end-user session.
+ *
+ * HDN-387 (HDN-BLK-023, Critical): setIntegrationConnectionStatus below now calls
+ * app.request_integration_connection_status_change, not app.set_integration_
+ * connection_status directly -- the latter's authenticated/service_role EXECUTE
+ * grants were revoked in the same migration (20260819000000) since it independently
+ * bypassed app.activate_enterprise_idp_connection's own IP-restriction/lockout/
+ * step-up-MFA protections for enterprise SSO connections. The new entry point
+ * refuses p_status='active' for an SSO adapter and delegates every other transition
+ * unchanged.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -39,6 +48,7 @@ export const INTEGRATION_HUB_KNOWN_MUTATION_ERROR_CODES = [
   "integration_connection_not_found",
   "integration_connection_invalid_status",
   "integration_health_check_invalid_status",
+  "enterprise_sso_activation_requires_specialized_wrapper",
 ] as const;
 type KnownIntegrationHubMutationErrorCode = (typeof INTEGRATION_HUB_KNOWN_MUTATION_ERROR_CODES)[number];
 export type IntegrationHubMutationErrorCode = KnownIntegrationHubMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -128,10 +138,18 @@ export async function rotateIntegrationConnectionCredential(
   return parseIntegrationConnection(data as Record<string, unknown>);
 }
 
-/** INTHUB:Configure-gated. Manual disable/re-enable/test-mode; never deletes connection or health-check history. */
+/**
+ * INTHUB:Configure-gated. Manual disable/re-enable/test-mode; never deletes connection
+ * or health-check history. HDN-387 (HDN-BLK-023, Critical): calls app.request_
+ * integration_connection_status_change, not the underlying app.set_integration_
+ * connection_status core directly -- that core's own authenticated/service_role grant
+ * was revoked in the same checkpoint. Reactivating an enterprise SSO connection through
+ * this path is refused outright (enterprise_sso_activation_requires_specialized_
+ * wrapper) -- use the dedicated SSO activation RPC instead.
+ */
 export async function setIntegrationConnectionStatus(client: IntegrationHubMutationRpcClient, input: SetIntegrationConnectionStatusInput): Promise<IntegrationConnection> {
   const parsedInput = SetIntegrationConnectionStatusInputSchema.parse(input);
-  const { data, error } = await client.rpc("set_integration_connection_status", {
+  const { data, error } = await client.rpc("request_integration_connection_status_change", {
     p_connection_id: parsedInput.connectionId,
     p_status: parsedInput.status,
     p_reason: parsedInput.reason,
@@ -142,7 +160,7 @@ export async function setIntegrationConnectionStatus(client: IntegrationHubMutat
     throw new IntegrationHubMutationError(classifyError(error.message), error.message);
   }
   if (!data || typeof data !== "object") {
-    throw new IntegrationHubMutationError("invalid_response", "set_integration_connection_status returned no row");
+    throw new IntegrationHubMutationError("invalid_response", "request_integration_connection_status_change returned no row");
   }
   return parseIntegrationConnection(data as Record<string, unknown>);
 }

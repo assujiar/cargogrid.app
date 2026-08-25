@@ -187,6 +187,8 @@ Reproduces Blueprint §30 verbatim as the binding incident/support contract:
 
 No runbook is invented beyond a trigger already named in this document or `08_*.md` — the catalogue grows only when a new trigger is architected, never speculatively.
 
+> **Amendment (2026-08-24, `ISS-2026-262` / `HDN-388`, Prompt 388 Documentation Handoff).** This table is Phase-0 planning prose, reproduced here unedited as history — it is **not** corrected in place, per this repository's own "never silently rewrite history" convention (the same discipline `BLOCKER_LEDGER.md` entries follow when a disposition changes after the fact). It should no longer be read as the current runbook catalogue. Reconciled against what was actually built, per `ISS-2026-262`'s own findings: `database-restore.md` matches exactly. `security-incident.md` and `secret-rotation.md` were built as `incident-response.md` and `key-rotation.md` — the same trigger/content anchor, a different filename. `deployment-rollback.md`, `migration-rollback.md`, `cutover-rollback.md`, `tenant-isolation-failure.md`, `webhook-endpoint-recovery.md`, and `job-dlq-requeue.md` were never built under any name — their own content anchors (§4.4's rollback table, §8.3's two reproduced procedures, the cross-tenant policy-test-failure alert, `08_*.md` §7.4's auto-disablement, and the `dead_letter`/admin-requeue flow respectively) are documented in this workstream's own prose and in `docs/build-log/`, but no dedicated `docs/runbooks/*.md` file exists for any of the six. `docs/runbooks/deployment-migration-guard.md` (new at `HDN-388`) now covers part of this gap — specifically the migration re-run-guard/teardown-batching facts a `deployment-rollback.md`/`migration-rollback.md` would have needed — but does not attempt the rollback-procedure or DLQ-requeue content the other five named files would have carried; those five remain genuinely unbuilt, unchanged disposition from `ISS-2026-262`. **`docs/runbooks/README.md` (new at `HDN-388`) is the authoritative, currently-accurate runbook index going forward** — consult it, not this table, for what actually exists in `docs/runbooks/` today.
+
 ## 9. Feature flags, capacity/scaling thresholds, and release artifacts
 
 ### 9.1 `ADR-CAND-ARCH-004` resolved — live-OLTP-to-replica/warehouse threshold
@@ -245,6 +247,14 @@ Sized 1–3 slices each, sequenced to `01_*.md`'s phase order and this document'
 | DR rehearsal program | 15 (hardening) | Quarterly rehearsal (§8.2, shared cadence with `10_*.md`'s `ADR-CAND-ARCH-023` slice — one program, not two) exercising §8.1/§8.3's restore/rollback procedures | Deployment pipeline + rollback runbooks, DR/backup rehearsal program (`10_*.md` §12) |
 | Reporting-replica graduation | 5 (or when §9.1's trigger fires) | Provision read replica per Tech Arch §6's Scale-up diagram once §9.1's measured trigger fires; not scheduled by phase number alone | Observability foundation (to measure the trigger), Reporting full (`05_*.md` §12) |
 | Release-artifact provenance tooling | 0 | Commit-SHA/pipeline-run tagging, SCA report publishing, release-notes template (§9.4) | CI pipeline foundation |
+
+> **Note (2026-08-24, `HDN-388`, Prompt 388 Documentation Handoff, Tier C).** Several rows above
+> cite `docs/runbooks/` filenames from §8.5's own planning table — `deployment-rollback.md`,
+> `security-incident.md`, `tenant-isolation-failure.md`, `job-dlq-requeue.md`,
+> `webhook-endpoint-recovery.md` — that were never built under those names; see §8.5's own dated
+> amendment note for the reconciliation. `docs/runbooks/README.md` is the current, authoritative
+> index of what actually exists in `docs/runbooks/` — consult it, not this table's own filenames,
+> for what to open.
 
 ## 12. Go-live blockers
 

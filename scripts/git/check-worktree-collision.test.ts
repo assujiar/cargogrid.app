@@ -33,8 +33,21 @@ describe("checkWorktreeCollision — against this repository's real state", () =
     assert.equal(typeof result.collisionRisk, "boolean");
   });
 
-  test("the current branch is reported as diverged from origin/main", () => {
+  test("the current branch is reported as diverged from origin/main", (t) => {
     const branch = currentBranch();
+    // HDN-387 (HDN-BLK-007): checkWorktreeCollision() only ever considers
+    // agent/*/claude/* branches as candidates (see listCandidateBranches()) --
+    // a checkout of `main` itself (the exact state CI runs a push to main in)
+    // never matches that glob and is never a candidate, so it can never be
+    // reported as "diverged from origin/main" by construction; asserting
+    // otherwise here was never a real regression guard for that branch, only
+    // for a genuine agent/claude session branch. Skip rather than fail: this
+    // is a fact about which branch happens to be checked out, not a property
+    // of checkWorktreeCollision()'s own divergence logic under test.
+    if (!branch.startsWith("agent/") && !branch.startsWith("claude/")) {
+      t.skip(`current branch "${branch}" is not an agent/*/claude/* candidate branch -- checkWorktreeCollision() never considers it, so it cannot be "diverged"`);
+      return;
+    }
     const result = checkWorktreeCollision();
     const current = result.divergedBranches.find((b) => b.branch === branch);
     assert.ok(current, `expected ${branch} to have commits ahead of origin/main`);
