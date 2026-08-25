@@ -3232,6 +3232,34 @@ This is the same *class* as the "CI-mirrors-hosted" property Step 15 §2.2 made 
 
 **Status `OPEN`**, Medium (no break observed; the risk is untested surface, not a known failure). **Not fixed at `RGL-392`**, whose charter is to freeze state, not change it — and the remedy is a real decision (pin Vercel to 22.x to match the gates, or widen the gates to test 24.x) rather than a mechanical edit. Owner: `RGL-399` (Staging Deployment), which owns environment configuration diagnosis, with `RGL-395` (Full CI Gate) owning any gate-matrix widening.
 
+### ISS-2026-288 — `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the parallel-lineage collision class that caused `ERR-2026-001..003` (found at `RGL-393`, Medium)
+
+Found by `RGL-393`'s branch audit, which diffed all 47 remote branches against `origin/main` for both commit-ahead count and non-`docs` content delta. **16 of the 17 branches carrying commits not on `main` have a zero-file non-`docs` delta** — stale but inert, their content already merged. One does not.
+
+`origin/claude/prompt-206-210-dpxtmu` (head `f364c15`, *"Add Finance Dashboard and Reports (FIN-213, CG-S9-FIN-024)"*, merge-base `6f4bd23` dated 2026-07-29) carries a **7-file, 939-insertion non-`docs` delta**. Crucially, **this is not lost work**: `main` already contains every one of those paths, the Finance Dashboard shipped, and nothing is missing from the release candidate. The risk is the opposite one — the branch's copies **differ substantially** from the merged ones:
+
+| File | Branch vs `main` |
+|---|---|
+| `supabase/migrations/20260729270000_create_finance_dashboard.sql` | **113 insertions / 236 deletions** |
+| `server/queries/finance-dashboard.ts` | 47 insertions / 108 deletions |
+| `app/(tenant)/[tenantSlug]/finance/dashboard/page.tsx` | 102 insertions / 199 deletions |
+
+So the branch holds a **divergent copy of an already-applied migration under an identical filename**. Merging it would either conflict or replace an applied migration's content in place — violating `AGENTS.md`'s "Never edit an applied migration" rule and reproducing precisely the parallel-lineage collision class that produced `ERR-2026-001`, `ERR-2026-002` and `ERR-2026-003` in this repository's own history. That history is why `ISS-2026-002`'s pre-flight collision check exists at all.
+
+**Status `OPEN`**, Medium — a dormant risk, not an active defect. Nothing has entered `RC-2026.08.25-1`: the freeze digests verified green by `pnpm run release:check-freeze` at `RGL-393` prove the candidate's migration and db-test sets are unchanged. **Deliberately not remediated at `RGL-393`**: the obvious fix is deleting the remote branch, and `AGENTS.md` forbids destructive Git operations on shared history without explicit authorization, which this lane does not hold. Not escalated to Prompt 393 §23's exception flow either — §23 names "unauthorized scope change", and an unmerged branch is a risk, not a change that crossed into the candidate. On the freeze watch list; must be re-checked at `RGL-410`. Owner: `RGL-404`, which holds the release-decision authority that could justify requesting branch deletion before promotion.
+
+### ISS-2026-289 — GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repository's own "pull request is mandatory" policy has never been enforceable (found at `RGL-393`, High)
+
+`RGL-393`'s ingress audit queried the GitHub API for all 47 branches. **Every one, `main` included, reports `"protected": false`.** No branch protection, no required reviewers, no required status checks, anywhere.
+
+`docs/architecture/11_DEVOPS_WORKSTREAM.md` §3 (reproducing Tech Arch §27.2) ratifies that "`main` is always production-ready; a pull request is mandatory for every code change". `docs/git/GIT_STRATEGY.md` §3 reproduces that policy and is admirably honest about not having implemented it: its scope note records that `PH0-087` "does **not** configure GitHub branch protection, required-status-checks, CODEOWNERS enforcement … those require external repository mutation, which is explicitly forbidden for this task." §4 then defers explicitly — squash-merge becomes the default "once GitHub branch protection is actually configured (`PH0-088`, CI/CD Baseline — out of scope here)".
+
+**`PH0-088` produced `.github/workflows/ci.yml` and did not configure branch protection either.** The deferral was handed forward once and then dropped, and nothing in the ~180 prompts since has re-checked it. `GIT_STRATEGY.md` was correct to refuse to "invent unavailable protection"; the defect is that the named follow-up owner never closed the loop.
+
+**Combined effect, which is why this is High rather than Medium.** With no protection on `main`, no required review, no required status checks, CI red anyway (`ISS-2026-286`), and Vercel auto-deploying `main` to production (`RGL-BLK-001`), a change can travel from a keyboard to the public production URL with **no review, no passing test, and no approval** — and this is true during a declared release freeze. Four of the six ingress paths `RGL-393` enumerated have no control at all.
+
+**Status `OPEN`**, High. **Not remediated at `RGL-393`**: configuring branch protection is a repository setting outside this repository's contents and outside this lane's authority — the same constraint `PH0-087` correctly recognized. **No new release blocker opened**, because `RGL-BLK-001` and `RGL-BLK-005` already carry the consequence between them and a duplicate would inflate the count without adding information. Owner: `RGL-404`, which holds the release-decision authority that would justify requesting the setting before promotion. Related in shape to `ISS-2026-284`: a control assumed in place at Phase 0 and never re-verified against the provider.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.

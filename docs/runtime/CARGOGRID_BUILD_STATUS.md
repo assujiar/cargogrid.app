@@ -2,7 +2,46 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-25 (`CG-S16-RGL-002` — **Release Candidate Freeze (Prompt 392)** —
+**Updated:** 2026-08-25 (`CG-S16-RGL-003` — **No-New-Feature Rule (Prompt 393)** —
+`COMPLETED`, first round, Tier C review pending. **Gate verdict `PARTIAL`**, recorded as such
+rather than `PASS` per the execution index's own rule that a gate which can only be
+half-enforced is not a passing gate. Not a promotion, a go decision, or a production/pilot/GA/
+market-ready claim. **Ships code**: 2 new script files, 1 `package.json` script line, 1 CI step —
+zero migration, zero schema change, zero product capability, zero new runtime dependency, frozen
+lockfile untouched. **Branch audit (all 47 remote branches, enumerated not sampled)**: 17 carry
+commits not on `main`; 16 have a zero-file non-`docs` delta and are stale but inert. One is not —
+`claude/prompt-206-210-dpxtmu` carries a 7-file/939-insertion delta including a **divergent copy
+of the already-applied migration `20260729270000_create_finance_dashboard.sql` under an identical
+filename** (113 insertions / 236 deletions vs `main`). Not lost work — `main` has all 7 paths —
+but one merge from the parallel-lineage collision class that produced `ERR-2026-001..003`.
+Registered `ISS-2026-288` and deliberately **not** deleted: destructive Git operations on shared
+history need authorization this lane does not hold. **Ingress audit, the load-bearing finding:
+all 47 branches including `main` report `"protected": false`** — no branch protection, no
+required reviewers, no required status checks anywhere. `GIT_STRATEGY.md` §3 deferred this
+explicitly from `PH0-087` to `PH0-088`, and `PH0-088` produced `ci.yml` without configuring it;
+nothing in the ~180 prompts since re-checked. Combined with red CI and the ungated Vercel `main`
+-> production auto-deploy, **4 of 6 ingress paths have no control at all**: a change can travel
+from a keyboard to the public production URL with no review, no passing test and no approval,
+during a declared freeze. Registered `ISS-2026-289` (High); **no duplicate blocker opened**, since
+`RGL-BLK-001`/`005` already carry the consequence. **Control added**: `pnpm run
+release:check-freeze` recomputes the migration-set, db-test-set and lockfile digests frozen at
+`RGL-392` and **fails closed** on drift, reporting expected vs actual per axis; guards the
+lockfile rather than `package.json`, a choice validated by accident when adding the npm script
+changed `package.json`, left the lockfile untouched, and the gate correctly stayed green.
+**The gate's very first run caught a real error in `RGL-392`'s own freeze record**: that digest
+covered only the 230 top-level files a shell glob matches, omitting
+`scripts/db-tests/fixtures/auth-schema-stub.sql` — loaded into every disposable database before
+any test runs, and the one file able to silently change every database test's meaning. Freeze
+**widened to 231 files, digest `4df2ae90…`**, disclosed in `RGL-392.md` §3 with the original
+figure left visible rather than edited in silently. **Standing constraint recorded for every
+later lane: no lane may report the candidate as sealed** — content drift is now detected, ingress
+is not controlled. Gates: `typecheck` 0; `lint` 0 errors/337 warnings (unchanged); `pnpm run
+test` **5452/5452** (5444 + 8 new); `next build` clean/249 routes; `release:check-freeze` green;
+all governance gates pass; `db:test` not re-run (no migration or db-test file touched, which the
+freeze gate itself proves); **CI still red** (`RGL-BLK-005`). Full detail:
+`docs/build-log/release-go-live/RGL-393.md`.)
+
+**Prior update:** 2026-08-25 (`CG-S16-RGL-002` — **Release Candidate Freeze (Prompt 392)** —
 `COMPLETED`, first round, Tier C review pending. **Sets `RC_FROZEN` for `RC-2026.08.25-1`.**
 Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. Zero code, zero
 migration, zero schema change — a freeze records state, it does not change it. Candidate commit

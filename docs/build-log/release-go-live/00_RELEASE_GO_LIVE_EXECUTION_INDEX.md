@@ -259,8 +259,8 @@ prompt's own header fixes; additional required outputs are named where the promp
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | `CG-S16-RGL-001` | `RGL-391` | Release Go-Live WBS Runtime Kickoff | `CG-S15-HDN-021` | Repository only | this file | none (kickoff may not approve anything) | `git revert` this commit | **`COMPLETED`** this checkpoint |
 | 2 | `CG-S16-RGL-002` | `RGL-392` | Release Candidate Freeze | 1 | Repository only | `RGL-392.md` | **`RC_FROZEN` set** for `RC-2026.08.25-1` | `git revert`; re-freeze | **`COMPLETED`**, Tier C pending |
-| 3 | `CG-S16-RGL-003` | `RGL-393` | No-New-Feature Rule | 2 | Repository + GitHub | `RGL-393.md` | none | `git revert` | **`READY`** |
-| 4 | `CG-S16-RGL-004` | `RGL-394` | Defect Triage | 3 | Repository + ledgers | `RGL-394.md`, `RELEASE_DEFECT_LEDGER.md` | severity rulings binding on `RGL-404` | `git revert` | `BLOCKED` on 3 |
+| 3 | `CG-S16-RGL-003` | `RGL-393` | No-New-Feature Rule | 2 | Repository + GitHub | `RGL-393.md` | gate verdict **`PARTIAL`** | `git revert` | **`COMPLETED`**, Tier C pending |
+| 4 | `CG-S16-RGL-004` | `RGL-394` | Defect Triage | 3 | Repository + ledgers | `RGL-394.md`, `RELEASE_DEFECT_LEDGER.md` | severity rulings binding on `RGL-404` | `git revert` | **`READY`** |
 | 5 | `CG-S16-RGL-005` | `RGL-395` | Full CI Gate | 4 | CI (real) + local | `RGL-395.md` | none | `git revert` | `BLOCKED` on 4 |
 | 6 | `CG-S16-RGL-006` | `RGL-396` | Clean Database Rebuild | 5 | Disposable Postgres (real) | `RGL-396.md` | none | disposable target; nothing to roll back | `BLOCKED` on 5 |
 | 7 | `CG-S16-RGL-007` | `RGL-397` | Migration Validation | 6 | Disposable Postgres (real) + live schema read-only | `RGL-397.md` | none | disposable target | `BLOCKED` on 6 |

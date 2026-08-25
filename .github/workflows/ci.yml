@@ -113,6 +113,16 @@ jobs:
       - name: Threat model register check (docs/security/THREAT_MODEL.md)
         run: pnpm run threat-model:check
 
+      # RGL-393 (CG-S16-RGL-003, No-New-Feature Rule): enforces the release-candidate
+      # freeze CG-S16-RGL-002 recorded. Fails closed if the migration set, db-test set
+      # or resolved dependency set drifts from RC-2026.08.25-1's frozen digests.
+      # Scope note, deliberately explicit: this is a repository-CONTENT gate. It cannot
+      # police a direct push to `main` (unprotected — RGL-393.md §3) nor the Vercel
+      # `main` -> production auto-deploy (RGL-BLK-001). A pass here does not mean the
+      # candidate is sealed, and no lane may report it as though it does.
+      - name: Release-candidate freeze check (docs/build-log/release-go-live/RGL-392.md)
+        run: pnpm run release:check-freeze
+
       - name: Branch name check (PR only)
         if: github.event_name == 'pull_request'
         run: node --experimental-strip-types scripts/git/check-branch-name.ts "${{ github.head_ref }}"
