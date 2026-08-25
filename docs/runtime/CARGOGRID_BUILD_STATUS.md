@@ -2,7 +2,61 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-24 (`CG-S15-HDN-021` — **Closure Verification (Prompt 389)** —
+**Updated:** 2026-08-25 (`CG-S16-RGL-001` — **Release Go-Live WBS Runtime Kickoff (Prompt 391)**
+— `COMPLETED`, first round, Tier C review pending. **Sets `RELEASE_GO_LIVE_IN_PROGRESS`. First
+runtime task of Step 16 (390-412).** Not a production, pilot, GA, or market-ready claim
+(RPD-001/034/036) — `RELEASE_GO_LIVE_VERIFIED` may only ever be set by Prompt 412. Zero code,
+zero migration, zero schema change; no file outside `docs/` touched. Entry gate
+`FULL_SYSTEM_HARDENING_VERIFIED` confirmed by direct read of four independent artifacts rather
+than re-citation; pre-flight collision check (`ISS-2026-002`) **executed** — 0 open PRs, 47
+branches enumerated, no competing `RGL-*` work anywhere. Produced three Step 16 artifacts:
+`docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` (the resume contract —
+checkpoint freeze, entry verdict, 22-row WBS with owner/dependency/environment/evidence/approval/
+rollback per row, the 11 release states, an environment matrix derived from **live provider
+state**, the severity and no-go policy, a 5-condition accepted-risk test, execution posture,
+rollback/communication/hypercare/PIR plans, runbook checklist, Step 17 eligibility criteria),
+`BLOCKER_LEDGER.md` (4 entries registered, **0 ruled** — this kickoff has no acceptance
+authority), and `RGL-391.md`. Only `CG-S16-RGL-002` is `READY`; the other 20 rows are `BLOCKED`
+on their own sequential upstream — Step 16 is on `AGENTS.md`'s **never-batch** list, so batch
+size is 1 for all 22 lanes. **Load-bearing finding: Step 15's frozen "Deployed environment:
+None" was stale, and had been for 13 days across 21 `VERIFIED` checkpoints** — a Vercel project
+created 2026-08-10 auto-deploys `main` to production, ungated; production is publicly reachable
+unauthenticated and **degraded** (`/api/ready` 503 `database_unreachable`, `/api/v1/status`
+500); 14 of the 20 most recent deployments are `ERROR`, including a production build that left
+production broken ~12 hours during Step 15, unnoticed precisely because the frozen claim said
+the environment did not exist. Root cause is process, not code review: **no checkpoint ever
+re-verified the claim against the provider.** Registered `RGL-BLK-001` (Critical — the ungated
+auto-deploy defeats Step 16's own non-negotiable "no production deployment without recorded go
+decision" gate and is **still armed** for the merge that closes this range), `RGL-BLK-002`
+(High), `RGL-BLK-003` (High aggregate — the 17 inherited Step 15 `ACCEPTED_EXCEPTION` High items
+were accepted against Step 15's *closure* bar, never a *production* bar, and may not be carried
+into a go decision by reference), and `ISS-2026-284`. **Second finding, found by running the
+gate rather than reading code: `RGL-BLK-004`/`ISS-2026-285`** — `app._calc_vendor_kpi_rate_validity`'s
+denominator `generate_series(start::date, (end - 1 day)::date, 1 day)` collapses to an empty
+series for sub-24-hour windows, so `is_computable` is false, **contradicting the function's own
+`comment on function` guarantee that "window_days is always > 0"**; empirically reproduced
+across all 24 hours (dead band at hours 01/02/03). Pre-existing (migration dated 2026-07-30) and
+therefore registered with owner `RGL-394` rather than repaired inside a zero-code kickoff.
+**Third finding, and the most serious for a release range: `RGL-BLK-005`/`ISS-2026-286` (Critical proposed) — CI has failed on every one of its 30 most recent runs since at least 2026-08-10**, found by querying the GitHub Actions API rather than reading the workflow file. The `db` job aborts at test file **34 of 230** (`advanced-tms-wms-outbound.sql:850`): `pg_read_file()` reads the *server's* filesystem while the race helper, launched via psql's `\!`, writes to the *client's* — the same host locally, a Docker service container in CI. Consequence: **196 database test files have had zero CI enforcement for the whole window**, while 21 Step 15 checkpoints reported green gates. Both are true — those gates were green *locally*; the *CI* gate, which Prompt 412 item 4 actually requires, was red throughout, and nothing in the reporting chain distinguished the two. No product defect is proven (the 196 files pass locally), so this is a release-gate-integrity finding, not a correctness one. Owner `RGL-395`. 
+**Gates, run fresh on the frozen tree and reported as they came out:** `pnpm install
+--frozen-lockfile` clean; `typecheck` **0**; `lint` **0 errors / 337 warnings**; `pnpm run test`
+**5443/5444** pre-commit (the known checkpoint-state-dependent `checkWorktreeCollision` class —
+the branch had no commits ahead of `origin/main`) then **5444/5444** post-commit; `pnpm exec
+next build` clean, 249 route entries; `docs:check`/`security:check`/`standards:check`/
+`git:check-paths` all passed; **`bash scripts/db-tests/run.sh` FAILED — 202 of 230 files passed,
+1 failed, 27 never ran** (`set -euo pipefail` aborts the suite), `ALL PASSED` never printed.
+**Step 15's `230/230` figure is explicitly NOT carried forward** — it was true at the hour it
+ran, which is exactly what Step 15's own day-of-week disclosures kept warning about. `RGL-392`
+must freeze a **red** test matrix. **CI (GitHub Actions), `main` @ `2670cb5`: FAILED**, as on
+all 30 most recent runs — no lane may report a CI gate as passing on the strength of a local
+run. Day/hour disclosure: Tuesday 2026-08-25 ~02:15-02:45 UTC; the
+day-of-week dimension of the registered HRIS flake class was exercised and did not fire, while
+the wall-clock dimension **did** fire, in a new place. Full detail:
+`docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md`; build log:
+`docs/build-log/release-go-live/RGL-391.md`; ledger record: `docs/runtime/TASK_LEDGER.md`'s
+`CG-S16-RGL-001` row.)
+
+**Prior update:** 2026-08-24 (`CG-S15-HDN-021` — **Closure Verification (Prompt 389)** —
 `VERIFIED`. **Sets `FULL_SYSTEM_HARDENING_VERIFIED`. Step 15 (Full-System Hardening,
 Prompts 368-389) is closed.** Not a production, pilot, GA, or market-ready claim
 (RPD-001/034/036). 4 independent parallel closure-verification lenses ran against the
@@ -956,7 +1010,7 @@ Not a production/pilot/GA/market-ready claim (RPD-001/034/036). Full detail:
 | HEAD | this checkpoint's commit |
 | Last known good commit (both lineages agree, pre-divergence) | `origin/main`@`27389a4` (PR #8, Prompt 45) — historical; current last-known-good is `ATW-029`'s own commit |
 | Schema/migration head | **162 migrations applied** (+1 this checkpoint: `20260730620000_extend_commercial_vendor_rate_for_procurement.sql`). |
-| Latest environment verified | **Corrected 2026-08-23 at `CG-S15-HDN-001` (Prompt 369) as part of Step 15's own state freeze.** A **live Supabase project now exists and is fully migrated** — `cargogrid.app` (`awdlicmwzdxquopwtcfd`), ap-northeast-1, PostgreSQL 17.6, 306/306 migrations applied cleanly with `supabase_migrations.schema_migrations` in sync with `supabase/migrations/`; 603 tables, ~2,900 routines, RLS enabled on 568 tables with 448 policies (`docs/build-log/phase-09/LIVE_SUPABASE_MIGRATION_REPORT.md`). The prior text here — "no live Supabase project exists yet either" — was stale and is superseded. **What has NOT changed:** a migrated database is not a running system. There is still **no deployed environment** (`preflight` correctly fails closed), no deploy pipeline, and **no real sign-in flow** — both portals' `unauthenticated`/fail-safe paths remain verified directly against an unreachable backend, and a real sign-in flow remains `NOT_RUN`. Local sandbox (read-only) plus a disposable local Postgres+PostGIS remain the harness `bash scripts/db-tests/run.sh` runs against. This distinction governs every Step 15 gate written for a running system — see `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` §10 |
+| Latest environment verified | **Corrected 2026-08-23 at `CG-S15-HDN-001` (Prompt 369) as part of Step 15's own state freeze.** A **live Supabase project now exists and is fully migrated** — `cargogrid.app` (`awdlicmwzdxquopwtcfd`), ap-northeast-1, PostgreSQL 17.6, 306/306 migrations applied cleanly with `supabase_migrations.schema_migrations` in sync with `supabase/migrations/`; 603 tables, ~2,900 routines, RLS enabled on 568 tables with 448 policies (`docs/build-log/phase-09/LIVE_SUPABASE_MIGRATION_REPORT.md`). The prior text here — "no live Supabase project exists yet either" — was stale and is superseded. **What has NOT changed:** a migrated database is not a running system. There is still **no deployed environment** (`preflight` correctly fails closed), no deploy pipeline, and **no real sign-in flow** — both portals' `unauthenticated`/fail-safe paths remain verified directly against an unreachable backend, and a real sign-in flow remains `NOT_RUN`. Local sandbox (read-only) plus a disposable local Postgres+PostGIS remain the harness `bash scripts/db-tests/run.sh` runs against. This distinction governs every Step 15 gate written for a running system — see `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` §10. **SUPERSEDED IN PART, 2026-08-25 at `CG-S16-RGL-001` (Prompt 391), Step 16's own state freeze: the "no deployed environment" half of the sentence above is stale, and had been for 13 days.** A Vercel project `cargogrid-app` (`prj_9ND1BsfbppHiqeKrSEldYh8xbC68`, team `saiki-tech`), created 2026-08-10 and Git-linked to this repository, **auto-deploys `main` to `target: production`**; the current `main` HEAD `2670cb5` carries a `READY` production deployment; production is **publicly reachable unauthenticated** (`GET /login` → 200, real rendered HTML) and **degraded** (`/api/ready` → 503 `database_unreachable`, `/api/v1/status` → 500). There is still no *CI* deploy pipeline (`.github/workflows/ci.yml` has no deploy job — deployment is Vercel's own Git integration, outside this repository's CI), still no staging tier and no UAT tier, and a real sign-in flow is still `NOT_RUN`. Registered as `RGL-BLK-001`/`RGL-BLK-002` in `docs/build-log/release-go-live/BLOCKER_LEDGER.md` and as `ISS-2026-284`; full evidence at `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §2.1, which supersedes Step 15 §10 for Step 16 purposes |
 | Last full green gate | `CG-S11-PRC-006` -- typecheck clean; lint 0 errors (pre-existing warnings only); `node --test` **3277/3277**; `pnpm run db:test` **ALL PASSED** (including the pre-existing, untouched COM-149 `commercial-rate-cost-lookup.sql` suite, confirmed zero regression); `next build` **PASS**; all governance gates pass. Independently re-run fresh by the orchestrating session this checkpoint, matching the fix agent's own reported numbers exactly -- this fix agent, briefed on both Prompt 253's and 254's own process lessons, produced a complete final report and ran `next build` as its own literal last step. |
 | **Active blockers** | **None for Phase 6.** Zero `OPEN` Critical/High-severity issue anywhere (directly, exhaustively re-confirmed against the live `KNOWN_ISSUES.md` issue index). Ten Medium/Low issues remain `OPEN` (`ISS-2026-013`, `ISS-2026-015`, `ISS-2026-018`, `ISS-2026-019`, `ISS-2026-031` -- carried unchanged from Phase 5; `ISS-2026-036` -- Low-Medium accessibility defect, registered at Prompt 251; `ISS-2026-037` -- Medium, denied-privileged-action attempts on vendor financial data are not audited, registered at Prompt 254; `ISS-2026-038`/`039` -- Medium, self-approval not blocked on rate approval / no tax dimension on vendor rates, both registered at Prompt 255; `ISS-2026-040` -- Medium, a repository-wide RBAC-evaluator structural observation surfaced at Prompt 255), each individually reasoned and non-blocking per `docs/build-log/phase-06/00_PROCUREMENT_VENDOR_WBS.md` §7. |
 | Next eligible task | **`CG-S11-PRC-007`** (Prompt 256, Sourcing) — dependency-clean, but **outside** the now fully-spent "lanjut prompt 249-255" named-range authorization. **Requires fresh, separate, explicit operator authorization before it may begin.** |
