@@ -1658,6 +1658,16 @@ operating procedure can account for it, not discovered in production.
 5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
 `Step 16`.
 
+**Re-examined and escalated at `RGL-404` (Go/No-Go Report), 2026-08-25.** Against a production
+go-live bar (not Step 15's own closure bar this `ACCEPTED_EXCEPTION` ruling was made against),
+this finding is a live-forced, deterministic **financial mis-posting** — the exact phrase
+`docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §8.1 uses to define
+**Critical**, not High. Registered `RGL-BLK-009` (Critical, `OPEN`, **not accepted** — Critical is
+never risk-accepted at any authority per §8.1), one of two independently-sufficient reasons
+`RGL-404` ruled `NO_GO` this checkpoint. Full ruling:
+`docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-009`,
+`docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
+
 ### ISS-2026-200 — the 5 "hash-chain" transaction-lineage triggers are standalone content fingerprints, not a genuine tamper-evident chain, and no reconciliation ever recomputes or compares them (found at `CG-S15-HDN-007`, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-017`)
 
 Found by this checkpoint's own investigation lens (hash-chain triggers and historical
@@ -3071,6 +3081,16 @@ Originally reported at the first round as an unreproduced anomaly (2 identical c
 **The real risk**: `HDN-384`'s own live security-incident drill diagnosed and "resolved" a simulated compromise by calling `app.revoke_all_actor_sessions`, `app.revoke_role_assignment`, and `app.revoke_ip_allowlist_entry` together, and confirmed lockout — but the lockout traced entirely to the role/IP-allowlist revocation, not the session revocation. A responder who revokes only sessions — a natural first reading of "cut off the attacker's access" for anyone who has not read this specific finding — would leave a still-valid JWT with full functional access indefinitely, since the underlying role assignment/tenant membership remains intact. This directly contradicts `docs/runbooks/incident-response.md`'s own stated mechanism and could lead a real incident responder to believe an incident is resolved when it is not.
 
 **Status `OPEN`**, High severity (a real, live-proved gap between a documented security control's own stated effect and its actual, verified-zero enforcement effect — the kind of gap that could cause a real incident to be declared resolved while the attacker retains full access). **Not fixed by this checkpoint** — either wire `app.user_sessions.status` into a real enforcement path (e.g. a session-validity check inside `app.evaluate_permission` or a dedicated session-gate RPC), or correct `incident-response.md`'s own claim and re-order its resolution steps to lead with role/membership revocation as the actually-enforced primary lockout mechanism, demoting session revocation to audit-trail/bookkeeping status. Disclosed and partially addressed (re-ordered guidance) in `docs/runbooks/disaster-recovery.md` §4 item 2 in the interim. Owner: a dedicated future task.
+
+**Re-examined at `RGL-404` (Go/No-Go Report), 2026-08-25.** Against a production go-live bar,
+this finding is not routinely acceptable as residual risk: `docs/runbooks/incident-response.md`
+actively documents session revocation as a working containment step, when it is not — a false
+safety claim an incident responder could reasonably rely on. Registered `RGL-BLK-010` (High,
+`OPEN`, not accepted without a fix or a corrected runbook) — kept below `RGL-BLK-009`'s own
+Critical escalation since the finding does not grant access, it fails to remove already-granted
+access, but flagged as needing resolution before real users exist ("tenant zero" gate). Full
+ruling: `docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-010`,
+`docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
 
 ### ISS-2026-265 — the composed in-place restore procedure's own `TRUNCATE` step silently bypasses 9 security/integrity row-level triggers with zero audit trail, independent of `--disable-triggers` (found at `HDN-384` Disaster Recovery Rehearsal Tier C review, schema-wide completeness sweep + attack-surface lenses, both independently live-reproduced, `OPEN`, High, owner a dedicated future task)
 
