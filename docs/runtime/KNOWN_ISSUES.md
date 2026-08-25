@@ -3532,6 +3532,34 @@ trigger with zero credentials (a wider reach than `ISS-2026-295`'s "any presente
 `RGL-404`/`RGL-015` must treat this, alongside `ISS-2026-295`, as an outstanding "fix ready, not
 yet deployed" item.
 
+### ISS-2026-297 — `GET /api/ready`'s live production p50 latency (837ms) exceeds the 500ms common-REST-query budget, though its max (1,698ms) stays under the 2s complex-query ceiling (found at `RGL-403`, Performance Evidence, 2026-08-25, Low)
+
+Found by `RGL-403`'s own charter — the first real live-deployed-target latency measurement this
+Step 16 range has taken. 10 read-only `curl` samples each against 3 production endpoints:
+`GET /api/health` (liveness only, zero dependency check) measured p50=195ms/p95=243ms;
+`GET /api/v1/status` (no-auth denial path, full gateway short-circuit) measured
+p50=463ms/p95=838ms; **`GET /api/ready` (readiness — calls `app.ping()` via the service-role
+client, a real Supabase round trip) measured p50=837ms/p95=1,698ms/max=1,698ms**.
+
+**Applicable budget** (`docs/architecture/08_API_INTEGRATION_WORKSTREAM.md` §12): "Common
+REST/GraphQL query: 500ms (query-plan threshold)"; "Complex report query: 2s." `/api/health` and
+`/api/v1/status` both sit inside the 500ms budget at p50; `/api/ready`'s p50 exceeds it, though its
+max stays under the 2s ceiling. The ~640ms delta versus `/api/health` (which performs zero database
+work) is attributable to the real Supabase round trip `app.ping()` performs — plausibly a
+cross-region call (Vercel's own deployment region vs. Supabase `ap-northeast-1`), not independently
+confirmed against a region-latency baseline, since no tool in this session's toolset can measure
+that directly.
+
+**Not registered as a blocker.** `/api/ready` is an internal orchestrator health probe, not a
+customer-facing capability named in Blueprint §21.1's own 19-row performance-target table; the
+sample size (n=10) is too small to be a confident SLA measurement; every probe returned a
+functionally correct `200 {"status":"ok"}`, no failure occurred.
+
+**Status `OPEN`, Severity Low** — a genuine, disclosed observation, not a fabricated pass and not
+inflated into a blocker it does not rise to. Owner: `RGL-404`/`RGL-406` (Post-Deployment
+Validation), for awareness at go/no-go and re-measurement after `RGL-015` actually deploys this
+branch to production. Full detail: `docs/build-log/release-go-live/RGL-403.md` §3.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
