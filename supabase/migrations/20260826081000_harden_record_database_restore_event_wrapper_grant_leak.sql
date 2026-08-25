@@ -1,0 +1,34 @@
+-- Self-caught, live security regression in this checkpoint's own prior work (Step 16
+-- historical-issue-backlog remediation): 20260826060000_harden_database_restore_audit_
+-- trail.sql's own public.record_database_restore_event wrapper was created without
+-- explicitly revoking Supabase's own platform-level default privilege ("ALTER DEFAULT
+-- PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,
+-- authenticated, service_role") -- the EXACT defect class 20260826010000_harden_
+-- public_api_data_wrappers_tierc_fixes.sql's own Finding 2 already documented and fixed
+-- once for the original 2367-wrapper Option 2 layer, and that same migration's own
+-- header explicitly amended the standing convention for every future wrapper: "a new
+-- public.* wrapper function must ALWAYS explicitly `revoke execute on function
+-- public.<name>(...) from anon, authenticated, service_role, public` before granting
+-- back exactly the roles app.<name> itself grants."
+--
+-- This checkpoint's own migration only did `revoke ... from public`, not the amended
+-- from-anon-authenticated-service_role-explicitly form -- reproducing the exact gap the
+-- amended convention exists to prevent. Live-confirmed via has_function_privilege before
+-- this fix: both `anon` and `authenticated` could call this SECURITY DEFINER function
+-- directly, writing arbitrary, fabricated app.audit_logs rows claiming a database
+-- restore occurred -- a real, live, unauthenticated write path into the audit trail.
+--
+-- Fixed live already, immediately upon discovery, via a direct `apply_migration` call
+-- (`harden_record_database_restore_event_wrapper_grant_leak`) before this file was even
+-- written -- disclosed here, in the repository's own migration history, for completeness
+-- and to keep supabase/migrations/ and the live hosted project in sync, per this
+-- repository's own "never edit an applied migration" convention (20260826060000 itself
+-- is not touched).
+--
+-- Found while drafting the NEXT migration (ISS-2026-254,
+-- 20260826080000_harden_restore_security_state_reconciliation.sql), which creates 2 more
+-- new public.* wrappers -- re-reading the Tier C fix's own amended convention before
+-- writing those caught this pre-existing gap in the ALREADY-APPLIED 20260826060000
+-- first. 20260826080000 itself already uses the correct, amended revoke pattern.
+
+revoke execute on function public.record_database_restore_event(p_actor_label text, p_scope text, p_tables_truncated integer, p_reason text, p_actor_auth_user_id uuid) from anon, authenticated;

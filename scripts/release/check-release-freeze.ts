@@ -316,6 +316,69 @@ import { readFileSync } from "node:fs";
  * applied to the live hosted project via `apply_migration` before this local
  * run (zero existing rows in `app.employees`/`app.import_staging_rows`,
  * confirmed live before applying).
+ *
+ * AMENDED 2026-08-25 (tenth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-
+ * backlog remediation section, item 7: `ISS-2026-254` (partial, disclosed as
+ * voluntary) plus two self-caught security regressions in this same
+ * checkpoint's own prior work, registered as `ISS-2026-298` and
+ * `ISS-2026-299`. Three migrations added (344 files total):
+ * `20260826080000_harden_restore_security_state_reconciliation.sql` creates
+ * `app.capture_security_state_snapshot`/`app.detect_reverted_security_state`
+ * plus `public.security_state_snapshots` and their matching Option 2
+ * wrappers -- a voluntary pre/post-restore compensating control for
+ * `ISS-2026-254`, explicitly disclosed as not closing the "snapshot never
+ * taken" case (no mechanism forces the snapshot step, since the actual
+ * restore procedure runs entirely outside any RPC this schema controls).
+ * `20260826081000_harden_record_database_restore_event_wrapper_grant_leak.sql`
+ * is a repository-side record of a fix already applied live via a direct
+ * `apply_migration` call, before this file was written: the prior
+ * `20260826060000` migration's own `public.record_database_restore_event`
+ * wrapper had used a bare `revoke ... from public`, missing the amended,
+ * explicitly-named-roles form (`revoke ... from anon, authenticated,
+ * service_role, public`) the `20260826010000` Tier C fix's own convention
+ * requires -- live-confirmed exploitable (`anon`/`authenticated` could call
+ * this `SECURITY DEFINER` audit-writing function directly) before the fix,
+ * live-reconfirmed closed after. `20260826090000_harden_security_state_
+ * snapshots_table_privilege_leak.sql` is a second, worse self-caught
+ * regression, found while live-verifying `20260826080000`'s own security
+ * posture: `public.security_state_snapshots` is the first table this
+ * repository has ever created directly in `public` schema, and it shipped
+ * without RLS or a revoke of Supabase's own default table-privilege
+ * bootstrap -- live-confirmed `anon`/`authenticated` held direct
+ * SELECT/INSERT on it (the identical bootstrap-grant class `ISS-2026-298`
+ * found for functions, reproduced here for a table), fixed live via a
+ * direct `apply_migration` call before this file was written, applying this
+ * repository's own standard `app.*`-table security pattern (RLS enabled,
+ * fail-closed with zero policies; `anon`/`authenticated` explicitly
+ * revoked). Neither `20260826060000` nor `20260826080000` is edited, per
+ * this repository's own "never edit an applied migration" rule.
+ * dbTestSetSha256 changed (an existing file widened, no file added or
+ * removed): `scripts/db-tests/database-restore-lock.sql` gained 2 new
+ * regression blocks -- one proving `capture_security_state_snapshot`
+ * correctly captures an active legal hold/revoked API key/disabled webhook
+ * endpoint/suspended user/suspended membership, that
+ * `detect_reverted_security_state` correctly reports all 5 by category
+ * after each is directly reverted under `session_replication_role =
+ * replica` (matching pg_restore --disable-triggers, since app.principal_
+ * memberships' own transition-enforcement trigger would otherwise reject a
+ * raw revoked-to-active UPDATE a real restore's data load never routes
+ * through triggers to begin with), that a same-point-in-time snapshot
+ * reports nothing, and that an unknown snapshot id is rejected; a second
+ * proving `public.security_state_snapshots` carries RLS enabled and zero
+ * anon/authenticated table privilege. Re-verified via a fresh full local
+ * db-test suite run (344 migrations, 233 runner files, ALL PASSED) before
+ * this digest was changed (earlier attempts surfaced and fixed, before the
+ * digest was touched: a stale `secret_value` column reference this new
+ * test's own webhook_endpoints insert had missed after `ISS-2026-257`'s
+ * rename to `secret_value_encrypted`; a missing `app.integration_secrets_
+ * encryption_key` test GUC this file had never needed before; and the
+ * principal_memberships transition-trigger rejection above). All 3
+ * migrations' live security posture was independently verified after
+ * applying (`has_function_privilege` for the 3 function wrappers,
+ * `has_table_privilege`/`pg_class.relrowsecurity` for the table) before
+ * this digest was changed -- the mitigation practice `ISS-2026-298`
+ * established, now applied to both functions and tables.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -366,7 +429,15 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-269 fix (341
   // files: +1, 20260826070000_harden_employee_import_duplicate_detection.sql).
   // See the class-level doc comment above.
-  migrationSetSha256: "129a7340fe49515b3c11aa34a604cc79446f4848c82eece13772124b85fc2c4a",
+  // History: 129a7340fe49515b3c11aa34a604cc79446f4848c82eece13772124b85fc2c4a
+  // (341 files, ninth-pass amendment above). Superseded 2026-08-25 (tenth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-254/
+  // ISS-2026-298/ISS-2026-299 fix (344 files: +3, 20260826080000_harden_
+  // restore_security_state_reconciliation.sql, 20260826081000_harden_record_
+  // database_restore_event_wrapper_grant_leak.sql, and 20260826090000_harden_
+  // security_state_snapshots_table_privilege_leak.sql). See the class-level
+  // doc comment above.
+  migrationSetSha256: "15c04e9af0c803e83ed66f188f1d16109275afc97476776e44720b73916f5a16",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -415,7 +486,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-269 fix (233
   // files unchanged in count -- hris-employee-master.sql widened). See the
   // class-level doc comment above.
-  dbTestSetSha256: "e135017ae8d8ce9d6a0fa9782cca9143fe1c24a7534372b2b5a2be8714d75d65",
+  // History: e135017ae8d8ce9d6a0fa9782cca9143fe1c24a7534372b2b5a2be8714d75d65
+  // (233 files, ninth-pass amendment above). Superseded 2026-08-25 (tenth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-254/
+  // ISS-2026-299 fix (233 files unchanged in count --
+  // database-restore-lock.sql widened twice, no file added or removed). See
+  // the class-level doc comment above.
+  dbTestSetSha256: "44f48a6bd042c6304810db54d8bd24157fb46a0a94d82a79530337c75ca6d26b",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
