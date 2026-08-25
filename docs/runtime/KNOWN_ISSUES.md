@@ -3403,6 +3403,38 @@ drift" gap `ISS-2026-290` already registered — this finding is further, strong
 not a separate root cause. Owner for a durable fix remains `RGL-395`/`RGL-404` per that entry;
 not attempted here, out of this checkpoint's own bounded scope.
 
+### ISS-2026-294 — One orphaned, unlinked `auth.users` row exists on the live hosted Supabase project — synthetic (not real customer PII), no tenant membership, no access path, but a stray artifact that does not belong in production (found at `RGL-398`, Seed Validation, 2026-08-25, Low)
+
+Found by `RGL-398`'s own charter — verifying no tenant-real data exists anywhere, including live
+production itself, not only source control. `select count(*) from auth.users` on
+`awdlicmwzdxquopwtcfd` returns **1**, while every tenant-scoped table this session queried
+(`app.tenants`, `app.tenant_user_identities`, `app.accounts`, `app.job_orders`,
+`app.finance_journals`) returns **0** — the live project is otherwise genuinely empty, the
+expected, safe state for a pre-launch release candidate.
+
+**Not real customer data.** The row's email domain is `cargogrid.net` (a placeholder domain, not
+the product's own `cargogrid.app` domain and not a real customer's), `raw_user_meta_data` is an
+empty object, and — critically — it holds **zero rows in `app.tenant_user_identities`**, meaning
+this identity has no tenant membership and therefore no path into any application data whatsoever
+under this schema's own access model. `created_at` is `2026-08-25 04:58:25 UTC`, inside this same
+session's own working window, before this checkpoint began — most likely a leftover artifact from
+earlier live-forced authenticated-session testing during the `RGL-BLK-002` remediation or a nearby
+checkpoint this same day, though no build log this session explicitly records creating it, so the
+exact origin could not be reconstructed with certainty from available context.
+
+**Not fixed at this checkpoint, deliberately.** Prompt 398 (`CG-S16-RGL-008`) §12 explicitly
+forbids "production mutation... in this prompt" — Seed Validation's own charter is to validate and
+report, not to mutate live data, even a stray non-sensitive row. Deleting it is a one-line,
+low-risk cleanup (`delete from auth.users where id = '2d0b7791-...'`, cascades to nothing since no
+`tenant_user_identities` row references it), but is left for a checkpoint actually authorized to
+mutate production — `RGL-015` (Production Deployment) or an operator-directed action — rather than
+taken here under a prompt that forbids it.
+
+**Status `OPEN`**, Severity **Low** — no tenant-real data, no access path, no security impact; the
+only real content is that production's `auth.users` table is not perfectly empty, which is a
+hygiene finding, not a defect. Owner: whichever checkpoint next has authorized production-mutation
+scope (`RGL-015` or later, at operator discretion).
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.

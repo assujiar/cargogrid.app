@@ -7942,3 +7942,22 @@ corrections below. Corrected rather than left standing.*
 | Status | **`COMPLETED`** — first round. Tier C review required before `VERIFIED`. Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. `RGL-BLK-001`/`003` remain open and undisposed, both `RGL-404`'s. Next eligible prompt: `CG-S16-RGL-008` (Prompt 398, Seed Validation) |
 | Date | 2026-08-25 |
 
+### CHG-2026-239 — Seed Validation: source-control seed/fixture data confirmed synthetic repository-wide; live production confirmed genuinely empty of tenant data except one orphaned, unlinked `auth.users` row, deliberately left unfixed under this prompt's own production-mutation ban (Step 16, Prompt 398)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-008` (Prompt 398, Seed Validation), package document `CG-AABPP-RGL-398`, package version `0.17.0`. Continuing the operator's own "jalankan semua step 16" instruction, sequentially from `RGL-397`. |
+| Change type | DOCS ONLY. 1 new build log, 4 standing-doc updates. Zero migration, zero application/TypeScript code, zero live database mutation |
+| Authorization | Operator instruction to run the full remaining Step 16 range, executed one task at a time per `AGENTS.md`'s never-batch rule |
+| Build process | Scanned every seed/fixture `.sql` source under `scripts/db-tests/`, `scripts/load-tests/`, and `supabase/migrations/` for realistic tenant PII (email domains, Indonesian NPWP/NIK-shaped literals). Ran `pnpm run data-classification:check`. Queried live production directly for tenant-scoped row counts, per Prompt 398 §4's own "production bootstrap... without leaking tenant-real data" wording, not only source control |
+| Findings and disposition | Source control: every non-safe email domain uses the RFC 2606-reserved `.test` TLD; NPWP-shaped literals are sequential/repeating placeholders; zero NIK-shaped literals anywhere — all synthetic. Live: every tenant-scoped table (`tenants`, `tenant_user_identities`, `accounts`, `job_orders`, `finance_journals`) genuinely empty. **One finding**: `auth.users` holds 1 orphaned row — synthetic `cargogrid.net` domain, empty metadata, zero tenant-membership linkage (no access path), created inside this session's own working window. Registered `ISS-2026-294`, Low severity |
+| Files edited | `docs/build-log/release-go-live/RGL-398.md` (new); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-294` new, `OPEN`); `docs/runtime/TASK_LEDGER.md`; `docs/runtime/CARGOGRID_BUILD_STATUS.md`; `docs/runtime/HANDOFF.md` |
+| Migration | None. No live database mutation performed or attempted |
+| Risk | None — this checkpoint is read-only against both source control and the live database |
+| Scope justification | Direct execution of this task's own charter (Prompt 398 §4, "validate seed... without leaking tenant-real data") |
+| Gates | `data-classification:check` green; `typecheck` 0; `lint` 0/337 warnings (unchanged); `docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze` all passed |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` — docs-only change, no functional impact either way |
+| Status | **`COMPLETED`** — first round. Tier C review required before `VERIFIED`. Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. `RGL-BLK-001`/`003` remain open and undisposed, both `RGL-404`'s. `ISS-2026-294` (Low) left open for a checkpoint authorized to mutate production. Next eligible prompt: `CG-S16-RGL-009` (Prompt 399, Staging Deployment) |
+| Date | 2026-08-25 |
+
