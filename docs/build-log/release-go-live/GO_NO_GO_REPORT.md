@@ -33,6 +33,27 @@ independently-sufficient Critical findings, this checkpoint attempted to fix bot
 still open, still Critical, still "never accepted at any authority" per §8.1. See §3 for the
 full, updated blocker accounting, and §9 for what this means for the operator.
 
+**Second addendum, same checkpoint, following a further explicit operator instruction.** The
+operator was told, verbatim, that `RGL-BLK-001` "remains open, Critical, and per §8.1 is never
+risk-accepted at any authority." In direct response, the operator instructed: *"yg auto deploy
+gapapa ke production itu, gausa dijadiin blocking"* — the auto-deploy-to-production risk is
+acceptable, do not treat it as blocking.
+
+This report records that instruction as an **operator override**, not as an `RGL-404` ruling under
+§8.2 — this checkpoint's own acceptance authority cannot accept a Critical finding (§8.1 is
+unconditional on that point, by this pipeline's own design), but the actual human operator commissioning
+this build sits outside and above that self-imposed rule and has now exercised that authority
+directly. Full record: `BLOCKER_LEDGER.md`'s own `RGL-BLK-001` "OPERATOR RISK ACCEPTANCE" section.
+The underlying mechanism (unprotected `main`, ungated Vercel production target) is **unchanged and
+still armed** — only its disposition changed, by explicit instruction, not its risk profile.
+
+**Effect: zero open Critical findings remain.** But **the verdict is still `NO_GO`.** §3.4 below
+already named three tracked gaps — no staging tier, no named UAT acceptor, no licensed external
+penetration-test engagement — as independently sufficient to keep `GO_DECIDED` premature "even
+setting `RGL-BLK-001`/`009` aside entirely." That reasoning is unaffected by this addendum: none
+of the three gaps was raised, addressed, or waived by the operator's `RGL-BLK-001` instruction.
+**`NO_GO` now rests on §3.4's three tracked gaps alone** — see the revised §3.1/§3.4/§7/§9 below.
+
 ---
 
 ## 1. Release scope
@@ -82,17 +103,19 @@ predates the frozen candidate. Pass.
 
 ## 3. Blocker status — the decisive section
 
-### 3.1 Open Critical — 1 (down from 2 — `RGL-BLK-009` fixed and deployed live this checkpoint)
+### 3.1 Open Critical — 0 (down from 2 — `RGL-BLK-009` fixed and deployed live; `RGL-BLK-001` accepted by operator override)
 
 | ID | Statement | Status |
 |---|---|---|
-| `RGL-BLK-001` | Production auto-deploys from `main` with no go/no-go gate — **re-verified live this checkpoint, unchanged, still fully armed**: `get_project_deployment_protection` shows the identical unprotected configuration recorded at kickoff; `main` is unchanged at `2670cb5`; GitHub branch protection remains `false`. **Could not be fixed** — no tool in this session's toolset can configure branch protection or a deployment-promotion gate (see the Verdict addendum above). | `OPEN`, not accepted, unfixable with available tools |
+| `RGL-BLK-001` | Production auto-deploys from `main` with no go/no-go gate — **re-verified live this checkpoint, unchanged, still fully armed**: `get_project_deployment_protection` shows the identical unprotected configuration recorded at kickoff; `main` is unchanged at `2670cb5`; GitHub branch protection remains `false`. **Could not be fixed** with this session's tooling — but the operator was told this and, in direct response, instructed that the risk is acceptable and should not be treated as blocking. **Accepted by explicit operator override** (see the Verdict's second addendum above and `BLOCKER_LEDGER.md`'s own entry) — the mechanism itself remains unfixed and fully armed; only its disposition changed. | `ACCEPTED (operator override)`, mechanism still unfixed |
 | `RGL-BLK-009` | Escalated from the inherited `HDN-BLK-016` (`app.request_finance_settlement_reversal` posted no reversing GL journal — a live-forced, deterministic, unbounded GL/AP desync on every settlement reversal). Re-classified from Step 15's own "High" to Critical, matching §8.1's own "financial mis-posting" definition verbatim. **Fixed and deployed live** the same checkpoint: the function now posts a correct reversing journal (mirroring `app.post_finance_correction`'s own established technique), and a second, previously undiscovered defect (the function had been silently reverted to `SECURITY INVOKER`, making it unreachable by any real user) was found and fixed in the same pass. Applied to the hosted project via `apply_migration`; verified via a fresh full local `db-tests` run, `ALL PASSED`. | **`RESOLVED`, live** |
 
 Per `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §8.1: *"Sev-1/Critical... Absolute no-go. Never
-accepted, never risk-accepted, at any authority."* This is a hard rule, not a judgment call this
-report has discretion over. **One open Critical finding is sufficient to force `NO_GO`; it is the
-only one remaining.**
+accepted, never risk-accepted, at any authority."* That rule binds rulings issued **within** this
+pipeline (an `RGL-394`/`RGL-404` ruling could not have accepted `RGL-BLK-001`); it does not bind
+the actual operator, whose direct instruction is recorded above as an out-of-band override, not as
+an in-pipeline acceptance dressed up to look compliant. **No open Critical finding remains as of
+this addendum.**
 
 ### 3.2 Open High — 1 (plus 2 fixed-not-deployed, plus 1 aggregate ruled, plus 1 re-ruled to Medium)
 
@@ -147,14 +170,26 @@ before GA," and the state table names `UAT_ACCEPTED` as requiring a human by con
 are independently sufficient reasons a `GO_DECIDED` would be premature even setting `RGL-BLK-001`/
 `009` aside entirely.
 
+**Addendum: this is now the operative reason.** With `RGL-BLK-001` accepted by operator override
+and `RGL-BLK-009` fixed and deployed live (see the Verdict's addenda above), **these three tracked
+gaps are the sole remaining reason `NO_GO` stands.** None is agent-resolvable: a staging tier is
+infrastructure provisioning outside this checkpoint's authority; `UAT_ACCEPTED` can only be set by
+a human business acceptor, by the state table's own construction; a licensed penetration-test
+engagement requires an external firm or independent tester this agent cannot simulate or stand in
+for. Each has been correctly declined, not merely left undone, at `RGL-399`/`RGL-400`/`RGL-402`.
+
 ---
 
 ## 4. Risk acceptance
 
-**None granted by this report beyond the 15-item conditional acceptance in §3.3.** No Critical
-finding is risk-accepted (never permitted, §8.1). The two newly-registered Criticals/Highs
-(`RGL-BLK-009`/`010`) are explicitly **not** accepted. `RGL-BLK-007`/`008` are not "accepted risk"
-in the §8.2 sense — they are genuinely fixed, only not yet deployed.
+**None granted by this report's own §8.2 acceptance authority beyond the 15-item conditional
+acceptance in §3.3.** No Critical finding is risk-accepted *by this report* (never permitted,
+§8.1) — `RGL-BLK-009` is genuinely fixed, not accepted, and `RGL-BLK-010` is re-ruled Medium and
+folded into the 15-item group, also not a fresh acceptance of a High. **`RGL-BLK-001` is a
+separate case**: accepted, but not by this report's own authority — by the operator directly,
+out-of-band, per the Verdict's second addendum and `BLOCKER_LEDGER.md`'s own entry. `RGL-BLK-007`/
+`008` are not "accepted risk" in the §8.2 sense either — they are genuinely fixed, only not yet
+deployed.
 
 ---
 
@@ -180,12 +215,10 @@ deployment (unaffected by this report, since nothing changes) remains
 
 Listed as concrete, checkable conditions, not vague aspirations:
 
-1. **`RGL-BLK-001` fixed**: GitHub branch protection on `main` requiring a status check/review
-   before merge, and/or Vercel deployment protection gating the production target on an explicit
-   promotion step — re-verified live via `get_project_deployment_protection` and a fresh branch-
-   protection query, not assumed. **Still open** — no tool in this session can make this change;
-   requires either operator action outside this pipeline, or a future session with the right
-   tooling.
+1. ~~`RGL-BLK-001` fixed~~ **Superseded, this checkpoint** — not fixed (the mechanism remains
+   unfixed and fully armed), but **accepted by direct operator override**, which this report
+   treats as discharging this condition for verdict purposes going forward. See the Verdict's
+   second addendum and §3.1.
 2. ~~`RGL-BLK-009` fixed~~ **Done, this checkpoint** — see §3.1.
 3. ~~`RGL-BLK-010` resolved~~ **Done, this checkpoint** (re-ruled — the documentation-layer fix
    this item needed already existed since `HDN-384`) — see §3.2. The underlying enforcement-
@@ -193,14 +226,16 @@ Listed as concrete, checkable conditions, not vague aspirations:
 4. **A human decision on the three tracked gaps** (§3.4): either genuinely resolved (a staging
    tier provisioned, a named UAT acceptor completes sign-off, an external pentest engagement
    completes) or explicitly, formally waived by an authority with standing to do so — this report
-   does not assume any of the three will simply be skipped.
+   does not assume any of the three will simply be skipped. **This is now the only substantive
+   condition remaining** — see the addendum in §3.4.
 5. **This branch (`claude/step-16-prompt-390-412-okbd6v`) merged and its own content re-verified
    as the actual candidate that would deploy** — not `main`'s current, older state.
 
-**Only items 1, 4, and 5 remain.** Item 1 requires infrastructure/governance access this session's
-own tooling does not have; item 4 requires human action this agent has repeatedly and correctly
-declined to simulate (`RGL-399`/`RGL-400`/`RGL-402`); item 5 is a git-workflow step for whoever
-picks this back up.
+**Only items 4 and 5 remain.** Item 4 requires human action this agent has repeatedly and
+correctly declined to simulate (`RGL-399`/`RGL-400`/`RGL-402`) — provisioning a staging tier,
+naming and completing a human UAT acceptor's sign-off, and commissioning a licensed external
+penetration test are all outside any agent's authority to fabricate or waive on the operator's
+behalf; item 5 is a git-workflow step for whoever picks this back up.
 
 ---
 
@@ -217,17 +252,18 @@ nothing to approve. This report itself is the record of the decision, made by th
 Consistent with this range's own established practice (`RGL-399`, `RGL-400`), the following are
 explicitly flagged for human attention, not left to be discovered only by reading this file:
 
-1. **`RGL-BLK-001`** (ungated production auto-deploy) needs a real infrastructure/governance fix —
-   this agent has **no tool available** to change GitHub branch protection or Vercel deployment
-   promotion settings (confirmed by direct tool search, not assumed): no branch-protection API is
-   exposed anywhere in this session's GitHub toolset, and the one Vercel deployment-protection
-   tool available only offers password/SSO/trusted-IP gating, which would break real customer
-   access if applied to production. This requires either operator action directly against GitHub/
-   Vercel, or a future session equipped with the right tooling.
+1. ~~`RGL-BLK-001`~~ **Resolved by direct operator decision, this checkpoint** — the operator was
+   escalated to on this exact point and responded that the ungated-auto-deploy risk is acceptable
+   and should not block. The underlying mechanism is still unfixed and still armed; the operator
+   has been told that plainly (see the Verdict's second addendum) and chose to accept it as-is
+   rather than wait for a mechanism fix. No further operator action needed on this item unless the
+   operator wants the mechanism itself fixed later.
 2. ~~`RGL-BLK-009`~~ **Fixed and deployed live this checkpoint** — no longer needs operator action.
 3. **A named human UAT acceptor** and, separately, **a licensed external penetration-test
    engagement** are both still missing and both named as release-blocking prerequisites by this
-   product's own governing documents (the execution index, Blueprint §20.3).
+   product's own governing documents (the execution index, Blueprint §20.3). **These are now the
+   only open items requiring operator/human action** — a staging tier (`RGL-399`) is the third,
+   also unresolved. None of the three can be provided, simulated, or waived by any agent.
 
 ---
 
@@ -257,9 +293,19 @@ checkpoint's own `NO_GO`, not `COMPLETED`, not skipped, and not silently reinter
 operator's own "jalankan semua step 16" instruction named the full 390–412 range; this report
 does not unilaterally decide the operator no longer wants that work done — it reports, honestly,
 that the range's own governing rules do not permit any further row to execute meaningfully while
-`RGL-BLK-001`/`RGL-BLK-009` remain open, and escalates that fact (§9) rather than working around
-it. Resuming requires either the blocking conditions in §7 being genuinely resolved and a fresh
-`RGL-404` re-run reaching `GO_DECIDED`, or explicit operator instruction on how to proceed given a
-`NO_GO` (e.g., authorizing documentation-only closure of this range as `NO_GO`-terminal, which
-would itself need to be a real, human-authorized scope change to this range's own WBS, not an
-agent's own improvisation).
+open blockers remain, and escalates that fact (§9) rather than working around it. Resuming
+requires either the blocking conditions in §7 being genuinely resolved and a fresh `RGL-404`
+re-run reaching `GO_DECIDED`, or explicit operator instruction on how to proceed given a `NO_GO`
+(e.g., authorizing documentation-only closure of this range as `NO_GO`-terminal, which would
+itself need to be a real, human-authorized scope change to this range's own WBS, not an agent's
+own improvisation).
+
+**Addendum, same checkpoint, after the operator's `RGL-BLK-001` override.** `RGL-BLK-001` and
+`RGL-BLK-009` no longer keep this range blocked — see the Verdict's addenda above. **The range is
+still `BLOCKED`**, now solely by §3.4's three tracked gaps (no staging tier, no named UAT
+acceptor, no licensed external penetration-test engagement), all of which require human/
+infrastructure action this agent cannot simulate or provide. `RGL-405` remains ineligible until
+either those three are genuinely resolved or an authority with standing formally waives them —
+this report does not assume the operator's `RGL-BLK-001` instruction extends to waiving these
+three as well, since the operator was not asked about them and Blueprint §20.3/the state table
+name them as release-blocking prerequisites independent of this report's own discretion.

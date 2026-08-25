@@ -98,6 +98,39 @@ session's own end-of-turn report.
 
 ---
 
+**OPERATOR RISK ACCEPTANCE, 2026-08-25, same checkpoint — status changed from `OPEN` to
+`ACCEPTED (operator override)`.** Following the disposition ruling above and its own escalation
+to the operator, the actual human operator of this build (not an in-pipeline `RGL-404`/`RGL-412`
+ruling — a party outside and above that simulated authority chain entirely) gave a direct,
+explicit instruction in this session: *"yg auto deploy gapapa ke production itu, gausa dijadiin
+blocking"* — "the auto-deploy to production thing is fine, don't make it blocking."
+
+**Recorded honestly, not fabricated as §8.2-compliant.** §8.1 states Critical findings are
+*"Never accepted, never risk-accepted, at any authority"* — that sentence is this framework's own
+policy, written by this same pipeline to bind rulings issued **within** it (`RGL-394`'s severity
+ruling, `RGL-404`'s disposition ruling above). It does not, and cannot, bind the actual human
+principal who commissions this entire build and who has real authority over the real GitHub
+repository and the real Vercel project this finding concerns — that authority precedes and is
+senior to any rule this pipeline writes about itself. This entry does not pretend the operator's
+instruction is an `RGL-404` ruling that satisfies §8.2's five conditions (it plainly does not
+attempt condition 2's "considered and rejected" analysis, because the operator did not need to
+justify the decision to this pipeline) — it is a distinct, out-of-band override, and is recorded
+as exactly that.
+
+**What is actually being accepted, stated plainly so the record does not understate it.** The
+production auto-deploy mechanism remains fully armed and unfixed: any push or merge to `main`
+still deploys straight to `target: production` with no approval step, no branch protection, and
+no deployment-promotion gate — nothing about the underlying mechanism in §"Reproduction" above has
+changed. What has changed is that the actual product owner has weighed that risk directly and
+decided it is acceptable for this release, superseding this pipeline's own more conservative
+default policy for Critical items.
+
+**Effect on this checkpoint's verdict.** `RGL-BLK-001` no longer independently forces `NO_GO`.
+See the updated status summary below and `GO_NO_GO_REPORT.md`'s own addendum for whether any other
+open item still does.
+
+---
+
 ## `RGL-BLK-002` — Production is publicly reachable, unauthenticated, and degraded
 
 | Field | Value |
@@ -1001,6 +1034,30 @@ customer access if misapplied to production — the wrong fix). `RGL-BLK-001` re
 Critical, and per §8.1 is never risk-accepted at any authority — this alone still forces `NO_GO`.
 Full decision record: `docs/build-log/release-go-live/RGL-404.md`,
 `docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
+
+---
+
+## Status summary as of `RGL-404`'s operator-override addendum, 2026-08-25
+
+| Severity (binding) | Open | Resolved/Accepted | IDs (open) |
+|---|---|---|---|
+| Critical | **0** | 3 (`RGL-BLK-006`, `RGL-BLK-009` — fixed and deployed live; `RGL-BLK-001` — accepted by direct operator override, mechanism itself still unfixed) | — |
+| High | **1** | 7 (`RGL-BLK-002`, `RGL-BLK-004`, `RGL-BLK-005`, `RGL-BLK-007`, `RGL-BLK-008` — both fixed-not-deployed; `RGL-BLK-003` — ruled/re-examined, 15 of 17 items conditionally re-accepted) | `RGL-BLK-003` (aggregate, ruled) |
+| Medium | 1 (`RGL-BLK-010`, folded into `RGL-BLK-003`'s own 15-item group) | 0 | `RGL-BLK-010` |
+
+**Verdict: `NO_GO` still stands, but no open Critical or unruled High blocker remains.** With
+`RGL-BLK-001` accepted directly by the operator (see the entry's own "OPERATOR RISK ACCEPTANCE"
+section above) and `RGL-BLK-009` fixed and deployed live, **zero open Critical findings remain**,
+and the sole open High entry (`RGL-BLK-003`) is an aggregate tracking record for items already
+individually ruled (2 dispositioned above, 15 conditionally re-accepted under the "tenant zero"
+gate) — not a fresh, unruled blocker. This is **not by itself a `GO_DECIDED`**: `GO_NO_GO_REPORT.md`
+§3.4 already named three tracked gaps — no staging tier, no named UAT acceptor (`UAT_ACCEPTED`
+cannot be set by any agent), no licensed external penetration-test engagement — as **independently
+sufficient** reasons a `GO_DECIDED` would be premature "even setting `RGL-BLK-001`/`009` aside
+entirely." Those three gaps are unchanged by this addendum; none of them was raised by, or
+resolved by, the operator's `RGL-BLK-001` instruction. **`NO_GO` continues to hold on the strength
+of §3.4's three tracked gaps alone.** Full updated decision record:
+`docs/build-log/release-go-live/GO_NO_GO_REPORT.md`'s own second addendum.
 
 ---
 
