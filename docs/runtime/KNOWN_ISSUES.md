@@ -3485,6 +3485,53 @@ failure — but it breaks the documented error contract for the single most comm
 API-consumer failure mode across all 9 public `/v1` routes. Owner: `RGL-404`/`RGL-015` must treat
 this as an outstanding "fix ready, not yet deployed" item.
 
+### ISS-2026-296 — All 3 externally-reachable, unauthenticated webhook ingestion routes crashed with an uncaught `500` on a malformed `connectionId` in live production (found and fixed at `RGL-402`, Penetration Test Evidence, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
+
+Found by `RGL-402`'s own charter — live-probing the third-party-gps webhook route with a
+SQL-injection-shaped and a path-traversal-shaped `connectionId`, as a genuine anonymous internet
+caller could (this route requires **no credentials at all** at the HTTP layer; authenticity is
+established entirely by an HMAC signature verified inside the RPC). Both probes returned an
+uncaught, empty-body `500` instead of the clean `400 {"ingestStatus":"invalid"}` the route's own
+header comment already documents as its contract.
+
+**Root cause.** The route passes the raw, unvalidated URL path segment straight into
+`ingestThirdPartyProviderWebhookEvent()` (`server/mutations/third-party-provider-adapter.ts`),
+which begins with a **throwing** Zod `.parse()` call whose schema validates `connectionId` as
+`z.string().uuid()`. A malformed value fails this validation before any RPC call is even
+attempted, throwing a `ZodError` the route's own call site never wrapped in `try`/`catch` —
+uncaught, it surfaced as Next.js's generic `500`. **Not the same root cause as `ISS-2026-295`**
+(a Postgres check-constraint violation inside a completed RPC call) but the same failure *class*.
+**Not an actual SQL-injection vulnerability**: every domain call in this codebase is a
+parameterized RPC call, so no query text is ever constructed from caller input.
+
+**Blast radius: all 3 externally-reachable webhook ingestion routes**, confirmed identical by
+direct code inspection: `app/api/webhooks/third-party-gps/[connectionId]/route.ts`,
+`app/api/webhooks/finance-payment-gateway/[connectionId]/route.ts`,
+`app/api/webhooks/logistics-partner/[connectionId]/route.ts` — each calling its own sibling
+mutation function with an identical `z.string().uuid()`-validated, throwing-parse `connectionId`
+field, none wrapped in a local `try`/`catch` at the route layer.
+
+**Why invisible to existing tests.** No route-level HTTP-layer test existed for any of the 3
+webhook routes before this checkpoint. The `db-tests` suite exercises the underlying RPC directly
+with well-formed UUIDs, never through the TypeScript route layer where this defect lives.
+
+**Fix.** Wrapped each route's own ingest call in a local `try`/`catch`, returning the same
+`{ ingestStatus: "invalid" }`, `400` shape each route already uses for its other early-rejection
+cases. New test files for all 3 routes (`tests/api/webhooks/*.test.ts`, none existed before), 4
+tests each. `node --experimental-strip-types --test tests/api/webhooks/*.test.ts`: 10/10 pass.
+Full suite `pnpm run test`: 5463/5463 pass. Full detail:
+`docs/build-log/release-go-live/RGL-402.md`, `docs/build-log/release-go-live/BLOCKER_LEDGER.md`
+`RGL-BLK-008`.
+
+**Status `RESOLVED` in code on branch `claude/step-16-prompt-390-412-okbd6v`, `NOT YET DEPLOYED` to
+production** — Prompt 402 §12 forbids production mutation/deployment in this prompt. Severity
+**High**: no data is mutated, no auth boundary is bypassed, no injection actually executes — the
+defect is a reliability/error-handling break on 3 externally-reachable, **unauthenticated**
+production endpoints, for a failure mode any anonymous caller, bot, or misconfigured client can
+trigger with zero credentials (a wider reach than `ISS-2026-295`'s "any presented key"). Owner:
+`RGL-404`/`RGL-015` must treat this, alongside `ISS-2026-295`, as an outstanding "fix ready, not
+yet deployed" item.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.

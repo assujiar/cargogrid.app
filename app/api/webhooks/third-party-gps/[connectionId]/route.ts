@@ -55,13 +55,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ con
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   const client = createSupabaseServiceRoleClient();
-  const result = await ingestThirdPartyProviderWebhookEvent(client, {
-    connectionId,
-    clientKey,
-    rawPayload,
-    timestamp,
-    signature,
-  });
-
-  return Response.json({ ingestStatus: result.ingestStatus, reportId: result.reportId }, { status: STATUS_BY_INGEST_STATUS[result.ingestStatus] ?? 200 });
+  // RGL-402: connectionId is unvalidated, attacker-controlled URL-path text -- a
+  // non-UUID value (malformed, injection-shaped, or a path-traversal attempt) fails
+  // ingestThirdPartyProviderWebhookEvent's own internal Zod .uuid() parse, which
+  // throws rather than returning an ingestStatus. Uncaught, that surfaced as a raw
+  // 500 instead of this route's own documented "never throws" contract (see this
+  // file's header comment) -- live-forced against production.
+  try {
+    const result = await ingestThirdPartyProviderWebhookEvent(client, {
+      connectionId,
+      clientKey,
+      rawPayload,
+      timestamp,
+      signature,
+    });
+    return Response.json({ ingestStatus: result.ingestStatus, reportId: result.reportId }, { status: STATUS_BY_INGEST_STATUS[result.ingestStatus] ?? 200 });
+  } catch {
+    return Response.json({ ingestStatus: "invalid" }, { status: 400 });
+  }
 }

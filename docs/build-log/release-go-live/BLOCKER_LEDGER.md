@@ -653,6 +653,101 @@ checkpoint holds no acceptance authority regardless (§8.2 condition 5 restricts
 
 ---
 
+## `RGL-BLK-008` — all 3 externally-reachable, unauthenticated webhook ingestion routes crashed with an uncaught `500` on a malformed `connectionId`, live-forced in production (`RESOLVED in code, not yet deployed` — found and fixed same checkpoint)
+
+| Field | Value |
+|---|---|
+| Severity | **High** |
+| Status | **`RESOLVED` in code on this branch, `NOT YET DEPLOYED` to production** (`RGL-402`, 2026-08-25, same checkpoint as discovery) |
+| Found at | `RGL-402` (Penetration Test Evidence), 2026-08-25, by live-probing the third-party-gps webhook route with a SQL-injection-shaped and a path-traversal-shaped `connectionId`, as a genuine anonymous internet caller could |
+| Owner | `RGL-402` (Penetration Test Evidence) — root-caused and fixed directly, this task's own charter; `RGL-015` (Production Deployment) owns actually shipping the fix live |
+
+**Statement.** `POST https://cargogrid-app.vercel.app/api/webhooks/third-party-gps/<connectionId>`
+with a `connectionId` path segment that is not a well-formed UUID (e.g. `1' OR '1'='1`, or
+`..%2f..%2fetc%2fpasswd`) returned an uncaught, empty-body `500` in live production, instead of the
+clean `400 {"ingestStatus":"invalid"}` the route's own header comment already documents as its
+contract. **This route requires no credentials at all at the HTTP layer** — a third-party
+provider's authenticity is established entirely by an HMAC signature verified inside the RPC, not
+by any Bearer token or session — so any anonymous caller on the internet can trigger this.
+
+**Root cause, found by direct code inspection following the live reproduction.** The route passes
+the raw, unvalidated URL path segment straight into `ingestThirdPartyProviderWebhookEvent()`
+(`server/mutations/third-party-provider-adapter.ts`), which begins with a **throwing** Zod
+`.parse()` call whose schema validates `connectionId` as `z.string().uuid()`. A malformed value
+fails this validation before any RPC call is even attempted, throwing a `ZodError` the route's own
+call site never wrapped in `try`/`catch` — uncaught, it surfaced as Next.js's generic `500`.
+
+**Not the same root cause as `RGL-BLK-007`** (a Postgres check-constraint violation inside a
+completed RPC call) — but the same failure *class*: an uncaught exception converting an intended
+clean `4xx` denial into a generic `500`. **Not an actual SQL-injection vulnerability**: every
+domain call in this codebase is a parameterized RPC call, so no query text is ever constructed
+from caller input; what this finding demonstrates is unhandled-exception / insufficient
+error-handling around input validation, not injection.
+
+**Blast radius: all 3 externally-reachable webhook ingestion routes**, confirmed identical by
+direct code inspection (not each individually live-reproduced a second/third time, since the code
+is byte-for-byte identical in shape): `app/api/webhooks/third-party-gps/[connectionId]/route.ts`,
+`app/api/webhooks/finance-payment-gateway/[connectionId]/route.ts`,
+`app/api/webhooks/logistics-partner/[connectionId]/route.ts` — each calling its own sibling
+mutation function with an identical `z.string().uuid()`-validated, throwing-parse `connectionId`
+field, none wrapped in a local `try`/`catch` at the route layer.
+
+**Why this class was invisible to existing tests.** No route-level HTTP-layer test existed for any
+of the 3 webhook routes before this checkpoint (`find tests -iname "*webhook*"` returned only the
+unrelated `webhook-event-types.test.ts`). The `db-tests` suite exercises the underlying RPC
+directly with well-formed UUIDs, never through the TypeScript route layer where this defect lives.
+
+**Fix.** Wrapped each route's own ingest call in a local `try`/`catch`, returning the same
+`{ ingestStatus: "invalid" }`, `400` shape each route already uses for its other early-rejection
+cases (missing signature/timestamp/empty body) — the smallest, most local fix, touching no
+contract, mutation function, or migration.
+
+**Verification.** New test files for all 3 routes (`tests/api/webhooks/*.test.ts`, none existed
+before), 4 tests each: a non-UUID `connectionId` never reaches the RPC and returns `400`; a
+path-traversal-shaped one likewise; a well-formed UUID with an `ok` RPC outcome still returns `200`
+(no happy-path regression); a well-formed UUID with an `invalid` RPC outcome still returns `401`
+(denial-status mapping unchanged). `node --experimental-strip-types --test tests/api/webhooks/*.test.ts`:
+10/10 pass. Full suite: `pnpm run test` — 5463/5463 pass. Full detail:
+`docs/build-log/release-go-live/RGL-402.md`.
+
+**Why High, not Critical.** No data is mutated, no auth boundary is bypassed, and no injection
+actually executes — the defect is a reliability/error-handling break on 3 externally-reachable,
+**unauthenticated** production endpoints, for a failure mode (malformed input) any anonymous
+caller, bot, or misconfigured client can trigger with zero credentials. Registered High to match
+`RGL-BLK-007`'s own reasoning, with a note that this finding's reachability is wider (zero
+credentials required, vs. `RGL-BLK-007`'s "any presented key").
+
+**Why `RESOLVED` here does not mean closed.** The fix is committed to
+`claude/step-16-prompt-390-412-okbd6v` and merges into the release candidate, but **production's
+running application binary is unchanged by this checkpoint** (Prompt 402 §12 forbids production
+mutation/deployment in this prompt) — the defect remains live in production until `RGL-015` ships
+this branch. `RGL-404`/`RGL-015` must account for this, alongside `RGL-BLK-007`, as an outstanding
+"fix ready, not yet deployed" item.
+
+**Not a §8.2 acceptance.** Fixing a root cause removes the finding rather than accepting it; this
+checkpoint holds no acceptance authority regardless (§8.2 condition 5 restricts that to
+`RGL-404`/`RGL-412`).
+
+---
+
+## Status summary as of `RGL-402` (Penetration Test Evidence), 2026-08-25
+
+| Severity (binding) | Open | Resolved | IDs (open) |
+|---|---|---|---|
+| Critical | **1** | 1 (`RGL-BLK-006`) | `RGL-BLK-001` |
+| High | **1** | 5 (`RGL-BLK-002`, `RGL-BLK-004`, `RGL-BLK-005`, `RGL-BLK-007`, `RGL-BLK-008`) | `RGL-BLK-003` |
+| Medium | 0 | 0 | — |
+
+**`RGL-BLK-008` (High, new this checkpoint) is `RESOLVED` in code, `NOT YET DEPLOYED`** — found and
+fixed the same checkpoint (`RGL-402`'s own charter, Penetration Test Evidence), alongside the
+already-registered `RGL-BLK-007` (`RGL-401`) in the same "fixed, not yet shipped" state; both ship
+live only at `RGL-015`. `RGL-BLK-001` (Critical, ungated Vercel auto-deploy) and `RGL-BLK-003`
+(High-aggregate, 17 inherited Step 15 acceptances) remain open, both `RGL-404`'s to dispose of;
+neither is touched by this checkpoint. A new tracked gap (no licensed third-party penetration-test
+engagement exists) is also recorded, owner `RGL-404`/`RGL-412` — see `RGL-402.md` §6.
+
+---
+
 ## Status summary as of `RGL-401` (Smoke Test), 2026-08-25
 
 | Severity (binding) | Open | Resolved | IDs (open) |
