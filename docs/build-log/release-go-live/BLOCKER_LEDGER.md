@@ -501,6 +501,98 @@ anything, and does not retroactively change what any earlier checkpoint reported
 
 ---
 
+## `RGL-BLK-006` — `ISS-2026-290`'s original "17 already-committed migrations behind" undercounted by 10; live production was missing real security and financial-integrity fixes, including a total Finance-write outage for genuine users (`RESOLVED` — found and fixed same checkpoint)
+
+| Field | Value |
+|---|---|
+| Severity | **Critical** |
+| Status | **`RESOLVED`** (`RGL-397`, 2026-08-25, same checkpoint as discovery) |
+| Found at | `RGL-397` (Migration Validation), 2026-08-25, by a full name-for-name diff of every migration filename against live `supabase_migrations.schema_migrations`, not by reading `ISS-2026-290`'s own prior count and trusting it |
+| Owner | `RGL-397` (Migration Validation) — fixed directly, this task's own charter |
+
+**Statement.** `RGL-BLK-002`'s Option 2 remediation (`ISS-2026-290`, this same range, earlier the
+same day) found and applied "17 already-committed Step 15 hardening migrations" that existed in
+the repository but had never reached the live hosted project. This checkpoint's own migration
+validation — comparing every one of the 336 local migration filenames against live's migration
+registry by name, not merely by counting rows — found that **10 more already-committed,
+already-reviewed Step 15 migrations, dated `20260810200000` through `20260811200000`, sitting
+chronologically INSIDE the exact window `ISS-2026-290` itself described (`20260810000000` through
+`20260819000000`), were also never applied.** `ISS-2026-290`'s own "17" count was an undercount,
+not a stale fact that later became true again — these 10 files existed in the repository at the
+time `ISS-2026-290` was written (confirmed via `git log --follow`, each committed at `HDN-373`/
+`HDN-374`, well before this session began) and were simply not among the files that checkpoint's
+own enumeration caught.
+
+**What was actually missing from production, by content, not merely by filename:**
+
+| Migration | What was live-unpatched until this checkpoint |
+|---|---|
+| `..._harden_tenant_isolation_actor_identity_gaps` (headline, `app.evaluate_permission`) | The single RBAC gate ~1,124 functions in this schema call transitively **never checked whether the claimed actor was still an active member of the tenant at all** — a revoked ex-member retained every role-based read/write permission they held at the moment of revocation, indefinitely, until someone separately cleaned up their `role_assignments` rows too (nothing in this codebase ever did). Live-forced and confirmed by the original investigation before this checkpoint re-applied it. |
+| `harden_dashboard_actor_identity_gaps` / `harden_crm_ops_actor_identity_gaps` (29 functions) | Actor-identity-forgery: any authenticated session could pass another identity's UUID into 29 `SECURITY DEFINER` dashboard/CRM functions and read that identity's own record-scoped data — for cost/margin/selling-price-masked dashboard aggregates, this let a caller with no view-cost grant of their own see real unmasked financial figures by forging a UUID known to hold that grant. |
+| `harden_own_row_rls_membership_gap` | A revoked ex-member retained RLS-level read access to their own past `notifications`/`notification_preferences`/`saved_report_views` rows indefinitely — the one gap in this schema's otherwise-universal "membership revocation fails closed" convention. |
+| `harden_loyalty_redemption_maker_checker` | A maker/checker collapse: any identity holding only `LYL:Edit` (not the higher `LYL:Configure` tier) could submit AND instantly, synchronously fulfill a `discount_voucher` loyalty redemption for any account in the tenant in one call, zero second approver — live-forced, confirmed real dollar-denominated voucher entitlements were walked through with zero review. |
+| `harden_finance_authority_chain_security_definer` (95 functions) + its own Tier C completeness fix (57 more) | **The most severe item.** 95 Finance-domain functions (journal, period close/lock, exchange rate, tax, invoice, AP/AR, cash, settlement, vendor bill, correction, reconciliation, account, bank statement) plus the generic `app.enqueue_job` were `SECURITY INVOKER` instead of `SECURITY DEFINER`, unlike virtually every other client-callable RPC in this schema. Because `authenticated` holds no direct grant on the underlying `app.permissions`/`app.role_assignments` tables or the Finance domain tables themselves, **every one of these Finance write RPCs, and every background job enqueued through the generic path, was completely unreachable by any real tenant user since it shipped** — not merely a security gap, a functional Finance-write outage for genuine users. The pre-existing `db-tests` suite never caught this because it runs every test as the Postgres superuser, bypassing the exact grant chain this defect broke. |
+| `harden_finance_journal_view_gate_and_self_approval` | `app.finance_journals`/`app.finance_journal_lines`'s own `SELECT` RLS policy was membership-only, no `FIN:View` predicate — any tenant member with zero Finance permissions could read every real journal row and line directly via RLS, bypassing the RPC layer's own correct gate entirely. Also closed a self-approval gap on `app.create_and_post_finance_system_journal` (independently, directly granted to `authenticated` across 4 migrations, with no authority check of its own once reachability was restored). |
+| `harden_finance_period_lock_idempotency_race` / `harden_financial_integrity_tierc_fixes` | A real concurrency race on `app.lock_finance_period` (two concurrent first-time locks could both pass the not-found check), plus 3 further Tier C financial-integrity fixes including a quote discount/tax billing defect that would have overbilled by the discount amount. |
+
+**Fix.** All 10 pre-existing, already-committed, already-reviewed migration files applied to live
+(`awdlicmwzdxquopwtcfd`) in exact chronological order via `apply_migration`, each read in full
+immediately before applying. Two of the ten (`harden_finance_authority_chain_security_definer`,
+249KB/5,192 lines, and `harden_finance_authority_chain_tierc_completeness`, 104KB/2,386 lines)
+exceeded the model's own single-response output-token limit when reproduced whole, so each was
+split at clean top-level SQL statement boundaries into 6 and 3 sequential `apply_migration` calls
+respectively (`_p1`..`_p6`/`_p1`..`_p3`), applied strictly in order — a chunking technique, not a
+content change; the identical, complete file content was applied either way, just via more calls.
+This means live's migration registry now carries 17 rows for these 10 files (326 → 343), not a
+clean 10 — disclosed here rather than presented as if one row per file, and functionally
+immaterial (Postgres applied the exact same DDL regardless of how many `apply_migration` calls
+carried it).
+
+**Verification.** Live migration count: 326 → 343 rows (17 new: 5 single-file + 6 + 1 + 3 + 1 + 1
+chunks/files). Functional spot-checks, all confirmed live via direct catalog/RLS inspection, not
+assumed from the applied SQL text alone: `app.evaluate_permission`'s body now contains the
+`not_active_tenant_member` check; `app.create_finance_journal_draft`, `app.check_finance_journal_authority`
+and `app.create_and_post_finance_system_journal` are now `prosecdef = true`; the self-approval gate
+literal (`check_finance_journal_authority(...Approve...)`) is present in
+`create_and_post_finance_system_journal`'s live body; `app.finance_journals`'s own RLS policy now
+reads `check_finance_journal_authority('View', ...)` instead of membership-only; `app.notifications`'s
+own-row policy now carries `has_active_tenant_membership`; `app.submit_loyalty_redemption`'s body
+now contains the `LYL`/`Configure` gate. Security advisors re-pulled after all 10: 1 pre-existing
+`ERROR` (`spatial_ref_sys`, PostGIS's own public-schema table, unrelated to this batch, already
+disclosed at `RGL-BLK-002`'s own advisor review); `WARN`-level `authenticated_security_definer_function_executable`
+count is consistent with the intentional DEFINER conversion (expected to grow, not a new defect
+class); no new `ERROR`-level finding attributable to this batch.
+
+**Why Critical.** The Finance-write reachability gap alone means genuine tenant users could not
+create, submit, approve, post, or reconcile real Finance records in production — a functional
+outage on the entire Finance domain, not merely a security posture gap — for the entire window
+between each fix's original merge (Step 15, `HDN-373`/`HDN-374`) and this checkpoint. Combined with
+the actor-identity-forgery, RBAC-persistence-after-revocation, and maker/checker-collapse findings,
+this is a materially more severe instance of exactly the class `ISS-2026-290`/`RGL-BLK-002`
+already registered Critical for the other 17 — corrected and closed here rather than left as a
+silent gap in that earlier count.
+
+**Not a §8.2 acceptance.** Fixing a root cause removes the finding rather than accepting it; this
+checkpoint holds no acceptance authority regardless (§8.2 condition 5 restricts that to
+`RGL-404`/`RGL-412`).
+
+---
+
+## Status summary as of `RGL-397` (Migration Validation), 2026-08-25
+
+| Severity (binding) | Open | Resolved | IDs (open) |
+|---|---|---|---|
+| Critical | **1** | 1 (`RGL-BLK-006`) | `RGL-BLK-001` |
+| High | **1** | 3 (`RGL-BLK-002`, `RGL-BLK-004`, `RGL-BLK-005`) | `RGL-BLK-003` |
+| Medium | 0 | 0 | — |
+
+**`RGL-BLK-006` (Critical, new this checkpoint) is `RESOLVED`** — found and fixed the same
+checkpoint (`RGL-397`'s own charter, Migration Validation). `RGL-BLK-001` (Critical, ungated Vercel
+auto-deploy) and `RGL-BLK-003` (High-aggregate, 17 inherited Step 15 acceptances) remain open,
+both `RGL-404`'s to dispose of; neither is touched by this checkpoint.
+
+---
+
 ## Status summary as of `RGL-391` (superseded below)
 
 | Severity (proposed) | Open | IDs |

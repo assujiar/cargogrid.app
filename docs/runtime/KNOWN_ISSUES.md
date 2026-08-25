@@ -3322,6 +3322,16 @@ Every one of these had already been diagnosed, fixed, reviewed, and merged to `m
 
 **Status `RESOLVED`, 2026-08-25**, same checkpoint as discovery. Severity **Critical** — not because any exploitation is known to have occurred (no evidence either way was sought or is available from this vantage point), but because live production carried multiple disclosed, already-fixed-in-repository Critical/High vulnerabilities, unpatched, for the entire window between each migration's original merge and this checkpoint. **Standing gap this leaves unresolved**: nothing in this build's CI/CD pipeline or release process automatically applies a merged migration to the live project, or alerts when live drifts behind `main` — this checkpoint's own `list_migrations` comparison was a manual, one-time catch, not a durable control. Registering that gap is owner `RGL-395`/`RGL-404`'s to assign a durable fix (e.g., a CI step that fails when live `list_migrations` lags the repository's own migration set); not attempted here, out of this checkpoint's own bounded scope.
 
+**Correction (`RGL-397`, 2026-08-25): the "17" count and the "exact match" re-verification claim
+above were both wrong.** `RGL-397`'s own migration validation — a full name-for-name diff of every
+local migration filename against live's registry, not a row count — found **10 more
+already-committed migrations sitting inside this exact same window** (`20260810200000` through
+`20260811200000`) that this checkpoint's own enumeration missed and its own re-verification failed
+to catch. See `ISS-2026-293` for the full corrected finding and fix; `RGL-BLK-006` in
+`BLOCKER_LEDGER.md`. This does not change anything about the 17 migrations this entry itself
+covers — they were correctly identified and correctly applied — it corrects the claim that they
+were the *complete* set of drift.
+
 ### ISS-2026-291 — The `RGL-BLK-002` Option 2 wrapper migration's own committed file hardcoded `security definer` on 140 of 2,367 `public.*` wrapper functions despite their `app.*` counterpart being `security invoker` — a live-forced RLS-bypass regression in content the same checkpoint's own pre-application verification had claimed was clean (found live, during the same migration's application to production, 2026-08-25, Critical)
 
 `supabase/migrations/20260826000000_create_public_api_data_wrappers.sql`'s own header comment (lines 54-73) explicitly documents that `security definer`/`invoker` mode must be copied per-function from each wrapped `app.*` function, specifically to avoid a `SECURITY DEFINER` wrapper silently executing an underlying `security invoker` function as `postgres` (which has `BYPASSRLS`) instead of the real caller — and `RGL-BLK-002-OPTION2-REMEDIATION.md` §5/§6 records this exact class as already-found-and-fixed pre-application, with a claimed "0 mismatches" exhaustive result. **That claim did not hold for the file as actually committed and applied**: a direct live `pg_proc.prosecdef` comparison against every corresponding `app.*` function, run immediately after applying the migration to `awdlicmwzdxquopwtcfd`, found 140 wrapper functions — all in the Finance module (`app.acknowledge_finance_period_checklist_item`, `app.activate_finance_account`, `app.allocate_finance_receipt`, `app.apply_finance_ap_settlement` and 136 others of the same shape) — with `security definer` hardcoded in the wrapper despite `app.<name>` itself being `security invoker`. Confirmed as a defect in the committed file's own text (direct `grep` against the migration file itself), not an artifact of how it was applied.
@@ -3343,6 +3353,55 @@ This Supabase project carries a standard platform-provisioning default — `ALTE
 **Fix applied**: `supabase/migrations/20260826010000_harden_public_api_data_wrappers_tierc_fixes.sql` resets every wrapper function's ACL to exactly mirror its live `app.*` counterpart's real grants (idempotent, re-derived from the catalog every run, not a fixed list). **Standing convention amended** (`20260826000000`'s own header, and `RGL-BLK-002-OPTION2-REMEDIATION.md` §9): any future `public.*` wrapper must explicitly `revoke execute on function public.<name>(...) from anon, authenticated, service_role, public` — revoking from `PUBLIC` alone is insufficient in this specific schema, unlike everywhere else in this codebase.
 
 **Status `RESOLVED`, 2026-08-25**, same checkpoint. Severity **Critical** (unauthenticated/under-authenticated access to functions never intended to be so reachable, live-forced against real production infrastructure, not merely reasoned about). Exhaustively re-verified live after the fix: grant-parity mismatches 2,359 → 0; zero-PUBLIC-role-leak check independently re-confirmed at 0. **Same open-question caveat as `ISS-2026-291`** applies to why this was not caught locally before live application — though this specific defect is plausibly explained by a genuine local/live environment divergence (this session's local `scripts/db-tests/` harness creates its `anon`/`authenticated`/`service_role` roles on a bare Postgres instance with no Supabase-platform-specific default-privilege bootstrap, so the same `create function public.*` statement would not reproduce this leak locally even on an otherwise-identical migration set) — unlike `ISS-2026-291`, which has no such environmental explanation available.
+
+### ISS-2026-293 — `ISS-2026-290`'s "17 already-committed migrations behind" undercounted by 10; live production was missing real security and financial-integrity fixes, including a total Finance-write outage for genuine authenticated users (found at `RGL-397`, Migration Validation, 2026-08-25, Critical, `RESOLVED` same checkpoint)
+
+Found by `RGL-397`'s own migration-validation charter: a full name-for-name diff of every one of
+the 336 local migration filenames against live `supabase_migrations.schema_migrations`, not a bare
+row count and not trust in `ISS-2026-290`'s own prior enumeration. Live's registry (326 rows) was a
+**strict subset** of the local filename set — every live migration name existed locally, but 10
+local names, all dated `20260810200000` through `20260811200000`, sitting chronologically inside
+the exact `20260810000000`–`20260819000000` window `ISS-2026-290` itself already described, did
+not exist live. `git log --follow` confirms all 10 were committed at `HDN-373`/`HDN-374` (Step 15),
+well before this session began — this is not new drift accumulating since `ISS-2026-290`'s own
+checkpoint, it is 10 files that checkpoint's own "17" enumeration simply missed, and whose own
+"exact match" live re-verification (see the correction appended to `ISS-2026-290` above) failed to
+catch.
+
+**What was missing, by content:** the RBAC evaluator's tenant-membership check on revocation
+(`app.evaluate_permission`, the single gate ~1,124 functions call transitively); actor-identity
+forgery across 29 dashboard/CRM functions (unmasking cost/margin/selling-price data via a forged
+UUID); an own-row RLS gap letting a revoked ex-member keep reading their own past
+notifications/saved views; a loyalty-redemption maker/checker collapse (one identity could submit
+and instantly fulfill any account's discount-voucher redemption); and, most severe, **95 Finance-
+domain functions plus the generic job-enqueue path were `SECURITY INVOKER` instead of `SECURITY
+DEFINER`, making every Finance write RPC in production completely unreachable by any real
+authenticated tenant user since it shipped** — a functional Finance-write outage, not merely a
+security gap, invisible to this repository's own `db-tests` suite because it runs every test as
+the Postgres superuser, bypassing the exact grant chain this defect broke. Full per-migration
+detail: `docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-006`.
+
+**Fix.** All 10 pre-existing, already-reviewed migrations applied to live in exact chronological
+order via `apply_migration`, each read in full before applying. Two exceeded the model's own
+single-response output-token limit when reproduced whole and were split into 6 and 3 sequential
+`apply_migration` calls respectively at clean statement boundaries — a chunking technique only,
+not a content change (live's migration registry now carries 17 rows for these 10 files, 326 → 343,
+disclosed rather than presented as a clean 10-to-10 mapping).
+
+**Status `RESOLVED`, 2026-08-25**, same checkpoint as discovery. Severity **Critical** — the
+Finance-write outage alone would qualify (genuine tenant users could not create, submit, approve,
+post, or reconcile real Finance records in production for the entire window since `HDN-373`/
+`HDN-374`), and it is compounded by the actor-identity-forgery, RBAC-persistence-after-revocation,
+and maker/checker findings alongside it. Verified live via direct catalog/RLS inspection (not
+assumed from applied SQL text): `prosecdef` now `true` on the previously-`INVOKER` functions
+spot-checked, the RBAC/self-approval/view-gate/own-row/maker-checker fix literals all present in
+each function's live body, `app.finance_journals`'s RLS policy now requires `FIN:View`. Security
+advisors re-pulled after all 10: one pre-existing `ERROR` (`spatial_ref_sys`, PostGIS, unrelated),
+no new `ERROR`-level finding attributable to this batch. **Standing gap this reinforces, not a new
+one**: the same "nothing in CI/CD automatically applies a merged migration to live, or alerts on
+drift" gap `ISS-2026-290` already registered — this finding is further, stronger evidence for it,
+not a separate root cause. Owner for a durable fix remains `RGL-395`/`RGL-404` per that entry;
+not attempted here, out of this checkpoint's own bounded scope.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
