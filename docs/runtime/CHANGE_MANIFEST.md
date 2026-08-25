@@ -8178,3 +8178,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit for the repository side; the live schema change would need a separate corrective migration to undo (this repo's own "never edit an applied migration" convention) — not expected to be needed, no real secret data existed to lose either way |
 | Status | **`COMPLETED`**. 4 of 168 backlog items resolved. 164 remain (0 Critical, 13 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-251 — Historical issue backlog remediation, item 5: `ISS-2026-265` (database restore audit trail, partial-by-design)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-250`. Item 5 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST + RUNBOOK |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Confirmed `app.audit_logs.tenant_id` is nullable before designing the fix (the established platform-level-event convention). Implemented `app.record_database_restore_event`, ran the full local `db-tests` suite, which immediately caught a missing Option 2 `public.*` wrapper via this repo's own zero-tolerance regression guard — fixed before the freeze digest was ever changed, not after |
+| Findings and disposition | `ISS-2026-265`: `RESOLVED`, explicitly partial by design and disclosed as such — closes "zero audit trail" (a new mandatory runbook step writes one explicit, structured audit event); does NOT and cannot close "`TRUNCATE` bypasses `FOR EACH ROW` triggers" itself, which is fundamental Postgres behavior no function-level change can alter. The recorded event's own payload discloses this limitation inline, not merely in documentation a reader might skip |
+| Files edited | `supabase/migrations/20260826060000_harden_database_restore_audit_trail.sql` (new); `docs/runbooks/database-restore.md` (new mandatory step (j)); `scripts/db-tests/database-restore-lock.sql` (widened); `scripts/release/check-release-freeze.ts` (eighth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-265` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826060000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — an additive, standalone audit-recording function with input validation (rejects an empty actor label, an unrecognized scope, a negative table count); no existing function or call path modified |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (2 consecutive runs — first caught the missing wrapper, second clean after the fix, both confirmed via the script's own real exit code). `pnpm run typecheck`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 5 of 168 backlog items resolved (one explicitly partial by design). 163 remain (0 Critical, 12 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |

@@ -244,6 +244,38 @@ import { readFileSync } from "node:fs";
  * project via `apply_migration` (zero existing rows in any of the 3 tables,
  * confirmed live before applying, so the backfill `UPDATE` statements were
  * no-ops), live-reconfirmed via `information_schema.columns` afterward.
+ *
+ * AMENDED 2026-08-25 (eighth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section, item 5: `ISS-2026-265`/`HDN-BLK-034` -- the composed
+ * in-place restore procedure's own `TRUNCATE` step never fires `FOR EACH ROW`
+ * triggers at all (standard, documented Postgres behavior, independent of
+ * `pg_restore`'s own `--disable-triggers` flag), silently bypassing 9
+ * security/integrity row-level triggers with zero row left in
+ * `app.audit_logs` documenting the restore happened. Fixed additively by
+ * supabase/migrations/20260826060000_harden_database_restore_audit_trail.sql
+ * (340 files total) -- closes only the genuinely closable "zero audit trail"
+ * half: a new mandatory step (j), `app.record_database_restore_event(...)`,
+ * writes one explicit, structured `app.audit_logs` row (`tenant_id = null`,
+ * the established platform-level-event convention) recording who ran the
+ * restore, its scope, and how many tables were truncated. Does NOT and
+ * cannot re-verify any individual table's own security invariant (a legal
+ * hold, a posted-journal balance) that the bypassed triggers would have
+ * protected -- disclosed inline in the recorded event's own payload and in
+ * the runbook, not silently claimed as fully closed; that remaining half
+ * needs a structurally different mechanism (a pre-restore manifest to diff
+ * against post-restore state), left open. Also ships the function's own
+ * `public.*` Option 2 wrapper (security-mode-matched, `SECURITY DEFINER`) --
+ * missed in the first draft and caught immediately by this repo's own
+ * `scripts/db-tests/public-api-wrapper-regression.sql` zero-tolerance guard
+ * before this digest was ever changed, not after. New regression in
+ * `scripts/db-tests/database-restore-lock.sql`: a real, persisted
+ * `app.audit_logs` row with the exact scope/table-count supplied, plus 3
+ * negative-input rejection assertions (233 files unchanged in count -- the
+ * existing file widened, no new file). Re-verified via a fresh full local
+ * db-test suite run (340 migrations, 233 runner files, ALL PASSED) before
+ * this digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -284,7 +316,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-257 fix
   // (339 files: +1, 20260826050000_harden_integration_secrets_encryption_
   // at_rest.sql). See the class-level doc comment above.
-  migrationSetSha256: "bfa32177ec2cd98323484c900e32c94175d102a7aaf378854061f56c2d684408",
+  // History: bfa32177ec2cd98323484c900e32c94175d102a7aaf378854061f56c2d684408
+  // (339 files, seventh-pass amendment above). Superseded 2026-08-25 (eighth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-265 fix (340
+  // files: +1, 20260826060000_harden_database_restore_audit_trail.sql). See
+  // the class-level doc comment above.
+  migrationSetSha256: "9ed06519551ea6bad34bcbd4cb0084b3b5a4c9df2e83bcd4cca1dad96f1271ba",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -323,7 +360,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // files unchanged in count -- 26 files widened with the new encryption-key
   // GUC/decrypt fixes, plus the ISS-2026-156 fix, no file added or removed).
   // See the class-level doc comment above.
-  dbTestSetSha256: "e54ed5a03d8f13dcdfaedd41da3c8837480e0032b92e6e743649dc7f3c7a6d19",
+  // History: e54ed5a03d8f13dcdfaedd41da3c8837480e0032b92e6e743649dc7f3c7a6d19
+  // (233 files, seventh-pass amendment above). Superseded 2026-08-25 (eighth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-265 fix (233
+  // files unchanged in count -- database-restore-lock.sql widened, no file
+  // added or removed). See the class-level doc comment above.
+  dbTestSetSha256: "83e37b49ef1dbde855586a3a3899466b4894f458861f0c8dfb4adecf0bb256fa",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
