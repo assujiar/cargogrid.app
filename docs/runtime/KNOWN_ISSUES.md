@@ -3435,6 +3435,56 @@ only real content is that production's `auth.users` table is not perfectly empty
 hygiene finding, not a defect. Owner: whichever checkpoint next has authorized production-mutation
 scope (`RGL-015` or later, at operator discretion).
 
+### ISS-2026-295 — Every `app/api/v1/**` route returned an uncaught `500` in live production for any invalid/unrecognized Bearer key instead of a clean `401` (found and fixed at `RGL-401`, Smoke Test, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
+
+Found by `RGL-401`'s own charter — live-probing `/api/v1/status` with the range of caller states a
+genuine external API consumer would present, not merely reading the code. No `Authorization`
+header correctly returned `401`; a present-but-never-issued Bearer key returned an uncaught `500`
+with an empty body — arguably the single most common real-world failure mode for any API consumer
+(a typo'd, expired, or revoked key).
+
+**Root cause, isolated via direct SQL against the live hosted project.**
+`lib/api-gateway/authenticate.server.ts`'s denial-logging branch unconditionally logged
+`actorType: "api_key"` for every denied request, regardless of outcome. `app.api_logs`'s own
+`api_logs_actor_shape_check` CHECK constraint requires a non-null `api_key_id` whenever
+`actor_type = 'api_key'`. For `rate_limited`/`forbidden_scope` denials the key was always found, so
+`api_key_id` is always resolved — correct. For `unauthenticated`, the key was never found at all,
+so `api_key_id` is genuinely `null` — logging `"api_key"` against a `null` id threw a `23514`
+constraint violation inside `recordApiRequest()`, uncaught by the caller, surfacing as a generic
+Next.js `500` instead of the intended clean `401`. Confirmed live by calling
+`public.record_api_request(...)` directly with the exact pre-fix parameter shape.
+
+**Blast radius: all 9 `app/api/v1/**` routes**, not one. `authorizeApiV1Request()` is the single
+shared gateway function every `/v1` route calls (confirmed via
+`grep -rln "authorizeApiV1Request" app/api/v1`) — every route sharing this one function shared this
+identical defect against any invalid key.
+
+**Why invisible to existing tests.** `tests/api/v1/support/rpc-fetch-stub.ts`'s own header comment
+discloses `record_api_request` "always succeeds trivially in these tests" — the Node unit-test
+layer never exercised the real constraint. `scripts/db-tests/public-api-platform.sql` only ever
+calls `app.authenticate_and_authorize_api_request` in isolation, never the full
+auth-check-then-log-denial route-handler sequence that actually triggers this.
+
+**Fix.** One line, `lib/api-gateway/authenticate.server.ts`: `actorType: "api_key"` →
+`actorType: authResult.apiKeyId ? "api_key" : "anon"`. No migration, no schema change — the
+constraint itself is correct; the application code violated it. New regression test added
+(`tests/api/v1/status.test.ts`) pinning the previously-broken case; two adjacent existing tests
+tightened to realistic fixtures matching the real DB contract. `node --experimental-strip-types
+--test tests/api/v1/status.test.ts`: 5/5 pass. Full suite `pnpm run test`: 5453/5453 pass. Fix's
+exact live database interaction re-verified directly against the hosted project; the one synthetic
+`app.api_logs` row this created was deleted immediately after, leaving production's table exactly
+as found otherwise. Full detail: `docs/build-log/release-go-live/RGL-401.md`,
+`docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-007`.
+
+**Status `RESOLVED` in code on branch `claude/step-16-prompt-390-412-okbd6v`, `NOT YET DEPLOYED` to
+production** — Prompt 401 §12 forbids production mutation/deployment in this prompt, so
+production's running application binary is unchanged by this checkpoint. Severity **High**: no
+tenant data, financial record, or security boundary is broken — the fix is a reliability/contract
+break in the public REST API's own error-handling path, not a data-integrity or tenant-isolation
+failure — but it breaks the documented error contract for the single most common real-world
+API-consumer failure mode across all 9 public `/v1` routes. Owner: `RGL-404`/`RGL-015` must treat
+this as an outstanding "fix ready, not yet deployed" item.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.

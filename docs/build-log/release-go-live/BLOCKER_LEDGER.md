@@ -578,6 +578,98 @@ checkpoint holds no acceptance authority regardless (§8.2 condition 5 restricts
 
 ---
 
+## `RGL-BLK-007` — Every `app/api/v1/**` route returns an uncaught `500` for any invalid/unrecognized Bearer key instead of a clean `401`, live-forced in production (`RESOLVED in code, not yet deployed` — found and fixed same checkpoint)
+
+| Field | Value |
+|---|---|
+| Severity | **High** |
+| Status | **`RESOLVED` in code on this branch, `NOT YET DEPLOYED` to production** (`RGL-401`, 2026-08-25, same checkpoint as discovery) |
+| Found at | `RGL-401` (Smoke Test), 2026-08-25, by live-probing `/api/v1/status` with a range of Bearer-token states as a genuine external API consumer would, not merely reasoning about the code |
+| Owner | `RGL-401` (Smoke Test) — root-caused and fixed directly, this task's own charter; `RGL-015` (Production Deployment) owns actually shipping the fix live |
+
+**Statement.** `GET https://cargogrid-app.vercel.app/api/v1/status` with
+`Authorization: Bearer <any never-issued key>` returned an uncaught `500` with an empty body in
+live production, instead of the intended clean `401 {"error":{"code":"unauthenticated"}}`. The
+same request with no `Authorization` header at all correctly returned `401` — only the
+present-but-unrecognized-key path was broken, arguably the single most common real-world failure
+mode for any API consumer (a typo'd, expired, or revoked key).
+
+**Root cause, isolated via direct SQL against the live hosted project, not guessed at.**
+`lib/api-gateway/authenticate.server.ts`'s denial-logging branch unconditionally logged
+`actorType: "api_key"` for every denied request. `app.api_logs`'s own
+`api_logs_actor_shape_check` CHECK constraint requires a non-null `api_key_id` whenever
+`actor_type = 'api_key'`. For `rate_limited`/`forbidden_scope` denials this is correct — the key
+was found, so `api_key_id` is always resolved. For `unauthenticated`, the key was never found at
+all, so `api_key_id` is genuinely `null` — logging `"api_key"` against a `null` id threw
+`23514` inside `recordApiRequest()`, an exception the caller did not catch, surfacing as Next.js's
+generic `500`. Confirmed live by calling `public.record_api_request(...)` directly with the exact
+pre-fix parameter shape and observing the same `23514` error.
+
+**Blast radius.** `authorizeApiV1Request()` is the one shared gateway function every `/v1` route
+calls (its own header comment: "the one place... IAE-010/011/012's own `/v1` routes reuse...
+instead of re-deriving auth/rate-limit/error-shape logic per capability"). Confirmed via
+`grep -rln "authorizeApiV1Request" app/api/v1` — **all 9** route files under `app/api/v1/**`
+shared this identical defect against any invalid key.
+
+**Why this class of bug was invisible to existing tests.** `tests/api/v1/support/rpc-fetch-stub.ts`'s
+own header comment discloses `record_api_request` "always succeeds trivially in these tests" — the
+Node unit-test layer never exercised the real constraint. `scripts/db-tests/public-api-platform.sql`
+only ever calls `app.authenticate_and_authorize_api_request` in isolation, never the full
+route-handler sequence of auth-check-then-log-denial that actually triggers this.
+
+**Fix.** One line, `lib/api-gateway/authenticate.server.ts`: `actorType: "api_key"` →
+`actorType: authResult.apiKeyId ? "api_key" : "anon"` — derives the logged actor type from
+whether a real key was actually resolved, matching both the constraint and
+`app.authenticate_and_authorize_api_request`'s own real contract. No migration, no schema change —
+the constraint itself is correct; the application code violated it.
+
+**Verification.** New regression test (`tests/api/v1/status.test.ts`) pins the previously-broken
+case; two adjacent existing tests (`rate_limited`, `forbidden_scope`) tightened to use realistic
+non-null `apiKeyId` fixtures matching the real DB contract. `node --experimental-strip-types --test
+tests/api/v1/status.test.ts`: 5/5 pass. Full suite: `pnpm run test` — 5453/5453 pass. Fix's exact
+live database interaction re-verified directly against the hosted project
+(`public.record_api_request(..., 'anon', null::uuid, ...)` succeeds cleanly); the one synthetic
+`app.api_logs` row this verification created was deleted immediately after, leaving production's
+table exactly as found otherwise. Full detail: `docs/build-log/release-go-live/RGL-401.md`.
+
+**Why High, not Critical.** No tenant data, financial record, or security boundary is broken or
+bypassed — the constraint that fired is doing exactly its job (rejecting a bad denial-log shape);
+the defect is a reliability/contract break in the public REST API's own error-handling path (a
+`500` where a documented `401` is the contract), not a data-integrity, tenant-isolation, or
+financial-correctness failure. It is registered High because it breaks the error contract for the
+single most common real-world API-consumer failure mode across the entire public `/v1` surface (9
+routes), not a narrow edge case.
+
+**Why `RESOLVED` here does not mean closed.** The fix is committed to
+`claude/step-16-prompt-390-412-okbd6v` and merges into the release candidate, but **production's
+running application binary is unchanged by this checkpoint** (Prompt 401 §12 forbids production
+mutation/deployment in this prompt) — the defect remains live in production until `RGL-015` ships
+this branch. `RGL-404`/`RGL-015` must account for this as an outstanding "fix ready, not yet
+deployed" item, not treat `RESOLVED` here as "no longer present in production."
+
+**Not a §8.2 acceptance.** Fixing a root cause removes the finding rather than accepting it; this
+checkpoint holds no acceptance authority regardless (§8.2 condition 5 restricts that to
+`RGL-404`/`RGL-412`).
+
+---
+
+## Status summary as of `RGL-401` (Smoke Test), 2026-08-25
+
+| Severity (binding) | Open | Resolved | IDs (open) |
+|---|---|---|---|
+| Critical | **1** | 1 (`RGL-BLK-006`) | `RGL-BLK-001` |
+| High | **1** | 4 (`RGL-BLK-002`, `RGL-BLK-004`, `RGL-BLK-005`, `RGL-BLK-007`) | `RGL-BLK-003` |
+| Medium | 0 | 0 | — |
+
+**`RGL-BLK-007` (High, new this checkpoint) is `RESOLVED` in code, `NOT YET DEPLOYED`** — found and
+fixed the same checkpoint (`RGL-401`'s own charter, Smoke Test), but the fix ships live only at
+`RGL-015`; `RGL-404` must treat it as an outstanding deployment item, not a closed matter.
+`RGL-BLK-001` (Critical, ungated Vercel auto-deploy) and `RGL-BLK-003` (High-aggregate, 17
+inherited Step 15 acceptances) remain open, both `RGL-404`'s to dispose of; neither is touched by
+this checkpoint.
+
+---
+
 ## Status summary as of `RGL-397` (Migration Validation), 2026-08-25
 
 | Severity (binding) | Open | Resolved | IDs (open) |

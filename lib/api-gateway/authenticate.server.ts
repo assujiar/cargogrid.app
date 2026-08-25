@@ -87,8 +87,14 @@ export async function authorizeApiV1Request(request: Request, operation: string,
 
   if (authResult.outcome !== "ok") {
     const statusCode = HTTP_STATUS_BY_DENIAL_OUTCOME[authResult.outcome];
+    // RGL-401: an "unauthenticated" outcome means the presented key never resolved to a real
+    // app.api_keys row, so authResult.apiKeyId is null -- logging actorType "api_key" with a
+    // null apiKeyId violates app.api_logs' own api_logs_actor_shape_check constraint
+    // ("api_key" requires a non-null api_key_id), crashing this entire request with an
+    // uncaught 500 instead of the intended clean denial response. Only forbidden_scope/
+    // rate_limited outcomes have a real, resolved apiKeyId -- unauthenticated never does.
     await recordApiRequest(rpcClient, {
-      correlationId, tenantId: authResult.tenantId, actorAuthUserId: null, actorType: "api_key", apiKeyId: authResult.apiKeyId,
+      correlationId, tenantId: authResult.tenantId, actorAuthUserId: null, actorType: authResult.apiKeyId ? "api_key" : "anon", apiKeyId: authResult.apiKeyId,
       interface: "rest", operation, httpMethod, path: url.pathname, statusCode, result: "failure",
       errorCode: authResult.outcome, durationMs: Date.now() - startedAt,
     });
