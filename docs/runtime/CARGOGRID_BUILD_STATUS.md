@@ -2,7 +2,44 @@
 
 **Instance of:** `CG-AABPP-GOV-013`
 **Instance version:** `0.2.0`
-**Updated:** 2026-08-25 (`CG-S16-RGL-001` — **Release Go-Live WBS Runtime Kickoff (Prompt 391)**
+**Updated:** 2026-08-25 (`CG-S16-RGL-002` — **Release Candidate Freeze (Prompt 392)** —
+`COMPLETED`, first round, Tier C review pending. **Sets `RC_FROZEN` for `RC-2026.08.25-1`.**
+Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. Zero code, zero
+migration, zero schema change — a freeze records state, it does not change it. Candidate commit
+`9d8a71d`; its **shippable content is byte-identical to `568be15` (`HDN-387`)**, verified by
+`git diff -- ':!docs'` returning empty, so the last change to shippable content predates this
+range entirely. **No release tag created** — tagging would imply a promotion decision only
+`RGL-404` may make, and this repository has never tagged a release. Froze the dependency set
+(lockfile sha256 `feafbf67…`, `--frozen-lockfile` clean; 6 caret-ranged manifest entries
+disclosed, so the freeze anchors on the lockfile hash rather than `package.json`), the schema
+state (333 migrations set sha256 `15f6e704…`, 230 db-test files sha256 `2c3389a8…`, and **no
+generated types, OpenAPI document or GraphQL schema artifact exists anywhere** — recorded as
+genuinely absent rather than left implicit), the change window, and the environment/secrets
+contract **by variable name and presence only**. **The test matrix is frozen RED**, and Step 15's
+`230/230` was explicitly refused as a freeze fact; `test:e2e` and `security:audit` recorded
+**NOT RUN** rather than inferred. **`RGL-BLK-004`'s root cause confirmed end-to-end by a
+controlled experiment**: the identical suite, same tree, same instant, re-run with only
+`PGTZ=Asia/Singapore` changed (local hour ~10:55, outside the 01:00-03:59 dead band) produced
+**`==> db-tests: ALL PASSED`, 230/230, 0 errors** — proving the diagnosis, proving no second
+failure hid behind the baseline run's `set -euo pipefail` abort (the 27 previously-unexecuted
+files are now known green), and independently evidencing that all 333 migrations apply cleanly
+from zero. Explicitly **not** read as "the suite is green": it is green 21 hours of every 24 and
+red for 3, so the matrix stays RED, and using `PGTZ` to dodge the window is forbidden as a fake
+pass. **New finding `ISS-2026-287` (Medium)**: Vercel builds and runs production on Node **`24.x`**
+while `engines.node`, the local toolchain (`v22.22.2`) and CI all sit on a Node 22 line — an
+untested major-version divergence between the environment that verifies the candidate and the
+environment that ships it; not a manifest violation, which is exactly why nothing flagged it.
+Owner `RGL-399`. **Precondition verdict: the candidate is frozen and is NOT promotable as
+frozen** — 2 proposed-Critical (`RGL-BLK-001`, `RGL-BLK-005`) and 3 High blockers stand. This
+lane deliberately did **not** award itself `NO_GO` authority (reserved to `RGL-404`/`RGL-412`)
+and recorded a non-binding recommendation instead; Prompt 392 §23's exception flow was tested
+explicitly against `RGL-BLK-002` and deliberately not triggered, since a disclosed pre-existing
+degradation with a named owner and an intact rollback target is not a new incident. Gates:
+`typecheck` 0; `lint` 0 errors/337 warnings; `pnpm run test` **5444/5444**; `next build` clean/249
+routes; all governance gates pass; `db:test` **RED (hour-dependent)**; **CI RED**. Full detail:
+`docs/build-log/release-go-live/RGL-392.md`.)
+
+**Prior update:** 2026-08-25 (`CG-S16-RGL-001` — **Release Go-Live WBS Runtime Kickoff (Prompt 391)**
 — `COMPLETED`, first round, Tier C review pending. **Sets `RELEASE_GO_LIVE_IN_PROGRESS`. First
 runtime task of Step 16 (390-412).** Not a production, pilot, GA, or market-ready claim
 (RPD-001/034/036) — `RELEASE_GO_LIVE_VERIFIED` may only ever be set by Prompt 412. Zero code,

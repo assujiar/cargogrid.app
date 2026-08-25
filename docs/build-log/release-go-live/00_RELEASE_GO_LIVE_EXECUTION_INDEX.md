@@ -258,8 +258,8 @@ prompt's own header fixes; additional required outputs are named where the promp
 | # | Task ID | Lane | Capability | Dep | Environment / posture | Evidence | Approval gate | Rollback | State |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | `CG-S16-RGL-001` | `RGL-391` | Release Go-Live WBS Runtime Kickoff | `CG-S15-HDN-021` | Repository only | this file | none (kickoff may not approve anything) | `git revert` this commit | **`COMPLETED`** this checkpoint |
-| 2 | `CG-S16-RGL-002` | `RGL-392` | Release Candidate Freeze | 1 | Repository only | `RGL-392.md` | sets `RC_FROZEN` | `git revert`; re-freeze | **`READY`** |
-| 3 | `CG-S16-RGL-003` | `RGL-393` | No-New-Feature Rule | 2 | Repository + GitHub | `RGL-393.md` | none | `git revert` | `BLOCKED` on 2 |
+| 2 | `CG-S16-RGL-002` | `RGL-392` | Release Candidate Freeze | 1 | Repository only | `RGL-392.md` | **`RC_FROZEN` set** for `RC-2026.08.25-1` | `git revert`; re-freeze | **`COMPLETED`**, Tier C pending |
+| 3 | `CG-S16-RGL-003` | `RGL-393` | No-New-Feature Rule | 2 | Repository + GitHub | `RGL-393.md` | none | `git revert` | **`READY`** |
 | 4 | `CG-S16-RGL-004` | `RGL-394` | Defect Triage | 3 | Repository + ledgers | `RGL-394.md`, `RELEASE_DEFECT_LEDGER.md` | severity rulings binding on `RGL-404` | `git revert` | `BLOCKED` on 3 |
 | 5 | `CG-S16-RGL-005` | `RGL-395` | Full CI Gate | 4 | CI (real) + local | `RGL-395.md` | none | `git revert` | `BLOCKED` on 4 |
 | 6 | `CG-S16-RGL-006` | `RGL-396` | Clean Database Rebuild | 5 | Disposable Postgres (real) | `RGL-396.md` | none | disposable target; nothing to roll back | `BLOCKED` on 5 |
@@ -294,7 +294,17 @@ three independent reasons, any one of which is sufficient:
    (`RGL-395`…`403`) is not a decision, and a production deployment (`RGL-405`) that predates
    its go decision is precisely `RGL-BLK-001`.
 
-### 5.2 Release-candidate lineage rule
+### 5.2 Release candidate identity — frozen at `RGL-392`
+
+**`RC-2026.08.25-1`**, candidate commit `9d8a71daf060b46d34d183b53e598578d6833c68`. Its
+*shippable content* (everything outside `docs/`) is byte-identical to `568be15` (`HDN-387`) —
+verified, not assumed. No release tag exists or was created; creating one would imply a promotion
+decision only `RGL-404` may make. Dependency-set, schema and test-matrix hashes: `RGL-392.md`
+§1–§4.
+
+**The frozen test matrix is RED**, and is frozen red. Full detail `RGL-392.md` §4.
+
+### 5.3 Release-candidate lineage rule
 
 Every lane from `RGL-392` onward cites evidence produced **at or after** the frozen candidate
 and against **one** compatible checkpoint. `RGL-410` and `RGL-412` must reject mixed-checkpoint
@@ -648,7 +658,7 @@ explicitly before executing — the same discipline Step 15 imposed on `HDN-383`
   production request.
 - **Never** disable, skip, quarantine, or weaken a test, lint rule, typecheck, RLS policy or
   validation to make a gate pass. This is Prompt 412 required-verification item 4.
-- **Mixed-checkpoint evidence is invalid** at `RGL-410` and `RGL-412` (§5.2).
+- **Mixed-checkpoint evidence is invalid** at `RGL-410` and `RGL-412` (§5.3).
 
 ### 11.2 Rollback plan (Prompt 391 step 8; `RGL-407` owns the full decision tree)
 

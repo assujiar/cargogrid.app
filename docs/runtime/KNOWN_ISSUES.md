@@ -3220,6 +3220,18 @@ Found by **querying the GitHub Actions API**, not by reading `.github/workflows/
 
 **Status `OPEN`**, Critical proposed. **Not fixed at `RGL-391`**: pre-existing, outside a zero-code kickoff's charter, and the repair is a real design choice (rewrite the assertion to avoid `pg_read_file`, or run the helper server-side) rather than a mechanical edit. Registered as `RGL-BLK-005`. Owner: `RGL-395` (Full CI Gate); binding severity ruling at `RGL-394`. **Binding on the range: `RGL-395` may not certify the CI gate, and `RGL-404` may not reach a go decision, until CI is verified green against the Actions API — never on the strength of a local run.**
 
+### ISS-2026-287 — The Vercel production build runs Node `24.x` while every gate in this repository runs and is pinned against Node 22, an untested runtime divergence between the environment that verifies the candidate and the environment that builds it (found at `RGL-392`, Medium)
+
+Recorded at the release-candidate freeze, where "the environment the evidence came from" is a load-bearing freeze fact rather than a detail.
+
+`package.json` declares `engines.node` `>=22.11.0`; the local toolchain that produced every Tier A result in this build is `v22.22.2`; `.github/workflows/ci.yml` uses `node-version-file: package.json`, so CI also resolves to a Node 22 line. The Vercel project `cargogrid-app` reports **`nodeVersion: "24.x"`** (`get_project`, verified live at `RGL-392`). So the artifact actually served in production is built and executed on a **major Node version that no gate in this repository has ever run against.**
+
+`engines.node >= 22.11.0` does not exclude 24.x, so this is not a manifest violation — which is precisely why it went unnoticed: nothing fails, and no tool reports a divergence. The production deployment at `2670cb5` did build successfully on 24.x, so there is no evidence of an actual break; the finding is that **the verification environment and the production environment differ by a major runtime version, and nothing tests the difference.**
+
+This is the same *class* as the "CI-mirrors-hosted" property Step 15 §2.2 made a standing constraint after pgcrypto/`search_path` divergences broke 20 functions only at call time in the hosted environment — an environment axis assumed equivalent, never verified. Registered now rather than after it produces a defect.
+
+**Status `OPEN`**, Medium (no break observed; the risk is untested surface, not a known failure). **Not fixed at `RGL-392`**, whose charter is to freeze state, not change it — and the remedy is a real decision (pin Vercel to 22.x to match the gates, or widen the gates to test 24.x) rather than a mechanical edit. Owner: `RGL-399` (Staging Deployment), which owns environment configuration diagnosis, with `RGL-395` (Full CI Gate) owning any gate-matrix widening.
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
