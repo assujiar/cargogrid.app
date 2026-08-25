@@ -977,6 +977,50 @@ begin
   );
 end $$;
 
+\echo '>> RGL-BLK-004 regression (HIGH, live-reproduced): app._calc_vendor_kpi_rate_validity is_computable for a sub-24-hour, non-day-aligned window -- deterministic, hardcoded window shape, independent of wall-clock and of the vendor/tenant fixtures above, so this proof does not depend on which hour of the day the suite happens to run in'
+do $$
+declare
+  -- This exact shape (21 hours, entirely inside one calendar day, not aligned to a
+  -- day boundary) is what the pre-fix formula collapsed on: window_start::date and
+  -- (window_end - interval '1 day')::date landed on DIFFERENT calendar dates with the
+  -- earlier one after the later one, so generate_series(later, earlier, '1 day') was
+  -- empty and is_computable came back false. Hardcoded, not now()-relative, so this
+  -- assertion is not one of the 3-hours-of-every-24 that used to fail depending on
+  -- when the suite happened to run -- it fails or passes identically at every hour.
+  v_window_start timestamptz := '2026-01-15 01:00:00+00';
+  v_window_end timestamptz := '2026-01-15 22:00:00+00';
+  v_result app.vendor_kpi_calc_result;
+begin
+  -- A nonexistent tenant/vendor is deliberately used: this checks the window-to-days
+  -- arithmetic itself, not real rate coverage, which the "New Vendor" block above
+  -- already covers through the real RPC surface for the historically-observed hours.
+  select * into v_result from app._calc_vendor_kpi_rate_validity(
+    '00000000-0000-0000-0000-000000000000'::uuid, '00000000-0000-0000-0000-000000000000'::uuid,
+    v_window_start, v_window_end
+  );
+  if not v_result.is_computable then
+    raise exception 'assertion failed: expected is_computable=true for a 21-hour same-calendar-day window (RGL-BLK-004 regression) -- got raw_denominator=%', v_result.raw_denominator;
+  end if;
+  if v_result.raw_denominator <> 1 then
+    raise exception 'assertion failed: expected exactly 1 calendar day in [2026-01-15 01:00, 2026-01-15 22:00), got raw_denominator=%', v_result.raw_denominator;
+  end if;
+  if v_result.computed_value <> 0 then
+    raise exception 'assertion failed: expected computed_value=0 (no rate coverage for a nonexistent vendor, but genuinely computable), got %', v_result.computed_value;
+  end if;
+
+  -- The whole-day-aligned case the pre-fix formula already handled correctly must
+  -- still produce the identical result under the new formula (window_end minus one
+  -- microsecond, not minus one day) -- a real non-regression check, not just "the new
+  -- case works".
+  select * into v_result from app._calc_vendor_kpi_rate_validity(
+    '00000000-0000-0000-0000-000000000000'::uuid, '00000000-0000-0000-0000-000000000000'::uuid,
+    '2026-01-01 00:00:00+00'::timestamptz, '2026-01-03 00:00:00+00'::timestamptz
+  );
+  if not v_result.is_computable or v_result.raw_denominator <> 2 then
+    raise exception 'assertion failed: expected a whole-day-aligned 2-day window [Jan1 00:00, Jan3 00:00) to still yield raw_denominator=2, got is_computable=% raw_denominator=%', v_result.is_computable, v_result.raw_denominator;
+  end if;
+end $$;
+
 \echo '>> Tier C batch-4 fix regression (C-04, HIGH, live-reproduced): decide_vendor_kpi_manual_adjustment now rejects (stale_scorecard) an approval whose target scorecard was superseded by a later recalculation while the adjustment was still pending, instead of silently rewriting a dead scorecard nobody reads anymore'
 do $$
 declare

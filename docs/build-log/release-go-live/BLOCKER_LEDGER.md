@@ -50,6 +50,22 @@ decision. This entry records the fact and the owner, nothing more.
 
 ---
 
+**Severity ruling (`RGL-394`, 2026-08-25, binding per Owner/binding severity ruling authority).**
+Re-verified live before ruling, not carried forward by assumption: `get_project_deployment_
+protection` against `prj_9ND1BsfbppHiqeKrSEldYh8xbC68` this checkpoint shows the identical
+configuration recorded at kickoff (`passwordProtection` off, `trustedIps` off,
+`ssoProtection.deploymentType: all_except_custom_domains` — the production alias itself
+un-gated). **Confirmed Critical, no adjustment from the proposed severity.** Meets Sev-1 per
+`00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §8.1's own definition on the "no working rollback"/
+"production outage" axis by mechanism, not by observed outcome: the auto-deploy path bypasses
+this range's own non-negotiable "no production deployment without recorded go decision" gate
+unconditionally, for every future merge, with **no compensating control today**. `RGL-394` does
+not hold acceptance authority (§8.2 condition 5) and does not dispose of this entry — that
+remains `RGL-404`'s decision, per the existing Owner field. This ruling only fixes the severity
+classification as binding rather than proposed.
+
+---
+
 ## `RGL-BLK-002` — Production is publicly reachable, unauthenticated, and degraded
 
 | Field | Value |
@@ -212,6 +228,19 @@ restore, DR rehearsal, monitoring/alerting) carry the same obligation.
 
 ---
 
+**Severity ruling (`RGL-394`, 2026-08-25, binding).** **Confirmed High — aggregate, no
+adjustment.** None of the 17 items is individually Sev-1 on its own §8.1 statement (each was
+already `ACCEPTED_EXCEPTION`-eligible, i.e. High-or-below, at Step 15's own closure), and
+`RGL-BLK-002`'s own remediation this range (`RGL-BLK-002-OPTION2-REMEDIATION.md`) did not touch
+any of the 17 named items directly — `HDN-BLK-022`'s RLS/RPC gate-gap class is adjacent in shape
+to `ISS-2026-292` (the default-privilege grant leak this same range's own `RGL-BLK-002` work
+found and fixed) but is a distinct, still-open ~33-table remainder, not overlapping content. The
+obligation itself (individual re-ruling against the production bar) is unchanged and remains
+`RGL-404`'s to discharge — `RGL-394` does not hold acceptance authority (§8.2 condition 5) and
+does not pre-empt that item-by-item ruling here.
+
+---
+
 ## `RGL-BLK-004` — `_calc_vendor_kpi_rate_validity` returns not-computable for any window whose date arithmetic collapses, breaking `db:test` for 3 hours of every day
 
 | Field | Value |
@@ -284,6 +313,47 @@ with a named owner instead, per §8.2 condition 3.
 
 **Compensating control today:** none. The gate is simply unreliable for 3 hours of every 24, and
 `RGL-395` cannot honestly certify the CI gate until this is fixed.
+
+---
+
+**`RESOLVED`, 2026-08-25, at `RGL-394` (Defect Triage), as its own charter requires ("owns the
+RGL-BLK-004 fix").**
+
+**Severity ruling: confirmed High, no adjustment.** Matches Sev-2 exactly — a real caller
+requesting a short intraday window silently received a missing-data result instead of the correct
+0%, a core-flow correctness defect with no workaround, but not a tenant-isolation/auth/financial-
+posting/data-loss/migration-failure/rollback/outage event.
+
+**Fix**, additive (`supabase/migrations/20260826020000_harden_vendor_kpi_rate_validity_window_calc.sql`,
+the original applied migration is not edited): `app._calc_vendor_kpi_rate_validity`'s days-in-
+window upper bound is now `(p_window_end - interval '1 microsecond')::date` instead of
+`(p_window_end - interval '1 day')::date`. The old formula only produced the correct calendar date
+for a window whose length is a whole number of 24-hour periods aligned to a day boundary; for any
+other window shape it could walk the upper bound's date to *before* the window's own start date,
+collapsing `generate_series()` to empty. The new formula finds the calendar date of the last
+instant genuinely inside the exclusive-end window, which is provably never earlier than the
+window's own start date once `window_end > window_start` (true of every real caller) — identical
+result to the old formula for every whole-day-aligned window it already handled correctly, and
+correct for every other window shape it did not.
+
+**Regression proof, both hour-independent and behavior-preserving**: a new, deterministic
+assertion block added to `scripts/db-tests/procurement-vendor-performance.sql` calls the function
+directly with a hardcoded, non-day-aligned 21-hour window (the exact shape that used to collapse)
+and asserts `is_computable = true`/`raw_denominator = 1` — fixed, not `now()`-relative, so it
+fails or passes identically at every hour of the day rather than only outside the historical
+01:00-03:59 dead band. A second assertion re-checks the original whole-day-aligned 2-day window
+case still yields `raw_denominator = 2`, proving the fix does not change behavior for the case the
+old formula already got right. The three pre-existing `now()`-relative scenario blocks in the same
+file are unmodified and, now that the underlying arithmetic bug is gone, pass at every hour rather
+than 21 of 24.
+
+**Verification**: full local `db-tests` suite re-run from a clean database against the corrected
+335→336-migration set — 231→232 files, `ALL PASSED` (see this checkpoint's own build log,
+`RGL-394.md`, for the exact run evidence). Applied to the live hosted project
+(`awdlicmwzdxquopwtcfd`) the same checkpoint, consistent with this range's own standing practice
+of keeping live current with every accepted schema fix rather than letting drift accumulate again
+(the precise gap `RGL-BLK-002`'s own remediation, `ISS-2026-290`, found and closed for the prior
+17 migrations).
 
 ---
 
@@ -362,6 +432,38 @@ CI gate, does not run on every push, and — per `RGL-BLK-004` — is itself hou
 
 ---
 
+**Severity ruling (`RGL-394`, 2026-08-25, binding).** **Reclassified High, down from the proposed
+Critical.** Re-verified live before ruling: `list_workflow_runs` against `main` this checkpoint
+shows the identical state — the latest run (114, `2670cb5`) still `conclusion: failure` — so the
+finding itself is unchanged and still real. The reclassification is about severity
+*classification*, not about whether this blocks: it still blocks go-live absent a formal §8.2
+acceptance by `RGL-404`.
+
+Applying the severity model at §8.1 by its own stated rule ("set by impact if it reached a real
+tenant, never by how hard it is to fix"): none of the Sev-1 triggers are met. It is not a tenant
+isolation breach, an authentication/authorization bypass, a financial mis-posting, data loss, a
+migration failure, a broken rollback, or a production outage — this entry's own text already
+proves the opposite for the one root-caused failure (the WMS concurrency guarantee the failing
+block tests is itself proven; only a loser's-output-text assertion fails, a test-harness portability
+bug, not a product defect). It matches Sev-2/High precisely instead: "a support/monitoring gate
+absent at go-live" — the CI gate is exactly that kind of control, and it is absent for 196 of 230
+files.
+
+**The compensating-control picture has also materially improved since kickoff, not stayed flat**,
+which independently supports High over Critical rather than merely permitting it: `RGL-BLK-004`
+(the other half of the "local execution is itself hour-dependent" caveat this entry's own
+compensating-control line names) is `RESOLVED` as of this same checkpoint, and the local suite has
+now been run to a full, genuine `ALL PASSED` multiple times this range against the exact current
+migration set (see `RGL-BLK-002-OPTION2-REMEDIATION.md` §7 and this checkpoint's own build log) —
+not a claim of CI-equivalence, but a real, repeated, hour-independent local signal that did not
+exist in this form at kickoff.
+
+This ruling does not fix the root cause (`RGL-395` still owns that) and does not accept the
+finding (`RGL-394` holds no acceptance authority, §8.2 condition 5) — it only corrects the
+severity classification to what the model's own definition supports.
+
+---
+
 ## Status summary as of `RGL-391` (superseded below)
 
 | Severity (proposed) | Open | IDs |
@@ -386,3 +488,21 @@ authority — not a severity acceptance.** No `RGL-BLK-*` entry has received a f
 acceptance ruling; `RGL-404` and `RGL-412` remain the only acceptance authorities. `RGL-394`
 (Defect Triage, not yet executed) still owns the binding severity ruling for the four entries
 that remain open.
+
+## Status summary as of `RGL-394` (Defect Triage), 2026-08-25
+
+| Severity (binding) | Open | Resolved | IDs (open) |
+|---|---|---|---|
+| Critical | **1** | 0 | `RGL-BLK-001` |
+| High | **2** | 2 (`RGL-BLK-002`, `RGL-BLK-004`) | `RGL-BLK-003`, `RGL-BLK-005` |
+| Medium | 0 | 0 | — |
+
+**Every entry now carries a binding severity ruling** (`RGL-394`'s own charter, confirmed live
+before each ruling rather than carried forward by assumption): `RGL-BLK-001` confirmed Critical;
+`RGL-BLK-003` confirmed High-aggregate; `RGL-BLK-005` **reclassified High**, down from the
+proposed Critical, per the severity model's own product-impact-based definition (§8.1) — it
+remains a real, still-open, still-blocking finding, only the classification changed.
+`RGL-BLK-004` is `RESOLVED` (fixed and verified this same checkpoint, `RGL-394`'s own charter to
+fix it directly). **No `RGL-BLK-*` entry has received a formal §8.2 acceptance ruling** — `RGL-394`
+holds no acceptance authority (§8.2 condition 5); `RGL-404` and `RGL-412` remain the only
+acceptance authorities, and `RGL-BLK-001`/`003`/`005` all still require their disposition.

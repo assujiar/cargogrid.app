@@ -69,6 +69,23 @@ import { readFileSync } from "node:fs";
  * full local db-test suite run (335 migrations, 231 files, ALL PASSED,
  * including public-api-wrapper-regression.sql's own security-mode and
  * grant-parity assertions) before this digest was changed.
+ *
+ * AMENDED 2026-08-25 (third pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-394.md (CG-S16-RGL-004, Defect
+ * Triage) -- this task's own charter is to fix RGL-BLK-004 directly (`_calc_
+ * vendor_kpi_rate_validity`'s days-in-window arithmetic collapsed to an empty
+ * series for any sub-24-hour or otherwise day-unaligned window, contradicting
+ * its own documented guarantee, and failing db:test for 3 of every 24 hours).
+ * Fixed additively by supabase/migrations/20260826020000_harden_vendor_kpi_
+ * rate_validity_window_calc.sql (336 files total) -- the already-applied
+ * 20260730740000 file is not edited. scripts/db-tests/procurement-vendor-
+ * performance.sql gained a new, hardcoded (not now()-relative) regression
+ * assertion pinning the exact previously-collapsing window shape, so this
+ * class of defect is now caught at every hour, not only inside the historical
+ * 01:00-03:59 dead band (232 files total -- no new file, the existing one
+ * widened). Re-verified via a fresh full local db-test suite run (336
+ * migrations, 231 runner files, ALL PASSED) before this digest was changed,
+ * and applied to the live hosted project only after that local run passed.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -88,12 +105,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (334 files, first-pass amendment above). Superseded 2026-08-25 (second
   // pass) by the same remediation's own Tier C self-correction (335 files: +1,
   // 20260826010000_harden_public_api_data_wrappers_tierc_fixes.sql, closing
-  // ISS-2026-291/ISS-2026-292). See the class-level doc comment above.
-  migrationSetSha256: "be34c20ff211d741ca043414ffb4bf8d7cd7a6b17fd6d1e525ce39663cd82a4b",
+  // ISS-2026-291/ISS-2026-292).
+  // History: be34c20ff211d741ca043414ffb4bf8d7cd7a6b17fd6d1e525ce39663cd82a4b
+  // (335 files, second-pass amendment above). Superseded 2026-08-25 (third
+  // pass) by RGL-394's own RGL-BLK-004 fix (336 files: +1,
+  // 20260826020000_harden_vendor_kpi_rate_validity_window_calc.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "5fc5907adfa0b06061b9ebd31b8019272ebecdaee2d00e9c92faf48a79726378",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
   // public-api-wrapper-regression.sql).
+  // History: 576c4aa0693173d361293df78b79f12f79ed72f5bdd502210f272d54a8a9f438
+  // (232 files, prior amendment above). Superseded 2026-08-25 (third pass) by
+  // RGL-394's own new regression assertion widening the existing
+  // procurement-vendor-performance.sql (still 232 files -- content changed,
+  // not file count).
   //
   // 232 tracked .sql files under scripts/db-tests/: the 231 the runner executes,
   // plus fixtures/auth-schema-stub.sql, which it loads into every disposable
@@ -103,7 +130,7 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // RGL-393.md §4. The fixture is not incidental — HDN-369 had to correct a
   // stale, load-bearing claim inside it, and its content changes what every
   // db-test runs against.
-  dbTestSetSha256: "576c4aa0693173d361293df78b79f12f79ed72f5bdd502210f272d54a8a9f438",
+  dbTestSetSha256: "746030c4f93ef1f16da79f87154547cb78e9cad0c8020efadc78a184f4c7aa05",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

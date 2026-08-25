@@ -190,6 +190,12 @@ Discovered `2026-08-09` during `CG-S11-PRC-020` (Prompt 269 Hardening)'s own adv
 
 **Handling:** Not fixed by this checkpoint. `app._calc_vendor_kpi_rate_validity` lives in `PRC-264`'s own migration (`20260730740000_create_procurement_vendor_performance.sql`), a different capability/checkpoint than the six findings `CG-S11-PRC-020` (Prompt 269) was chartered to fix, and this checkpoint's own adversarial-review mandate is to close the three lenses' CONFIRMED findings against Prompt 269's own fix pass, not to open and fix an unrelated capability's pre-existing defect discovered incidentally — the same scope-discipline reasoning `docs/build-log/phase-06/PRC-269.md` §6 already applied when it first disclosed this failure in prose without registering it. The eventual fix is bounded and low-risk once undertaken: replace the `(p_window_end - interval '1 day')::date` upper bound with an inclusive-end computation that does not depend on time-of-day sign (e.g. `(p_window_end - interval '1 second')::date`, or deriving the day count directly via `date(p_window_end) - date(p_window_start)` with an explicit floor/ceiling decision on partial trailing days) — a `CREATE OR REPLACE FUNCTION` against this same function, plus a regression test that pins the window to specific UTC hours (e.g. `01:00`–`22:00` AND `10:00`–`11:00`) rather than a `now()`-relative window whose pass/fail depends on when the suite happens to run. **Status `OPEN`**, Low severity (self-heals outside the ~4-hour daily UTC band; no data-integrity impact — the metric value that would be recomputed with the wrong `is_computable` is never published as a scorecard line in a way that silently fabricates a value, since `is_computable=false` correctly still routes the vendor into `insufficient_kpi_coverage`/reduced-coverage handling rather than showing a wrong number) — but a real, currently-red `db:test` gate for roughly one-sixth of any given day; owner: PRC-264, a future task with an explicit mandate to touch `20260730740000`'s own capability.
 
+**`RESOLVED`, 2026-08-25, at `RGL-394` (Step 16, Defect Triage, `RGL-BLK-004`).** This exact
+defect — found here in 2026-08-09, again at `ISS-2026-204` (2026-08-24), and a third time live
+by `RGL-391` (2026-08-25, registered `RGL-BLK-004`) — is fixed. See `ISS-2026-204`'s own
+`RESOLVED` annotation for the fix detail (identical fix, one entry, cross-referenced rather than
+duplicated); full record `docs/build-log/release-go-live/RGL-394.md`.
+
 ### ISS-2026-060 — Vendor rate engine (PRC-255) has no `zone`/`distance` pricing dimension (OPEN, Medium)
 
 Discovered `2026-08-09` during `CG-S11-PRC-022` (Prompt 271, Closure Verification), by the commercial-engine verification lens plus an independent synthesis-pass re-check. `255_VENDOR_RATE_PRICELIST_PROMPT.md` (lines 60, 76, 100) names `zone`/`distance` explicitly, twice, as required rate-engine tiering dimensions alongside route/service/mode/fleet/container/weight/volume — all of which are genuinely implemented. `ADR-0015` (the founding Phase 2 rate-engine decision) also names both dimensions. Independently `grep`-confirmed this checkpoint: `zone|distance` returns zero real matches (only unrelated prose) across both `supabase/migrations/20260724150000_create_commercial_rate_cost_lookup.sql` and `supabase/migrations/20260730620000_extend_commercial_vendor_rate_for_procurement.sql` — the two migrations that jointly define the rate engine's tiering surface. `docs/build-log/phase-06/PRC-255.md` §9/§10 discloses the rate engine's tax-dimension absence in detail (registered as `ISS-2026-039`) but names zone/distance nowhere; the gap is absent from `KNOWN_ISSUES.md` and the Phase 6 WBS prior to this checkpoint.
@@ -1838,6 +1844,20 @@ checkpoints have used for out-of-lane defects found incidentally (`ISS-2026-163`
 direct half-open-interval day-span computation that cannot invert regardless of the
 window's own start/end hour alignment.
 
+**`RESOLVED`, 2026-08-25, at `RGL-394` (Step 16, Defect Triage), registered there as
+`RGL-BLK-004`.** `HDN-387` did not pick this up (its own build log shows it landed on 7
+other bounded items that checkpoint); the defect resurfaced a third time as `RGL-BLK-004`,
+found live by `RGL-391`'s own Tier A baseline run, and `RGL-394` fixed it directly, exactly
+matching the fix shape this entry already predicted: `supabase/migrations/20260826020000_
+harden_vendor_kpi_rate_validity_window_calc.sql` replaces the day-count upper bound with
+`(p_window_end - interval '1 microsecond')::date`, which cannot invert regardless of the
+window's own start/end hour alignment. A new hardcoded (non-`now()`-relative) regression
+assertion was added to `scripts/db-tests/procurement-vendor-performance.sql` pinning the
+exact previously-collapsing window shape, so this class fails or passes identically at
+every hour rather than only inside the historical dead band. Full record:
+`docs/build-log/release-go-live/RGL-394.md`, `docs/build-log/release-go-live/BLOCKER_LEDGER.md`
+`RGL-BLK-004`.
+
 ### ISS-2026-205 — the append-only-guard pattern `ISS-2026-201` applied to `app.transaction_lineage_edges` is genuinely needed on roughly 70 more tables schema-wide, including `app.audit_logs` itself (found at `CG-S15-HDN-007`'s own Tier C review, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-018`)
 
 Found by this checkpoint's own Tier C completeness-sweep lens, live-forced against a
@@ -3219,6 +3239,17 @@ Found by **querying the GitHub Actions API**, not by reading `.github/workflows/
 **Related, folded in rather than registered separately:** every recent checkpoint commit fails this repository's own `scripts/git/check-commit-message.ts` gate, which CI runs on PR head commits — verified directly against `3fe4bf6` (`HDN-389`), `00403cb` (`HDN-388`) and `568be15` (`HDN-387`). `RGL-391`'s own first commit had the same shape and was amended to comply before anything was pushed. It is a sub-case of the same "nobody was reading CI" root cause.
 
 **Status `OPEN`**, Critical proposed. **Not fixed at `RGL-391`**: pre-existing, outside a zero-code kickoff's charter, and the repair is a real design choice (rewrite the assertion to avoid `pg_read_file`, or run the helper server-side) rather than a mechanical edit. Registered as `RGL-BLK-005`. Owner: `RGL-395` (Full CI Gate); binding severity ruling at `RGL-394`. **Binding on the range: `RGL-395` may not certify the CI gate, and `RGL-404` may not reach a go decision, until CI is verified green against the Actions API — never on the strength of a local run.**
+
+**Severity ruling (`RGL-394`, 2026-08-25): reclassified High, down from the proposed Critical.**
+Re-verified live before ruling (`list_workflow_runs` against `main`: still `conclusion: failure`
+on run 114 — the finding is unchanged, only the classification). Applying the severity model's
+own product-impact test: this is not a tenant isolation breach, auth bypass, financial
+mis-posting, data loss, migration failure, broken rollback or production outage — this entry's
+own text already proves the opposite for the one root-caused failure (the WMS concurrency
+guarantee under test is itself proven; only a loser's-output-text assertion fails). It matches
+Sev-2/High precisely: "a support/monitoring gate absent at go-live." Still blocks go-live absent a
+formal `RGL-404` acceptance; `RGL-395` still owns the root-cause repair unchanged. Full reasoning:
+`docs/build-log/release-go-live/RGL-394.md`, `BLOCKER_LEDGER.md` `RGL-BLK-005`.
 
 ### ISS-2026-287 — The Vercel production build runs Node `24.x` while every gate in this repository runs and is pinned against Node 22, an untested runtime divergence between the environment that verifies the candidate and the environment that builds it (found at `RGL-392`, Medium)
 
