@@ -94,6 +94,91 @@ presence*, never by value.
 
 ---
 
+**`RESOLVED`, 2026-08-25, out of the Step 16 WBS's normal sequence, under direct explicit
+operator authority.** Full record:
+`docs/build-log/release-go-live/RGL-BLK-002-OPTION2-REMEDIATION.md`. This is **not** `RGL-399`'s
+own diagnosis (which remains a separate, not-yet-executed task) — the true root cause turned out
+to be unrelated to environment configuration, and this resolution corrects that original
+framing rather than confirming it.
+
+**Actual root cause**, traced directly against the live hosted PostgREST endpoint: the `app`
+schema — where every business RPC in this application lives — was never exposed to PostgREST
+(`supabase/config.toml`: `schemas = ["public", "graphql_public"]`, matching the live project's
+own `db_schema` exactly), and **zero `public.*` wrapper ever existed anywhere in this
+repository**. Every server-side Supabase client factory calls `.rpc()` on the client library's
+default schema (`public`), never `app` — so every business RPC has been unreachable via the Data
+API since the first client factory was written, invisible to this build's own test suite for the
+same structural reason `ISS-2026-286` documents (`db-tests` calls the database directly via
+`psql`, bypassing PostgREST; `e2e` has only ever run "against an unreachable backend"). The `503
+database_unreachable` was a real PostgREST `PGRST202`/`PGRST106` schema-resolution failure,
+mislabeled by `/api/ready`'s own catch-all error message — not a credential or configuration
+problem, confirmed by direct `curl` probe with **no** Vercel environment variable read or
+guessed at any point.
+
+**Fix: Option 2** (a `public.*` security-mode-matched wrapper per externally-callable `app.*`
+function), chosen over Option 1 (exposing `app` directly) because several already-closed Step 15
+findings were rated High rather than Critical specifically because of `app`'s non-exposure —
+removing it would have silently reclassified accepted findings into live Critical
+vulnerabilities. 2,367 wrappers, catalog-derived (not hand-authored), covering every
+`app.*` function with `EXECUTE` granted to `service_role`/`authenticated`/`anon` (excluding 32
+inert trigger-function grants and 61 internal-only `_`-prefixed helpers, independently confirmed
+never called directly from any TypeScript source). Full methodology, the security-mode
+regression this remediation caught and fixed in itself before shipping (a naive
+`security definer`-everywhere design would have silently bypassed RLS for 398 functions), and
+the exhaustive + live verification evidence: see the remediation record.
+
+**Verification, exhaustive not sampled**: grant parity 0/2367 mismatches; security-mode parity
+0/2367 mismatches; 0 wrappers retain `PUBLIC`-role `EXECUTE`; a live cross-tenant RLS probe
+confirms invoker-mode wrappers preserve RLS exactly and definer-mode wrappers introduce no new
+bypass beyond their own pre-existing baseline. Full existing 230-file `db-tests` suite re-run
+unmodified: **0 regressions**. New permanent exhaustive regression test:
+`scripts/db-tests/public-api-wrapper-regression.sql` (231 total local files became 232). Full
+Tier A gate suite re-run clean: `typecheck` 0; `lint` 0 errors/337 warnings (unchanged);
+`pnpm run test` 5452/5452; `next build` clean. `RC-2026.08.25-1`'s frozen digests amended
+accordingly (`scripts/release/check-release-freeze.ts`, history preserved in comments, not
+silently edited) — see §10/§11 of the remediation record for live-application confirmation.
+
+**`RGL-394` (Defect Triage) remains a separate, not-yet-executed task** and still owns the
+formal severity ruling this entry's original "High, `RGL-394` owns the binding ruling" line
+named — that ruling is now moot for THIS specific defect (fixed, not merely triaged), but
+`RGL-394`'s broader charter (triage every open blocker) is unaffected and unclosed by this
+record.
+
+---
+
+**CORRECTION, 2026-08-25, same checkpoint.** The "grant parity 0/2367 mismatches;
+security-mode parity 0/2367 mismatches" verification line above, as written, does not
+hold for the migration as it was actually applied to production. Immediately after the
+live apply, direct catalog comparison against `awdlicmwzdxquopwtcfd` found two live-forced
+Critical defects in the committed migration's own content: 140 wrappers hardcoded
+`security definer` against an `invoker` `app.*` counterpart (RLS-bypass class), and 2,359
+wrappers carried an unintended `anon`/`authenticated` grant from this Supabase project's
+own platform-level default privileges on schema `public` (live-forced end to end:
+`app.ping()`, `service_role`-only by design, answered a bare anon-key call with `200
+true` before the fix). Both fixed the same checkpoint, additively
+(`supabase/migrations/20260826010000_harden_public_api_data_wrappers_tierc_fixes.sql` —
+the already-applied `20260826000000` file is not edited), and re-verified exhaustively
+clean afterward — both counts to 0, plus return-type/volatility/set-returning parity and
+the zero-`PUBLIC`-leak check all independently re-confirmed at 0. Full detail, including
+why each defect evaded the pre-application verification the line above describes:
+`docs/build-log/release-go-live/RGL-BLK-002-OPTION2-REMEDIATION.md` §12,
+`docs/runtime/KNOWN_ISSUES.md` `ISS-2026-291`/`ISS-2026-292`. This correction does not
+change `RGL-BLK-002`'s own `RESOLVED` status — both new defects were found and closed
+within the same remediation, before this record was written up as final — but the
+original verification line is now known incomplete as stated, and is corrected here
+rather than silently edited, per this ledger's own append-only discipline.
+
+**Separately, also found this same checkpoint as a precondition of this remediation, and
+independently significant: `ISS-2026-290`** — 17 already-committed Step 15 hardening
+migrations, including fixes for multiple live Critical vulnerabilities (an unauthenticated
+webhook-signature bypass, a `storage_path` column-grant leak, an ~11% invoice tax-doubling
+bug among them), had never been applied to the live hosted Supabase project. Live's own
+migration history stopped at `20260809200000` while the repository had already advanced
+to `20260819000000`. All 17 applied, in order, before this remediation's own wrapper
+migration — full detail: `docs/runtime/KNOWN_ISSUES.md` `ISS-2026-290`.
+
+---
+
 ## `RGL-BLK-003` — 17 inherited Step 15 High acceptances have not been re-ruled against a production bar
 
 | Field | Value |
@@ -277,7 +362,7 @@ CI gate, does not run on every push, and — per `RGL-BLK-004` — is itself hou
 
 ---
 
-## Status summary as of `RGL-391`
+## Status summary as of `RGL-391` (superseded below)
 
 | Severity (proposed) | Open | IDs |
 |---|---|---|
@@ -287,3 +372,17 @@ CI gate, does not run on every push, and — per `RGL-BLK-004` — is itself hou
 
 **No entry above has been ruled on.** `RGL-394` owns binding severity; `RGL-404` and `RGL-412` are
 the only acceptance authorities (§8.2 condition 5).
+
+## Status summary as of the `RGL-BLK-002` remediation, 2026-08-25
+
+| Severity (proposed) | Open | Resolved | IDs (open) |
+|---|---|---|---|
+| Critical | **2** | 0 | `RGL-BLK-001`, `RGL-BLK-005` |
+| High | **2** | 1 (`RGL-BLK-002`) | `RGL-BLK-003`, `RGL-BLK-004` |
+| Medium | 0 | 0 | — |
+
+**Only `RGL-BLK-002` has been ruled on, and only as a direct fix under explicit operator
+authority — not a severity acceptance.** No `RGL-BLK-*` entry has received a formal §8.2
+acceptance ruling; `RGL-404` and `RGL-412` remain the only acceptance authorities. `RGL-394`
+(Defect Triage, not yet executed) still owns the binding severity ruling for the four entries
+that remain open.
