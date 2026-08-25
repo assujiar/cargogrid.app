@@ -112,6 +112,48 @@ import { readFileSync } from "node:fs";
  * evidence obtained separately from this local run, per RGL-392's standing
  * constraint that no lane may report a CI gate as passing on the strength of
  * a local run alone.
+ *
+ * AMENDED 2026-08-25 (fifth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md §9 (fix pass following an
+ * explicit operator instruction, after the RGL-014/CG-S16-RGL-014 Go/No-Go
+ * Report reached NO_GO, to fix every blocker fixable with this session's
+ * tooling) and docs/build-log/release-go-live/BLOCKER_LEDGER.md's
+ * `RGL-BLK-009` entry -- a Critical financial mis-posting defect: the
+ * settlement-reversal governed action (`app.request_finance_settlement_
+ * reversal`) reversed the AP side of a posted settlement but never posted an
+ * offsetting GL correction journal, so the general ledger silently diverged
+ * from the subledger on every reversal. Fixed additively by
+ * supabase/migrations/20260826030000_harden_finance_settlement_reversal_gl_
+ * journal_and_reachability.sql (337 files total) -- the already-applied
+ * 20260810700000 and 20260811200000 files are not edited. The same migration
+ * also fixes a second, previously undiscovered live defect it uncovered:
+ * 20260811200000 (a same-day HDN-374 Tier C fix) recreated this function via
+ * `CREATE OR REPLACE FUNCTION` without restating `SECURITY DEFINER`, silently
+ * reverting it to the Postgres default (`SECURITY INVOKER`) and breaking
+ * reachability for real `authenticated`/`service_role` callers -- undetected
+ * until this pass live-queried `pg_proc.prosecdef` directly. Restoring
+ * `SECURITY DEFINER` also required a matching fix to the pre-existing
+ * `public.*` wrapper (still `SECURITY INVOKER`, matching the function's OLD
+ * broken state), caught by this repo's own
+ * scripts/db-tests/public-api-wrapper-regression.sql zero-tolerance guard.
+ * scripts/db-tests/finance-settlement.sql gained a new regression block
+ * asserting EXECUTE reachability, a full settlement-reversal lifecycle, GL/
+ * subledger consistency after reversal, and exact line-level correction
+ * matching (232 files unchanged -- no new file, the existing one widened);
+ * its pre-existing "HDN-374 Tier C regression: locked period" assertion was
+ * also widened to accept the more accurate `finance_period_locked` error now
+ * correctly raised by the properly-hardened posting path this fix reaches,
+ * alongside the original `finance_settlement_reversal_period_not_open`
+ * (a second, independent latent defect this pass discovered but did not need
+ * to fix: `app.lock_finance_period`-based locks were never reflected by this
+ * function's own pre-existing `posting_eligible` check; only the real
+ * enforcement path, `app.assert_finance_period_open_for_posting`, catches
+ * them, and that path is what this fix's callees now reach). Re-verified via
+ * a fresh full local db-test suite run (337 migrations, 232 runner files, ALL
+ * PASSED) before this digest was changed, and applied to the live hosted
+ * project across three `apply_migration` calls (initial fix, a settlement-
+ * date-not-`current_date` correction, and the wrapper security-mode fix)
+ * before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -137,7 +179,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by RGL-394's own RGL-BLK-004 fix (336 files: +1,
   // 20260826020000_harden_vendor_kpi_rate_validity_window_calc.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "5fc5907adfa0b06061b9ebd31b8019272ebecdaee2d00e9c92faf48a79726378",
+  // History: 5fc5907adfa0b06061b9ebd31b8019272ebecdaee2d00e9c92faf48a79726378
+  // (336 files, third-pass amendment above). Superseded 2026-08-25 (fifth
+  // pass) by RGL-404's own RGL-BLK-009 fix (337 files: +1,
+  // 20260826030000_harden_finance_settlement_reversal_gl_journal_and_
+  // reachability.sql). See the class-level doc comment above.
+  migrationSetSha256: "9c4f956ebc7b29c6f1dcfe2bcc31f20676ba20ccb7718f7cc2c74f785e8df78e",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -160,7 +207,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (232 files, prior amendment above). Superseded 2026-08-25 (fourth pass) by
   // RGL-395's own RGL-BLK-005 fix: 6 files' content changed (no file added or
   // removed, still 232 files). See the class-level doc comment above.
-  dbTestSetSha256: "e531723a2160096d28c778784f53723f07afe36ff9529623964998ad4c4ca07a",
+  // History: e531723a2160096d28c778784f53723f07afe36ff9529623964998ad4c4ca07a
+  // (232 files, fourth-pass amendment above). Superseded 2026-08-25 (fifth
+  // pass) by RGL-404's own RGL-BLK-009 fix: scripts/db-tests/finance-
+  // settlement.sql widened (still 232 files -- content changed, not file
+  // count). See the class-level doc comment above.
+  dbTestSetSha256: "1b4103c220a5ce06c5587def356cc0c6091d6538afd8367c4f00f0e320a65438",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

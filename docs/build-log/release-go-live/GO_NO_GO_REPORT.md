@@ -13,6 +13,26 @@ Set formally per the execution index §4's own state table ("`NO_GO`: Release or
 go-live must not proceed | Set by: `RGL-404` or `RGL-412`"). Not a partial, conditional, or
 "go with caveats" outcome — a full, unambiguous no-go.
 
+**Addendum, same checkpoint, following an explicit operator instruction to run every available
+fix so blockers could be closed.** After this report's own first round reached `NO_GO` on two
+independently-sufficient Critical findings, this checkpoint attempted to fix both:
+
+- **`RGL-BLK-009` (financial mis-posting) — fixed and deployed live.** A real code fix was
+  designed, implemented, verified against a fresh local `db-tests` run, and applied directly to
+  the hosted production database. This Critical finding is genuinely closed, not merely accepted
+  or deferred. Full detail: §3.1 below and `BLOCKER_LEDGER.md`'s own `RGL-BLK-009` entry.
+- **`RGL-BLK-001` (ungated production auto-deploy) — could not be fixed.** No tool available in
+  this session can configure GitHub branch protection rules (no such tool exists in this
+  session's GitHub MCP surface) or a Vercel deployment-promotion gate (the one deployment-
+  protection tool available only offers password/SSO/trusted-IP authentication-gating, which
+  would solve a different problem — and applying it to the production target would break real
+  customer access, the wrong fix for a governance gap). This remains a genuine, hard limitation
+  of this session's tooling, not a judgment call.
+
+**The verdict remains `NO_GO`**, now forced by one reason instead of two: `RGL-BLK-001` alone,
+still open, still Critical, still "never accepted at any authority" per §8.1. See §3 for the
+full, updated blocker accounting, and §9 for what this means for the operator.
+
 ---
 
 ## 1. Release scope
@@ -62,25 +82,35 @@ predates the frozen candidate. Pass.
 
 ## 3. Blocker status — the decisive section
 
-### 3.1 Open Critical — 2, either alone forces `NO_GO`
+### 3.1 Open Critical — 1 (down from 2 — `RGL-BLK-009` fixed and deployed live this checkpoint)
 
 | ID | Statement | Status |
 |---|---|---|
-| `RGL-BLK-001` | Production auto-deploys from `main` with no go/no-go gate — **re-verified live this checkpoint, unchanged, still fully armed**: `get_project_deployment_protection` shows the identical unprotected configuration recorded at kickoff; `main` is unchanged at `2670cb5`; GitHub branch protection remains `false`. | `OPEN`, not accepted |
-| `RGL-BLK-009` | **New this checkpoint** — escalated from the inherited `HDN-BLK-016` (`app.request_finance_settlement_reversal` posts no reversing GL journal, a live-forced, deterministic, unbounded GL/AP desync on every settlement reversal). Re-classified from Step 15's own "High" to **Critical**, matching §8.1's own definition ("financial mis-posting") verbatim, against a production bar Step 15's own ruling never applied. | `OPEN`, not accepted |
+| `RGL-BLK-001` | Production auto-deploys from `main` with no go/no-go gate — **re-verified live this checkpoint, unchanged, still fully armed**: `get_project_deployment_protection` shows the identical unprotected configuration recorded at kickoff; `main` is unchanged at `2670cb5`; GitHub branch protection remains `false`. **Could not be fixed** — no tool in this session's toolset can configure branch protection or a deployment-promotion gate (see the Verdict addendum above). | `OPEN`, not accepted, unfixable with available tools |
+| `RGL-BLK-009` | Escalated from the inherited `HDN-BLK-016` (`app.request_finance_settlement_reversal` posted no reversing GL journal — a live-forced, deterministic, unbounded GL/AP desync on every settlement reversal). Re-classified from Step 15's own "High" to Critical, matching §8.1's own "financial mis-posting" definition verbatim. **Fixed and deployed live** the same checkpoint: the function now posts a correct reversing journal (mirroring `app.post_finance_correction`'s own established technique), and a second, previously undiscovered defect (the function had been silently reverted to `SECURITY INVOKER`, making it unreachable by any real user) was found and fixed in the same pass. Applied to the hosted project via `apply_migration`; verified via a fresh full local `db-tests` run, `ALL PASSED`. | **`RESOLVED`, live** |
 
 Per `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §8.1: *"Sev-1/Critical... Absolute no-go. Never
 accepted, never risk-accepted, at any authority."* This is a hard rule, not a judgment call this
-report has discretion over. **Two independent Critical findings, either sufficient on its own.**
+report has discretion over. **One open Critical finding is sufficient to force `NO_GO`; it is the
+only one remaining.**
 
-### 3.2 Open High — 2 (plus 2 fixed-not-deployed, plus 1 aggregate ruled)
+### 3.2 Open High — 1 (plus 2 fixed-not-deployed, plus 1 aggregate ruled, plus 1 re-ruled to Medium)
 
 | ID | Statement | Status |
 |---|---|---|
-| `RGL-BLK-003` | Aggregate — 17 inherited Step 15 High acceptances. **Re-ruled item-by-item this checkpoint** (§3.3 below): 2 escalated (now `RGL-BLK-009`/`010`), 15 conditionally re-accepted with a new "tenant zero" re-examination gate. | `OPEN`, ruled |
-| `RGL-BLK-010` | **New this checkpoint** — escalated from inherited `HDN-BLK-035` (session revocation never enforced; the documented incident-response step is inert). Not re-classified in severity (stays High), but not accepted as routine residual risk — needs a fix or a corrected runbook before real users exist. | `OPEN`, not accepted as routine |
+| `RGL-BLK-003` | Aggregate — 17 inherited Step 15 High acceptances. **Re-ruled item-by-item this checkpoint** (§3.3 below): 1 escalated and fixed (`RGL-BLK-009`), 1 escalated then re-ruled to Medium once its own documentation-layer fix was found already in place (`RGL-BLK-010`), 15 conditionally re-accepted with a new "tenant zero" re-examination gate. | `OPEN`, ruled |
 | `RGL-BLK-007` | `/api/v1/**` `500`-on-invalid-key defect — genuinely fixed in this candidate's own content, regression-tested. | `RESOLVED` in code, not yet deployed |
 | `RGL-BLK-008` | 3 webhook routes' `500`-on-malformed-input defect — genuinely fixed in this candidate's own content, regression-tested. | `RESOLVED` in code, not yet deployed |
+
+`RGL-BLK-010` (session revocation never enforced by any path) was initially escalated to High and
+registered as "not accepted as routine residual risk" — re-examination found this was based on an
+incomplete read of `docs/runbooks/incident-response.md`'s own current content: that runbook was
+**already corrected at `HDN-384` Tier C**, before this Step 16 range began, to lead with
+role/membership revocation as the real lockout mechanism and explicitly disclose that session
+revocation is bookkeeping only. Re-ruled to **Medium**, folded into `RGL-BLK-003`'s own 15-item
+group — the underlying enforcement-wiring gap remains genuinely open, but the "false safety
+claim" risk this escalation was originally about does not exist in the current runbook. See
+`BLOCKER_LEDGER.md`'s own `RGL-BLK-010` entry for the correction in full.
 
 ### 3.3 The 17 inherited Step 15 High items — re-ruled against the production bar, per §8.2 condition 4
 
@@ -153,13 +183,13 @@ Listed as concrete, checkable conditions, not vague aspirations:
 1. **`RGL-BLK-001` fixed**: GitHub branch protection on `main` requiring a status check/review
    before merge, and/or Vercel deployment protection gating the production target on an explicit
    promotion step — re-verified live via `get_project_deployment_protection` and a fresh branch-
-   protection query, not assumed.
-2. **`RGL-BLK-009` fixed**: `app.request_finance_settlement_reversal` posts a correct, governed
-   reversing GL journal (or the interim hard-disable business-process control is genuinely in
-   place) — live-forced re-verification required, not a code read.
-3. **`RGL-BLK-010` resolved**: either the enforcement path actually checks
-   `app.user_sessions.status`, or `docs/runbooks/incident-response.md` is corrected to state the
-   true interim containment procedure.
+   protection query, not assumed. **Still open** — no tool in this session can make this change;
+   requires either operator action outside this pipeline, or a future session with the right
+   tooling.
+2. ~~`RGL-BLK-009` fixed~~ **Done, this checkpoint** — see §3.1.
+3. ~~`RGL-BLK-010` resolved~~ **Done, this checkpoint** (re-ruled — the documentation-layer fix
+   this item needed already existed since `HDN-384`) — see §3.2. The underlying enforcement-
+   wiring hardening item remains open but non-blocking.
 4. **A human decision on the three tracked gaps** (§3.4): either genuinely resolved (a staging
    tier provisioned, a named UAT acceptor completes sign-off, an external pentest engagement
    completes) or explicitly, formally waived by an authority with standing to do so — this report
@@ -167,11 +197,10 @@ Listed as concrete, checkable conditions, not vague aspirations:
 5. **This branch (`claude/step-16-prompt-390-412-okbd6v`) merged and its own content re-verified
    as the actual candidate that would deploy** — not `main`'s current, older state.
 
-None of these five is attempted or resolved by this checkpoint. Items 1–3 require infrastructure/
-application changes outside a documentation-and-evidence checkpoint's own bounded scope (Prompt
-404 §11/§12); item 4 requires human action this agent has repeatedly and correctly declined to
-simulate (`RGL-399`/`RGL-400`/`RGL-402`); item 5 is a git-workflow step for whoever picks this back
-up.
+**Only items 1, 4, and 5 remain.** Item 1 requires infrastructure/governance access this session's
+own tooling does not have; item 4 requires human action this agent has repeatedly and correctly
+declined to simulate (`RGL-399`/`RGL-400`/`RGL-402`); item 5 is a git-workflow step for whoever
+picks this back up.
 
 ---
 
@@ -189,11 +218,13 @@ Consistent with this range's own established practice (`RGL-399`, `RGL-400`), th
 explicitly flagged for human attention, not left to be discovered only by reading this file:
 
 1. **`RGL-BLK-001`** (ungated production auto-deploy) needs a real infrastructure/governance fix —
-   this agent has no standing or tooling to change GitHub branch protection or Vercel deployment
-   promotion settings on the operator's behalf without explicit instruction.
-2. **`RGL-BLK-009`** (financial mis-posting on every settlement reversal) needs either a real code
-   fix (a governed reversing-journal mechanism) or an explicit operator decision to disable the
-   affected capability in production until fixed.
+   this agent has **no tool available** to change GitHub branch protection or Vercel deployment
+   promotion settings (confirmed by direct tool search, not assumed): no branch-protection API is
+   exposed anywhere in this session's GitHub toolset, and the one Vercel deployment-protection
+   tool available only offers password/SSO/trusted-IP gating, which would break real customer
+   access if applied to production. This requires either operator action directly against GitHub/
+   Vercel, or a future session equipped with the right tooling.
+2. ~~`RGL-BLK-009`~~ **Fixed and deployed live this checkpoint** — no longer needs operator action.
 3. **A named human UAT acceptor** and, separately, **a licensed external penetration-test
    engagement** are both still missing and both named as release-blocking prerequisites by this
    product's own governing documents (the execution index, Blueprint §20.3).

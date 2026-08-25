@@ -334,13 +334,13 @@ rather than an inherited Step 15 citation.
 
 ---
 
-## `RGL-BLK-009` — Escalated from `HDN-BLK-016`: live-forced, deterministic financial mis-posting on every settlement reversal — meets §8.1's own Critical definition verbatim, not accepted for production go-live
+## `RGL-BLK-009` — Escalated from `HDN-BLK-016`: live-forced, deterministic financial mis-posting on every settlement reversal — meets §8.1's own Critical definition verbatim; fixed and deployed live to the hosted project the same checkpoint
 
 | Field | Value |
 |---|---|
 | Severity | **Critical** (escalated from Step 15's own "High" — re-classified against the production bar, not a Step 15 correction) |
-| Status | `OPEN` — **not accepted, blocks any future `GO_DECIDED`** |
-| Found at | Originally `HDN-374` (2026-08-23); escalated at `RGL-404` (Go/No-Go Report), 2026-08-25 |
+| Status | **`RESOLVED`, live-fixed** — applied directly to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration`, in effect immediately, not merely committed to this branch |
+| Found at | Originally `HDN-374` (2026-08-23); escalated at `RGL-404` (Go/No-Go Report), 2026-08-25; fixed same checkpoint following an explicit operator instruction to run all available fixes |
 | Owner | Unchanged technical owner: a design decision for the correct reversing-journal account mapping and idempotency shape (originally handed `HDN-386`→`HDN-387`, never implemented). Acceptance/severity authority: `RGL-404`/`RGL-412` only |
 
 **Statement.** `app.request_finance_settlement_reversal` mutates only
@@ -362,27 +362,65 @@ re-classification does not retroactively edit that historical record (`docs/buil
 hardening/BLOCKER_LEDGER.md`'s own `HDN-BLK-016` entry is unchanged) — it applies this range's own
 binding severity model to the same underlying, still-unfixed technical fact.
 
-**Not accepted.** Per §8.1, Critical is never risk-accepted at any authority. This item requires
-an actual fix (a correct, governed reversing-journal mechanism, mirroring this codebase's own
-`app.prepare_finance_journal_reversal` maker/checker shape, per `HDN-BLK-016`'s own "Required of
-`HDN-386`" field) — or, as a genuinely bounded interim measure, a hard business-process control
-disabling `app.request_finance_settlement_reversal` in production until the fix ships — before any
-future `RGL-404` re-run could rule `GO_DECIDED` while this item remains open.
+**Not accepted as risk — fixed instead.** Per §8.1, Critical is never risk-accepted at any
+authority, so this item was closed by actually fixing it rather than by any acceptance ruling.
 
-**Compensating control today:** none. Production holds zero real settlements to reverse yet
-(`RGL-398`), which limits *current* blast radius but does not change the severity ruling — Critical
-findings are not accepted on a "hasn't happened yet" basis, unlike the 15-item conditional
-acceptance above (which are lower-severity gaps with a workaround/coverage-gap shape, not a
-deterministic mis-posting).
+**Fix, applied live the same checkpoint.** `app.request_finance_settlement_reversal` now locates
+the settlement's own posted GL journal (via its `app.finance_subledger_batches` row), reads that
+journal's own lines, flips debit↔credit (the identical technique `app.post_finance_correction`
+already uses for a general journal reversal — no new account-mapping logic invented), and posts
+the flipped lines as a new `'correction'`-sourced journal via the same
+`app.create_and_post_finance_system_journal` this codebase already uses for every other governed
+posting path. A `app.finance_journal_corrections` row is written (status `posted` immediately —
+a single FIN:Approve-gated atomic call, not a separate maker/checker workflow requiring a
+different authority the caller was never expected to hold) so the correction ledger and
+`app.get_finance_correction_chain` remain complete either way. Design decision made explicitly,
+per `HDN-BLK-016`'s own "Required of `HDN-386`" field ("automatic vs. a separate governed step"):
+**automatic**, to avoid reintroducing the exact "AP reversed but GL not yet" partial-state window
+this fix exists to close.
+
+**A second, previously undiscovered live defect was found and fixed in the same pass.** Live
+catalog inspection (`select prosecdef from pg_proc where proname='request_finance_settlement_
+reversal'`) showed the function was `SECURITY INVOKER`, not `SECURITY DEFINER` — `20260811200000`
+(a later, same-day migration fixing this function's own period-lock bypass, `HDN-374` Tier C
+finding 3) re-created it via `CREATE OR REPLACE FUNCTION` without restating `SECURITY DEFINER`,
+silently reverting `RGL-397`'s own DEFINER-conversion fix for this one function immediately after
+it shipped. Consequence: since `authenticated` holds no direct grant on the underlying tables,
+**this function has been completely unreachable by any real authenticated tenant user** since
+`20260811200000` shipped — the identical "Finance write RPC unreachable" bug class `RGL-397`/
+`RGL-BLK-006` already found and fixed for 95 other functions, recurring here via a different
+mechanism. Fixed in the same `CREATE OR REPLACE`, restoring `SECURITY DEFINER`. The `public.*`
+wrapper (Option 2 remediation) was also mismatched as a consequence (created `SECURITY INVOKER`
+to match app.*'s own then-broken state) — fixed to match, closing the zero-tolerance
+security-mode regression guard (`scripts/db-tests/public-api-wrapper-regression.sql`) this
+mismatch correctly flagged during local verification.
+
+**Verification.** New db-test regression added (`scripts/db-tests/finance-settlement.sql`):
+reverses a posted settlement and asserts the original journal stays posted/untouched, a new
+correction-sourced reversal journal exists with every line direction flipped on the identical
+account/amount, the subledger batch is marked `reversed`, a posted `finance_journal_corrections`
+row records the chain, and `authenticated` retains `EXECUTE` on the now-restored `SECURITY
+DEFINER` function. Found and fixed one genuine defect in the fix's own first draft during this
+same verification pass (using `current_date` for the reversal's posting date made success depend
+on whichever fiscal period happens to be open on the wall-clock day the call is made — corrected
+to reuse `v_settlement.settlement_date`, already validated open by this function's own pre-existing
+period-lock check). Full local `db-tests` suite re-run from a clean database: **`ALL PASSED`**.
+Live-verified `prosecdef=true` on both `app.*` and `public.*` after the fix.
+
+**Migration:** `supabase/migrations/20260826030000_harden_finance_settlement_reversal_gl_journal_
+and_reachability.sql` (this branch's own committed record — applied live via `apply_migration`
+across 3 calls during this checkpoint's own iterative fix-and-verify pass: the initial fix, the
+date correction, and the wrapper security-mode fix; the committed file reflects the final,
+corrected, single coherent version, not each intermediate step).
 
 ---
 
-## `RGL-BLK-010` — Escalated from `HDN-BLK-035`: session revocation is never consulted by any enforcement path, making the documented incident-response resolution step functionally inert — not accepted as routine residual risk
+## `RGL-BLK-010` — Escalated from `HDN-BLK-035`: session revocation is never consulted by any enforcement path — but the documented incident-response procedure was already corrected at `HDN-384`, before this escalation; re-ruled down, see the correction below
 
 | Field | Value |
 |---|---|
-| Severity | **High** (unchanged from Step 15's own classification — not re-classified, but re-ruled as not-routinely-acceptable) |
-| Status | `OPEN` — **not accepted as routine residual risk; requires a fix or a documented interim manual procedure before go-live** |
+| Severity | **Medium** (corrected below — the runbook fix this entry originally demanded already exists) |
+| Status | **`RESOLVED` at the documentation layer since `HDN-384`** (prior to this range); underlying enforcement-wiring gap remains `OPEN`, Medium, non-blocking — see correction below |
 | Found at | Originally `HDN-386` (Step 15, exact prior checkpoint not further re-derived here); escalated for explicit non-acceptance at `RGL-404` (Go/No-Go Report), 2026-08-25 |
 | Owner | Unchanged technical owner: wiring session-status checks into the real enforcement path (`Step 16` backlog per `HDN-BLK-040`'s own ruling). Acceptance/severity authority: `RGL-404`/`RGL-412` only |
 
@@ -414,6 +452,33 @@ compensating factor is a legitimate, disclosed reason it does not independently 
 way `RGL-BLK-001`/`RGL-BLK-009` do — but it must be resolved (real fix or corrected runbook) before
 real users exist, named explicitly as part of the same "tenant zero" gate `RGL-BLK-003`'s own
 ruling above establishes.
+
+---
+
+**Correction, same checkpoint, before this branch was pushed.** Option (b) above — *"the runbook
+explicitly corrected to state the true interim procedure... so no operator relies on a documented
+step that does not work"* — was written as if still open. It is not: re-reading
+`docs/runbooks/incident-response.md` §4 in full (not merely re-citing `ISS-2026-264`'s own prose)
+shows this correction was **already made at `HDN-384` Tier C**, before Step 16 began. §4 item 1 is
+titled *"Pull authority the identity should not have — do this FIRST, it is the layer that is
+actually enforced"*; item 2 (session/API-key revocation) is titled *"audit-trail hygiene, not the
+primary lockout"* and carries the exact disclosure this entry's own statement describes verbatim,
+plus guidance to escalate to the Supabase Admin API for real JWT/refresh-token invalidation when
+one is suspected compromised. **The "false safety claim" this entry's own "why not accepted"
+reasoning turns on does not exist in the current runbook** — an operator following §4 in order is
+correctly told the true mechanism at every step.
+
+**Re-ruled down accordingly.** `RGL-BLK-010` is **not** a fresh, unaddressed gap this checkpoint
+discovered — it is `ISS-2026-264`'s own already-`HDN-384`-mitigated finding, re-escalated here on
+an incomplete read of the runbook's current state (this checkpoint's own error, corrected in
+place rather than silently). **Reclassified: `RESOLVED` at the documentation layer (has been since
+`HDN-384`, prior to this range), with the underlying `app.user_sessions.status`
+enforcement-wiring gap remaining open as a genuine, but now correctly Medium-shaped, disclosed,
+non-blocking hardening item** — folded into the same 15-item "tenant zero" conditional-acceptance
+group `RGL-BLK-003`'s own ruling already covers, not a separate High blocker. This does not change
+this checkpoint's own `NO_GO` verdict (`RGL-BLK-001`/`RGL-BLK-009` remain independently sufficient)
+but does correct the record: `RGL-BLK-010` should not be cited as an open High blocker by any
+later checkpoint.
 
 ---
 
@@ -917,20 +982,25 @@ today"** — a distinct requirement from, and smaller than, `RGL-BLK-001`'s own 
 
 ---
 
-## Status summary as of `RGL-404` (Go/No-Go Report), 2026-08-25
+## Status summary as of `RGL-404` (Go/No-Go Report, including its own fix-pass follow-up), 2026-08-25
 
 | Severity (binding) | Open | Resolved/Accepted | IDs (open) |
 |---|---|---|---|
-| Critical | **2** | 1 (`RGL-BLK-006`) | `RGL-BLK-001`, `RGL-BLK-009` |
-| High | **2** | 7 (`RGL-BLK-002`, `RGL-BLK-004`, `RGL-BLK-005`, `RGL-BLK-007`, `RGL-BLK-008` — both fixed-not-deployed; `RGL-BLK-003` — ruled/re-examined, 15 of 17 items conditionally re-accepted) | `RGL-BLK-003` (aggregate, ruled), `RGL-BLK-010` |
-| Medium | 0 | 0 | — |
+| Critical | **1** | 2 (`RGL-BLK-006`, `RGL-BLK-009` — fixed and deployed live) | `RGL-BLK-001` |
+| High | **1** | 7 (`RGL-BLK-002`, `RGL-BLK-004`, `RGL-BLK-005`, `RGL-BLK-007`, `RGL-BLK-008` — both fixed-not-deployed; `RGL-BLK-003` — ruled/re-examined, 15 of 17 items conditionally re-accepted) | `RGL-BLK-003` (aggregate, ruled) |
+| Medium | 1 (`RGL-BLK-010`, re-ruled down from High — docs-layer already resolved at `HDN-384`, enforcement-wiring gap remains, folded into `RGL-BLK-003`'s own 15-item group) | 0 | `RGL-BLK-010` |
 
-**Verdict: `NO_GO`.** Forced independently by two Critical findings, either alone sufficient:
-`RGL-BLK-001` (ungated production auto-deploy, unchanged since kickoff) and `RGL-BLK-009`
-(escalated this checkpoint from `HDN-BLK-016` — a live-forced, deterministic financial
-mis-posting on every settlement reversal, matching §8.1's own Critical definition verbatim).
-Per §8.1, Critical is never risk-accepted at any authority. Full decision record:
-`docs/build-log/release-go-live/RGL-404.md`, `docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
+**Verdict: `NO_GO` — unchanged, but now forced by one reason, not two.** Following an explicit
+operator instruction to run all available fixes, this checkpoint fixed `RGL-BLK-009` directly and
+deployed it live to the hosted project (see the entry itself) — genuinely closing that Critical
+finding, not merely ruling on it. `RGL-BLK-001` (ungated production auto-deploy) **could not be
+fixed**: no tool available in this session's toolset can configure GitHub branch protection rules
+or a Vercel deployment-promotion gate (`update_project_deployment_protection` only offers
+password/SSO/trusted-IP auth-gating, which would solve a different problem and would break real
+customer access if misapplied to production — the wrong fix). `RGL-BLK-001` remains open,
+Critical, and per §8.1 is never risk-accepted at any authority — this alone still forces `NO_GO`.
+Full decision record: `docs/build-log/release-go-live/RGL-404.md`,
+`docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
 
 ---
 

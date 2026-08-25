@@ -1662,11 +1662,21 @@ operating procedure can account for it, not discovered in production.
 go-live bar (not Step 15's own closure bar this `ACCEPTED_EXCEPTION` ruling was made against),
 this finding is a live-forced, deterministic **financial mis-posting** — the exact phrase
 `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §8.1 uses to define
-**Critical**, not High. Registered `RGL-BLK-009` (Critical, `OPEN`, **not accepted** — Critical is
-never risk-accepted at any authority per §8.1), one of two independently-sufficient reasons
-`RGL-404` ruled `NO_GO` this checkpoint. Full ruling:
-`docs/build-log/release-go-live/BLOCKER_LEDGER.md` `RGL-BLK-009`,
-`docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
+**Critical**, not High. Registered `RGL-BLK-009` (Critical, escalated).
+
+**`RESOLVED`, same checkpoint, following an explicit operator instruction to run all available
+fixes.** `app.request_finance_settlement_reversal` now locates the settlement's own posted GL
+journal, flips its lines debit↔credit (the identical technique `app.post_finance_correction`
+already uses), and posts the flipped lines as a new governed `'correction'`-sourced journal via
+`app.create_and_post_finance_system_journal` — the GL and AP subledger no longer desync on a
+settlement reversal. A second, previously undiscovered live defect was found and fixed in the same
+pass: the function had been silently reverted to `SECURITY INVOKER` by a later same-day migration
+that recreated it without restating `SECURITY DEFINER`, making it completely unreachable by any
+real authenticated tenant user since — fixed by restoring `SECURITY DEFINER` (and its `public.*`
+wrapper, which had inherited the same mismatch). Applied live to the hosted project via
+`apply_migration`, not merely committed to this branch. New db-test regression added and full local
+`db-tests` suite re-run clean. Full detail: `docs/build-log/release-go-live/BLOCKER_LEDGER.md`
+`RGL-BLK-009`, `docs/build-log/release-go-live/GO_NO_GO_REPORT.md`.
 
 ### ISS-2026-200 — the 5 "hash-chain" transaction-lineage triggers are standalone content fingerprints, not a genuine tamper-evident chain, and no reconciliation ever recomputes or compares them (found at `CG-S15-HDN-007`, `ACCEPTED_EXCEPTION` at `HDN-389`, High, owner `Step 16`, ledger `HDN-BLK-017`)
 
@@ -3081,6 +3091,26 @@ Originally reported at the first round as an unreproduced anomaly (2 identical c
 **The real risk**: `HDN-384`'s own live security-incident drill diagnosed and "resolved" a simulated compromise by calling `app.revoke_all_actor_sessions`, `app.revoke_role_assignment`, and `app.revoke_ip_allowlist_entry` together, and confirmed lockout — but the lockout traced entirely to the role/IP-allowlist revocation, not the session revocation. A responder who revokes only sessions — a natural first reading of "cut off the attacker's access" for anyone who has not read this specific finding — would leave a still-valid JWT with full functional access indefinitely, since the underlying role assignment/tenant membership remains intact. This directly contradicts `docs/runbooks/incident-response.md`'s own stated mechanism and could lead a real incident responder to believe an incident is resolved when it is not.
 
 **Status `OPEN`**, High severity (a real, live-proved gap between a documented security control's own stated effect and its actual, verified-zero enforcement effect — the kind of gap that could cause a real incident to be declared resolved while the attacker retains full access). **Not fixed by this checkpoint** — either wire `app.user_sessions.status` into a real enforcement path (e.g. a session-validity check inside `app.evaluate_permission` or a dedicated session-gate RPC), or correct `incident-response.md`'s own claim and re-order its resolution steps to lead with role/membership revocation as the actually-enforced primary lockout mechanism, demoting session revocation to audit-trail/bookkeeping status. Disclosed and partially addressed (re-ordered guidance) in `docs/runbooks/disaster-recovery.md` §4 item 2 in the interim. Owner: a dedicated future task.
+
+**Corrected at `RGL-404` (Go/No-Go Report), 2026-08-25 — this trailing paragraph was stale.** It
+was written before `HDN-384`'s own same-checkpoint Tier C round finished; `docs/runbooks/
+incident-response.md` §4 items 1-2 have in fact **already carried the exact "correct
+incident-response.md's own claim" remedy this paragraph names as still needed**, since `HDN-384`
+Tier C — item 1 is titled *"Pull authority the identity should not have — do this FIRST, it is
+the layer that is actually enforced"*, item 2 is titled *"Also revoke sessions and API keys —
+audit-trail hygiene, not the primary lockout"* and states this exact finding verbatim, plus
+guidance to escalate to the Supabase Admin API for real JWT invalidation. `RGL-404` initially
+re-escalated this finding as `RGL-BLK-010` (High, not accepted) without first re-reading the
+runbook's current content; corrected once the omission was found (`docs/build-log/release-go-live/
+BLOCKER_LEDGER.md` `RGL-BLK-010`) — **re-ruled to Medium**, folded into `RGL-BLK-003`'s own
+15-item "tenant zero" conditional-acceptance group. The underlying `app.user_sessions.status`
+enforcement-wiring gap remains genuinely open (a real hardening item, not a documentation
+problem any more) — attempting to wire real enforcement was considered and deliberately not
+attempted this checkpoint: it would require either modifying `app.evaluate_permission` (the
+single RBAC gate ~1,124 functions call transitively — a change of that blast radius needs far
+more testing than this checkpoint's own remaining scope allows) or calling Supabase's Auth Admin
+API to invalidate live JWTs (an application-layer, not pure-SQL, change this session has no way
+to verify against a real session). Left for a dedicated future task, as originally named.
 
 **Re-examined at `RGL-404` (Go/No-Go Report), 2026-08-25.** Against a production go-live bar,
 this finding is not routinely acceptable as residual risk: `docs/runbooks/incident-response.md`
