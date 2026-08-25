@@ -1035,6 +1035,82 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-072 (Step 16 historical-issue-backlog remediation, 20260826040000): app.evaluate_permission now independently re-checks app.users.status, defense in depth against exactly the drift class the two blocks above do NOT cover -- an app.users.status change made OUTSIDE app.transition_user_status (a raw UPDATE, deliberately used here instead of the governed transition, so the role_assignments cascade does NOT fire) leaves role_assignments untouched, yet must still be denied. A fresh, dedicated actor is used (not the grantee/401 fixture above, whose tenant membership is already revoked by the HDN-373 block immediately above) so this test genuinely exercises "still an active tenant member, active role_assignments row, but app.users.status itself is not active" -- the one path neither prior fix reaches.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_actor uuid := '00000000-0000-0000-0000-000000000404';
+  v_decision app.rbac_decision;
+  v_active_count integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
+
+  insert into auth.users (id, email) values (v_actor, 'platformstatus@example.test');
+  perform app.invite_user(v_tenant_id, v_actor, 'platformstatus@example.test', 'Platform Status Actor', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'platformstatus@example.test'), 'active', 'onboarded', 'tester');
+  perform app.assign_role(
+    v_tenant_id,
+    (select rv.id from app.role_versions rv join app.roles r on r.id = rv.role_id where r.tenant_id = v_tenant_id and r.name = 'RBAC Finance Approver' and rv.status = 'published'),
+    v_actor,
+    v_actor,
+    'tester'
+  );
+
+  -- Baseline: a genuine, active tenant member with an active role_assignments row is
+  -- allowed, exactly like grantee/401 originally was.
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected this fresh actor to hold FIN:Approve via role_grant before any status manipulation, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Deliberately bypass app.transition_user_status -- a raw UPDATE, exactly the drift
+  -- path HRT-295''s own cascade cannot see (it only fires when THAT function performs the
+  -- transition). This is the live-forced defect this migration closes, not a synthetic one.
+  update app.users set status = 'suspended' where tenant_id = v_tenant_id and auth_user_id = v_actor;
+
+  select count(*) into v_active_count from app.role_assignments
+  where tenant_id = v_tenant_id and auth_user_id = v_actor and status = 'active';
+  if v_active_count = 0 then
+    raise exception 'assertion failed: expected the role_assignments row to survive a raw app.users.status UPDATE untouched (that is the whole point of this test -- the cascade must NOT have fired), found 0 -- test fixture assumption broken';
+  end if;
+
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if v_decision.allowed then
+    raise exception 'assertion failed: an actor whose app.users.status is suspended (via a raw UPDATE that never touched role_assignments) still evaluated allowed=true -- ISS-2026-072''s app.users.status half has reappeared';
+  end if;
+  if v_decision.reason is distinct from 'not_active_platform_user' then
+    raise exception 'assertion failed: expected reason=not_active_platform_user for a suspended app.users row with a surviving active role_assignment, got %', v_decision.reason;
+  end if;
+
+  -- Same proof for 'revoked'.
+  update app.users set status = 'revoked' where tenant_id = v_tenant_id and auth_user_id = v_actor;
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if v_decision.allowed or v_decision.reason is distinct from 'not_active_platform_user' then
+    raise exception 'assertion failed: expected reason=not_active_platform_user for a revoked app.users row too, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Restoring app.users.status alone (still bypassing app.transition_user_status) is
+  -- immediately reflected -- this is a live re-check every call, not a one-way sticky flag.
+  update app.users set status = 'active' where tenant_id = v_tenant_id and auth_user_id = v_actor;
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected FIN:Approve to be allowed again immediately once app.users.status returned to active, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- The one real design decision this migration made, live-proved rather than assumed:
+  -- Supreme Admin (000000403, granted globally at this file''s own later setup block,
+  -- with ZERO app.users row in ANY tenant, confirmed by this file''s own fixture) remains
+  -- unaffected -- proving the new check''s placement AFTER the Supreme Admin branch is
+  -- correct. Placing it before would have made this assertion fail.
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000403', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.reason <> 'supreme_admin_exception' then
+    raise exception 'assertion failed: expected Supreme Admin (who holds no app.users row in this tenant at all) to remain unaffected by the new app.users.status check (supreme_admin_exception), got reason=%', v_decision.reason;
+  end if;
+
+  raise notice 'ISS-2026-072 app.users.status defense-in-depth proof: a raw, out-of-band status change (bypassing app.transition_user_status entirely) is correctly denied even though role_assignments never cascaded, recovers immediately once status returns to active, and Supreme Admin (who has no app.users row in this tenant) remains unaffected';
+end;
+$$;
+
 \echo '>> HDN-373 (ISS-2026-171/173, carried forward from HDN-372; plus app.notification_preferences, found this checkpoint): own-row RLS policies on app.notifications/app.notification_preferences/app.saved_report_views now require an active tenant membership, not merely row ownership -- a revoked ex-member no longer retains RLS-level read access to their own past rows. Live-tested for notification_preferences (achievable without a large cross-table fixture); structurally verified for all three via the live policy expression, mirroring this file''s own established pg_get_expr sweep pattern.'
 do $$
 declare

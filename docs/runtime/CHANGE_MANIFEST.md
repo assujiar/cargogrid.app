@@ -8136,3 +8136,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit |
 | Status | **`COMPLETED`**. 3 tracked gaps accepted by operator override. `NO_GO` verdict deliberately maintained pending explicit operator instruction to proceed to `GO_DECIDED`. **Next work (outside the Step 16 WBS)**: entry-by-entry audit and severity-ordered remediation of the full historical `KNOWN_ISSUES.md` backlog, now beginning |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-249 — Historical issue backlog remediation, items 1-2: `ISS-2026-267` (restore-procedure mutual exclusion) and `ISS-2026-072` (`evaluate_permission` platform-user-status check)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, following the operator's explicit instruction ("pokoknya seluruh issue baik yg critical high medium low harus solved semua tanpa terkecuali") after `RGL-BLK-001` and the 3 tracked go-live gaps were accepted by operator override. First 2 of 168 audited open entries (0 Critical/16 High/78 Medium/74 Low) |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST + RUNBOOK + DOCS |
+| Authorization | Operator's own explicit instruction; the `evaluate_permission` item specifically re-authorized after a dedicated clarifying question, since this session had earlier declined to touch that function without a scoped go-ahead given its ~1,124-call-site blast radius |
+| Build process | 2 background research agents (read-only, no writes) mapped the current `app.evaluate_permission` definition/call-site risk and the restore-lock precedent before any implementation; design/implementation judgment retained directly, not delegated. Both fixes verified via a full local `db-tests` suite run (338 migrations, 233 files, `ALL PASSED`) before being applied live |
+| Findings and disposition | `ISS-2026-267`/`HDN-BLK-036`: `RESOLVED` — `docs/runbooks/database-restore.md` §4 now mandates a `pg_try_advisory_lock`/`pg_advisory_unlock` step around the composed in-place restore procedure. `ISS-2026-072`: `RESOLVED` — `app.evaluate_permission` now independently re-checks `app.users.status`, closing the one remaining half of a two-part finding (the other two halves were already fixed at HRT-295/HDN-373) |
+| Files edited | `docs/runbooks/database-restore.md`; `scripts/db-tests/database-restore-lock.sql` (new); `supabase/migrations/20260826040000_harden_rbac_evaluator_platform_user_status_check.sql` (new); `scripts/db-tests/rbac-enforcement.sql` (widened); `scripts/release/check-release-freeze.ts` (sixth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-267`/`ISS-2026-072` resolution notes); `docs/build-log/release-go-live/BLOCKER_LEDGER.md` (progress note); `docs/build-log/release-go-live/RGL-404.md` (new §12 running progress log) |
+| Migration | 1 new migration (`20260826040000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration`, live-reconfirmed via `pg_get_functiondef`. The restore-lock fix ships no migration (a runbook/procedure change using a built-in Postgres primitive, not a schema change) |
+| Risk | `evaluate_permission` is the shared RBAC choke point for ~1,124 transitive callers — mitigated by keeping the change additive-only on a single, never-overloaded signature (zero call-site edits), a lockout-safety analysis proving no legitimate actor can newly false-deny, and a full-suite regression run (every domain's own tests, not only a new dedicated one) before applying live |
+| Scope justification | Direct execution of the operator's own explicit "fix everything" instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED`, 2 consecutive full runs. `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit for the repository side; the live `evaluate_permission` change would need a separate corrective migration to undo (this repo's own "never edit an applied migration" convention) — not expected to be needed |
+| Status | **`COMPLETED`**. 2 of 168 backlog items resolved. 166 remain; work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |

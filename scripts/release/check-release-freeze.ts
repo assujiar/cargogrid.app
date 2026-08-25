@@ -154,6 +154,56 @@ import { readFileSync } from "node:fs";
  * project across three `apply_migration` calls (initial fix, a settlement-
  * date-not-`current_date` correction, and the wrapper security-mode fix)
  * before this local run.
+ *
+ * AMENDED 2026-08-25 (sixth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section and docs/runtime/KNOWN_ISSUES.md's `ISS-2026-267`/
+ * `ISS-2026-072` entries -- following the operator's explicit "seluruh issue
+ * ... harus solved semua tanpa terkecuali" instruction (every issue, all
+ * severities, resolved without exception) after `RGL-BLK-001` and the three
+ * tracked go-live gaps were accepted by operator override. First two items
+ * from the resulting ~168-entry open-issue inventory (0 Critical / 16 High /
+ * 78 Medium / 74 Low), both High:
+ *
+ * `ISS-2026-267`/`HDN-BLK-036` (no mutual-exclusion mechanism for the composed
+ * in-place restore procedure) -- fixed via a documented, mandatory
+ * `pg_try_advisory_lock(872314, 1)`/`pg_advisory_unlock` step added to
+ * `docs/runbooks/database-restore.md` §4 item 4 (no new schema object, so
+ * nothing is lost when the procedure's own step (a) drops the `app` schema;
+ * auto-releases on a crashed/disconnected session, so no stale-lock cleanup
+ * logic is needed). New regression file
+ * `scripts/db-tests/database-restore-lock.sql` (233 files total: +1) proves
+ * genuine mutual exclusion between two real, independent concurrent `psql`
+ * processes using this repository's own existing two-process concurrency-race
+ * helper (`scripts/db-tests/wms-picking-concurrency-helper.sh`), not a
+ * single-session simulation.
+ *
+ * `ISS-2026-072` (the still-open `app.users.status` half of a two-part
+ * finding; the `role_assignments`-cascade half was already fixed at HRT-295,
+ * the tenant-membership half at HDN-373/20260810300000) -- fixed additively
+ * by supabase/migrations/20260826040000_harden_rbac_evaluator_platform_
+ * user_status_check.sql (338 files total: +1) -- the already-applied
+ * 20260810300000 file is not edited. One new defense-in-depth branch in
+ * `app.evaluate_permission`'s body, placed after the Supreme Admin exception
+ * (a Supreme Admin can hold zero `app.users` rows in a tenant they still
+ * legitimately act in -- live-verified this placement is correct, not merely
+ * argued, via a new regression assertion). No call-site changes anywhere:
+ * confirmed a single-signature, never-overloaded function, so all ~1,124
+ * transitive callers are syntactically untouched; the real risk this pass had
+ * to rule out was behavioral (a false-deny), not textual, ruled out both by a
+ * lockout-safety analysis (`app.assign_role` already hard-requires
+ * `app.users.status='active'` at grant time, so no legitimate actor's
+ * `role_assignments` row can exist while their `app.users.status` is not
+ * `'active'` except via exactly the out-of-band drift this fix targets) and
+ * empirically (full local `db-tests` suite `ALL PASSED` across all 233 files,
+ * every domain's own regression suite included, not merely a dedicated new
+ * assertion). `scripts/db-tests/rbac-enforcement.sql` widened, not replaced
+ * (233 files unchanged in count from the file above -- content changed only).
+ * Re-verified via a fresh full local db-test suite run (338 migrations, 233
+ * runner files, ALL PASSED) before this digest was changed, and applied to
+ * the live hosted project via `apply_migration` before this local run,
+ * live-reconfirmed present via a direct `pg_get_functiondef`/`pg_proc.
+ * prosecdef` query against the hosted project afterward.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -184,7 +234,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by RGL-404's own RGL-BLK-009 fix (337 files: +1,
   // 20260826030000_harden_finance_settlement_reversal_gl_journal_and_
   // reachability.sql). See the class-level doc comment above.
-  migrationSetSha256: "9c4f956ebc7b29c6f1dcfe2bcc31f20676ba20ccb7718f7cc2c74f785e8df78e",
+  // History: 9c4f956ebc7b29c6f1dcfe2bcc31f20676ba20ccb7718f7cc2c74f785e8df78e
+  // (337 files, fifth-pass amendment above). Superseded 2026-08-25 (sixth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-072 fix
+  // (338 files: +1, 20260826040000_harden_rbac_evaluator_platform_user_
+  // status_check.sql). See the class-level doc comment above.
+  migrationSetSha256: "07611ff2691d0e1e48937062a1d84e3a3bb4fe26ff019dd49e325a516c32d703",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -212,7 +267,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by RGL-404's own RGL-BLK-009 fix: scripts/db-tests/finance-
   // settlement.sql widened (still 232 files -- content changed, not file
   // count). See the class-level doc comment above.
-  dbTestSetSha256: "1b4103c220a5ce06c5587def356cc0c6091d6538afd8367c4f00f0e320a65438",
+  // History: 1b4103c220a5ce06c5587def356cc0c6091d6538afd8367c4f00f0e320a65438
+  // (232 files, fifth-pass amendment above). Superseded 2026-08-25 (sixth
+  // pass) by the historical-issue-backlog remediation (233 files: +1,
+  // database-restore-lock.sql; rbac-enforcement.sql also widened). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "f00bfda7738cb225dd77ec978d3752332f2e9865546987599574130c257b6cd7",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

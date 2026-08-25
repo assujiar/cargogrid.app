@@ -1070,6 +1070,16 @@ prior phase, not only this range), not to deploy. **`RGL-405`–`412` remain `BL
 explicit, separate operator instruction to proceed to `GO_DECIDED`.** See `RGL-404.md`'s own new
 section for the backlog survey and remediation work this instruction produced.
 
+**Historical-issue-backlog remediation progress note, 2026-08-25 onward.** Per the operator's
+"seluruh issue ... harus solved semua tanpa terkecuali" instruction, the 15-item conditionally-
+accepted group above is being worked genuinely, not merely left accepted. `HDN-BLK-036`
+(`ISS-2026-267`, no mutual-exclusion mechanism for the composed in-place restore procedure) is now
+**`RESOLVED`** — see `docs/runtime/KNOWN_ISSUES.md`'s own `ISS-2026-267` entry and
+`docs/build-log/release-go-live/RGL-404.md`'s backlog section for full detail; not duplicated here
+in full to keep this ledger's own append-only growth manageable across what both the operator and
+this ledger anticipate will be a long remediation. Progress tracked going forward in `RGL-404.md`
+and `docs/runtime/CHANGE_MANIFEST.md`, referenced from here rather than repeated.
+
 ---
 
 ## Status summary as of `RGL-402` (Penetration Test Evidence), 2026-08-25
