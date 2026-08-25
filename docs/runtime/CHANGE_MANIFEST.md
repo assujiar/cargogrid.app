@@ -7961,3 +7961,22 @@ corrections below. Corrected rather than left standing.*
 | Status | **`COMPLETED`** — first round. Tier C review required before `VERIFIED`. Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. `RGL-BLK-001`/`003` remain open and undisposed, both `RGL-404`'s. `ISS-2026-294` (Low) left open for a checkpoint authorized to mutate production. Next eligible prompt: `CG-S16-RGL-009` (Prompt 399, Staging Deployment) |
 | Date | 2026-08-25 |
 
+### CHG-2026-240 — Staging Deployment: no staging tier exists, re-verified; the one substitute (a Vercel preview) could not be proven safe to use, so posture (b) — a tracked gap, not fabricated proof — was taken exactly as the execution index requires (Step 16, Prompt 399)
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-009` (Prompt 399, Staging Deployment), package document `CG-AABPP-RGL-399`, package version `0.17.0`. Continuing the operator's own "jalankan semua step 16" instruction, sequentially from `RGL-398`. |
+| Change type | DOCS ONLY. 1 new build log, 4 standing-doc updates. Zero migration, zero application/TypeScript code, zero infrastructure provisioned or mutated |
+| Authorization | Operator instruction to run the full remaining Step 16 range, executed one task at a time per `AGENTS.md`'s never-batch rule |
+| Build process | Re-verified no staging tier exists (`list_projects` against the Vercel team, cross-checked against every Supabase project this session has touched). Found a pre-existing Vercel preview deployment for this branch/commit via `list_deployments`/`get_deployment`; checked its build logs and deployment-protection settings. Attempted the execution index's own posture (a) precondition — proving the preview's database target — via both available SSO-bypass tools (twice, against two URL aliases), and searched for an environment-variable enumeration tool; none succeeded or existed |
+| Findings and disposition | No staging tier exists (unchanged from execution index §7.1's own kickoff assessment, re-verified not assumed). A real Vercel preview deployment exists for this branch, `READY`, clean build, SSO-protected. Could not prove what database it targets — the one precondition posture (a) requires — so posture (a) was correctly not taken. **Posture (b) taken**: tracked gap recorded, owner `RGL-404`, risk stated (if the preview shares production's database, as the execution index's own prior assessment holds "likely" but still unproven, using it as staging would mutate production data) |
+| Files edited | `docs/build-log/release-go-live/RGL-399.md` (new); `docs/runtime/TASK_LEDGER.md`; `docs/runtime/CARGOGRID_BUILD_STATUS.md`; `docs/runtime/HANDOFF.md` |
+| Migration | None. No infrastructure provisioned, no live database touched |
+| Risk | None — this checkpoint is read-only against Vercel and made no deployment, migration, or mutation of any kind |
+| Scope justification | Direct execution of this task's own charter, constrained by the execution index's own binding rule (§7.1: "Authorized postures for `RGL-399`, and no others") |
+| Gates | `typecheck` 0; `lint` 0/337 warnings (unchanged); `docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze` all passed |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` — docs-only change, no functional impact either way |
+| Status | **`COMPLETED`** — first round. Tier C review required before `VERIFIED`. Not a promotion, a go decision, or a production/pilot/GA/market-ready claim. `RGL-BLK-001`/`003` remain open and undisposed. The staging-tier gap remains open, owner `RGL-404`. Next eligible prompt: `CG-S16-RGL-010` (Prompt 400, UAT Deployment) |
+| Date | 2026-08-25 |
+
