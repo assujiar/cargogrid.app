@@ -357,12 +357,12 @@ of keeping live current with every accepted schema fix rather than letting drift
 
 ---
 
-## `RGL-BLK-005` — CI has been red on `main` for at least 30 consecutive runs; the `db` job dies at test file 34 of 230, so 196 database test files have never run in CI
+## `RGL-BLK-005` — CI has been red on `main` for at least 30 consecutive runs; the `db` job dies at test file 34 of 230, so 196 database test files have never run in CI (`RESOLVED` — see below)
 
 | Field | Value |
 |---|---|
-| Severity (proposed) | **Critical — release-gate integrity** |
-| Status | `OPEN` |
+| Severity (proposed) | Critical — release-gate integrity (**binding: High**, `RGL-394`) |
+| Status | **`RESOLVED`** (`RGL-395`, 2026-08-25) |
 | Found at | `RGL-391`, 2026-08-25, by querying the GitHub Actions API — **not** by reading the workflow file |
 | Owner | `RGL-395` (Full CI Gate) |
 | Gate defeated | Prompt 412 required-verification item 4 (*"Confirm full CI gate passed without suppressing lint, typecheck, tests, build, migrations… or release checks"*); `390_*_README.md` non-negotiable gate *"No disabled RLS/RBAC/test/security/financial control to pass a gate"*; Step 15 §8.1 gate 10 (*"No fake pass, hidden failure or disabled test"*) |
@@ -464,6 +464,43 @@ severity classification to what the model's own definition supports.
 
 ---
 
+**`RESOLVED` (`RGL-395`, 2026-08-25).** Root cause fixed directly, this task's own charter.
+`pg_read_file()` reads the Postgres **server's** filesystem; the concurrency-race helper scripts
+write their race-output files on the psql **client's** filesystem (invoked via `\!`, which runs
+client-side). Locally client and server share a host so this happened to work; in CI Postgres runs
+as a separate `postgis/postgis:17-3.4` Docker service container with its own filesystem, so the
+file genuinely did not exist server-side.
+
+CI's own `set -euo pipefail` abort-on-first-failure meant only the *first* occurrence
+(`advanced-tms-wms-outbound.sql`, file 34) had ever actually been observed failing — grepping every
+`.sql` file under `scripts/db-tests/` for `pg_read_file(` found **6 files total**, so the other 5
+(`advanced-tms-wms-packing.sql`, `advanced-tms-wms-picking.sql`, `automation-rule-engine.sql`,
+`procurement-vendor-contract.sql`, `public-api-platform.sql`) were latent, unreached instances of
+the identical defect class that would have failed CI again immediately after the first was fixed.
+
+Fixed structurally in all 6, not coincidentally: each race-output file's **content** (not its path)
+is now captured client-side via psql's `` \set var `cat "$RACE_OUT_A" "$RACE_OUT_B"` `` backtick-
+subshell syntax, which inherits psql's own process environment (including anything set via
+`\setenv`) — reading the files from the same host that wrote them, sidestepping the client/server
+split entirely rather than working around it. Bridged into `do $$...$$` blocks via the pre-existing
+`set_config`/`current_setting` GUC pattern (already established in this codebase for carrying
+psql-side values into a `do` body, since psql does not interpolate `:variables` inside one).
+
+**Verified both locally and, for the first time, genuinely in CI — not on the strength of a local
+run alone (`RGL-392`'s standing constraint).** Local: fresh full db-tests suite re-run from a clean
+database, 336 migrations, 231 files, `ALL PASSED`. CI: pushed to this branch's own open PR (#68,
+`assujiar/cargogrid.app`), triggering a real `pull_request` workflow run — GitHub Actions run
+[`32818026784`](https://github.com/assujiar/cargogrid.app/actions/runs/32818026784), commit
+`b60dccf`, **all three jobs (`quality`, `db`, `e2e`) `conclusion: success`**, the `db` job's own log
+ending `==> db-tests: ALL PASSED`. This is the first CI-green run for this repository since at
+least 2026-08-10 (30+ consecutive prior failures). Full record: `RGL-395.md`.
+
+This closes the root-cause repair only — it does not itself constitute a §8.2 acceptance of
+anything, and does not retroactively change what any earlier checkpoint reported (their local
+`230/230`/`231/231` figures were always real local figures, never CI figures).
+
+---
+
 ## Status summary as of `RGL-391` (superseded below)
 
 | Severity (proposed) | Open | IDs |
@@ -506,3 +543,18 @@ remains a real, still-open, still-blocking finding, only the classification chan
 fix it directly). **No `RGL-BLK-*` entry has received a formal §8.2 acceptance ruling** — `RGL-394`
 holds no acceptance authority (§8.2 condition 5); `RGL-404` and `RGL-412` remain the only
 acceptance authorities, and `RGL-BLK-001`/`003`/`005` all still require their disposition.
+
+## Status summary as of `RGL-395` (Full CI Gate), 2026-08-25
+
+| Severity (binding) | Open | Resolved | IDs (open) |
+|---|---|---|---|
+| Critical | **1** | 0 | `RGL-BLK-001` |
+| High | **1** | 3 (`RGL-BLK-002`, `RGL-BLK-004`, `RGL-BLK-005`) | `RGL-BLK-003` |
+| Medium | 0 | 0 | — |
+
+**`RGL-BLK-005` is `RESOLVED`** (root cause fixed and verified genuinely in CI this checkpoint,
+`RGL-395`'s own charter — see the entry itself above and `RGL-395.md`). Fixing the root cause is not
+a §8.2 acceptance; it removes the finding rather than accepting it, so no acceptance authority was
+needed or invoked. **`RGL-BLK-001` (Critical) and `RGL-BLK-003` (High-aggregate) remain open** and
+still require `RGL-404`'s disposition — this checkpoint's charter (Full CI Gate) does not extend to
+either.

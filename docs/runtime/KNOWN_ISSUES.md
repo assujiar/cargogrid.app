@@ -3220,7 +3220,7 @@ This is a new, previously-unregistered instance of the wall-clock-dependent clas
 
 **Status `OPEN`**, High. **Not fixed at `RGL-391`**: pre-existing (migration dated 2026-07-30, long before Step 16), and `AGENTS.md` directs a checkpoint to fix only task-caused failures and register pre-existing ones with a named owner; Prompt 391's charter is additionally zero-code/zero-migration, and a repair requires an additive migration. Registered as `RGL-BLK-004`. Owner: `RGL-394` (Defect Triage) for the binding severity ruling, with the fix landing at `RGL-394` or `RGL-395`.
 
-### ISS-2026-286 — CI has failed on every one of its 30 most recent runs since at least 2026-08-10; the `db` job aborts at test file 34 of 230, so 196 database test files have had zero CI enforcement while 21 checkpoints reported green gates (found at `RGL-391`, Critical proposed)
+### ISS-2026-286 — CI has failed on every one of its 30 most recent runs since at least 2026-08-10; the `db` job aborts at test file 34 of 230, so 196 database test files have had zero CI enforcement while 21 checkpoints reported green gates (found at `RGL-391`, Critical proposed; `RESOLVED` at `RGL-395`)
 
 Found by **querying the GitHub Actions API**, not by reading `.github/workflows/ci.yml` — which is the check every prior checkpoint effectively performed, and which cannot surface this.
 
@@ -3250,6 +3250,18 @@ guarantee under test is itself proven; only a loser's-output-text assertion fail
 Sev-2/High precisely: "a support/monitoring gate absent at go-live." Still blocks go-live absent a
 formal `RGL-404` acceptance; `RGL-395` still owns the root-cause repair unchanged. Full reasoning:
 `docs/build-log/release-go-live/RGL-394.md`, `BLOCKER_LEDGER.md` `RGL-BLK-005`.
+
+**`RESOLVED` (`RGL-395`, 2026-08-25).** Root cause fixed in all 6 files that called
+`pg_read_file()` against a client-written race-output path (only the first, this entry's own
+`advanced-tms-wms-outbound.sql`, had ever actually been reached and observed failing — CI's own
+abort-on-first-failure hid the other 5 as latent instances of the identical defect class). Fixed
+structurally by capturing each race-output file's content client-side, in the same process that
+wrote it, via psql's `` \set var `cat ...` `` backtick-subshell syntax, instead of asking the
+server to read a client-local path. Verified genuinely in CI, not merely locally: GitHub Actions
+run [`32818026784`](https://github.com/assujiar/cargogrid.app/actions/runs/32818026784) (commit
+`b60dccf`, PR #68) — all three jobs `quality`/`db`/`e2e` `conclusion: success`, the first CI-green
+run for this repository since at least 2026-08-10. Full record:
+`docs/build-log/release-go-live/RGL-395.md`, `BLOCKER_LEDGER.md` `RGL-BLK-005`.
 
 ### ISS-2026-287 — The Vercel production build runs Node `24.x` while every gate in this repository runs and is pinned against Node 22, an untested runtime divergence between the environment that verifies the candidate and the environment that builds it (found at `RGL-392`, Medium)
 
