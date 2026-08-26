@@ -8325,3 +8325,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 11 of 168 backlog items resolved (2 explicitly partial by design). 157 remain (0 Critical, 9 High, 75 Medium, 73 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-258 — Historical issue backlog remediation, item 12: `ISS-2026-272` (migration rehearsal tracking, partial by design)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-257`. Item 12 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction; scope of the "where contracted" conditionality explicitly confirmed with the operator via `AskUserQuestion` before implementation |
+| Build process | Mirrored `app.dr_restore_tests`/`app.record_dr_restore_test`'s own honesty discipline verbatim for the new evidence table/RPC. Diffed the redefined `app.verify_onboarding_checklist_item` against its prior definition to confirm the only changes are the widened item allow-list, the new computation branch, and the 2 new `UPDATE ... SET` columns — the existing 6-item `status='ready_for_production'` composite is byte-for-byte unchanged. Discovered mid-design that the underlying business rule ("where contracted") has no schema representation to condition on, and stopped to confirm scope with the operator rather than unilaterally deciding whether to gate every tenant's readiness on it |
+| Findings and disposition | `ISS-2026-272`: `RESOLVED (partial by design, disclosed)` — a real evidence table, recording RPC, and live-computed 7th checklist item now exist; wiring it into the readiness gate is deliberately deferred pending a real "contracted" flag, per the operator's own explicit choice |
+| Files edited | `supabase/migrations/20260826140000_create_migration_rehearsal_tracking.sql` (new); `scripts/db-tests/disaster-recovery-enterprise-support.sql` (widened); `scripts/release/check-release-freeze.ts` (fifteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-272` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826140000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — 1 new table, 1 new RPC (`authenticated`/`service_role`-gated, `SUP:Configure`-checked internally), and a `CREATE OR REPLACE` widening on an existing function proved by diff to leave all pre-existing behavior (including the readiness gate) unchanged |
+| Scope justification | Direct execution of the operator's own explicit instruction; the "where contracted" scope question was raised and resolved with the operator before implementation, not decided unilaterally |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New `public.*` wrapper's grants live-verified via `has_function_privilege`; `verify_onboarding_checklist_item`'s live fix re-confirmed via `pg_get_functiondef` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 12 of 168 backlog items resolved (3 explicitly partial by design). 156 remain (0 Critical, 9 High, 74 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |

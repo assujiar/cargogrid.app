@@ -761,12 +761,13 @@ begin
     and p.proname in (
       'record_dr_restore_test', 'resolve_latest_dr_restore_status', 'set_support_entitlement',
       'verify_onboarding_checklist_item', 'list_dr_restore_tests_for_tenant',
-      'get_support_entitlement', 'get_enterprise_onboarding_checklist'
+      'get_support_entitlement', 'get_enterprise_onboarding_checklist',
+      'record_migration_rehearsal_test'
     )
     and has_function_privilege('anon', p.oid, 'EXECUTE');
 
   if v_anon_grant_count <> 0 then
-    raise exception 'assertion failed: expected zero anon EXECUTE grants across this checkpoint''s 7 functions, found %', v_anon_grant_count;
+    raise exception 'assertion failed: expected zero anon EXECUTE grants across this checkpoint''s 8 functions (ISS-2026-272 added record_migration_rehearsal_test), found %', v_anon_grant_count;
   end if;
 
   select has_function_privilege('authenticated', 'app.resolve_latest_dr_restore_status(uuid, text)', 'EXECUTE') into v_authenticated_on_resolve;
@@ -780,5 +781,114 @@ begin
   end if;
 end;
 $$;
+
+-- ISS-2026-272 (Step 16 historical-issue-backlog remediation): app.migration_rehearsal_
+-- tests/app.record_migration_rehearsal_test, and the 7th checklist item
+-- (migration_rehearsal_verified) on app.verify_onboarding_checklist_item -- mirroring
+-- app.dr_restore_tests/app.record_dr_restore_test's own honesty discipline. Deliberately
+-- NOT wired into the status='ready_for_production' composite gate (the business rule is
+-- "where contracted" and no contract-flag exists yet) -- proved directly below, not
+-- merely asserted in a comment.
+\echo '>> ISS-2026-272 regression: app.record_migration_rehearsal_test/app.verify_onboarding_checklist_item(''migration_rehearsal_verified'', ...) -- SUP:Configure-gated, requires >=2 passed rehearsals, real failure-evidence discipline, and does NOT participate in the status=ready_for_production gate'
+do $$
+declare
+  v_tenant1 uuid;
+  v_admin1 uuid := '00000000-0000-0000-0000-000038000001';
+  v_rep1 uuid := '00000000-0000-0000-0000-000038000003';
+  v_checklist_before app.enterprise_onboarding_checklists;
+  v_checklist app.enterprise_onboarding_checklists;
+  v_rehearsal app.migration_rehearsal_tests;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'iaedr');
+
+  begin
+    perform app.record_migration_rehearsal_test(v_tenant1, 'passed', 'reference data + employee import', null, null, null, v_admin1, 'admin1', v_rep1, 'rep1');
+    raise exception 'assertion failed: expected rep1 (no SUP:Configure) to be denied';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.record_migration_rehearsal_test(v_tenant1, 'invalid_status', 'x', null, null, null, v_admin1, 'admin1', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected an invalid status to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'migration_rehearsal_invalid_status%' then raise; end if;
+  end;
+
+  begin
+    perform app.record_migration_rehearsal_test(v_tenant1, 'passed', '   ', null, null, null, v_admin1, 'admin1', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected a blank scope_summary to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'migration_rehearsal_scope_summary_required%' then raise; end if;
+  end;
+
+  begin
+    perform app.record_migration_rehearsal_test(v_tenant1, 'failed', 'reference data', null, null, null, v_admin1, 'admin1', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected a failed result with no failure_reason/recovery_steps/retest_scheduled_at to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'migration_rehearsal_failure_evidence_required%' then raise; end if;
+  end;
+
+  begin
+    perform app.record_migration_rehearsal_test(v_tenant1, 'failed', 'reference data', 'collision on seeded currency codes', 'use app.import_reference_currency instead', now() - interval '1 day', v_admin1, 'admin1', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected a past retest_scheduled_at to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'migration_rehearsal_retest_schedule_must_be_future%' then raise; end if;
+  end;
+
+  -- A real, well-formed failed rehearsal is accepted.
+  select * into v_rehearsal from app.record_migration_rehearsal_test(v_tenant1, 'failed', 'financial opening balances', 'no bulk GL-journal path exists', 'wait for the bulk import mechanism', now() + interval '30 days', v_admin1, 'admin1', v_admin1, 'admin1');
+  if v_rehearsal.status <> 'failed' then
+    raise exception 'assertion failed: expected the well-formed failed rehearsal to be accepted, got status=%', v_rehearsal.status;
+  end if;
+
+  -- Capture the checklist's current status BEFORE touching migration_rehearsal_verified
+  -- at all, to prove this item never changes it (the whole point of this fix).
+  select * into v_checklist_before from app.enterprise_onboarding_checklists where tenant_id = v_tenant1;
+
+  -- Exactly 1 passed rehearsal: not yet >= 2, so the item stays false.
+  perform app.record_migration_rehearsal_test(v_tenant1, 'passed', 'reference data + employee import', null, null, null, v_admin1, 'admin1', v_admin1, 'admin1');
+  v_checklist := app.verify_onboarding_checklist_item(v_tenant1, 'migration_rehearsal_verified', null, v_admin1, 'admin1');
+  if v_checklist.migration_rehearsal_verified <> false then
+    raise exception 'assertion failed: expected migration_rehearsal_verified=false with only 1 passed rehearsal, got %', v_checklist.migration_rehearsal_verified;
+  end if;
+  if v_checklist.status <> v_checklist_before.status then
+    raise exception 'assertion failed: expected status to be completely unaffected by migration_rehearsal_verified (still false here), got % (was %)', v_checklist.status, v_checklist_before.status;
+  end if;
+
+  -- A 2nd passed rehearsal flips the item live, on the very next verify call -- no
+  -- caller-asserted rubber stamp, a real recompute from app.migration_rehearsal_tests.
+  perform app.record_migration_rehearsal_test(v_tenant1, 'passed', 'master data', null, null, null, v_admin1, 'admin1', v_admin1, 'admin1');
+  v_checklist := app.verify_onboarding_checklist_item(v_tenant1, 'migration_rehearsal_verified', null, v_admin1, 'admin1');
+  if v_checklist.migration_rehearsal_verified <> true or v_checklist.migration_rehearsal_verified_at is null then
+    raise exception 'assertion failed: expected migration_rehearsal_verified=true (with a real timestamp) after 2 passed rehearsals, got %/%', v_checklist.migration_rehearsal_verified, v_checklist.migration_rehearsal_verified_at;
+  end if;
+
+  -- The whole point of this fix, proved directly rather than merely asserted in a
+  -- comment: flipping this item from false to true did NOT change status at all --
+  -- it is not part of the status='ready_for_production' composite gate.
+  if v_checklist.status <> v_checklist_before.status then
+    raise exception 'assertion failed: expected status to remain completely unaffected by migration_rehearsal_verified flipping to true (this item must never gate readiness), got % (was %)', v_checklist.status, v_checklist_before.status;
+  end if;
+
+  -- A real, persisted audit event records each genuinely-recorded rehearsal.
+  if not exists (
+    select 1 from app.audit_logs
+    where action = 'record_migration_rehearsal_test' and resource_type = 'app.migration_rehearsal_tests'
+      and tenant_id = v_tenant1
+  ) then
+    raise exception 'assertion failed: expected a real audit_logs event for a recorded migration rehearsal';
+  end if;
+
+  raise notice 'ISS-2026-272 proof: app.record_migration_rehearsal_test is SUP:Configure-gated with real failure-evidence discipline mirroring app.record_dr_restore_test, migration_rehearsal_verified correctly requires >=2 passed rehearsals and recomputes live, and -- the whole point of this fix -- flipping it never changes status=ready_for_production, proving it is deliberately not part of that composite gate';
+end;
+$$;
+
+\echo '>> ISS-2026-272 regression evidence complete'
 
 \echo 'ALL IAE-035 (Disaster Recovery and Enterprise Support) ASSERTIONS PASSED'

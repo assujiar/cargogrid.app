@@ -523,6 +523,52 @@ import { readFileSync } from "node:fs";
  * stopped again, unrelated to this change -- was restarted) before this
  * digest was changed, and applied to the live hosted project via
  * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (fifteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 12: `ISS-2026-272` --
+ * no mechanism tracked "migration rehearsals completed" for enterprise
+ * tenants, the identical structural pattern already found for DR
+ * communication (`ISS-2026-258`) and `app.dr_restore_tests`' own
+ * `component_scope` enum (`ISS-2026-260`). One migration added (349 files:
+ * +1, `20260826140000_create_migration_rehearsal_tracking.sql`) -- a real
+ * evidence table (`app.migration_rehearsal_tests`) and recording RPC
+ * (`app.record_migration_rehearsal_test`) mirroring `app.dr_restore_tests`/
+ * `app.record_dr_restore_test`'s own honesty discipline verbatim, plus a
+ * 7th checklist item (`migration_rehearsal_verified`) on
+ * `app.verify_onboarding_checklist_item` (`CREATE OR REPLACE` on the
+ * identical existing signature, diffed against the prior definition to
+ * confirm the only changes are the widened item allow-list, the new
+ * computation branch, and the 2 new `UPDATE ... SET` columns). Confirmed
+ * with the operator via `AskUserQuestion` before implementing: the
+ * business rule this traces to is "at least two rehearsals **where
+ * contracted**", and no "is migration rehearsal contracted" flag exists
+ * anywhere in this schema -- so the new item is deliberately NOT added to
+ * the existing `status='ready_for_production'` composite gate the other 6
+ * items form (confirmed unchanged by direct diff), which would otherwise
+ * have newly required every tenant, contracted or not, to complete 2
+ * rehearsals to reach that status -- a real behavior change to existing
+ * tenant onboarding gating this fix deliberately avoids. Ships with a
+ * matching Option 2 `public.*` wrapper for the new RPC (the existing
+ * `verify_onboarding_checklist_item` wrapper needs no change, same
+ * signature); live-verified via `has_function_privilege` immediately after
+ * applying: `anon` denied, `authenticated`/`service_role` allowed,
+ * matching `app.record_dr_restore_test`'s own grant set; `pg_get_
+ * functiondef` re-confirmed the `verify_onboarding_checklist_item` fix
+ * took effect. dbTestSetSha256 changed (an existing file widened, no file
+ * added or removed): `scripts/db-tests/disaster-recovery-enterprise-
+ * support.sql` gained a new regression block proving the new RPC is
+ * `SUP:Configure`-gated with real failure-evidence discipline mirroring
+ * `app.record_dr_restore_test`, `migration_rehearsal_verified` correctly
+ * requires >=2 passed rehearsals and recomputes live, and -- the central
+ * point of this fix -- flipping it from `false` to `true` never changes
+ * `status`, proving directly (not merely asserting) that it is not part of
+ * the `ready_for_production` gate; the file's own pre-existing anon-grant
+ * defense-in-depth check was widened to cover the new function too.
+ * Re-verified via a fresh full local db-test suite run (349 migrations,
+ * 234 runner files, ALL PASSED, first attempt clean) before this digest
+ * was changed, and applied to the live hosted project via `apply_migration`
+ * before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -604,7 +650,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-270 fix (348 files: +1,
   // 20260826130000_create_reference_data_import_registration.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "cfb96c5e91cc5ca6018f0a5096cd9c17cc1d77f07168f84865414c06e17ef4c6",
+  // History: cfb96c5e91cc5ca6018f0a5096cd9c17cc1d77f07168f84865414c06e17ef4c6
+  // (348 files, fourteenth-pass amendment above). Superseded 2026-08-25
+  // (fifteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-272 fix (349 files: +1,
+  // 20260826140000_create_migration_rehearsal_tracking.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "76faad22b3899f5ed7f96a09fe83a3863ee0737a3ca0c6234910e6bb9c276358",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -681,7 +733,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (fourteenth pass) by the historical-issue-backlog remediation's
   // ISS-2026-270 fix (234 files: +1, new scripts/db-tests/reference-
   // data-import.sql). See the class-level doc comment above.
-  dbTestSetSha256: "9a0a5dbc71315f18ba3d4598e9fa849aacacdb051527cc1a7d878df89566245a",
+  // History: 9a0a5dbc71315f18ba3d4598e9fa849aacacdb051527cc1a7d878df89566245a
+  // (234 files, fourteenth-pass amendment above). Superseded 2026-08-25
+  // (fifteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-272 fix (234 files unchanged in count -- disaster-recovery-
+  // enterprise-support.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "f3c257c8dde475150aa07c97e4a93798ccc7d5ef21d3a980beddbbcf99a894bc",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
