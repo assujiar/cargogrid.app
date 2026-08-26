@@ -410,6 +410,46 @@ import { readFileSync } from "node:fs";
  * fresh full local db-test suite run (345 migrations, 233 runner files, ALL
  * PASSED, first attempt clean) before this digest was changed, and applied
  * to the live hosted project via `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (twelfth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-
+ * backlog remediation section, item 9: `ISS-2026-264` --
+ * `app.revoke_all_actor_sessions`'s own session-status flip in
+ * `app.user_sessions` was never consulted by any RLS policy, RPC, or
+ * `app.evaluate_permission`, so session revocation had zero real enforcement
+ * effect anywhere. Root-caused further during this fix:
+ * `app.register_user_session` (the only function that ever creates an
+ * `app.user_sessions` row) was never called from anywhere in the real
+ * application either -- not even the real sign-in path
+ * (`app/(public)/login/actions.ts`) -- so a database-only fix would have
+ * been a structural no-op in production. One migration added (346 files:
+ * +1, `20260826110000_harden_evaluate_permission_session_revocation_
+ * enforcement.sql`) -- `CREATE OR REPLACE` on the identical existing
+ * signature, adding one new, deliberately narrow check: deny only when an
+ * actor has at least one tracked session for the tenant AND every one of
+ * them is revoked, never when zero sessions are tracked (so no login
+ * predating this fix, and no future login path that never registers a
+ * session, is ever universally denied). Paired with an application-code
+ * change (`lib/auth/register-login-session.ts`, wired into the sign-in
+ * Server Action) that makes session registration actually happen on every
+ * real tenant-scoped sign-in going forward -- without it, the new database
+ * check alone could never fire against real traffic. No new `public.*`
+ * object created (function body only, grant set untouched), so the
+ * `ISS-2026-298`/`ISS-2026-299` live-verification mitigation does not apply
+ * here; `pg_get_functiondef` re-confirmed the live fix took effect instead,
+ * the same pattern used for `ISS-2026-072`/`ISS-2026-263`.
+ * dbTestSetSha256 changed (an existing file widened, no file added or
+ * removed): `scripts/db-tests/rbac-enforcement.sql` gained a new regression
+ * block proving an untracked actor is completely unaffected, an actor with
+ * an active tracked session remains allowed, an actor whose every tracked
+ * session is revoked (via a real `app.revoke_all_actor_sessions` call) is
+ * denied `all_sessions_revoked`, a fresh session immediately restores
+ * authority, and Supreme Admin remains unaffected. Re-verified via a fresh
+ * full local db-test suite run (346 migrations, 233 runner files, ALL
+ * PASSED, first attempt clean once the local disposable Postgres cluster --
+ * found stopped, unrelated to this change -- was restarted) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -473,7 +513,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-263 fix (345
   // files: +1, 20260826100000_harden_user_status_transition_invalid_event_
   // type.sql). See the class-level doc comment above.
-  migrationSetSha256: "0593e6a0e53ee7abdb92c0bf0838b423f15f20c16a28c44d2cb072457d16a33f",
+  // History: 0593e6a0e53ee7abdb92c0bf0838b423f15f20c16a28c44d2cb072457d16a33f
+  // (345 files, eleventh-pass amendment above). Superseded 2026-08-25
+  // (twelfth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-264 fix (346 files: +1,
+  // 20260826110000_harden_evaluate_permission_session_revocation_
+  // enforcement.sql). See the class-level doc comment above.
+  migrationSetSha256: "578757a56b8dd35e88216a2c7df91b0937d9678129131ef7068f54b23ca486e1",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -533,7 +579,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by the historical-issue-backlog remediation's ISS-2026-263 fix (233
   // files unchanged in count -- user-lifecycle.sql widened, no file added or
   // removed). See the class-level doc comment above.
-  dbTestSetSha256: "f573d9f0df1a5652a658aac531b690217f380678bf933051cc1c93d4dfa0da3a",
+  // History: f573d9f0df1a5652a658aac531b690217f380678bf933051cc1c93d4dfa0da3a
+  // (233 files, eleventh-pass amendment above). Superseded 2026-08-25
+  // (twelfth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-264 fix (233 files unchanged in count -- rbac-enforcement.sql
+  // widened, no file added or removed). See the class-level doc comment
+  // above.
+  dbTestSetSha256: "bf17db612e08fc505d510ad871a16b1c026a0f40f7d8dec5e82212f782b3b0bf",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

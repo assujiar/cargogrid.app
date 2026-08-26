@@ -1111,6 +1111,85 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-264 (Step 16 historical-issue-backlog remediation, 20260826110000): app.evaluate_permission now denies an actor whose every tracked app.user_sessions row for this tenant is revoked -- the real enforcement half app.revoke_all_actor_sessions previously lacked entirely -- while an actor who has never had any session registered at all remains completely unaffected (this check must never universally deny an untracked actor).'
+do $$
+declare
+  v_tenant_id uuid;
+  v_actor uuid := '00000000-0000-0000-0000-000000000405';
+  v_decision app.rbac_decision;
+  v_session_1 app.user_sessions;
+  v_session_2 app.user_sessions;
+  v_revoked_count integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
+
+  insert into auth.users (id, email) values (v_actor, 'sessionrevocation@example.test');
+  perform app.invite_user(v_tenant_id, v_actor, 'sessionrevocation@example.test', 'Session Revocation Actor', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'sessionrevocation@example.test'), 'active', 'onboarded', 'tester');
+  perform app.assign_role(
+    v_tenant_id,
+    (select rv.id from app.role_versions rv join app.roles r on r.id = rv.role_id where r.tenant_id = v_tenant_id and r.name = 'RBAC Finance Approver' and rv.status = 'published'),
+    v_actor,
+    v_actor,
+    'tester'
+  );
+
+  -- Baseline, before any session is ever registered: completely unaffected -- this is
+  -- the exact scenario every real login predating this fix (and any future login path
+  -- that never calls app.register_user_session) must remain in. If this check ever
+  -- became "deny when zero active sessions exist" instead of "deny when at least one
+  -- session is tracked and all are revoked," this assertion would immediately fail.
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected an actor with zero tracked sessions to be completely unaffected by this check, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Register 2 sessions (2 devices) -- still allowed with at least one active.
+  v_session_1 := app.register_user_session(v_tenant_id, 'laptop', '203.0.113.10', v_actor, 'tester');
+  v_session_2 := app.register_user_session(v_tenant_id, 'phone', '203.0.113.11', v_actor, 'tester');
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected an actor with 2 active tracked sessions to remain allowed, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Revoke ALL of this actor's sessions in this tenant (the real HDN-384 incident-drill
+  -- action, called by Supreme Admin 403 who already holds SEC:Configure via the
+  -- supreme_admin_exception). This is the real enforcement gap ISS-2026-264 found: before
+  -- this fix, this call had zero effect on evaluate_permission's own decision.
+  v_revoked_count := app.revoke_all_actor_sessions(v_tenant_id, v_actor, 'security review', '00000000-0000-0000-0000-000000000403', 'tester');
+  if v_revoked_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 sessions revoked, got %', v_revoked_count;
+  end if;
+
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if v_decision.allowed then
+    raise exception 'assertion failed: an actor whose every tracked session is revoked still evaluated allowed=true -- ISS-2026-264''s own enforcement gap has reappeared';
+  end if;
+  if v_decision.reason is distinct from 'all_sessions_revoked' then
+    raise exception 'assertion failed: expected reason=all_sessions_revoked once every tracked session is revoked, got %', v_decision.reason;
+  end if;
+
+  -- A fresh sign-in (a new session registered, exactly what lib/auth/register-login-
+  -- session.ts wires into the real login action) immediately restores authority -- a
+  -- live re-check every call, not a one-way sticky lockout.
+  perform app.register_user_session(v_tenant_id, 'laptop-2', '203.0.113.12', v_actor, 'tester');
+  v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected FIN:Approve to be allowed again immediately once a fresh session was registered, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Supreme Admin (000000403, zero app.users row in any tenant) remains unaffected --
+  -- proving this check's placement after the Supreme Admin branch is correct, mirroring
+  -- ISS-2026-072's own identical proof above.
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000403', v_tenant_id, 'FIN', 'Approve');
+  if v_decision.reason <> 'supreme_admin_exception' then
+    raise exception 'assertion failed: expected Supreme Admin to remain unaffected by the new session-revocation check, got reason=%', v_decision.reason;
+  end if;
+
+  raise notice 'ISS-2026-264 session-revocation enforcement proof: an untracked actor is unaffected, an actor with an active tracked session is allowed, an actor whose every tracked session is revoked is denied all_sessions_revoked, a fresh session immediately restores authority, and Supreme Admin remains unaffected';
+end;
+$$;
+
 \echo '>> HDN-373 (ISS-2026-171/173, carried forward from HDN-372; plus app.notification_preferences, found this checkpoint): own-row RLS policies on app.notifications/app.notification_preferences/app.saved_report_views now require an active tenant membership, not merely row ownership -- a revoked ex-member no longer retains RLS-level read access to their own past rows. Live-tested for notification_preferences (achievable without a large cross-table fixture); structurally verified for all three via the live policy expression, mirroring this file''s own established pg_get_expr sweep pattern.'
 do $$
 declare
