@@ -450,6 +450,44 @@ import { readFileSync } from "node:fs";
  * found stopped, unrelated to this change -- was restarted) before this
  * digest was changed, and applied to the live hosted project via
  * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (thirteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 10: `ISS-2026-266` --
+ * the composed in-place restore procedure's own required step (h) was a
+ * raw, per-view-name `REFRESH MATERIALIZED VIEW CONCURRENTLY` an operator
+ * had to remember to repeat for every registered view, bypassing this
+ * repository's own already-existing governed refresh mechanism
+ * (`app.refresh_analytics_view`, IAE-005) entirely -- this entry's own text
+ * named exactly this gap ("a more permanent fix... rather than a manual
+ * runbook step") as its remaining owner item. One migration added (347
+ * files: +1, `20260826120000_harden_restore_materialized_view_refresh_
+ * completeness.sql`) -- `app.refresh_all_registered_analytics_views(p_actor_
+ * auth_user_id, p_actor_label)` delegates to the existing
+ * `app.refresh_analytics_view` for every `active` row in
+ * `app.analytics_view_registry`, inheriting its authority check (Supreme
+ * Admin only) and `app.analytics_refresh_runs` ledger entry per view, and
+ * automatically covering any view registered after this function shipped.
+ * Ships with a matching Option 2 `public.*` wrapper, correctly using the
+ * amended `revoke ... from anon, authenticated, service_role, public`
+ * form from first principles (not discovered as a live bug this time) --
+ * live-verified via `has_function_privilege` immediately after applying,
+ * per the `ISS-2026-298` mitigation practice: `anon` denied,
+ * `authenticated`/`service_role` allowed, matching
+ * `app.refresh_analytics_view`'s own existing grant set exactly.
+ * `docs/runbooks/database-restore.md`'s own step (h) instruction updated to
+ * call this function instead of the raw per-view SQL. dbTestSetSha256
+ * changed (an existing file widened, no file added or removed):
+ * `scripts/db-tests/analytics-materialized-views.sql` gained a new
+ * regression block proving the new function is Supreme-only, refreshes
+ * every active registered view (including surfacing a real per-view
+ * `'failed'` run for a view whose underlying materialized view no longer
+ * exists, without aborting the batch), and produces the identical
+ * persisted ledger rows an individual `app.refresh_analytics_view` call
+ * would. Re-verified via a fresh full local db-test suite run (347
+ * migrations, 233 runner files, ALL PASSED, first attempt clean) before
+ * this digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -519,7 +557,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-264 fix (346 files: +1,
   // 20260826110000_harden_evaluate_permission_session_revocation_
   // enforcement.sql). See the class-level doc comment above.
-  migrationSetSha256: "578757a56b8dd35e88216a2c7df91b0937d9678129131ef7068f54b23ca486e1",
+  // History: 578757a56b8dd35e88216a2c7df91b0937d9678129131ef7068f54b23ca486e1
+  // (346 files, twelfth-pass amendment above). Superseded 2026-08-25
+  // (thirteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-266 fix (347 files: +1,
+  // 20260826120000_harden_restore_materialized_view_refresh_completeness.sql).
+  // See the class-level doc comment above.
+  migrationSetSha256: "6bf6ec92c95de4e62a618acd9979f8349ffc3096d42faf9bd6d79d43de0a1dd5",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -585,7 +629,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-264 fix (233 files unchanged in count -- rbac-enforcement.sql
   // widened, no file added or removed). See the class-level doc comment
   // above.
-  dbTestSetSha256: "bf17db612e08fc505d510ad871a16b1c026a0f40f7d8dec5e82212f782b3b0bf",
+  // History: bf17db612e08fc505d510ad871a16b1c026a0f40f7d8dec5e82212f782b3b0bf
+  // (233 files, twelfth-pass amendment above). Superseded 2026-08-25
+  // (thirteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-266 fix (233 files unchanged in count --
+  // analytics-materialized-views.sql widened, no file added or removed).
+  // See the class-level doc comment above.
+  dbTestSetSha256: "cdb12fdd4aaaa26aa4f6ebe9e57e4d1a4690e380832e2d272b0c28c36c71c6c4",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

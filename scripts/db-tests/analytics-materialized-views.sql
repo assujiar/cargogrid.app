@@ -239,4 +239,73 @@ begin
 end;
 $$;
 
+-- ISS-2026-266 (Step 16 historical-issue-backlog remediation): the composed in-place
+-- restore procedure's own new step (h) used to be a raw, per-view-name `REFRESH
+-- MATERIALIZED VIEW CONCURRENTLY` an operator had to remember to repeat for every
+-- registered view. app.refresh_all_registered_analytics_views delegates to the
+-- already-tested app.refresh_analytics_view for every ACTIVE registry row in one
+-- governed call, so it inherits that function's own authority check and audit-logged
+-- ledger row per view -- proved here, not merely asserted.
+\echo '>> ISS-2026-266 regression: app.refresh_all_registered_analytics_views refreshes every active registered view via the existing governed app.refresh_analytics_view, in one call, Supreme-only'
+do $$
+declare
+  v_run record;
+  v_completed_count integer := 0;
+  v_failed_count integer := 0;
+  v_seen_report_usage_daily boolean := false;
+  v_seen_disposable boolean := false;
+begin
+  begin
+    perform app.refresh_all_registered_analytics_views('00000000-0000-0000-0000-000007000002', 'tester');
+    raise exception 'assertion failed: expected a non-Supreme-Admin actor to be denied';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- This file's own fixture registered exactly 2 active views by this point:
+  -- report_usage_daily (real, refreshable) and iae005_disposable_test (its own
+  -- materialized view was deliberately dropped earlier in this same file, so refreshing
+  -- it must surface as a real failed run, never abort the whole batch).
+  for v_run in select * from app.refresh_all_registered_analytics_views('00000000-0000-0000-0000-000007000001', 'tester') loop
+    if v_run.view_code = 'report_usage_daily' then
+      v_seen_report_usage_daily := true;
+      if v_run.status <> 'completed' then
+        raise exception 'assertion failed: expected report_usage_daily to refresh cleanly, got status=%', v_run.status;
+      end if;
+      v_completed_count := v_completed_count + 1;
+    elsif v_run.view_code = 'iae005_disposable_test' then
+      v_seen_disposable := true;
+      if v_run.status <> 'failed' or v_run.error_reason is null then
+        raise exception 'assertion failed: expected the dropped disposable view to surface a real failed run with an error_reason, not abort the batch, got status=%', v_run.status;
+      end if;
+      v_failed_count := v_failed_count + 1;
+    else
+      raise exception 'assertion failed: unexpected view_code % in the refresh-all result set', v_run.view_code;
+    end if;
+  end loop;
+
+  if not v_seen_report_usage_daily or not v_seen_disposable then
+    raise exception 'assertion failed: expected both registered active views to appear in the refresh-all result set, saw report_usage_daily=%, disposable=%', v_seen_report_usage_daily, v_seen_disposable;
+  end if;
+  if v_completed_count <> 1 or v_failed_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 completed and 1 failed run, got completed=%, failed=%', v_completed_count, v_failed_count;
+  end if;
+
+  -- Each refresh-all call delegates to app.refresh_analytics_view, so it produces the
+  -- identical real, persisted app.analytics_refresh_runs rows an individual call would --
+  -- not a bespoke, unledgered code path.
+  if not exists (
+    select 1 from app.analytics_refresh_runs
+    where view_code = 'report_usage_daily' and status = 'completed' and triggered_by_label = 'tester'
+  ) then
+    raise exception 'assertion failed: expected a real, persisted completed run for report_usage_daily';
+  end if;
+
+  raise notice 'ISS-2026-266 proof: refresh_all_registered_analytics_views is Supreme-only, refreshes every active registered view via the existing governed app.refresh_analytics_view, surfaces a per-view failure without aborting the batch, and produces the identical persisted ledger rows an individual call would';
+end;
+$$;
+
+\echo '>> ISS-2026-266 regression evidence complete'
+
 \echo 'ALL IAE-005 (Analytics and Materialized Views) db-test assertions passed.'

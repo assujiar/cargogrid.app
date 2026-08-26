@@ -8283,3 +8283,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live function replacement would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 9 of 168 backlog items resolved (2 explicitly partial by design). 159 remain (0 Critical, 9 High, 77 Medium, 73 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-256 — Historical issue backlog remediation, item 10: `ISS-2026-266` (governed materialized-view refresh)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-255`. Item 10 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST + RUNBOOK |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Found this repository already had a real, governed, ledgered refresh mechanism (`app.refresh_analytics_view`, IAE-005) that the runbook's own manual step (h) never used — closed the gap by delegating to it in a loop rather than reimplementing refresh/authority logic. Confirmed only 1 materialized view exists today (`app.mv_report_usage_daily`), so the new function's own future-proofing (looping over the live registry rather than a hardcoded view list) is a real, not speculative, improvement. Checked the new wrapper's own live grants immediately after applying, per the `ISS-2026-298`/`ISS-2026-299` mitigation practice — correct from first principles this time |
+| Findings and disposition | `ISS-2026-266`: `RESOLVED` — `app.refresh_all_registered_analytics_views` refreshes every active registered view via the existing governed RPC in one call, and the runbook's own step (h) now calls it instead of raw SQL |
+| Files edited | `supabase/migrations/20260826120000_harden_restore_materialized_view_refresh_completeness.sql` (new); `docs/runbooks/database-restore.md` (step (h) updated, revision history); `scripts/db-tests/analytics-materialized-views.sql` (widened); `scripts/release/check-release-freeze.ts` (thirteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-266` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826120000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — a new, additive, `service_role`/`authenticated`-only function that delegates entirely to an existing, already-tested function for its actual work and authority check; no existing function or call path modified |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New `public.*` wrapper's `anon`/`authenticated`/`service_role` grants live-verified via `has_function_privilege` before considering the fix complete |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 10 of 168 backlog items resolved (2 explicitly partial by design). 158 remain (0 Critical, 9 High, 76 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
