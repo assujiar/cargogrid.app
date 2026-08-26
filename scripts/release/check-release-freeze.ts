@@ -488,6 +488,41 @@ import { readFileSync } from "node:fs";
  * migrations, 233 runner files, ALL PASSED, first attempt clean) before
  * this digest was changed, and applied to the live hosted project via
  * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (fourteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 11: `ISS-2026-270` --
+ * no safe import/registration path existed for migration-seeded reference
+ * tables (`app.finance_currencies`, `app.uoms`): a raw insert collision
+ * raised an unclassified duplicate-key error, and a multi-row batch insert
+ * with one colliding row rolled back the entire batch, including
+ * genuinely-new rows in the same statement. Confirmed live: zero writer
+ * RPCs existed anywhere for either table before this fix. One migration
+ * added (348 files: +1, `20260826130000_create_reference_data_import_
+ * registration.sql`) -- `app.import_reference_currency`/
+ * `app.import_reference_uom`, mirroring this repository's own established
+ * "return the existing row if found" idempotent-registration pattern
+ * (`app.invite_user`, `app.provision_tenant`) rather than the entry's own
+ * cited `INSERT ... ON CONFLICT DO NOTHING`, which would silently accept a
+ * same-code row with different values. Supreme Admin only, matching
+ * `app.register_analytics_view`'s own convention for the other
+ * platform-wide registry this codebase has. Ships with matching Option 2
+ * `public.*` wrappers, correctly using the amended revoke form from first
+ * principles; live-verified via `has_function_privilege` immediately after
+ * applying: `anon`/`authenticated` denied, `service_role` allowed, for
+ * both. dbTestSetSha256 changed (one NEW file added, 233 -> 234): new
+ * `scripts/db-tests/reference-data-import.sql` proves both functions are
+ * Supreme-only, idempotently return the existing row on a collision
+ * (the exact scenario this entry live-reproduced), a genuinely-new code
+ * inserts cleanly and survives being called alongside a colliding sibling
+ * (proving no multi-row-batch-style rollback), the underlying table's own
+ * CHECK constraint still rejects invalid input, and a real audit event
+ * records each genuinely-new import. Re-verified via a fresh full local
+ * db-test suite run (348 migrations, 234 runner files, ALL PASSED, first
+ * attempt clean once the local disposable Postgres cluster -- found
+ * stopped again, unrelated to this change -- was restarted) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -563,7 +598,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-266 fix (347 files: +1,
   // 20260826120000_harden_restore_materialized_view_refresh_completeness.sql).
   // See the class-level doc comment above.
-  migrationSetSha256: "6bf6ec92c95de4e62a618acd9979f8349ffc3096d42faf9bd6d79d43de0a1dd5",
+  // History: 6bf6ec92c95de4e62a618acd9979f8349ffc3096d42faf9bd6d79d43de0a1dd5
+  // (347 files, thirteenth-pass amendment above). Superseded 2026-08-25
+  // (fourteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-270 fix (348 files: +1,
+  // 20260826130000_create_reference_data_import_registration.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "cfb96c5e91cc5ca6018f0a5096cd9c17cc1d77f07168f84865414c06e17ef4c6",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -635,7 +676,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-266 fix (233 files unchanged in count --
   // analytics-materialized-views.sql widened, no file added or removed).
   // See the class-level doc comment above.
-  dbTestSetSha256: "cdb12fdd4aaaa26aa4f6ebe9e57e4d1a4690e380832e2d272b0c28c36c71c6c4",
+  // History: cdb12fdd4aaaa26aa4f6ebe9e57e4d1a4690e380832e2d272b0c28c36c71c6c4
+  // (233 files, thirteenth-pass amendment above). Superseded 2026-08-25
+  // (fourteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-270 fix (234 files: +1, new scripts/db-tests/reference-
+  // data-import.sql). See the class-level doc comment above.
+  dbTestSetSha256: "9a0a5dbc71315f18ba3d4598e9fa849aacacdb051527cc1a7d878df89566245a",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

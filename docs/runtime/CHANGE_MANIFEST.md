@@ -8304,3 +8304,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 10 of 168 backlog items resolved (2 explicitly partial by design). 158 remain (0 Critical, 9 High, 76 Medium, 73 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-257 — Historical issue backlog remediation, item 11: `ISS-2026-270` (reference data import registration)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-256`. Item 11 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction; operator's own stated preference to build genuinely code-shaped infrastructure rather than skip feature-shaped items |
+| Build process | Confirmed live before designing the fix that zero writer RPCs existed anywhere for `app.finance_currencies`/`app.uoms` — every reference was a read-only validation lookup. Deliberately chose the "return the existing row if found" idempotent pattern already established elsewhere in this codebase over the entry's own cited `ON CONFLICT DO NOTHING` suggestion, since `DO NOTHING` would silently accept a same-code row with different values, masking a real conflict rather than surfacing it to the caller |
+| Findings and disposition | `ISS-2026-270`: `RESOLVED` — `app.import_reference_currency`/`app.import_reference_uom` give migration/import scripts a safe, idempotent, Supreme-Admin-gated path to add reference rows without risking an all-or-nothing batch rollback on a collision |
+| Files edited | `supabase/migrations/20260826130000_create_reference_data_import_registration.sql` (new); `scripts/db-tests/reference-data-import.sql` (new); `scripts/release/check-release-freeze.ts` (fourteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-270` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826130000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — 2 new, additive, `service_role`-only functions touching 2 tables that previously had zero writer RPCs at all; no existing function or call path modified |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first real attempt clean once the local disposable Postgres cluster — found stopped again, unrelated to this change — was restarted). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. Both new `public.*` wrappers' `anon`/`authenticated`/`service_role` grants live-verified via `has_function_privilege` before considering the fix complete |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 11 of 168 backlog items resolved (2 explicitly partial by design). 157 remain (0 Critical, 9 High, 75 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
