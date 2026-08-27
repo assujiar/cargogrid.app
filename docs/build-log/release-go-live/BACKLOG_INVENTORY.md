@@ -66,6 +66,37 @@ removed from this list. See `RGL-404.md` §12 item 21.
 `ISS-2026-295`/`296` — **closed** at Track A (`RGL-404.md` §12A, deployed to production
 2026-08-27); removed from this list, no longer open.
 
+## Batch 1 status: complete
+
+`ISS-2026-249`, `167` (representative, 3 of ~41 sites), `174`, `175`, `176` — `RESOLVED`, full
+detail in `KNOWN_ISSUES.md` and `RGL-404.md` §12 items 22-26.
+
+`ISS-2026-170` — investigated, withdrawn from this batch after a wider check (34
+`scripts/db-tests/*.sql` files, not just the 5 production TypeScript callers a first-pass grep
+found) revealed the true `record_type` enumeration is ~17 values, not 5, some backed by real
+records and some deliberately synthetic by design; a migration was drafted and then deleted before
+being applied, rather than risk breaking legitimate tests across a dozen unrelated domains on an
+incomplete enumeration. Redispositioned to a dedicated future task with the full corrected scope
+handed forward — see the entry's own text.
+
+`ISS-2026-189` — investigated, an `HRS:View` RLS gate (with a self-access carve-out) was drafted
+and applied locally, then also reverted after the suite surfaced ~90 sites across ~15 HRIS/
+ticketing test files relying on the current, broader access as normal fixture-construction
+practice — real evidence supporting this entry's own "plausibly an intentional org directory
+feature" framing, not just test debt. Rather than force through a design interpretation the entry
+itself calls genuinely undecided, the ruling is deferred to a human, with both options and the new
+evidence laid out in the entry's own text.
+
+`ISS-2026-258`/`261`/`273`/`289` — dispositioned (named owner, real next step, not agent-fixable).
+
+Working total after Batch 1: **141 remaining** (0 Critical, 5 High, 69 Medium, 67 Low). Down from
+146: `ISS-2026-249` (High) and `167` (Medium) resolved partial-by-design-disclosed per this
+session's own established convention (a real, verified, disclosed-as-incomplete fix counts as
+resolved, same treatment as `ISS-2026-265`/`254`/`272` earlier this session); `174`/`175`/`176`
+(all Low) fully resolved. `189` remains open pending a human ruling. `250`/`258`/`261`/`273`/`289`
+(5 High) remain open, dispositioned not fixed. See `RGL-404.md` §12 for the authoritative running
+log.
+
 ## Medium/Low batches (140 items, working count)
 
 Batches below reproduce the categorization research pass performed for this document (full
@@ -88,7 +119,7 @@ High items above go in the first batch regardless of theme.
 | `docs-consistency` | 142, 153, 157, 252, 281 | 5 | DOC/BIG | Doc mislabels, stale sections, accessibility-audit gap |
 | `iae-hardening-residual` | 148, 149, 152 | 3 | TEST/CODE | Load evidence, anon enumeration oracle, inert capability matrix |
 | `step-up-mfa-enforcement` | 151 | 1 | CODE | `create_integration_connection` unwired to step-up MFA |
-| `rls-grants` | 167, 170, 172, 174, 175, 176, 189 | 7 | CODE | Same shape (missing tenant-membership conjunct/column grant) — candidate for ONE migration mirroring the HDN-373 pattern |
+| `rls-grants` | ~~167~~, 170, ~~172~~, ~~174~~, ~~175~~, ~~176~~, 189 | 7 | CODE | **Batch 1: 5 of 7 resolved, 2 withdrawn/deferred** (170, 189) — each item turned out to need its own distinct mechanism (error-text collapse, column grant, cache key, view allow-list), not one shared migration as originally guessed; see per-item detail below |
 | `support-access-audit` | 177, 178 | 2 | CODE | Session-open audit gap, webhook-retry tenant cross-check |
 | `rbac-defense-in-depth` | 186, 187, 188, 190, 191 | 5 | mixed | Support-access session lifecycle (187+188 batchable), evaluator hardening |
 | `rls-own-row-narrowing` | 192 | 1 | CODE | `principal_memberships` own-row RLS narrower than sibling pattern |

@@ -421,9 +421,18 @@ begin
   select * into v_created from app.create_vendor_api_key(v_tenant1, v_vendor_alpha, 'Rotate Proof Key', null, null, v_admin1, 'admin');
 
   begin
+    -- ISS-2026-167 (Track B Batch 1): v_admin2 has no relationship at all to
+    -- v_tenant1 (a genuine stranger, not merely an unauthorized same-tenant
+    -- member), so this now raises the generic api_key_not_found -- closing
+    -- the cross-tenant existence oracle app.rotate_api_key's own error text
+    -- previously leaked (a distinct insufficient_authority naming the real
+    -- tenant_id). A same-tenant member lacking manage authority still gets
+    -- the specific insufficient_authority error (see api-key-webhook.sql's
+    -- own regression for that case) -- not a leak, since they already
+    -- belong to that tenant.
     perform app.rotate_api_key(v_created.id, 0, v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for tenant2''s own admin against tenant1''s own vendor key';
-  exception when insufficient_privilege then null;
+    raise exception 'assertion failed: expected api_key_not_found for a genuinely cross-tenant admin against tenant1''s own vendor key';
+  exception when no_data_found then null;
   end;
 
   select * into v_rotated from app.rotate_api_key(v_created.id, 0, v_admin1, 'admin');

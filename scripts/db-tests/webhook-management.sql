@@ -174,6 +174,17 @@ begin
     raise exception 'assertion failed: expected status=dead_letter after 1 failed attempt against max_attempts=1, got %', v_dead_delivery.status;
   end if;
 
+  -- ISS-2026-249 (Track B Batch 1): this dead-letter transition must now
+  -- raise a real observability alert -- previously this producer never
+  -- alerted at all.
+  if not exists (
+    select 1 from app.incidents
+    where tenant_id = v_tenant1 and source_type = 'webhook' and signal_type = 'error' and severity = 'high'
+      and title like 'webhook delivery dead-lettered:%'
+  ) then
+    raise exception 'assertion failed: expected a real app.incidents row (source_type=webhook, signal_type=error, high) after this dead-letter transition -- ISS-2026-249 regression';
+  end if;
+
   begin
     perform app.replay_webhook_delivery(v_dead_delivery.id, v_staff1, 'staff');
     raise exception 'assertion failed: expected insufficient_authority for a PRC:View-only staff member';
