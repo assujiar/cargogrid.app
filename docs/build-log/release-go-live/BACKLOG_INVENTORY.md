@@ -43,22 +43,25 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 147** (0 Critical, 7 High, 70 Medium, 70 Low), pending the item-level
-tightening above.
+**Working total for Track B: 146** (0 Critical, 6 High, 70 Medium, 70 Low) — updated during Batch 1
+review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
+`RGL-404.md` §12 item 21.
 
 ---
 
-## High severity (7) — first batch priority per the approved plan
+## High severity (6) — first batch priority per the approved plan
 
-| ID | Summary | Fix | Batch |
-|---|---|---|---|
-| `ISS-2026-249` | Alert system unwired from webhook/AI/security failure producers | `CODE` | step-up-mfa-enforcement |
-| `ISS-2026-250` | No monitoring/incident dashboard UI consumes the alerting backend | `CODE` | observability-alerting |
-| `ISS-2026-258` | No real DR communication mechanism exists anywhere | `BIG` | dr-runbook |
-| `ISS-2026-261` | No second infrastructure vendor; Supabase-wide outage has no failover | `INFRA` | dr-runbook |
-| `ISS-2026-273` | No bulk financial opening-balance import path exists at all | `BIG` | migration-import |
-| `ISS-2026-285` | `_calc_vendor_kpi_rate_validity` not-computable for sub-24h windows | `CODE` | db-test-vendor-kpi |
-| `ISS-2026-289` | GitHub branch protection never configured on any of 47 branches | `INFRA` | ci-evidence |
+| ID | Summary | Fix | Batch | Status |
+|---|---|---|---|---|
+| `ISS-2026-249` | Alert system unwired from webhook/AI/security failure producers | `CODE` | step-up-mfa-enforcement | in progress (Batch 1) |
+| `ISS-2026-250` | No monitoring/incident dashboard UI consumes the alerting backend | `CODE`/`BIG` (TBD by research) | observability-alerting | in progress (Batch 1) |
+| `ISS-2026-258` | No real DR communication mechanism exists anywhere | `BIG` | dr-runbook | dispositioned (KNOWN_ISSUES.md, not agent-fixable) |
+| `ISS-2026-261` | No second infrastructure vendor; Supabase-wide outage has no failover | `INFRA` | dr-runbook | dispositioned (KNOWN_ISSUES.md, not agent-fixable) |
+| `ISS-2026-273` | No bulk financial opening-balance import path exists at all | `BIG` | migration-import | dispositioned (KNOWN_ISSUES.md, not agent-fixable) |
+| `ISS-2026-289` | GitHub branch protection never configured on any of 47 branches | `INFRA` | ci-evidence | dispositioned (KNOWN_ISSUES.md, exact steps for operator) |
+
+`ISS-2026-285` — **closed as doc-only** (already fixed at `RGL-394`, entry just never annotated);
+removed from this list. See `RGL-404.md` §12 item 21.
 
 `ISS-2026-295`/`296` — **closed** at Track A (`RGL-404.md` §12A, deployed to production
 2026-08-27); removed from this list, no longer open.
@@ -120,7 +123,7 @@ established convention, `ISS-2026-298`/`299` precedent):
 
 Severity orders the first batch; domain/mechanism groups the rest, per the approved plan:
 
-1. **Batch 1 (High + quick wins)**: all 7 High items, plus `rls-grants` (7, one candidate migration) — 14 items.
+1. **Batch 1 (High + quick wins)**: all 6 High items, plus `rls-grants` (7, one candidate migration) — 13 items.
 2. **Batch 2**: `table-only-procurement-hardening` (19, several candidate for one migration).
 3. **Batch 3**: `hris-integrated-verification-residual` (14) + `hris-overtime-timesheet-gaps` (2) + `hris-payroll-personal-data` (3) — 19 items.
 4. **Batch 4**: `cpl-customer-portal-scope` (14) + `loyalty-fraud-reconciliation` (5) + `loyalty-approval-authority` (2) — 21 items.

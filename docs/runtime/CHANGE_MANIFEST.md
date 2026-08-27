@@ -8481,3 +8481,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | Vercel instant rollback to the prior production deployment if needed; not indicated — all post-deploy checks passed |
 | Status | **`COMPLETED`**. Production now running this checkpoint's code. Backlog work continues per `RGL-404.md` §12/§13; a second release will follow the remaining batches per the approved plan |
 | Date | 2026-08-27 |
+
+### CHG-2026-266 — Track B Batch 1, first pass: honest dispositions for 4 non-agent-fixable High items, plus 1 stale-documentation correction (`ISS-2026-285`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Track B, Batch 1 of the approved backlog plan (`docs/build-log/release-go-live/BACKLOG_INVENTORY.md`) — the 6 High-severity items, worked first per severity ordering |
+| Change type | DOCUMENTATION (no schema change, no migration, no code change) |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction, plus the explicit "build code part, disposition rest" choice from this session's plan-mode approval |
+| Build process | Read all 4 remaining non-`CODE` High items in full (`ISS-2026-258` DR communication mechanism, `ISS-2026-261` no second infra vendor, `ISS-2026-273` no bulk opening-balance import, `ISS-2026-289` GitHub branch protection). Confirmed each has no bounded code-shaped fix an agent can safely make (re-checked `ISS-2026-289` specifically against every `mcp__github__*` tool available this session — none can set a branch-protection rule). Wrote an explicit, owner-named, compensating-control-documented disposition for each, per the operator's own chosen treatment for genuinely non-agent-fixable items. Separately, a Track B research agent investigating `ISS-2026-285` (expected to need a real migration fix) found it was already fixed 2 days earlier at `RGL-394` (`RGL-BLK-004`) — its 2 duplicate registrations (`ISS-2026-059`/`204`) were correctly annotated `RESOLVED` at the time, but this entry itself was missed. Verified the claim directly (read the actual fix migration and its regression test) before annotating |
+| Findings and disposition | `ISS-2026-258`/`261`/`273`/`289`: remain `OPEN`, High, with a named owner and next concrete step each (Product/Support Engineering; Platform/Infrastructure leadership; Finance/Product; repository owner with exact GitHub Settings steps, respectively). `ISS-2026-285`: `RESOLVED` (doc-only correction — was already fixed) |
+| Files edited | `docs/runtime/KNOWN_ISSUES.md` (5 entries updated); `docs/build-log/release-go-live/RGL-404.md` (§12 item 21 added, tally corrected to 146); `docs/build-log/release-go-live/BACKLOG_INVENTORY.md` (High-severity table updated) |
+| Migration | None |
+| Risk | None — documentation only |
+| Scope justification | Direct execution of the operator's own explicit instruction and chosen disposition treatment |
+| Gates | `pnpm run docs:check`/`standards:check`: green. No other gate is affected by a documentation-only change |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; nothing to undo on any live database |
+| Status | **`COMPLETED`**. Backlog now 146 (0 Critical, 6 High, 70 Medium, 70 Low). Batch 1's remaining 13 items (`ISS-2026-249`/`250` plus the 7 `rls-grants` items) continue via background research already in flight — see next `CHG` entry |
+| Date | 2026-08-27 |

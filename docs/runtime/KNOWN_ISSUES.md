@@ -3060,6 +3060,18 @@ A broad search across `app/`, `server/`, and every migration for `customer_impac
 
 **Status `OPEN`**, High severity (this is one of the checkpoint's own named charter items — communication/ownership/escalation/customer-impact verification — and the finding is that none of it exists as a real, callable mechanism; a genuine DR event today would rely entirely on ad hoc human judgment with no tooling, template, or systematic record of what was communicated to whom). **Not fixed by this checkpoint** — building a real incident-communication system (channel integration, message templates, a customer-impact/status-page mechanism) is a real product/infrastructure build, well outside this checkpoint's own "5-15 files, bounded repair, no new product features" charter. Disclosed in `docs/runbooks/disaster-recovery.md` §5. Cross-referenced with `ISS-2026-251` (HDN-382, no escalation/dispatch mechanism for `app.raise_observability_alert`'s own generated incidents) — both trace to the identical underlying absence (no real Slack/email/PagerDuty dispatch integration exists anywhere in this codebase); a future fix for one should account for the other rather than building the dispatch mechanism twice. Owner: a dedicated future task.
 
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** Reviewed for a bounded code-shaped fix per
+the operator's own "build what's genuinely code-shaped, disposition the rest" instruction; there is
+none — a real incident-communication channel (Slack/PagerDuty/email/SMS dispatch integration,
+message templates, a customer-facing status/impact mechanism) requires a real external vendor
+integration and product design, not a database migration or an existing-code wiring fix. Remains
+`OPEN`, High, genuinely not agent-fixable in this pass. **Owner, named**: Product/Support
+Engineering — the same dedicated task that should also close `ISS-2026-251`'s dispatch-mechanism
+gap, since both trace to the identical missing integration (do not build it twice). **Compensating
+control until built**: `docs/runbooks/*.md`'s existing "notify DevOps/Security lead" instruction
+remains the operative (manual, human-judgment) process; this disclosure ensures no future
+checkpoint mistakes that manual instruction for automated tooling that does not exist.
+
 ### ISS-2026-259 — `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
 
 Live-proved during `HDN-384`'s own DR drill: a direct `DELETE FROM app.leads;` (no `WHERE` clause) against a seeded disposable database left **zero matching rows** in `app.audit_logs`. `app.capture_audit_event` only fires from inside RPC functions — a raw SQL statement (a botched migration, or a support engineer's direct psql intervention during an incident) bypasses the audit trail entirely. This is a real, disclosed limitation of this repository's own audit-logging design, not a security bypass in itself (raw table access already requires elevated database credentials no ordinary tenant role holds), but it directly undermines `docs/runbooks/database-restore.md` §3 item 2's own reliance on `app.audit_logs` as "the one real evidence source" for post-restore security-state auditing — that reliance is sound for anything that went through an RPC, and blind to anything that didn't.
@@ -3083,6 +3095,17 @@ Live-proved during `HDN-384`'s own DR drill: a direct `DELETE FROM app.leads;` (
 **Tier C correction (attack-surface lens): sharpened, not softened.** Supabase does offer a real, native cross-region mechanism — Read Replicas — confirmed via Supabase's own documentation. But it is gated to paid plans, and this repository's own organization is confirmed on the **free tier** (live-queried via the Supabase management connector), so it is structurally unavailable today, not merely unconfigured or undocumented. Even on a paid plan, Read Replicas explicitly exclude Auth traffic (all Auth requests are served by the Primary per Supabase's own documentation) and would not survive a full Primary outage — so a plan upgrade alone would not fully close this finding either. The finding stands as originally registered; the mechanism a future fix might reach for is now named precisely rather than assumed absent.
 
 **Status `OPEN`**, High severity (a real, structural single-point-of-failure dependency directly relevant to 2 of the 4 DR scenarios this checkpoint's own charter names; not a live incident today, and not necessarily the wrong architectural choice for this product's stage, but an undisclosed-elsewhere risk that should be a conscious, documented business decision rather than an implicit one). **Not fixed by this checkpoint** — introducing a second infrastructure vendor, a paid-tier Read Replica (which would still need pairing with a separate Auth-continuity plan), or any other mitigation is a major infrastructure/product decision requiring executive/architecture sign-off, far outside this checkpoint's own "5-15 files, bounded repair" charter. Disclosed in `docs/runbooks/disaster-recovery.md` §2/§4 item 4 as a tabletop-only, honestly-bounded gap. Owner: a dedicated future task.
+
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** No bounded code-shaped fix exists — this is
+a vendor/infrastructure-strategy decision (adopt a second managed-Postgres vendor, upgrade to a
+paid Supabase tier for Read Replicas plus a separate Auth-continuity plan, or consciously accept
+the single-vendor posture as a stage-appropriate business choice) that requires human
+executive/architecture sign-off and a real budget/contract commitment, not an agent action. Remains
+`OPEN`, High, genuinely not agent-fixable. **Owner, named**: Platform/Infrastructure leadership —
+this is a business decision about acceptable risk vs. cost, not an engineering task with a single
+correct answer. **Compensating control until decided**: the honest "wait-and-restore, bounded by
+Supabase's own unconfirmed SLA" posture stays disclosed in `docs/runbooks/disaster-recovery.md` §2;
+no false failover-capability claim is made anywhere in this repository's operational documentation.
 
 ### ISS-2026-262 — `11_DEVOPS_WORKSTREAM.md` §8.5's own runbook catalogue names 6 files that do not exist anywhere in `docs/runbooks/` under those names (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `RESOLVED` at `HDN-388`, Low, owner a dedicated future task)
 
@@ -3210,6 +3233,21 @@ Business rule (Prompt 385 §24) states "Financial opening balances require exact
 
 **Status `OPEN`**, High severity (for a real migration needing to load thousands of opening-balance records at a genuine cutover, there is today no bulk path at all, and the one domain — Finance — where business rule §24 explicitly requires "exact reconciliation" has a self-disclosed gap in reaching the GL journal at all, meaning even the single-record path cannot be said to be "exactly reconciled" in the full double-entry sense). **Not fixed by this checkpoint** — building a bulk opening-balance import pipeline (wiring `PLT-131` to these 4 domains' own single-record primitives, plus closing `FIN-202`'s own disclosed GL gap) is a real, substantial feature addition, well outside this checkpoint's own "5-15 files, bounded repair" charter. Disclosed in `docs/runbooks/data-migration-rehearsal.md` §3 item 3/§4 item 5. Owner: a dedicated future task.
 
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** No bounded code-shaped fix attempted in this
+batch — a full bulk opening-balance import pipeline (staging/mapping/preview/CSV ingestion wired to
+`PLT-131`, across Finance/Inventory/HRIS) is a genuine new feature, not a bug fix, and closing
+`FIN-202`'s own disclosed GL-journal gap for the single-record path is itself a real Finance
+double-entry design decision (which account pairing, which period, which approval gate) that
+deserves its own dedicated, operator-confirmed design pass — exactly the discipline
+`ISS-2026-275`/`276`'s own fix (`RGL-404.md` §12 item 14) used for the adjacent historical-import
+problem, not something to rush inside a 14-item batch. Remains `OPEN`, High, not attempted this
+pass. **Owner, named**: Finance/Product — a dedicated future task scoped specifically to bulk
+opening-balance import, following the `AskUserQuestion`-gated design-confirmation pattern this
+session has used for every other Finance-correctness decision. **Compensating control until
+built**: the single-record `post_finance_ar_open_item`/`app.post_finance_ap_open_item` RPCs remain
+the only sanctioned path, and `FIN-202`'s own reconciliation function continues to correctly
+exclude `opening_balance`-sourced items rather than silently misreporting them as reconciled.
+
 ### ISS-2026-274 — no master-data (customer/vendor/item) or tenant-setup bulk-import mechanism exists anywhere (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
 
 Confirmed by direct code inventory: no `customer_import`, `vendor_import` (master data, as distinct from `vendor_rate_import`'s own rate-only scope), or `item_import` schema exists anywhere in the Import/Export Job Framework's 4 real domain adapters. `vendor_rate_import` itself *requires* the referenced vendor to already exist as a `master_records` row and rejects unresolved vendor codes outright — it is not a master-data import path. Tenant-setup import was disclosed `NOT_RUN` at its own origin (`PLT-120.md`, Master Data Foundation: "Import hooks... are disclosed `NOT_RUN` — IMPEXP/JOB (`PLT-131`/`132`) do not exist yet") and was never retrofitted by any later checkpoint.
@@ -3310,6 +3348,21 @@ This is a new, previously-unregistered instance of the wall-clock-dependent clas
 
 **Status `OPEN`**, High. **Not fixed at `RGL-391`**: pre-existing (migration dated 2026-07-30, long before Step 16), and `AGENTS.md` directs a checkpoint to fix only task-caused failures and register pre-existing ones with a named owner; Prompt 391's charter is additionally zero-code/zero-migration, and a repair requires an additive migration. Registered as `RGL-BLK-004`. Owner: `RGL-394` (Defect Triage) for the binding severity ruling, with the fix landing at `RGL-394` or `RGL-395`.
 
+**RESOLVED**, 2026-08-25, at `RGL-394` (Step 16, Defect Triage, `RGL-BLK-004`) — **documentation-only
+correction, 2026-08-27 (Track B, Batch 1 review)**: this entry's own resolution was never actually
+annotated here, even though the fix landed and its two duplicate registrations of the identical
+defect (`ISS-2026-059`, `ISS-2026-204`) were both correctly marked `RESOLVED` at the time. Confirmed
+directly: `supabase/migrations/20260826020000_harden_vendor_kpi_rate_validity_window_calc.sql`
+replaces `app._calc_vendor_kpi_rate_validity` via `CREATE OR REPLACE FUNCTION` (identical signature,
+body-only change, no ambiguous-overload risk) — the upper bound of the `generate_series` denominator
+changed from `(p_window_end - interval '1 day')::date` to `(p_window_end - interval '1 microsecond')::date`,
+which is provably identical for every whole-day-aligned window and never inverts for a sub-24h one
+(since every real caller already enforces `window_end > window_start`). Regression coverage in
+`scripts/db-tests/procurement-vendor-performance.sql` (hardcoded, hour-independent timestamps) proves
+a 21-hour same-calendar-day window is now correctly computable (`is_computable = true`,
+`raw_denominator = 1`) and a 2-day window remains unchanged (`raw_denominator = 2`). Full detail:
+`docs/build-log/release-go-live/RGL-394.md` §3, `BLOCKER_LEDGER.md` `RGL-BLK-004`.
+
 ### ISS-2026-286 — CI has failed on every one of its 30 most recent runs since at least 2026-08-10; the `db` job aborts at test file 34 of 230, so 196 database test files have had zero CI enforcement while 21 checkpoints reported green gates (found at `RGL-391`, Critical proposed; `RESOLVED` at `RGL-395`)
 
 Found by **querying the GitHub Actions API**, not by reading `.github/workflows/ci.yml` — which is the check every prior checkpoint effectively performed, and which cannot surface this.
@@ -3392,6 +3445,23 @@ So the branch holds a **divergent copy of an already-applied migration under an 
 **Combined effect, which is why this is High rather than Medium.** With no protection on `main`, no required review, no required status checks, CI red anyway (`ISS-2026-286`), and Vercel auto-deploying `main` to production (`RGL-BLK-001`), a change can travel from a keyboard to the public production URL with **no review, no passing test, and no approval** — and this is true during a declared release freeze. Four of the six ingress paths `RGL-393` enumerated have no control at all.
 
 **Status `OPEN`**, High. **Not remediated at `RGL-393`**: configuring branch protection is a repository setting outside this repository's contents and outside this lane's authority — the same constraint `PH0-087` correctly recognized. **No new release blocker opened**, because `RGL-BLK-001` and `RGL-BLK-005` already carry the consequence between them and a duplicate would inflate the count without adding information. Owner: `RGL-404`, which holds the release-decision authority that would justify requesting the setting before promotion. Related in shape to `ISS-2026-284`: a control assumed in place at Phase 0 and never re-verified against the provider.
+
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** Re-confirmed genuinely not agent-fixable: a
+fresh search of every GitHub MCP tool available to this session (`mcp__github__*`, ~50 tools
+covering PRs, issues, branches, commits, releases, actions) found none that can set a repository
+branch-protection rule — creating/reading/merging branches and PRs is available, but the
+`PUT /repos/{owner}/{repo}/branches/{branch}/protection` administrative endpoint is not exposed by
+any tool this session can call. This matches `RGL-393`'s own finding that this "requires external
+repository mutation" outside any lane's authority. Remains `OPEN`, High. **Owner, named, with exact
+steps** (this is a 2-minute human action, not a build task): repository owner (`assujiar`), via
+GitHub → Settings → Branches → Add branch protection rule for `main` — require a pull request
+before merging, require the `quality`/`db`/`e2e` status checks from `.github/workflows/ci.yml` to
+pass, and (optionally) require at least 1 approving review. This is the same underlying gap
+`RGL-BLK-001` already carries as its accepted, operator-overridden risk — closing this one
+requires the identical human action as closing that one. **Compensating control until configured**:
+this session's own PR-driven, gate-verified-before-push discipline (this exact commit sequence)
+substitutes for the missing enforced-in-platform control, but is not a substitute for the real
+setting — it depends on every future contributor voluntarily following the same discipline.
 
 ### ISS-2026-290 — 17 already-committed Step 15 hardening migrations, including fixes for multiple live Critical vulnerabilities, were never applied to the live hosted Supabase project — production ran on schema state frozen at `20260809200000` while the repository's own migration history had already advanced to `20260819000000` (found during the `RGL-BLK-002` Option 2 remediation, 2026-08-25, Critical)
 
