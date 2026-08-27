@@ -383,6 +383,20 @@ begin
   if v_rows is not null and exists (select 1 from unnest(v_rows) r where r.tenant_id = v_tenant_a) then
     raise exception 'assertion failed: expected tenant B''s own list_finance_invoices to never return a tenant A row';
   end if;
+
+  -- ISS-2026-048 extension fix (Track B Batch 2): app.approve_finance_invoice -- a
+  -- genuine stranger to the invoice's tenant now gets the same finance_invoice_not_found
+  -- error a nonexistent invoice id would produce, never a tenant-echoing
+  -- insufficient_authority error.
+  begin
+    perform app.approve_finance_invoice(v_invoice.id, v_invoice.record_version, '00000000-0000-0000-0000-000000027506', 'financemanagerb');
+    raise exception 'assertion failed: expected finance_invoice_not_found -- Finance Manager B has zero relationship to tenant A';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'finance_invoice_not_found%' then
+        raise exception 'assertion failed: expected finance_invoice_not_found, got %', sqlerrm;
+      end if;
+  end;
 end;
 $$;
 

@@ -43,9 +43,11 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 146** (0 Critical, 6 High, 70 Medium, 70 Low) — updated during Batch 1
+**Working total for Track B: 136** (0 Critical, 5 High, 64 Medium, 67 Low) — updated during Batch 1
 review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
-`RGL-404.md` §12 item 21.
+`RGL-404.md` §12 item 21. Further updated after Batch 1 (141) and Batch 2 (136, this figure) —
+see the "Batch 1 status"/"Batch 2 status" sections below and `RGL-404.md` §12 items 22-31 for the
+authoritative running log.
 
 ---
 
@@ -97,6 +99,55 @@ resolved, same treatment as `ISS-2026-265`/`254`/`272` earlier this session); `1
 (5 High) remain open, dispositioned not fixed. See `RGL-404.md` §12 for the authoritative running
 log.
 
+## Batch 2 status: complete
+
+`table-only-procurement-hardening` (19 items: 013, 015, 018, 019, 031, 036, 037, 038, 039, 040,
+041, 043, 044, 046, 047, 048, 049, 050, 052) turned out genuinely `mixed`, as this table's own
+batch-key row predicted — 5 items closed (fully or partial-by-design), 2 drafted-then-withdrawn
+after their true scope was found materially larger than assessed, 12 confirmed-still-open
+dispositions (10 pure, plus `049`'s own unfixed first half).
+
+`ISS-2026-013`, `036` — `RESOLVED (doc-only, already fixed)`: both entries described a defect
+that was already remediated by an unrelated later checkpoint (`PRC-255` for 013, `HDN-380` for
+036) but never reconciled — the same `ISS-2026-285`-class finding (item 21) recurring, caught the
+same way: verify against actual current code before writing a disposition, not before.
+
+`ISS-2026-044` — `RESOLVED`: `app.request_approval`'s own unique_violation gap, fixed at the
+single shared choke point.
+
+`ISS-2026-043`/`048` — `RESOLVED (partial by design)`: extended with 6 more representative
+cross-domain sites (17/34 of an estimated ~334 candidate sites total), mirroring `167`'s own
+Batch 1 treatment for the identical class of repo-wide sweep.
+
+`ISS-2026-049` — partial: its own second half (the shared `app.decide_approval_step`'s tenant-id
+echo) closed by the same migration as `043`/`048`; its own first half (entity_type-before-authority
+across 5 wrappers) stays open, the review's own original "disclose, not partially fix" choice,
+unchanged — so the item as a whole is NOT counted as resolved in the running tally.
+
+`ISS-2026-038` (self-approval gate on vendor rate versions) and `ISS-2026-040` (RPC-level
+`evaluate_permission` gate against a customer_user-layer principal) were BOTH drafted, migration
+files written and ready to apply, and then withdrawn before being applied anywhere — mirroring
+Batch 1's own `ISS-2026-170`/`189` precedent exactly. In both cases a repo-wide check performed
+before applying (not after) found the true blast radius far exceeds the originating entry's own
+bounded-fix assessment: `038` would have broken ~75 unrelated test files' own "seed an approved
+rate" fixture-shortcut pattern (117 call sites, almost universally same-actor create+approve);
+`040` would have broken a real, deliberate, working customer-portal read-access pattern already
+exercised across at least 8 domain test files (a narrow staff role granted to a customer_user-layer
+principal, with ownership-scoping — not the RPC-level role gate — providing the actual isolation).
+Neither was forced through; both are redispositioned with the corrected scope handed forward — see
+each entry's own text in `KNOWN_ISSUES.md`.
+
+`ISS-2026-015`, `018`, `019`, `031`, `037`, `039`, `041`, `046`, `047`, `050`, `052` —
+re-verified still genuinely open against current code (not assumed from the entry's own possibly-
+stale text) and dispositioned: each is a real `BIG`/`BIZ`/`INFRA` gap this batch confirmed cannot
+be closed by a bounded agent-executable fix, consistent with `00_EXECUTION_INDEX.md` §8.1's own
+"registered with a named owner and a disposition" treatment for exactly this class.
+
+Working total after Batch 2: **136 remaining** (0 Critical, 5 High, 64 Medium, 67 Low). Down from
+141 by 5 (all Medium): `013`/`036` doc-only, `044` fully resolved, `043`/`048` partial-by-design
+(tracked as one combined tally reduction since both share the identical fix migration and
+disclosure text). See `RGL-404.md` §12 items 27-31 for the authoritative running log.
+
 ## Medium/Low batches (140 items, working count)
 
 Batches below reproduce the categorization research pass performed for this document (full
@@ -139,7 +190,7 @@ High items above go in the first batch regardless of theme.
 | `migration-import` | 274, 277 | 2 | BIG/CODE | No master-data bulk-import mechanism; legal-hold scoped to deletion only |
 | `prod-seed-hygiene` | 294 | 1 | INFRA | One orphaned synthetic `auth.users` row on the hosted project |
 | `perf-live-latency` | 297 | 1 | INFRA | `GET /api/ready` p50 latency exceeds budget |
-| `table-only-procurement-hardening` | 013, 015, 018, 019, 031, 036, 037, 038, 039, 040, 041, 043, 044, 046, 047, 048, 049, 050, 052 | 19 | mixed | 038/040/043/044/048 share an RBAC/authority-check root cause, candidate for ONE migration; rest are unrelated BIG features |
+| `table-only-procurement-hardening` | 013, 015, 018, 019, 031, 036, 037, 038, 039, 040, 041, 043, 044, 046, 047, 048, 049, 050, 052 | 19 | mixed | **Batch 2, complete.** 043/044/048/049(half) shared an RBAC/authority-check root cause and were fixed via 2 migrations; 013/036 were doc-only (already fixed elsewhere); 038/040 drafted then withdrawn (blast radius exceeded assessment); rest confirmed still-open BIG/BIZ/INFRA, dispositioned |
 
 **New this session, not part of the tracked 147** (self-caught, disclosed per this session's own
 established convention, `ISS-2026-298`/`299` precedent):
@@ -155,7 +206,8 @@ established convention, `ISS-2026-298`/`299` precedent):
 Severity orders the first batch; domain/mechanism groups the rest, per the approved plan:
 
 1. **Batch 1 (High + quick wins)**: all 6 High items, plus `rls-grants` (7, one candidate migration) — 13 items.
-2. **Batch 2**: `table-only-procurement-hardening` (19, several candidate for one migration).
+2. **Batch 2 (complete)**: `table-only-procurement-hardening` (19 items — 5 closed, 2 withdrawn/
+   redispositioned, 12 dispositioned; see "Batch 2 status" above).
 3. **Batch 3**: `hris-integrated-verification-residual` (14) + `hris-overtime-timesheet-gaps` (2) + `hris-payroll-personal-data` (3) — 19 items.
 4. **Batch 4**: `cpl-customer-portal-scope` (14) + `loyalty-fraud-reconciliation` (5) + `loyalty-approval-authority` (2) — 21 items.
 5. **Batch 5**: `accessibility` (7) + `browser-compat` (1) + `docs-consistency` (5) + `perf-load-evidence` (3) + `iae-hardening-residual` (3) — 19 items.

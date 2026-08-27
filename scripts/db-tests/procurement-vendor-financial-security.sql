@@ -189,6 +189,7 @@ declare
   v_approver uuid := '00000000-0000-0000-0000-000000092103';
   v_viewer uuid := '00000000-0000-0000-0000-000000092106';
   v_pdv uuid := '00000000-0000-0000-0000-000000092105';
+  v_admin2 uuid := '00000000-0000-0000-0000-000000092201';
   v_account app.vendor_bank_accounts;
   v_replay app.vendor_bank_accounts;
   v_masked record;
@@ -385,6 +386,20 @@ begin
   if v_revealed.account_number <> '1234567890123' then
     raise exception 'assertion failed: expected the real decrypted account number back, got %', v_revealed.account_number;
   end if;
+
+  -- ISS-2026-043 extension fix (Track B Batch 2): a genuine stranger to the account's
+  -- tenant (pfin2's own tenant_admin, zero relationship to pfin1) now gets the same
+  -- vendor_bank_account_not_found error a nonexistent account id would produce, never
+  -- a tenant-echoing insufficient_authority error.
+  begin
+    perform app.reveal_vendor_bank_account_number(v_account.id, 'attempted cross-tenant reveal', now(), v_admin2, 'admin2');
+    raise exception 'assertion failed: expected vendor_bank_account_not_found -- pfin2''s admin has zero relationship to pfin1';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'vendor_bank_account_not_found%' then
+        raise exception 'assertion failed: expected vendor_bank_account_not_found, got %', sqlerrm;
+      end if;
+  end;
 
   -- the reveal is unconditionally audited, and the audit row NEVER carries the
   -- plaintext or the ciphertext -- only last4 and the reveal reason. Note the audit
