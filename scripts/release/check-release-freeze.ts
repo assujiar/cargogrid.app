@@ -697,8 +697,52 @@ import { readFileSync } from "node:fs";
  * `public.*` wrapper's security mode not matching its `app.*` counterpart
  * -- and the local disposable Postgres cluster found stopped again,
  * unrelated to this change, was restarted twice during authoring) before
- * applied to the live hosted project via `apply_migration` before this
- * local run.
+ * this digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-27 (eighteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 15: `ISS-2026-279` --
+ * `app.employee_number` uniqueness on an explicit staged value is
+ * case/whitespace-sensitive (`master_records_tenant_code_unique` is a
+ * plain case-sensitive `btree` unique index, no `lower()`/`trim()`
+ * normalization), letting `EMP-001`, `emp-001`, and `EMP-001 ` (trailing
+ * space) all commit as 3 distinct employees in one job. This entry's own
+ * text names the fix as a genuine design decision left open between a
+ * hard functional unique index and a soft validation-time/commit-time
+ * flag, "best made alongside `ISS-2026-269`'s own broader un-keyed-
+ * duplicate-detection fix" (already resolved, an earlier item in this
+ * same running log). A hard functional unique index was deliberately NOT
+ * chosen -- `app.master_records` is shared across every
+ * `master_type_code`, and a live hosted project may already carry real
+ * case-varying rows that predate this fix, so a retroactive hard
+ * constraint risks failing migration application outright or silently
+ * rejecting a legitimate future record with no human review. Widened
+ * `app.commit_employee_import_job` a third time (351 -> 352 files: +1,
+ * `20260826170000_harden_employee_import_number_normalization_detection.sql`)
+ * with the symmetric, already-shipped-and-approved answer `ISS-2026-269`
+ * established for the identical risk class on this same function: an
+ * explicitly-numbered row whose `employee_number` normalizes (`lower` +
+ * `trim`) to an existing employee's own number, without being byte-
+ * identical (an exact match already raises `employee_import_duplicate_
+ * employee_number` via the unique index, unchanged), is flagged into the
+ * existing `app.employee_duplicate_candidates` table for human review --
+ * never a hard block, mirroring `ISS-2026-269`'s own disclosed rationale
+ * that a trivial keystroke variation must not itself become a false-
+ * positive import failure. `CREATE OR REPLACE` diffed against the
+ * currently-applied function body before writing the new one, confirming
+ * only the new `else` branch (paired with the existing `if
+ * v_was_auto_numbered`) and the updated comment changed -- nothing else
+ * drifted. dbTestSetSha256 changed (an existing file widened, no file
+ * added or removed): `scripts/db-tests/hris-employee-master.sql` gained a
+ * new regression block proving the exact 3-variant scenario this entry's
+ * own live reproduction named (`EMP-CASE-001`/`emp-case-001`/`'EMP-CASE-001 '`)
+ * all still commit successfully and are flagged pairwise for human
+ * review, and that a genuinely unrelated explicit `employee_number` is
+ * never flagged. Re-verified via a fresh full local db-test suite run
+ * (352 migrations, 234 runner files, ALL PASSED, clean on the first
+ * attempt) before this digest was changed, and applied to the live hosted
+ * project via `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -798,7 +842,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-275/ISS-2026-276 fix (351 files: +1,
   // 20260826160000_create_finance_journal_historical_import.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "6ac79f37937d6011fc19c49341dbd9d3c9c3958523aaf7eeb4e3cf0aad9a4820",
+  // History: 6ac79f37937d6011fc19c49341dbd9d3c9c3958523aaf7eeb4e3cf0aad9a4820
+  // (351 files, seventeenth-pass amendment above). Superseded 2026-08-27
+  // (eighteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-279 fix (352 files: +1,
+  // 20260826170000_harden_employee_import_number_normalization_detection.sql).
+  // See the class-level doc comment above.
+  migrationSetSha256: "c91908161eb1fd75911be833555d5ce29cd144e2993ee7b31d99f8a2cc11b780",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -893,7 +943,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-275/ISS-2026-276 fix (234 files unchanged in count --
   // finance-journal.sql widened, no file added or removed). See the
   // class-level doc comment above.
-  dbTestSetSha256: "329cfdf96f8296255f45891f7da0ffd66efb033fc0dc2256102de9c6758ce4c7",
+  // History: 329cfdf96f8296255f45891f7da0ffd66efb033fc0dc2256102de9c6758ce4c7
+  // (234 files, seventeenth-pass amendment above). Superseded 2026-08-27
+  // (eighteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-279 fix (234 files unchanged in count --
+  // hris-employee-master.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "b1e8c3f83d0c0e62258bb8086e60a1e6120945718db67ddfbcb62039f89e38fc",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

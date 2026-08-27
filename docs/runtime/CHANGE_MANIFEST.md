@@ -8386,3 +8386,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 14 of 168 backlog items resolved (3 explicitly partial by design). 153 remain (0 Critical, 9 High, 73 Medium, 71 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-27 |
+
+### CHG-2026-261 — Historical issue backlog remediation, item 15: `ISS-2026-279` (employee-number case/whitespace normalization detection)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-260`. Item 15 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Confirmed by direct migration read that `master_records_tenant_code_unique` is a plain case-sensitive `btree` unique index with no `lower()`/`trim()` normalization. This entry's own text names the fix as a genuine open design decision between a hard functional unique index and a soft validation/commit-time flag. Rejected the hard-index option: `app.master_records` is shared across every `master_type_code`, and a live hosted project may already carry real case-varying rows predating this fix, so a retroactive hard constraint risked failing migration application outright or rejecting a legitimate future record with no human review. Chose consistency with `ISS-2026-269`'s own already-shipped, already-approved soft-flag answer for the identical risk class on the same function, rather than treating this as a fresh, independent design decision |
+| Findings and disposition | `ISS-2026-279`: `RESOLVED` — `app.commit_employee_import_job` now flags, for human review, an explicitly-numbered import row whose employee_number normalizes to an existing employee's own number without being byte-identical, via the existing `app.employee_duplicate_candidates` mechanism; the import itself still succeeds (never a hard block) |
+| Files edited | `supabase/migrations/20260826170000_harden_employee_import_number_normalization_detection.sql` (new); `scripts/db-tests/hris-employee-master.sql` (widened); `scripts/release/check-release-freeze.ts` (eighteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-279` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826170000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — a `CREATE OR REPLACE` widening `app.commit_employee_import_job`'s own body (diffed against the currently-applied definition before writing, confirming only the intended branch and comment changed); no new grants required |
+| Risk | Low — purely additive detection logic inside an already-authority-gated (`HRS:Import`) function; never blocks a legitimate import, only adds a review-queue row |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New function body live-verified via `pg_get_functiondef` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema change would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 15 of 168 backlog items resolved (3 explicitly partial by design). 152 remain (0 Critical, 9 High, 72 Medium, 71 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |

@@ -997,6 +997,112 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-279 (Step 16 historical-issue-backlog remediation) fix regression: an EXPLICITLY-supplied employee_number that normalizes (lower + trim) to the same value as an existing employee''s own number, without being byte-identical, is flagged into app.employee_duplicate_candidates for human review -- the exact HDN-385 Tier C live reproduction (EMP-CASE-001 / emp-case-001 / trailing-space variant all committed as 3 distinct employees, zero flag) -- the import itself still succeeds (never a hard block), and an unrelated employee_number is never flagged'
+do $$
+declare
+  v_tenant1 uuid;
+  v_staff uuid;
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_job3 app.jobs;
+  v_job4 app.jobs;
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_source_file3 app.files;
+  v_source_file4 app.files;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_row3 app.import_staging_rows;
+  v_row4 app.import_staging_rows;
+  v_first_id uuid;
+  v_second_id uuid;
+  v_third_id uuid;
+  v_fourth_id uuid;
+  v_candidate app.employee_duplicate_candidates;
+  v_employee_count integer;
+begin
+  select id into v_tenant1 from app.tenants where slug = 'hrmemp1';
+  select auth_user_id into v_staff from app.users where email = 'staff@hrmemp1.test';
+
+  -- First import: the canonical explicit number.
+  v_source_file1 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-1.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', null, v_staff, 'staff');
+  v_job1 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file1.id, '{}'::jsonb, 'idem-empimport-normcase-job-1', v_staff, 'staff');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-CASE-001', 'full_name', 'Case Variant Person One', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job1.job_id, false, v_staff, 'staff');
+  select master_record_id into v_first_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person One';
+
+  -- Second import, a SEPARATE job (the unique index is per-row, but confirming it never
+  -- fires cross-job either): lowercase variant, a genuinely different person (no shared
+  -- work_email/full_name), isolating this proof to employee_number normalization alone.
+  v_source_file2 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-2.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-2', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', null, v_staff, 'staff');
+  v_job2 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file2.id, '{}'::jsonb, 'idem-empimport-normcase-job-2', v_staff, 'staff');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'emp-case-001', 'full_name', 'Case Variant Person Two', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job2.job_id, false, v_staff, 'staff');
+  select master_record_id into v_second_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person Two';
+
+  select count(*) into v_employee_count from app.employees where tenant_id = v_tenant1 and full_name in ('Case Variant Person One', 'Case Variant Person Two');
+  if v_employee_count <> 2 then
+    raise exception 'assertion failed: expected both case-variant rows to still be created (never a hard block on import), found %', v_employee_count;
+  end if;
+
+  select * into v_candidate from app.employee_duplicate_candidates
+    where tenant_id = v_tenant1 and source_master_record_id = v_second_id and candidate_master_record_id = v_first_id;
+  if not found then
+    raise exception 'assertion failed: expected a pending app.employee_duplicate_candidates row linking emp-case-001 back to EMP-CASE-001 -- ISS-2026-279''s own case-sensitivity gap has reappeared';
+  end if;
+  if v_candidate.decision <> 'pending' or v_candidate.similarity_basis <> 'employee_number_normalized' then
+    raise exception 'assertion failed: expected decision=pending/similarity_basis=employee_number_normalized, got decision=%, similarity_basis=%', v_candidate.decision, v_candidate.similarity_basis;
+  end if;
+
+  -- Third import: trailing-space variant, the exact 3rd form the entry's own live
+  -- reproduction named -- must ALSO be flagged (against both prior rows).
+  v_source_file3 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-3.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-3', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file3.id, 'clean', null, v_staff, 'staff');
+  v_job3 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file3.id, '{}'::jsonb, 'idem-empimport-normcase-job-3', v_staff, 'staff');
+  perform app.stage_import_rows(v_job3.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-CASE-001 ', 'full_name', 'Case Variant Person Three', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row3 from app.import_staging_rows where job_id = v_job3.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row3.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job3.job_id, false, v_staff, 'staff');
+  select master_record_id into v_third_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person Three';
+
+  if (select count(*) from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_third_id) <> 2 then
+    raise exception 'assertion failed: expected the trailing-space variant to be flagged against BOTH prior case-variant employees, got % candidate row(s)', (select count(*) from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_third_id);
+  end if;
+
+  -- A FOURTH import, with a genuinely unrelated explicit employee_number, must NOT be
+  -- flagged -- proving this is a real normalized match, not "every explicitly-numbered
+  -- row gets flagged unconditionally."
+  v_source_file4 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-4.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-4', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file4.id, 'clean', null, v_staff, 'staff');
+  v_job4 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file4.id, '{}'::jsonb, 'idem-empimport-normcase-job-4', v_staff, 'staff');
+  perform app.stage_import_rows(v_job4.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-CASE-999', 'full_name', 'Case Variant Person Four', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row4 from app.import_staging_rows where job_id = v_job4.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row4.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job4.job_id, false, v_staff, 'staff');
+  select master_record_id into v_fourth_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person Four';
+
+  if exists (select 1 from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_fourth_id) then
+    raise exception 'assertion failed: expected a genuinely unrelated explicit employee_number (no normalized collision with anyone) to NOT be flagged as a duplicate candidate';
+  end if;
+
+  raise notice 'ISS-2026-279 employee-number-normalization-detection proof: EMP-CASE-001/emp-case-001/''EMP-CASE-001 '' all commit successfully (never a hard block) and are flagged pairwise into app.employee_duplicate_candidates for human review; a genuinely unrelated explicit number is not flagged';
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth (ERR-2026-004): anon holds no direct table/EXECUTE access to any new employee object; authenticated has RLS-scoped SELECT but no direct INSERT/UPDATE/DELETE; app.validate_employee_import_row is service_role-only (ATW-032''s own live rbac-enforcement.sql gate independently proves the transitive-authority half of this); CRITICAL fix regression -- authenticated''s SELECT on app.employees/app.employee_emergency_contacts/app.employee_change_requests is column-scoped, never full-row (this checkpoint''s own review-round fix, PLT-114''s exact established pattern)'
 do $$
 declare
