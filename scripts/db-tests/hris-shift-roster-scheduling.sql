@@ -744,8 +744,8 @@ set role authenticated;
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug='shr1');
-  v_emp1 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp1work@shr1.test');
-  v_emp2 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp2work@shr1.test');
+  v_emp1 uuid;
+  v_emp2 uuid;
   v_emp1_assignment_id uuid;
   v_emp2_assignment_id uuid;
   v_request app.schedule_swap_requests;
@@ -761,7 +761,19 @@ begin
   -- rows, never the actor identity the RPC calls below authenticate as,
   -- which remains governed entirely by request.jwt.claims + the explicit
   -- p_actor_auth_user_id argument), never the behavior under test.
+  --
+  -- ISS-2026-189 (Track B Batch 1) widened this same need to v_emp1/v_emp2
+  -- themselves: they were previously initialized in the DECLARE section
+  -- (which runs under the outer `set role authenticated` already active at
+  -- that point), relying on app.employees' own RLS being tenant-membership-
+  -- only. Now that a non-HRS:View, non-self read of ANOTHER employee's row
+  -- (emp1 resolving emp2's own master_record_id) is correctly denied at the
+  -- RLS layer, these must also resolve under the same elevated role as the
+  -- assignment ids below -- moved out of DECLARE (which cannot itself be
+  -- role-scoped) and into this same BEGIN-section elevated block.
   set local role postgres;
+  v_emp1 := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp1work@shr1.test');
+  v_emp2 := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp2work@shr1.test');
   v_emp1_assignment_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-10'::date and status = 'published');
   v_emp2_assignment_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp2 and work_date = '2026-09-11'::date and status = 'published');
   set local role authenticated;
@@ -855,8 +867,8 @@ set role authenticated;
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug='shr1');
-  v_emp1 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp1work@shr1.test');
-  v_emp2 uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp2work@shr1.test');
+  v_emp1 uuid;
+  v_emp2 uuid;
   v_dep_assignment_id uuid;
   v_dep_target_id uuid;
   v_dep_request app.schedule_swap_requests;
@@ -865,8 +877,13 @@ begin
   -- resolved under a momentarily elevated LOCAL role (reverted before the
   -- RPC call below), for the exact same reason as the earlier swap-request
   -- block above -- emp1 cannot see emp2's raw schedule_assignments row
-  -- post-fix; test-arrangement only.
+  -- post-fix; test-arrangement only. ISS-2026-189 (Track B Batch 1) widened
+  -- this same need to v_emp1/v_emp2 themselves -- see the earlier block's
+  -- own comment for the full reasoning; moved out of DECLARE for the same
+  -- reason.
   set local role postgres;
+  v_emp1 := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp1work@shr1.test');
+  v_emp2 := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'emp2work@shr1.test');
   v_dep_assignment_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp1 and work_date = '2026-09-12'::date and status = 'published');
   v_dep_target_id := (select id from app.schedule_assignments where tenant_id = v_tenant1 and employee_id = v_emp2 and work_date = '2026-09-13'::date and status = 'published');
   set local role authenticated;

@@ -194,39 +194,74 @@ describe("validateFlagRegistry", () => {
 });
 
 describe("FlagCache — TTL expiry (§5, never serves a stale hit)", () => {
+  const ctxA = { tenantId: "tenant-a", environment: "production" as const, cohorts: [] as const };
+  const ctxB = { tenantId: "tenant-b", environment: "production" as const, cohorts: [] as const };
+
   test("a fresh entry is returned before TTL expiry", () => {
     const cache = new FlagCache(1000);
     const fixedNow = () => new Date("2026-07-16T00:00:00.000Z");
-    cache.set("flag.a", { enabled: true, reason: "rollout_bucket" }, fixedNow);
-    assert.deepEqual(cache.get("flag.a", fixedNow), { enabled: true, reason: "rollout_bucket" });
+    cache.set("flag.a", ctxA, { enabled: true, reason: "rollout_bucket" }, fixedNow);
+    assert.deepEqual(cache.get("flag.a", ctxA, fixedNow), { enabled: true, reason: "rollout_bucket" });
   });
 
   test("an entry past its TTL returns undefined (a fresh miss), not a stale value", () => {
     const cache = new FlagCache(1000);
     const setAt = () => new Date("2026-07-16T00:00:00.000Z");
     const getAt = () => new Date("2026-07-16T00:00:02.000Z");
-    cache.set("flag.a", { enabled: true, reason: "rollout_bucket" }, setAt);
-    assert.equal(cache.get("flag.a", getAt), undefined);
+    cache.set("flag.a", ctxA, { enabled: true, reason: "rollout_bucket" }, setAt);
+    assert.equal(cache.get("flag.a", ctxA, getAt), undefined);
   });
 
   test("a missing key returns undefined", () => {
     const cache = new FlagCache(1000);
-    assert.equal(cache.get("flag.never-set"), undefined);
+    assert.equal(cache.get("flag.never-set", ctxA), undefined);
   });
 
   test("invalidate removes an entry immediately regardless of TTL", () => {
     const cache = new FlagCache(60000);
     const fixedNow = () => new Date("2026-07-16T00:00:00.000Z");
-    cache.set("flag.a", { enabled: true, reason: "rollout_bucket" }, fixedNow);
-    cache.invalidate("flag.a");
-    assert.equal(cache.get("flag.a", fixedNow), undefined);
+    cache.set("flag.a", ctxA, { enabled: true, reason: "rollout_bucket" }, fixedNow);
+    cache.invalidate("flag.a", ctxA);
+    assert.equal(cache.get("flag.a", ctxA, fixedNow), undefined);
   });
 
   test("size reflects the number of live entries", () => {
     const cache = new FlagCache(60000);
     const fixedNow = () => new Date("2026-07-16T00:00:00.000Z");
-    cache.set("flag.a", { enabled: true, reason: "rollout_bucket" }, fixedNow);
-    cache.set("flag.b", { enabled: false, reason: "default" }, fixedNow);
+    cache.set("flag.a", ctxA, { enabled: true, reason: "rollout_bucket" }, fixedNow);
+    cache.set("flag.b", ctxA, { enabled: false, reason: "default" }, fixedNow);
     assert.equal(cache.size(), 2);
+  });
+
+  // ISS-2026-175 regression (Track B Batch 1): the cache key previously
+  // included only flagId, so a shared instance served one tenant's cached
+  // decision to another. These assert the fix directly.
+  test("ISS-2026-175: two tenants for the same flag do not share a cache entry", () => {
+    const cache = new FlagCache(60000);
+    const fixedNow = () => new Date("2026-07-16T00:00:00.000Z");
+    cache.set("flag.a", ctxA, { enabled: true, reason: "rollout_bucket" }, fixedNow);
+    assert.equal(cache.get("flag.a", ctxB, fixedNow), undefined, "tenant B must not see tenant A's cached decision");
+    cache.set("flag.a", ctxB, { enabled: false, reason: "default" }, fixedNow);
+    assert.deepEqual(cache.get("flag.a", ctxA, fixedNow), { enabled: true, reason: "rollout_bucket" }, "tenant A's own entry must be unaffected by tenant B's set()");
+    assert.deepEqual(cache.get("flag.a", ctxB, fixedNow), { enabled: false, reason: "default" });
+    assert.equal(cache.size(), 2);
+  });
+
+  test("ISS-2026-175: invalidate for one tenant does not remove another tenant's entry for the same flag", () => {
+    const cache = new FlagCache(60000);
+    const fixedNow = () => new Date("2026-07-16T00:00:00.000Z");
+    cache.set("flag.a", ctxA, { enabled: true, reason: "rollout_bucket" }, fixedNow);
+    cache.set("flag.a", ctxB, { enabled: false, reason: "default" }, fixedNow);
+    cache.invalidate("flag.a", ctxA);
+    assert.equal(cache.get("flag.a", ctxA, fixedNow), undefined);
+    assert.deepEqual(cache.get("flag.a", ctxB, fixedNow), { enabled: false, reason: "default" });
+  });
+
+  test("ISS-2026-175: different environments for the same tenant+flag do not share a cache entry", () => {
+    const cache = new FlagCache(60000);
+    const fixedNow = () => new Date("2026-07-16T00:00:00.000Z");
+    const staging = { ...ctxA, environment: "staging" as const };
+    cache.set("flag.a", ctxA, { enabled: true, reason: "rollout_bucket" }, fixedNow);
+    assert.equal(cache.get("flag.a", staging, fixedNow), undefined);
   });
 });

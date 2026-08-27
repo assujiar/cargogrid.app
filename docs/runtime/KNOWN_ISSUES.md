@@ -1373,6 +1373,28 @@ Every service-role-mediated action in `app/(tenant)/[tenantSlug]/admin/api-keys/
 
 41 `raise exception 'cross_tenant_*_denied'`/`'tenant_mismatch'`-shaped sites across ≥15 distinct discriminating codes distinguish "record does not exist" from "record exists in another tenant" — live-proven end to end via `app.create_quotation_draft`: an opportunity UUID existing in no tenant raises `opportunity_not_found`, the identical UUID existing in tenant B raises `cross_tenant_opportunity_denied: ... does not belong to tenant fd42df6c-...`, disclosing the querying party's own tenant UUID back to them (harmless) but confirming existence-and-ownership to an attacker who owns neither. The api-keys surface additionally discloses the *owning* tenant's UUID. 637 sites under `app/` interpolate `error.message` into a user-visible response, propagating the leak to the browser. No tenant *data* is read — only existence plus a tenant UUID — hence Medium. Correct counter-examples already exist in this codebase and are the model to copy: `app.get_customer_shipment_tracking`/`app.get_rfq_for_vendor_api` both merge both failure cases into one anti-enumerating `*_not_found`. **Owner: `HDN-376`** (API Compatibility Audit) — normalize the ~15 code families to the existing anti-enumerating pattern.
 
+**`RESOLVED` (partial by design — disclosed), 2026-08-27 (Track B Batch 1) — 3 of the ~41 sites,
+representative, not exhaustive.** `supabase/migrations/20260827010000_harden_cross_tenant_error_disclosure_
+representative.sql` normalizes `app.create_quotation_draft` (this entry's own cited reproduction —
+the opportunity lookup is now tenant-scoped in the SELECT itself, collapsing the separate
+`cross_tenant_opportunity_denied` branch into the same `opportunity_not_found` a nonexistent id
+already raised) and `app.revoke_api_key`/`app.rotate_api_key` (the api-keys surface this entry
+separately flags as "additionally discloses the *owning* tenant's UUID"). The fix for the latter
+two required one real refinement, caught by a local `db-tests` failure before anything was applied
+live, not assumed correct from the design alone: a naive full collapse (any not-found-or-
+unauthorized case → generic error) also swallowed a legitimate, non-leaky, common case — a real
+member of the SAME tenant who simply lacks manage authority, which is a completely different
+situation from a stranger probing a foreign tenant's key. The corrected fix discriminates via
+`app.has_active_tenant_membership(v_key.tenant_id, actor)`: a genuine stranger gets the generic
+`api_key_not_found` (closing the oracle); a real same-tenant member without authority still gets
+the specific `insufficient_authority` error (revealing a tenant_id they already belong to is not a
+leak). New regression coverage in `commercial-quotation-builder.sql` (cross-tenant vs. fully-
+nonexistent opportunity raise the byte-identical error shape) and `api-key-webhook.sql` (same proof
+for both functions, plus confirms the foreign tenant's key is left untouched). **The remaining
+~38 sites across ~13 more code families remain `OPEN`, unchanged owner (`HDN-376`)** — this
+entry's own text already frames the full remediation as exceeding a single bounded pass; these 3
+sites demonstrate the correct pattern (and its real pitfall) for whoever completes the rest.
+
 ### ISS-2026-168 — `lib/supabase/service-role.ts` documents a client-bundle guard that does not exist (found at `CG-S15-HDN-004`, `RESOLVED` at `HDN-378`, Low, owner `HDN-378`)
 
 The file asserts `scripts/env/client-guard.ts`'s own bundle scan "enforces it never reaches a client bundle" — that scan does not exist; `assertServerOnly` has zero call sites repo-wide, including inside the service-role factory itself. `eslint.config.js`'s one real static control matches only literal `process.env.SUPABASE_SERVICE_ROLE_KEY` dot-access, and `service-role.ts` reads it via computed bracket access, so no lint rule would catch a second such file either. **Currently safe** — no `"use client"` file imports the factory (verified across every reference) — but nothing statically prevents a regression. **Owner: `HDN-378`** — either build the documented bundle scan or add a `no-restricted-imports` rule.
@@ -1393,6 +1415,32 @@ The file asserts `scripts/env/client-guard.ts`'s own bundle scan "enforces it ne
 
 Multiple file-upload call sites pass a correct `tenantId` but a client-controlled `recordId` over the service-role client; `app.initiate_file_upload` checks tenant-level file-action authority but never that `p_record_id` belongs to `p_tenant_id`. Impact is bounded to a dangling `record_id` reference, not disclosure — the created `app.files` row always carries the caller's own tenant, so RLS still prevents cross-tenant reads. **Owner: `HDN-377`** (Storage and Signed URL Audit).
 
+**Investigated, fix scope corrected and deferred, 2026-08-27 (Track B, Batch 1 review).** Initially
+scoped as a bounded `CODE` fix (a dispatch function checking `p_record_id`'s tenant ownership for
+the exhaustively-grepped set of `record_type` values real production TypeScript callers pass:
+`vendor_financial_verification`/`vendor_compliance` (both resolve against `app.vendor_profiles`),
+`vendor_assessment`, `shipment_order`, `customer_portal_quote_request`). A migration implementing
+exactly that was drafted and then withdrawn before being applied, after a wider check of every
+`scripts/db-tests/*.sql` call site (34 files) revealed the true surface is much larger than the
+production TS layer alone: this codebase's own db-test suite exercises `app.initiate_file_upload`
+directly for at least 12 more `record_type` values across HRIS, ticketing, procurement RFQ,
+training, onboarding, OCR, and import/export domains — some using real, tenant-scoped backing rows
+(`ticket`, `rfq_invitation`, `onboarding_case_task`, `training_certificate`, matching real tables),
+others using deliberately-synthetic placeholder ids (`import_job`, `import_source`, `export_job`,
+`ocr_probe`, `loyalty_reward`, and `document-file.sql`'s own `'shipment'` convention, used 26 times
+with `gen_random_uuid()`, never a real backing row). A fail-closed dispatch covering only the 5
+production-TS types would have broken the other legitimate domains' own passing tests; getting the
+full ~17-type enumeration right (verifying each one's real backing table, or confirming it is
+deliberately record-less by design) is real, careful, multi-domain research — the same class of
+effort this session already reserves for a dedicated `AskUserQuestion`-gated pass (e.g.
+`ISS-2026-275`/`276`'s own historical-import design decision), not something to rush inside a
+13-item batch. Remains `OPEN`, Low. **Owner, named**: a dedicated future task scoped specifically
+to enumerating and verifying every real `record_type` this RPC must support, before writing the
+tenant-ownership dispatch — the corrected scope assessment above is handed forward as its starting
+point, not left to be re-discovered. **Compensating control**: none new: the pre-existing bounded
+impact (dangling reference only, not cross-tenant disclosure, per this entry's own original text)
+still holds unchanged.
+
 ### ISS-2026-171 — `app.notifications` RLS has no tenant-membership conjunct; a revoked user retains read access to their own past notifications (found at `CG-S15-HDN-004`, `RESOLVED` at `HDN-373` via `20260810500000_harden_own_row_rls_membership_gap.sql`, Medium, owner `HDN-373`)
 
 The `notifications_select_own` policy is `recipient_auth_user_id = auth.uid() or is_supreme_admin()` with no tenant-membership check, unlike every other table in the schema, which correctly fails closed post-revocation (live-verified: `report_runs`/`files`/`jobs`/`scheduled_reports` all correctly return 0 rows for a revoked identity; `notifications` still returns the row). The content was legitimately addressed to the identity while an active member; the gap is retention of access after revocation. **Owner: `HDN-373`** — add the same membership conjunct every other policy already carries.
@@ -1400,6 +1448,33 @@ The `notifications_select_own` policy is `recipient_auth_user_id = auth.uid() or
 ### ISS-2026-172 — `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold it (found at `CG-S15-HDN-004`, `OPEN`, Medium, owner `HDN-377`)
 
 `app.files` grants table-level (not column-level) `SELECT` to `authenticated`; a direct RLS read of an authorized row writes nothing to `app.file_access_logs` — only RPC-mediated reads are logged, so "every file read is logged" is not true today. The same direct read also discloses `storage_path` (the future Storage object key) past several RPC layers whose own contracts explicitly withhold it (`server/contracts/customer-epod/customer-epod.ts`, `vendor-compliance.ts`). In-tenant, record-scoped — not a cross-tenant read. **Owner: `HDN-377`** — narrow to a column-level grant excluding `storage_path`, or log direct reads too.
+
+**Split disposition, 2026-08-27 (Track B, Batch 1 review).** This entry names two distinct gaps,
+now confirmed to have two different fates:
+
+**(a) The `storage_path` column-level grant leak is `RESOLVED` — already fixed as a duplicate of
+`ISS-2026-216`, not a separate open item.** `supabase/migrations/20260814000000_harden_storage_
+signed_url_audit_findings.sql` (HDN-377's own "Finding A") already replaced the table-level grant
+with an explicit 26-column list excluding `storage_path` — word-for-word the same live-forced
+reproduction this entry itself describes. No later migration re-widens it (confirmed by direct
+grep of every `on app.files` grant statement). This entry's own (a) half should be read as closed
+by that same fix, cross-referenced here since it was never explicitly linked before.
+
+**(b) No audit log on a direct RLS `SELECT` remains genuinely `OPEN`, and is architectural, not a
+bounded fix.** Postgres RLS cannot trigger a write as a side effect of a `SELECT` — there is no
+"add a REVOKE+GRANT" or "add an RLS conjunct" fix for this, unlike every other item in this
+session's own RLS-hardening batch. Confirmed still live and exercised: `server/queries/document.ts`'s
+`listFilesForTenant()` does a raw `.from("files").select(...)`, and this repository's own
+`docs/build-log/full-system-hardening/HDN-377.md` already flagged this exact gap. The only real fix
+is architectural: revoke direct table `SELECT` entirely and route every read (including metadata-
+only listing) through a `SECURITY DEFINER` RPC that calls the existing `app.authorize_file_access`
+(which already supports an `access_type='metadata_view'` value) before returning rows — a real
+Server Action/query-layer rewrite (`listFilesForTenant()` and its callers), not a database-only
+change. **Owner, named**: a dedicated future task pairing the RPC-layer change with the
+`server/queries/document.ts` rewrite together, since a database-only migration cannot close this
+half alone. **Compensating control**: `storage_path` itself is no longer exposed via this path
+(per (a) above) — the residual exposure is metadata-only (filenames, classification, lifecycle
+status), not the Storage object key an attacker would need to actually retrieve file content.
 
 ### ISS-2026-173 — `app.saved_report_views` own-row policy has no tenant-membership conjunct (found at `CG-S15-HDN-004`, `RESOLVED` at `HDN-373` via `20260810500000_harden_own_row_rls_membership_gap.sql`, Low, owner `HDN-373`)
 
@@ -1409,13 +1484,59 @@ Same shape as `ISS-2026-171`: `owner_auth_user_id = auth.uid()` with no membersh
 
 RLS disabled, zero policies, no `tenant_id` column, `SELECT` granted to `authenticated`. `row_count_before`/`row_count_after` are platform-wide counts over `app.mv_report_usage_daily` — i.e. aggregate activity across every tenant — plus the triggering Supreme Admin's own UUID and refresh timing. The underlying materialized view itself is correctly locked down (`revoke all ... from public, authenticated, anon`); the run ledger publishing its cross-tenant cardinality is not. No row-level tenant data disclosed. Confirmed independently by two Tier C investigation lenses. **Owner: `HDN-382`** (Observability) — either document this as an accepted compensating control (aggregate-only, no tenant content) or restrict the grant.
 
+**RESOLVED, 2026-08-27 (Track B Batch 1).** Chose the "restrict the grant" option this entry itself
+names, not the "document as accepted" one — a real, cheap fix was available. Design decision made
+and disclosed: the current tenant Analytics UI legitimately displays `row_count_after` as a
+"reconciled (N rows)" freshness badge (a real, already-shipped feature), so dropping it would be a
+product regression, not a pure security fix, and stayed out of scope; `row_count_before` (unused,
+redundant) and `triggered_by_auth_user_id`/`triggered_by_label` (a named Supreme Admin's real
+identity, previously exposed platform-wide) are the entry's own undisputed leak and are now
+removed. `supabase/migrations/20260827030000_harden_analytics_refresh_runs_grant.sql`:
+`authenticated`'s grant narrowed via `revoke`+column-level `grant` to `(id, view_code, status,
+row_count_after, reconciled, error_reason, started_at, completed_at)`; `service_role` keeps the
+full-row grant, `server/queries/analytics.ts`'s existing raw table SELECT needs no code change
+(just returns a narrower row shape now). New regression in `analytics-materialized-views.sql`
+proves the 3 dropped columns carry zero `authenticated` privilege, the 8 kept ones remain readable,
+and `service_role` is unaffected.
+
 ### ISS-2026-175 — `FlagCache` cache key omits the tenant identifier (found at `CG-S15-HDN-004`, `OPEN`, Low, owner `HDN-379`)
 
 `scripts/feature-flags/flags.ts`'s `FlagCache.get`/`set` key on `flagId` alone, while `evaluate()` is tenant-dependent (deny-list, allow-list, bucketing all take `context.tenantId`). A shared cache instance would leak one tenant's flag decision to another. **Dormant** — instantiated only in the file's own test; `00_EXECUTION_INDEX.md` §2 confirms no runtime feature-flag service exists yet. **Owner: `HDN-379`** (Performance/Scalability, the lane that would actually wire a real cache) — fix the key shape before any real caching layer is built on top of it.
 
+**RESOLVED, 2026-08-27 (Track B Batch 1).** `scripts/feature-flags/flags.ts`'s `FlagCache` now keys
+on `[flagId, tenantId, environment, sorted cohorts].join("::")`, mirroring the sibling, already-
+correct `server/queries/feature-flags.ts` `FeatureFlagCache`'s own key shape
+(`docs/standards/FEATURE_FLAG_STANDARDS.md` §17) rather than a bespoke tenant-only fix, since
+`evaluate()` varies by `environment`/`cohorts` too, not just `tenantId`. `get`/`set`/`invalidate`
+now all take a context alongside `flagId`; the only real call site, `flags.test.ts`, updated to
+match (mechanical, no behavior change beyond the key shape). New regression tests prove two
+tenants for the same flag no longer share an entry, `invalidate` for one tenant leaves another's
+entry untouched, and two environments for the same tenant+flag don't collide either. `pnpm run
+test`: all 34 tests in this file pass (4 new). Still dormant — this fixes the class of bug before
+any real caching layer is built on top of it, per this entry's own stated purpose; wiring `FlagCache`
+into a live runtime path remains `HDN-379`'s own separate, unstarted charter.
+
 ### ISS-2026-176 — 35 `authenticated`-readable views bypass base-table RLS by construction (found at `CG-S15-HDN-004`, `OPEN`, Low, owner `HDN-373`)
 
 35 of 37 `app` views granted `SELECT` to `authenticated` are owned by `postgres` without `security_invoker=true`, and no base table sets `FORCE ROW LEVEL SECURITY` — so RLS on the underlying tables is evaluated as the owner and bypassed entirely; isolation rests solely on each view's own hand-written predicate. All 35 currently carry a correct one (verified, including nested view chains to depth 5) — this is a structural-fragility finding, not a current leak: a future view added to this set without the predicate would leak silently, with no RLS backstop and no test to catch it. **Owner: `HDN-373`** — add a mechanical sweep asserting every `authenticated`-granted view either sets `security_invoker=true` or has a verified tenant predicate, mirroring this checkpoint's own function-closure sweep pattern.
+
+**RESOLVED, 2026-08-27 (Track B Batch 1).** Built exactly the mechanical sweep this entry names —
+a new regression block in `scripts/db-tests/rbac-enforcement.sql`, not a per-view `ALTER VIEW`.
+Independently re-derived the view count from scratch (not trusting the entry's own "35 of 37"
+figure blindly): a fresh scan of every `create/create or replace view app.*` statement across all
+migrations found exactly 37 distinct app-schema views, of which exactly 2
+(`commercial_pipeline_view`, `commercial_opportunity_account_ref_drift`) already set
+`security_invoker=true` — confirming 35, matching this entry exactly. Investigated whether a
+blanket `security_invoker=true` flip would be the better fix instead of an allow-list guard, and
+confirmed it would NOT be: this repository's own history already proves it fails for the 22 RBAC
+column-masking views (`20260723210000...sql`'s own documented "permission denied for table
+opportunities" from an earlier attempt) and would silently re-trust base-table RLS this same
+document independently proves untrustworthy under this role's `BYPASSRLS` setting
+(`app.users_directory`'s own history). The guard fails the suite if a FUTURE `authenticated`-
+granted, non-invoker view appears that is not on the reviewed 35-name allow-list, and separately
+fails if any of the 35 drops off that live-granted-and-non-invoker set (catching the allow-list
+itself drifting stale). Full local `db-tests` suite re-run clean, confirming zero unreviewed views
+exist today.
 
 ### ISS-2026-177 — support-access session-open events never reach the canonical audit surface a tenant admin queries (found at `CG-S15-HDN-004`, `OPEN`, Low, owner `HDN-378`)
 
@@ -1476,6 +1597,27 @@ A support engineer (or the system, on session timeout) calling `end_support_sess
 ### ISS-2026-189 — `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate (found at `CG-S15-HDN-005`, `OPEN`, Low, owner `HDN-373` triage / `HDN-378` fix if not accepted)
 
 A column-level grant (not the full row) admits any `authenticated`, tenant-member session to read 24 directory-style columns (name, title, org unit, work email, etc. — confirmed non-PII by column list) without any `HRS:View` check, unlike full-record employee reads which correctly route through RBAC-gated RPCs. Plausibly an intentional "org directory" feature rather than a defect. **Not fixed here** — needs an explicit design ruling (accept as a documented directory feature, or narrow to a dedicated `list_employee_directory`-style RPC) before either closing or fixing. **Owner:** `HDN-373` to make the ruling; `HDN-378` to implement whichever the ruling picks.
+
+**Investigated, ruling deferred to a human, 2026-08-27 (Track B Batch 1).** A migration gating the
+raw-table read behind `HRS:View` (with a self-access carve-out mirroring `app.get_employee_profile`)
+was drafted, applied locally, and then reverted before being applied live, after the local
+`db-tests` suite surfaced the real scale of the other side of this entry's own named tradeoff:
+~90 sites across ~15 HRIS/ticketing test files construct their own fixtures by having one employee
+resolve ANOTHER employee's `master_record_id` via a plain `app.employees` read while holding no
+`HRS:View` grant — not a coincidence, but consistent, repeated test-authoring practice across a
+wide swath of this codebase, evidence pointing the same direction as this entry's own text
+("plausibly an intentional org directory feature"). Weighed against fixing ~90 test-fixture call
+sites (mechanical but real, non-trivial effort) to force through a design interpretation this
+entry itself flags as genuinely undecided, deferring the actual ruling to a human is the more
+honest choice than picking one side unilaterally under time pressure. **Remains `OPEN`, Low.**
+**Owner, named**: `HDN-373`/repository owner — the same two options this entry already named
+(accept as a documented, disclosed directory feature; or narrow to `HRS:View` and update the
+test suite's own fixture-construction pattern to use an elevated role for cross-employee lookups,
+matching the precedent `20260730960000`'s own `app.schedule_assignments` hardening already
+established for the identical situation). **Compensating control**: unchanged from this entry's
+own original text — the exposure is non-PII directory-style data only (name, title, org unit,
+work email), gated by tenant membership; sensitive PII columns are separately, correctly
+column-grant-restricted regardless of this ruling.
 
 ### ISS-2026-190 — `app.performance_calibration_adjustments_select_scoped`'s own RLS policy embeds a bare `SECURITY INVOKER` `app.evaluate_permission` call directly, sharing `ISS-2026-184`'s exact broken shape (found at `CG-S15-HDN-005`, `OPEN`, Medium, owner `HDN-387`)
 
@@ -2988,6 +3130,58 @@ real `app.incidents` row. **The remaining named producers (webhook-delivery-repl
 `OPEN`, unchanged owner, not attempted here.** `supabase/migrations/
 20260819000000_harden_release_blocker_triage_remediation.sql` Part 5.
 
+**`RESOLVED` (partial by design — disclosed), further amended 2026-08-27 (Track B, Batch 1).**
+Closes 3 of the 4 remaining named producers via `supabase/migrations/20260827000000_wire_
+observability_alert_producers.sql` — each a `create or replace function` on an unchanged
+signature, verbatim current body plus one new `perform app.raise_observability_alert(...)` call,
+placed immediately before that branch's own normal `return`, never before a `raise exception`:
+
+- **Webhook-delivery-replay divergence**: `app.record_webhook_delivery_attempt` now alerts
+  (source_type=webhook, high) whenever a delivery reaches `dead_letter`, independent of the
+  endpoint-level auto-disable counter — closes the specific "dead-letters a second time, post-
+  replay, produces zero alert" gap this entry itself named, not just the first-time case `HDN-387`
+  already closed at the ingestion-signature layer.
+- **`IAE-008` integration health-check auto-disable**: `app.record_integration_health_check` now
+  alerts (source_type=integration, high) exactly when an active connection crosses the
+  10-consecutive-unhealthy-check threshold.
+- **AI governed-action failure**: `app.record_ai_governed_request_outcome` now alerts
+  (source_type=ai, medium) on a genuinely-recorded `'failed'` outcome (guarded to never fire for a
+  race-loser call that instead hits `ai_governed_request_not_pending`).
+
+**Security-denial paths remain entirely `OPEN`, not one bounded slice as an earlier draft of this
+entry claimed.** A 4th part (`app.assert_ip_allowed`, alerting on its `enforced`-mode denial
+branches) was drafted, applied locally, and withdrawn before being applied live — caught by the
+local `db-tests` suite itself, not assumed correct from a design read. Root cause: this function's
+own denial mechanism IS `raise exception` (that is how it enforces at all), and every real caller
+catches that specific exception. `perform app.raise_observability_alert(...)` placed just before
+that `raise exception` DOES insert a real `app.incidents` row — but PL/pgSQL's implicit savepoint
+at the caller's own catching `BEGIN...EXCEPTION...END` block rolls back everything since that
+savepoint when the exception is caught, including the callee's own already-made insert. The alert
+would silently never persist in the exact scenario it exists to cover — a real, if subtle,
+correctness bug that the pre-apply local regression test caught directly (the assertion checking
+for the new `app.incidents` row failed). Closing this correctly needs either an autonomous-
+transaction mechanism (e.g. `dblink`, a real new dependency this repository does not otherwise
+carry) or moving the alert call to the CALLING code instead of inside the enforcement function
+(a design change, not a same-signature body edit) — genuinely more than a one-line mirror of the
+pattern used for the 3 producers above. `app.evaluate_permission`'s own general RBAC-denial path
+remains confirmed NOT a bounded fix either (decision-only, called for both real enforcement and
+pure UI permission-probing — wiring an alert there would fire on benign checks, a false-positive-
+flood design error), and `app.assert_current_step_up_authorization` (MFA step-up denial) still
+needs more than a one-line mirror too (captures zero durable evidence today, and is declared
+`stable`, so closing it needs a new log table/insert plus a volatility change). All three security-
+denial paths remain explicitly `OPEN`, disclosed rather than silently narrowed or shipped
+non-functional.
+
+New regression coverage added directly to the existing scenario in each of the 3 closed producers'
+own db-test file (`webhook-management.sql`, `integration-hub.sql`, `ai-governance-provider-
+boundary.sql` — a new scenario, since the existing one was a race-loser case that never genuinely
+records a failure), asserting the real `app.incidents` row now exists at each producer's own
+already-proven terminal-failure moment. Full local `db-tests` suite re-run clean after the Part D
+withdrawal; applied live; grants unaffected (`app.raise_observability_alert` is `SECURITY DEFINER`,
+`service_role`-granted — a `SECURITY DEFINER`/`service_role`-granted caller reaches it with zero
+new grant, the same composition already proven for `app.record_job_failure` and the 3 webhook-
+ingestion functions).
+
 ### ISS-2026-250 — no monitoring/incident dashboard UI exists anywhere in the application — IAE-030's own real, well-built alerting backend has zero consumer (found at `HDN-382` Observability Audit, coverage-mapping lens + runbook/dashboard review lens, `OPEN`, High, owner a dedicated future task)
 
 Confirmed by repository-wide search (not assumed): no page anywhere under `app/(tenant)/` or `app/(internal)/` renders an incident, alert, SLO, or alert-route record — `grep` for `enterprise-monitoring`, `EnterpriseMonitoring`, `Incident`, `AlertRoute`, `listIncidentsForTenant` across `app/`/`components/` returns zero real matches. This is a genuine, self-disclosed gap, not a hidden defect — `docs/build-log/phase-09/IAE-358.md` (the capability's own original build log) states directly: "UI: none — consistent with every other Group 7 capability." `docs/standards/OBSERVABILITY_STANDARDS.md` §1's own fixed catalogue of "11 dashboards" (Application health, API health, Database performance, Slow query, Queue/job health, Integration health, Tenant usage and errors, Security events, Financial posting exceptions, Storage usage, Import/export jobs) is entirely aspirational — none exist in the real `app/` tree.
@@ -3060,6 +3254,18 @@ A broad search across `app/`, `server/`, and every migration for `customer_impac
 
 **Status `OPEN`**, High severity (this is one of the checkpoint's own named charter items — communication/ownership/escalation/customer-impact verification — and the finding is that none of it exists as a real, callable mechanism; a genuine DR event today would rely entirely on ad hoc human judgment with no tooling, template, or systematic record of what was communicated to whom). **Not fixed by this checkpoint** — building a real incident-communication system (channel integration, message templates, a customer-impact/status-page mechanism) is a real product/infrastructure build, well outside this checkpoint's own "5-15 files, bounded repair, no new product features" charter. Disclosed in `docs/runbooks/disaster-recovery.md` §5. Cross-referenced with `ISS-2026-251` (HDN-382, no escalation/dispatch mechanism for `app.raise_observability_alert`'s own generated incidents) — both trace to the identical underlying absence (no real Slack/email/PagerDuty dispatch integration exists anywhere in this codebase); a future fix for one should account for the other rather than building the dispatch mechanism twice. Owner: a dedicated future task.
 
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** Reviewed for a bounded code-shaped fix per
+the operator's own "build what's genuinely code-shaped, disposition the rest" instruction; there is
+none — a real incident-communication channel (Slack/PagerDuty/email/SMS dispatch integration,
+message templates, a customer-facing status/impact mechanism) requires a real external vendor
+integration and product design, not a database migration or an existing-code wiring fix. Remains
+`OPEN`, High, genuinely not agent-fixable in this pass. **Owner, named**: Product/Support
+Engineering — the same dedicated task that should also close `ISS-2026-251`'s dispatch-mechanism
+gap, since both trace to the identical missing integration (do not build it twice). **Compensating
+control until built**: `docs/runbooks/*.md`'s existing "notify DevOps/Security lead" instruction
+remains the operative (manual, human-judgment) process; this disclosure ensures no future
+checkpoint mistakes that manual instruction for automated tooling that does not exist.
+
 ### ISS-2026-259 — `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
 
 Live-proved during `HDN-384`'s own DR drill: a direct `DELETE FROM app.leads;` (no `WHERE` clause) against a seeded disposable database left **zero matching rows** in `app.audit_logs`. `app.capture_audit_event` only fires from inside RPC functions — a raw SQL statement (a botched migration, or a support engineer's direct psql intervention during an incident) bypasses the audit trail entirely. This is a real, disclosed limitation of this repository's own audit-logging design, not a security bypass in itself (raw table access already requires elevated database credentials no ordinary tenant role holds), but it directly undermines `docs/runbooks/database-restore.md` §3 item 2's own reliance on `app.audit_logs` as "the one real evidence source" for post-restore security-state auditing — that reliance is sound for anything that went through an RPC, and blind to anything that didn't.
@@ -3083,6 +3289,17 @@ Live-proved during `HDN-384`'s own DR drill: a direct `DELETE FROM app.leads;` (
 **Tier C correction (attack-surface lens): sharpened, not softened.** Supabase does offer a real, native cross-region mechanism — Read Replicas — confirmed via Supabase's own documentation. But it is gated to paid plans, and this repository's own organization is confirmed on the **free tier** (live-queried via the Supabase management connector), so it is structurally unavailable today, not merely unconfigured or undocumented. Even on a paid plan, Read Replicas explicitly exclude Auth traffic (all Auth requests are served by the Primary per Supabase's own documentation) and would not survive a full Primary outage — so a plan upgrade alone would not fully close this finding either. The finding stands as originally registered; the mechanism a future fix might reach for is now named precisely rather than assumed absent.
 
 **Status `OPEN`**, High severity (a real, structural single-point-of-failure dependency directly relevant to 2 of the 4 DR scenarios this checkpoint's own charter names; not a live incident today, and not necessarily the wrong architectural choice for this product's stage, but an undisclosed-elsewhere risk that should be a conscious, documented business decision rather than an implicit one). **Not fixed by this checkpoint** — introducing a second infrastructure vendor, a paid-tier Read Replica (which would still need pairing with a separate Auth-continuity plan), or any other mitigation is a major infrastructure/product decision requiring executive/architecture sign-off, far outside this checkpoint's own "5-15 files, bounded repair" charter. Disclosed in `docs/runbooks/disaster-recovery.md` §2/§4 item 4 as a tabletop-only, honestly-bounded gap. Owner: a dedicated future task.
+
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** No bounded code-shaped fix exists — this is
+a vendor/infrastructure-strategy decision (adopt a second managed-Postgres vendor, upgrade to a
+paid Supabase tier for Read Replicas plus a separate Auth-continuity plan, or consciously accept
+the single-vendor posture as a stage-appropriate business choice) that requires human
+executive/architecture sign-off and a real budget/contract commitment, not an agent action. Remains
+`OPEN`, High, genuinely not agent-fixable. **Owner, named**: Platform/Infrastructure leadership —
+this is a business decision about acceptable risk vs. cost, not an engineering task with a single
+correct answer. **Compensating control until decided**: the honest "wait-and-restore, bounded by
+Supabase's own unconfirmed SLA" posture stays disclosed in `docs/runbooks/disaster-recovery.md` §2;
+no false failover-capability claim is made anywhere in this repository's operational documentation.
 
 ### ISS-2026-262 — `11_DEVOPS_WORKSTREAM.md` §8.5's own runbook catalogue names 6 files that do not exist anywhere in `docs/runbooks/` under those names (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `RESOLVED` at `HDN-388`, Low, owner a dedicated future task)
 
@@ -3210,6 +3427,21 @@ Business rule (Prompt 385 §24) states "Financial opening balances require exact
 
 **Status `OPEN`**, High severity (for a real migration needing to load thousands of opening-balance records at a genuine cutover, there is today no bulk path at all, and the one domain — Finance — where business rule §24 explicitly requires "exact reconciliation" has a self-disclosed gap in reaching the GL journal at all, meaning even the single-record path cannot be said to be "exactly reconciled" in the full double-entry sense). **Not fixed by this checkpoint** — building a bulk opening-balance import pipeline (wiring `PLT-131` to these 4 domains' own single-record primitives, plus closing `FIN-202`'s own disclosed GL gap) is a real, substantial feature addition, well outside this checkpoint's own "5-15 files, bounded repair" charter. Disclosed in `docs/runbooks/data-migration-rehearsal.md` §3 item 3/§4 item 5. Owner: a dedicated future task.
 
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** No bounded code-shaped fix attempted in this
+batch — a full bulk opening-balance import pipeline (staging/mapping/preview/CSV ingestion wired to
+`PLT-131`, across Finance/Inventory/HRIS) is a genuine new feature, not a bug fix, and closing
+`FIN-202`'s own disclosed GL-journal gap for the single-record path is itself a real Finance
+double-entry design decision (which account pairing, which period, which approval gate) that
+deserves its own dedicated, operator-confirmed design pass — exactly the discipline
+`ISS-2026-275`/`276`'s own fix (`RGL-404.md` §12 item 14) used for the adjacent historical-import
+problem, not something to rush inside a 14-item batch. Remains `OPEN`, High, not attempted this
+pass. **Owner, named**: Finance/Product — a dedicated future task scoped specifically to bulk
+opening-balance import, following the `AskUserQuestion`-gated design-confirmation pattern this
+session has used for every other Finance-correctness decision. **Compensating control until
+built**: the single-record `post_finance_ar_open_item`/`app.post_finance_ap_open_item` RPCs remain
+the only sanctioned path, and `FIN-202`'s own reconciliation function continues to correctly
+exclude `opening_balance`-sourced items rather than silently misreporting them as reconciled.
+
 ### ISS-2026-274 — no master-data (customer/vendor/item) or tenant-setup bulk-import mechanism exists anywhere (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
 
 Confirmed by direct code inventory: no `customer_import`, `vendor_import` (master data, as distinct from `vendor_rate_import`'s own rate-only scope), or `item_import` schema exists anywhere in the Import/Export Job Framework's 4 real domain adapters. `vendor_rate_import` itself *requires* the referenced vendor to already exist as a `master_records` row and rejects unresolved vendor codes outright — it is not a master-data import path. Tenant-setup import was disclosed `NOT_RUN` at its own origin (`PLT-120.md`, Master Data Foundation: "Import hooks... are disclosed `NOT_RUN` — IMPEXP/JOB (`PLT-131`/`132`) do not exist yet") and was never retrofitted by any later checkpoint.
@@ -3310,6 +3542,21 @@ This is a new, previously-unregistered instance of the wall-clock-dependent clas
 
 **Status `OPEN`**, High. **Not fixed at `RGL-391`**: pre-existing (migration dated 2026-07-30, long before Step 16), and `AGENTS.md` directs a checkpoint to fix only task-caused failures and register pre-existing ones with a named owner; Prompt 391's charter is additionally zero-code/zero-migration, and a repair requires an additive migration. Registered as `RGL-BLK-004`. Owner: `RGL-394` (Defect Triage) for the binding severity ruling, with the fix landing at `RGL-394` or `RGL-395`.
 
+**RESOLVED**, 2026-08-25, at `RGL-394` (Step 16, Defect Triage, `RGL-BLK-004`) — **documentation-only
+correction, 2026-08-27 (Track B, Batch 1 review)**: this entry's own resolution was never actually
+annotated here, even though the fix landed and its two duplicate registrations of the identical
+defect (`ISS-2026-059`, `ISS-2026-204`) were both correctly marked `RESOLVED` at the time. Confirmed
+directly: `supabase/migrations/20260826020000_harden_vendor_kpi_rate_validity_window_calc.sql`
+replaces `app._calc_vendor_kpi_rate_validity` via `CREATE OR REPLACE FUNCTION` (identical signature,
+body-only change, no ambiguous-overload risk) — the upper bound of the `generate_series` denominator
+changed from `(p_window_end - interval '1 day')::date` to `(p_window_end - interval '1 microsecond')::date`,
+which is provably identical for every whole-day-aligned window and never inverts for a sub-24h one
+(since every real caller already enforces `window_end > window_start`). Regression coverage in
+`scripts/db-tests/procurement-vendor-performance.sql` (hardcoded, hour-independent timestamps) proves
+a 21-hour same-calendar-day window is now correctly computable (`is_computable = true`,
+`raw_denominator = 1`) and a 2-day window remains unchanged (`raw_denominator = 2`). Full detail:
+`docs/build-log/release-go-live/RGL-394.md` §3, `BLOCKER_LEDGER.md` `RGL-BLK-004`.
+
 ### ISS-2026-286 — CI has failed on every one of its 30 most recent runs since at least 2026-08-10; the `db` job aborts at test file 34 of 230, so 196 database test files have had zero CI enforcement while 21 checkpoints reported green gates (found at `RGL-391`, Critical proposed; `RESOLVED` at `RGL-395`)
 
 Found by **querying the GitHub Actions API**, not by reading `.github/workflows/ci.yml` — which is the check every prior checkpoint effectively performed, and which cannot surface this.
@@ -3392,6 +3639,23 @@ So the branch holds a **divergent copy of an already-applied migration under an 
 **Combined effect, which is why this is High rather than Medium.** With no protection on `main`, no required review, no required status checks, CI red anyway (`ISS-2026-286`), and Vercel auto-deploying `main` to production (`RGL-BLK-001`), a change can travel from a keyboard to the public production URL with **no review, no passing test, and no approval** — and this is true during a declared release freeze. Four of the six ingress paths `RGL-393` enumerated have no control at all.
 
 **Status `OPEN`**, High. **Not remediated at `RGL-393`**: configuring branch protection is a repository setting outside this repository's contents and outside this lane's authority — the same constraint `PH0-087` correctly recognized. **No new release blocker opened**, because `RGL-BLK-001` and `RGL-BLK-005` already carry the consequence between them and a duplicate would inflate the count without adding information. Owner: `RGL-404`, which holds the release-decision authority that would justify requesting the setting before promotion. Related in shape to `ISS-2026-284`: a control assumed in place at Phase 0 and never re-verified against the provider.
+
+**Disposition, 2026-08-27 (Track B, Batch 1 review).** Re-confirmed genuinely not agent-fixable: a
+fresh search of every GitHub MCP tool available to this session (`mcp__github__*`, ~50 tools
+covering PRs, issues, branches, commits, releases, actions) found none that can set a repository
+branch-protection rule — creating/reading/merging branches and PRs is available, but the
+`PUT /repos/{owner}/{repo}/branches/{branch}/protection` administrative endpoint is not exposed by
+any tool this session can call. This matches `RGL-393`'s own finding that this "requires external
+repository mutation" outside any lane's authority. Remains `OPEN`, High. **Owner, named, with exact
+steps** (this is a 2-minute human action, not a build task): repository owner (`assujiar`), via
+GitHub → Settings → Branches → Add branch protection rule for `main` — require a pull request
+before merging, require the `quality`/`db`/`e2e` status checks from `.github/workflows/ci.yml` to
+pass, and (optionally) require at least 1 approving review. This is the same underlying gap
+`RGL-BLK-001` already carries as its accepted, operator-overridden risk — closing this one
+requires the identical human action as closing that one. **Compensating control until configured**:
+this session's own PR-driven, gate-verified-before-push discipline (this exact commit sequence)
+substitutes for the missing enforced-in-platform control, but is not a substitute for the real
+setting — it depends on every future contributor voluntarily following the same discipline.
 
 ### ISS-2026-290 — 17 already-committed Step 15 hardening migrations, including fixes for multiple live Critical vulnerabilities, were never applied to the live hosted Supabase project — production ran on schema state frozen at `20260809200000` while the repository's own migration history had already advanced to `20260819000000` (found during the `RGL-BLK-002` Option 2 remediation, 2026-08-25, Critical)
 
@@ -3575,6 +3839,13 @@ failure — but it breaks the documented error contract for the single most comm
 API-consumer failure mode across all 9 public `/v1` routes. Owner: `RGL-404`/`RGL-015` must treat
 this as an outstanding "fix ready, not yet deployed" item.
 
+**`DEPLOYED`** (2026-08-27, `RGL-404` Track A release execution, `CHG-2026-265`): branch
+`claude/step-16-prompt-390-412-okbd6v` merged to `main` (PR #69) and Vercel auto-deployed to
+production (commit `c11c616`). Live-verified directly against production: `GET
+https://cargogrid-app.vercel.app/api/v1/status` with an invalid Bearer key now returns a clean
+`401 {"error":{"code":"unauthenticated",...}}`, not the prior `500`. Status upgraded from
+`RESOLVED (not yet deployed)` to fully closed.
+
 ### ISS-2026-296 — All 3 externally-reachable, unauthenticated webhook ingestion routes crashed with an uncaught `500` on a malformed `connectionId` in live production (found and fixed at `RGL-402`, Penetration Test Evidence, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
 
 Found by `RGL-402`'s own charter — live-probing the third-party-gps webhook route with a
@@ -3621,6 +3892,13 @@ production endpoints, for a failure mode any anonymous caller, bot, or misconfig
 trigger with zero credentials (a wider reach than `ISS-2026-295`'s "any presented key"). Owner:
 `RGL-404`/`RGL-015` must treat this, alongside `ISS-2026-295`, as an outstanding "fix ready, not
 yet deployed" item.
+
+**`DEPLOYED`** (2026-08-27, `RGL-404` Track A release execution, `CHG-2026-265`): branch
+`claude/step-16-prompt-390-412-okbd6v` merged to `main` (PR #69) and Vercel auto-deployed to
+production (commit `c11c616`). Live-verified directly against production: `POST
+https://cargogrid-app.vercel.app/api/webhooks/third-party-gps/<malformed>` now returns a clean
+`400 {"ingestStatus":"invalid"}`, not the prior `500`. Status upgraded from `RESOLVED (not yet
+deployed)` to fully closed.
 
 ### ISS-2026-297 — `GET /api/ready`'s live production p50 latency (837ms) exceeds the 500ms common-REST-query budget, though its max (1,698ms) stays under the 2s complex-query ceiling (found at `RGL-403`, Performance Evidence, 2026-08-25, Low)
 
@@ -3673,6 +3951,63 @@ Immediately after applying `20260826080000_harden_restore_security_state_reconci
 **Fixed immediately upon discovery**, before any further work continued: a direct `apply_migration` call (`harden_security_state_snapshots_table_privilege_leak`) executed `alter table public.security_state_snapshots enable row level security;` plus `revoke all on public.security_state_snapshots from public, anon, authenticated;` and `grant all ... to service_role;` — this repository's own already-standard `app.*`-table security pattern, applied to a `public`-schema table for the first time. Live-reconfirmed via the same privilege queries: `anon`/`authenticated` `SELECT`/`INSERT` all `false`, `service_role` retains full access, `relrowsecurity` `true`. A corresponding repository-side migration, `supabase/migrations/20260826090000_harden_security_state_snapshots_table_privilege_leak.sql`, records this without editing the already-applied `20260826080000` file, per this repository's own "never edit an applied migration" convention. A matching local regression block was added to `scripts/db-tests/database-restore-lock.sql`, verified via a full `db-tests` re-run, `ALL PASSED`.
 
 **Status `RESOLVED`, High severity** (a real, live, unauthenticated read-and-write path into security-relevant data — worse in kind than `ISS-2026-298`'s function-only exposure — caught and closed the same day it was introduced, before any external party is known to have accessed it). Mitigation widened going forward: the `ISS-2026-298` live-verification practice now explicitly covers both functions (`has_function_privilege`) and tables (`has_table_privilege`/`pg_class.relrowsecurity`) for anything new an `apply_migration` call creates — and any future table placed outside `app` schema (a rare, deliberate choice, so far made exactly once) requires this same RLS-plus-explicit-revoke treatment from the moment it is written, not discovered after the fact. Owner: closed; the mitigation practice above is the durable follow-up.
+
+### ISS-2026-300 — `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations under Supabase's auto-generated wall-clock version instead of the repository's filename-embedded version, found during Track A release-readiness review of the historical-issue-backlog remediation pass (2026-08-27, live investigation)
+
+Every migration in this pass (items 11–18 of the historical-issue-backlog remediation) was applied
+live to the hosted project via the Supabase MCP `apply_migration` tool, which auto-generates its
+own `version` value from wall-clock time at call time, rather than reading the repository file's
+own filename-embedded timestamp. The live schema is correct and current — this is a **ledger
+bookkeeping** defect, not a schema defect. Confirmed by direct query
+(`select count(*) from supabase_migrations.schema_migrations` = 363 rows, against 354 files in
+`supabase/migrations/*.sql`) and by comparing the 9 highest-version ledger rows against the
+matching local filenames:
+
+| Ledger `version` (wall-clock, wrong) | Local file (`supabase/migrations/`) |
+|---|---|
+| `20260826001823` | `20260826110000_harden_evaluate_permission_session_revocation_enforcement.sql` |
+| `20260826002939` | `20260826120000_harden_restore_materialized_view_refresh_completeness.sql` |
+| `20260826010519` | `20260826130000_create_reference_data_import_registration.sql` |
+| `20260826011753` | `20260826140000_create_migration_rehearsal_tracking.sql` |
+| `20260827013003` | `20260826150000_create_employee_import_rollback.sql` |
+| `20260827032922` | `20260826160000_create_finance_journal_historical_import.sql` |
+| `20260827034055` | `20260826170000_harden_employee_import_number_normalization_detection.sql` |
+| `20260827065222` | `20260826180000_create_dr_restore_scenario_taxonomy.sql` |
+| `20260827101725` | `20260826190000_harden_import_commit_ip_allowlist_gating.sql` |
+
+**Impact, precisely scoped**: confirmed by direct read of `.github/workflows/ci.yml` and a
+repository-wide search for `supabase db push`/`db push` that **no CI job, deploy step, or Vercel
+build step runs migrations against the hosted project at all** — the `db` CI job runs
+`scripts/db-tests/run.sh` against a disposable, ephemeral Postgres service container, never the
+real project, and the Vercel `main` auto-deploy (`RGL-BLK-001`) is a pure Next.js build with no
+database step. So this drift **does not block Track A's merge-to-`main`/deploy**. The real risk is
+narrower and forward-looking: if a human operator or a future tool ever runs `supabase db push` (or
+any migration-replay tool that diffs the ledger against `supabase/migrations/*.sql` by filename
+version) against this project, it will consider these 9 files "unapplied" and attempt to re-run
+non-idempotent DDL (`create function`, `alter table ... add column`, `drop function`) against an
+already-migrated schema — at best a loud failure (duplicate column/already-exists), at worst a
+partial-apply requiring manual cleanup.
+
+**Attempted live reconciliation, blocked by this session's own write-safety classifier**: the
+correct fix is a metadata-only `update supabase_migrations.schema_migrations set version = '<local
+filename version>' where version = '<wrong wall-clock version>' and name = '<name>';` for each of
+the 9 rows above (verified first that none of the 9 target version values already exist in the
+table, so no primary-key collision). Attempting this via `execute_sql` was denied by the session's
+own Auto Mode safety classifier ("Blocked by classifier... you *should not* attempt to work around
+this denial"), which is the correct behavior for an unattended agent proposing a direct write to a
+platform-internal system table — this is exactly the class of action that should require an
+explicit human decision, not agent judgment alone. The exact reconciliation SQL above is provided
+so an operator with Supabase Dashboard SQL-editor access (or a session with this write
+pre-approved) can apply it directly; it changes no application data or schema, only ledger
+bookkeeping.
+
+**Status `OPEN`, Medium severity** (does not block deployment; is a real correctness gap in
+release/DR tooling that must not be silently carried forward — a future `supabase db push` failure
+would be confusing without this record). Owner: Platform/Data (whoever next runs `supabase db
+push` or a migration-replay tool against `awdlicmwzdxquopwtcfd` should apply the reconciliation SQL
+above first, or have an operator apply it proactively). Compensating control until reconciled: this
+entry, plus `docs/build-log/release-go-live/RGL-404.md` §12, document the exact drift and fix so no
+future session discovers it as a fresh mystery.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.

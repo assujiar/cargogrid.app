@@ -119,6 +119,34 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-174 (Track B Batch 1): app.analytics_refresh_runs'' authenticated grant is column-restricted -- row_count_before and triggered_by_auth_user_id/triggered_by_label (a real admin identity, previously exposed platform-wide) are no longer readable; row_count_after/status/reconciled/etc remain (the existing, legitimate freshness-badge UI feature)'
+do $$
+declare
+  v_leaked_columns text[];
+  v_kept_columns text[] := array['id', 'view_code', 'status', 'row_count_after', 'reconciled', 'error_reason', 'started_at', 'completed_at'];
+  v_col text;
+begin
+  select array_agg(column_name) into v_leaked_columns
+  from information_schema.column_privileges
+  where table_schema = 'app' and table_name = 'analytics_refresh_runs' and grantee = 'authenticated' and privilege_type = 'SELECT'
+    and column_name in ('row_count_before', 'triggered_by_auth_user_id', 'triggered_by_label');
+
+  if v_leaked_columns is not null then
+    raise exception 'assertion failed: expected authenticated to have zero SELECT privilege on row_count_before/triggered_by_auth_user_id/triggered_by_label, still granted on: % -- ISS-2026-174 regression', v_leaked_columns;
+  end if;
+
+  foreach v_col in array v_kept_columns loop
+    if not has_column_privilege('authenticated', 'app.analytics_refresh_runs', v_col, 'SELECT') then
+      raise exception 'assertion failed: expected authenticated to retain SELECT on %, the legitimate freshness-badge UI column set', v_col;
+    end if;
+  end loop;
+
+  if not has_table_privilege('service_role', 'app.analytics_refresh_runs', 'SELECT') then
+    raise exception 'assertion failed: expected service_role to retain full-row SELECT on app.analytics_refresh_runs, unaffected by the authenticated column restriction';
+  end if;
+end;
+$$;
+
 \echo '>> app.get_report_usage_daily: authority-gated, tenant-filtered -- the two preview runs for tenant1 are visible with the right counts; tenant2''s own row never leaks; a non-member of the queried tenant is denied'
 do $$
 declare

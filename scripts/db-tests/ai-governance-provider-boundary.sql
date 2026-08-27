@@ -232,6 +232,31 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-249 (Track B Batch 1): a genuinely-recorded failure (not a race loser) now raises a real observability alert -- previously this producer never alerted at all'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeaigov');
+  v_rep1 uuid := '00000000-0000-0000-0000-000021000002';
+  v_connection_id uuid := (select id from app.integration_connections where tenant_id = v_tenant1 and adapter_code = 'openai_multimodal');
+  v_failing_request app.ai_governed_requests;
+  v_outcome app.ai_governed_requests;
+begin
+  v_failing_request := app.request_ai_governed_action(v_tenant1, v_connection_id, 'quotation_draft', null, null, jsonb_build_object('origin', 'JKT'), v_rep1, 'rep');
+  v_outcome := app.record_ai_governed_request_outcome(v_failing_request.id, 'failed', null, null, null, null, null, 'provider timeout', v_rep1, 'rep');
+  if v_outcome.status <> 'failed' then
+    raise exception 'assertion failed: expected status=failed, got %', v_outcome.status;
+  end if;
+
+  if not exists (
+    select 1 from app.incidents
+    where tenant_id = v_tenant1 and source_type = 'ai' and signal_type = 'error' and severity = 'medium'
+      and title like 'AI governed action failed:%'
+  ) then
+    raise exception 'assertion failed: expected a real app.incidents row (source_type=ai, signal_type=error, medium) after this genuine failure -- ISS-2026-249 regression';
+  end if;
+end;
+$$;
+
 \echo '>> app.record_ai_governed_request_outcome (IAE-037 Tier C fix): also rejects a NaN or Infinity provider_unit_cost_amount, which the original ">= 0" check alone silently admitted (NaN < 0 is false in Postgres numeric ordering) -- a real defense-in-depth gap since a poisoned NaN cost would corrupt a tenant-wide billing SUM'
 do $$
 declare

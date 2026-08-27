@@ -1255,4 +1255,82 @@ begin
 end;
 $$;
 
+-- ===========================================================================
+-- ISS-2026-176 (Track B Batch 1): structural regression guard, not a
+-- functional fix. app-schema views granted SELECT to authenticated run in
+-- owner mode by default (no security_invoker), which is CORRECT and
+-- REQUIRED for this repository's own RBAC column-masking views (flipping to
+-- invoker mode reproduces a real, previously-shipped failure --
+-- 20260723210000_create_commercial_opportunity_management.sql's own
+-- documented "permission denied for table opportunities" -- since
+-- authenticated has no column-level grant on the masked columns on the base
+-- table) and for the hand-rolled-predicate plain views (base-table RLS has
+-- also been proven untrustworthy under this role's BYPASSRLS setting --
+-- app.users_directory's own history, 20260716113048_create_audit_trail.sql).
+-- So this does NOT flip any view to security_invoker=true -- it fails the
+-- suite if a FUTURE view is added to this set (granted to authenticated,
+-- not security_invoker) without being added to this reviewed allow-list,
+-- catching an unreviewed addition rather than assuming every future view
+-- author rediscovers this same reasoning.
+do $$
+declare
+  v_expected text[] := array[
+    -- RBAC column-masking views (22) -- security_invoker=false is required,
+    -- not incidental: each nulls sensitive columns via a permission check,
+    -- and the base table's own column-level grant excludes those columns.
+    'users_directory', 'opportunities_directory', 'costing_responses_directory',
+    'rate_selections_directory', 'margin_calculations_directory', 'quotations_directory',
+    'quotation_lines_directory', 'customer_contract_price_components_directory',
+    'credit_profiles_directory', 'credit_check_snapshots_directory', 'credit_profile_overrides_directory',
+    'job_order_handoffs_directory', 'job_orders_directory', 'exceptions_directory',
+    'shipment_actual_costs_directory', 'job_profitability_directory', 'vendor_rate_tiers_directory',
+    'vendor_rate_versions_directory', 'sourcing_requests_directory', 'rfq_responses_directory',
+    'purchase_orders_directory', 'purchase_order_events_directory',
+    -- Plain, unmasked projection views (13) -- exist for the "always read
+    -- through a _directory-shaped view" convention; carry their own
+    -- hand-rolled tenant/row predicate, proven correct independently.
+    'v_active_vendor_rates', 'sourcing_candidates_directory', 'rfqs_directory',
+    'rfq_requirement_lines_directory', 'rfq_invitations_directory', 'rfq_clarifications_directory',
+    'dispatch_ready_queue', 'dispatch_board_queue', 'vendor_comparisons_directory',
+    'vendor_comparison_offers_directory', 'vendor_comparison_offer_scores_directory',
+    'vendor_comparison_events_directory', 'purchase_order_lines_directory'
+  ];
+  v_unreviewed text[];
+  v_expected_count integer;
+  v_reviewed_still_granted_count integer;
+begin
+  select array_agg(c.relname order by c.relname) into v_unreviewed
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'app' and c.relkind = 'v'
+    and has_table_privilege('authenticated', c.oid, 'SELECT')
+    and not coalesce(c.reloptions::text[] && array['security_invoker=true'], false)
+    and c.relname <> all (v_expected);
+
+  if v_unreviewed is not null then
+    raise exception 'assertion failed: % app-schema view(s) granted to authenticated with no security_invoker=true and not on the reviewed allow-list: % (ISS-2026-176 regression -- review the new view''s own predicate/masking correctness, then add its name to v_expected in rbac-enforcement.sql)', array_length(v_unreviewed, 1), v_unreviewed;
+  end if;
+
+  -- Symmetry check: every name ON the allow-list should still actually
+  -- exist, be granted to authenticated, and still be non-invoker -- catches
+  -- the allow-list itself silently drifting stale (e.g. a view renamed or
+  -- dropped, or someone flipping one to security_invoker without pruning
+  -- this list, which would otherwise never be re-noticed).
+  select count(*) into v_expected_count from unnest(v_expected);
+  select count(*) into v_reviewed_still_granted_count
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'app' and c.relkind = 'v'
+    and has_table_privilege('authenticated', c.oid, 'SELECT')
+    and not coalesce(c.reloptions::text[] && array['security_invoker=true'], false)
+    and c.relname = any (v_expected);
+
+  if v_reviewed_still_granted_count <> v_expected_count then
+    raise exception 'assertion failed: the ISS-2026-176 allow-list names % views, but only % of them are still (authenticated-granted, non-invoker) app views -- the allow-list has drifted stale (a view was renamed, dropped, or flipped to security_invoker without updating rbac-enforcement.sql)', v_expected_count, v_reviewed_still_granted_count;
+  end if;
+
+  raise notice 'ISS-2026-176 view-grant regression guard: % reviewed views confirmed, zero unreviewed authenticated-granted non-invoker app view found', v_expected_count;
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'

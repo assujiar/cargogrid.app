@@ -227,6 +227,17 @@ begin
     raise exception 'assertion failed: expected a real auto_disabled_at timestamp and a disclosed disabled_reason';
   end if;
 
+  -- ISS-2026-249 (Track B Batch 1): the auto-disable transition must now
+  -- raise a real observability alert -- previously this producer never
+  -- alerted at all.
+  if not exists (
+    select 1 from app.incidents
+    where tenant_id = v_tenant1 and source_type = 'integration' and signal_type = 'error' and severity = 'high'
+      and title like 'integration connection auto-disabled:%'
+  ) then
+    raise exception 'assertion failed: expected a real app.incidents row (source_type=integration, signal_type=error, high) after this auto-disable transition -- ISS-2026-249 regression';
+  end if;
+
   select count(*) into v_history_count from app.integration_health_checks where connection_id = v_connection_id;
   if v_history_count <> 11 then
     raise exception 'assertion failed: expected 11 real, append-only health-check rows (1 healthy + 10 unhealthy), got %', v_history_count;

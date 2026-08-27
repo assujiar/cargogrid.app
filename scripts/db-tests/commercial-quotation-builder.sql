@@ -187,6 +187,46 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-167 (Track B Batch 1): a genuinely-cross-tenant opportunity and a genuinely-nonexistent one now raise the IDENTICAL generic opportunity_not_found error -- no distinguishing cross-tenant existence oracle'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmequote');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'betaquote');
+  v_opportunity_id uuid := (select id from app.opportunities where name = 'Contoso Jakarta-Surabaya quote lane');
+  v_contact_id uuid := (select id from app.contacts where full_name = 'Jane Doe');
+  v_fully_nonexistent_id uuid := '00000000-0000-0000-0000-0000000099ff';
+  v_cross_tenant_sqlerrm text;
+  v_nonexistent_sqlerrm text;
+begin
+  -- v_opportunity_id genuinely exists, but only in v_tenant1 -- calling with
+  -- v_tenant2 must raise the SAME error a fully nonexistent id would, never
+  -- a distinguishing cross_tenant_opportunity_denied.
+  begin
+    perform app.create_quotation_draft(v_tenant2, v_opportunity_id, 'IDR', now() + interval '14 days', v_contact_id, null, null, '00000000-0000-0000-0000-000000009203', 'tester');
+    raise exception 'assertion failed: expected opportunity_not_found for a cross-tenant opportunity reference';
+  exception
+    when no_data_found then
+      get stacked diagnostics v_cross_tenant_sqlerrm = message_text;
+      if v_cross_tenant_sqlerrm !~ 'opportunity_not_found' then raise; end if;
+  end;
+
+  begin
+    perform app.create_quotation_draft(v_tenant1, v_fully_nonexistent_id, 'IDR', now() + interval '14 days', v_contact_id, null, null, '00000000-0000-0000-0000-000000009203', 'tester');
+    raise exception 'assertion failed: expected opportunity_not_found for a fully nonexistent opportunity id';
+  exception
+    when no_data_found then
+      get stacked diagnostics v_nonexistent_sqlerrm = message_text;
+      if v_nonexistent_sqlerrm !~ 'opportunity_not_found' then raise; end if;
+  end;
+
+  if v_cross_tenant_sqlerrm !~ ('opportunity_not_found: ' || v_opportunity_id::text)
+     or v_nonexistent_sqlerrm !~ ('opportunity_not_found: ' || v_fully_nonexistent_id::text)
+  then
+    raise exception 'assertion failed: expected both errors to share the identical opportunity_not_found shape (only the echoed id differs, never a tenant_id or a distinguishing error code) -- cross-tenant: %, nonexistent: %', v_cross_tenant_sqlerrm, v_nonexistent_sqlerrm;
+  end if;
+end;
+$$;
+
 \echo '>> add_quotation_line / remove_quotation_line: draft-only, COM:Edit + record access, mixed-currency rejected, exact decimal line/header totals, optimistic concurrency'
 do $$
 declare

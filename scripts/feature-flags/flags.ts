@@ -153,6 +153,19 @@ interface CacheEntry {
   readonly expiresAt: number;
 }
 
+/**
+ * ISS-2026-175 fix (Track B Batch 1): the cache key previously included only
+ * flagId, so a shared FlagCache instance would serve tenant B's cached
+ * evaluation to tenant A (evaluate()'s own result varies by tenantId,
+ * environment, and cohorts, per EvaluationContext, not flagId alone).
+ * Mirrors server/queries/feature-flags.ts's own already-correct
+ * FeatureFlagCache key shape (flagKey/tenantId/environment/sorted cohorts),
+ * per docs/standards/FEATURE_FLAG_STANDARDS.md §17.
+ */
+function cacheKey(flagId: string, context: Pick<EvaluationContext, "tenantId" | "environment" | "cohorts">): string {
+  return [flagId, context.tenantId, context.environment, [...context.cohorts].sort().join(",")].join("::");
+}
+
 /** docs/standards/FEATURE_FLAG_STANDARDS.md §5 — bounded, TTL-based; a stale entry expires and re-evaluates, never served indefinitely. */
 export class FlagCache {
   private readonly entries = new Map<string, CacheEntry>();
@@ -162,22 +175,23 @@ export class FlagCache {
     this.ttlMs = ttlMs;
   }
 
-  get(flagId: string, now: () => Date = () => new Date()): EvaluationResult | undefined {
-    const entry = this.entries.get(flagId);
+  get(flagId: string, context: Pick<EvaluationContext, "tenantId" | "environment" | "cohorts">, now: () => Date = () => new Date()): EvaluationResult | undefined {
+    const key = cacheKey(flagId, context);
+    const entry = this.entries.get(key);
     if (!entry) return undefined;
     if (now().getTime() >= entry.expiresAt) {
-      this.entries.delete(flagId);
+      this.entries.delete(key);
       return undefined;
     }
     return entry.value;
   }
 
-  set(flagId: string, value: EvaluationResult, now: () => Date = () => new Date()): void {
-    this.entries.set(flagId, { value, expiresAt: now().getTime() + this.ttlMs });
+  set(flagId: string, context: Pick<EvaluationContext, "tenantId" | "environment" | "cohorts">, value: EvaluationResult, now: () => Date = () => new Date()): void {
+    this.entries.set(cacheKey(flagId, context), { value, expiresAt: now().getTime() + this.ttlMs });
   }
 
-  invalidate(flagId: string): void {
-    this.entries.delete(flagId);
+  invalidate(flagId: string, context: Pick<EvaluationContext, "tenantId" | "environment" | "cohorts">): void {
+    this.entries.delete(cacheKey(flagId, context));
   }
 
   size(): number {

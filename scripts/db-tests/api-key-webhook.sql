@@ -372,6 +372,80 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-167 (Track B Batch 1): app.revoke_api_key/app.rotate_api_key -- a genuinely-cross-tenant key and a genuinely-nonexistent one raise the IDENTICAL generic api_key_not_found error, never echoing the foreign tenant''s real UUID'
+do $$
+declare
+  v_gizmo_tenant_id uuid := (select id from app.tenants where slug = 'gizmokey');
+  v_gizmo_key app.api_keys;
+  v_fully_nonexistent_id uuid := gen_random_uuid();
+  v_cross_tenant_sqlerrm text;
+  v_nonexistent_sqlerrm text;
+begin
+  -- Inserted directly rather than via app.create_api_key: gizmokey's own
+  -- admin (002104) holds no app.role_assignments row at all in this file's
+  -- fixture (plain principal_memberships 'tenant_admin' layer only, which
+  -- app.evaluate_permission -- and therefore create_api_key's own scope-
+  -- authority check -- does not treat as an automatic all-permissions
+  -- grant), so no scope string would pass create_api_key's own validation.
+  -- This test only needs a real, genuinely-owned gizmokey key to exist.
+  insert into app.api_keys (tenant_id, name, key_prefix, key_hash, scopes, created_by_auth_user_id)
+  values (v_gizmo_tenant_id, 'Gizmo isolation-probe key', 'cgk_probe001', encode(digest('gizmo-probe-raw-key', 'sha256'), 'hex'), '["HRS:View personal data"]'::jsonb, '00000000-0000-0000-0000-000000002104')
+  returning * into v_gizmo_key;
+
+  -- acmekey's own tenant admin (002101) probes a key that genuinely exists,
+  -- but only in gizmokey -- must raise the SAME error a fully nonexistent
+  -- key id would, never a distinguishing insufficient_authority that echoes
+  -- gizmokey's real tenant_id.
+  begin
+    perform app.revoke_api_key(v_gizmo_key.id, 'probe', '00000000-0000-0000-0000-000000002101', 'tenant admin');
+    raise exception 'assertion failed: expected api_key_not_found for a cross-tenant key reference (revoke)';
+  exception
+    when no_data_found then
+      get stacked diagnostics v_cross_tenant_sqlerrm = message_text;
+      if v_cross_tenant_sqlerrm !~ 'api_key_not_found' then raise; end if;
+      if v_cross_tenant_sqlerrm ~ v_gizmo_tenant_id::text then
+        raise exception 'assertion failed: the error must never echo the foreign tenant''s real UUID, got %', v_cross_tenant_sqlerrm;
+      end if;
+  end;
+
+  begin
+    perform app.revoke_api_key(v_fully_nonexistent_id, 'probe', '00000000-0000-0000-0000-000000002101', 'tenant admin');
+    raise exception 'assertion failed: expected api_key_not_found for a fully nonexistent key id (revoke)';
+  exception
+    when no_data_found then
+      get stacked diagnostics v_nonexistent_sqlerrm = message_text;
+      if v_nonexistent_sqlerrm !~ 'api_key_not_found' then raise; end if;
+  end;
+
+  begin
+    perform app.rotate_api_key(v_gizmo_key.id, 60, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+    raise exception 'assertion failed: expected api_key_not_found for a cross-tenant key reference (rotate)';
+  exception
+    when no_data_found then
+      get stacked diagnostics v_cross_tenant_sqlerrm = message_text;
+      if v_cross_tenant_sqlerrm !~ 'api_key_not_found' then raise; end if;
+      if v_cross_tenant_sqlerrm ~ v_gizmo_tenant_id::text then
+        raise exception 'assertion failed: the error must never echo the foreign tenant''s real UUID, got %', v_cross_tenant_sqlerrm;
+      end if;
+  end;
+
+  begin
+    perform app.rotate_api_key(v_fully_nonexistent_id, 60, '00000000-0000-0000-0000-000000002101', 'tenant admin');
+    raise exception 'assertion failed: expected api_key_not_found for a fully nonexistent key id (rotate)';
+  exception
+    when no_data_found then
+      get stacked diagnostics v_nonexistent_sqlerrm = message_text;
+      if v_nonexistent_sqlerrm !~ 'api_key_not_found' then raise; end if;
+  end;
+
+  -- The gizmokey key itself must be genuinely unaffected by any of the
+  -- above -- still owned by gizmokey, still active.
+  if not exists (select 1 from app.api_keys where id = v_gizmo_key.id and tenant_id = v_gizmo_tenant_id and status = 'active') then
+    raise exception 'assertion failed: the gizmokey probe key must remain untouched by acmekey''s own denied attempts';
+  end if;
+end;
+$$;
+
 \echo '>> app.list_api_keys_for_tenant: authority-gated, excludes key_hash from its result shape entirely, and is tenant-isolated'
 do $$
 declare
