@@ -8424,3 +8424,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 16 of 168 backlog items resolved (3 explicitly partial by design). 151 remain (0 Critical, 9 High, 71 Medium, 71 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-27 |
+
+### CHG-2026-263 — Historical issue backlog remediation, item 17: `ISS-2026-268` (DR/backup drill app.files coverage)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-262`. Item 17 of 168 audited open entries |
+| Change type | TEST INFRASTRUCTURE (no schema change, no migration) |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | This entry's own text framed the fix as "the next real drill to close" — not a code/schema defect but a disclosed test-coverage gap in the DR/backup drill's own seeded slice across 2 prior checkpoints. Performed that next real drill: wrote a new, permanent, re-runnable shell script (mirroring this repository's own established non-`*.sql` drill-helper precedent, `scripts/db-tests/wms-picking-concurrency-helper.sh`) that seeds a real `app.files` row via the genuine `app.initiate_file_upload`/`app.record_file_scan_result` RPCs (not a raw hand-crafted insert, which required also publishing a real per-tenant `document:employee_document` definition first, mirroring `scripts/db-tests/document-file.sql`'s own established minimal-valid-definition shape) and runs it through the identical `pg_dump -Fc`/`DROP DATABASE`/`CREATE DATABASE`/`pg_restore -j 4` cycle `docs/runbooks/database-restore.md` §4 item 2 already proved and measured for `app.jobs`. Iterated through 3 real authoring corrections before a clean run: a missing `tenant_user_identities` activation step (`grant_principal_membership` alone does not activate a `tenant_user_identities` row created by `invite_user`; `app.transition_user_status(..., 'active', ...)` does), an invalid `job_type` value, and the missing published document-type definition precondition for `app.initiate_file_upload` |
+| Findings and disposition | `ISS-2026-268`: `RESOLVED` — 2 independent live runs both confirm the `app.files` row survives the proven restore cycle byte-for-byte, alongside the already-proven `app.jobs` row |
+| Files edited | `scripts/db-tests/database-restore-files-drill.sh` (new); `docs/runbooks/database-restore.md` (§4 item 5 struck through and resolved, §7 new rehearsal-history row, §8 new revision-history row 0.7.0); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-268` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | None — a test-infrastructure/runbook-evidence fix, not a schema change. No live database change and nothing applied to the hosted project |
+| Risk | None — a new, standalone drill script against a disposable, throwaway local database only; touches no application code, no migration, no live/production data |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | The new script is a `.sh` file, not a `.sql` test file `scripts/db-tests/run.sh`'s own glob picks up, so it is not part of `pnpm run db:test` and its addition does not change the frozen `dbTestSetSha256` (confirmed: `pnpm run release:check-freeze` stayed green with the new file staged, un-amended). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`: all green. The drill script itself was run twice live, both `PASSED` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; nothing to undo on any live database |
+| Status | **`COMPLETED`**. 17 of 168 backlog items resolved (3 explicitly partial by design). 150 remain (0 Critical, 9 High, 71 Medium, 70 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |
