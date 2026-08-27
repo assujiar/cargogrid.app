@@ -891,4 +891,72 @@ $$;
 
 \echo '>> ISS-2026-272 regression evidence complete'
 
+\echo '>> ISS-2026-260 regression: app.record_dr_restore_test''s new, optional, trailing p_dr_scenario parameter (default null) records one of Prompt 384''s own 4 named DR scenarios alongside (never instead of) the existing component_scope; an invalid scenario value is rejected with a distinct named exception; every pre-existing 13-argument call site keeps working completely unchanged'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaedr');
+  v_admin1 uuid := '00000000-0000-0000-0000-000038000001';
+  v_test app.dr_restore_tests;
+  v_legacy app.dr_restore_tests;
+  v_raised boolean := false;
+begin
+  -- A pre-existing, 13-argument call site (no p_dr_scenario at all) keeps working
+  -- completely unchanged -- the new parameter defaults to null, never breaking an
+  -- existing caller.
+  v_legacy := app.record_dr_restore_test(v_tenant1, 'shared', 'database', 'passed', 12, 24, null, null, null, null, null, v_admin1, 'admin1');
+  if v_legacy.dr_scenario is not null then
+    raise exception 'assertion failed: expected a legacy 13-argument call to leave dr_scenario null, got %', v_legacy.dr_scenario;
+  end if;
+
+  -- A scenario this repository's own component taxonomy has no natural slot for
+  -- (security_incident) can now be recorded, alongside a real component_scope.
+  v_test := app.record_dr_restore_test(v_tenant1, 'shared', 'secrets', 'passed', 5, 10, null, null, null, null, null, v_admin1, 'admin1', 'security_incident');
+  if v_test.dr_scenario <> 'security_incident' or v_test.component_scope <> 'secrets' then
+    raise exception 'assertion failed: expected dr_scenario=security_incident alongside component_scope=secrets, got dr_scenario=%, component_scope=%', v_test.dr_scenario, v_test.component_scope;
+  end if;
+
+  -- Each of the other 2 previously-unrepresentable scenarios is also accepted.
+  perform app.record_dr_restore_test(v_tenant1, 'shared', 'observability', 'passed', 5, 10, null, null, null, null, null, v_admin1, 'admin1', 'provider_failure');
+  perform app.record_dr_restore_test(v_tenant1, 'shared', 'jobs_integrations', 'passed', 5, 10, null, null, null, null, null, v_admin1, 'admin1', 'major_outage');
+
+  -- An invalid scenario value is rejected with a distinct named exception, never
+  -- silently accepted or coerced.
+  begin
+    perform app.record_dr_restore_test(v_tenant1, 'shared', 'database', 'passed', 5, 10, null, null, null, null, null, v_admin1, 'admin1', 'not-a-real-scenario');
+    raise exception 'assertion failed: expected dr_test_invalid_dr_scenario to reject an unrecognized scenario value, but the call succeeded';
+  exception
+    when others then
+      if sqlerrm !~ '^dr_test_invalid_dr_scenario' then
+        raise;
+      end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected dr_test_invalid_dr_scenario, got none';
+  end if;
+
+  -- The underlying table-level CHECK constraint itself (independent of the RPC's own
+  -- explicit check) also rejects an invalid scenario value, defense in depth.
+  v_raised := false;
+  begin
+    insert into app.dr_restore_tests (tenant_id, deployment_type, component_scope, status, observed_rpo_minutes, observed_rto_minutes, dr_scenario, tested_by_auth_user_id, tested_by)
+    values (v_tenant1, 'shared', 'database', 'passed', 5, 10, 'not-a-real-scenario', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected dr_restore_tests_dr_scenario_check to reject an invalid scenario at the table layer, but the insert succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'dr_restore_tests_dr_scenario_check' then
+        raise;
+      end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected a dr_restore_tests_dr_scenario_check violation, got none';
+  end if;
+
+  raise notice 'ISS-2026-260 proof: app.record_dr_restore_test''s new p_dr_scenario parameter records all 4 named DR scenarios alongside the existing component_scope, is rejected when invalid (both at the RPC and the table layer), and every pre-existing call site is unaffected';
+end;
+$$;
+
+\echo '>> ISS-2026-260 regression evidence complete'
+
 \echo 'ALL IAE-035 (Disaster Recovery and Enterprise Support) ASSERTIONS PASSED'

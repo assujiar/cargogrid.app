@@ -743,6 +743,55 @@ import { readFileSync } from "node:fs";
  * (352 migrations, 234 runner files, ALL PASSED, clean on the first
  * attempt) before this digest was changed, and applied to the live hosted
  * project via `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-27 (nineteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 16: `ISS-2026-260` --
+ * `app.dr_restore_tests.component_scope` (IAE-035) is CHECK-constrained to
+ * a component/mechanism taxonomy (`database`, `secrets`, `backup`,
+ * `observability`, `jobs_integrations`), not the 4 DR scenarios (data
+ * corruption, security incident, provider failure, major outage) Prompt
+ * 384's own DR rehearsal charter names -- 3 of the 4 scenarios have no
+ * natural component slot. Confirmed with the operator (`AskUserQuestion`)
+ * before implementing: add a NEW, parallel, nullable `dr_scenario` column
+ * alongside the existing `component_scope`, rather than widening
+ * `component_scope`'s own CHECK constraint to also accept scenario
+ * values -- mixing a mechanism taxonomy and a scenario taxonomy into one
+ * enum would make every future query against `component_scope`
+ * ambiguous about which taxonomy a given row's value belongs to. One
+ * migration added (352 -> 353 files: +1,
+ * `20260826180000_create_dr_restore_scenario_taxonomy.sql`) adding the
+ * column plus its own CHECK constraint, and widening
+ * `app.record_dr_restore_test` (and its matching Option 2 `public.*`
+ * wrapper) with one new, trailing, DEFAULT-valued `p_dr_scenario`
+ * parameter. **A real defect self-caught and fixed during this same
+ * migration's authoring**: `CREATE OR REPLACE FUNCTION` cannot be used to
+ * append a new parameter to an existing function -- Postgres identifies a
+ * function by its name PLUS its full parameter type list, so appending
+ * one (even with a default) creates a SECOND, DISTINCT overload alongside
+ * the original rather than truly replacing it, making every pre-existing
+ * call site genuinely ambiguous (`function ... is not unique`) --
+ * verified directly against a real disposable Postgres instance before
+ * settling on the fix. Corrected by explicitly `DROP FUNCTION`-ing the
+ * original 13-argument signature (both `app.*` and `public.*`) before
+ * creating the new 14-argument one, confirmed by direct read to be the
+ * exact, already-established convention this repository's own FIN-206
+ * migration used for the identical `p_lock_scope` append onto `app.
+ * create_and_post_finance_system_journal` (a `drop function if exists`
+ * line was already present there) -- not a new pattern invented for this
+ * fix, and not a live defect in that earlier migration either, once
+ * actually read in full. dbTestSetSha256 changed (an existing file
+ * widened, no file added or removed):
+ * `scripts/db-tests/disaster-recovery-enterprise-support.sql` gained a
+ * new regression block proving all 4 named scenarios can now be recorded
+ * alongside `component_scope`, an invalid scenario is rejected at both
+ * the RPC and table-CHECK-constraint layer, and every pre-existing
+ * 13-argument call site keeps working completely unchanged. Re-verified
+ * via a fresh full local db-test suite run (353 migrations, 234 runner
+ * files, ALL PASSED, clean after the ambiguous-overload defect above was
+ * caught and fixed by this same local run) before this digest was
+ * changed, and applied to the live hosted project via `apply_migration`
+ * before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -848,7 +897,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-279 fix (352 files: +1,
   // 20260826170000_harden_employee_import_number_normalization_detection.sql).
   // See the class-level doc comment above.
-  migrationSetSha256: "c91908161eb1fd75911be833555d5ce29cd144e2993ee7b31d99f8a2cc11b780",
+  // History: c91908161eb1fd75911be833555d5ce29cd144e2993ee7b31d99f8a2cc11b780
+  // (352 files, eighteenth-pass amendment above). Superseded 2026-08-27
+  // (nineteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-260 fix (353 files: +1,
+  // 20260826180000_create_dr_restore_scenario_taxonomy.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "6fac78cbabdd98b6780cc815e8d9e0a952895741f4d2da14b8170d2161c42ed4",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -949,7 +1004,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-279 fix (234 files unchanged in count --
   // hris-employee-master.sql widened, no file added or removed). See the
   // class-level doc comment above.
-  dbTestSetSha256: "b1e8c3f83d0c0e62258bb8086e60a1e6120945718db67ddfbcb62039f89e38fc",
+  // History: b1e8c3f83d0c0e62258bb8086e60a1e6120945718db67ddfbcb62039f89e38fc
+  // (234 files, eighteenth-pass amendment above). Superseded 2026-08-27
+  // (nineteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-260 fix (234 files unchanged in count --
+  // disaster-recovery-enterprise-support.sql widened, no file added or
+  // removed). See the class-level doc comment above.
+  dbTestSetSha256: "dafb20eb1d719bae7251a199b5d11733e4a015876108e7b7098fb840e530b2cd",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

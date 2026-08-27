@@ -8405,3 +8405,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema change would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 15 of 168 backlog items resolved (3 explicitly partial by design). 152 remain (0 Critical, 9 High, 72 Medium, 71 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-27 |
+
+### CHG-2026-262 — Historical issue backlog remediation, item 16: `ISS-2026-260` (DR restore scenario taxonomy)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-261`. Item 16 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Presented the entry's own named design fork via `AskUserQuestion` before implementing (widen `component_scope`'s own CHECK constraint vs. a new parallel scenario column) — the operator chose the parallel-column option, avoiding mixing a mechanism taxonomy and a scenario taxonomy into one enum. Mid-authoring, self-caught and fixed a real defect: appending a new trailing parameter to `app.record_dr_restore_test` via `CREATE OR REPLACE FUNCTION` does not truly replace the function — Postgres identifies a function by name plus full parameter type list, so it silently creates a second, distinct, ambiguous overload instead. Verified this directly against a real disposable Postgres instance before settling on the fix, then confirmed by direct read that this repository's own FIN-206 migration had already established the correct convention (`DROP FUNCTION` first, then `CREATE FUNCTION`) for the identical situation |
+| Findings and disposition | `ISS-2026-260`: `RESOLVED` — `app.dr_restore_tests` now carries a real, parallel `dr_scenario` dimension; `app.record_dr_restore_test` (and its `public.*` wrapper) accepts an optional 14th argument to record it, with the original 13-argument call shape completely unaffected |
+| Files edited | `supabase/migrations/20260826180000_create_dr_restore_scenario_taxonomy.sql` (new); `scripts/db-tests/disaster-recovery-enterprise-support.sql` (widened); `scripts/release/check-release-freeze.ts` (nineteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-260` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826180000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — adds one nullable column + CHECK constraint, and replaces `app.record_dr_restore_test`/`public.record_dr_restore_test` via explicit `DROP FUNCTION` + `CREATE FUNCTION` (never a bare `CREATE OR REPLACE` across a changed argument list) |
+| Risk | Low — purely additive; the new parameter defaults to null, so no existing caller's behavior changes; the explicit drop-then-create was verified live to leave exactly one overload of each function, not two ambiguous ones |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (clean after the ambiguous-overload defect was caught and fixed by this same local run — first attempt failed with `function ... is not unique` on a bare `comment on function` statement, root-caused, fixed, re-run clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. Grants and single-overload correctness live-verified via direct `pg_proc`/`has_function_privilege` query |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 16 of 168 backlog items resolved (3 explicitly partial by design). 151 remain (0 Critical, 9 High, 71 Medium, 71 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |
