@@ -913,3 +913,81 @@ end $$;
 -- INTENDED skip path still works, while the fix itself closes the
 -- previously-unreachable-in-tests misclassification path) rather than a second
 -- executed assertion in this file.
+
+\echo '>> ISS-2026-278 (Step 16 historical-issue-backlog remediation) regression: app.commit_vendor_rate_import_job now composes app.assert_ip_allowed + app.has_active_ip_allowlist_bypass when a caller supplies p_client_ip -- denies an out-of-range IP under enforced mode, allows an in-range one, and allows a null/omitted p_client_ip regardless of enforcement (every pre-existing call site in this file relies on exactly this)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'ratetier1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000035101';
+  v_supreme uuid := '00000000-0000-0000-0000-000000035999';
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_source_file3 app.files;
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_job3 app.jobs;
+  v_row1_id uuid;
+  v_row2_id uuid;
+  v_row3_id uuid;
+  v_committed app.jobs;
+  v_raised boolean;
+begin
+  perform app.add_ip_allowlist_entry(v_tenant1, '203.0.113.0/24', 'ratetier1 office range', 'admin', v_supreme, 'supreme');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant1, 'enforced', v_supreme, 'supreme');
+
+  -- (a) out-of-range p_client_ip -- denied, ip_not_allowed.
+  v_source_file1 := app.initiate_file_upload(v_tenant1, 'vendor_rate_import_source', 'import_source', gen_random_uuid(), 'vendor-rates-ipcheck-a.csv', 'text/csv', 1024, 'internal', false, null, null, null, 'idem-rt-import-ipcheck-src-a', v_admin1, 'admin');
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', 'test-scanner', v_admin1, 'admin');
+  v_job1 := app.create_import_export_job(v_tenant1, 'import', 'vendor_rate_import', v_source_file1.id, '{}'::jsonb, 'idem-rt-import-ipcheck-job-a', v_admin1, 'admin');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'vendor_code', 'RT-IPCHECK-A', 'vendor_name', 'Ip Check Vendor A', 'service_type', 'trucking',
+    'origin_lane', 'Jakarta', 'destination_lane', 'Semarang', 'currency', 'IDR', 'base_amount', '500000'
+  )), v_admin1, 'admin');
+  select id into v_row1_id from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1;
+  perform app.validate_vendor_rate_import_row(v_row1_id, v_admin1, 'admin');
+  v_raised := false;
+  begin
+    perform app.commit_vendor_rate_import_job(v_job1.job_id, false, v_admin1, 'admin', '198.51.100.7');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-range p_client_ip under enforced mode, the call unexpectedly succeeded';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'ip_not_allowed' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected ip_not_allowed, got none';
+  end if;
+
+  -- (b) in-range p_client_ip -- succeeds.
+  v_source_file2 := app.initiate_file_upload(v_tenant1, 'vendor_rate_import_source', 'import_source', gen_random_uuid(), 'vendor-rates-ipcheck-b.csv', 'text/csv', 1024, 'internal', false, null, null, null, 'idem-rt-import-ipcheck-src-b', v_admin1, 'admin');
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', 'test-scanner', v_admin1, 'admin');
+  v_job2 := app.create_import_export_job(v_tenant1, 'import', 'vendor_rate_import', v_source_file2.id, '{}'::jsonb, 'idem-rt-import-ipcheck-job-b', v_admin1, 'admin');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'vendor_code', 'RT-IPCHECK-B', 'vendor_name', 'Ip Check Vendor B', 'service_type', 'trucking',
+    'origin_lane', 'Jakarta', 'destination_lane', 'Bandung', 'currency', 'IDR', 'base_amount', '500000'
+  )), v_admin1, 'admin');
+  select id into v_row2_id from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1;
+  perform app.validate_vendor_rate_import_row(v_row2_id, v_admin1, 'admin');
+  v_committed := app.commit_vendor_rate_import_job(v_job2.job_id, false, v_admin1, 'admin', '203.0.113.42');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit for an in-range p_client_ip, got %', v_committed;
+  end if;
+
+  -- (c) p_client_ip omitted -- succeeds regardless of the enforced policy.
+  v_source_file3 := app.initiate_file_upload(v_tenant1, 'vendor_rate_import_source', 'import_source', gen_random_uuid(), 'vendor-rates-ipcheck-c.csv', 'text/csv', 1024, 'internal', false, null, null, null, 'idem-rt-import-ipcheck-src-c', v_admin1, 'admin');
+  perform app.record_file_scan_result(v_source_file3.id, 'clean', 'test-scanner', v_admin1, 'admin');
+  v_job3 := app.create_import_export_job(v_tenant1, 'import', 'vendor_rate_import', v_source_file3.id, '{}'::jsonb, 'idem-rt-import-ipcheck-job-c', v_admin1, 'admin');
+  perform app.stage_import_rows(v_job3.job_id, jsonb_build_array(jsonb_build_object(
+    'vendor_code', 'RT-IPCHECK-C', 'vendor_name', 'Ip Check Vendor C', 'service_type', 'trucking',
+    'origin_lane', 'Jakarta', 'destination_lane', 'Bogor', 'currency', 'IDR', 'base_amount', '500000'
+  )), v_admin1, 'admin');
+  select id into v_row3_id from app.import_staging_rows where job_id = v_job3.job_id and row_number = 1;
+  perform app.validate_vendor_rate_import_row(v_row3_id, v_admin1, 'admin');
+  v_committed := app.commit_vendor_rate_import_job(v_job3.job_id, false, v_admin1, 'admin');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit when p_client_ip is omitted, regardless of enforcement, got %', v_committed;
+  end if;
+
+  raise notice 'PASS: app.commit_vendor_rate_import_job (ISS-2026-278) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, and allows an omitted p_client_ip regardless of enforcement';
+end;
+$$;

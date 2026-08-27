@@ -792,6 +792,61 @@ import { readFileSync } from "node:fs";
  * caught and fixed by this same local run) before this digest was
  * changed, and applied to the live hosted project via `apply_migration`
  * before this local run.
+ *
+ * AMENDED 2026-08-27 (twentieth pass), migrationSetSha256 only
+ * (dbTestSetSha256 also changed -- see below, listed separately per this
+ * digest's own established convention when the two land in the same
+ * pass). Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 18: `ISS-2026-278`
+ * -- no MFA/step-up/elevated-authorization gate existed on any
+ * import-commit RPC (`app.commit_import_job` and every domain adapter's
+ * own `app.commit_*_import_job`), unlike the 4 "platform-default
+ * high-risk target functions" HDN-378/ISS-2026-150 already hardened with
+ * an IP-allowlist + MFA-step-up composition. Confirmed with the operator
+ * (`AskUserQuestion`) before implementing: IP-allowlist gating only, no
+ * mandatory MFA step-up, scoped to the 5 real `commit_*_import_job`
+ * functions -- this entry's own text already flags the real risk of
+ * forcing step-up on every bulk import commit, including routine,
+ * non-financial ones (e.g. `attendance_device_import`), without a
+ * dedicated UX review this checkpoint has no standing to perform. One
+ * migration added (353 -> 354 files: +1,
+ * `20260826190000_harden_import_commit_ip_allowlist_gating.sql`) widening
+ * `app.commit_import_job`, `app.commit_employee_import_job`, `app.
+ * commit_attendance_device_import_job`, `app.commit_timesheet_import_job`,
+ * and `app.commit_vendor_rate_import_job` (plus each one's own Option 2
+ * `public.*` wrapper) with one new, trailing, DEFAULT-valued
+ * `p_client_ip` parameter each -- the identical composition and
+ * non-interactive-caller exemption (`app.assert_ip_allowed` +
+ * `app.has_active_ip_allowlist_bypass`) HDN-378's own 4 functions already
+ * established. Every one of the 10 functions (5 `app.*` + 5 `public.*`)
+ * widened via an explicit `DROP FUNCTION` (old signature) + `CREATE
+ * FUNCTION` (new signature), never a bare `CREATE OR REPLACE` across a
+ * changed argument list -- `ISS-2026-260`'s own self-caught
+ * ambiguous-overload finding applied correctly from the first draft this
+ * time, not rediscovered. Each widened function's body diffed against its
+ * currently-applied definition before writing the new one, confirming
+ * only the intended trailing parameter and IP-check block (placed
+ * immediately after the function's own last authority check, before its
+ * first business-state validation -- the identical "after authority is
+ * otherwise established, before the mutating action" ordering discipline
+ * HDN-378 used) changed in each case. dbTestSetSha256 changed (5 existing
+ * files widened, no file added or removed):
+ * `scripts/db-tests/import-export.sql` gained a full 4-scenario
+ * regression block for `app.commit_import_job` (out-of-range IP denied
+ * under enforced mode, in-range IP allowed, omitted IP allowed regardless
+ * of enforcement, active bypass grant exempts an out-of-range IP);
+ * `scripts/db-tests/hris-employee-master.sql`,
+ * `scripts/db-tests/hris-attendance.sql`,
+ * `scripts/db-tests/hris-overtime-timesheet.sql`, and
+ * `scripts/db-tests/procurement-vendor-rate-tiers.sql` each gained a
+ * lighter 3-scenario proof (deny/allow-in-range/allow-omitted) for their
+ * own domain adapter, confirming the composition is correctly wired in
+ * every one of the 5 functions, not only the generic framework one.
+ * Re-verified via a fresh full local db-test suite run (354 migrations,
+ * 234 runner files, ALL PASSED, clean on the first attempt for both the
+ * migration and every one of the 5 new regression blocks) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -903,7 +958,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-260 fix (353 files: +1,
   // 20260826180000_create_dr_restore_scenario_taxonomy.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "6fac78cbabdd98b6780cc815e8d9e0a952895741f4d2da14b8170d2161c42ed4",
+  // History: 6fac78cbabdd98b6780cc815e8d9e0a952895741f4d2da14b8170d2161c42ed4
+  // (353 files, nineteenth-pass amendment above). Superseded 2026-08-27
+  // (twentieth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-278 fix (354 files: +1,
+  // 20260826190000_harden_import_commit_ip_allowlist_gating.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "cc91b1907804884cba268a6911e6cb02d82124eceecdc5ce3bfc335a1488f47d",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1010,7 +1071,15 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-260 fix (234 files unchanged in count --
   // disaster-recovery-enterprise-support.sql widened, no file added or
   // removed). See the class-level doc comment above.
-  dbTestSetSha256: "dafb20eb1d719bae7251a199b5d11733e4a015876108e7b7098fb840e530b2cd",
+  // History: dafb20eb1d719bae7251a199b5d11733e4a015876108e7b7098fb840e530b2cd
+  // (234 files, nineteenth-pass amendment above). Superseded 2026-08-27
+  // (twentieth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-278 fix (234 files unchanged in count -- import-export.sql,
+  // hris-employee-master.sql, hris-attendance.sql,
+  // hris-overtime-timesheet.sql, and procurement-vendor-rate-tiers.sql
+  // all widened, no file added or removed). See the class-level doc
+  // comment above.
+  dbTestSetSha256: "e6a7a317c8a6c28a7f4e6a3bcae6f59c2b61dacdef78ce92cce491c0530d589a",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

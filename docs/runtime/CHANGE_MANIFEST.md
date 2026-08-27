@@ -8443,3 +8443,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; nothing to undo on any live database |
 | Status | **`COMPLETED`**. 17 of 168 backlog items resolved (3 explicitly partial by design). 150 remain (0 Critical, 9 High, 71 Medium, 70 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-27 |
+
+### CHG-2026-264 — Historical issue backlog remediation, item 18: `ISS-2026-278` (import-commit RPC IP-allowlist gating)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-263`. Item 18 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Presented the entry's own named design fork via `AskUserQuestion` before implementing (IP-allowlist only vs. full HDN-378 parity including mandatory MFA step-up vs. skip) — the operator chose IP-allowlist-only, matching the entry's own disclosed concern that mandatory step-up on every bulk import commit, including routine non-financial ones, risks over-restricting a legitimate operational workflow without dedicated UX review. Investigated HDN-378/ISS-2026-150's own exact composition (`app.assert_ip_allowed` + `app.has_active_ip_allowlist_bypass`, ordering discipline, non-interactive-caller exemption) directly from its migration and mirrored it verbatim across all 5 real `commit_*_import_job` functions. Applied `ISS-2026-260`'s own self-caught lesson from earlier this same remediation run correctly from the first draft this time: every one of the 10 widened functions (5 `app.*` + 5 matching `public.*` wrappers) uses an explicit `DROP FUNCTION` + `CREATE FUNCTION`, never a bare `CREATE OR REPLACE` across a changed argument list |
+| Findings and disposition | `ISS-2026-278`: `RESOLVED` — all 5 real import-commit RPCs now accept an optional `p_client_ip` parameter enforcing the tenant's own IP allowlist when supplied, bypassable via an active grant, with zero behavior change for any existing caller that omits it |
+| Files edited | `supabase/migrations/20260826190000_harden_import_commit_ip_allowlist_gating.sql` (new); `scripts/db-tests/import-export.sql`, `scripts/db-tests/hris-employee-master.sql`, `scripts/db-tests/hris-attendance.sql`, `scripts/db-tests/hris-overtime-timesheet.sql`, `scripts/db-tests/procurement-vendor-rate-tiers.sql` (all widened); `scripts/release/check-release-freeze.ts` (twentieth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-278` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826190000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — 5 `DROP FUNCTION`+`CREATE FUNCTION` pairs at the `app.*` layer plus 5 matching pairs at the `public.*` Option 2 wrapper layer, each re-granted to the exact same roles the original migration granted |
+| Risk | Low — purely additive parameter with a default of `null`; every existing call site (none of which pass a 5th argument) is completely unaffected; the new check only activates for a caller that explicitly supplies an IP, and is bypassable via an already-governed grant |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean, migration and all 5 new regression blocks). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. Grants and single-overload correctness (10 functions, all `pronargs=5`, exactly one overload each) live-verified via direct `pg_proc`/`has_function_privilege` query |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema change would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 18 of 168 backlog items resolved (3 explicitly partial by design). 149 remain (0 Critical, 9 High, 70 Medium, 70 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |

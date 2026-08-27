@@ -1964,3 +1964,80 @@ end;
 $$;
 
 \echo '>> ISS-2026-271 regression evidence complete'
+
+\echo '>> ISS-2026-278 (Step 16 historical-issue-backlog remediation) regression: app.commit_employee_import_job now composes app.assert_ip_allowed + app.has_active_ip_allowlist_bypass when a caller supplies p_client_ip -- denies an out-of-range IP under enforced mode, allows an in-range one, and allows a null/omitted p_client_ip regardless of enforcement (every pre-existing call site in this file relies on exactly this)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_staff uuid;
+  v_supreme uuid := '00000000-0000-0000-0000-000000027999';
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_job3 app.jobs;
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_source_file3 app.files;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_row3 app.import_staging_rows;
+  v_committed app.jobs;
+  v_raised boolean;
+begin
+  select auth_user_id into v_staff from app.users where email = 'staff@hrmemp1.test';
+
+  perform app.add_ip_allowlist_entry(v_tenant1, '203.0.113.0/24', 'hrmemp1 office range', 'admin', v_supreme, 'supreme');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant1, 'enforced', v_supreme, 'supreme');
+
+  -- (a) out-of-range p_client_ip -- denied, ip_not_allowed.
+  v_source_file1 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-ipcheck-a.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-ipcheck-source-a', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', null, v_staff, 'staff');
+  v_job1 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file1.id, '{}'::jsonb, 'idem-empimport-ipcheck-job-a', v_staff, 'staff');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Ip Check Person A', 'work_email', 'ipcheck.a@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  v_raised := false;
+  begin
+    perform app.commit_employee_import_job(v_job1.job_id, false, v_staff, 'staff', '198.51.100.7');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-range p_client_ip under enforced mode, the call unexpectedly succeeded';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'ip_not_allowed' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected ip_not_allowed, got none';
+  end if;
+
+  -- (b) in-range p_client_ip -- succeeds.
+  v_source_file2 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-ipcheck-b.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-ipcheck-source-b', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', null, v_staff, 'staff');
+  v_job2 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file2.id, '{}'::jsonb, 'idem-empimport-ipcheck-job-b', v_staff, 'staff');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Ip Check Person B', 'work_email', 'ipcheck.b@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+  v_committed := app.commit_employee_import_job(v_job2.job_id, false, v_staff, 'staff', '203.0.113.42');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit for an in-range p_client_ip, got %', v_committed;
+  end if;
+
+  -- (c) p_client_ip omitted -- succeeds regardless of the enforced policy.
+  v_source_file3 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-ipcheck-c.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-ipcheck-source-c', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file3.id, 'clean', null, v_staff, 'staff');
+  v_job3 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file3.id, '{}'::jsonb, 'idem-empimport-ipcheck-job-c', v_staff, 'staff');
+  perform app.stage_import_rows(v_job3.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Ip Check Person C', 'work_email', 'ipcheck.c@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row3 from app.import_staging_rows where job_id = v_job3.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row3.id, v_staff, 'staff');
+  v_committed := app.commit_employee_import_job(v_job3.job_id, false, v_staff, 'staff');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit when p_client_ip is omitted, regardless of enforcement, got %', v_committed;
+  end if;
+
+  raise notice 'PASS: app.commit_employee_import_job (ISS-2026-278) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, and allows an omitted p_client_ip regardless of enforcement';
+end;
+$$;
