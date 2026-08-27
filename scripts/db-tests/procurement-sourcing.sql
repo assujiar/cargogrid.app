@@ -861,12 +861,20 @@ declare
 begin
   select id into v_request_id from app.sourcing_requests where tenant_id = v_tenant1 and idempotency_key = 'idem-src-r1';
 
+  -- ISS-2026-043 extension fix (Track B Batch 2): app.get_sourcing_request was itself
+  -- missed by ISS-2026-054's own sweep (which fixed list_sourcing_candidates and
+  -- get_sourcing_request_history below, in the exact same migration) -- a cross-tenant,
+  -- zero-membership caller now gets the same sourcing_request_not_found a genuinely
+  -- missing id would produce, never insufficient_authority. Updated from the pre-fix
+  -- expectation (insufficient_privilege) to the corrected one.
   begin
     perform app.get_sourcing_request(v_request_id, v_staff2);
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant2''s staff has no PRC:View over tenant1';
+    raise exception 'assertion failed: expected sourcing_request_not_found -- tenant2''s staff has zero relationship to tenant1';
   exception
-    when insufficient_privilege then
-      null;
+    when no_data_found then
+      if sqlerrm not like 'sourcing_request_not_found:%' then
+        raise exception 'assertion failed: expected sourcing_request_not_found, got %', sqlerrm;
+      end if;
   end;
 
   -- Prompt 269 (ISS-2026-054, C-05): a cross-tenant, zero-membership caller now gets

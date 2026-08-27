@@ -910,6 +910,71 @@ import { readFileSync } from "node:fs";
  * files, ALL PASSED) before this digest was changed, and applied to the
  * live hosted project via `apply_migration` immediately after this local
  * run passed.
+ *
+ * AMENDED 2026-08-27 (twenty-second pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md §12,
+ * items 27-31 (Track B, Batch 2 -- `table-only-procurement-hardening`).
+ * Two migrations added (357 -> 359 files: +2):
+ * `20260827110000_harden_request_approval_unique_violation_handler.sql`
+ * (closes ISS-2026-044: `app.request_approval`'s own INSERT is now
+ * wrapped in a `unique_violation` handler, returning the winning
+ * concurrent caller's own row instead of propagating a raw
+ * constraint-violation error -- drafted against the correct LATEST body,
+ * `20260730390000`'s own `idempotency_key_conflict` widening, after an
+ * earlier draft based on the stale original migration was caught by an
+ * exhaustive, case-insensitive re-grep before being applied anywhere)
+ * and
+ * `20260827130000_harden_tenant_disclosure_representative_extension_batch2.sql`
+ * (extends ISS-2026-043/048's own established
+ * `has_active_tenant_membership`-folded-into-not-found pattern to 6 more
+ * representative, cross-domain sites --
+ * `app.get_sourcing_request`/`app.select_vendor_rate`/
+ * `app.get_wms_inbound_order`/`app.reveal_vendor_bank_account_number`
+ * (reads) and `app.cancel_approval_request`/`app.approve_finance_invoice`
+ * (writes) -- plus `app.decide_approval_step`, closing ISS-2026-049's own
+ * second half at the shared Platform Approval Engine's single choke
+ * point. `app.approve_finance_invoice` was drafted a second time after
+ * this batch's own db-tests wrapper-security-mode regression check
+ * caught the first draft silently dropping a later migration's own
+ * `SECURITY DEFINER`/`SET search_path`/`FOR UPDATE` hardening -- a bare
+ * `CREATE OR REPLACE FUNCTION` with unspecified `SECURITY` resets to
+ * `INVOKER`, the Postgres default, not the prior function's own value).
+ * Two migrations were also drafted for this batch and then withdrawn
+ * before being applied anywhere, after a repo-wide check found each
+ * one's true blast radius far exceeded its own originating entry's
+ * bounded-fix assessment: ISS-2026-038 (self-approval gate on
+ * `app.create_rate_version`/`app.approve_rate_version` -- these two
+ * functions turned out to be used as a generic same-actor
+ * create-then-approve fixture-seeding shortcut across ~75 unrelated
+ * `scripts/db-tests/*.sql` files, 117 total `approve_rate_version` call
+ * sites) and ISS-2026-040 (an RPC-level `app.evaluate_permission` deny
+ * for any `customer_user`-layer principal -- at least 8 domain test
+ * files deliberately grant such a principal a narrow staff role for
+ * real, working owner-scoped portal read access, with ownership-scoping,
+ * not the RPC-level role gate, providing the actual isolation; a blanket
+ * deny would have broken this real capability). dbTestSetSha256 changed
+ * (234 files unchanged in count -- 6 existing files widened, no file
+ * added or removed): `scripts/db-tests/approval.sql` gained blocks
+ * proving `app.request_approval`'s wrapped INSERT still succeeds
+ * cleanly on the non-colliding path (the literal concurrent-race branch
+ * needs genuine concurrent sessions this harness cannot create -- the
+ * same limitation `scripts/db-tests/batch4-tier-c-review-fixes.sql`'s
+ * own Fix 13 already accepted for the identical function), and that a
+ * cross-tenant stranger now gets a generic not-found error from both
+ * `app.cancel_approval_request` and `app.decide_approval_step`, never a
+ * tenant-echoing `insufficient_authority`;
+ * `scripts/db-tests/procurement-sourcing.sql`,
+ * `scripts/db-tests/procurement-vendor-rate-tiers.sql`,
+ * `scripts/db-tests/procurement-vendor-financial-security.sql`, and
+ * `scripts/db-tests/finance-invoice.sql` each gained or corrected a
+ * cross-tenant assertion for their own newly-fixed function;
+ * `scripts/db-tests/advanced-tms-wms-inbound.sql` had one pre-existing
+ * test corrected from its pre-fix `insufficient_authority` expectation
+ * to the corrected `inbound_order_not_found`. Re-verified via a fresh
+ * full local db-test suite run (359 migrations, 234 runner files, ALL
+ * PASSED) before this digest was changed, and applied to the live
+ * hosted project via `apply_migration` immediately after this local run
+ * passed.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1034,7 +1099,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // 20260827010000_harden_cross_tenant_error_disclosure_representative.sql,
   // 20260827030000_harden_analytics_refresh_runs_grant.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "38f3969a786380bbbd4a5645cc81667f0da7c96633192400c079ad418ed067fa",
+  // History: 38f3969a786380bbbd4a5645cc81667f0da7c96633192400c079ad418ed067fa
+  // (357 files, twenty-first-pass amendment above). Superseded 2026-08-27
+  // (twenty-second pass) by Track B Batch 2's ISS-2026-044/043/048/049
+  // fixes (359 files: +2,
+  // 20260827110000_harden_request_approval_unique_violation_handler.sql,
+  // 20260827130000_harden_tenant_disclosure_representative_extension_batch2.sql).
+  // See the class-level doc comment above.
+  migrationSetSha256: "8a5b26a13dad1db0db102030e4d4da13b0bf0bc4c4e2681b0486d65b0728b989",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1158,7 +1230,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // hris-shift-roster-scheduling.sql, and analytics-materialized-views.sql
   // all widened, no file added or removed). See the class-level doc
   // comment above.
-  dbTestSetSha256: "69d5f99356271c3fb246f210a497bf3f9f5f904d62c7fbffba9fe1608b9200cc",
+  // History: 69d5f99356271c3fb246f210a497bf3f9f5f904d62c7fbffba9fe1608b9200cc
+  // (234 files, twenty-first-pass amendment above). Superseded 2026-08-27
+  // (twenty-second pass) by Track B Batch 2 (234 files unchanged in count --
+  // approval.sql, procurement-sourcing.sql, procurement-vendor-rate-tiers.sql,
+  // procurement-vendor-financial-security.sql, finance-invoice.sql, and
+  // advanced-tms-wms-inbound.sql all widened, no file added or removed).
+  // See the class-level doc comment above.
+  dbTestSetSha256: "2361bc6950e59dbe9ac8d029cc0a7d45a8cd296080b7e8de30cf7f2269b33003",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

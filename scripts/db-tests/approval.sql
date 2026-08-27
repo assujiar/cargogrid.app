@@ -704,6 +704,100 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-044 (Track B Batch 2): app.request_approval''s INSERT is now wrapped in a unique_violation handler. The literal race window (a second, genuinely concurrent caller''s own INSERT landing between this transaction''s pre-check SELECT and its own INSERT) needs real concurrent sessions this sequential SQL harness cannot create -- the same limitation this repository''s own db-tests already accepted, by name, for the identical underlying function (see this file''s own sibling scripts/db-tests/batch4-tier-c-review-fixes.sql, Fix 13, "a real, sequential proxy for the concurrent unique_violation the underlying app.request_approval can still raise"). This is a sequential proxy: a fresh request creates cleanly (proving the wrapped INSERT still succeeds on the normal, non-colliding path), and the pre-existing idempotent-replay behavior (unaffected by this fix, exercised via the ALREADY-committed-row pre-check branch, not the new exception handler) continues to return the identical row rather than erroring.'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmeap');
+  v_published_version_id uuid;
+  v_request app.approval_requests;
+  v_replay app.approval_requests;
+begin
+  select v.id into v_published_version_id
+  from app.config_versions v join app.config_objects o on o.id = v.config_object_id
+  where o.tenant_id = v_tenant_id and o.config_type_code = 'approval' and o.scope_level = 'tenant' and v.status = 'published';
+
+  v_request := app.request_approval(v_published_version_id, v_tenant_id, 'purchase_order', '00000000-0000-0000-0000-000000009109', 'req-ap-iss044-1', '00000000-0000-0000-0000-000000001502', 'regular user');
+  if v_request.status <> 'pending' then
+    raise exception 'assertion failed: expected the wrapped INSERT to still succeed cleanly on the normal path, got status %', v_request.status;
+  end if;
+
+  v_replay := app.request_approval(v_published_version_id, v_tenant_id, 'purchase_order', '00000000-0000-0000-0000-000000009109', 'req-ap-iss044-1', '00000000-0000-0000-0000-000000001502', 'regular user');
+  if v_replay.id <> v_request.id then
+    raise exception 'assertion failed: expected the idempotent pre-check path to keep returning the identical row after the fix, got a different id';
+  end if;
+end;
+$$;
+
+\echo '>> ISS-2026-048 extension (Track B Batch 2): app.cancel_approval_request -- a genuine stranger to the request''s tenant (gizmoap''s own tenant_admin, zero relationship to acmeap) now gets the same approval_request_not_found error a nonexistent request id produces, never a tenant-echoing insufficient_authority error'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmeap');
+  v_stranger uuid := '00000000-0000-0000-0000-000000001508';
+  v_published_version_id uuid;
+  v_request app.approval_requests;
+begin
+  select v.id into v_published_version_id
+  from app.config_versions v join app.config_objects o on o.id = v.config_object_id
+  where o.tenant_id = v_tenant_id and o.config_type_code = 'approval' and o.scope_level = 'tenant' and v.status = 'published';
+
+  v_request := app.request_approval(v_published_version_id, v_tenant_id, 'purchase_order', '00000000-0000-0000-0000-000000009110', 'req-ap-iss048-1', '00000000-0000-0000-0000-000000001502', 'regular user');
+
+  begin
+    perform app.cancel_approval_request(v_request.id, v_stranger, 'gizmoap stranger', 'attempted cross-tenant cancel');
+    raise exception 'assertion failed: expected approval_request_not_found -- gizmoap''s admin has zero relationship to acmeap';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'approval_request_not_found%' then
+        raise exception 'assertion failed: expected approval_request_not_found, got %', sqlerrm;
+      end if;
+  end;
+
+  -- Real acmeap actor still works unaffected -- the fix narrows only the zero-membership case.
+  perform app.cancel_approval_request(v_request.id, '00000000-0000-0000-0000-000000001502', 'regular user', 'real cancel');
+  if (select status from app.approval_requests where id = v_request.id) <> 'cancelled' then
+    raise exception 'assertion failed: expected the real tenant member''s cancel to still succeed';
+  end if;
+end;
+$$;
+
+\echo '>> ISS-2026-049 second half (Track B Batch 2): app.decide_approval_step -- the same fix at the shared engine choke point. A genuine stranger to the request''s tenant gets approval_step_not_found, never a tenant-echoing insufficient_authority error; a real tenant member who is simply not an eligible approver for this step still gets the specific, more useful insufficient_authority error (not a leak -- they already belong there)'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmeap');
+  v_stranger uuid := '00000000-0000-0000-0000-000000001508';
+  v_published_version_id uuid;
+  v_request app.approval_requests;
+  v_step1_id uuid;
+begin
+  select v.id into v_published_version_id
+  from app.config_versions v join app.config_objects o on o.id = v.config_object_id
+  where o.tenant_id = v_tenant_id and o.config_type_code = 'approval' and o.scope_level = 'tenant' and v.status = 'published';
+
+  v_request := app.request_approval(v_published_version_id, v_tenant_id, 'purchase_order', '00000000-0000-0000-0000-000000009111', 'req-ap-iss049-1', '00000000-0000-0000-0000-000000001502', 'regular user');
+  select id into v_step1_id from app.approval_request_steps where request_id = v_request.id and step_order = 1;
+
+  begin
+    perform app.decide_approval_step(v_step1_id, 'approved', v_stranger, 'gizmoap stranger');
+    raise exception 'assertion failed: expected approval_step_not_found -- gizmoap''s admin has zero relationship to acmeap';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'approval_step_not_found%' then
+        raise exception 'assertion failed: expected approval_step_not_found, got %', sqlerrm;
+      end if;
+  end;
+
+  -- A real acmeap member (financeap, not eligible for step 1's Manager Approver role)
+  -- still gets the specific, more useful insufficient_authority error -- not a leak.
+  begin
+    perform app.decide_approval_step(v_step1_id, 'approved', '00000000-0000-0000-0000-000000001506', 'finance one');
+    raise exception 'assertion failed: expected insufficient_authority -- financeap is a real tenant member but not eligible for step 1';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+end;
+$$;
+
 \echo '>> app.get_approval_request_history: authority-gated, ordered by step_order then decided_at, and reflects every real decision'
 do $$
 declare

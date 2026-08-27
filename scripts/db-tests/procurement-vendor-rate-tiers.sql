@@ -678,6 +678,28 @@ begin
   end;
 end $$;
 
+\echo '>> ISS-2026-043 extension (Track B Batch 2): app.select_vendor_rate -- a genuine stranger to the costing request''s tenant (tenant2''s own staff, zero relationship to tenant1) now gets the same costing_request_not_found error a nonexistent costing_request id would produce, never a tenant-echoing insufficient_authority error'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'ratetier1');
+  v_staff2 uuid := '00000000-0000-0000-0000-000000035202';
+  v_request app.costing_requests;
+  v_rate app.vendor_rate_versions;
+begin
+  select * into v_request from app.costing_requests where tenant_id = v_tenant1 limit 1;
+  select * into v_rate from app.vendor_rate_versions where tenant_id = v_tenant1 and approval_status = 'approved' limit 1;
+
+  begin
+    perform app.select_vendor_rate(v_request.id, v_rate.id, false, null, null, null, v_staff2, 'staff2');
+    raise exception 'assertion failed: expected costing_request_not_found -- tenant2''s staff has zero relationship to tenant1';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'costing_request_not_found%' then
+        raise exception 'assertion failed: expected costing_request_not_found, got %', sqlerrm;
+      end if;
+  end;
+end $$;
+
 \echo '>> import adapter: schema registration (vendor_rate_import) exists; tenant publishes its own column definition; a valid staged batch commits real rate versions (including tiers); formula/spreadsheet-injection-shaped values rejected with a clear reason (never silently stripped); an unresolved vendor_master_code rejected; partial commit skips invalid rows; idempotent replay creates zero duplicates'
 do $$
 declare

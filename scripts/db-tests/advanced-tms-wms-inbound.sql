@@ -567,12 +567,16 @@ begin
     raise exception 'assertion failed: expected exactly 1 remaining line on the shipment-sourced order (the second was removed earlier), got %', v_count;
   end if;
 
+  -- ISS-2026-043 extension fix (Track B Batch 2): a genuine stranger to the order's
+  -- tenant now gets the same not-found error a nonexistent id produces, never a
+  -- tenant-echoing insufficient_authority error -- updated from the pre-fix
+  -- expectation (insufficient_authority) to the corrected one.
   begin
     perform app.get_wms_inbound_order(v_order_id, '00000000-0000-0000-0000-000000090107');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1';
+    raise exception 'assertion failed: expected inbound_order_not_found -- tenant2''s rep has no membership in tenant1';
   exception
-    when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+    when no_data_found then
+      if sqlerrm not like 'inbound_order_not_found%' then raise; end if;
   end;
 
   select count(*) into v_count from app.list_wms_inbound_orders(v_tenant2, '00000000-0000-0000-0000-000000090107', null, null, null, 50);
