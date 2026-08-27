@@ -618,6 +618,87 @@ import { readFileSync } from "node:fs";
  * stopped again, unrelated to this change -- was restarted) before this
  * digest was changed, and applied to the live hosted project via
  * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-27 (seventeenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 14: `ISS-2026-275`/
+ * `ISS-2026-276` -- `app.finance_journals_protect_posted` never fires on
+ * `INSERT` (only `UPDATE`/`DELETE`), so a direct bulk insert of an
+ * already-posted journal was neither blocked by that trigger nor checked
+ * for a balanced debit=credit total (`app.validate_finance_journal_line_
+ * balance` is only ever invoked from inside the RPC functions, never at
+ * the table layer), and no legitimate `source_type` existed to record its
+ * true provenance -- `'migration'` did not exist in `app.finance_journals`'
+ * own `source_type` vocabulary, the identical root gap `ISS-2026-276`
+ * registered separately. Confirmed with the operator (AskUserQuestion)
+ * before implementing that widening the existing `UPDATE`/`DELETE`
+ * immutability trigger to also guard `INSERT` was the wrong fix (it would
+ * make it impossible to ever load real historical already-posted data, since
+ * the trigger has no way to distinguish a legitimate migration insert from
+ * an illegitimate one) -- a dedicated migration-insert RPC replicating the
+ * RPC-layer validation is correct instead. One migration added (351 files:
+ * +1, `20260826160000_create_finance_journal_historical_import.sql`) --
+ * `app.import_historical_finance_journal`, modeled directly on the existing
+ * `app.create_and_post_finance_system_journal` (posts immediately, skipping
+ * draft/submitted/approved) but differing in exactly the ways that close
+ * both entries' own gaps: it requires real `FIN:Approve` authority itself
+ * (its own template deliberately has none, trusting its caller to have
+ * already checked; this new RPC is the directly-called entry point), it
+ * re-validates debit=credit balance via the existing shared rule before
+ * ever writing a row, and it requires a real non-null `source_id` and a
+ * real non-empty reason -- `'migration'` is added to both
+ * `finance_journals_source_type_check` and `finance_journals_source_check`
+ * (preserving the existing `'correction'` source type, FIN-206's own
+ * retrofit, byte-for-byte -- an additive replacement, confirmed by direct
+ * read of the currently-applied constraint text before writing the new
+ * one, never a narrowing). Matches the finance domain's own current
+ * security posture: `security definer` with the established `search_path
+ * to 'app', 'pg_temp'` clause (confirmed by direct read that
+ * `20260810700000_harden_finance_authority_chain_security_definer.sql`
+ * converted the whole domain, including this fix's own direct template,
+ * from its original security-invoker shape -- matching that, not the
+ * template's now-superseded original definition, is correct). The one real
+ * design decision this fix makes, confirmed with the operator before
+ * implementing: unlike the live system-journal path, this RPC does NOT
+ * require the resolved fiscal period to be `posting_eligible` (open) -- a
+ * real historical migration by definition targets periods that are already
+ * closed today; requiring an open period would make this fix useless for
+ * its own stated purpose. A period covering the date must still exist
+ * (`app.resolve_finance_period_for_date` returns zero rows otherwise,
+ * raised as a clear error) -- this only relaxes the open/closed check,
+ * never the date-to-period resolution itself. Idempotent on `(tenant_id,
+ * source_type='migration', source_id)`, mirroring the template's own
+ * idempotency shape. Ships with a matching Option 2 `public.*` wrapper,
+ * correctly using the amended revoke form from first principles;
+ * live-verified via `has_function_privilege` immediately after applying:
+ * `anon` denied, `authenticated`/`service_role` allowed. dbTestSetSha256
+ * changed (an existing file widened, no file added or removed):
+ * `scripts/db-tests/finance-journal.sql` gained a new regression block
+ * proving a non-`FIN:Approve` actor is denied, a null `source_id` and a
+ * blank reason are each rejected with a distinct named exception, an
+ * unbalanced line set is rejected by the shared balance rule, a real
+ * balanced journal dated inside an already-CLOSED historical fiscal period
+ * (a brand-new, isolated calendar generated and then directly closed via
+ * raw SQL, never disturbing the file's own shared open `2026-03` period)
+ * still posts successfully -- the central point of this fix -- a repeated
+ * call with the same `source_id` returns the existing journal idempotently,
+ * a real audit event is recorded, and (defense in depth) the underlying
+ * `finance_journals_source_check` constraint independently rejects a
+ * sourceless `'migration'` row at the table layer, plus a schema-privilege
+ * defense-in-depth block proving `anon` holds zero EXECUTE on the new
+ * function. Re-verified via a fresh full local db-test suite run (351
+ * migrations, 234 runner files, ALL PASSED, clean after four authoring
+ * mistakes were caught and fixed across successive local runs -- an
+ * insufficient-lines vs. unbalanced mismatch in the negative test, the
+ * historical journal date not falling inside the single generated period, a
+ * mis-declared composite-typed account-id variable, the wrong
+ * `app.audit_logs` column names, and (caught by
+ * `public-api-wrapper-regression.sql`'s own exhaustive check) the new
+ * `public.*` wrapper's security mode not matching its `app.*` counterpart
+ * -- and the local disposable Postgres cluster found stopped again,
+ * unrelated to this change, was restarted twice during authoring) before
+ * applied to the live hosted project via `apply_migration` before this
+ * local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -711,7 +792,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-271 fix (350 files: +1,
   // 20260826150000_create_employee_import_rollback.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "855f12fb61bcd39b8d160f9038cb4682d4c6f214b5e6d9cf8d15829b0768db73",
+  // History: 855f12fb61bcd39b8d160f9038cb4682d4c6f214b5e6d9cf8d15829b0768db73
+  // (350 files, sixteenth-pass amendment above). Superseded 2026-08-27
+  // (seventeenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-275/ISS-2026-276 fix (351 files: +1,
+  // 20260826160000_create_finance_journal_historical_import.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "6ac79f37937d6011fc19c49341dbd9d3c9c3958523aaf7eeb4e3cf0aad9a4820",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -800,7 +887,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-271 fix (234 files unchanged in count --
   // hris-employee-master.sql widened, no file added or removed). See the
   // class-level doc comment above.
-  dbTestSetSha256: "47b945d51ad5f749c7018f3b96b063468bb984173598db437846f2eedf9ffee9",
+  // History: 47b945d51ad5f749c7018f3b96b063468bb984173598db437846f2eedf9ffee9
+  // (234 files, sixteenth-pass amendment above). Superseded 2026-08-27
+  // (seventeenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-275/ISS-2026-276 fix (234 files unchanged in count --
+  // finance-journal.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "329cfdf96f8296255f45891f7da0ffd66efb033fc0dc2256102de9c6758ce4c7",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

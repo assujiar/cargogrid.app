@@ -555,3 +555,170 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> ISS-2026-275/ISS-2026-276: app.import_historical_finance_journal requires FIN:Approve, a real source_id, a non-empty reason and a balanced line set; it succeeds into an already-closed historical fiscal period (the deliberate, operator-approved difference from the live posting path); it is idempotent on (tenant_id, source_type=migration, source_id); the underlying finance_journals_source_check constraint independently rejects a sourceless migration row; and it records a real audit event'
+do $$
+declare
+  v_tenant_a uuid;
+  v_source_id uuid := gen_random_uuid();
+  v_cash_account uuid;
+  v_rev_account uuid;
+  v_calendar_period_id uuid;
+  v_denied boolean;
+  v_journal app.finance_journals;
+  v_retry app.finance_journals;
+  v_audit_count integer;
+  v_lines jsonb;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmejrnla');
+  select id into v_cash_account from app.finance_accounts where tenant_id = v_tenant_a and code = 'CASH-JRNL';
+  select id into v_rev_account from app.finance_accounts where tenant_id = v_tenant_a and code = 'REV-JRNL';
+
+  v_lines := jsonb_build_array(
+    jsonb_build_object('accountId', v_cash_account, 'direction', 'debit', 'amount', 500),
+    jsonb_build_object('accountId', v_rev_account, 'direction', 'credit', 'amount', 500)
+  );
+
+  -- A brand-new, isolated historical fiscal calendar (year 2020) so this
+  -- scenario's own closed-period simulation can never disturb the shared
+  -- open 2026-03 period every other scenario in this file depends on.
+  perform app.generate_finance_fiscal_calendar(v_tenant_a, null, 'FY2020-JRNL', 'FY2020 Historical', '2020-01-01'::date, 1, '00000000-0000-0000-0000-000000029802', 'financemanagera');
+  select id into v_calendar_period_id from app.finance_fiscal_periods where tenant_id = v_tenant_a and period_code = '2020-01' and company_id is null;
+  if v_calendar_period_id is null then
+    raise exception 'assertion failed: expected app.generate_finance_fiscal_calendar to create a real 2020-01 period';
+  end if;
+  -- Directly closing it via raw SQL (bypassing the close-period RPC's own
+  -- multi-step workflow) is the deliberate, minimal way to simulate a
+  -- genuinely already-closed historical period for this test.
+  update app.finance_fiscal_periods set status = 'closed' where id = v_calendar_period_id;
+
+  -- Finance Editor A (FIN:Edit/View, no FIN:Approve) is denied.
+  v_denied := false;
+  begin
+    perform app.import_historical_finance_journal(v_tenant_a, null, v_source_id, '2020-01-15'::date, 'USD', v_lines,
+      'ISS-2026-275 test import', '00000000-0000-0000-0000-000000029803', 'financeeditora');
+    raise exception 'assertion failed: expected financeeditora (no FIN:Approve) to be denied importing a historical journal, but the call succeeded';
+  exception
+    when others then
+      if sqlerrm !~ '^insufficient_authority' then
+        raise;
+      end if;
+      v_denied := true;
+  end;
+  if not v_denied then
+    raise exception 'assertion failed: expected insufficient_authority for financeeditora, got none';
+  end if;
+
+  -- A null source_id is rejected.
+  v_denied := false;
+  begin
+    perform app.import_historical_finance_journal(v_tenant_a, null, null, '2020-01-15'::date, 'USD', v_lines,
+      'ISS-2026-275 test import', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+    raise exception 'assertion failed: expected a null source_id to be rejected, but the call succeeded';
+  exception
+    when others then
+      if sqlerrm !~ '^finance_journal_migration_source_id_required' then
+        raise;
+      end if;
+      v_denied := true;
+  end;
+  if not v_denied then
+    raise exception 'assertion failed: expected finance_journal_migration_source_id_required, got none';
+  end if;
+
+  -- A blank reason is rejected.
+  v_denied := false;
+  begin
+    perform app.import_historical_finance_journal(v_tenant_a, null, v_source_id, '2020-01-15'::date, 'USD', v_lines,
+      '   ', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+    raise exception 'assertion failed: expected a blank reason to be rejected, but the call succeeded';
+  exception
+    when others then
+      if sqlerrm !~ '^finance_journal_migration_reason_required' then
+        raise;
+      end if;
+      v_denied := true;
+  end;
+  if not v_denied then
+    raise exception 'assertion failed: expected finance_journal_migration_reason_required, got none';
+  end if;
+
+  -- An unbalanced set of lines is rejected by the shared balance rule.
+  v_denied := false;
+  begin
+    perform app.import_historical_finance_journal(v_tenant_a, null, v_source_id, '2020-01-15'::date, 'USD',
+      jsonb_build_array(
+        jsonb_build_object('accountId', v_cash_account, 'direction', 'debit', 'amount', 500),
+        jsonb_build_object('accountId', v_rev_account, 'direction', 'credit', 'amount', 499)
+      ),
+      'ISS-2026-275 test import', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+    raise exception 'assertion failed: expected an unbalanced line set to be rejected, but the call succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_journal_unbalanced' then
+        raise;
+      end if;
+      v_denied := true;
+  end;
+  if not v_denied then
+    raise exception 'assertion failed: expected finance_journal_unbalanced, got none';
+  end if;
+
+  -- The central point of this fix: a real, balanced journal dated inside an
+  -- already-CLOSED historical period still posts successfully.
+  select * into v_journal from app.import_historical_finance_journal(v_tenant_a, null, v_source_id, '2020-01-15'::date, 'USD', v_lines,
+    'ISS-2026-275 test import', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+  if v_journal.status <> 'posted' or v_journal.source_type <> 'migration' or v_journal.source_id <> v_source_id or v_journal.total_amount <> 500 or v_journal.posting_period_id <> v_calendar_period_id then
+    raise exception 'assertion failed: expected a posted migration journal (source_type=migration, source_id=%, total=500, period=%) into the closed historical period, got status=% source_type=% source_id=% total=% period=%',
+      v_source_id, v_calendar_period_id, v_journal.status, v_journal.source_type, v_journal.source_id, v_journal.total_amount, v_journal.posting_period_id;
+  end if;
+
+  -- Idempotent on (tenant_id, source_type=migration, source_id): a repeated
+  -- call with the same source_id returns the existing journal unchanged.
+  select * into v_retry from app.import_historical_finance_journal(v_tenant_a, null, v_source_id, '2020-01-15'::date, 'USD', v_lines,
+    'ISS-2026-275 retried import', '00000000-0000-0000-0000-000000029802', 'financemanagera');
+  if v_retry.id <> v_journal.id then
+    raise exception 'assertion failed: expected a retried import with the same source_id to return the original journal unchanged, got id=%', v_retry.id;
+  end if;
+
+  select count(*) into v_audit_count from app.audit_logs
+    where tenant_id = v_tenant_a and action = 'import_historical_finance_journal' and resource_id = v_journal.id and result = 'success';
+  if v_audit_count = 0 then
+    raise exception 'assertion failed: expected at least one import_historical_finance_journal audit event for journal %', v_journal.id;
+  end if;
+
+  -- Defense in depth: the underlying finance_journals_source_check constraint
+  -- itself (independent of the RPC's own explicit check) still rejects a
+  -- sourceless 'migration' row at the table layer.
+  v_denied := false;
+  begin
+    insert into app.finance_journals (tenant_id, company_id, journal_number, source_type, source_id, idempotency_key, currency, total_amount, journal_date, status, posting_period_id, posted_by, posted_at, created_by)
+    values (v_tenant_a, null, 'JRNL-2020-999999', 'migration', null, 'jrnl-sourcecheck-1', 'USD', 500, '2020-01-15'::date, 'posted', v_calendar_period_id, 'financemanagera', now(), 'financemanagera');
+    raise exception 'assertion failed: expected finance_journals_source_check to reject a sourceless migration row, but the insert succeeded';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_journals_source_check' then
+        raise;
+      end if;
+      v_denied := true;
+  end;
+  if not v_denied then
+    raise exception 'assertion failed: expected a finance_journals_source_check violation, got none';
+  end if;
+end;
+$$;
+
+\echo '>> ISS-2026-275/ISS-2026-276: schema-privilege defense in depth: anon holds zero EXECUTE on app.import_historical_finance_journal (ERR-2026-004 regression guard)'
+do $$
+declare
+  v_anon_has boolean;
+begin
+  select bool_or(has_function_privilege('anon', p.oid, 'EXECUTE'))
+    into v_anon_has
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.proname = 'import_historical_finance_journal';
+  if coalesce(v_anon_has, false) then
+    raise exception 'assertion failed: expected anon to hold zero EXECUTE on app.import_historical_finance_journal, found at least one overload granted';
+  end if;
+end;
+$$;
