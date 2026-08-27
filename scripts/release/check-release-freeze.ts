@@ -847,6 +847,69 @@ import { readFileSync } from "node:fs";
  * migration and every one of the 5 new regression blocks) before this
  * digest was changed, and applied to the live hosted project via
  * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-27 (twenty-first pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md §12,
+ * items 22-26 (Track B, Batch 1 of the operator-directed full-backlog
+ * remediation). Three migrations added (354 -> 357 files: +3):
+ * `20260827000000_wire_observability_alert_producers.sql` (closes part of
+ * ISS-2026-249: `app.record_webhook_delivery_attempt`,
+ * `app.record_integration_health_check`, and
+ * `app.record_ai_governed_request_outcome` now each call
+ * `app.raise_observability_alert` on their own terminal-failure branch,
+ * so a dead-lettered webhook, an auto-disabled integration connection,
+ * and a failed AI-governed action each produce a real `app.incidents`
+ * row instead of a silent gap; a fourth producer,
+ * `app.assert_ip_allowed`, was drafted and then withdrawn from this same
+ * migration after this batch's own new db-test assertion caught a
+ * caught-exception implicit-savepoint rollback that would have
+ * discarded the function's own alert insert whenever its caller wraps
+ * the call in `BEGIN ... EXCEPTION WHEN ... END` -- documented in
+ * `KNOWN_ISSUES.md` under ISS-2026-249 rather than forced through);
+ * `20260827010000_harden_cross_tenant_error_disclosure_representative.sql`
+ * (closes part of ISS-2026-167: `app.create_quotation_draft` collapses
+ * to one generic `opportunity_not_found` error for both a genuinely
+ * cross-tenant and a fully nonexistent opportunity id, and
+ * `app.revoke_api_key`/`app.rotate_api_key` gained an
+ * `app.has_active_tenant_membership` pre-check so a genuine stranger to
+ * the key's tenant gets the same generic not-found while a same-tenant
+ * actor who merely lacks manage authority still gets their own specific
+ * `insufficient_authority` error -- the first-draft version of this fix
+ * collapsed both cases unconditionally and broke the legitimate
+ * same-tenant case, caught by this batch's own db-tests run and
+ * corrected before this digest was changed); and
+ * `20260827030000_harden_analytics_refresh_runs_grant.sql` (closes
+ * ISS-2026-176: narrows the `authenticated` grant on
+ * `app.analytics_refresh_runs` from whole-table `SELECT` to an explicit
+ * column list, removing incidental exposure of internal refresh-run
+ * detail columns). dbTestSetSha256 changed (234 files unchanged in
+ * count -- 9 existing files widened, no file added or removed):
+ * `scripts/db-tests/webhook-management.sql`,
+ * `scripts/db-tests/integration-hub.sql`, and
+ * `scripts/db-tests/ai-governance-provider-boundary.sql` each gained a
+ * new assertion proving a real `app.incidents` row now exists at their
+ * producer's own terminal-failure moment;
+ * `scripts/db-tests/commercial-quotation-builder.sql` gained a block
+ * proving a cross-tenant and a nonexistent opportunity id raise the
+ * byte-identical error shape; `scripts/db-tests/api-key-webhook.sql`
+ * gained a block proving cross-tenant `revoke_api_key`/`rotate_api_key`
+ * calls never leak the foreign tenant's UUID;
+ * `scripts/db-tests/vendor-api.sql` had one pre-existing test corrected
+ * to expect the new (correct) `no_data_found`/`api_key_not_found` error
+ * for a genuinely cross-tenant caller, replacing its old expectation of
+ * `insufficient_privilege`; `scripts/db-tests/rbac-enforcement.sql`
+ * gained a regression guard enumerating the 35 `app`-schema views
+ * deliberately granted to `authenticated` without `security_invoker`
+ * (closes ISS-2026-174/175); and
+ * `scripts/db-tests/hris-shift-roster-scheduling.sql` and
+ * `scripts/db-tests/analytics-materialized-views.sql` each received a
+ * small defensive/doc-correction change carried over from this batch's
+ * investigation of ISS-2026-189 and ISS-2026-285 respectively (both
+ * dispositioned, not code-fixed, in `KNOWN_ISSUES.md`). Re-verified via
+ * a fresh full local db-test suite run (357 migrations, 234 runner
+ * files, ALL PASSED) before this digest was changed, and applied to the
+ * live hosted project via `apply_migration` immediately after this local
+ * run passed.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -964,7 +1027,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-278 fix (354 files: +1,
   // 20260826190000_harden_import_commit_ip_allowlist_gating.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "cc91b1907804884cba268a6911e6cb02d82124eceecdc5ce3bfc335a1488f47d",
+  // History: cc91b1907804884cba268a6911e6cb02d82124eceecdc5ce3bfc335a1488f47d
+  // (354 files, twentieth-pass amendment above). Superseded 2026-08-27
+  // (twenty-first pass) by Track B Batch 1's ISS-2026-249/167/176 fixes
+  // (357 files: +3, 20260827000000_wire_observability_alert_producers.sql,
+  // 20260827010000_harden_cross_tenant_error_disclosure_representative.sql,
+  // 20260827030000_harden_analytics_refresh_runs_grant.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "38f3969a786380bbbd4a5645cc81667f0da7c96633192400c079ad418ed067fa",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1079,7 +1149,16 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // hris-overtime-timesheet.sql, and procurement-vendor-rate-tiers.sql
   // all widened, no file added or removed). See the class-level doc
   // comment above.
-  dbTestSetSha256: "e6a7a317c8a6c28a7f4e6a3bcae6f59c2b61dacdef78ce92cce491c0530d589a",
+  // History: e6a7a317c8a6c28a7f4e6a3bcae6f59c2b61dacdef78ce92cce491c0530d589a
+  // (234 files, twentieth-pass amendment above). Superseded 2026-08-27
+  // (twenty-first pass) by Track B Batch 1 (234 files unchanged in count --
+  // webhook-management.sql, integration-hub.sql,
+  // ai-governance-provider-boundary.sql, commercial-quotation-builder.sql,
+  // api-key-webhook.sql, vendor-api.sql, rbac-enforcement.sql,
+  // hris-shift-roster-scheduling.sql, and analytics-materialized-views.sql
+  // all widened, no file added or removed). See the class-level doc
+  // comment above.
+  dbTestSetSha256: "69d5f99356271c3fb246f210a497bf3f9f5f904d62c7fbffba9fe1608b9200cc",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
