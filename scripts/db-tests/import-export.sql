@@ -796,4 +796,78 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-278 (Step 16 historical-issue-backlog remediation) regression: app.commit_import_job composes app.assert_ip_allowed + app.has_active_ip_allowlist_bypass when a caller supplies p_client_ip -- denies an out-of-range IP under enforced mode, allows an in-range one, allows a null/omitted p_client_ip regardless of enforcement (every pre-existing call site in this file relies on exactly this), and exempts an active bypass-grant holder even from an out-of-range IP'
+do $$
+declare
+  v_tenant_id uuid;
+  v_source_file_id uuid;
+  v_supreme2 uuid := '00000000-0000-0000-0000-000000003007';
+  v_job app.jobs;
+  v_committed app.jobs;
+  v_grant app.ip_allowlist_bypass_grants;
+  v_raised boolean;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmeie');
+  v_source_file_id := (select id from app.files where tenant_id = v_tenant_id and idempotency_key = 'idem-source-1');
+
+  insert into auth.users (id, email) values (v_supreme2, 'supreme2ie@example.test');
+  perform app.grant_principal_membership(v_supreme2, 'supreme_admin', null, null, 'tester');
+
+  perform app.add_ip_allowlist_entry(v_tenant_id, '203.0.113.0/24', 'acmeie office range', 'admin', '00000000-0000-0000-0000-000000003005', 'supreme');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant_id, 'enforced', '00000000-0000-0000-0000-000000003005', 'supreme');
+
+  -- (a) out-of-range p_client_ip -- denied, ip_not_allowed.
+  v_job := app.create_import_export_job(v_tenant_id, 'import', 'shipment_rows', v_source_file_id, '{}'::jsonb, 'idem-job-ipcheck-a', '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object('ref', 'REF-IP-A', 'amount', '10')), '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.validate_staging_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), '00000000-0000-0000-0000-000000003001', 'requester');
+  v_raised := false;
+  begin
+    perform app.commit_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000003001', 'requester', '198.51.100.7');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-range p_client_ip under enforced mode, the call unexpectedly succeeded';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'ip_not_allowed' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected ip_not_allowed, got none';
+  end if;
+
+  -- (b) in-range p_client_ip -- succeeds.
+  v_job := app.create_import_export_job(v_tenant_id, 'import', 'shipment_rows', v_source_file_id, '{}'::jsonb, 'idem-job-ipcheck-b', '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object('ref', 'REF-IP-B', 'amount', '10')), '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.validate_staging_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), '00000000-0000-0000-0000-000000003001', 'requester');
+  v_committed := app.commit_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000003001', 'requester', '203.0.113.42');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit for an in-range p_client_ip, got %', v_committed;
+  end if;
+
+  -- (c) p_client_ip omitted -- succeeds regardless of the enforced policy.
+  v_job := app.create_import_export_job(v_tenant_id, 'import', 'shipment_rows', v_source_file_id, '{}'::jsonb, 'idem-job-ipcheck-c', '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object('ref', 'REF-IP-C', 'amount', '10')), '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.validate_staging_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), '00000000-0000-0000-0000-000000003001', 'requester');
+  v_committed := app.commit_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000003001', 'requester');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit when p_client_ip is omitted, regardless of enforcement, got %', v_committed;
+  end if;
+
+  -- (d) active bypass grant -- succeeds even with an out-of-range p_client_ip.
+  v_grant := app.request_ip_allowlist_bypass(v_tenant_id, '00000000-0000-0000-0000-000000003001', 'ISS-2026-278 regression bypass', '00000000-0000-0000-0000-000000003005', 'supreme');
+  v_grant := app.approve_ip_allowlist_bypass(v_grant.id, v_supreme2, 'supreme2');
+  if v_grant.status <> 'approved' then
+    raise exception 'assertion failed: expected the bypass grant to be approved, got %', v_grant.status;
+  end if;
+
+  v_job := app.create_import_export_job(v_tenant_id, 'import', 'shipment_rows', v_source_file_id, '{}'::jsonb, 'idem-job-ipcheck-d', '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object('ref', 'REF-IP-D', 'amount', '10')), '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.validate_staging_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), '00000000-0000-0000-0000-000000003001', 'requester');
+  v_committed := app.commit_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000003001', 'requester', '198.51.100.7');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit for an out-of-range p_client_ip when the actor holds an active bypass grant, got %', v_committed;
+  end if;
+
+  raise notice 'PASS: app.commit_import_job (ISS-2026-278) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, allows an omitted p_client_ip regardless of enforcement, and exempts an active bypass-grant holder even from an out-of-range IP';
+end;
+$$;
+
 \echo '>> PLT-131 (Import/Export Job Framework) test suite passed'

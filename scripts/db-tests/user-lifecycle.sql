@@ -346,4 +346,89 @@ begin
 end;
 $$;
 
+-- ISS-2026-263: app.transition_user_status's own event_type CASE mapping used to fall
+-- through to the raw target-status value for any transition outside its 5 explicit pairs
+-- -- including a true no-op -- deterministically failing with a spurious CHECK-constraint
+-- violation on the history insert. Fixed to reject with a clear, purpose-built error
+-- instead. Proves both: every real transition still succeeds exactly as before, and every
+-- unrecognized/no-op transition now fails with the new, legible error rather than the old
+-- confusing one.
+\echo '>> ISS-2026-263 regression: an unrecognized or no-op app.transition_user_status call is rejected with a clear error, not a spurious CHECK violation'
+do $$
+declare
+  v_tenant_id uuid;
+  v_user app.users;
+begin
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000000263', 'iss263@example.test');
+  select id into v_tenant_id from app.tenants where slug = 'acmeusr';
+
+  v_user := app.invite_user(v_tenant_id, '00000000-0000-0000-0000-000000000263', 'iss263@example.test', 'ISS-2026-263 Actor', null, 'tester', now() + interval '7 days');
+
+  -- A true no-op (invited -> invited) is rejected with the new, clear error -- not the
+  -- old spurious history-table CHECK violation.
+  begin
+    perform app.transition_user_status(v_user.id, 'invited', 'no-op probe', 'tester');
+    raise exception 'assertion failed: expected an invited -> invited no-op to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'invalid_status_transition%' then raise; end if;
+  end;
+
+  -- The 5 real, recognized transitions all still succeed exactly as before.
+  v_user := app.transition_user_status(v_user.id, 'active', 'onboarded', 'tester');
+  if v_user.status <> 'active' then raise exception 'assertion failed: expected activate to succeed, got status=%', v_user.status; end if;
+
+  -- A true no-op on an active user (active -> active) is rejected, not silently accepted
+  -- and not a spurious CHECK violation.
+  begin
+    perform app.transition_user_status(v_user.id, 'active', 'no-op probe', 'tester');
+    raise exception 'assertion failed: expected an active -> active no-op to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'invalid_status_transition%' then raise; end if;
+  end;
+
+  v_user := app.transition_user_status(v_user.id, 'suspended', 'temporary freeze', 'tester');
+  if v_user.status <> 'suspended' then raise exception 'assertion failed: expected suspend to succeed, got status=%', v_user.status; end if;
+
+  -- The exact scenario HDN-384 originally reproduced: the immediate next identical call
+  -- (now suspended -> suspended) used to fail with a spurious CHECK violation every time.
+  -- Now fails with the new, clear error instead -- still correctly rejected, never
+  -- silently accepted.
+  begin
+    perform app.transition_user_status(v_user.id, 'suspended', 'temporary freeze', 'tester');
+    raise exception 'assertion failed: expected a suspended -> suspended no-op to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'invalid_status_transition%' then raise; end if;
+  end;
+
+  v_user := app.transition_user_status(v_user.id, 'active', 'end of suspension', 'tester');
+  if v_user.status <> 'active' then raise exception 'assertion failed: expected reactivate to succeed, got status=%', v_user.status; end if;
+
+  v_user := app.transition_user_status(v_user.id, 'revoked', 'offboarded', 'tester');
+  if v_user.status <> 'revoked' then raise exception 'assertion failed: expected revoke to succeed, got status=%', v_user.status; end if;
+
+  v_user := app.transition_user_status(v_user.id, 'active', 'genuine rehire', 'tester');
+  if v_user.status <> 'active' then raise exception 'assertion failed: expected rehire_reactivate to succeed, got status=%', v_user.status; end if;
+
+  -- Every recognized transition's own event_type row landed correctly (never the raw
+  -- status-value fallback this fix removed).
+  perform 1 from app.user_lifecycle_history where user_id = v_user.id and event_type = 'activate' and from_status = 'invited' and to_status = 'active';
+  if not found then raise exception 'assertion failed: expected an activate history row'; end if;
+  perform 1 from app.user_lifecycle_history where user_id = v_user.id and event_type = 'suspend' and from_status = 'active' and to_status = 'suspended';
+  if not found then raise exception 'assertion failed: expected a suspend history row'; end if;
+  perform 1 from app.user_lifecycle_history where user_id = v_user.id and event_type = 'reactivate' and from_status = 'suspended' and to_status = 'active';
+  if not found then raise exception 'assertion failed: expected a reactivate history row'; end if;
+  perform 1 from app.user_lifecycle_history where user_id = v_user.id and event_type = 'revoke' and from_status = 'active' and to_status = 'revoked';
+  if not found then raise exception 'assertion failed: expected a revoke history row'; end if;
+  perform 1 from app.user_lifecycle_history where user_id = v_user.id and event_type = 'rehire_reactivate' and from_status = 'revoked' and to_status = 'active';
+  if not found then raise exception 'assertion failed: expected a rehire_reactivate history row'; end if;
+
+  raise notice 'ISS-2026-263 proof: all 5 real transitions still succeed with the correct event_type, and every no-op/unrecognized transition is now rejected with a clear invalid_status_transition error instead of a spurious CHECK violation';
+end;
+$$;
+
+\echo '>> ISS-2026-263 regression evidence complete'
+
 \echo 'ALL PLT-110 db-test assertions passed.'

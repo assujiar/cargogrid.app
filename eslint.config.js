@@ -170,6 +170,7 @@ const serviceRoleImportGuard = {
     "app/api/webhooks/logistics-partner/\\[connectionId\\]/route.ts",
     "app/api/webhooks/third-party-gps/\\[connectionId\\]/route.ts",
     "lib/api-gateway/authenticate.server.ts",
+    "lib/auth/register-login-session-deps.server.ts",
     "lib/portal/supreme-admin-guard-deps.server.ts",
     "lib/portal/tenant-admin-guard-deps.server.ts",
     "scripts/jobs/external-sync-worker.ts",

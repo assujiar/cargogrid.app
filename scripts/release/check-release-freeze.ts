@@ -154,6 +154,699 @@ import { readFileSync } from "node:fs";
  * project across three `apply_migration` calls (initial fix, a settlement-
  * date-not-`current_date` correction, and the wrapper security-mode fix)
  * before this local run.
+ *
+ * AMENDED 2026-08-25 (sixth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section and docs/runtime/KNOWN_ISSUES.md's `ISS-2026-267`/
+ * `ISS-2026-072` entries -- following the operator's explicit "seluruh issue
+ * ... harus solved semua tanpa terkecuali" instruction (every issue, all
+ * severities, resolved without exception) after `RGL-BLK-001` and the three
+ * tracked go-live gaps were accepted by operator override. First two items
+ * from the resulting ~168-entry open-issue inventory (0 Critical / 16 High /
+ * 78 Medium / 74 Low), both High:
+ *
+ * `ISS-2026-267`/`HDN-BLK-036` (no mutual-exclusion mechanism for the composed
+ * in-place restore procedure) -- fixed via a documented, mandatory
+ * `pg_try_advisory_lock(872314, 1)`/`pg_advisory_unlock` step added to
+ * `docs/runbooks/database-restore.md` §4 item 4 (no new schema object, so
+ * nothing is lost when the procedure's own step (a) drops the `app` schema;
+ * auto-releases on a crashed/disconnected session, so no stale-lock cleanup
+ * logic is needed). New regression file
+ * `scripts/db-tests/database-restore-lock.sql` (233 files total: +1) proves
+ * genuine mutual exclusion between two real, independent concurrent `psql`
+ * processes using this repository's own existing two-process concurrency-race
+ * helper (`scripts/db-tests/wms-picking-concurrency-helper.sh`), not a
+ * single-session simulation.
+ *
+ * `ISS-2026-072` (the still-open `app.users.status` half of a two-part
+ * finding; the `role_assignments`-cascade half was already fixed at HRT-295,
+ * the tenant-membership half at HDN-373/20260810300000) -- fixed additively
+ * by supabase/migrations/20260826040000_harden_rbac_evaluator_platform_
+ * user_status_check.sql (338 files total: +1) -- the already-applied
+ * 20260810300000 file is not edited. One new defense-in-depth branch in
+ * `app.evaluate_permission`'s body, placed after the Supreme Admin exception
+ * (a Supreme Admin can hold zero `app.users` rows in a tenant they still
+ * legitimately act in -- live-verified this placement is correct, not merely
+ * argued, via a new regression assertion). No call-site changes anywhere:
+ * confirmed a single-signature, never-overloaded function, so all ~1,124
+ * transitive callers are syntactically untouched; the real risk this pass had
+ * to rule out was behavioral (a false-deny), not textual, ruled out both by a
+ * lockout-safety analysis (`app.assign_role` already hard-requires
+ * `app.users.status='active'` at grant time, so no legitimate actor's
+ * `role_assignments` row can exist while their `app.users.status` is not
+ * `'active'` except via exactly the out-of-band drift this fix targets) and
+ * empirically (full local `db-tests` suite `ALL PASSED` across all 233 files,
+ * every domain's own regression suite included, not merely a dedicated new
+ * assertion). `scripts/db-tests/rbac-enforcement.sql` widened, not replaced
+ * (233 files unchanged in count from the file above -- content changed only).
+ * Re-verified via a fresh full local db-test suite run (338 migrations, 233
+ * runner files, ALL PASSED) before this digest was changed, and applied to
+ * the live hosted project via `apply_migration` before this local run,
+ * live-reconfirmed present via a direct `pg_get_functiondef`/`pg_proc.
+ * prosecdef` query against the hosted project afterward.
+ *
+ * AMENDED 2026-08-25 (seventh pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section, item 3: `ISS-2026-257` -- a full database backup
+ * (`pg_dump`/`pg_restore`) captured 3 plaintext secret columns verbatim, no
+ * encryption-at-rest (`app.integration_connection_credentials.
+ * credential_value`, `app.third_party_provider_connections.
+ * webhook_secret_value`, `app.webhook_endpoints.secret_value`), contradicting
+ * this repository's own documented "references, never values" export
+ * discipline. Fixed additively by
+ * supabase/migrations/20260826050000_harden_integration_secrets_encryption_
+ * at_rest.sql (339 files total) -- no already-applied migration is edited.
+ * Mirrors the already-established, already-proven vendor-financial encryption
+ * pattern (`pgp_sym_encrypt`/`pgp_sym_decrypt` via `pgcrypto`): a fail-closed
+ * GUC-keyed symmetric key shared by all 3 columns, 2 private encrypt/decrypt
+ * helpers, and a rename-the-plaintext-column-out-in-one-migration technique
+ * (never a second plaintext column, never a backfill-then-drop-later
+ * straddle). 6 writer and 11 reader functions across 5 other, already-applied
+ * migration files redefined via `CREATE OR REPLACE` on their identical
+ * existing signatures -- zero call-site changes anywhere, zero `public.*`
+ * wrapper or TypeScript changes needed (confirmed no wrapper exposes any of
+ * the 3 raw column names, and the writer RPCs' own one-time-reveal return
+ * shapes are unchanged). Self-caught before shipping (the identical class of
+ * gap HDN-373's own migration self-caught for
+ * `app.has_active_tenant_membership`): this domain's callers are a MIX of
+ * `SECURITY DEFINER` and `SECURITY INVOKER` (unlike vendor-financial's
+ * uniformly-DEFINER callers), so the private encrypt/decrypt helpers are
+ * explicitly granted to `service_role` rather than left ungranted. While
+ * verifying, this pass's own schema change (an `ALTER TABLE` row rewrite on
+ * `app.webhook_endpoints`) incidentally surfaced a second, independent,
+ * already-tracked defect -- `ISS-2026-156` (a webhook-endpoint lookup in
+ * `scripts/db-tests/n8n-integration.sql` with no `ORDER BY`/status filter,
+ * latent nondeterminism that had previously happened to pick the right row) --
+ * fixed in the same pass by filtering on `status = 'active'`, the
+ * semantically correct fix matching that test's own intent. Re-verified via a
+ * fresh full local db-test suite run (339 migrations, 233 runner files, ALL
+ * PASSED) before this digest was changed, and applied to the live hosted
+ * project via `apply_migration` (zero existing rows in any of the 3 tables,
+ * confirmed live before applying, so the backfill `UPDATE` statements were
+ * no-ops), live-reconfirmed via `information_schema.columns` afterward.
+ *
+ * AMENDED 2026-08-25 (eighth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section, item 5: `ISS-2026-265`/`HDN-BLK-034` -- the composed
+ * in-place restore procedure's own `TRUNCATE` step never fires `FOR EACH ROW`
+ * triggers at all (standard, documented Postgres behavior, independent of
+ * `pg_restore`'s own `--disable-triggers` flag), silently bypassing 9
+ * security/integrity row-level triggers with zero row left in
+ * `app.audit_logs` documenting the restore happened. Fixed additively by
+ * supabase/migrations/20260826060000_harden_database_restore_audit_trail.sql
+ * (340 files total) -- closes only the genuinely closable "zero audit trail"
+ * half: a new mandatory step (j), `app.record_database_restore_event(...)`,
+ * writes one explicit, structured `app.audit_logs` row (`tenant_id = null`,
+ * the established platform-level-event convention) recording who ran the
+ * restore, its scope, and how many tables were truncated. Does NOT and
+ * cannot re-verify any individual table's own security invariant (a legal
+ * hold, a posted-journal balance) that the bypassed triggers would have
+ * protected -- disclosed inline in the recorded event's own payload and in
+ * the runbook, not silently claimed as fully closed; that remaining half
+ * needs a structurally different mechanism (a pre-restore manifest to diff
+ * against post-restore state), left open. Also ships the function's own
+ * `public.*` Option 2 wrapper (security-mode-matched, `SECURITY DEFINER`) --
+ * missed in the first draft and caught immediately by this repo's own
+ * `scripts/db-tests/public-api-wrapper-regression.sql` zero-tolerance guard
+ * before this digest was ever changed, not after. New regression in
+ * `scripts/db-tests/database-restore-lock.sql`: a real, persisted
+ * `app.audit_logs` row with the exact scope/table-count supplied, plus 3
+ * negative-input rejection assertions (233 files unchanged in count -- the
+ * existing file widened, no new file). Re-verified via a fresh full local
+ * db-test suite run (340 migrations, 233 runner files, ALL PASSED) before
+ * this digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (ninth pass), migrationSetSha256 only (dbTestSetSha256
+ * unchanged -- an existing file widened, no file added or removed). Ruling:
+ * docs/build-log/release-go-live/RGL-404.md's historical-issue-backlog
+ * remediation section, item 6: `ISS-2026-269` -- an auto-generated-employee-
+ * number import row has zero duplicate detection against an existing
+ * employee sharing the same identity, live-reproduced at `HDN-385` (a fresh
+ * re-import of an identical un-keyed row silently creates a second,
+ * genuinely duplicate employee -- distinct from, and unfixed by, `HDN-385`'s
+ * own `20260817000000` fix, which only catches a collision on an EXPLICIT
+ * employee_number). Fixed additively by
+ * supabase/migrations/20260826070000_harden_employee_import_duplicate_
+ * detection.sql (341 files total) -- `app.commit_employee_import_job`
+ * (already `CREATE OR REPLACE`d once at `20260817000000`) redefined again on
+ * its identical signature, never editing either already-applied file.
+ * Matching heuristic: exact case-insensitive `work_email` match OR exact
+ * `full_name` match against any existing tenant employee -- the same
+ * definition of "duplicate" `HDN-385`'s own live reproduction used, not an
+ * invented fuzzier heuristic (Levenshtein/phonetic matching), which this
+ * finding's own text explicitly flagged as needing further HR-domain design
+ * input beyond a bounded fix. Deliberately a review flag into the
+ * already-established `app.employee_duplicate_candidates` mechanism, never a
+ * hard block -- the import still succeeds. Deliberately NOT routed through
+ * the existing `app.flag_employee_duplicate_candidate` RPC, which re-checks
+ * `HRS:Edit` authority independent of the `HRS:Import` authority the commit
+ * function already verified once -- composing it would have silently
+ * required every importer to also hold `HRS:Edit`, a real authority
+ * regression this fix avoids by inserting directly into the review table
+ * from within the already-authority-checked commit function. New regression
+ * in `scripts/db-tests/hris-employee-master.sql`: a genuine re-import
+ * reproduces `HDN-385`'s own scenario and is now flagged (import still
+ * succeeds); a genuinely distinct new employee (no shared `work_email`/
+ * `full_name`) is confirmed NOT flagged, proving this is a real match, not
+ * an unconditional flag-everything rule. Re-verified via a fresh full local
+ * db-test suite run (341 migrations, 233 runner files, ALL PASSED) before
+ * this digest was changed (the first attempt surfaced a `min(uuid)` bug in
+ * this pass's own new test, fixed before the digest was touched), and
+ * applied to the live hosted project via `apply_migration` before this local
+ * run (zero existing rows in `app.employees`/`app.import_staging_rows`,
+ * confirmed live before applying).
+ *
+ * AMENDED 2026-08-25 (tenth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-
+ * backlog remediation section, item 7: `ISS-2026-254` (partial, disclosed as
+ * voluntary) plus two self-caught security regressions in this same
+ * checkpoint's own prior work, registered as `ISS-2026-298` and
+ * `ISS-2026-299`. Three migrations added (344 files total):
+ * `20260826080000_harden_restore_security_state_reconciliation.sql` creates
+ * `app.capture_security_state_snapshot`/`app.detect_reverted_security_state`
+ * plus `public.security_state_snapshots` and their matching Option 2
+ * wrappers -- a voluntary pre/post-restore compensating control for
+ * `ISS-2026-254`, explicitly disclosed as not closing the "snapshot never
+ * taken" case (no mechanism forces the snapshot step, since the actual
+ * restore procedure runs entirely outside any RPC this schema controls).
+ * `20260826081000_harden_record_database_restore_event_wrapper_grant_leak.sql`
+ * is a repository-side record of a fix already applied live via a direct
+ * `apply_migration` call, before this file was written: the prior
+ * `20260826060000` migration's own `public.record_database_restore_event`
+ * wrapper had used a bare `revoke ... from public`, missing the amended,
+ * explicitly-named-roles form (`revoke ... from anon, authenticated,
+ * service_role, public`) the `20260826010000` Tier C fix's own convention
+ * requires -- live-confirmed exploitable (`anon`/`authenticated` could call
+ * this `SECURITY DEFINER` audit-writing function directly) before the fix,
+ * live-reconfirmed closed after. `20260826090000_harden_security_state_
+ * snapshots_table_privilege_leak.sql` is a second, worse self-caught
+ * regression, found while live-verifying `20260826080000`'s own security
+ * posture: `public.security_state_snapshots` is the first table this
+ * repository has ever created directly in `public` schema, and it shipped
+ * without RLS or a revoke of Supabase's own default table-privilege
+ * bootstrap -- live-confirmed `anon`/`authenticated` held direct
+ * SELECT/INSERT on it (the identical bootstrap-grant class `ISS-2026-298`
+ * found for functions, reproduced here for a table), fixed live via a
+ * direct `apply_migration` call before this file was written, applying this
+ * repository's own standard `app.*`-table security pattern (RLS enabled,
+ * fail-closed with zero policies; `anon`/`authenticated` explicitly
+ * revoked). Neither `20260826060000` nor `20260826080000` is edited, per
+ * this repository's own "never edit an applied migration" rule.
+ * dbTestSetSha256 changed (an existing file widened, no file added or
+ * removed): `scripts/db-tests/database-restore-lock.sql` gained 2 new
+ * regression blocks -- one proving `capture_security_state_snapshot`
+ * correctly captures an active legal hold/revoked API key/disabled webhook
+ * endpoint/suspended user/suspended membership, that
+ * `detect_reverted_security_state` correctly reports all 5 by category
+ * after each is directly reverted under `session_replication_role =
+ * replica` (matching pg_restore --disable-triggers, since app.principal_
+ * memberships' own transition-enforcement trigger would otherwise reject a
+ * raw revoked-to-active UPDATE a real restore's data load never routes
+ * through triggers to begin with), that a same-point-in-time snapshot
+ * reports nothing, and that an unknown snapshot id is rejected; a second
+ * proving `public.security_state_snapshots` carries RLS enabled and zero
+ * anon/authenticated table privilege. Re-verified via a fresh full local
+ * db-test suite run (344 migrations, 233 runner files, ALL PASSED) before
+ * this digest was changed (earlier attempts surfaced and fixed, before the
+ * digest was touched: a stale `secret_value` column reference this new
+ * test's own webhook_endpoints insert had missed after `ISS-2026-257`'s
+ * rename to `secret_value_encrypted`; a missing `app.integration_secrets_
+ * encryption_key` test GUC this file had never needed before; and the
+ * principal_memberships transition-trigger rejection above). All 3
+ * migrations' live security posture was independently verified after
+ * applying (`has_function_privilege` for the 3 function wrappers,
+ * `has_table_privilege`/`pg_class.relrowsecurity` for the table) before
+ * this digest was changed -- the mitigation practice `ISS-2026-298`
+ * established, now applied to both functions and tables.
+ *
+ * AMENDED 2026-08-25 (eleventh pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-
+ * backlog remediation section, item 8: `ISS-2026-263` --
+ * `app.transition_user_status`'s own `event_type` `CASE` mapping had an
+ * `else` fallback assigning the raw target-status value (e.g. `'suspended'`)
+ * as the history `event_type`, instead of a verb-form value
+ * `app.user_lifecycle_history_event_type_check` actually accepts -- any
+ * transition outside 5 explicit pairs, including a true no-op, deterministically
+ * failed with a spurious `CHECK`-constraint violation rather than a clear
+ * error. One migration added (345 files: +1,
+ * `20260826100000_harden_user_status_transition_invalid_event_type.sql`) --
+ * `CREATE OR REPLACE` on the identical existing signature, changing the
+ * `else` branch to `null` and adding an explicit `invalid_status_transition`
+ * rejection before the history insert, mirroring this repository's own
+ * established convention for this exact error shape (see
+ * `advanced-tms-label-barcode-operations.sql`'s own `invalid_status_transition`
+ * regression). No new `public.*` object created (function body only, grant
+ * set untouched), so the `ISS-2026-298`/`ISS-2026-299` live-verification
+ * mitigation does not apply here; `pg_get_functiondef` re-confirmed the live
+ * fix took effect instead, the same pattern used for `ISS-2026-072`.
+ * dbTestSetSha256 changed (an existing file widened, no file added or
+ * removed): `scripts/db-tests/user-lifecycle.sql` gained a new regression
+ * block proving all 5 real transitions still succeed with the correct
+ * `event_type` (including a full round-trip through every history row), and
+ * that 3 no-op/unrecognized calls (`invited->invited`, `active->active`,
+ * `suspended->suspended` -- the exact scenario `HDN-384` originally
+ * reproduced) are now rejected with the new, clear error. Re-verified via a
+ * fresh full local db-test suite run (345 migrations, 233 runner files, ALL
+ * PASSED, first attempt clean) before this digest was changed, and applied
+ * to the live hosted project via `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (twelfth pass), migrationSetSha256 and dbTestSetSha256.
+ * Ruling: docs/build-log/release-go-live/RGL-404.md's historical-issue-
+ * backlog remediation section, item 9: `ISS-2026-264` --
+ * `app.revoke_all_actor_sessions`'s own session-status flip in
+ * `app.user_sessions` was never consulted by any RLS policy, RPC, or
+ * `app.evaluate_permission`, so session revocation had zero real enforcement
+ * effect anywhere. Root-caused further during this fix:
+ * `app.register_user_session` (the only function that ever creates an
+ * `app.user_sessions` row) was never called from anywhere in the real
+ * application either -- not even the real sign-in path
+ * (`app/(public)/login/actions.ts`) -- so a database-only fix would have
+ * been a structural no-op in production. One migration added (346 files:
+ * +1, `20260826110000_harden_evaluate_permission_session_revocation_
+ * enforcement.sql`) -- `CREATE OR REPLACE` on the identical existing
+ * signature, adding one new, deliberately narrow check: deny only when an
+ * actor has at least one tracked session for the tenant AND every one of
+ * them is revoked, never when zero sessions are tracked (so no login
+ * predating this fix, and no future login path that never registers a
+ * session, is ever universally denied). Paired with an application-code
+ * change (`lib/auth/register-login-session.ts`, wired into the sign-in
+ * Server Action) that makes session registration actually happen on every
+ * real tenant-scoped sign-in going forward -- without it, the new database
+ * check alone could never fire against real traffic. No new `public.*`
+ * object created (function body only, grant set untouched), so the
+ * `ISS-2026-298`/`ISS-2026-299` live-verification mitigation does not apply
+ * here; `pg_get_functiondef` re-confirmed the live fix took effect instead,
+ * the same pattern used for `ISS-2026-072`/`ISS-2026-263`.
+ * dbTestSetSha256 changed (an existing file widened, no file added or
+ * removed): `scripts/db-tests/rbac-enforcement.sql` gained a new regression
+ * block proving an untracked actor is completely unaffected, an actor with
+ * an active tracked session remains allowed, an actor whose every tracked
+ * session is revoked (via a real `app.revoke_all_actor_sessions` call) is
+ * denied `all_sessions_revoked`, a fresh session immediately restores
+ * authority, and Supreme Admin remains unaffected. Re-verified via a fresh
+ * full local db-test suite run (346 migrations, 233 runner files, ALL
+ * PASSED, first attempt clean once the local disposable Postgres cluster --
+ * found stopped, unrelated to this change -- was restarted) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (thirteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 10: `ISS-2026-266` --
+ * the composed in-place restore procedure's own required step (h) was a
+ * raw, per-view-name `REFRESH MATERIALIZED VIEW CONCURRENTLY` an operator
+ * had to remember to repeat for every registered view, bypassing this
+ * repository's own already-existing governed refresh mechanism
+ * (`app.refresh_analytics_view`, IAE-005) entirely -- this entry's own text
+ * named exactly this gap ("a more permanent fix... rather than a manual
+ * runbook step") as its remaining owner item. One migration added (347
+ * files: +1, `20260826120000_harden_restore_materialized_view_refresh_
+ * completeness.sql`) -- `app.refresh_all_registered_analytics_views(p_actor_
+ * auth_user_id, p_actor_label)` delegates to the existing
+ * `app.refresh_analytics_view` for every `active` row in
+ * `app.analytics_view_registry`, inheriting its authority check (Supreme
+ * Admin only) and `app.analytics_refresh_runs` ledger entry per view, and
+ * automatically covering any view registered after this function shipped.
+ * Ships with a matching Option 2 `public.*` wrapper, correctly using the
+ * amended `revoke ... from anon, authenticated, service_role, public`
+ * form from first principles (not discovered as a live bug this time) --
+ * live-verified via `has_function_privilege` immediately after applying,
+ * per the `ISS-2026-298` mitigation practice: `anon` denied,
+ * `authenticated`/`service_role` allowed, matching
+ * `app.refresh_analytics_view`'s own existing grant set exactly.
+ * `docs/runbooks/database-restore.md`'s own step (h) instruction updated to
+ * call this function instead of the raw per-view SQL. dbTestSetSha256
+ * changed (an existing file widened, no file added or removed):
+ * `scripts/db-tests/analytics-materialized-views.sql` gained a new
+ * regression block proving the new function is Supreme-only, refreshes
+ * every active registered view (including surfacing a real per-view
+ * `'failed'` run for a view whose underlying materialized view no longer
+ * exists, without aborting the batch), and produces the identical
+ * persisted ledger rows an individual `app.refresh_analytics_view` call
+ * would. Re-verified via a fresh full local db-test suite run (347
+ * migrations, 233 runner files, ALL PASSED, first attempt clean) before
+ * this digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (fourteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 11: `ISS-2026-270` --
+ * no safe import/registration path existed for migration-seeded reference
+ * tables (`app.finance_currencies`, `app.uoms`): a raw insert collision
+ * raised an unclassified duplicate-key error, and a multi-row batch insert
+ * with one colliding row rolled back the entire batch, including
+ * genuinely-new rows in the same statement. Confirmed live: zero writer
+ * RPCs existed anywhere for either table before this fix. One migration
+ * added (348 files: +1, `20260826130000_create_reference_data_import_
+ * registration.sql`) -- `app.import_reference_currency`/
+ * `app.import_reference_uom`, mirroring this repository's own established
+ * "return the existing row if found" idempotent-registration pattern
+ * (`app.invite_user`, `app.provision_tenant`) rather than the entry's own
+ * cited `INSERT ... ON CONFLICT DO NOTHING`, which would silently accept a
+ * same-code row with different values. Supreme Admin only, matching
+ * `app.register_analytics_view`'s own convention for the other
+ * platform-wide registry this codebase has. Ships with matching Option 2
+ * `public.*` wrappers, correctly using the amended revoke form from first
+ * principles; live-verified via `has_function_privilege` immediately after
+ * applying: `anon`/`authenticated` denied, `service_role` allowed, for
+ * both. dbTestSetSha256 changed (one NEW file added, 233 -> 234): new
+ * `scripts/db-tests/reference-data-import.sql` proves both functions are
+ * Supreme-only, idempotently return the existing row on a collision
+ * (the exact scenario this entry live-reproduced), a genuinely-new code
+ * inserts cleanly and survives being called alongside a colliding sibling
+ * (proving no multi-row-batch-style rollback), the underlying table's own
+ * CHECK constraint still rejects invalid input, and a real audit event
+ * records each genuinely-new import. Re-verified via a fresh full local
+ * db-test suite run (348 migrations, 234 runner files, ALL PASSED, first
+ * attempt clean once the local disposable Postgres cluster -- found
+ * stopped again, unrelated to this change -- was restarted) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-25 (fifteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 12: `ISS-2026-272` --
+ * no mechanism tracked "migration rehearsals completed" for enterprise
+ * tenants, the identical structural pattern already found for DR
+ * communication (`ISS-2026-258`) and `app.dr_restore_tests`' own
+ * `component_scope` enum (`ISS-2026-260`). One migration added (349 files:
+ * +1, `20260826140000_create_migration_rehearsal_tracking.sql`) -- a real
+ * evidence table (`app.migration_rehearsal_tests`) and recording RPC
+ * (`app.record_migration_rehearsal_test`) mirroring `app.dr_restore_tests`/
+ * `app.record_dr_restore_test`'s own honesty discipline verbatim, plus a
+ * 7th checklist item (`migration_rehearsal_verified`) on
+ * `app.verify_onboarding_checklist_item` (`CREATE OR REPLACE` on the
+ * identical existing signature, diffed against the prior definition to
+ * confirm the only changes are the widened item allow-list, the new
+ * computation branch, and the 2 new `UPDATE ... SET` columns). Confirmed
+ * with the operator via `AskUserQuestion` before implementing: the
+ * business rule this traces to is "at least two rehearsals **where
+ * contracted**", and no "is migration rehearsal contracted" flag exists
+ * anywhere in this schema -- so the new item is deliberately NOT added to
+ * the existing `status='ready_for_production'` composite gate the other 6
+ * items form (confirmed unchanged by direct diff), which would otherwise
+ * have newly required every tenant, contracted or not, to complete 2
+ * rehearsals to reach that status -- a real behavior change to existing
+ * tenant onboarding gating this fix deliberately avoids. Ships with a
+ * matching Option 2 `public.*` wrapper for the new RPC (the existing
+ * `verify_onboarding_checklist_item` wrapper needs no change, same
+ * signature); live-verified via `has_function_privilege` immediately after
+ * applying: `anon` denied, `authenticated`/`service_role` allowed,
+ * matching `app.record_dr_restore_test`'s own grant set; `pg_get_
+ * functiondef` re-confirmed the `verify_onboarding_checklist_item` fix
+ * took effect. dbTestSetSha256 changed (an existing file widened, no file
+ * added or removed): `scripts/db-tests/disaster-recovery-enterprise-
+ * support.sql` gained a new regression block proving the new RPC is
+ * `SUP:Configure`-gated with real failure-evidence discipline mirroring
+ * `app.record_dr_restore_test`, `migration_rehearsal_verified` correctly
+ * requires >=2 passed rehearsals and recomputes live, and -- the central
+ * point of this fix -- flipping it from `false` to `true` never changes
+ * `status`, proving directly (not merely asserting) that it is not part of
+ * the `ready_for_production` gate; the file's own pre-existing anon-grant
+ * defense-in-depth check was widened to cover the new function too.
+ * Re-verified via a fresh full local db-test suite run (349 migrations,
+ * 234 runner files, ALL PASSED, first attempt clean) before this digest
+ * was changed, and applied to the live hosted project via `apply_migration`
+ * before this local run.
+ *
+ * AMENDED 2026-08-25 (sixteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 13: `ISS-2026-271` --
+ * no `rollback_import_job`/`undo_import_job`/`revert_import_job` RPC
+ * existed anywhere; a manual, FK-ordered raw-SQL delete live-proved to work
+ * but left 2 residues (a dangling `app.audit_logs` reference to a deleted
+ * job row; an untouched employee-number counter) and left the entry's own
+ * flagged downstream-reference risk unexercised. One migration added (350
+ * files: +1, `20260826150000_create_employee_import_rollback.sql`) --
+ * `app.rollback_employee_import_job`, deliberately shaped differently from
+ * the manual drill in exactly the ways that close both residues: the job
+ * row is never deleted (status moves to a new `'rolled_back'` value,
+ * `jobs_status_check` widened, confirmed via direct `grep` that no other
+ * migration had ever touched that constraint before this one), so every
+ * existing `audit_logs` reference to it stays resolvable, and the rollback
+ * itself is captured as one new audit event; `app.employee_number_counters`
+ * is deliberately left untouched, per that table's own already-documented
+ * "Never reused" design intent (decrementing it would risk a future import
+ * reusing a number a different, concurrent import already consumed). The
+ * downstream-reference risk is handled by Postgres's own default
+ * (`RESTRICT`) foreign-key behavior on every `app.employees` reference in
+ * this schema (confirmed by direct migration read -- no `ON DELETE CASCADE`
+ * exists anywhere), caught as `foreign_key_violation` and re-raised as a
+ * clear, named error -- correct and complete by construction against the
+ * database's own authoritative FK catalog, not a hand-maintained table
+ * list that could drift. The set of records a job created is resolved via
+ * `app.employee_lifecycle_events.metadata->>'job_id'`, the exact linkage
+ * `app.commit_employee_import_job`'s own creation-event insert already
+ * writes -- not a new mechanism invented for this fix. Ships with a
+ * matching Option 2 `public.*` wrapper, correctly using the amended revoke
+ * form from first principles; live-verified via `has_function_privilege`
+ * immediately after applying: `anon` denied, `authenticated`/`service_role`
+ * allowed. dbTestSetSha256 changed (an existing file widened, no file
+ * added or removed): `scripts/db-tests/hris-employee-master.sql` gained a
+ * new regression block proving the RPC is `HRS:Import`-gated, refuses a
+ * non-completed job/blank reason/second rollback attempt, and -- the
+ * central point of this fix -- refuses atomically (never partially,
+ * confirmed by checking both fixture employees survive intact) when a
+ * real downstream reference exists (a minimal `app.employee_duplicate_
+ * candidates` row referencing one of the job's own created employees),
+ * then succeeds cleanly once that reference is cleared, leaving the job
+ * row (`status='rolled_back'`) and the employee-number counter completely
+ * untouched with a real audit event recorded. Re-verified via a fresh full
+ * local db-test suite run (350 migrations, 234 runner files, ALL PASSED,
+ * first attempt clean once the local disposable Postgres cluster -- found
+ * stopped again, unrelated to this change -- was restarted) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-27 (seventeenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 14: `ISS-2026-275`/
+ * `ISS-2026-276` -- `app.finance_journals_protect_posted` never fires on
+ * `INSERT` (only `UPDATE`/`DELETE`), so a direct bulk insert of an
+ * already-posted journal was neither blocked by that trigger nor checked
+ * for a balanced debit=credit total (`app.validate_finance_journal_line_
+ * balance` is only ever invoked from inside the RPC functions, never at
+ * the table layer), and no legitimate `source_type` existed to record its
+ * true provenance -- `'migration'` did not exist in `app.finance_journals`'
+ * own `source_type` vocabulary, the identical root gap `ISS-2026-276`
+ * registered separately. Confirmed with the operator (AskUserQuestion)
+ * before implementing that widening the existing `UPDATE`/`DELETE`
+ * immutability trigger to also guard `INSERT` was the wrong fix (it would
+ * make it impossible to ever load real historical already-posted data, since
+ * the trigger has no way to distinguish a legitimate migration insert from
+ * an illegitimate one) -- a dedicated migration-insert RPC replicating the
+ * RPC-layer validation is correct instead. One migration added (351 files:
+ * +1, `20260826160000_create_finance_journal_historical_import.sql`) --
+ * `app.import_historical_finance_journal`, modeled directly on the existing
+ * `app.create_and_post_finance_system_journal` (posts immediately, skipping
+ * draft/submitted/approved) but differing in exactly the ways that close
+ * both entries' own gaps: it requires real `FIN:Approve` authority itself
+ * (its own template deliberately has none, trusting its caller to have
+ * already checked; this new RPC is the directly-called entry point), it
+ * re-validates debit=credit balance via the existing shared rule before
+ * ever writing a row, and it requires a real non-null `source_id` and a
+ * real non-empty reason -- `'migration'` is added to both
+ * `finance_journals_source_type_check` and `finance_journals_source_check`
+ * (preserving the existing `'correction'` source type, FIN-206's own
+ * retrofit, byte-for-byte -- an additive replacement, confirmed by direct
+ * read of the currently-applied constraint text before writing the new
+ * one, never a narrowing). Matches the finance domain's own current
+ * security posture: `security definer` with the established `search_path
+ * to 'app', 'pg_temp'` clause (confirmed by direct read that
+ * `20260810700000_harden_finance_authority_chain_security_definer.sql`
+ * converted the whole domain, including this fix's own direct template,
+ * from its original security-invoker shape -- matching that, not the
+ * template's now-superseded original definition, is correct). The one real
+ * design decision this fix makes, confirmed with the operator before
+ * implementing: unlike the live system-journal path, this RPC does NOT
+ * require the resolved fiscal period to be `posting_eligible` (open) -- a
+ * real historical migration by definition targets periods that are already
+ * closed today; requiring an open period would make this fix useless for
+ * its own stated purpose. A period covering the date must still exist
+ * (`app.resolve_finance_period_for_date` returns zero rows otherwise,
+ * raised as a clear error) -- this only relaxes the open/closed check,
+ * never the date-to-period resolution itself. Idempotent on `(tenant_id,
+ * source_type='migration', source_id)`, mirroring the template's own
+ * idempotency shape. Ships with a matching Option 2 `public.*` wrapper,
+ * correctly using the amended revoke form from first principles;
+ * live-verified via `has_function_privilege` immediately after applying:
+ * `anon` denied, `authenticated`/`service_role` allowed. dbTestSetSha256
+ * changed (an existing file widened, no file added or removed):
+ * `scripts/db-tests/finance-journal.sql` gained a new regression block
+ * proving a non-`FIN:Approve` actor is denied, a null `source_id` and a
+ * blank reason are each rejected with a distinct named exception, an
+ * unbalanced line set is rejected by the shared balance rule, a real
+ * balanced journal dated inside an already-CLOSED historical fiscal period
+ * (a brand-new, isolated calendar generated and then directly closed via
+ * raw SQL, never disturbing the file's own shared open `2026-03` period)
+ * still posts successfully -- the central point of this fix -- a repeated
+ * call with the same `source_id` returns the existing journal idempotently,
+ * a real audit event is recorded, and (defense in depth) the underlying
+ * `finance_journals_source_check` constraint independently rejects a
+ * sourceless `'migration'` row at the table layer, plus a schema-privilege
+ * defense-in-depth block proving `anon` holds zero EXECUTE on the new
+ * function. Re-verified via a fresh full local db-test suite run (351
+ * migrations, 234 runner files, ALL PASSED, clean after four authoring
+ * mistakes were caught and fixed across successive local runs -- an
+ * insufficient-lines vs. unbalanced mismatch in the negative test, the
+ * historical journal date not falling inside the single generated period, a
+ * mis-declared composite-typed account-id variable, the wrong
+ * `app.audit_logs` column names, and (caught by
+ * `public-api-wrapper-regression.sql`'s own exhaustive check) the new
+ * `public.*` wrapper's security mode not matching its `app.*` counterpart
+ * -- and the local disposable Postgres cluster found stopped again,
+ * unrelated to this change, was restarted twice during authoring) before
+ * this digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-27 (eighteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 15: `ISS-2026-279` --
+ * `app.employee_number` uniqueness on an explicit staged value is
+ * case/whitespace-sensitive (`master_records_tenant_code_unique` is a
+ * plain case-sensitive `btree` unique index, no `lower()`/`trim()`
+ * normalization), letting `EMP-001`, `emp-001`, and `EMP-001 ` (trailing
+ * space) all commit as 3 distinct employees in one job. This entry's own
+ * text names the fix as a genuine design decision left open between a
+ * hard functional unique index and a soft validation-time/commit-time
+ * flag, "best made alongside `ISS-2026-269`'s own broader un-keyed-
+ * duplicate-detection fix" (already resolved, an earlier item in this
+ * same running log). A hard functional unique index was deliberately NOT
+ * chosen -- `app.master_records` is shared across every
+ * `master_type_code`, and a live hosted project may already carry real
+ * case-varying rows that predate this fix, so a retroactive hard
+ * constraint risks failing migration application outright or silently
+ * rejecting a legitimate future record with no human review. Widened
+ * `app.commit_employee_import_job` a third time (351 -> 352 files: +1,
+ * `20260826170000_harden_employee_import_number_normalization_detection.sql`)
+ * with the symmetric, already-shipped-and-approved answer `ISS-2026-269`
+ * established for the identical risk class on this same function: an
+ * explicitly-numbered row whose `employee_number` normalizes (`lower` +
+ * `trim`) to an existing employee's own number, without being byte-
+ * identical (an exact match already raises `employee_import_duplicate_
+ * employee_number` via the unique index, unchanged), is flagged into the
+ * existing `app.employee_duplicate_candidates` table for human review --
+ * never a hard block, mirroring `ISS-2026-269`'s own disclosed rationale
+ * that a trivial keystroke variation must not itself become a false-
+ * positive import failure. `CREATE OR REPLACE` diffed against the
+ * currently-applied function body before writing the new one, confirming
+ * only the new `else` branch (paired with the existing `if
+ * v_was_auto_numbered`) and the updated comment changed -- nothing else
+ * drifted. dbTestSetSha256 changed (an existing file widened, no file
+ * added or removed): `scripts/db-tests/hris-employee-master.sql` gained a
+ * new regression block proving the exact 3-variant scenario this entry's
+ * own live reproduction named (`EMP-CASE-001`/`emp-case-001`/`'EMP-CASE-001 '`)
+ * all still commit successfully and are flagged pairwise for human
+ * review, and that a genuinely unrelated explicit `employee_number` is
+ * never flagged. Re-verified via a fresh full local db-test suite run
+ * (352 migrations, 234 runner files, ALL PASSED, clean on the first
+ * attempt) before this digest was changed, and applied to the live hosted
+ * project via `apply_migration` before this local run.
+ *
+ * AMENDED 2026-08-27 (nineteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 16: `ISS-2026-260` --
+ * `app.dr_restore_tests.component_scope` (IAE-035) is CHECK-constrained to
+ * a component/mechanism taxonomy (`database`, `secrets`, `backup`,
+ * `observability`, `jobs_integrations`), not the 4 DR scenarios (data
+ * corruption, security incident, provider failure, major outage) Prompt
+ * 384's own DR rehearsal charter names -- 3 of the 4 scenarios have no
+ * natural component slot. Confirmed with the operator (`AskUserQuestion`)
+ * before implementing: add a NEW, parallel, nullable `dr_scenario` column
+ * alongside the existing `component_scope`, rather than widening
+ * `component_scope`'s own CHECK constraint to also accept scenario
+ * values -- mixing a mechanism taxonomy and a scenario taxonomy into one
+ * enum would make every future query against `component_scope`
+ * ambiguous about which taxonomy a given row's value belongs to. One
+ * migration added (352 -> 353 files: +1,
+ * `20260826180000_create_dr_restore_scenario_taxonomy.sql`) adding the
+ * column plus its own CHECK constraint, and widening
+ * `app.record_dr_restore_test` (and its matching Option 2 `public.*`
+ * wrapper) with one new, trailing, DEFAULT-valued `p_dr_scenario`
+ * parameter. **A real defect self-caught and fixed during this same
+ * migration's authoring**: `CREATE OR REPLACE FUNCTION` cannot be used to
+ * append a new parameter to an existing function -- Postgres identifies a
+ * function by its name PLUS its full parameter type list, so appending
+ * one (even with a default) creates a SECOND, DISTINCT overload alongside
+ * the original rather than truly replacing it, making every pre-existing
+ * call site genuinely ambiguous (`function ... is not unique`) --
+ * verified directly against a real disposable Postgres instance before
+ * settling on the fix. Corrected by explicitly `DROP FUNCTION`-ing the
+ * original 13-argument signature (both `app.*` and `public.*`) before
+ * creating the new 14-argument one, confirmed by direct read to be the
+ * exact, already-established convention this repository's own FIN-206
+ * migration used for the identical `p_lock_scope` append onto `app.
+ * create_and_post_finance_system_journal` (a `drop function if exists`
+ * line was already present there) -- not a new pattern invented for this
+ * fix, and not a live defect in that earlier migration either, once
+ * actually read in full. dbTestSetSha256 changed (an existing file
+ * widened, no file added or removed):
+ * `scripts/db-tests/disaster-recovery-enterprise-support.sql` gained a
+ * new regression block proving all 4 named scenarios can now be recorded
+ * alongside `component_scope`, an invalid scenario is rejected at both
+ * the RPC and table-CHECK-constraint layer, and every pre-existing
+ * 13-argument call site keeps working completely unchanged. Re-verified
+ * via a fresh full local db-test suite run (353 migrations, 234 runner
+ * files, ALL PASSED, clean after the ambiguous-overload defect above was
+ * caught and fixed by this same local run) before this digest was
+ * changed, and applied to the live hosted project via `apply_migration`
+ * before this local run.
+ *
+ * AMENDED 2026-08-27 (twentieth pass), migrationSetSha256 only
+ * (dbTestSetSha256 also changed -- see below, listed separately per this
+ * digest's own established convention when the two land in the same
+ * pass). Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 18: `ISS-2026-278`
+ * -- no MFA/step-up/elevated-authorization gate existed on any
+ * import-commit RPC (`app.commit_import_job` and every domain adapter's
+ * own `app.commit_*_import_job`), unlike the 4 "platform-default
+ * high-risk target functions" HDN-378/ISS-2026-150 already hardened with
+ * an IP-allowlist + MFA-step-up composition. Confirmed with the operator
+ * (`AskUserQuestion`) before implementing: IP-allowlist gating only, no
+ * mandatory MFA step-up, scoped to the 5 real `commit_*_import_job`
+ * functions -- this entry's own text already flags the real risk of
+ * forcing step-up on every bulk import commit, including routine,
+ * non-financial ones (e.g. `attendance_device_import`), without a
+ * dedicated UX review this checkpoint has no standing to perform. One
+ * migration added (353 -> 354 files: +1,
+ * `20260826190000_harden_import_commit_ip_allowlist_gating.sql`) widening
+ * `app.commit_import_job`, `app.commit_employee_import_job`, `app.
+ * commit_attendance_device_import_job`, `app.commit_timesheet_import_job`,
+ * and `app.commit_vendor_rate_import_job` (plus each one's own Option 2
+ * `public.*` wrapper) with one new, trailing, DEFAULT-valued
+ * `p_client_ip` parameter each -- the identical composition and
+ * non-interactive-caller exemption (`app.assert_ip_allowed` +
+ * `app.has_active_ip_allowlist_bypass`) HDN-378's own 4 functions already
+ * established. Every one of the 10 functions (5 `app.*` + 5 `public.*`)
+ * widened via an explicit `DROP FUNCTION` (old signature) + `CREATE
+ * FUNCTION` (new signature), never a bare `CREATE OR REPLACE` across a
+ * changed argument list -- `ISS-2026-260`'s own self-caught
+ * ambiguous-overload finding applied correctly from the first draft this
+ * time, not rediscovered. Each widened function's body diffed against its
+ * currently-applied definition before writing the new one, confirming
+ * only the intended trailing parameter and IP-check block (placed
+ * immediately after the function's own last authority check, before its
+ * first business-state validation -- the identical "after authority is
+ * otherwise established, before the mutating action" ordering discipline
+ * HDN-378 used) changed in each case. dbTestSetSha256 changed (5 existing
+ * files widened, no file added or removed):
+ * `scripts/db-tests/import-export.sql` gained a full 4-scenario
+ * regression block for `app.commit_import_job` (out-of-range IP denied
+ * under enforced mode, in-range IP allowed, omitted IP allowed regardless
+ * of enforcement, active bypass grant exempts an out-of-range IP);
+ * `scripts/db-tests/hris-employee-master.sql`,
+ * `scripts/db-tests/hris-attendance.sql`,
+ * `scripts/db-tests/hris-overtime-timesheet.sql`, and
+ * `scripts/db-tests/procurement-vendor-rate-tiers.sql` each gained a
+ * lighter 3-scenario proof (deny/allow-in-range/allow-omitted) for their
+ * own domain adapter, confirming the composition is correctly wired in
+ * every one of the 5 functions, not only the generic framework one.
+ * Re-verified via a fresh full local db-test suite run (354 migrations,
+ * 234 runner files, ALL PASSED, clean on the first attempt for both the
+ * migration and every one of the 5 new regression blocks) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -184,7 +877,94 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by RGL-404's own RGL-BLK-009 fix (337 files: +1,
   // 20260826030000_harden_finance_settlement_reversal_gl_journal_and_
   // reachability.sql). See the class-level doc comment above.
-  migrationSetSha256: "9c4f956ebc7b29c6f1dcfe2bcc31f20676ba20ccb7718f7cc2c74f785e8df78e",
+  // History: 9c4f956ebc7b29c6f1dcfe2bcc31f20676ba20ccb7718f7cc2c74f785e8df78e
+  // (337 files, fifth-pass amendment above). Superseded 2026-08-25 (sixth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-072 fix
+  // (338 files: +1, 20260826040000_harden_rbac_evaluator_platform_user_
+  // status_check.sql). See the class-level doc comment above.
+  // History: 07611ff2691d0e1e48937062a1d84e3a3bb4fe26ff019dd49e325a516c32d703
+  // (338 files, sixth-pass amendment above). Superseded 2026-08-25 (seventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-257 fix
+  // (339 files: +1, 20260826050000_harden_integration_secrets_encryption_
+  // at_rest.sql). See the class-level doc comment above.
+  // History: bfa32177ec2cd98323484c900e32c94175d102a7aaf378854061f56c2d684408
+  // (339 files, seventh-pass amendment above). Superseded 2026-08-25 (eighth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-265 fix (340
+  // files: +1, 20260826060000_harden_database_restore_audit_trail.sql). See
+  // the class-level doc comment above.
+  // History: 9ed06519551ea6bad34bcbd4cb0084b3b5a4c9df2e83bcd4cca1dad96f1271ba
+  // (340 files, eighth-pass amendment above). Superseded 2026-08-25 (ninth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-269 fix (341
+  // files: +1, 20260826070000_harden_employee_import_duplicate_detection.sql).
+  // See the class-level doc comment above.
+  // History: 129a7340fe49515b3c11aa34a604cc79446f4848c82eece13772124b85fc2c4a
+  // (341 files, ninth-pass amendment above). Superseded 2026-08-25 (tenth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-254/
+  // ISS-2026-298/ISS-2026-299 fix (344 files: +3, 20260826080000_harden_
+  // restore_security_state_reconciliation.sql, 20260826081000_harden_record_
+  // database_restore_event_wrapper_grant_leak.sql, and 20260826090000_harden_
+  // security_state_snapshots_table_privilege_leak.sql). See the class-level
+  // doc comment above.
+  // History: 15c04e9af0c803e83ed66f188f1d16109275afc97476776e44720b73916f5a16
+  // (344 files, tenth-pass amendment above). Superseded 2026-08-25 (eleventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-263 fix (345
+  // files: +1, 20260826100000_harden_user_status_transition_invalid_event_
+  // type.sql). See the class-level doc comment above.
+  // History: 0593e6a0e53ee7abdb92c0bf0838b423f15f20c16a28c44d2cb072457d16a33f
+  // (345 files, eleventh-pass amendment above). Superseded 2026-08-25
+  // (twelfth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-264 fix (346 files: +1,
+  // 20260826110000_harden_evaluate_permission_session_revocation_
+  // enforcement.sql). See the class-level doc comment above.
+  // History: 578757a56b8dd35e88216a2c7df91b0937d9678129131ef7068f54b23ca486e1
+  // (346 files, twelfth-pass amendment above). Superseded 2026-08-25
+  // (thirteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-266 fix (347 files: +1,
+  // 20260826120000_harden_restore_materialized_view_refresh_completeness.sql).
+  // See the class-level doc comment above.
+  // History: 6bf6ec92c95de4e62a618acd9979f8349ffc3096d42faf9bd6d79d43de0a1dd5
+  // (347 files, thirteenth-pass amendment above). Superseded 2026-08-25
+  // (fourteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-270 fix (348 files: +1,
+  // 20260826130000_create_reference_data_import_registration.sql). See the
+  // class-level doc comment above.
+  // History: cfb96c5e91cc5ca6018f0a5096cd9c17cc1d77f07168f84865414c06e17ef4c6
+  // (348 files, fourteenth-pass amendment above). Superseded 2026-08-25
+  // (fifteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-272 fix (349 files: +1,
+  // 20260826140000_create_migration_rehearsal_tracking.sql). See the
+  // class-level doc comment above.
+  // History: 76faad22b3899f5ed7f96a09fe83a3863ee0737a3ca0c6234910e6bb9c276358
+  // (349 files, fifteenth-pass amendment above). Superseded 2026-08-25
+  // (sixteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-271 fix (350 files: +1,
+  // 20260826150000_create_employee_import_rollback.sql). See the
+  // class-level doc comment above.
+  // History: 855f12fb61bcd39b8d160f9038cb4682d4c6f214b5e6d9cf8d15829b0768db73
+  // (350 files, sixteenth-pass amendment above). Superseded 2026-08-27
+  // (seventeenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-275/ISS-2026-276 fix (351 files: +1,
+  // 20260826160000_create_finance_journal_historical_import.sql). See the
+  // class-level doc comment above.
+  // History: 6ac79f37937d6011fc19c49341dbd9d3c9c3958523aaf7eeb4e3cf0aad9a4820
+  // (351 files, seventeenth-pass amendment above). Superseded 2026-08-27
+  // (eighteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-279 fix (352 files: +1,
+  // 20260826170000_harden_employee_import_number_normalization_detection.sql).
+  // See the class-level doc comment above.
+  // History: c91908161eb1fd75911be833555d5ce29cd144e2993ee7b31d99f8a2cc11b780
+  // (352 files, eighteenth-pass amendment above). Superseded 2026-08-27
+  // (nineteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-260 fix (353 files: +1,
+  // 20260826180000_create_dr_restore_scenario_taxonomy.sql). See the
+  // class-level doc comment above.
+  // History: 6fac78cbabdd98b6780cc815e8d9e0a952895741f4d2da14b8170d2161c42ed4
+  // (353 files, nineteenth-pass amendment above). Superseded 2026-08-27
+  // (twentieth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-278 fix (354 files: +1,
+  // 20260826190000_harden_import_commit_ip_allowlist_gating.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "cc91b1907804884cba268a6911e6cb02d82124eceecdc5ce3bfc335a1488f47d",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -212,7 +992,94 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by RGL-404's own RGL-BLK-009 fix: scripts/db-tests/finance-
   // settlement.sql widened (still 232 files -- content changed, not file
   // count). See the class-level doc comment above.
-  dbTestSetSha256: "1b4103c220a5ce06c5587def356cc0c6091d6538afd8367c4f00f0e320a65438",
+  // History: 1b4103c220a5ce06c5587def356cc0c6091d6538afd8367c4f00f0e320a65438
+  // (232 files, fifth-pass amendment above). Superseded 2026-08-25 (sixth
+  // pass) by the historical-issue-backlog remediation (233 files: +1,
+  // database-restore-lock.sql; rbac-enforcement.sql also widened). See the
+  // class-level doc comment above.
+  // History: f00bfda7738cb225dd77ec978d3752332f2e9865546987599574130c257b6cd7
+  // (233 files, sixth-pass amendment above). Superseded 2026-08-25 (seventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-257 fix (233
+  // files unchanged in count -- 26 files widened with the new encryption-key
+  // GUC/decrypt fixes, plus the ISS-2026-156 fix, no file added or removed).
+  // See the class-level doc comment above.
+  // History: e54ed5a03d8f13dcdfaedd41da3c8837480e0032b92e6e743649dc7f3c7a6d19
+  // (233 files, seventh-pass amendment above). Superseded 2026-08-25 (eighth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-265 fix (233
+  // files unchanged in count -- database-restore-lock.sql widened, no file
+  // added or removed). See the class-level doc comment above.
+  // History: 83e37b49ef1dbde855586a3a3899466b4894f458861f0c8dfb4adecf0bb256fa
+  // (233 files, eighth-pass amendment above). Superseded 2026-08-25 (ninth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-269 fix (233
+  // files unchanged in count -- hris-employee-master.sql widened). See the
+  // class-level doc comment above.
+  // History: e135017ae8d8ce9d6a0fa9782cca9143fe1c24a7534372b2b5a2be8714d75d65
+  // (233 files, ninth-pass amendment above). Superseded 2026-08-25 (tenth
+  // pass) by the historical-issue-backlog remediation's ISS-2026-254/
+  // ISS-2026-299 fix (233 files unchanged in count --
+  // database-restore-lock.sql widened twice, no file added or removed). See
+  // the class-level doc comment above.
+  // History: 44f48a6bd042c6304810db54d8bd24157fb46a0a94d82a79530337c75ca6d26b
+  // (233 files, tenth-pass amendment above). Superseded 2026-08-25 (eleventh
+  // pass) by the historical-issue-backlog remediation's ISS-2026-263 fix (233
+  // files unchanged in count -- user-lifecycle.sql widened, no file added or
+  // removed). See the class-level doc comment above.
+  // History: f573d9f0df1a5652a658aac531b690217f380678bf933051cc1c93d4dfa0da3a
+  // (233 files, eleventh-pass amendment above). Superseded 2026-08-25
+  // (twelfth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-264 fix (233 files unchanged in count -- rbac-enforcement.sql
+  // widened, no file added or removed). See the class-level doc comment
+  // above.
+  // History: bf17db612e08fc505d510ad871a16b1c026a0f40f7d8dec5e82212f782b3b0bf
+  // (233 files, twelfth-pass amendment above). Superseded 2026-08-25
+  // (thirteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-266 fix (233 files unchanged in count --
+  // analytics-materialized-views.sql widened, no file added or removed).
+  // See the class-level doc comment above.
+  // History: cdb12fdd4aaaa26aa4f6ebe9e57e4d1a4690e380832e2d272b0c28c36c71c6c4
+  // (233 files, thirteenth-pass amendment above). Superseded 2026-08-25
+  // (fourteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-270 fix (234 files: +1, new scripts/db-tests/reference-
+  // data-import.sql). See the class-level doc comment above.
+  // History: 9a0a5dbc71315f18ba3d4598e9fa849aacacdb051527cc1a7d878df89566245a
+  // (234 files, fourteenth-pass amendment above). Superseded 2026-08-25
+  // (fifteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-272 fix (234 files unchanged in count -- disaster-recovery-
+  // enterprise-support.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  // History: f3c257c8dde475150aa07c97e4a93798ccc7d5ef21d3a980beddbbcf99a894bc
+  // (234 files, fifteenth-pass amendment above). Superseded 2026-08-25
+  // (sixteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-271 fix (234 files unchanged in count --
+  // hris-employee-master.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  // History: 47b945d51ad5f749c7018f3b96b063468bb984173598db437846f2eedf9ffee9
+  // (234 files, sixteenth-pass amendment above). Superseded 2026-08-27
+  // (seventeenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-275/ISS-2026-276 fix (234 files unchanged in count --
+  // finance-journal.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  // History: 329cfdf96f8296255f45891f7da0ffd66efb033fc0dc2256102de9c6758ce4c7
+  // (234 files, seventeenth-pass amendment above). Superseded 2026-08-27
+  // (eighteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-279 fix (234 files unchanged in count --
+  // hris-employee-master.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  // History: b1e8c3f83d0c0e62258bb8086e60a1e6120945718db67ddfbcb62039f89e38fc
+  // (234 files, eighteenth-pass amendment above). Superseded 2026-08-27
+  // (nineteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-260 fix (234 files unchanged in count --
+  // disaster-recovery-enterprise-support.sql widened, no file added or
+  // removed). See the class-level doc comment above.
+  // History: dafb20eb1d719bae7251a199b5d11733e4a015876108e7b7098fb840e530b2cd
+  // (234 files, nineteenth-pass amendment above). Superseded 2026-08-27
+  // (twentieth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-278 fix (234 files unchanged in count -- import-export.sql,
+  // hris-employee-master.sql, hris-attendance.sql,
+  // hris-overtime-timesheet.sql, and procurement-vendor-rate-tiers.sql
+  // all widened, no file added or removed). See the class-level doc
+  // comment above.
+  dbTestSetSha256: "e6a7a317c8a6c28a7f4e6a3bcae6f59c2b61dacdef78ce92cce491c0530d589a",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

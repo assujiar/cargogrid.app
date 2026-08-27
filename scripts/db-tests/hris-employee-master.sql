@@ -896,6 +896,213 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-269 (Step 16 historical-issue-backlog remediation) fix regression: a fresh, auto-numbered re-import of an un-keyed row sharing an existing employee''s own work_email/full_name is flagged into app.employee_duplicate_candidates for human review -- the exact HDN-385 live reproduction (a genuine duplicate person record, silently created, zero flag) -- the import itself still succeeds (never a hard block)'
+do $$
+declare
+  v_tenant1 uuid;
+  v_staff uuid;
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_first_employee_count integer;
+  v_second_employee_count integer;
+  v_first_id uuid;
+  v_second_id uuid;
+  v_candidate app.employee_duplicate_candidates;
+begin
+  select id into v_tenant1 from app.tenants where slug = 'hrmemp1';
+  select auth_user_id into v_staff from app.users where email = 'staff@hrmemp1.test';
+
+  -- First import: a single, un-keyed (no employee_number) row.
+  v_source_file1 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-unkeyed-1.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-unkeyed-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', null, v_staff, 'staff');
+  v_job1 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file1.id, '{}'::jsonb, 'idem-empimport-unkeyed-job-1', v_staff, 'staff');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Repeat Import Person', 'work_email', 'repeat.import@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job1.job_id, false, v_staff, 'staff');
+
+  select count(*) into v_first_employee_count from app.employees
+    where tenant_id = v_tenant1 and full_name = 'Repeat Import Person';
+  select master_record_id into v_first_id from app.employees
+    where tenant_id = v_tenant1 and full_name = 'Repeat Import Person' limit 1;
+  if v_first_employee_count <> 1 then
+    raise exception 'assertion failed: expected exactly one employee created by the first import, got %', v_first_employee_count;
+  end if;
+
+  -- Second import: the SAME source row, re-imported as a genuinely new, un-keyed staging
+  -- row in a fresh job -- exactly HDN-385''s own "a fresh re-import of the same source
+  -- file" reproduction. app.next_employee_number() mints a DIFFERENT number, so
+  -- master_records'' own unique constraint never fires; this is the precise gap
+  -- ISS-2026-269 exists to close.
+  v_source_file2 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-unkeyed-2.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-unkeyed-source-2', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', null, v_staff, 'staff');
+  v_job2 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file2.id, '{}'::jsonb, 'idem-empimport-unkeyed-job-2', v_staff, 'staff');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Repeat Import Person', 'work_email', 'repeat.import@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+
+  -- The import itself still succeeds -- never a hard block.
+  perform app.commit_employee_import_job(v_job2.job_id, false, v_staff, 'staff');
+
+  select count(*) into v_second_employee_count from app.employees where tenant_id = v_tenant1 and full_name = 'Repeat Import Person';
+  if v_second_employee_count <> 2 then
+    raise exception 'assertion failed: expected the second, genuinely-duplicate employee record to still be created (never a hard block on import), found % rows total', v_second_employee_count;
+  end if;
+  select master_record_id into v_second_id from app.employees where tenant_id = v_tenant1 and full_name = 'Repeat Import Person' and master_record_id <> v_first_id;
+
+  -- ...but now flagged, where before this fix there was zero flag at all.
+  select * into v_candidate from app.employee_duplicate_candidates
+    where tenant_id = v_tenant1 and source_master_record_id = v_second_id and candidate_master_record_id = v_first_id;
+  if not found then
+    raise exception 'assertion failed: expected a pending app.employee_duplicate_candidates row linking the re-imported duplicate back to the original employee -- ISS-2026-269''s own "zero duplicate detection" gap has reappeared';
+  end if;
+  if v_candidate.decision <> 'pending' or v_candidate.similarity_basis <> 'work_email+full_name' then
+    raise exception 'assertion failed: expected decision=pending/similarity_basis=work_email+full_name (both fields matched), got decision=%, similarity_basis=%', v_candidate.decision, v_candidate.similarity_basis;
+  end if;
+
+  -- A THIRD import, un-keyed, with a genuinely different person (different work_email
+  -- AND full_name) must NOT be flagged -- proving this is a real match, not "every
+  -- auto-numbered row gets flagged unconditionally."
+  declare
+    v_job3 app.jobs;
+    v_source_file3 app.files;
+    v_row3 app.import_staging_rows;
+    v_third_id uuid;
+  begin
+    v_source_file3 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-unkeyed-3.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-unkeyed-source-3', v_staff, 'staff');
+    perform app.record_file_scan_result(v_source_file3.id, 'clean', null, v_staff, 'staff');
+    v_job3 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file3.id, '{}'::jsonb, 'idem-empimport-unkeyed-job-3', v_staff, 'staff');
+    perform app.stage_import_rows(v_job3.job_id, jsonb_build_array(jsonb_build_object(
+      'full_name', 'Genuinely Distinct Person', 'work_email', 'distinct.person@hrmemp1.test', 'employment_type', 'full_time'
+    )), v_staff, 'staff');
+    select * into v_row3 from app.import_staging_rows where job_id = v_job3.job_id and row_number = 1;
+    perform app.validate_employee_import_row(v_row3.id, v_staff, 'staff');
+    perform app.commit_employee_import_job(v_job3.job_id, false, v_staff, 'staff');
+    select master_record_id into v_third_id from app.employees where tenant_id = v_tenant1 and full_name = 'Genuinely Distinct Person';
+
+    if exists (select 1 from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_third_id) then
+      raise exception 'assertion failed: expected a genuinely distinct new employee (no shared work_email/full_name with anyone) to NOT be flagged as a duplicate candidate';
+    end if;
+  end;
+
+  raise notice 'ISS-2026-269 duplicate-import-detection proof: a re-imported, auto-numbered duplicate person is flagged into app.employee_duplicate_candidates for human review (import still succeeds, never a hard block); a genuinely distinct new employee is not flagged';
+end;
+$$;
+
+\echo '>> ISS-2026-279 (Step 16 historical-issue-backlog remediation) fix regression: an EXPLICITLY-supplied employee_number that normalizes (lower + trim) to the same value as an existing employee''s own number, without being byte-identical, is flagged into app.employee_duplicate_candidates for human review -- the exact HDN-385 Tier C live reproduction (EMP-CASE-001 / emp-case-001 / trailing-space variant all committed as 3 distinct employees, zero flag) -- the import itself still succeeds (never a hard block), and an unrelated employee_number is never flagged'
+do $$
+declare
+  v_tenant1 uuid;
+  v_staff uuid;
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_job3 app.jobs;
+  v_job4 app.jobs;
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_source_file3 app.files;
+  v_source_file4 app.files;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_row3 app.import_staging_rows;
+  v_row4 app.import_staging_rows;
+  v_first_id uuid;
+  v_second_id uuid;
+  v_third_id uuid;
+  v_fourth_id uuid;
+  v_candidate app.employee_duplicate_candidates;
+  v_employee_count integer;
+begin
+  select id into v_tenant1 from app.tenants where slug = 'hrmemp1';
+  select auth_user_id into v_staff from app.users where email = 'staff@hrmemp1.test';
+
+  -- First import: the canonical explicit number.
+  v_source_file1 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-1.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', null, v_staff, 'staff');
+  v_job1 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file1.id, '{}'::jsonb, 'idem-empimport-normcase-job-1', v_staff, 'staff');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-CASE-001', 'full_name', 'Case Variant Person One', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job1.job_id, false, v_staff, 'staff');
+  select master_record_id into v_first_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person One';
+
+  -- Second import, a SEPARATE job (the unique index is per-row, but confirming it never
+  -- fires cross-job either): lowercase variant, a genuinely different person (no shared
+  -- work_email/full_name), isolating this proof to employee_number normalization alone.
+  v_source_file2 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-2.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-2', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', null, v_staff, 'staff');
+  v_job2 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file2.id, '{}'::jsonb, 'idem-empimport-normcase-job-2', v_staff, 'staff');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'emp-case-001', 'full_name', 'Case Variant Person Two', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job2.job_id, false, v_staff, 'staff');
+  select master_record_id into v_second_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person Two';
+
+  select count(*) into v_employee_count from app.employees where tenant_id = v_tenant1 and full_name in ('Case Variant Person One', 'Case Variant Person Two');
+  if v_employee_count <> 2 then
+    raise exception 'assertion failed: expected both case-variant rows to still be created (never a hard block on import), found %', v_employee_count;
+  end if;
+
+  select * into v_candidate from app.employee_duplicate_candidates
+    where tenant_id = v_tenant1 and source_master_record_id = v_second_id and candidate_master_record_id = v_first_id;
+  if not found then
+    raise exception 'assertion failed: expected a pending app.employee_duplicate_candidates row linking emp-case-001 back to EMP-CASE-001 -- ISS-2026-279''s own case-sensitivity gap has reappeared';
+  end if;
+  if v_candidate.decision <> 'pending' or v_candidate.similarity_basis <> 'employee_number_normalized' then
+    raise exception 'assertion failed: expected decision=pending/similarity_basis=employee_number_normalized, got decision=%, similarity_basis=%', v_candidate.decision, v_candidate.similarity_basis;
+  end if;
+
+  -- Third import: trailing-space variant, the exact 3rd form the entry's own live
+  -- reproduction named -- must ALSO be flagged (against both prior rows).
+  v_source_file3 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-3.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-3', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file3.id, 'clean', null, v_staff, 'staff');
+  v_job3 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file3.id, '{}'::jsonb, 'idem-empimport-normcase-job-3', v_staff, 'staff');
+  perform app.stage_import_rows(v_job3.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-CASE-001 ', 'full_name', 'Case Variant Person Three', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row3 from app.import_staging_rows where job_id = v_job3.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row3.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job3.job_id, false, v_staff, 'staff');
+  select master_record_id into v_third_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person Three';
+
+  if (select count(*) from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_third_id) <> 2 then
+    raise exception 'assertion failed: expected the trailing-space variant to be flagged against BOTH prior case-variant employees, got % candidate row(s)', (select count(*) from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_third_id);
+  end if;
+
+  -- A FOURTH import, with a genuinely unrelated explicit employee_number, must NOT be
+  -- flagged -- proving this is a real normalized match, not "every explicitly-numbered
+  -- row gets flagged unconditionally."
+  v_source_file4 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-normcase-4.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-normcase-source-4', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file4.id, 'clean', null, v_staff, 'staff');
+  v_job4 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file4.id, '{}'::jsonb, 'idem-empimport-normcase-job-4', v_staff, 'staff');
+  perform app.stage_import_rows(v_job4.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', 'EMP-CASE-999', 'full_name', 'Case Variant Person Four', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row4 from app.import_staging_rows where job_id = v_job4.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row4.id, v_staff, 'staff');
+  perform app.commit_employee_import_job(v_job4.job_id, false, v_staff, 'staff');
+  select master_record_id into v_fourth_id from app.employees where tenant_id = v_tenant1 and full_name = 'Case Variant Person Four';
+
+  if exists (select 1 from app.employee_duplicate_candidates where tenant_id = v_tenant1 and source_master_record_id = v_fourth_id) then
+    raise exception 'assertion failed: expected a genuinely unrelated explicit employee_number (no normalized collision with anyone) to NOT be flagged as a duplicate candidate';
+  end if;
+
+  raise notice 'ISS-2026-279 employee-number-normalization-detection proof: EMP-CASE-001/emp-case-001/''EMP-CASE-001 '' all commit successfully (never a hard block) and are flagged pairwise into app.employee_duplicate_candidates for human review; a genuinely unrelated explicit number is not flagged';
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth (ERR-2026-004): anon holds no direct table/EXECUTE access to any new employee object; authenticated has RLS-scoped SELECT but no direct INSERT/UPDATE/DELETE; app.validate_employee_import_row is service_role-only (ATW-032''s own live rbac-enforcement.sql gate independently proves the transitive-authority half of this); CRITICAL fix regression -- authenticated''s SELECT on app.employees/app.employee_emergency_contacts/app.employee_change_requests is column-scoped, never full-row (this checkpoint''s own review-round fix, PLT-114''s exact established pattern)'
 do $$
 declare
@@ -1592,5 +1799,245 @@ begin
   end if;
 
   raise notice 'PASS: last_critical_admin correctly blocks both app.terminate_employee and app.suspend_employee against a tenant''s last active tenant_admin, with a genuine atomic rollback both times, and a normal termination succeeds once a second admin exists';
+end;
+$$;
+
+-- ISS-2026-271 (Step 16 historical-issue-backlog remediation): app.rollback_employee_
+-- import_job -- a real, governed rollback for a completed import, closing both residues
+-- the entry's own manual-drill reproduction found (a dangling app.audit_logs reference;
+-- an untouched, but deliberately never-reused, employee-number counter), and proving the
+-- entry's own unexercised downstream-reference risk is correctly handled by Postgres's
+-- own default FK enforcement rather than silently orphaning or cascade-deleting anything.
+\echo '>> ISS-2026-271 regression: app.rollback_employee_import_job -- HRS:Import-gated, refuses a non-completed job and an empty reason, deletes the job''s own employee/master_record/lifecycle-event/staging rows while leaving the job row itself (now status=rolled_back) and app.employee_number_counters untouched, records a real audit event, and refuses cleanly (never partially) when a created employee has a real downstream reference'
+do $$
+declare
+  v_tenant1 uuid;
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_viewer uuid := '00000000-0000-0000-0000-000000027105';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_committed app.jobs;
+  v_rolled_back app.jobs;
+  v_employee1_id uuid;
+  v_employee2_id uuid;
+  v_counter_before integer;
+  v_counter_after integer;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'hrmemp1');
+
+  v_source_file := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'rollback-employees.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-rollback-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file.id, 'clean', null, v_staff, 'staff');
+
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file.id, '{}'::jsonb, 'idem-empimport-rollback-job-1', v_staff, 'staff');
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Rollback Test Employee One', 'employment_type', 'full_time', 'work_email', 'rollback-one@hrmemp1.test'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job.job_id and row_number = 1;
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Rollback Test Employee Two', 'employment_type', 'full_time', 'work_email', 'rollback-two@hrmemp1.test'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job.job_id and row_number = 2;
+
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+
+  -- Rejected before the job is even committed: only a completed job may be rolled back.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'too early', v_staff, 'staff');
+    raise exception 'assertion failed: expected rollback of an in_progress (not yet committed) job to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'import_export_job_not_rollbackable%' then raise; end if;
+  end;
+
+  v_committed := app.commit_employee_import_job(v_job.job_id, false, v_staff, 'staff');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected the rollback-fixture job to commit cleanly, got status=%', v_committed.status;
+  end if;
+
+  select master_record_id into v_employee1_id from app.employees where tenant_id = v_tenant1 and work_email = 'rollback-one@hrmemp1.test';
+  select master_record_id into v_employee2_id from app.employees where tenant_id = v_tenant1 and work_email = 'rollback-two@hrmemp1.test';
+  if v_employee1_id is null or v_employee2_id is null then
+    raise exception 'assertion failed: expected both rollback-fixture employees to exist after commit';
+  end if;
+
+  select last_seq into v_counter_before from app.employee_number_counters where tenant_id = v_tenant1;
+
+  -- A viewer (HRS:View only, no HRS:Import) is denied.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'unauthorized attempt', v_viewer, 'viewer');
+    raise exception 'assertion failed: expected a viewer (no HRS:Import) to be denied';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- A blank reason is rejected.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, '   ', v_staff, 'staff');
+    raise exception 'assertion failed: expected a blank rollback reason to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'employee_import_rollback_reason_required%' then raise; end if;
+  end;
+
+  -- The real downstream-reference risk this entry itself flagged as unexercised: link
+  -- employee 1 as a duplicate candidate of employee 2 (a genuine, minimal downstream
+  -- reference into app.employees, the same default-RESTRICT FK shape every real
+  -- downstream domain -- payroll, position assignment, attendance -- also uses). The
+  -- rollback must refuse cleanly, and NEITHER employee may be partially deleted.
+  insert into app.employee_duplicate_candidates (tenant_id, source_master_record_id, candidate_master_record_id, similarity_basis, created_by)
+  values (v_tenant1, v_employee1_id, v_employee2_id, 'ISS-2026-271 regression fixture', 'tester');
+
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'blocked by downstream reference', v_staff, 'staff');
+    raise exception 'assertion failed: expected rollback to be refused while a real downstream reference exists';
+  exception
+    when others then
+      if sqlerrm not like 'employee_import_rollback_blocked_by_downstream_references%' then raise; end if;
+  end;
+
+  if not exists (select 1 from app.employees where master_record_id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected BOTH employees to survive a refused rollback (atomic, never a partial delete)';
+  end if;
+  if (select status from app.jobs where job_id = v_job.job_id) <> 'completed' then
+    raise exception 'assertion failed: expected the job to remain status=completed after a refused rollback';
+  end if;
+
+  -- Clear the downstream reference, then the identical rollback call succeeds cleanly.
+  delete from app.employee_duplicate_candidates where source_master_record_id = v_employee1_id and candidate_master_record_id = v_employee2_id;
+
+  v_rolled_back := app.rollback_employee_import_job(v_job.job_id, 'ISS-2026-271 regression: real rollback', v_staff, 'staff');
+  if v_rolled_back.status <> 'rolled_back' or v_rolled_back.error <> 'ISS-2026-271 regression: real rollback' then
+    raise exception 'assertion failed: expected status=rolled_back with the given reason recorded on the job row, got status=%, error=%', v_rolled_back.status, v_rolled_back.error;
+  end if;
+
+  if exists (select 1 from app.employees where master_record_id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected both employees to be deleted after a successful rollback';
+  end if;
+  if exists (select 1 from app.master_records where id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected both master_records to be deleted after a successful rollback';
+  end if;
+  if exists (select 1 from app.employee_lifecycle_events where master_record_id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected all lifecycle events for both employees to be deleted after a successful rollback';
+  end if;
+  if exists (select 1 from app.import_staging_rows where job_id = v_job.job_id) then
+    raise exception 'assertion failed: expected the job''s own staging rows to be deleted after a successful rollback';
+  end if;
+
+  -- ISS-2026-271's own first named residue, closed: the job row itself still exists
+  -- (never deleted), so this and every other audit_logs row already referencing this
+  -- job_id remains resolvable.
+  if not exists (select 1 from app.jobs where job_id = v_job.job_id) then
+    raise exception 'assertion failed: expected the job row itself to survive rollback (status=rolled_back, never deleted) -- this is what keeps existing audit_logs references resolvable';
+  end if;
+  if not exists (
+    select 1 from app.audit_logs
+    where action = 'rollback_employee_import_job' and resource_type = 'app.jobs' and resource_id = v_job.job_id
+  ) then
+    raise exception 'assertion failed: expected a real, persisted audit_logs event for the rollback itself';
+  end if;
+
+  -- ISS-2026-271's own second named residue: deliberately NOT "fixed" by reclaiming the
+  -- counter -- app.employee_number_counters is untouched by design (that table''s own
+  -- comment: "Never reused"). Proved directly, not merely asserted in a comment.
+  select last_seq into v_counter_after from app.employee_number_counters where tenant_id = v_tenant1;
+  if v_counter_after is distinct from v_counter_before then
+    raise exception 'assertion failed: expected app.employee_number_counters to be completely untouched by rollback (deliberately never reclaimed), got % (was %)', v_counter_after, v_counter_before;
+  end if;
+
+  -- An already-rolled-back job cannot be rolled back again.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'second attempt', v_staff, 'staff');
+    raise exception 'assertion failed: expected rollback of an already-rolled_back job to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'import_export_job_not_rollbackable%' then raise; end if;
+  end;
+
+  raise notice 'ISS-2026-271 proof: app.rollback_employee_import_job is HRS:Import-gated, refuses a non-completed job/blank reason/second rollback attempt, refuses atomically (never partially) when a real downstream reference exists, and on success deletes the job''s own employee/master_record/lifecycle-event/staging rows while leaving the job row (status=rolled_back) and app.employee_number_counters completely untouched, with a real audit event recording the rollback itself';
+end;
+$$;
+
+\echo '>> ISS-2026-271 regression evidence complete'
+
+\echo '>> ISS-2026-278 (Step 16 historical-issue-backlog remediation) regression: app.commit_employee_import_job now composes app.assert_ip_allowed + app.has_active_ip_allowlist_bypass when a caller supplies p_client_ip -- denies an out-of-range IP under enforced mode, allows an in-range one, and allows a null/omitted p_client_ip regardless of enforcement (every pre-existing call site in this file relies on exactly this)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_staff uuid;
+  v_supreme uuid := '00000000-0000-0000-0000-000000027999';
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_job3 app.jobs;
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_source_file3 app.files;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_row3 app.import_staging_rows;
+  v_committed app.jobs;
+  v_raised boolean;
+begin
+  select auth_user_id into v_staff from app.users where email = 'staff@hrmemp1.test';
+
+  perform app.add_ip_allowlist_entry(v_tenant1, '203.0.113.0/24', 'hrmemp1 office range', 'admin', v_supreme, 'supreme');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant1, 'enforced', v_supreme, 'supreme');
+
+  -- (a) out-of-range p_client_ip -- denied, ip_not_allowed.
+  v_source_file1 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-ipcheck-a.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-ipcheck-source-a', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', null, v_staff, 'staff');
+  v_job1 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file1.id, '{}'::jsonb, 'idem-empimport-ipcheck-job-a', v_staff, 'staff');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Ip Check Person A', 'work_email', 'ipcheck.a@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  v_raised := false;
+  begin
+    perform app.commit_employee_import_job(v_job1.job_id, false, v_staff, 'staff', '198.51.100.7');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-range p_client_ip under enforced mode, the call unexpectedly succeeded';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'ip_not_allowed' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected ip_not_allowed, got none';
+  end if;
+
+  -- (b) in-range p_client_ip -- succeeds.
+  v_source_file2 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-ipcheck-b.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-ipcheck-source-b', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', null, v_staff, 'staff');
+  v_job2 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file2.id, '{}'::jsonb, 'idem-empimport-ipcheck-job-b', v_staff, 'staff');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Ip Check Person B', 'work_email', 'ipcheck.b@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+  v_committed := app.commit_employee_import_job(v_job2.job_id, false, v_staff, 'staff', '203.0.113.42');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit for an in-range p_client_ip, got %', v_committed;
+  end if;
+
+  -- (c) p_client_ip omitted -- succeeds regardless of the enforced policy.
+  v_source_file3 := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'employees-ipcheck-c.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-ipcheck-source-c', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file3.id, 'clean', null, v_staff, 'staff');
+  v_job3 := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file3.id, '{}'::jsonb, 'idem-empimport-ipcheck-job-c', v_staff, 'staff');
+  perform app.stage_import_rows(v_job3.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Ip Check Person C', 'work_email', 'ipcheck.c@hrmemp1.test', 'employment_type', 'full_time'
+  )), v_staff, 'staff');
+  select * into v_row3 from app.import_staging_rows where job_id = v_job3.job_id and row_number = 1;
+  perform app.validate_employee_import_row(v_row3.id, v_staff, 'staff');
+  v_committed := app.commit_employee_import_job(v_job3.job_id, false, v_staff, 'staff');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit when p_client_ip is omitted, regardless of enforcement, got %', v_committed;
+  end if;
+
+  raise notice 'PASS: app.commit_employee_import_job (ISS-2026-278) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, and allows an omitted p_client_ip regardless of enforcement';
 end;
 $$;

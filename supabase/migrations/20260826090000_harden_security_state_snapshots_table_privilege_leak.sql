@@ -1,0 +1,43 @@
+-- Self-caught, live security regression in this checkpoint's own immediately-prior work
+-- (ISS-2026-254 fix, 20260826080000_harden_restore_security_state_reconciliation.sql):
+-- public.security_state_snapshots is the first table this entire repository has ever
+-- created directly in `public` schema (every other table lives in `app`, where a matching
+-- Option 2 public.* wrapper mediates access -- never the raw table). Supabase's own
+-- platform-level default-privilege bootstrap grants SELECT/INSERT/UPDATE/DELETE on new
+-- public-schema TABLES to anon/authenticated/service_role at CREATE time, the identical
+-- class of defect already found and fixed once for FUNCTIONS (ISS-2026-298) -- this
+-- migration created the table without ever revoking those default table grants or
+-- enabling RLS, unlike every app.* table in this codebase (which uniformly does both).
+--
+-- Live-confirmed exploitable before this fix: has_table_privilege('anon', ...) and
+-- has_table_privilege('authenticated', ...) both returned true for SELECT and INSERT on
+-- public.security_state_snapshots, with RLS disabled -- meaning any unauthenticated
+-- internet caller could read every captured security-state snapshot (which legal
+-- holds/API keys/webhook endpoints/users/memberships were active pre-restore) directly via
+-- PostgREST's default public-schema exposure, and could INSERT fabricated snapshot rows,
+-- bypassing the carefully access-controlled app.capture_security_state_snapshot RPC and
+-- its public.* wrapper entirely -- a real, live, unauthenticated read+write path into
+-- security-relevant data, worse than ISS-2026-298 (that was function-only; this is direct
+-- table access with no RLS at all).
+--
+-- Fixed live already, immediately upon discovery, via a direct `apply_migration` call
+-- (`harden_security_state_snapshots_table_privilege_leak`) before this file was even
+-- written -- disclosed here, in the repository's own migration history, for completeness
+-- and to keep supabase/migrations/ and the live hosted project in sync, per this
+-- repository's own "never edit an applied migration" convention (20260826080000 itself
+-- is not touched).
+--
+-- Fixed by applying this repository's own already-standard app.* table security pattern
+-- (see e.g. app.legal_holds, 20260807500000_create_intelligence_data_retention_archival.sql)
+-- to this table too: enable RLS (fail-closed with zero policies -- only service_role, which
+-- bypasses RLS entirely, can ever reach this table) and explicitly revoke/re-grant naming
+-- anon and authenticated, not merely `from public`.
+--
+-- Found while verifying the ISS-2026-254 fix's own live security posture (running
+-- get_advisors + a direct has_table_privilege check on the new table before considering
+-- that item done) -- the same mitigation practice ISS-2026-298 established for wrapper
+-- functions, now also applied to a table for the first time. Registered as ISS-2026-299.
+
+alter table public.security_state_snapshots enable row level security;
+revoke all on public.security_state_snapshots from public, anon, authenticated;
+grant all on public.security_state_snapshots to service_role;

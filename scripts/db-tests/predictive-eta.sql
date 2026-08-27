@@ -7,6 +7,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaeeta with a real openai_multimodal connection, a full lead->prospect->contact->opportunity->costing->rate->margin->quotation->acceptance->account->job-order-handoff pipeline down to one CONFIRMED job order, then a draft Shipment Order (create_shipment_order_from_job) left unconfirmed for the not-eligible test; actors admin1 (bootstrap), rep1 (COM+OPS+AI:Create/View/Approve), viewer1 (AI:View only), outsider1 (different team, full AI grants but no record access); a second tenant (iaeeta2) for cross-tenant isolation; milestone codes registered (idempotent, platform-wide)'
 do $$
 declare

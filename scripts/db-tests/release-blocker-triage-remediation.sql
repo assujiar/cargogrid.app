@@ -16,6 +16,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant hdn387a (INTHUB:Configure holder, an enterprise_sso_oidc connection and a payment_gateway connection); tenant hdn387b (a tenant_admin, an HRS:View holder, a zero-HRS-role org_user, a position_grades row); tenant hdn387c (a document-type-registered contract upload, a file under legal hold, a file_access_logs row, a Supreme Admin); tenant hdn387d (an INTHUB:Configure holder, a payment_gateway connection, for the webhook-alert-wiring proof)'
 do $$
 declare

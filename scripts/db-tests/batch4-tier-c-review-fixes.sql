@@ -15,6 +15,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaetierc4 with a HR+FIN+INTHUB admin, a FIN-only actor (no HRS), a real openai_multimodal connection, a real activated employee and GL account, external_hr_system/external_accounting_system connections and mappings; a second tenant (iaetierc4b) for cross-tenant proofs'
 do $$
 declare

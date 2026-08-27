@@ -2,6 +2,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: two tenants; Acme has a tenant_admin (holding exactly HRS:View personal data via a real role assignment), a regular org_user, and a global Supreme Admin'
 do $$
 declare

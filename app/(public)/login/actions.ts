@@ -21,6 +21,8 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../../lib/supabase/server.ts";
 import { validateRedirectTarget } from "../../../lib/auth/redirect-allowlist.ts";
+import { registerLoginSessionIfApplicable } from "../../../lib/auth/register-login-session.ts";
+import { buildRegisterLoginSessionDeps } from "../../../lib/auth/register-login-session-deps.server.ts";
 
 const TENANT_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -41,9 +43,23 @@ export async function signInAction(_prevState: SignInFormState, formData: FormDa
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     return { error: "Invalid email or password." };
+  }
+
+  // ISS-2026-264: best-effort session registration, never a login gate -- see
+  // lib/auth/register-login-session.ts's own header for the full rationale. A
+  // failure here (transient RPC error, unresolvable tenant) must never block an
+  // otherwise-successful sign-in.
+  if (data.user) {
+    try {
+      const deps = await buildRegisterLoginSessionDeps();
+      await registerLoginSessionIfApplicable(deps, { tenantSlug, authUserId: data.user.id, actorLabel: email });
+    } catch {
+      // Session tracking is a defense-in-depth enhancement layered on top of
+      // authentication, not a precondition for it -- swallow and proceed.
+    }
   }
 
   const target = tenantSlug ? `/${tenantSlug}/admin` : "/supreme";

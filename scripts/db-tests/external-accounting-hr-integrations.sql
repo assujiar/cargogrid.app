@@ -8,6 +8,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: tenant iaeexthr with one real activated employee (HRIS Employee Master lifecycle), one real activated GL account, 2 real integration connections (external_hr_system, external_accounting_system); a second tenant (iaeexthr2) for cross-tenant isolation; a HRS+FIN View-only viewer for authority-denial tests'
 do $$
 declare

@@ -12,6 +12,11 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-257: fixed test-only key for app.integration_secrets_encryption_key() --
+-- production key provisioning/rotation/custody is a disclosed, out-of-scope
+-- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
+select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
+
 \echo '>> setup: one tenant, two vehicles (A: receives real telemetry, B: never does), one GPS device on vehicle A, a third-party connection mapped to vehicle A, four Shipment Orders (C: no resource assigned, D: vehicle B assigned, E+F: both vehicle A assigned concurrently) via the real Commercial pipeline'
 create temporary table th_test_state (key text primary key, value text not null);
 do $$

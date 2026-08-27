@@ -8136,3 +8136,329 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit |
 | Status | **`COMPLETED`**. 3 tracked gaps accepted by operator override. `NO_GO` verdict deliberately maintained pending explicit operator instruction to proceed to `GO_DECIDED`. **Next work (outside the Step 16 WBS)**: entry-by-entry audit and severity-ordered remediation of the full historical `KNOWN_ISSUES.md` backlog, now beginning |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-249 — Historical issue backlog remediation, items 1-2: `ISS-2026-267` (restore-procedure mutual exclusion) and `ISS-2026-072` (`evaluate_permission` platform-user-status check)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, following the operator's explicit instruction ("pokoknya seluruh issue baik yg critical high medium low harus solved semua tanpa terkecuali") after `RGL-BLK-001` and the 3 tracked go-live gaps were accepted by operator override. First 2 of 168 audited open entries (0 Critical/16 High/78 Medium/74 Low) |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST + RUNBOOK + DOCS |
+| Authorization | Operator's own explicit instruction; the `evaluate_permission` item specifically re-authorized after a dedicated clarifying question, since this session had earlier declined to touch that function without a scoped go-ahead given its ~1,124-call-site blast radius |
+| Build process | 2 background research agents (read-only, no writes) mapped the current `app.evaluate_permission` definition/call-site risk and the restore-lock precedent before any implementation; design/implementation judgment retained directly, not delegated. Both fixes verified via a full local `db-tests` suite run (338 migrations, 233 files, `ALL PASSED`) before being applied live |
+| Findings and disposition | `ISS-2026-267`/`HDN-BLK-036`: `RESOLVED` — `docs/runbooks/database-restore.md` §4 now mandates a `pg_try_advisory_lock`/`pg_advisory_unlock` step around the composed in-place restore procedure. `ISS-2026-072`: `RESOLVED` — `app.evaluate_permission` now independently re-checks `app.users.status`, closing the one remaining half of a two-part finding (the other two halves were already fixed at HRT-295/HDN-373) |
+| Files edited | `docs/runbooks/database-restore.md`; `scripts/db-tests/database-restore-lock.sql` (new); `supabase/migrations/20260826040000_harden_rbac_evaluator_platform_user_status_check.sql` (new); `scripts/db-tests/rbac-enforcement.sql` (widened); `scripts/release/check-release-freeze.ts` (sixth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-267`/`ISS-2026-072` resolution notes); `docs/build-log/release-go-live/BLOCKER_LEDGER.md` (progress note); `docs/build-log/release-go-live/RGL-404.md` (new §12 running progress log) |
+| Migration | 1 new migration (`20260826040000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration`, live-reconfirmed via `pg_get_functiondef`. The restore-lock fix ships no migration (a runbook/procedure change using a built-in Postgres primitive, not a schema change) |
+| Risk | `evaluate_permission` is the shared RBAC choke point for ~1,124 transitive callers — mitigated by keeping the change additive-only on a single, never-overloaded signature (zero call-site edits), a lockout-safety analysis proving no legitimate actor can newly false-deny, and a full-suite regression run (every domain's own tests, not only a new dedicated one) before applying live |
+| Scope justification | Direct execution of the operator's own explicit "fix everything" instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED`, 2 consecutive full runs. `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit for the repository side; the live `evaluate_permission` change would need a separate corrective migration to undo (this repo's own "never edit an applied migration" convention) — not expected to be needed |
+| Status | **`COMPLETED`**. 2 of 168 backlog items resolved. 166 remain; work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-250 — Historical issue backlog remediation, items 3-4: `ISS-2026-257` (integration/webhook secret encryption-at-rest) and `ISS-2026-156` (n8n test nondeterminism, found incidentally)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-249`. Items 3-4 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | A background research agent mapped every writer/reader call site for the 3 target columns before implementation (design/implementation retained directly). New migration extends the already-proven vendor-financial `pgp_sym_encrypt` pattern. Full local `db-tests` suite run after implementation surfaced a real, unexpected regression (`ISS-2026-156`, already in the audited backlog) triggered by this migration's own `ALTER TABLE` row rewrite — root-caused and fixed in the same pass rather than worked around |
+| Findings and disposition | `ISS-2026-257`: `RESOLVED` — 3 plaintext secret columns now `pgp_sym_encrypt`'d at rest; 6 writers + 11 readers redefined, zero call-site changes. `ISS-2026-156`: `RESOLVED` — a webhook-endpoint lookup with no `ORDER BY`/status filter, now filtered on `status = 'active'`; this entry's own prior "confirmed non-reproducing" claim held only for the specific trigger it tested (cross-file execution order), not for a schema-level physical row-order change, corrected in place |
+| Files edited | `supabase/migrations/20260826050000_harden_integration_secrets_encryption_at_rest.sql` (new); `scripts/release/check-release-freeze.ts` (seventh-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-257`/`ISS-2026-156` resolution notes); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended, arithmetic correction to the running tally); 26 `scripts/db-tests/*.sql` files (GUC wiring for the new encryption key; 3 files also carry functional fixes: `advanced-tms-third-party-provider-adapter.sql`/`integration-hub.sql` decrypt-and-compare instead of raw-column-compare, `n8n-integration.sql` the `ISS-2026-156` fix) |
+| Migration | 1 new migration (`20260826050000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — all 3 target tables held zero rows (confirmed live before applying), so the backfill `UPDATE` statements were no-ops; live-reconfirmed via `information_schema.columns` |
+| Risk | A schema change touching 17 functions across 6 migration files (5 pre-existing + this one) — mitigated by zero call-site/signature changes anywhere, a self-caught grant gap (mixed SECURITY DEFINER/INVOKER callers, mirroring HDN-373's own self-caught class), and a full-suite regression run (not only new dedicated assertions) that caught a real, unrelated regression before it shipped |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (confirmed via the script's own real exit code this time, not a trailing `echo` that always reports 0 regardless — an earlier check in this same session's own work mistakenly relied on that and needed a second, correctly-verified run). `pnpm run typecheck`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit for the repository side; the live schema change would need a separate corrective migration to undo (this repo's own "never edit an applied migration" convention) — not expected to be needed, no real secret data existed to lose either way |
+| Status | **`COMPLETED`**. 4 of 168 backlog items resolved. 164 remain (0 Critical, 13 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-251 — Historical issue backlog remediation, item 5: `ISS-2026-265` (database restore audit trail, partial-by-design)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-250`. Item 5 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST + RUNBOOK |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Confirmed `app.audit_logs.tenant_id` is nullable before designing the fix (the established platform-level-event convention). Implemented `app.record_database_restore_event`, ran the full local `db-tests` suite, which immediately caught a missing Option 2 `public.*` wrapper via this repo's own zero-tolerance regression guard — fixed before the freeze digest was ever changed, not after |
+| Findings and disposition | `ISS-2026-265`: `RESOLVED`, explicitly partial by design and disclosed as such — closes "zero audit trail" (a new mandatory runbook step writes one explicit, structured audit event); does NOT and cannot close "`TRUNCATE` bypasses `FOR EACH ROW` triggers" itself, which is fundamental Postgres behavior no function-level change can alter. The recorded event's own payload discloses this limitation inline, not merely in documentation a reader might skip |
+| Files edited | `supabase/migrations/20260826060000_harden_database_restore_audit_trail.sql` (new); `docs/runbooks/database-restore.md` (new mandatory step (j)); `scripts/db-tests/database-restore-lock.sql` (widened); `scripts/release/check-release-freeze.ts` (eighth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-265` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826060000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — an additive, standalone audit-recording function with input validation (rejects an empty actor label, an unrecognized scope, a negative table count); no existing function or call path modified |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (2 consecutive runs — first caught the missing wrapper, second clean after the fix, both confirmed via the script's own real exit code). `pnpm run typecheck`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 5 of 168 backlog items resolved (one explicitly partial by design). 163 remain (0 Critical, 12 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-252 — Historical issue backlog remediation, item 6: `ISS-2026-269` (employee import duplicate detection)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-251`. Item 6 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Read the entry's own live reproduction to pin the matching heuristic to exactly the definition already demonstrated (`work_email`/`full_name`), avoiding an invented fuzzier heuristic the entry itself flagged as needing further HR-domain input. Deliberately did not route through the existing `app.flag_employee_duplicate_candidate` RPC after recognizing it would silently add an `HRS:Edit` authority requirement to every import. First local `db-tests` run caught a `min(uuid)` bug in this pass's own new test (no such Postgres aggregate) — fixed before applying live |
+| Findings and disposition | `ISS-2026-269`: `RESOLVED` — a fresh, auto-numbered import row matching an existing employee's `work_email`/`full_name` is now flagged into `app.employee_duplicate_candidates` for human review; the import itself still succeeds (never a hard block) |
+| Files edited | `supabase/migrations/20260826070000_harden_employee_import_duplicate_detection.sql` (new); `scripts/db-tests/hris-employee-master.sql` (widened); `scripts/release/check-release-freeze.ts` (ninth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-269` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826070000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` (zero existing rows in `app.employees`/`app.import_staging_rows`, confirmed live before applying) |
+| Risk | Low-medium — touches a real write path (`app.commit_employee_import_job`, already redefined once at `20260817000000`), mitigated by keeping the fix strictly additive (a new flagging block after the existing insert logic, no existing behavior altered) and a full-suite regression run |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (2 runs — first caught the `min(uuid)` test bug, second clean, both confirmed via the script's own real exit code). `pnpm run typecheck`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema change would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 6 of 168 backlog items resolved (one explicitly partial by design). 162 remain (0 Critical, 11 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-253 — Historical issue backlog remediation, item 7: `ISS-2026-254` (restore security-state reconciliation, partial-by-design), plus two self-caught security regressions (`ISS-2026-298`, `ISS-2026-299`)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-252`. Item 7 of 168 audited open entries, plus 2 self-caught regressions introduced and closed within this same pass |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST + RUNBOOK, including 2 live security fixes applied via direct `apply_migration` before their own corrective migration files were written |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Designed a voluntary, explicitly-disclosed-as-voluntary compensating control (`app.capture_security_state_snapshot`/`app.detect_reverted_security_state`) storing state in `public` schema specifically because it must survive the in-place restore procedure's own `app`-schema drop — the same technique already established for `ISS-2026-267`'s advisory lock. While writing the new `public.*` wrappers, re-reading `ISS-2026-298`'s own convention text surfaced that item 5's own wrapper (`public.record_database_restore_event`) had shipped with the exact gap that convention exists to prevent — live-confirmed exploitable, fixed live immediately, before this item's own migration was ever applied. Immediately after applying this item's own migration, live-verifying its security posture (the mitigation `ISS-2026-298` had just established) surfaced a second, worse gap: `public.security_state_snapshots`, the first table this repository has ever placed directly in `public` schema, shipped with RLS disabled and Supabase's own default table-privilege bootstrap left ungranted-back — live-confirmed `anon`/`authenticated` held direct `SELECT`+`INSERT`, fixed live within minutes of discovery |
+| Findings and disposition | `ISS-2026-254`: `RESOLVED`, explicitly partial by design and disclosed as such — closes "no tool exists at all" for the pre/post-restore security-state comparison; does not close "snapshot never taken" (no mechanism forces the step, since the actual restore procedure runs entirely outside any RPC this schema controls). `ISS-2026-298`: `RESOLVED` same day — a `public.*` wrapper granted `anon`/`authenticated` live `EXECUTE` via Supabase's default-privilege bootstrap, a bare `revoke ... from public` missing the amended named-roles form. `ISS-2026-299`: `RESOLVED` same day — a `public`-schema table shipped without RLS or an explicit default-grant revoke, giving `anon`/`authenticated` live `SELECT`+`INSERT` on security-relevant data; worse in kind than `ISS-2026-298` (read+write table access, not merely a function call) |
+| Files edited | `supabase/migrations/20260826080000_harden_restore_security_state_reconciliation.sql` (new, `ISS-2026-254`); `supabase/migrations/20260826081000_harden_record_database_restore_event_wrapper_grant_leak.sql` (new, repo-side record of a live fix for `ISS-2026-298`, does not edit the already-applied `20260826060000`); `supabase/migrations/20260826090000_harden_security_state_snapshots_table_privilege_leak.sql` (new, repo-side record of a live fix for `ISS-2026-299`, does not edit the already-applied `20260826080000`); `docs/runbooks/database-restore.md` (new diagnosis-step reference + revision-history entry); `scripts/db-tests/database-restore-lock.sql` (widened twice — `ISS-2026-254`'s own snapshot/detect regression, and `ISS-2026-299`'s table-privilege regression); `scripts/release/check-release-freeze.ts` (tenth-pass amendment, covering all 3 migrations); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-254` resolution note, new `ISS-2026-298`/`ISS-2026-299` entries); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended, both self-caught regressions disclosed) |
+| Migration | 3 new migrations (`20260826080000`, `20260826081000`, `20260826090000`), all applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — the latter 2 as direct, immediate live fixes, applied before their own repository-side migration files were written, per this repository's own "never edit an applied migration" convention |
+| Risk | Medium — 2 real, live, unauthenticated security exposures were introduced by this same pass's own earlier steps within it and caught before being left unaddressed; both closed same-day via the identical live-verification discipline they themselves establish going forward. The underlying `ISS-2026-254` fix itself is low-risk (additive, `service_role`-only functions and table) |
+| Scope justification | Direct execution of the operator's own explicit instruction; the 2 self-caught fixes are corrective work on defects this same pass introduced, not scope creep |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (multiple runs — caught and fixed a stale `secret_value` column reference post-`ISS-2026-257` rename, a missing encryption-key test GUC, and the `principal_memberships` transition-trigger rejection needing `session_replication_role = replica` to correctly simulate a restore's own `--disable-triggers` behavior, all before the freeze digest was touched). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. Live security posture independently verified after each `apply_migration` call via `has_function_privilege` (3 wrappers) and `has_table_privilege`/`pg_class.relrowsecurity` (1 table) |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema additions would need separate corrective migrations to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 7 of 168 backlog items resolved (2 explicitly partial by design). 161 remain (0 Critical, 10 High, 78 Medium, 73 Low); work continues per `RGL-404.md` §12. 2 additional self-caught regressions (not counted against the 168) found and closed same-day |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-254 — Historical issue backlog remediation, item 8: `ISS-2026-263` (user status transition invalid event_type)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-253`. Item 8 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Diffed the new function body against the prior definition to confirm the change was exactly the entry's own proposed fix (else branch to null, plus an explicit rejection) and nothing else — no accidental drop of the later HRT-295/ISS-2026-072 role_assignments cascade block that was appended after this function's original body. Checked all real call sites (HRIS onboarding/offboarding, effective-dating, ~150+ db-tests fixture calls) confirmed none rely on the old spurious-CHECK-violation error text |
+| Findings and disposition | `ISS-2026-263`: `RESOLVED` — an unrecognized or no-op `app.transition_user_status` call is now rejected with a clear `invalid_status_transition` error before the history insert is attempted, instead of a spurious `CHECK`-constraint violation; all 5 real transitions unchanged |
+| Files edited | `supabase/migrations/20260826100000_harden_user_status_transition_invalid_event_type.sql` (new); `scripts/db-tests/user-lifecycle.sql` (widened); `scripts/release/check-release-freeze.ts` (eleventh-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-263` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826100000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — `CREATE OR REPLACE` on an identical existing signature, no new `public.*` object |
+| Risk | Low — the only behavior change is that calls which already deterministically failed (no-op/unrecognized transitions) now fail with a clearer, purpose-built error instead of a confusing downstream `CHECK` violation; no previously-succeeding call path is altered |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. `pg_get_functiondef` re-confirmed the live fix took effect |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live function replacement would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 8 of 168 backlog items resolved (2 explicitly partial by design). 160 remain (0 Critical, 10 High, 77 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-255 — Historical issue backlog remediation, item 9: `ISS-2026-264` (session-revocation enforcement + real session registration)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-254`. Item 9 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + APPLICATION CODE (sign-in Server Action) + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction; operator explicitly chose the full two-part fix (database enforcement + real login wiring) over a database-only partial fix, via `AskUserQuestion` |
+| Build process | Investigated beyond the entry's own stated scope and found the deeper root cause: `app.register_user_session` was never called from anywhere in the real application, so a database-only enforcement check would have been inert in production. Designed the fix as two paired, independently-necessary parts. Followed the existing `lib/portal/*-guard.ts`/`*-guard-deps.server.ts` deps-injection pattern exactly for the new session-registration logic, rather than inventing a new composition style — `lib/auth/register-login-session.ts` (pure, unit-tested) plus `lib/auth/register-login-session-deps.server.ts` (real Supabase wiring). Added the new deps file to `eslint.config.js`'s `serviceRoleImportGuard` ignore list, confirmed genuinely server-only (only ever imported from the `"use server"` sign-in action) |
+| Findings and disposition | `ISS-2026-264`: `RESOLVED` — `app.evaluate_permission` now denies `all_sessions_revoked` when every one of an actor's tracked sessions for a tenant is revoked, and a real session is now registered on every tenant-scoped sign-in going forward, so the new check has real traffic to act on |
+| Files edited | `supabase/migrations/20260826110000_harden_evaluate_permission_session_revocation_enforcement.sql` (new); `lib/auth/register-login-session.ts` (new); `lib/auth/register-login-session-deps.server.ts` (new); `lib/auth/register-login-session.test.ts` (new, 5 tests); `app/(public)/login/actions.ts` (widened — best-effort session registration after sign-in); `eslint.config.js` (service-role import guard ignore list); `scripts/db-tests/rbac-enforcement.sql` (widened); `scripts/release/check-release-freeze.ts` (twelfth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-264` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826110000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — `CREATE OR REPLACE` on an identical existing signature, no new `public.*` object |
+| Risk | Medium — touches the real production sign-in Server Action for every user, the highest-traffic code path this checkpoint's own backlog work has modified so far. Mitigated: the session-registration call is wrapped in `try`/`catch` and can never block a legitimate sign-in on failure; the new database check only ever narrows authority for an actor whose sessions were explicitly revoked, never for an untracked actor; full JS test suite (5468 tests) and full `db-tests` suite both re-run clean after the change |
+| Scope justification | Direct execution of the operator's own explicit instruction; scope (both database and application-code halves) was explicitly confirmed with the operator via `AskUserQuestion` before implementation, given the higher risk of touching the live sign-in path |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean once the local disposable Postgres cluster — found stopped, unrelated to this change — was restarted). `node --test lib/auth/register-login-session.test.ts`: 5/5 pass. `pnpm run test`: 5468/5468 pass. `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. `pg_get_functiondef` re-confirmed the live fix took effect. **Browser-driven verification of the live sign-in flow was not attempted** — this repository has no `dev`/`start` script and no reachable local Supabase Auth/PostgREST stack in this sandbox (`.env.local` does not exist here), the identical disclosed class of environmental gap as `ISS-2026-255`/`ISS-2026-244`; this repository's own `e2e/` Playwright suite is explicitly synthetic-content-only for the same reason (`playwright.config.ts`'s own header) |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live function replacement would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 9 of 168 backlog items resolved (2 explicitly partial by design). 159 remain (0 Critical, 9 High, 77 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-256 — Historical issue backlog remediation, item 10: `ISS-2026-266` (governed materialized-view refresh)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-255`. Item 10 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST + RUNBOOK |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Found this repository already had a real, governed, ledgered refresh mechanism (`app.refresh_analytics_view`, IAE-005) that the runbook's own manual step (h) never used — closed the gap by delegating to it in a loop rather than reimplementing refresh/authority logic. Confirmed only 1 materialized view exists today (`app.mv_report_usage_daily`), so the new function's own future-proofing (looping over the live registry rather than a hardcoded view list) is a real, not speculative, improvement. Checked the new wrapper's own live grants immediately after applying, per the `ISS-2026-298`/`ISS-2026-299` mitigation practice — correct from first principles this time |
+| Findings and disposition | `ISS-2026-266`: `RESOLVED` — `app.refresh_all_registered_analytics_views` refreshes every active registered view via the existing governed RPC in one call, and the runbook's own step (h) now calls it instead of raw SQL |
+| Files edited | `supabase/migrations/20260826120000_harden_restore_materialized_view_refresh_completeness.sql` (new); `docs/runbooks/database-restore.md` (step (h) updated, revision history); `scripts/db-tests/analytics-materialized-views.sql` (widened); `scripts/release/check-release-freeze.ts` (thirteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-266` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826120000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — a new, additive, `service_role`/`authenticated`-only function that delegates entirely to an existing, already-tested function for its actual work and authority check; no existing function or call path modified |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New `public.*` wrapper's `anon`/`authenticated`/`service_role` grants live-verified via `has_function_privilege` before considering the fix complete |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 10 of 168 backlog items resolved (2 explicitly partial by design). 158 remain (0 Critical, 9 High, 76 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-257 — Historical issue backlog remediation, item 11: `ISS-2026-270` (reference data import registration)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-256`. Item 11 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction; operator's own stated preference to build genuinely code-shaped infrastructure rather than skip feature-shaped items |
+| Build process | Confirmed live before designing the fix that zero writer RPCs existed anywhere for `app.finance_currencies`/`app.uoms` — every reference was a read-only validation lookup. Deliberately chose the "return the existing row if found" idempotent pattern already established elsewhere in this codebase over the entry's own cited `ON CONFLICT DO NOTHING` suggestion, since `DO NOTHING` would silently accept a same-code row with different values, masking a real conflict rather than surfacing it to the caller |
+| Findings and disposition | `ISS-2026-270`: `RESOLVED` — `app.import_reference_currency`/`app.import_reference_uom` give migration/import scripts a safe, idempotent, Supreme-Admin-gated path to add reference rows without risking an all-or-nothing batch rollback on a collision |
+| Files edited | `supabase/migrations/20260826130000_create_reference_data_import_registration.sql` (new); `scripts/db-tests/reference-data-import.sql` (new); `scripts/release/check-release-freeze.ts` (fourteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-270` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826130000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — 2 new, additive, `service_role`-only functions touching 2 tables that previously had zero writer RPCs at all; no existing function or call path modified |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first real attempt clean once the local disposable Postgres cluster — found stopped again, unrelated to this change — was restarted). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. Both new `public.*` wrappers' `anon`/`authenticated`/`service_role` grants live-verified via `has_function_privilege` before considering the fix complete |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 11 of 168 backlog items resolved (2 explicitly partial by design). 157 remain (0 Critical, 9 High, 75 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-258 — Historical issue backlog remediation, item 12: `ISS-2026-272` (migration rehearsal tracking, partial by design)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-257`. Item 12 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction; scope of the "where contracted" conditionality explicitly confirmed with the operator via `AskUserQuestion` before implementation |
+| Build process | Mirrored `app.dr_restore_tests`/`app.record_dr_restore_test`'s own honesty discipline verbatim for the new evidence table/RPC. Diffed the redefined `app.verify_onboarding_checklist_item` against its prior definition to confirm the only changes are the widened item allow-list, the new computation branch, and the 2 new `UPDATE ... SET` columns — the existing 6-item `status='ready_for_production'` composite is byte-for-byte unchanged. Discovered mid-design that the underlying business rule ("where contracted") has no schema representation to condition on, and stopped to confirm scope with the operator rather than unilaterally deciding whether to gate every tenant's readiness on it |
+| Findings and disposition | `ISS-2026-272`: `RESOLVED (partial by design, disclosed)` — a real evidence table, recording RPC, and live-computed 7th checklist item now exist; wiring it into the readiness gate is deliberately deferred pending a real "contracted" flag, per the operator's own explicit choice |
+| Files edited | `supabase/migrations/20260826140000_create_migration_rehearsal_tracking.sql` (new); `scripts/db-tests/disaster-recovery-enterprise-support.sql` (widened); `scripts/release/check-release-freeze.ts` (fifteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-272` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826140000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` |
+| Risk | Low — 1 new table, 1 new RPC (`authenticated`/`service_role`-gated, `SUP:Configure`-checked internally), and a `CREATE OR REPLACE` widening on an existing function proved by diff to leave all pre-existing behavior (including the readiness gate) unchanged |
+| Scope justification | Direct execution of the operator's own explicit instruction; the "where contracted" scope question was raised and resolved with the operator before implementation, not decided unilaterally |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New `public.*` wrapper's grants live-verified via `has_function_privilege`; `verify_onboarding_checklist_item`'s live fix re-confirmed via `pg_get_functiondef` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 12 of 168 backlog items resolved (3 explicitly partial by design). 156 remain (0 Critical, 9 High, 74 Medium, 73 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+---
+
+### CHG-2026-259 — Historical issue backlog remediation, item 13: `ISS-2026-271` (employee import rollback)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-258`. Item 13 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Investigated how a job's created records could be identified without a direct FK (`app.employee_lifecycle_events.metadata->>'job_id'`, already written by the existing commit function). Confirmed by direct migration read that every `app.employees`-referencing table in this schema uses Postgres's default `RESTRICT` delete behavior (no `ON DELETE CASCADE` anywhere), so the entry's own flagged downstream-reference risk is handled correctly and completely by the database's own FK catalog rather than a hand-maintained table list. Deliberately designed the fix to differ from the manual drill's own raw-delete shape in exactly the ways that close both named residues, rather than simply automating the drill as-is |
+| Findings and disposition | `ISS-2026-271`: `RESOLVED` — `app.rollback_employee_import_job` gives a real, governed rollback path: the job row survives (status `rolled_back`, keeping every audit reference resolvable), the employee-number counter is deliberately untouched (documented as a design choice, not an oversight), and a real downstream reference blocks the rollback atomically via a clear, named error |
+| Files edited | `supabase/migrations/20260826150000_create_employee_import_rollback.sql` (new); `scripts/db-tests/hris-employee-master.sql` (widened); `scripts/release/check-release-freeze.ts` (sixteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-271` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826150000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — widens `app.jobs`' own `jobs_status_check` (additive, confirmed untouched by any other migration before this one) plus one new `authenticated`/`service_role`-gated RPC |
+| Risk | Low-medium — a destructive operation (deletes employee/master_record/lifecycle-event/staging rows), but gated behind `HRS:Import` + tenant-membership authority, restricted to `status='completed'` jobs only, and atomic: any FK block aborts the whole operation with no partial deletion, proved directly in the regression test |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first real attempt clean once the local disposable Postgres cluster — found stopped again, unrelated to this change — was restarted). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New `public.*` wrapper's grants live-verified via `has_function_privilege` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 13 of 168 backlog items resolved (3 explicitly partial by design). 155 remain (0 Critical, 9 High, 74 Medium, 72 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
+
+### CHG-2026-260 — Historical issue backlog remediation, item 14: `ISS-2026-275`/`ISS-2026-276` (finance journal historical import)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-259`. Item 14 of 168 audited open entries (closes 2 entries at once) |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Investigated both entries' own root cause by direct migration read: `app.finance_journals_protect_posted` only fires on `UPDATE OR DELETE`; `app.validate_finance_journal_line_balance` is invoked only from inside RPCs, never at the table layer; `app.finance_journals_validate_source` (HDN-375) allows `source_type='manual'` with a null `source_id` unconditionally. Presented the entry's own named design fork via `AskUserQuestion` before implementing (widen the trigger to also guard `INSERT`, vs. a dedicated migration-insert RPC) — widening the trigger would make it permanently impossible to load real historical already-posted data, so the dedicated-RPC option was built. A second `AskUserQuestion` confirmed the fiscal-period design wrinkle: this RPC deliberately skips the `posting_eligible` (open) check, since real historical data by definition targets already-closed periods. Direct read of `20260810700000_harden_finance_authority_chain_security_definer.sql` confirmed the finance domain's write RPCs — including this fix's own direct template, `app.create_and_post_finance_system_journal` — currently run `security definer`, not the original security-invoker shape; matched that for the new RPC and its `public.*` wrapper, corrected after `public-api-wrapper-regression.sql`'s own exhaustive check first caught the mismatch |
+| Findings and disposition | `ISS-2026-275`: `RESOLVED` — `app.import_historical_finance_journal` is a real, `FIN:Approve`-gated, balance-re-validated, non-sourceless entry point for historical already-posted data, closing all three of this entry's own disclosed gaps. `ISS-2026-276`: `RESOLVED` — `'migration'` is now a real, first-class `source_type`, additively widening the existing CHECK constraints without narrowing the already-applied `'correction'` type |
+| Files edited | `supabase/migrations/20260826160000_create_finance_journal_historical_import.sql` (new); `scripts/db-tests/finance-journal.sql` (widened); `scripts/release/check-release-freeze.ts` (seventeenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-275`/`ISS-2026-276` resolution notes); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826160000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — widens 2 CHECK constraints on `app.finance_journals` (additive) plus one new `security definer`, `authenticated`/`service_role`-gated RPC and its matching Option 2 `public.*` wrapper |
+| Risk | Low-medium — a real financial-posting write path, but gated behind `FIN:Approve` authority, re-validates the shared debit=credit balance rule before writing, requires a real non-null `source_id` and non-empty reason, and is idempotent on `(tenant_id, source_type='migration', source_id)` so a retried call can never double-post |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (clean after 4 authoring mistakes were caught and fixed across successive local runs — an insufficient-lines vs. unbalanced test mismatch, the historical journal date not falling inside the single generated period, a mis-declared composite-typed variable, wrong `app.audit_logs` column names, and a security-mode mismatch between the new function and its wrapper — plus the local disposable Postgres cluster found stopped again, unrelated to this change, restarted twice). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New `public.*` wrapper's grants and `security definer` mode live-verified via direct `pg_proc`/`has_function_privilege` query |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 14 of 168 backlog items resolved (3 explicitly partial by design). 153 remain (0 Critical, 9 High, 73 Medium, 71 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |
+
+### CHG-2026-261 — Historical issue backlog remediation, item 15: `ISS-2026-279` (employee-number case/whitespace normalization detection)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-260`. Item 15 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Confirmed by direct migration read that `master_records_tenant_code_unique` is a plain case-sensitive `btree` unique index with no `lower()`/`trim()` normalization. This entry's own text names the fix as a genuine open design decision between a hard functional unique index and a soft validation/commit-time flag. Rejected the hard-index option: `app.master_records` is shared across every `master_type_code`, and a live hosted project may already carry real case-varying rows predating this fix, so a retroactive hard constraint risked failing migration application outright or rejecting a legitimate future record with no human review. Chose consistency with `ISS-2026-269`'s own already-shipped, already-approved soft-flag answer for the identical risk class on the same function, rather than treating this as a fresh, independent design decision |
+| Findings and disposition | `ISS-2026-279`: `RESOLVED` — `app.commit_employee_import_job` now flags, for human review, an explicitly-numbered import row whose employee_number normalizes to an existing employee's own number without being byte-identical, via the existing `app.employee_duplicate_candidates` mechanism; the import itself still succeeds (never a hard block) |
+| Files edited | `supabase/migrations/20260826170000_harden_employee_import_number_normalization_detection.sql` (new); `scripts/db-tests/hris-employee-master.sql` (widened); `scripts/release/check-release-freeze.ts` (eighteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-279` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826170000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — a `CREATE OR REPLACE` widening `app.commit_employee_import_job`'s own body (diffed against the currently-applied definition before writing, confirming only the intended branch and comment changed); no new grants required |
+| Risk | Low — purely additive detection logic inside an already-authority-gated (`HRS:Import`) function; never blocks a legitimate import, only adds a review-queue row |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New function body live-verified via `pg_get_functiondef` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema change would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 15 of 168 backlog items resolved (3 explicitly partial by design). 152 remain (0 Critical, 9 High, 72 Medium, 71 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |
+
+### CHG-2026-262 — Historical issue backlog remediation, item 16: `ISS-2026-260` (DR restore scenario taxonomy)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-261`. Item 16 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Presented the entry's own named design fork via `AskUserQuestion` before implementing (widen `component_scope`'s own CHECK constraint vs. a new parallel scenario column) — the operator chose the parallel-column option, avoiding mixing a mechanism taxonomy and a scenario taxonomy into one enum. Mid-authoring, self-caught and fixed a real defect: appending a new trailing parameter to `app.record_dr_restore_test` via `CREATE OR REPLACE FUNCTION` does not truly replace the function — Postgres identifies a function by name plus full parameter type list, so it silently creates a second, distinct, ambiguous overload instead. Verified this directly against a real disposable Postgres instance before settling on the fix, then confirmed by direct read that this repository's own FIN-206 migration had already established the correct convention (`DROP FUNCTION` first, then `CREATE FUNCTION`) for the identical situation |
+| Findings and disposition | `ISS-2026-260`: `RESOLVED` — `app.dr_restore_tests` now carries a real, parallel `dr_scenario` dimension; `app.record_dr_restore_test` (and its `public.*` wrapper) accepts an optional 14th argument to record it, with the original 13-argument call shape completely unaffected |
+| Files edited | `supabase/migrations/20260826180000_create_dr_restore_scenario_taxonomy.sql` (new); `scripts/db-tests/disaster-recovery-enterprise-support.sql` (widened); `scripts/release/check-release-freeze.ts` (nineteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-260` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826180000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — adds one nullable column + CHECK constraint, and replaces `app.record_dr_restore_test`/`public.record_dr_restore_test` via explicit `DROP FUNCTION` + `CREATE FUNCTION` (never a bare `CREATE OR REPLACE` across a changed argument list) |
+| Risk | Low — purely additive; the new parameter defaults to null, so no existing caller's behavior changes; the explicit drop-then-create was verified live to leave exactly one overload of each function, not two ambiguous ones |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (clean after the ambiguous-overload defect was caught and fixed by this same local run — first attempt failed with `function ... is not unique` on a bare `comment on function` statement, root-caused, fixed, re-run clean). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. Grants and single-overload correctness live-verified via direct `pg_proc`/`has_function_privilege` query |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 16 of 168 backlog items resolved (3 explicitly partial by design). 151 remain (0 Critical, 9 High, 71 Medium, 71 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |
+
+### CHG-2026-263 — Historical issue backlog remediation, item 17: `ISS-2026-268` (DR/backup drill app.files coverage)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-262`. Item 17 of 168 audited open entries |
+| Change type | TEST INFRASTRUCTURE (no schema change, no migration) |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | This entry's own text framed the fix as "the next real drill to close" — not a code/schema defect but a disclosed test-coverage gap in the DR/backup drill's own seeded slice across 2 prior checkpoints. Performed that next real drill: wrote a new, permanent, re-runnable shell script (mirroring this repository's own established non-`*.sql` drill-helper precedent, `scripts/db-tests/wms-picking-concurrency-helper.sh`) that seeds a real `app.files` row via the genuine `app.initiate_file_upload`/`app.record_file_scan_result` RPCs (not a raw hand-crafted insert, which required also publishing a real per-tenant `document:employee_document` definition first, mirroring `scripts/db-tests/document-file.sql`'s own established minimal-valid-definition shape) and runs it through the identical `pg_dump -Fc`/`DROP DATABASE`/`CREATE DATABASE`/`pg_restore -j 4` cycle `docs/runbooks/database-restore.md` §4 item 2 already proved and measured for `app.jobs`. Iterated through 3 real authoring corrections before a clean run: a missing `tenant_user_identities` activation step (`grant_principal_membership` alone does not activate a `tenant_user_identities` row created by `invite_user`; `app.transition_user_status(..., 'active', ...)` does), an invalid `job_type` value, and the missing published document-type definition precondition for `app.initiate_file_upload` |
+| Findings and disposition | `ISS-2026-268`: `RESOLVED` — 2 independent live runs both confirm the `app.files` row survives the proven restore cycle byte-for-byte, alongside the already-proven `app.jobs` row |
+| Files edited | `scripts/db-tests/database-restore-files-drill.sh` (new); `docs/runbooks/database-restore.md` (§4 item 5 struck through and resolved, §7 new rehearsal-history row, §8 new revision-history row 0.7.0); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-268` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | None — a test-infrastructure/runbook-evidence fix, not a schema change. No live database change and nothing applied to the hosted project |
+| Risk | None — a new, standalone drill script against a disposable, throwaway local database only; touches no application code, no migration, no live/production data |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | The new script is a `.sh` file, not a `.sql` test file `scripts/db-tests/run.sh`'s own glob picks up, so it is not part of `pnpm run db:test` and its addition does not change the frozen `dbTestSetSha256` (confirmed: `pnpm run release:check-freeze` stayed green with the new file staged, un-amended). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`: all green. The drill script itself was run twice live, both `PASSED` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; nothing to undo on any live database |
+| Status | **`COMPLETED`**. 17 of 168 backlog items resolved (3 explicitly partial by design). 150 remain (0 Critical, 9 High, 71 Medium, 70 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |
+
+### CHG-2026-264 — Historical issue backlog remediation, item 18: `ISS-2026-278` (import-commit RPC IP-allowlist gating)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-263`. Item 18 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Presented the entry's own named design fork via `AskUserQuestion` before implementing (IP-allowlist only vs. full HDN-378 parity including mandatory MFA step-up vs. skip) — the operator chose IP-allowlist-only, matching the entry's own disclosed concern that mandatory step-up on every bulk import commit, including routine non-financial ones, risks over-restricting a legitimate operational workflow without dedicated UX review. Investigated HDN-378/ISS-2026-150's own exact composition (`app.assert_ip_allowed` + `app.has_active_ip_allowlist_bypass`, ordering discipline, non-interactive-caller exemption) directly from its migration and mirrored it verbatim across all 5 real `commit_*_import_job` functions. Applied `ISS-2026-260`'s own self-caught lesson from earlier this same remediation run correctly from the first draft this time: every one of the 10 widened functions (5 `app.*` + 5 matching `public.*` wrappers) uses an explicit `DROP FUNCTION` + `CREATE FUNCTION`, never a bare `CREATE OR REPLACE` across a changed argument list |
+| Findings and disposition | `ISS-2026-278`: `RESOLVED` — all 5 real import-commit RPCs now accept an optional `p_client_ip` parameter enforcing the tenant's own IP allowlist when supplied, bypassable via an active grant, with zero behavior change for any existing caller that omits it |
+| Files edited | `supabase/migrations/20260826190000_harden_import_commit_ip_allowlist_gating.sql` (new); `scripts/db-tests/import-export.sql`, `scripts/db-tests/hris-employee-master.sql`, `scripts/db-tests/hris-attendance.sql`, `scripts/db-tests/hris-overtime-timesheet.sql`, `scripts/db-tests/procurement-vendor-rate-tiers.sql` (all widened); `scripts/release/check-release-freeze.ts` (twentieth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-278` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826190000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — 5 `DROP FUNCTION`+`CREATE FUNCTION` pairs at the `app.*` layer plus 5 matching pairs at the `public.*` Option 2 wrapper layer, each re-granted to the exact same roles the original migration granted |
+| Risk | Low — purely additive parameter with a default of `null`; every existing call site (none of which pass a 5th argument) is completely unaffected; the new check only activates for a caller that explicitly supplies an IP, and is bypassable via an already-governed grant |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first attempt clean, migration and all 5 new regression blocks). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. Grants and single-overload correctness (10 functions, all `pronargs=5`, exactly one overload each) live-verified via direct `pg_proc`/`has_function_privilege` query |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema change would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 18 of 168 backlog items resolved (3 explicitly partial by design). 149 remain (0 Critical, 9 High, 70 Medium, 70 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-27 |
