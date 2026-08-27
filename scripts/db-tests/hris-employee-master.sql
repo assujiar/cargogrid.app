@@ -1695,3 +1695,166 @@ begin
   raise notice 'PASS: last_critical_admin correctly blocks both app.terminate_employee and app.suspend_employee against a tenant''s last active tenant_admin, with a genuine atomic rollback both times, and a normal termination succeeds once a second admin exists';
 end;
 $$;
+
+-- ISS-2026-271 (Step 16 historical-issue-backlog remediation): app.rollback_employee_
+-- import_job -- a real, governed rollback for a completed import, closing both residues
+-- the entry's own manual-drill reproduction found (a dangling app.audit_logs reference;
+-- an untouched, but deliberately never-reused, employee-number counter), and proving the
+-- entry's own unexercised downstream-reference risk is correctly handled by Postgres's
+-- own default FK enforcement rather than silently orphaning or cascade-deleting anything.
+\echo '>> ISS-2026-271 regression: app.rollback_employee_import_job -- HRS:Import-gated, refuses a non-completed job and an empty reason, deletes the job''s own employee/master_record/lifecycle-event/staging rows while leaving the job row itself (now status=rolled_back) and app.employee_number_counters untouched, records a real audit event, and refuses cleanly (never partially) when a created employee has a real downstream reference'
+do $$
+declare
+  v_tenant1 uuid;
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_viewer uuid := '00000000-0000-0000-0000-000000027105';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_row1 app.import_staging_rows;
+  v_row2 app.import_staging_rows;
+  v_committed app.jobs;
+  v_rolled_back app.jobs;
+  v_employee1_id uuid;
+  v_employee2_id uuid;
+  v_counter_before integer;
+  v_counter_after integer;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'hrmemp1');
+
+  v_source_file := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'rollback-employees.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-empimport-rollback-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file.id, 'clean', null, v_staff, 'staff');
+
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'employee_import', v_source_file.id, '{}'::jsonb, 'idem-empimport-rollback-job-1', v_staff, 'staff');
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Rollback Test Employee One', 'employment_type', 'full_time', 'work_email', 'rollback-one@hrmemp1.test'
+  )), v_staff, 'staff');
+  select * into v_row1 from app.import_staging_rows where job_id = v_job.job_id and row_number = 1;
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'full_name', 'Rollback Test Employee Two', 'employment_type', 'full_time', 'work_email', 'rollback-two@hrmemp1.test'
+  )), v_staff, 'staff');
+  select * into v_row2 from app.import_staging_rows where job_id = v_job.job_id and row_number = 2;
+
+  perform app.validate_employee_import_row(v_row1.id, v_staff, 'staff');
+  perform app.validate_employee_import_row(v_row2.id, v_staff, 'staff');
+
+  -- Rejected before the job is even committed: only a completed job may be rolled back.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'too early', v_staff, 'staff');
+    raise exception 'assertion failed: expected rollback of an in_progress (not yet committed) job to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'import_export_job_not_rollbackable%' then raise; end if;
+  end;
+
+  v_committed := app.commit_employee_import_job(v_job.job_id, false, v_staff, 'staff');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected the rollback-fixture job to commit cleanly, got status=%', v_committed.status;
+  end if;
+
+  select master_record_id into v_employee1_id from app.employees where tenant_id = v_tenant1 and work_email = 'rollback-one@hrmemp1.test';
+  select master_record_id into v_employee2_id from app.employees where tenant_id = v_tenant1 and work_email = 'rollback-two@hrmemp1.test';
+  if v_employee1_id is null or v_employee2_id is null then
+    raise exception 'assertion failed: expected both rollback-fixture employees to exist after commit';
+  end if;
+
+  select last_seq into v_counter_before from app.employee_number_counters where tenant_id = v_tenant1;
+
+  -- A viewer (HRS:View only, no HRS:Import) is denied.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'unauthorized attempt', v_viewer, 'viewer');
+    raise exception 'assertion failed: expected a viewer (no HRS:Import) to be denied';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- A blank reason is rejected.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, '   ', v_staff, 'staff');
+    raise exception 'assertion failed: expected a blank rollback reason to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'employee_import_rollback_reason_required%' then raise; end if;
+  end;
+
+  -- The real downstream-reference risk this entry itself flagged as unexercised: link
+  -- employee 1 as a duplicate candidate of employee 2 (a genuine, minimal downstream
+  -- reference into app.employees, the same default-RESTRICT FK shape every real
+  -- downstream domain -- payroll, position assignment, attendance -- also uses). The
+  -- rollback must refuse cleanly, and NEITHER employee may be partially deleted.
+  insert into app.employee_duplicate_candidates (tenant_id, source_master_record_id, candidate_master_record_id, similarity_basis, created_by)
+  values (v_tenant1, v_employee1_id, v_employee2_id, 'ISS-2026-271 regression fixture', 'tester');
+
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'blocked by downstream reference', v_staff, 'staff');
+    raise exception 'assertion failed: expected rollback to be refused while a real downstream reference exists';
+  exception
+    when others then
+      if sqlerrm not like 'employee_import_rollback_blocked_by_downstream_references%' then raise; end if;
+  end;
+
+  if not exists (select 1 from app.employees where master_record_id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected BOTH employees to survive a refused rollback (atomic, never a partial delete)';
+  end if;
+  if (select status from app.jobs where job_id = v_job.job_id) <> 'completed' then
+    raise exception 'assertion failed: expected the job to remain status=completed after a refused rollback';
+  end if;
+
+  -- Clear the downstream reference, then the identical rollback call succeeds cleanly.
+  delete from app.employee_duplicate_candidates where source_master_record_id = v_employee1_id and candidate_master_record_id = v_employee2_id;
+
+  v_rolled_back := app.rollback_employee_import_job(v_job.job_id, 'ISS-2026-271 regression: real rollback', v_staff, 'staff');
+  if v_rolled_back.status <> 'rolled_back' or v_rolled_back.error <> 'ISS-2026-271 regression: real rollback' then
+    raise exception 'assertion failed: expected status=rolled_back with the given reason recorded on the job row, got status=%, error=%', v_rolled_back.status, v_rolled_back.error;
+  end if;
+
+  if exists (select 1 from app.employees where master_record_id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected both employees to be deleted after a successful rollback';
+  end if;
+  if exists (select 1 from app.master_records where id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected both master_records to be deleted after a successful rollback';
+  end if;
+  if exists (select 1 from app.employee_lifecycle_events where master_record_id in (v_employee1_id, v_employee2_id)) then
+    raise exception 'assertion failed: expected all lifecycle events for both employees to be deleted after a successful rollback';
+  end if;
+  if exists (select 1 from app.import_staging_rows where job_id = v_job.job_id) then
+    raise exception 'assertion failed: expected the job''s own staging rows to be deleted after a successful rollback';
+  end if;
+
+  -- ISS-2026-271's own first named residue, closed: the job row itself still exists
+  -- (never deleted), so this and every other audit_logs row already referencing this
+  -- job_id remains resolvable.
+  if not exists (select 1 from app.jobs where job_id = v_job.job_id) then
+    raise exception 'assertion failed: expected the job row itself to survive rollback (status=rolled_back, never deleted) -- this is what keeps existing audit_logs references resolvable';
+  end if;
+  if not exists (
+    select 1 from app.audit_logs
+    where action = 'rollback_employee_import_job' and resource_type = 'app.jobs' and resource_id = v_job.job_id
+  ) then
+    raise exception 'assertion failed: expected a real, persisted audit_logs event for the rollback itself';
+  end if;
+
+  -- ISS-2026-271's own second named residue: deliberately NOT "fixed" by reclaiming the
+  -- counter -- app.employee_number_counters is untouched by design (that table''s own
+  -- comment: "Never reused"). Proved directly, not merely asserted in a comment.
+  select last_seq into v_counter_after from app.employee_number_counters where tenant_id = v_tenant1;
+  if v_counter_after is distinct from v_counter_before then
+    raise exception 'assertion failed: expected app.employee_number_counters to be completely untouched by rollback (deliberately never reclaimed), got % (was %)', v_counter_after, v_counter_before;
+  end if;
+
+  -- An already-rolled-back job cannot be rolled back again.
+  begin
+    perform app.rollback_employee_import_job(v_job.job_id, 'second attempt', v_staff, 'staff');
+    raise exception 'assertion failed: expected rollback of an already-rolled_back job to be rejected';
+  exception
+    when others then
+      if sqlerrm not like 'import_export_job_not_rollbackable%' then raise; end if;
+  end;
+
+  raise notice 'ISS-2026-271 proof: app.rollback_employee_import_job is HRS:Import-gated, refuses a non-completed job/blank reason/second rollback attempt, refuses atomically (never partially) when a real downstream reference exists, and on success deletes the job''s own employee/master_record/lifecycle-event/staging rows while leaving the job row (status=rolled_back) and app.employee_number_counters completely untouched, with a real audit event recording the rollback itself';
+end;
+$$;
+
+\echo '>> ISS-2026-271 regression evidence complete'

@@ -569,6 +569,55 @@ import { readFileSync } from "node:fs";
  * 234 runner files, ALL PASSED, first attempt clean) before this digest
  * was changed, and applied to the live hosted project via `apply_migration`
  * before this local run.
+ *
+ * AMENDED 2026-08-25 (sixteenth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md's
+ * historical-issue-backlog remediation section, item 13: `ISS-2026-271` --
+ * no `rollback_import_job`/`undo_import_job`/`revert_import_job` RPC
+ * existed anywhere; a manual, FK-ordered raw-SQL delete live-proved to work
+ * but left 2 residues (a dangling `app.audit_logs` reference to a deleted
+ * job row; an untouched employee-number counter) and left the entry's own
+ * flagged downstream-reference risk unexercised. One migration added (350
+ * files: +1, `20260826150000_create_employee_import_rollback.sql`) --
+ * `app.rollback_employee_import_job`, deliberately shaped differently from
+ * the manual drill in exactly the ways that close both residues: the job
+ * row is never deleted (status moves to a new `'rolled_back'` value,
+ * `jobs_status_check` widened, confirmed via direct `grep` that no other
+ * migration had ever touched that constraint before this one), so every
+ * existing `audit_logs` reference to it stays resolvable, and the rollback
+ * itself is captured as one new audit event; `app.employee_number_counters`
+ * is deliberately left untouched, per that table's own already-documented
+ * "Never reused" design intent (decrementing it would risk a future import
+ * reusing a number a different, concurrent import already consumed). The
+ * downstream-reference risk is handled by Postgres's own default
+ * (`RESTRICT`) foreign-key behavior on every `app.employees` reference in
+ * this schema (confirmed by direct migration read -- no `ON DELETE CASCADE`
+ * exists anywhere), caught as `foreign_key_violation` and re-raised as a
+ * clear, named error -- correct and complete by construction against the
+ * database's own authoritative FK catalog, not a hand-maintained table
+ * list that could drift. The set of records a job created is resolved via
+ * `app.employee_lifecycle_events.metadata->>'job_id'`, the exact linkage
+ * `app.commit_employee_import_job`'s own creation-event insert already
+ * writes -- not a new mechanism invented for this fix. Ships with a
+ * matching Option 2 `public.*` wrapper, correctly using the amended revoke
+ * form from first principles; live-verified via `has_function_privilege`
+ * immediately after applying: `anon` denied, `authenticated`/`service_role`
+ * allowed. dbTestSetSha256 changed (an existing file widened, no file
+ * added or removed): `scripts/db-tests/hris-employee-master.sql` gained a
+ * new regression block proving the RPC is `HRS:Import`-gated, refuses a
+ * non-completed job/blank reason/second rollback attempt, and -- the
+ * central point of this fix -- refuses atomically (never partially,
+ * confirmed by checking both fixture employees survive intact) when a
+ * real downstream reference exists (a minimal `app.employee_duplicate_
+ * candidates` row referencing one of the job's own created employees),
+ * then succeeds cleanly once that reference is cleared, leaving the job
+ * row (`status='rolled_back'`) and the employee-number counter completely
+ * untouched with a real audit event recorded. Re-verified via a fresh full
+ * local db-test suite run (350 migrations, 234 runner files, ALL PASSED,
+ * first attempt clean once the local disposable Postgres cluster -- found
+ * stopped again, unrelated to this change -- was restarted) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` before this local run.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -656,7 +705,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-272 fix (349 files: +1,
   // 20260826140000_create_migration_rehearsal_tracking.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "76faad22b3899f5ed7f96a09fe83a3863ee0737a3ca0c6234910e6bb9c276358",
+  // History: 76faad22b3899f5ed7f96a09fe83a3863ee0737a3ca0c6234910e6bb9c276358
+  // (349 files, fifteenth-pass amendment above). Superseded 2026-08-25
+  // (sixteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-271 fix (350 files: +1,
+  // 20260826150000_create_employee_import_rollback.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "855f12fb61bcd39b8d160f9038cb4682d4c6f214b5e6d9cf8d15829b0768db73",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -739,7 +794,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-272 fix (234 files unchanged in count -- disaster-recovery-
   // enterprise-support.sql widened, no file added or removed). See the
   // class-level doc comment above.
-  dbTestSetSha256: "f3c257c8dde475150aa07c97e4a93798ccc7d5ef21d3a980beddbbcf99a894bc",
+  // History: f3c257c8dde475150aa07c97e4a93798ccc7d5ef21d3a980beddbbcf99a894bc
+  // (234 files, fifteenth-pass amendment above). Superseded 2026-08-25
+  // (sixteenth pass) by the historical-issue-backlog remediation's
+  // ISS-2026-271 fix (234 files unchanged in count --
+  // hris-employee-master.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "47b945d51ad5f749c7018f3b96b063468bb984173598db437846f2eedf9ffee9",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

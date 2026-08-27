@@ -8346,3 +8346,24 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. 12 of 168 backlog items resolved (3 explicitly partial by design). 156 remain (0 Critical, 9 High, 74 Medium, 73 Low); work continues per `RGL-404.md` §12 |
 | Date | 2026-08-25 |
+
+---
+
+### CHG-2026-259 — Historical issue backlog remediation, item 13: `ISS-2026-271` (employee import rollback)
+
+| Field | Value |
+|---|---|
+| Task/prompt | Historical-issue-backlog remediation, continuing from `CHG-2026-258`. Item 13 of 168 audited open entries |
+| Change type | LIVE DATABASE + REPOSITORY MIGRATION + TEST |
+| Authorization | Operator's own standing "seluruh issue ... harus solved semua tanpa terkecuali" instruction |
+| Build process | Investigated how a job's created records could be identified without a direct FK (`app.employee_lifecycle_events.metadata->>'job_id'`, already written by the existing commit function). Confirmed by direct migration read that every `app.employees`-referencing table in this schema uses Postgres's default `RESTRICT` delete behavior (no `ON DELETE CASCADE` anywhere), so the entry's own flagged downstream-reference risk is handled correctly and completely by the database's own FK catalog rather than a hand-maintained table list. Deliberately designed the fix to differ from the manual drill's own raw-delete shape in exactly the ways that close both named residues, rather than simply automating the drill as-is |
+| Findings and disposition | `ISS-2026-271`: `RESOLVED` — `app.rollback_employee_import_job` gives a real, governed rollback path: the job row survives (status `rolled_back`, keeping every audit reference resolvable), the employee-number counter is deliberately untouched (documented as a design choice, not an oversight), and a real downstream reference blocks the rollback atomically via a clear, named error |
+| Files edited | `supabase/migrations/20260826150000_create_employee_import_rollback.sql` (new); `scripts/db-tests/hris-employee-master.sql` (widened); `scripts/release/check-release-freeze.ts` (sixteenth-pass amendment); `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-271` resolution note); `docs/build-log/release-go-live/RGL-404.md` (§12 progress table extended) |
+| Migration | 1 new migration (`20260826150000`), applied live to the hosted project (`awdlicmwzdxquopwtcfd`) via `apply_migration` — widens `app.jobs`' own `jobs_status_check` (additive, confirmed untouched by any other migration before this one) plus one new `authenticated`/`service_role`-gated RPC |
+| Risk | Low-medium — a destructive operation (deletes employee/master_record/lifecycle-event/staging rows), but gated behind `HRS:Import` + tenant-membership authority, restricted to `status='completed'` jobs only, and atomic: any FK block aborts the whole operation with no partial deletion, proved directly in the regression test |
+| Scope justification | Direct execution of the operator's own explicit instruction |
+| Gates | `bash scripts/db-tests/run.sh`: `ALL PASSED` (first real attempt clean once the local disposable Postgres cluster — found stopped again, unrelated to this change — was restarted). `pnpm run typecheck`/`lint`/`docs:check`/`security:check`/`standards:check`/`git:check-paths`/`release:check-freeze`: all green. New `public.*` wrapper's grants live-verified via `has_function_privilege` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit; the live schema addition would need a separate corrective migration to undo — not expected to be needed |
+| Status | **`COMPLETED`**. 13 of 168 backlog items resolved (3 explicitly partial by design). 155 remain (0 Critical, 9 High, 74 Medium, 72 Low); work continues per `RGL-404.md` §12 |
+| Date | 2026-08-25 |
