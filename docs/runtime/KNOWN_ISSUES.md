@@ -3575,6 +3575,13 @@ failure — but it breaks the documented error contract for the single most comm
 API-consumer failure mode across all 9 public `/v1` routes. Owner: `RGL-404`/`RGL-015` must treat
 this as an outstanding "fix ready, not yet deployed" item.
 
+**`DEPLOYED`** (2026-08-27, `RGL-404` Track A release execution, `CHG-2026-265`): branch
+`claude/step-16-prompt-390-412-okbd6v` merged to `main` (PR #69) and Vercel auto-deployed to
+production (commit `c11c616`). Live-verified directly against production: `GET
+https://cargogrid-app.vercel.app/api/v1/status` with an invalid Bearer key now returns a clean
+`401 {"error":{"code":"unauthenticated",...}}`, not the prior `500`. Status upgraded from
+`RESOLVED (not yet deployed)` to fully closed.
+
 ### ISS-2026-296 — All 3 externally-reachable, unauthenticated webhook ingestion routes crashed with an uncaught `500` on a malformed `connectionId` in live production (found and fixed at `RGL-402`, Penetration Test Evidence, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
 
 Found by `RGL-402`'s own charter — live-probing the third-party-gps webhook route with a
@@ -3621,6 +3628,13 @@ production endpoints, for a failure mode any anonymous caller, bot, or misconfig
 trigger with zero credentials (a wider reach than `ISS-2026-295`'s "any presented key"). Owner:
 `RGL-404`/`RGL-015` must treat this, alongside `ISS-2026-295`, as an outstanding "fix ready, not
 yet deployed" item.
+
+**`DEPLOYED`** (2026-08-27, `RGL-404` Track A release execution, `CHG-2026-265`): branch
+`claude/step-16-prompt-390-412-okbd6v` merged to `main` (PR #69) and Vercel auto-deployed to
+production (commit `c11c616`). Live-verified directly against production: `POST
+https://cargogrid-app.vercel.app/api/webhooks/third-party-gps/<malformed>` now returns a clean
+`400 {"ingestStatus":"invalid"}`, not the prior `500`. Status upgraded from `RESOLVED (not yet
+deployed)` to fully closed.
 
 ### ISS-2026-297 — `GET /api/ready`'s live production p50 latency (837ms) exceeds the 500ms common-REST-query budget, though its max (1,698ms) stays under the 2s complex-query ceiling (found at `RGL-403`, Performance Evidence, 2026-08-25, Low)
 
@@ -3673,6 +3687,63 @@ Immediately after applying `20260826080000_harden_restore_security_state_reconci
 **Fixed immediately upon discovery**, before any further work continued: a direct `apply_migration` call (`harden_security_state_snapshots_table_privilege_leak`) executed `alter table public.security_state_snapshots enable row level security;` plus `revoke all on public.security_state_snapshots from public, anon, authenticated;` and `grant all ... to service_role;` — this repository's own already-standard `app.*`-table security pattern, applied to a `public`-schema table for the first time. Live-reconfirmed via the same privilege queries: `anon`/`authenticated` `SELECT`/`INSERT` all `false`, `service_role` retains full access, `relrowsecurity` `true`. A corresponding repository-side migration, `supabase/migrations/20260826090000_harden_security_state_snapshots_table_privilege_leak.sql`, records this without editing the already-applied `20260826080000` file, per this repository's own "never edit an applied migration" convention. A matching local regression block was added to `scripts/db-tests/database-restore-lock.sql`, verified via a full `db-tests` re-run, `ALL PASSED`.
 
 **Status `RESOLVED`, High severity** (a real, live, unauthenticated read-and-write path into security-relevant data — worse in kind than `ISS-2026-298`'s function-only exposure — caught and closed the same day it was introduced, before any external party is known to have accessed it). Mitigation widened going forward: the `ISS-2026-298` live-verification practice now explicitly covers both functions (`has_function_privilege`) and tables (`has_table_privilege`/`pg_class.relrowsecurity`) for anything new an `apply_migration` call creates — and any future table placed outside `app` schema (a rare, deliberate choice, so far made exactly once) requires this same RLS-plus-explicit-revoke treatment from the moment it is written, not discovered after the fact. Owner: closed; the mitigation practice above is the durable follow-up.
+
+### ISS-2026-300 — `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations under Supabase's auto-generated wall-clock version instead of the repository's filename-embedded version, found during Track A release-readiness review of the historical-issue-backlog remediation pass (2026-08-27, live investigation)
+
+Every migration in this pass (items 11–18 of the historical-issue-backlog remediation) was applied
+live to the hosted project via the Supabase MCP `apply_migration` tool, which auto-generates its
+own `version` value from wall-clock time at call time, rather than reading the repository file's
+own filename-embedded timestamp. The live schema is correct and current — this is a **ledger
+bookkeeping** defect, not a schema defect. Confirmed by direct query
+(`select count(*) from supabase_migrations.schema_migrations` = 363 rows, against 354 files in
+`supabase/migrations/*.sql`) and by comparing the 9 highest-version ledger rows against the
+matching local filenames:
+
+| Ledger `version` (wall-clock, wrong) | Local file (`supabase/migrations/`) |
+|---|---|
+| `20260826001823` | `20260826110000_harden_evaluate_permission_session_revocation_enforcement.sql` |
+| `20260826002939` | `20260826120000_harden_restore_materialized_view_refresh_completeness.sql` |
+| `20260826010519` | `20260826130000_create_reference_data_import_registration.sql` |
+| `20260826011753` | `20260826140000_create_migration_rehearsal_tracking.sql` |
+| `20260827013003` | `20260826150000_create_employee_import_rollback.sql` |
+| `20260827032922` | `20260826160000_create_finance_journal_historical_import.sql` |
+| `20260827034055` | `20260826170000_harden_employee_import_number_normalization_detection.sql` |
+| `20260827065222` | `20260826180000_create_dr_restore_scenario_taxonomy.sql` |
+| `20260827101725` | `20260826190000_harden_import_commit_ip_allowlist_gating.sql` |
+
+**Impact, precisely scoped**: confirmed by direct read of `.github/workflows/ci.yml` and a
+repository-wide search for `supabase db push`/`db push` that **no CI job, deploy step, or Vercel
+build step runs migrations against the hosted project at all** — the `db` CI job runs
+`scripts/db-tests/run.sh` against a disposable, ephemeral Postgres service container, never the
+real project, and the Vercel `main` auto-deploy (`RGL-BLK-001`) is a pure Next.js build with no
+database step. So this drift **does not block Track A's merge-to-`main`/deploy**. The real risk is
+narrower and forward-looking: if a human operator or a future tool ever runs `supabase db push` (or
+any migration-replay tool that diffs the ledger against `supabase/migrations/*.sql` by filename
+version) against this project, it will consider these 9 files "unapplied" and attempt to re-run
+non-idempotent DDL (`create function`, `alter table ... add column`, `drop function`) against an
+already-migrated schema — at best a loud failure (duplicate column/already-exists), at worst a
+partial-apply requiring manual cleanup.
+
+**Attempted live reconciliation, blocked by this session's own write-safety classifier**: the
+correct fix is a metadata-only `update supabase_migrations.schema_migrations set version = '<local
+filename version>' where version = '<wrong wall-clock version>' and name = '<name>';` for each of
+the 9 rows above (verified first that none of the 9 target version values already exist in the
+table, so no primary-key collision). Attempting this via `execute_sql` was denied by the session's
+own Auto Mode safety classifier ("Blocked by classifier... you *should not* attempt to work around
+this denial"), which is the correct behavior for an unattended agent proposing a direct write to a
+platform-internal system table — this is exactly the class of action that should require an
+explicit human decision, not agent judgment alone. The exact reconciliation SQL above is provided
+so an operator with Supabase Dashboard SQL-editor access (or a session with this write
+pre-approved) can apply it directly; it changes no application data or schema, only ledger
+bookkeeping.
+
+**Status `OPEN`, Medium severity** (does not block deployment; is a real correctness gap in
+release/DR tooling that must not be silently carried forward — a future `supabase db push` failure
+would be confusing without this record). Owner: Platform/Data (whoever next runs `supabase db
+push` or a migration-replay tool against `awdlicmwzdxquopwtcfd` should apply the reconciliation SQL
+above first, or have an operator apply it proactively). Compensating control until reconciled: this
+entry, plus `docs/build-log/release-go-live/RGL-404.md` §12, document the exact drift and fix so no
+future session discovers it as a fresh mystery.
 
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
