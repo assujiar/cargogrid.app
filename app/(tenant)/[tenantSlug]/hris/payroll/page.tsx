@@ -29,6 +29,7 @@ import {
   submitPayrollRunForFinalizationAction,
   finalizePayrollRunAction,
   cancelPayrollRunAction,
+  requestPayrollRunCalculationCancellationAction,
   generateFinancePayrollHandoffAction,
   acknowledgeFinancePayrollHandoffAction,
 } from "./actions.ts";
@@ -125,6 +126,7 @@ export default async function PayrollAdminPage({ params }: { params: Promise<{ t
       submitPayrollRunForFinalizationAction={(runId: string, expectedVersion: number) => submitPayrollRunForFinalizationAction.bind(null, tenantSlug, runId, expectedVersion)}
       finalizePayrollRunAction={(requestStepId: string, decision: "approved" | "rejected") => finalizePayrollRunAction.bind(null, tenantSlug, requestStepId, decision)}
       cancelPayrollRunAction={(runId: string, expectedVersion: number) => cancelPayrollRunAction.bind(null, tenantSlug, runId, expectedVersion)}
+      requestPayrollRunCalculationCancellationAction={(runId: string) => requestPayrollRunCalculationCancellationAction.bind(null, tenantSlug, runId)}
       generateFinancePayrollHandoffAction={(runId: string) => generateFinancePayrollHandoffAction.bind(null, tenantSlug, runId)}
       acknowledgeFinancePayrollHandoffAction={(batchId: string, expectedVersion: number) => acknowledgeFinancePayrollHandoffAction.bind(null, tenantSlug, batchId, expectedVersion)}
     />

@@ -790,4 +790,188 @@ begin
 end;
 $$;
 
+\echo '>> 13. ISS-2026-090 regression: real customer- and helpdesk-channel tickets drive the SLA engine''s own customer_account_id/support_queue_id specificity dimensions and RLS/RPC boundary paths (every test above exercised app.create_ticket -- internal channel -- exclusively; app.sla_policy_versions.channel and app.resolve_effective_sla_policy_version''s own customer_account_id/support_queue_id ranking dimensions were live but never once driven by a real non-internal ticket)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'sla1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'GENERAL');
+  v_account_a uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Customer Account A');
+  v_calendar_id uuid := (select id from app.sla_calendars where tenant_id = v_tenant1 and code = 'STD');
+  v_customer1 uuid := '00000000-0000-0000-0000-000000289010';
+  v_customer2 uuid := '00000000-0000-0000-0000-000000289011';
+  v_supreme uuid := '00000000-0000-0000-0000-000000289090';
+  v_policy_cust_wide app.sla_policies;
+  v_v_cust_wide app.sla_policy_versions;
+  v_policy_cust_acct app.sla_policies;
+  v_v_cust_acct app.sla_policy_versions;
+  v_policy_hd_wide app.sla_policies;
+  v_v_hd_wide app.sla_policy_versions;
+  v_policy_hd_queue app.sla_policies;
+  v_v_hd_queue app.sla_policy_versions;
+  v_support_queue uuid;
+  v_ticket_cust1 app.tickets;
+  v_ticket_cust2 app.tickets;
+  v_ticket_hd1 app.tickets;
+  v_ticket_hd2 app.tickets;
+  v_clock_cust1 app.ticket_sla_clocks;
+  v_clock_cust2 app.ticket_sla_clocks;
+  v_clock_hd1 app.ticket_sla_clocks;
+  v_clock_hd2 app.ticket_sla_clocks;
+  v_row record;
+  v_count integer;
+begin
+  -- A second, unaffiliated customer identity -- holds no principal_membership
+  -- on ANY account -- for the RLS/RPC boundary checks below (customer1 alone,
+  -- reused from the fixture, cannot exercise a genuine "not your account"
+  -- denial against itself).
+  insert into auth.users (id, email) values (v_customer2, 'customer2@sla1.test');
+  perform app.invite_user(v_tenant1, v_customer2, 'customer2@sla1.test', 'Sla1 Customer Two', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'customer2@sla1.test'), 'active', 'onboarded', 'tester');
+
+  -- A real Supreme Admin -- Platform-side helpdesk-triage authority, needed
+  -- to assign a real app.support_queues row (mirrors ticketing-helpdesk.sql's
+  -- own fixture pattern; 'SQ-SLA090' is a fresh, unclaimed support_queues
+  -- code -- app.support_queues is Platform-global, not tenant-scoped, so its
+  -- code must be unique across every db-test file in this same run).
+  insert into auth.users (id, email) values (v_supreme, 'supreme@sla1-090.test');
+  perform app.grant_principal_membership(v_supreme, 'supreme_admin', null, null, 'tester');
+
+  perform app.set_ticket_category_helpdesk_visibility(v_category, true, '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  -- --- Customer channel: wildcard vs. customer_account_id-scoped precedence ---
+
+  v_policy_cust_wide := app.create_sla_policy(v_tenant1, 'CUSTWIDE', 'Customer Wide Default', '00000000-0000-0000-0000-000000289002', 'staff1');
+  v_v_cust_wide := app.create_sla_policy_version(v_policy_cust_wide.id, 'customer', null, null, null, null, null, v_calendar_id, 180, 720, 0, '00000000-0000-0000-0000-000000289002', 'staff1');
+  perform app.publish_sla_policy_version(v_v_cust_wide.id, v_v_cust_wide.record_version, '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  v_ticket_cust1 := app.create_customer_ticket(v_tenant1, v_account_a, v_category, 'normal', 'Customer wide-policy case', 'body', 'idem-sla090-cust1', v_customer1, 'customer1');
+  v_clock_cust1 := app.start_ticket_sla_clock(v_ticket_cust1.id, v_customer1, 'customer1');
+  if v_clock_cust1.sla_policy_version_id <> v_v_cust_wide.id then
+    raise exception 'FAIL: expected the customer-channel ticket to match the wildcard customer-channel SLA policy, got version %', v_clock_cust1.sla_policy_version_id;
+  end if;
+  if v_clock_cust1.response_target_minutes <> 180 or v_clock_cust1.resolution_target_minutes <> 720 then
+    raise exception 'FAIL: unexpected customer-channel wildcard-policy targets, got response=% resolution=%', v_clock_cust1.response_target_minutes, v_clock_cust1.resolution_target_minutes;
+  end if;
+
+  -- A MORE SPECIFIC policy scoped to this exact customer_account_id --
+  -- resolve_effective_sla_policy_version's own highest-ranked specificity
+  -- dimension (20260731120000_create_ticket_sla.sql:905), never previously
+  -- exercised by any live customer-channel ticket in this suite.
+  v_policy_cust_acct := app.create_sla_policy(v_tenant1, 'CUSTACCTA', 'Customer Account A VIP', '00000000-0000-0000-0000-000000289002', 'staff1');
+  v_v_cust_acct := app.create_sla_policy_version(v_policy_cust_acct.id, 'customer', null, null, v_account_a, null, null, v_calendar_id, 30, 240, 0, '00000000-0000-0000-0000-000000289002', 'staff1');
+  perform app.publish_sla_policy_version(v_v_cust_acct.id, v_v_cust_acct.record_version, '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  v_ticket_cust2 := app.create_customer_ticket(v_tenant1, v_account_a, v_category, 'normal', 'Customer account-scoped-policy case', 'body', 'idem-sla090-cust2', v_customer1, 'customer1');
+  v_clock_cust2 := app.start_ticket_sla_clock(v_ticket_cust2.id, v_customer1, 'customer1');
+  if v_clock_cust2.sla_policy_version_id <> v_v_cust_acct.id then
+    raise exception 'FAIL: expected the customer_account_id-scoped SLA policy (more specific) to win over the wildcard, got version %', v_clock_cust2.sla_policy_version_id;
+  end if;
+  if v_clock_cust2.response_target_minutes <> 30 then
+    raise exception 'FAIL: expected the account-scoped policy''s own tighter response target (30), got %', v_clock_cust2.response_target_minutes;
+  end if;
+
+  -- Requester-safe projection: the real customer_user actor sees target/status
+  -- reflecting the policy that actually won.
+  select * into v_row from app.get_ticket_sla_status_for_requester(v_ticket_cust2.id, v_customer1);
+  if v_row.response_target_minutes <> 30 then
+    raise exception 'FAIL: customer requester-safe projection did not reflect the account-scoped policy''s own target';
+  end if;
+
+  -- RLS/RPC boundary: an unaffiliated second customer identity (zero
+  -- membership on Account A) gets ZERO rows from every SLA read RPC -- the
+  -- exact customer-channel boundary this file never previously constructed a
+  -- real customer_user actor to test.
+  select count(*) into v_count from app.get_ticket_sla_status_for_requester(v_ticket_cust2.id, v_customer2);
+  if v_count <> 0 then
+    raise exception 'CRITICAL: an unaffiliated customer identity read another account''s customer-channel SLA status';
+  end if;
+  select count(*) into v_count from app.get_ticket_sla_clock(v_ticket_cust2.id, v_customer2);
+  if v_count <> 0 then
+    raise exception 'CRITICAL: an unaffiliated customer identity read the staff-only SLA clock projection';
+  end if;
+
+  -- Raw-table RLS, real forged session (same technique test 9 above uses):
+  -- the same unaffiliated customer, zero rows.
+  perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000289011", "role": "authenticated"}', false);
+  set role authenticated;
+  select count(*) into v_count from app.ticket_sla_clocks where id = v_clock_cust2.id;
+  reset role;
+  perform set_config('request.jwt.claims', 'null', false);
+  if v_count <> 0 then
+    raise exception 'CRITICAL: raw-table RLS admitted an unaffiliated customer_user-layer actor to another account''s SLA clock, count=%', v_count;
+  end if;
+
+  raise notice 'PASS (customer channel): wildcard vs. customer_account_id-scoped policy precedence resolves correctly on a real app.create_customer_ticket-created ticket; requester-safe projection reflects the winning policy; an unaffiliated customer_user identity is admitted to zero rows via RPC or raw-table RLS';
+
+  -- --- Helpdesk channel: wildcard vs. support_queue_id-scoped precedence ---
+
+  v_policy_hd_wide := app.create_sla_policy(v_tenant1, 'HDWIDE', 'Helpdesk Wide Default', '00000000-0000-0000-0000-000000289002', 'staff1');
+  v_v_hd_wide := app.create_sla_policy_version(v_policy_hd_wide.id, 'helpdesk', null, null, null, null, null, v_calendar_id, 60, 480, 0, '00000000-0000-0000-0000-000000289002', 'staff1');
+  perform app.publish_sla_policy_version(v_v_hd_wide.id, v_v_hd_wide.record_version, '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  v_ticket_hd1 := app.create_helpdesk_ticket(v_tenant1, v_category, 'normal', 'medium', 'billing', 'production', null, 'Helpdesk wide-policy case', 'body', 'idem-sla090-hd1', '00000000-0000-0000-0000-000000289001', 'admin1');
+  v_clock_hd1 := app.start_ticket_sla_clock(v_ticket_hd1.id, '00000000-0000-0000-0000-000000289001', 'admin1');
+  if v_clock_hd1.sla_policy_version_id <> v_v_hd_wide.id then
+    raise exception 'FAIL: expected the helpdesk-channel ticket to match the wildcard helpdesk-channel SLA policy, got version %', v_clock_hd1.sla_policy_version_id;
+  end if;
+
+  -- A real app.support_queues row + a MORE SPECIFIC policy scoped to it --
+  -- resolve_effective_sla_policy_version's own support_queue_id specificity
+  -- dimension, never previously exercised by any live helpdesk-channel
+  -- ticket in this suite.
+  v_support_queue := (app.create_support_queue('SQ-SLA090', 'ISS-2026-090 Regression Queue', null, v_supreme, 'supreme')).id;
+  v_policy_hd_queue := app.create_sla_policy(v_tenant1, 'HDQUEUE', 'Helpdesk Queue-scoped', '00000000-0000-0000-0000-000000289002', 'staff1');
+  v_v_hd_queue := app.create_sla_policy_version(v_policy_hd_queue.id, 'helpdesk', null, null, null, null, v_support_queue, v_calendar_id, 15, 120, 0, '00000000-0000-0000-0000-000000289002', 'staff1');
+  perform app.publish_sla_policy_version(v_v_hd_queue.id, v_v_hd_queue.record_version, '00000000-0000-0000-0000-000000289002', 'staff1');
+
+  v_ticket_hd2 := app.create_helpdesk_ticket(v_tenant1, v_category, 'normal', 'high', 'billing', 'production', null, 'Helpdesk queue-scoped-policy case', 'body', 'idem-sla090-hd2', '00000000-0000-0000-0000-000000289001', 'admin1');
+  v_ticket_hd2 := app.transfer_helpdesk_support_queue(v_ticket_hd2.id, v_ticket_hd2.record_version, v_support_queue, 'ISS-2026-090 regression triage', v_supreme, 'supreme');
+  v_clock_hd2 := app.start_ticket_sla_clock(v_ticket_hd2.id, '00000000-0000-0000-0000-000000289001', 'admin1');
+  if v_clock_hd2.sla_policy_version_id <> v_v_hd_queue.id then
+    raise exception 'FAIL: expected the support_queue_id-scoped SLA policy (more specific) to win over the wildcard, got version %', v_clock_hd2.sla_policy_version_id;
+  end if;
+  if v_clock_hd2.response_target_minutes <> 15 then
+    raise exception 'FAIL: expected the queue-scoped policy''s own tighter response target (15), got %', v_clock_hd2.response_target_minutes;
+  end if;
+
+  -- Requester-safe projection: admin1 (tenant-side requester party via
+  -- app._is_tenant_helpdesk_authorized) sees target/status for the tenant's
+  -- own helpdesk case.
+  select * into v_row from app.get_ticket_sla_status_for_requester(v_ticket_hd2.id, '00000000-0000-0000-0000-000000289001');
+  if v_row.response_target_minutes <> 15 then
+    raise exception 'FAIL: helpdesk tenant-side requester-safe projection did not reflect the queue-scoped policy''s own target';
+  end if;
+
+  -- Staff-only full projection is genuinely Supreme-Admin-only for a
+  -- helpdesk ticket (ISS-2026-085/086's own is_ticket_staff early-return):
+  -- the tenant-side requester (admin1) gets ZERO rows even though they ARE
+  -- the requester-safe party, and staff1's own real tenant-wide TKT:Edit
+  -- grant (ISS-2026-086's own subject) does NOT leak staff status onto a
+  -- helpdesk case either.
+  select count(*) into v_count from app.get_ticket_sla_clock(v_ticket_hd2.id, '00000000-0000-0000-0000-000000289001');
+  if v_count <> 0 then
+    raise exception 'CRITICAL: a tenant-side helpdesk requester (admin1) read the staff-only SLA clock projection for their own helpdesk case';
+  end if;
+  select count(*) into v_count from app.get_ticket_sla_clock(v_ticket_hd2.id, '00000000-0000-0000-0000-000000289002');
+  if v_count <> 0 then
+    raise exception 'CRITICAL: a tenant TKT:Edit holder (staff1) read the staff-only SLA clock projection for a helpdesk case they are not staff on';
+  end if;
+  select count(*) into v_count from app.get_ticket_sla_clock(v_ticket_hd2.id, v_supreme);
+  if v_count <> 1 then
+    raise exception 'FAIL: a real Supreme Admin should see the full staff-only SLA clock projection for a helpdesk case';
+  end if;
+
+  -- RLS/RPC boundary: a real customer_user-layer actor (customer1, wholly
+  -- unrelated to this tenant's own helpdesk case) gets ZERO rows.
+  select count(*) into v_count from app.get_ticket_sla_status_for_requester(v_ticket_hd2.id, v_customer1);
+  if v_count <> 0 then
+    raise exception 'CRITICAL: a customer_user-layer actor read a helpdesk-channel SLA status';
+  end if;
+
+  raise notice 'PASS (helpdesk channel): wildcard vs. support_queue_id-scoped policy precedence resolves correctly on a real app.create_helpdesk_ticket-created ticket; the tenant-side requester-safe projection reflects the winning policy; the staff-only full projection is genuinely Supreme-Admin-only (the requester-side tenant_admin AND a tenant TKT:Edit holder both get zero rows); a customer_user-layer actor is admitted to zero rows';
+
+  raise notice 'PASS: ISS-2026-090 closed -- scripts/db-tests/ticketing-sla.sql now drives the SLA engine''s customer/helpdesk-channel policy-matching and RLS/RPC boundary paths through real app.create_customer_ticket/app.create_helpdesk_ticket-created tickets, not app.create_ticket alone';
+end;
+$$;
+
 \echo '>> ticketing-sla.sql: ALL PASSED'

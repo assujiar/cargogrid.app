@@ -630,13 +630,16 @@ begin
 end;
 $$;
 
-\echo '>> LIVE rescoping (decision 4): a subscription row stops appearing the instant its own account membership is suspended, without the row itself being touched. Run LAST and deliberately never reactivated -- alpha-admin is Account Alpha''s sole account_admin, so self-suspension via app.set_customer_portal_account_membership_status leaves no remaining account_admin able to reactivate it through that same RPC (app.grant_initial_customer_portal_account_admin is a one-time bootstrap that no-ops, never reactivates, on an existing non-revoked row) -- an honest, disclosed consequence of this fixture''s own single-admin shape, not a defect in the RPC under test.'
+\echo '>> LIVE rescoping (decision 4): a subscription row stops appearing the instant its own account membership is suspended, without the row itself being touched. Run LAST and deliberately never reactivated. Track B Batch 8 (ISS-2026-125 item 3): app.set_customer_portal_account_membership_status now enforces a last-account_admin guard, so this block first grants Account Alpha a second admin (never itself used to reactivate alpha-admin -- this test still deliberately leaves alpha-admin suspended) purely so alpha-admin''s own self-suspend below stays a real, legal call exercising this test''s actual target (live rescoping) rather than tripping that guard.'
 do $$
 declare
   v_tenant1 uuid := (select value from csa_test_state where key = 'tenant1_id')::uuid;
   v_alpha_admin uuid := '00000000-0000-0000-0000-000000311010';
+  v_alpha_admin_2 uuid := '00000000-0000-0000-0000-000000311060';
+  v_account_alpha uuid;
   v_membership_id uuid := (select value::uuid from csa_test_state where key = 'alpha_membership_id');
   v_membership_version integer := (select value::integer from csa_test_state where key = 'alpha_membership_version');
+  v_second_admin app.customer_portal_account_memberships;
   v_count integer;
 begin
   select count(*) into v_count from app.list_customer_shipment_alert_subscriptions(v_tenant1, v_alpha_admin);
@@ -644,9 +647,25 @@ begin
     raise exception 'assertion failed: expected 3 rows before suspension, got %', v_count;
   end if;
 
+  -- Track B Batch 8, ISS-2026-125 item 3: app.set_customer_portal_account_
+  -- membership_status now rejects a self-suspend that would leave Account
+  -- Alpha with zero active account_admins (last_account_admin) -- give it a
+  -- second admin first so alpha-admin's own self-suspend below stays a
+  -- real, legal call exercising this test's own actual target (live
+  -- rescoping), not the last-admin guard. This second admin is deliberately
+  -- never itself used to reactivate alpha-admin (this test's own header
+  -- comment already disclosed no reactivation happens here) -- it exists
+  -- solely to keep the self-suspend legal.
+  select id into v_account_alpha from app.accounts where tenant_id = v_tenant1 and legal_name = 'Csa1 Account Alpha';
+  insert into auth.users (id, email) values (v_alpha_admin_2, 'alpha-admin-2@csa1.test');
+  perform app.invite_user(v_tenant1, v_alpha_admin_2, 'alpha-admin-2@csa1.test', 'Csa1 Alpha Second Admin', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'alpha-admin-2@csa1.test'), 'active', 'onboarded', 'tester');
+  select * into v_second_admin from app.invite_customer_portal_user(v_tenant1, v_account_alpha, v_alpha_admin_2, 'account_admin', v_alpha_admin, 'alpha-admin');
+  perform app.accept_customer_portal_invite(v_second_admin.id, v_second_admin.record_version, v_alpha_admin_2);
+
   -- The actor must be an active account_admin on the SAME account (app.
   -- actor_is_active_customer_portal_account_admin) -- alpha-admin themselves
-  -- still qualifies at this point.
+  -- still qualifies at this point, and is no longer Alpha's SOLE admin.
   perform app.set_customer_portal_account_membership_status(v_membership_id, v_membership_version, 'suspended', 'live rescoping test', v_alpha_admin, 'alpha-admin');
 
   select count(*) into v_count from app.list_customer_shipment_alert_subscriptions(v_tenant1, v_alpha_admin);

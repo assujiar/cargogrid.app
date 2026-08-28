@@ -27,6 +27,7 @@ import {
   submitPayrollRunForFinalization,
   finalizePayrollRun,
   cancelPayrollRun,
+  requestPayrollRunCalculationCancellation,
   prepareFinancePayrollDisbursementHandoffFromPayrollRun,
   acknowledgePayrollFinanceHandoffBatch,
   PayrollMutationError,
@@ -340,6 +341,30 @@ export async function cancelPayrollRunAction(tenantSlug: string, runId: string, 
     await cancelPayrollRun(supabase, { runId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof PayrollMutationError) return { error: `Could not cancel this run: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(path(tenantSlug));
+  return OK;
+}
+
+// Track B Batch 8 (ISS-2026-080): a real, tested wrapper
+// (requestPayrollRunCalculationCancellation, server/mutations/payroll.ts)
+// existed with no Server Action or UI caller -- this was the only missing
+// link making app.calculate_payroll_run's own mid-loop cancellation check
+// (HRT-282 Tier C Finding 4) reachable from the admin workspace itself
+// rather than only from a direct RPC call. No new RPC, no schema change --
+// pure UI-reachability wiring, mirroring cancelPayrollRunAction immediately
+// above.
+export async function requestPayrollRunCalculationCancellationAction(tenantSlug: string, runId: string, _prevState: PayrollAdminActionState, _formData: FormData): Promise<PayrollAdminActionState> {
+  const access = await resolveHrisAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return NO_ACCESS;
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await requestPayrollRunCalculationCancellation(supabase, { runId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof PayrollMutationError) return { error: `Could not request cancellation of this in-progress calculation: ${error.message}` };
     throw error;
   }
 

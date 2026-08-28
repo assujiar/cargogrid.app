@@ -1217,6 +1217,65 @@ import { readFileSync } from "node:fs";
  * new/changed grant and function body live-verified correct, including a
  * live-only grant-leak correction found via mandatory post-apply grant
  * introspection.
+ *
+ * AMENDED 2026-08-28 (twenty-eighth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md §12,
+ * items 74-99 (Track B, Batch 8 -- the final "sweep up everything"
+ * disposition batch, a 26-item independent re-derivation against
+ * docs/runtime/KNOWN_ISSUES.md rather than the plan's own 5 named groups
+ * alone). Two migrations added (377 -> 379 files: +2):
+ * `20260828193000_harden_customer_portal_last_account_admin_status_guard.sql`
+ * (ISS-2026-125 item 3: `app.set_customer_portal_account_membership_
+ * status` gains the identical last-admin guard `app.update_customer_
+ * portal_account_membership_role` already applies -- the sole active
+ * account_admin on an account may no longer suspend/revoke themselves or
+ * the account's only other admin); and
+ * `20260828200000_create_raw_mutation_tripwire.sql` (ISS-2026-259: a new
+ * statement-level tripwire trigger + `xact_id` correlation column + `app.
+ * list_untracked_table_mutations()` read RPC, attached to `app.leads` and
+ * `app.audit_logs`, detecting -- never blocking -- a raw DELETE/UPDATE/
+ * TRUNCATE with no corresponding same-transaction audit-log entry;
+ * deliberately bounded to 2 tables, honestly disclosed as narrowing, not
+ * closing, the general repo-wide audit blindness). A third migration
+ * (`20260828190000_harden_enqueue_job_payload_target_mismatch.sql`,
+ * ISS-2026-053) was drafted, applied to a local disposable database, and
+ * then WITHDRAWN before ever being applied live -- the full local
+ * db-tests suite (not its own isolated regression, which had passed
+ * clean) surfaced a real regression: `app.run_loyalty_expiry_sweep`'s own
+ * deliberate idempotent-replay design legitimately embeds a
+ * `clock_timestamp()`-derived, microsecond-varying value in its payload
+ * while its idempotency key correctly scopes only to the calendar day --
+ * mirrors the `ISS-2026-038`/`040` withdrawal precedent exactly. Also
+ * found and corrected in this same batch: a real inventory omission
+ * (`ISS-2026-255`, High, `TRACKED_GAP`, never tracked in `BACKLOG_
+ * INVENTORY.md`'s own High-severity table at all -- disclosed and
+ * corrected, not silently absorbed) and a false-positive research finding
+ * (a first-pass agent's claim that 13 `table-only-procurement-hardening`
+ * items were "never actually written back" was independently re-checked
+ * and found to be a regex miss against this file's own pipe-table row
+ * format, not a real gap -- caught before any action was taken on it).
+ * dbTestSetSha256 changed (234 -> 235 files: +1,
+ * `scripts/db-tests/raw-mutation-tripwire.sql` -- 6 new regression cases
+ * for ISS-2026-259). `scripts/db-tests/ticketing-sla.sql` (new test 13,
+ * ISS-2026-090), `customer-user-management.sql` (new block, ISS-2026-125
+ * item 3), `customer-portal-dashboard.sql`/`customer-shipment-alerts.sql`
+ * (fixture repairs, each self-mutation given a second admin first, direct
+ * consequence of the ISS-2026-125 fix), and `scripts/db-tests/lib/setup-
+ * disposable-db.sh` (`set -euo pipefail` added internally, ISS-2026-161)
+ * all also changed but fall outside the tracked set (widened existing
+ * files, not a net-new file, except the one counted above).
+ * `app/(tenant)/[tenantSlug]/hris/payroll/actions.ts`/`page.tsx`/
+ * `payroll-admin-panel.tsx` (ISS-2026-080, TypeScript-only UI wiring)
+ * also changed but is neither a migration nor a db-test file. Re-verified
+ * via a fresh full local db-test suite run (379 migrations, 235 runner
+ * files, ALL PASSED, second attempt after the ISS-2026-053 migration was
+ * withdrawn following the first attempt's real regression) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` immediately after this local run passed; every
+ * new/changed grant and function body live-verified correct on first
+ * application, no live-only leak this time (the platform default-
+ * privilege bootstrap revoke was baked into the new migration from the
+ * start, per the precedent Batch 7 established).
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1374,8 +1433,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // source_lineage.sql, 20260828160000_harden_self_approval_null_actor_
   // fail_open.sql, 20260828171000_harden_vendor_evidence_reviewer_record_
   // scope.sql, 20260828173000_harden_files_malware_scan_raw_correction_
-  // audit.sql). See the class-level doc comment above.
-  migrationSetSha256: "2f8b8c272e6b00db9132dc954786f0e2337b7e8a7386b0e15db16f7d57106d18",
+  // audit.sql).
+  // History: 2f8b8c272e6b00db9132dc954786f0e2337b7e8a7386b0e15db16f7d57106d18
+  // (377 files, twenty-seventh-pass amendment above). Superseded 2026-08-28
+  // (twenty-eighth pass) by Track B Batch 8's ISS-2026-125/259 fixes (379
+  // files: +2, 20260828193000_harden_customer_portal_last_account_admin_
+  // status_guard.sql, 20260828200000_create_raw_mutation_tripwire.sql). See
+  // the class-level doc comment above.
+  migrationSetSha256: "c2caf7cec32d7dc08535ee11f477e01f3c3ed7a2c0ec14b26a746a1ca4707d26",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1539,9 +1604,15 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // billing-events.sql, procurement-vendor-compliance.sql, procurement-
   // vendor-financial-security.sql, document-file.sql, approval.sql,
   // dedicated-enterprise-deployment.sql, and multi-region-data-
-  // residency.sql all widened, no file added or removed). See the
-  // class-level doc comment above.
-  dbTestSetSha256: "6128cd424ad1aa108a22c013cf8c790aa1feff99449724ea972cd345accfdb90",
+  // residency.sql all widened, no file added or removed).
+  // History: 6128cd424ad1aa108a22c013cf8c790aa1feff99449724ea972cd345accfdb90
+  // (234 files, twenty-seventh-pass amendment above). Superseded 2026-08-28
+  // (twenty-eighth pass) by Track B Batch 8 (235 files: +1, scripts/db-
+  // tests/raw-mutation-tripwire.sql, new -- ticketing-sla.sql, customer-
+  // user-management.sql, customer-portal-dashboard.sql, and customer-
+  // shipment-alerts.sql all also widened). See the class-level doc comment
+  // above.
+  dbTestSetSha256: "e425cdf978802940d2c205edc44a566f641cb811fed7b1924c2d3994beba036b",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

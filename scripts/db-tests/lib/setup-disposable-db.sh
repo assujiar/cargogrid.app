@@ -19,6 +19,24 @@
 #   # afterward, $CARGOGRID_TEST_DB_URL is set and ready to use.
 
 cargogrid_setup_disposable_db() {
+  # Track B Batch 8 (ISS-2026-161): this function's own header above
+  # documents "from a caller that has already set -euo pipefail" as a
+  # USAGE CONTRACT, but never enforced it itself -- a caller that skips that
+  # (this repository's one shipped caller, scripts/db-tests/run.sh line 14,
+  # already does it; a future/ad hoc caller can easily forget, exactly as
+  # observed live at HDN-370's Tier C session) got a function that reaches
+  # its own final `export` statement and returns 0 even when every `psql`
+  # call inside failed (e.g. Postgres down: "Connection refused" on every
+  # migration, function still reports success). Setting it here makes the
+  # safety property hold unconditionally rather than depending on every
+  # caller remembering the documented contract -- safe and idempotent to set
+  # again even when a stricter caller already has (`set -e`/`-u`/`-o
+  # pipefail` are shell-global flags, not function-scoped; re-asserting an
+  # already-set flag is a no-op). This intentionally leaves the calling
+  # shell in `-euo pipefail` mode after this function returns, matching the
+  # documented contract every real caller already independently opts into.
+  set -euo pipefail
+
   local admin_url="$1"
   local db_name="$2"
   local repo_root="$3"
