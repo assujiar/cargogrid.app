@@ -12,6 +12,13 @@
 -- app.loyalty_benefit_entitlement_events, app.loyalty_reward_stock_
 -- reservations, app.loyalty_redemption_events).
 --
+-- Extended (ISS-2026-137, Track B Batch 4, loyalty-approval-authority) by
+-- supabase/migrations/20260828010000_harden_customer_portal_loyalty_tier_
+-- movements_supreme_admin_override.sql to a 6th table, app.loyalty_
+-- account_tier_movements -- named in ISS-2026-130's own ORIGINAL four-table
+-- list but omitted from CPL-325's own 5-table remediation scope. Block (c3)
+-- and the (d)/(e) grant-check array below now also cover this 6th table.
+--
 -- UUID range 00000000-0000-0000-0000-000003992xxx, grep-verified unclaimed
 -- against every other file in this directory before writing this fixture.
 --
@@ -83,6 +90,29 @@ begin
   perform app.publish_loyalty_reward(v_tenant1, v_reward.id, v_reward.record_version, null, v_manager1, 'manager1');
   insert into app.loyalty_reward_stock_reservations (tenant_id, reward_id, quantity, reason, created_by, idempotency_key)
   values (v_tenant1, v_reward.id, 1, 'seed', 'tester', 'sao1-resv-1');
+
+  -- ISS-2026-137 fixture: a real published tier definition, then a direct
+  -- fixture INSERT into app.loyalty_account_tier_movements (mirrors this
+  -- same file's own already-established "direct table INSERT, no RPC
+  -- exists to create one standalone" fixture shape used above for
+  -- app.loyalty_reward_stock_reservations -- no dedicated single-movement
+  -- RPC exists; production movements are a side effect of the tier
+  -- evaluation engine, out of scope to stand up for this narrow trigger
+  -- regression).
+  declare
+    v_tier app.loyalty_tier_definitions;
+  begin
+    v_tier := app.create_loyalty_tier_definition(v_tenant1, v_program1, 'Silver', 1, 'lifetime_points', 0, '{}'::jsonb, 365, v_manager1, 'manager1');
+    v_tier := app.publish_loyalty_tier_definition(v_tenant1, v_tier.id, v_tier.record_version, null, v_manager1, 'manager1');
+
+    insert into app.loyalty_account_tier_movements (
+      tenant_id, loyalty_account_id, from_tier_id, to_tier_id, movement_type,
+      tier_definition_version_id, evaluation_snapshot, reason, next_review_at, created_by
+    ) values (
+      v_tenant1, v_lacct1, null, v_tier.id, 'initial',
+      v_tier.id, '{"seed": true}'::jsonb, 'seed for supreme admin override test', clock_timestamp() + interval '365 days', 'tester'
+    );
+  end;
 end $$;
 
 \echo '>> (a) raw UPDATE/DELETE with no actor context (auth.uid() = NULL) is BLOCKED on app.loyalty_point_ledger_entries'
@@ -188,13 +218,38 @@ begin
   perform set_config('request.jwt.claims', 'null', true);
 end $$;
 
-\echo '>> (d) authenticated holds ZERO UPDATE/DELETE grant on any of the 5 tables (unchanged baseline); (e) service_role now DOES hold the additive UPDATE/DELETE grant this migration adds'
+\echo '>> (c3) ISS-2026-137 regression: same three-part proof (blocked / blocked / Supreme-Admin-allowed-and-audited) on the 6th table, app.loyalty_account_tier_movements -- confirms the ISS-2026-130 fix extends correctly to the table it originally omitted'
+do $$
+declare
+  v_supreme uuid := '00000000-0000-0000-0000-000003992099';
+  v_movement_id uuid := (select id from app.loyalty_account_tier_movements where reason = 'seed for supreme admin override test');
+begin
+  perform set_config('request.jwt.claims', 'null', true);
+  begin
+    update app.loyalty_account_tier_movements set reason = 'tampered' where id = v_movement_id;
+    raise exception 'assertion failed: expected normal-context UPDATE to be blocked';
+  exception when others then
+    if sqlerrm not like 'loyalty_ledger_append_only_immutable%' then raise; end if;
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', v_supreme::text, 'role', 'authenticated')::text, true);
+  update app.loyalty_account_tier_movements set reason = 'corrected by supreme admin' where id = v_movement_id;
+  if not exists (select 1 from app.loyalty_account_tier_movements where id = v_movement_id and reason = 'corrected by supreme admin') then
+    raise exception 'assertion failed: expected Supreme Admin UPDATE on app.loyalty_account_tier_movements to succeed';
+  end if;
+  if not exists (select 1 from app.audit_logs where resource_type = 'app.loyalty_account_tier_movements' and resource_id = v_movement_id and action = 'update_append_only_loyalty_ledger_row') then
+    raise exception 'assertion failed: expected an audit_logs row for the Supreme Admin UPDATE on app.loyalty_account_tier_movements';
+  end if;
+  perform set_config('request.jwt.claims', 'null', true);
+end $$;
+
+\echo '>> (d) authenticated holds ZERO UPDATE/DELETE grant on any of the 6 tables (unchanged baseline); (e) service_role now DOES hold the additive UPDATE/DELETE grant on all 6, including app.loyalty_account_tier_movements (ISS-2026-137)'
 do $$
 declare
   v_has_grant boolean;
   t text;
 begin
-  foreach t in array array['loyalty_earning_events','loyalty_point_ledger_entries','loyalty_benefit_entitlement_events','loyalty_reward_stock_reservations','loyalty_redemption_events'] loop
+  foreach t in array array['loyalty_earning_events','loyalty_point_ledger_entries','loyalty_benefit_entitlement_events','loyalty_reward_stock_reservations','loyalty_redemption_events','loyalty_account_tier_movements'] loop
     select exists (
       select 1 from information_schema.role_table_grants
       where table_schema = 'app' and table_name = t and grantee = 'authenticated' and privilege_type in ('UPDATE','DELETE')

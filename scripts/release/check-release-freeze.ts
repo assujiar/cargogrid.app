@@ -1004,6 +1004,65 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (359 migrations,
  * 234 runner files, ALL PASSED) before this digest was changed. No live
  * database write this batch -- nothing to apply via `apply_migration`.
+ *
+ * AMENDED 2026-08-28 (twenty-fourth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md §12,
+ * items 34-41 (Track B, Batch 4 -- `cpl-customer-portal-scope` +
+ * `loyalty-fraud-reconciliation` + `loyalty-approval-authority`). Seven
+ * migrations added (359 -> 366 files: +7):
+ * `20260827140000_harden_customer_portal_invoice_account_id_projection_
+ * iss2026124.sql` (ISS-2026-124: adds `customer_account_id` to
+ * `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices`
+ * and their `public.*` wrappers, `DROP`+`CREATE` required for the
+ * `RETURNS TABLE` widening);
+ * `20260828000000_create_loyalty_point_program_expiry_config.sql`
+ * (ISS-2026-128 item 2: new `app.loyalty_point_program_configs` table +
+ * `set_`/`get_` RPCs + their `public.*` wrappers, `app.post_loyalty_
+ * points_earned` widened via `CREATE OR REPLACE` with an identical
+ * signature -- self-caught mid-drafting: an ordering bug validated
+ * `p_expiry_days` only inside the idempotency short-circuit, silently
+ * skipping it on replay, corrected before this digest changed; a missing
+ * `public.*` wrapper pair was also self-caught by `public-api-wrapper-
+ * regression.sql` and added);
+ * `20260828030000_harden_customer_portal_membership_anti_enumeration.sql`
+ * (ISS-2026-116: collapses `app.accept_customer_portal_invite`/`app.set_
+ * customer_portal_account_membership_status`'s own distinguishable
+ * wrong-actor error into the identical not-found shape);
+ * `20260828040000_harden_advanced_tms_customer_inventory_access_actor_
+ * identity.sql` (ISS-2026-117: all 10 actor-taking functions in ATW-023's
+ * customer-inventory-access migration now call `app.assert_actor_is_
+ * session_identity` first -- escalated in severity during verification,
+ * since `20260826000000`'s own `public.*` wrappers made the gap directly
+ * reachable by any authenticated session, not merely theoretical);
+ * `20260828050000_harden_customer_portal_loyalty_fraud_review_case_self_
+ * approval.sql` (ISS-2026-133 item 1: a new `opened_by_auth_user_id`
+ * column plus the established `self_approval_not_allowed` convention on
+ * `app.open_loyalty_fraud_review_case`/`app.decide_loyalty_fraud_review_
+ * case`);
+ * `20260828060000_harden_customer_portal_loyalty_tier_movements_supreme_
+ * admin_override.sql` (ISS-2026-137: extends the already-generic
+ * `app.protect_loyalty_ledger_append_only()` trigger to a 6th table); and
+ * `20260828070000_harden_customer_portal_loyalty_liability_reward_
+ * internal_cost_missing_exception.sql` (ISS-2026-134 item 3: a third
+ * exception type, `reward_internal_cost_missing`, on `app.execute_
+ * loyalty_liability_reconciliation_run` -- self-caught mid-drafting: an
+ * early version was accidentally based on a stale pre-CPL-325-atomicity
+ * body, live-reproduced breaking that file's own snapshot-atomicity
+ * regression, rebuilt on the current body before finalizing).
+ * dbTestSetSha256 changed (234 files unchanged in count -- 8 existing
+ * files widened, no file added or removed): `advanced-tms-customer-
+ * inventory-access.sql`, `customer-invoice-billing-visibility.sql`,
+ * `customer-loyalty-expiry-fraud-prevention.sql`, `customer-loyalty-
+ * liability-reconciliation.sql`, `customer-loyalty-membership-tier.sql`
+ * (a pre-existing fixture that directly `UPDATE`d `app.loyalty_account_
+ * tier_movements` corrected to use a genuine Supreme Admin actor, now
+ * that the new trigger blocks a raw update), `customer-loyalty-points-
+ * ledger.sql`, `customer-portal-loyalty-ledger-supreme-admin-override.
+ * sql`, and `customer-portal-scope.sql`. Re-verified via a fresh full
+ * local db-test suite run (366 migrations, 234 runner files, ALL PASSED)
+ * before this digest was changed, and applied to the live hosted project
+ * via `apply_migration` immediately after this local run passed; every
+ * new/changed grant and function body live-verified correct.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1134,8 +1193,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // fixes (359 files: +2,
   // 20260827110000_harden_request_approval_unique_violation_handler.sql,
   // 20260827130000_harden_tenant_disclosure_representative_extension_batch2.sql).
-  // See the class-level doc comment above.
-  migrationSetSha256: "8a5b26a13dad1db0db102030e4d4da13b0bf0bc4c4e2681b0486d65b0728b989",
+  // History: 8a5b26a13dad1db0db102030e4d4da13b0bf0bc4c4e2681b0486d65b0728b989
+  // (359 files, twenty-second-pass amendment above). Superseded 2026-08-28
+  // (twenty-fourth pass) by Track B Batch 4's ISS-2026-116/117/124/128/133/
+  // 134/137 fixes (366 files: +7, 20260827140000, 20260828000000,
+  // 20260828030000, 20260828040000, 20260828050000, 20260828060000,
+  // 20260828070000). See the class-level doc comment above.
+  migrationSetSha256: "9a1fecf2af2f4ab64f64b67a10d4773b3979ab0711c457dcab3587dba09541c9",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1269,8 +1333,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (234 files, twenty-second-pass amendment above). Superseded 2026-08-27
   // (twenty-third pass) by Track B Batch 3 (234 files unchanged in count --
   // procurement-vendor-invoice-matching.sql widened, no file added or
-  // removed). See the class-level doc comment above.
-  dbTestSetSha256: "834154f63adbc87e9e732601ec836ac9a4239835dda75300c892dc3625179fbb",
+  // removed).
+  // History: 834154f63adbc87e9e732601ec836ac9a4239835dda75300c892dc3625179fbb
+  // (234 files, twenty-third-pass amendment above). Superseded 2026-08-28
+  // (twenty-fourth pass) by Track B Batch 4 (234 files unchanged in count --
+  // advanced-tms-customer-inventory-access.sql, customer-invoice-billing-
+  // visibility.sql, customer-loyalty-expiry-fraud-prevention.sql,
+  // customer-loyalty-liability-reconciliation.sql, customer-loyalty-
+  // membership-tier.sql, customer-loyalty-points-ledger.sql, customer-
+  // portal-loyalty-ledger-supreme-admin-override.sql, and customer-portal-
+  // scope.sql all widened, no file added or removed). See the class-level
+  // doc comment above.
+  dbTestSetSha256: "3e48578beba727ba14b0bae623f3da0abf258d5ed528377537438f7900bed688",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

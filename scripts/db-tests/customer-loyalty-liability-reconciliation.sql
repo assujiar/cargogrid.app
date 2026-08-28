@@ -1092,4 +1092,133 @@ begin
   end;
 end $$;
 
+\echo '>> ISS-2026-134 item 3 regression (mandatory): a physical_item reward published with internal_cost=NULL, redeemed and approved into fulfilling -- the run must still report reward_fulfillment_liability_total=0 for it (unchanged) but now ALSO raise a real, typed reward_internal_cost_missing exception naming the redemption/reward, block certify until resolved, and certify cleanly once resolved. Own, fully isolated tenant (lra4), mirroring lra3''s own established isolation rationale -- this fixture''s own account/redemption activity must never ripple into lra1''s own tenant-wide absolute-count assertions elsewhere in this file'
+do $$
+declare
+  v_tenant4 uuid;
+  v_company4 uuid;
+  v_manager4 uuid := '00000000-0000-0000-0000-000000346701';
+  v_customer_iota uuid := '00000000-0000-0000-0000-000000346710';
+  v_manager_role4 uuid;
+  v_manager_draft4 app.role_versions;
+  v_locale_draft4 app.tenant_locale_versions;
+  v_program4_id uuid;
+  v_account_iota uuid;
+  v_reward app.loyalty_rewards;
+  v_event_id uuid;
+  v_redemption app.loyalty_redemptions;
+  v_run app.loyalty_liability_reconciliation_runs;
+  v_exception app.loyalty_liability_reconciliation_exceptions;
+begin
+  insert into auth.users (id, email) values
+    (v_manager4, 'manager4@lra4.test'),
+    (v_customer_iota, 'customer-iota@lra4.test');
+
+  perform app.provision_tenant('lra4', 'Liability Recon Test Tenant Four (null internal_cost, isolated)', 'idem-lra4', 'tester');
+  v_tenant4 := (select id from app.tenants where slug = 'lra4');
+  perform app.transition_tenant_status(v_tenant4, 'active', 'setup', 'tester');
+  perform app.create_org_unit(v_tenant4, 'company', null, 'LRA4-CO', 'Lra4 Co', 'tester');
+  v_company4 := (select id from app.org_units where tenant_id = v_tenant4 and code = 'LRA4-CO');
+
+  perform app.invite_user(v_tenant4, v_manager4, 'manager4@lra4.test', 'Lra4 Manager', v_company4, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'manager4@lra4.test'), 'active', 'onboarded', 'tester');
+  v_manager_role4 := (app.create_role(v_tenant4, 'Loyalty Manager', 'full LYL authority', 'tester')).id;
+  v_manager_draft4 := app.create_role_version(v_manager_role4, 'tester');
+  perform app.set_role_version_permissions(v_manager_draft4.id, array(select id from app.permissions where resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit', 'Configure')), 'tester');
+  perform app.publish_role_version(v_manager_draft4.id, now(), 'tester');
+  perform app.assign_role(v_tenant4, (select id from app.role_versions where role_id = v_manager_role4 and status = 'published'), v_manager4, v_manager4, 'tester');
+
+  -- A real published USD locale (mirrors lra3''s own fixture exactly) --
+  -- the currency-scope gate this new exception's own detection is
+  -- deliberately co-scoped with (this migration's own header) resolves
+  -- against this.
+  perform app.grant_principal_membership(v_manager4, 'tenant_admin', v_tenant4, null, 'tester');
+  v_locale_draft4 := app.create_tenant_locale_draft(v_tenant4, v_manager4, 'tester');
+  perform app.set_tenant_locale_config(v_locale_draft4.id, v_manager4, 'id', 'Asia/Jakarta', 'USD', '{}'::jsonb, 'tester');
+  perform app.publish_tenant_locale_version(v_locale_draft4.id, v_manager4, clock_timestamp(), 'tester');
+
+  perform app.invite_user(v_tenant4, v_customer_iota, 'customer-iota@lra4.test', 'Lra4 Customer Iota', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'customer-iota@lra4.test'), 'active', 'onboarded', 'tester');
+
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant4, 'Lra4 Account Iota', 'lra4-iota-fp', '{}'::jsonb, v_company4, 'tester') returning id into v_account_iota;
+  perform app.grant_principal_membership(v_customer_iota, 'customer_user', v_tenant4, v_account_iota::text, 'tester');
+
+  perform app.create_loyalty_program(v_tenant4, 'Lra4 Program', 'Program used ONLY by the ISS-2026-134 item 3 regression.', v_manager4, 'manager4');
+  v_program4_id := (select id from app.loyalty_programs where tenant_id = v_tenant4 and name = 'Lra4 Program');
+  perform app.update_loyalty_program_status(v_tenant4, v_program4_id, 1, 'active', v_manager4, 'manager4');
+  perform app.create_loyalty_program_rule_version(v_tenant4, v_program4_id, 'per_paid_invoice_amount', 'points', 1, '{}'::jsonb, v_manager4, 'manager4');
+  perform app.publish_loyalty_program_rule_version(v_tenant4, (select id from app.loyalty_program_rule_versions where program_id = v_program4_id and status = 'draft'), 1, null, v_manager4, 'manager4');
+
+  perform app.enroll_customer_loyalty_account(v_tenant4, v_account_iota, v_program4_id, v_manager4, 'manager4');
+
+  -- The reward under test: p_internal_cost is explicitly NULL -- a real,
+  -- valid, published physical_item reward with no internal_cost configured.
+  v_reward := app.create_loyalty_reward_draft(v_tenant4, v_program4_id, 'Lra4 Physical Reward (null cost)', 'physical_item', 'Null internal_cost fixture.', 'Terms.', null, 20, 5, null::numeric, null, null, v_manager4, 'manager4');
+  perform app.publish_loyalty_reward(v_tenant4, v_reward.id, v_reward.record_version, null, v_manager4, 'manager4');
+
+  insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by)
+  values ('00000000-0000-0000-0000-000000346800', v_tenant4, v_account_iota, 'invoice', '00000000-0000-0000-0000-000000346801', 'USD', 20, 20, 'paid', false, '2026-08-01', '2026-08-31', 'tester');
+  perform app.evaluate_customer_loyalty_earning_for_paid_invoice(v_tenant4, '00000000-0000-0000-0000-000000346800', v_manager4, 'manager4');
+  v_event_id := (select id from app.loyalty_earning_events where idempotency_key = 'ar-open-item:00000000-0000-0000-0000-000000346800');
+  perform app.post_loyalty_points_earned(v_tenant4, v_event_id, v_manager4, 'manager4', 365);
+
+  v_redemption := app.submit_loyalty_redemption(v_tenant4, (select id from app.loyalty_accounts where tenant_id = v_tenant4 and customer_account_id = v_account_iota), v_reward.id, 'lra4-iota-redeem-1', v_manager4, 'manager4');
+  v_redemption := app.decide_loyalty_redemption(v_tenant4, v_redemption.id, v_redemption.record_version, 'approve', 'approved for null-internal_cost fixture', v_manager4, 'manager4');
+  if v_redemption.status <> 'fulfilling' then
+    raise exception 'assertion failed: expected Iota''s redemption to be fulfilling, got %', v_redemption.status;
+  end if;
+
+  v_run := app.execute_loyalty_liability_reconciliation_run(v_tenant4, null, 'USD', v_manager4, 'manager4', 'lra4-run-1', 1);
+  if v_run.status <> 'exceptions_pending' then
+    raise exception 'assertion failed: expected status=exceptions_pending for the null-internal_cost run, got %', v_run.status;
+  end if;
+  if v_run.reward_fulfillment_liability_total <> 0 then
+    raise exception 'assertion failed: expected reward_fulfillment_liability_total = 0 for a null-internal_cost open redemption (unchanged behavior), got %', v_run.reward_fulfillment_liability_total;
+  end if;
+
+  select * into v_exception from app.loyalty_liability_reconciliation_exceptions where run_id = v_run.id and exception_type = 'reward_internal_cost_missing';
+  if v_exception.id is null then
+    raise exception 'assertion failed: expected a real reward_internal_cost_missing exception row, found none';
+  end if;
+  if (v_exception.detail->>'redemptionId')::uuid <> v_redemption.id or (v_exception.detail->>'rewardId')::uuid <> v_reward.id then
+    raise exception 'assertion failed: expected the exception detail to name the exact redemption/reward, got %', v_exception.detail;
+  end if;
+
+  -- A currency-mismatched run (co-scoped with the ISS-2026-136 item 1
+  -- accumulation gate, this migration's own header) must NOT re-raise the
+  -- identical exception -- avoiding the ISS-2026-136 item 2 detection-noise
+  -- shape for this new type.
+  declare
+    v_run_wrong_currency app.loyalty_liability_reconciliation_runs := app.execute_loyalty_liability_reconciliation_run(v_tenant4, null, 'IDR', v_manager4, 'manager4', 'lra4-run-idr', 1);
+  begin
+    if exists (select 1 from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_wrong_currency.id and exception_type = 'reward_internal_cost_missing') then
+      raise exception 'assertion failed: expected NO reward_internal_cost_missing exception on a currency-mismatched (IDR) run of a USD-denominated tenant';
+    end if;
+  end;
+
+  -- Certify is BLOCKED while this exception remains open.
+  begin
+    perform app.certify_loyalty_liability_reconciliation_run(v_tenant4, v_run.id, v_run.record_version, v_manager4, 'manager4');
+    raise exception 'assertion failed: expected certify to be BLOCKED while the reward_internal_cost_missing exception remains open';
+  exception when others then if sqlerrm not like 'loyalty_liability_reconciliation_unresolved_exceptions%' then raise; end if;
+  end;
+
+  -- Resolve it (mandatory non-empty reason, the same convention as every
+  -- other exception type), then certify succeeds.
+  v_exception := app.resolve_loyalty_liability_reconciliation_exception(v_tenant4, v_exception.id, v_exception.record_version, 'accepted -- reward internal_cost intentionally left unset for this test fixture', v_manager4, 'manager4');
+  if v_exception.status <> 'resolved' then
+    raise exception 'assertion failed: expected the reward_internal_cost_missing exception to resolve, got status=%', v_exception.status;
+  end if;
+
+  -- The run's own status just auto-cleared from exceptions_pending back to
+  -- open (the same mechanism the file's own established "resolve all three
+  -- exceptions" block above already exercises), bumping record_version --
+  -- re-select the current version rather than reuse the pre-resolve one.
+  v_run := app.certify_loyalty_liability_reconciliation_run(v_tenant4, v_run.id, (select record_version from app.loyalty_liability_reconciliation_runs where id = v_run.id), v_manager4, 'manager4');
+  if v_run.status <> 'certified' then
+    raise exception 'assertion failed: expected certify to succeed once the exception is resolved, got status=%', v_run.status;
+  end if;
+end $$;
+
 \echo '>> ALL PASSED: CPL-323 Liability Reconciliation Analytics'

@@ -365,6 +365,14 @@ declare
   v_movement app.loyalty_account_tier_movements;
   v_count_before integer;
   v_count_after integer;
+  -- ISS-2026-137 fix (supabase/migrations/20260828060000): app.loyalty_
+  -- account_tier_movements is now append-only-protected (the identical
+  -- ISS-2026-130 Supreme-Admin-override gate the other 5 Loyalty ledger
+  -- tables already carry) -- the direct fixture UPDATE below now requires a
+  -- genuine Supreme Admin actor context, mirroring scripts/db-tests/
+  -- customer-portal-loyalty-ledger-supreme-admin-override.sql's own
+  -- established convention exactly, rather than a bare superuser session.
+  v_supreme uuid := '00000000-0000-0000-0000-000000338099';
 begin
   select id into v_loyalty_account_id from app.loyalty_accounts where tenant_id = v_tenant1 and program_id = v_program_id and customer_account_id = v_account_alpha;
   select * into v_gold_movement from app.loyalty_account_tier_movements where loyalty_account_id = v_loyalty_account_id order by created_at desc, id desc limit 1;
@@ -386,10 +394,18 @@ begin
     raise exception 'assertion failed: expected a safe no-op (still the Gold movement, no new row) while inside the 30-day review window, got % (count % -> %)', v_movement, v_count_before, v_count_after;
   end if;
 
-  -- Simulate the review window having elapsed (direct fixture manipulation,
-  -- superuser context -- never through the RPC, which never lets a caller
-  -- set next_review_at directly).
+  -- Simulate the review window having elapsed (direct fixture manipulation
+  -- -- never through the RPC, which never lets a caller set next_review_at
+  -- directly). ISS-2026-137 fix: this table is now append-only-protected,
+  -- so the direct UPDATE requires a genuine Supreme Admin actor context
+  -- (app.protect_loyalty_ledger_append_only) -- a real, disposable Supreme
+  -- Admin identity, used for this ONE statement only, then reset.
+  insert into auth.users (id, email) values (v_supreme, 'supreme@tier1.test');
+  perform app.link_auth_identity(v_supreme, v_tenant1, 'tester', 'active');
+  perform app.grant_principal_membership(v_supreme, 'supreme_admin', null, null, 'tester');
+  perform set_config('request.jwt.claims', json_build_object('sub', v_supreme::text, 'role', 'authenticated')::text, true);
   update app.loyalty_account_tier_movements set next_review_at = now() - interval '1 day' where id = v_gold_movement.id;
+  perform set_config('request.jwt.claims', 'null', true);
 
   v_movement := app.recalculate_customer_loyalty_tier(v_tenant1, v_loyalty_account_id, v_manager1, 'manager1');
   if v_movement.movement_type <> 'downgrade' or v_movement.to_tier_id <> v_silver_id or v_movement.from_tier_id <> v_gold_id then

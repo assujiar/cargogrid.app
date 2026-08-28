@@ -1302,4 +1302,195 @@ begin
   end;
 end $$;
 
-\echo 'ALL PASSED: CPL-318 Points Ledger'
+-- ===========================================================================
+-- DRAFT / RESEARCH ONLY -- Track B Batch 4, ISS-2026-128 item 2 candidate
+-- fix regression block, added alongside supabase/migrations/20260828000000_
+-- create_loyalty_point_program_expiry_config.sql. NOT yet integrated into
+-- the mainline migration/db-test sequence.
+-- ===========================================================================
+
+\echo '>> ISS-2026-128 item 2 fix: app.get_loyalty_point_program_expiry_config returns a NULL-shaped row (not an error) when no override has ever been set for a program'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pts1');
+  v_manager1a uuid := '00000000-0000-0000-0000-000000340001';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'pts1') and name = 'Points Rewards');
+  v_config app.loyalty_point_program_configs;
+begin
+  v_config := app.get_loyalty_point_program_expiry_config(v_tenant1, v_program_id, v_manager1a);
+  if v_config.id is not null then
+    raise exception 'assertion failed: expected a NULL-shaped row before any config is ever set, got %', v_config;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-128 item 2 fix: app.set_loyalty_point_program_expiry_config -- bounded (1-3650), LYL:Configure required, program must belong to the caller''s own tenant, upsert never creates a second row'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pts1');
+  v_manager1a uuid := '00000000-0000-0000-0000-000000340001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000000340003';
+  v_plain1 uuid := '00000000-0000-0000-0000-000000340004';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'pts1') and name = 'Points Rewards');
+  v_config app.loyalty_point_program_configs;
+  v_row_count integer;
+begin
+  begin
+    perform app.set_loyalty_point_program_expiry_config(v_tenant1, v_program_id, 45, v_viewer1, 'viewer1');
+    raise exception 'assertion failed: expected insufficient_authority for Loyalty Viewer (LYL:View only, no Configure)';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.set_loyalty_point_program_expiry_config(v_tenant1, v_program_id, 0, v_manager1a, 'manager1a');
+    raise exception 'assertion failed: expected invalid_expiry_days for 0 days';
+  exception when others then if sqlerrm not like 'invalid_expiry_days%' then raise; end if;
+  end;
+  begin
+    perform app.set_loyalty_point_program_expiry_config(v_tenant1, v_program_id, 3651, v_manager1a, 'manager1a');
+    raise exception 'assertion failed: expected invalid_expiry_days for 3651 days';
+  exception when others then if sqlerrm not like 'invalid_expiry_days%' then raise; end if;
+  end;
+
+  begin
+    perform app.set_loyalty_point_program_expiry_config(v_tenant1, gen_random_uuid(), 45, v_manager1a, 'manager1a');
+    raise exception 'assertion failed: expected loyalty_program_not_found for a nonexistent program id';
+  exception when others then if sqlerrm not like 'loyalty_program_not_found%' then raise; end if;
+  end;
+
+  v_config := app.set_loyalty_point_program_expiry_config(v_tenant1, v_program_id, 45, v_manager1a, 'manager1a');
+  if v_config.points_expiry_days <> 45 then
+    raise exception 'assertion failed: expected points_expiry_days=45, got %', v_config;
+  end if;
+
+  v_config := app.get_loyalty_point_program_expiry_config(v_tenant1, v_program_id, v_manager1a);
+  if v_config.points_expiry_days <> 45 then
+    raise exception 'assertion failed: expected get_ to now return points_expiry_days=45, got %', v_config;
+  end if;
+
+  -- Upsert: re-setting the SAME (tenant, program) updates in place, never a
+  -- second row.
+  v_config := app.set_loyalty_point_program_expiry_config(v_tenant1, v_program_id, 90, v_manager1a, 'manager1a');
+  if v_config.points_expiry_days <> 90 then
+    raise exception 'assertion failed: expected upsert to update points_expiry_days to 90, got %', v_config;
+  end if;
+  select count(*) into v_row_count from app.loyalty_point_program_configs where tenant_id = v_tenant1 and program_id = v_program_id;
+  if v_row_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 config row per (tenant, program) after upsert, got %', v_row_count;
+  end if;
+
+  begin
+    perform app.get_loyalty_point_program_expiry_config(v_tenant1, v_program_id, v_plain1);
+    raise exception 'assertion failed: expected insufficient_authority for Plain User (no LYL grant) on get_';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+end $$;
+
+\echo '>> ISS-2026-128 item 2 fix: app.post_loyalty_points_earned -- an explicit p_expiry_days still wins outright over a persisted config; a NULL/omitted p_expiry_days resolves to the persisted config (90d, set above) when one exists, and still falls back to the legacy 365d system default for a program with no persisted config'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pts1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'pts2');
+  v_manager1a uuid := '00000000-0000-0000-0000-000000340001';
+  v_manager2 uuid := '00000000-0000-0000-0000-000000341001';
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'pts1') and legal_name = 'Pts Account Alpha');
+  v_account_delta uuid := (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'pts2') and legal_name = 'Pts Account Delta');
+  v_event_configured uuid;
+  v_event_override uuid;
+  v_event_unconfigured uuid;
+  v_entry app.loyalty_point_ledger_entries;
+  v_lot app.loyalty_point_lots;
+  v_days_until_expiry numeric;
+begin
+  -- A fresh paid invoice/earning event for Alpha (tenant1, program has a
+  -- persisted 90-day config set above), converted with NO p_expiry_days
+  -- argument at all (relying on the widened default of NULL).
+  insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
+    ('00000000-0000-0000-0000-000000340106', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000340206', 'USD', 40, 40, 'paid', false, '2026-08-06', '2026-09-05', 'tester');
+  perform app.evaluate_customer_loyalty_earning_for_paid_invoice(v_tenant1, '00000000-0000-0000-0000-000000340106', v_manager1a, 'manager1a');
+  v_event_configured := (select id from app.loyalty_earning_events where idempotency_key = 'ar-open-item:00000000-0000-0000-0000-000000340106');
+
+  v_entry := app.post_loyalty_points_earned(v_tenant1, v_event_configured, v_manager1a, 'manager1a');
+  v_lot := (select l from app.loyalty_point_lots l where l.source_earning_event_id = v_event_configured);
+  v_days_until_expiry := extract(epoch from (v_lot.expires_at - clock_timestamp())) / 86400.0;
+  if v_days_until_expiry < 89 or v_days_until_expiry > 91 then
+    raise exception 'assertion failed: expected the persisted 90-day config to apply when p_expiry_days is omitted, got a lot expiring in % days (expires_at=%)', v_days_until_expiry, v_lot.expires_at;
+  end if;
+
+  -- A second fresh event for Alpha, this time with an EXPLICIT override
+  -- (7 days) -- must win outright over the persisted 90-day config.
+  insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
+    ('00000000-0000-0000-0000-000000340107', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000340207', 'USD', 15, 15, 'paid', false, '2026-08-07', '2026-09-06', 'tester');
+  perform app.evaluate_customer_loyalty_earning_for_paid_invoice(v_tenant1, '00000000-0000-0000-0000-000000340107', v_manager1a, 'manager1a');
+  v_event_override := (select id from app.loyalty_earning_events where idempotency_key = 'ar-open-item:00000000-0000-0000-0000-000000340107');
+
+  perform app.post_loyalty_points_earned(v_tenant1, v_event_override, v_manager1a, 'manager1a', 7);
+  v_lot := (select l from app.loyalty_point_lots l where l.source_earning_event_id = v_event_override);
+  v_days_until_expiry := extract(epoch from (v_lot.expires_at - clock_timestamp())) / 86400.0;
+  if v_days_until_expiry < 6 or v_days_until_expiry > 8 then
+    raise exception 'assertion failed: expected an explicit p_expiry_days=7 to win outright over the persisted 90-day config, got a lot expiring in % days (expires_at=%)', v_days_until_expiry, v_lot.expires_at;
+  end if;
+
+  -- Tenant2's own program (v_program2_id) has never had a config row set --
+  -- omitting p_expiry_days must still fall back to the original 365-day
+  -- system default, unchanged (backward-compatibility regression proof).
+  insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
+    ('00000000-0000-0000-0000-000000341102', v_tenant2, v_account_delta, 'invoice', '00000000-0000-0000-0000-000000341202', 'USD', 25, 25, 'paid', false, '2026-08-02', '2026-09-01', 'tester');
+  perform app.evaluate_customer_loyalty_earning_for_paid_invoice(v_tenant2, '00000000-0000-0000-0000-000000341102', v_manager2, 'manager2');
+  v_event_unconfigured := (select id from app.loyalty_earning_events where idempotency_key = 'ar-open-item:00000000-0000-0000-0000-000000341102');
+
+  perform app.post_loyalty_points_earned(v_tenant2, v_event_unconfigured, v_manager2, 'manager2');
+  v_lot := (select l from app.loyalty_point_lots l where l.source_earning_event_id = v_event_unconfigured);
+  v_days_until_expiry := extract(epoch from (v_lot.expires_at - clock_timestamp())) / 86400.0;
+  if v_days_until_expiry < 364 or v_days_until_expiry > 366 then
+    raise exception 'assertion failed: expected the unchanged 365-day system default for a program with no persisted config, got a lot expiring in % days (expires_at=%)', v_days_until_expiry, v_lot.expires_at;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-128 item 2 fix: raw-function grant defense in depth -- anon holds no EXECUTE on either new function; authenticated/service_role both do'
+do $$
+declare
+  v_fn text;
+  v_has_priv boolean;
+begin
+  foreach v_fn in array array[
+    'app.set_loyalty_point_program_expiry_config(uuid, uuid, integer, uuid, text)',
+    'app.get_loyalty_point_program_expiry_config(uuid, uuid, uuid)'
+  ] loop
+    select has_function_privilege('anon', v_fn, 'EXECUTE') into v_has_priv;
+    if v_has_priv then
+      raise exception 'assertion failed: anon must NOT hold EXECUTE on %', v_fn;
+    end if;
+    select has_function_privilege('authenticated', v_fn, 'EXECUTE') into v_has_priv;
+    if not v_has_priv then
+      raise exception 'assertion failed: authenticated SHOULD hold EXECUTE on %', v_fn;
+    end if;
+    select has_function_privilege('service_role', v_fn, 'EXECUTE') into v_has_priv;
+    if not v_has_priv then
+      raise exception 'assertion failed: service_role SHOULD hold EXECUTE on %', v_fn;
+    end if;
+  end loop;
+end $$;
+
+\echo '>> ISS-2026-128 item 2 fix: actor-identity session cross-check on both new RPCs'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pts1');
+  v_manager1a uuid := '00000000-0000-0000-0000-000000340001';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'pts1') and name = 'Points Rewards');
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000340050", "role": "authenticated"}';
+
+  begin
+    perform app.set_loyalty_point_program_expiry_config(v_tenant1, v_program_id, 45, v_manager1a, 'manager1a');
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.set_loyalty_point_program_expiry_config';
+  exception when others then if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+  begin
+    perform app.get_loyalty_point_program_expiry_config(v_tenant1, v_program_id, v_manager1a);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.get_loyalty_point_program_expiry_config';
+  exception when others then if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+end $$;
+
+\echo 'ALL PASSED: CPL-318 Points Ledger (+ ISS-2026-128 item 2 draft fix regression block)'

@@ -43,11 +43,11 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 135** (0 Critical, 5 High, 63 Medium, 67 Low) — updated during Batch 1
+**Working total for Track B: 131** (0 Critical, 5 High, 62 Medium, 64 Low) — updated during Batch 1
 review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
-`RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), and Batch 3 (135,
-this figure) — see the "Batch 1 status"/"Batch 2 status"/"Batch 3 status" sections below and
-`RGL-404.md` §12 items 22-33 for the authoritative running log.
+`RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), Batch 3 (135), and
+Batch 4 (131, this figure) — see the "Batch 1 status"/"Batch 2 status"/"Batch 3 status"/"Batch 4
+status" sections below and `RGL-404.md` §12 items 22-41 for the authoritative running log.
 
 ---
 
@@ -198,6 +198,68 @@ Working total after Batch 3: **135 remaining** (0 Critical, 5 High, 63 Medium, 6
 (Low-Medium) stays counted as open since only 2 of its 3 sub-items closed. See `RGL-404.md` §12
 items 32-33 for the authoritative running log.
 
+## Batch 4 status: complete
+
+`cpl-customer-portal-scope` (14: 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 126, 127, 128,
+129) + `loyalty-fraud-reconciliation` (5: 131, 132, 133, 134, 136) + `loyalty-approval-authority`
+(2: 137, 138) — 21 items, genuinely `mixed` as the table predicted, but with a materially richer
+`CODE` yield than the "mostly BIG/DOC" characterization suggested: 4 items fully closed, 4 more
+partially closed (a real sub-item genuinely fixed, a distinct sub-item stays open), 13 confirmed-
+still-open dispositions.
+
+`ISS-2026-115` — `RESOLVED` (doc-only, already fixed): the same `ISS-2026-285`-class doc-drift
+finding recurring a fifth time this session (already fixed by commit `cdbccc7`, never annotated).
+
+`ISS-2026-116` — `RESOLVED`: `app.accept_customer_portal_invite`/`app.set_customer_portal_
+account_membership_status`'s own distinguishable wrong-actor-vs-not-found error shapes collapsed
+into one identical anti-enumeration error, mirroring `app.get_customer_inventory_balance`'s own
+established precedent — the entry's own text already named the exact fix.
+
+`ISS-2026-117` — `RESOLVED`: all 10 actor-taking functions in ATW-023's customer-inventory-access
+migration now call `app.assert_actor_is_session_identity` first. **Escalated in severity during
+verification**: the gap became directly reachable by any authenticated session once
+`20260826000000` (RGL-394, landed after this entry was written) added `public.*` PostgREST
+wrappers granting `EXECUTE` to `authenticated` for all 10 functions.
+
+`ISS-2026-137` — `RESOLVED`: `app.loyalty_account_tier_movements` — the sixth append-only ledger
+table sharing `ISS-2026-130`'s own already-fixed gap, mechanically extended with the same
+already-generic trigger, exactly as that entry's own text named.
+
+`ISS-2026-124` — partial: DB-layer projection gap closed (`customer_account_id` added to both
+RPCs plus their `public.*` wrappers, widened in lockstep — a dependency this entry's own text
+predates); the TS-contract/UI-surfacing half stays open, disclosed, outside this batch's DB-layer
+mandate.
+
+`ISS-2026-128` — partial: item 2 (no persisted per-program expiry config) closed with a new
+additive table + 2 RPCs + a backward-compatible widening of `app.post_loyalty_points_earned`;
+item 1 (on-demand conversion, the same job-scheduler class as `ISS-2026-126`) stays open. Self-
+caught twice during drafting: an ordering regression (validating `p_expiry_days` only after the
+idempotency short-circuit, silently skipping validation on a replay call) broke a pre-existing
+test, fixed before finalizing; and a missing `public.*` wrapper pair, caught by
+`public-api-wrapper-regression.sql` before finalizing.
+
+`ISS-2026-133` — partial: item 1 (self-approval on fraud review cases) closed with the identical
+`self_approval_not_allowed` convention already established repository-wide, a new
+`opened_by_auth_user_id` column (not retroactive, disclosed); items 2-3 stay open.
+
+`ISS-2026-134` — partial: item 3 (a null `reward.internal_cost` silently contributing 0 to the
+liability total with no exception) closed with a third exception type mirroring the two already-
+established derivation-mismatch types. Self-caught during drafting: an early version was
+accidentally based on a stale pre-atomicity function body, live-reproduced breaking the file's own
+CPL-325 snapshot-atomicity regression before being corrected. Items 1, 2, 4, 5 stay open.
+
+`ISS-2026-118`, `119`, `120`, `121`, `122`, `123`, `126`, `127`, `129`, `131` (item 3 only), `132`,
+`136` (item 2 only), `138` — re-verified still genuinely open against current code and
+redispositioned with a fresh update paragraph each, consistent with `00_EXECUTION_INDEX.md` §8.1's
+own "registered with a named owner and a disposition" treatment.
+
+Working total after Batch 4: **131 remaining** (0 Critical, 5 High, 62 Medium, 64 Low). Down from
+135 by 4: `ISS-2026-115`/`116` (Low, doc-only/fully resolved), `ISS-2026-117` (Medium, fully
+resolved), `ISS-2026-137` (Low, fully resolved). The four partial closures (`124`/`128`/`133`/`134`)
+are NOT counted toward this reduction — each still has a genuinely open sub-item, matching this
+file's own discipline of only counting an item once its own disposition is a real terminus. See
+`RGL-404.md` §12 items 34-41 for the authoritative running log.
+
 ## Medium/Low batches (140 items, working count)
 
 Batches below reproduce the categorization research pass performed for this document (full
@@ -213,9 +275,9 @@ High items above go in the first batch regardless of theme.
 | `db-test-flakiness` | 103, 146, 155 | 3 | TEST/CODE | Wall-clock fixtures, tenant-id disclosure, registration dedup gap |
 | `hris-payroll-personal-data` | 091, 092, 093 | 3 | CODE | **Batch 3, complete.** 092 resolved doc-only (closed by `ISS-2026-099`); 091/093 confirmed still-open BIG, dispositioned |
 | `ticketing-links-gaps` | 101, 102 | 2 | CODE | Missing UI caller, internal ID leak |
-| `cpl-customer-portal-scope` | 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 126, 127, 128, 129 | 14 | mostly BIG/DOC | Disclosed Phase-8 scope narrowings; per-item, not one migration |
-| `loyalty-fraud-reconciliation` | 131, 132, 133, 134, 136 | 5 | mixed | Same domain (CPL-322/325), different mechanisms; 132+134 share an override-gap shape |
-| `loyalty-approval-authority` | 137, 138 | 2 | CODE/BIG | Checker bypass; zero accessibility-audit evidence |
+| `cpl-customer-portal-scope` | 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 126, 127, 128, 129 | 14 | mostly BIG/DOC | **Batch 4, complete.** 115/116/117 resolved (117 escalated in severity); 124/128 partial; rest confirmed still-open BIG/DOC, dispositioned |
+| `loyalty-fraud-reconciliation` | 131, 132, 133, 134, 136 | 5 | mixed | **Batch 4, complete.** 133/134 partial (self-approval + cost-missing exception fixed); rest confirmed still-open, dispositioned |
+| `loyalty-approval-authority` | 137, 138 | 2 | CODE/BIG | **Batch 4, complete.** 137 resolved (6th-table trigger extension); 138 confirmed a doc-only gap, dispositioned |
 | `perf-load-evidence` | 139, 140, 141 | 3 | TEST/CODE | Zero load/perf evidence for Phase 8/9 routes; retention gap |
 | `docs-consistency` | 142, 153, 157, 252, 281 | 5 | DOC/BIG | Doc mislabels, stale sections, accessibility-audit gap |
 | `iae-hardening-residual` | 148, 149, 152 | 3 | TEST/CODE | Load evidence, anon enumeration oracle, inert capability matrix |
@@ -259,7 +321,7 @@ Severity orders the first batch; domain/mechanism groups the rest, per the appro
 2. **Batch 2 (complete)**: `table-only-procurement-hardening` (19 items — 5 closed, 2 withdrawn/
    redispositioned, 12 dispositioned; see "Batch 2 status" above).
 3. **Batch 3 (complete)**: `hris-integrated-verification-residual` (14) + `hris-overtime-timesheet-gaps` (2) + `hris-payroll-personal-data` (3) — 19 items (1 resolved doc-only, 1 partially resolved, 17 dispositioned).
-4. **Batch 4**: `cpl-customer-portal-scope` (14) + `loyalty-fraud-reconciliation` (5) + `loyalty-approval-authority` (2) — 21 items.
+4. **Batch 4 (complete)**: `cpl-customer-portal-scope` (14) + `loyalty-fraud-reconciliation` (5) + `loyalty-approval-authority` (2) — 21 items (4 resolved, 4 partially resolved, 13 dispositioned).
 5. **Batch 5**: `accessibility` (7) + `browser-compat` (1) + `docs-consistency` (5) + `perf-load-evidence` (3) + `iae-hardening-residual` (3) — 19 items.
 6. **Batch 6**: `rbac-defense-in-depth` (5) + `support-access-audit` (2) + `rls-own-row-narrowing` (1) + `step-up-mfa-enforcement` (1) + `observability-alerting` (2) + `db-test-flakiness` (3) + `ticketing-links-gaps` (2) + `perf-cache-safety` (1) — 17 items.
 7. **Batch 7**: `lineage-provenance` (2) + `rest-api-consistency` (2) + `rest-api-error-shape` (2) + `files-legal-hold-residual` (2) + `crypto-scan-recovery` (1) + `schema-completeness-gaps` (2) + `finance-fx` (1) + `migration-import` (2) — 14 items.
