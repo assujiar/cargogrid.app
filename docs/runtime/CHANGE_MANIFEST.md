@@ -8652,3 +8652,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit; each live schema change would need a separate corrective migration to undo — not expected to be needed |
 | Status | **`COMPLETED`**. Batch 8 closed — the final Track B disposition batch. Backlog now 102 (0 Critical, 6 High, 52 Medium, 44 Low). All 8 planned batches of the Track B backlog-remediation plan are now complete; remaining items are confirmed-still-open dispositions (BIG/INFRA/BIZ, genuinely not agent-fixable in a bounded pass) or standing, disclosed infrastructure gaps, each carrying a real owner and evidence trail per `docs/runtime/KNOWN_ISSUES.md` |
 | Date | 2026-08-28 |
+
+### CHG-2026-275 — `RGL-407` (Rollback Decision, `CG-S16-RGL-017`): no rollback indicated; `docs/runbooks/deployment-rollback.md` authored
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-017` (Prompt 407, Rollback Decision) — the Step 16 WBS row immediately following `RGL-405`/`RGL-406` (recorded as `RGL-404.md` §12A), resumed after Track B's 8 backlog-remediation batches completed |
+| Change type | DOCUMENTATION (new runbook + index/KNOWN_ISSUES/execution-index updates) — no code, migration, or contract change |
+| Authorization | The operator's own "jalankan semua step 16" instruction, resuming the Step 16 WBS sequence now that Track B is complete |
+| Build process | Re-assessed rollback need against the current production state (all 8 Track B batches included, not the narrower state `RGL-404.md` §13 originally cleared on 2026-08-27). Gathered fresh, live evidence: Vercel deployment history (`isRollbackCandidate` on the immediately-prior production deployment, confirming the instant-rollback mechanism has a real target), `get_runtime_errors` (0 in trailing 24h), 3 live health-endpoint probes (all green), a live Supabase `get_advisors` security sweep (1 pre-existing `ERROR`, unchanged). Authored `docs/runbooks/deployment-rollback.md`, consolidating the already-ratified per-layer rollback doctrine (Tech Arch §28.3, Blueprint §24.5/§26.2/§26.3, previously reproduced across `10_*.md`/`11_*.md` but never consolidated into one operational file) rather than re-deriving policy — closes the `deployment-rollback.md`/`migration-rollback.md`/`cutover-rollback.md` half of `ISS-2026-262`'s own disclosed gap for real |
+| Findings and disposition | No rollback indicated — production healthy on every measured signal, no active Sev-1/Sev-2 blocker against the release candidate. `ISS-2026-262` updated (the runbook now genuinely exists, not merely reconciled by note). `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §5/§11.2/§12 corrected: rows 5-17 updated from stale `BLOCKED on N` markers to their true completed/verified state; the rollback-target deployment id corrected (the table's own value was stale since `RGL-405`) |
+| Files edited | `docs/runbooks/deployment-rollback.md` (new); `docs/runbooks/README.md`; `docs/runtime/KNOWN_ISSUES.md` (`ISS-2026-262` updated); `docs/build-log/release-go-live/RGL-407.md` (new); `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` (§5 rows 5-17, §11.2, §12); `docs/runtime/HANDOFF.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md` |
+| Migration | None |
+| Risk | None — documentation only, no live system mutated |
+| Scope justification | Direct execution of the next eligible Step 16 WBS row per the operator's own standing instruction |
+| Gates | `pnpm run docs:check`: green. No code changed, so `typecheck`/`lint`/`test`/`db:test` are unaffected — the immediately-preceding checkpoint (Track B Batch 8) already recorded a clean full gate run |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
+| Status | **`COMPLETED`**. `RGL-407` `VERIFIED`. `RGL-408` (Hypercare, `CG-S16-RGL-018`, Prompt 408) next per the Step 16 WBS |
+| Date | 2026-08-28 |

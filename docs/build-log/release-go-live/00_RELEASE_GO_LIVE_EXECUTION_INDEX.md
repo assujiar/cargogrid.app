@@ -261,19 +261,19 @@ prompt's own header fixes; additional required outputs are named where the promp
 | 2 | `CG-S16-RGL-002` | `RGL-392` | Release Candidate Freeze | 1 | Repository only | `RGL-392.md` | **`RC_FROZEN` set** for `RC-2026.08.25-1` | `git revert`; re-freeze | **`COMPLETED`**, Tier C pending |
 | 3 | `CG-S16-RGL-003` | `RGL-393` | No-New-Feature Rule | 2 | Repository + GitHub | `RGL-393.md` | gate verdict **`PARTIAL`** | `git revert` | **`COMPLETED`**, Tier C pending |
 | 4 | `CG-S16-RGL-004` | `RGL-394` | Defect Triage | 3 | Repository + ledgers | `RGL-394.md`, `RELEASE_DEFECT_LEDGER.md` | severity rulings binding on `RGL-404` | `git revert` | **`READY`** |
-| 5 | `CG-S16-RGL-005` | `RGL-395` | Full CI Gate | 4 | CI (real) + local | `RGL-395.md` | none | `git revert` | `BLOCKED` on 4 |
-| 6 | `CG-S16-RGL-006` | `RGL-396` | Clean Database Rebuild | 5 | Disposable Postgres (real) | `RGL-396.md` | none | disposable target; nothing to roll back | `BLOCKED` on 5 |
-| 7 | `CG-S16-RGL-007` | `RGL-397` | Migration Validation | 6 | Disposable Postgres (real) + live schema read-only | `RGL-397.md` | none | disposable target | `BLOCKED` on 6 |
-| 8 | `CG-S16-RGL-008` | `RGL-398` | Seed Validation | 7 | Disposable Postgres (real) + live project read-only | `RGL-398.md` | none | disposable target | `BLOCKED` on 7 |
-| 9 | `CG-S16-RGL-009` | `RGL-399` | Staging Deployment | 8 | **No staging tier exists** — see §7.1 | `RGL-399.md` | none | Vercel instant rollback (preview only) | `BLOCKED` on 8 |
-| 10 | `CG-S16-RGL-010` | `RGL-400` | UAT Deployment | 9 | **No UAT tier, no acceptors** — see §7.2 | `RGL-400.md` | `UAT_READY`; `UAT_ACCEPTED` **needs a human** | n/a | `BLOCKED` on 9 |
-| 11 | `CG-S16-RGL-011` | `RGL-401` | Smoke Test | 10 | Live production URL (real) + local Playwright | `RGL-401.md` | none | n/a (read-only probes) | `BLOCKED` on 10 |
-| 12 | `CG-S16-RGL-012` | `RGL-402` | Penetration Test Evidence | 11 | Live production URL + live Supabase (real, read-only/negative) | `RGL-402.md` | none | n/a | `BLOCKED` on 11 |
-| 13 | `CG-S16-RGL-013` | `RGL-403` | Performance Evidence | 12 | Disposable Postgres + live URL (real) | `RGL-403.md` | budgets may force `NO_GO` | n/a | `BLOCKED` on 12 |
-| 14 | `CG-S16-RGL-014` | `RGL-404` | Go/No-Go Report | 13 | Repository (decision artifact) | `RGL-404.md`, `GO_NO_GO_REPORT.md` | **sets `GO_DECIDED` or `NO_GO`** | decision reversible by a later dated ruling | `BLOCKED` on 13 |
-| 15 | `CG-S16-RGL-015` | `RGL-405` | Production Deployment | 14 | Vercel production (real) — **gated on 14** | `RGL-405.md` | `PRODUCTION_DEPLOYED` | Vercel instant rollback to `dpl_4vgM6mR6Y5xpA3UfGxsdY2WFCs4U` | `BLOCKED` on 14 |
-| 16 | `CG-S16-RGL-016` | `RGL-406` | Post-Deployment Validation | 15 | Live production (real) | `RGL-406.md` | `POST_DEPLOYMENT_VALIDATED` | triggers `RGL-407` on failure | `BLOCKED` on 15 |
-| 17 | `CG-S16-RGL-017` | `RGL-407` | Rollback Decision | 16 | Repository + Vercel/Supabase (real) | `RGL-407.md`, `ROLLBACK_DECISION_TREE.md` | authority-bound | is the rollback path | `BLOCKED` on 16 |
+| 5 | `CG-S16-RGL-005` | `RGL-395` | Full CI Gate | 4 | CI (real) + local | `RGL-395.md` | none | `git revert` | **`COMPLETED`** |
+| 6 | `CG-S16-RGL-006` | `RGL-396` | Clean Database Rebuild | 5 | Disposable Postgres (real) | `RGL-396.md` | none | disposable target; nothing to roll back | **`COMPLETED`** |
+| 7 | `CG-S16-RGL-007` | `RGL-397` | Migration Validation | 6 | Disposable Postgres (real) + live schema read-only | `RGL-397.md` | none | disposable target | **`COMPLETED`** |
+| 8 | `CG-S16-RGL-008` | `RGL-398` | Seed Validation | 7 | Disposable Postgres (real) + live project read-only | `RGL-398.md` | none | disposable target | **`COMPLETED`** |
+| 9 | `CG-S16-RGL-009` | `RGL-399` | Staging Deployment | 8 | **No staging tier exists** — see §7.1 | `RGL-399.md` | none | Vercel instant rollback (preview only) | **`COMPLETED`** (operator-accepted gap, §3.4 addendum) |
+| 10 | `CG-S16-RGL-010` | `RGL-400` | UAT Deployment | 9 | **No UAT tier, no acceptors** — see §7.2 | `RGL-400.md` | `UAT_READY`; `UAT_ACCEPTED` **needs a human** | n/a | **`COMPLETED`** (operator-accepted gap, §3.4 addendum) |
+| 11 | `CG-S16-RGL-011` | `RGL-401` | Smoke Test | 10 | Live production URL (real) + local Playwright | `RGL-401.md` | none | n/a (read-only probes) | **`COMPLETED`** |
+| 12 | `CG-S16-RGL-012` | `RGL-402` | Penetration Test Evidence | 11 | Live production URL + live Supabase (real, read-only/negative) | `RGL-402.md` | none | n/a | **`COMPLETED`** (operator-accepted external-pentest gap, §3.4 addendum) |
+| 13 | `CG-S16-RGL-013` | `RGL-403` | Performance Evidence | 12 | Disposable Postgres + live URL (real) | `RGL-403.md` | budgets may force `NO_GO` | n/a | **`COMPLETED`** |
+| 14 | `CG-S16-RGL-014` | `RGL-404` | Go/No-Go Report | 13 | Repository (decision artifact) | `RGL-404.md`, `GO_NO_GO_REPORT.md` | **sets `GO_DECIDED` or `NO_GO`** | decision reversible by a later dated ruling | **`GO_DECIDED`** (after the operator's own `RGL-BLK-001` + tracked-gap overrides; see `GO_NO_GO_REPORT.md`'s own addenda) |
+| 15 | `CG-S16-RGL-015` | `RGL-405` | Production Deployment | 14 | Vercel production (real) — **gated on 14** | `RGL-404.md` §12A (no separate `RGL-405.md` — recorded as an addendum) | `PRODUCTION_DEPLOYED` | Vercel instant rollback — see §11.2, target updated at `RGL-407` | **`PRODUCTION_DEPLOYED`** (2026-08-27, PR #69, commit `c11c616`; production has since advanced through 8 further Track B batch merges, most recently `c77d479`) |
+| 16 | `CG-S16-RGL-016` | `RGL-406` | Post-Deployment Validation | 15 | Live production (real) | `RGL-404.md` §12A (no separate `RGL-406.md` — recorded as an addendum) | `POST_DEPLOYMENT_VALIDATED` | triggers `RGL-407` on failure | **`POST_DEPLOYMENT_VALIDATED`** (2026-08-27; re-confirmed live at `RGL-407`, 2026-08-28, against the current production state) |
+| 17 | `CG-S16-RGL-017` | `RGL-407` | Rollback Decision | 16 | Repository + Vercel/Supabase (real) | `RGL-407.md`, `docs/runbooks/deployment-rollback.md` (serves this row's own planned `ROLLBACK_DECISION_TREE.md` name — see §12) | authority-bound | is the rollback path | **`VERIFIED`** — no rollback indicated |
 | 18 | `CG-S16-RGL-018` | `RGL-408` | Hypercare | 17 | Repository + live monitoring | `RGL-408.md` | `HYPERCARE_ACTIVE` | n/a | `BLOCKED` on 17 |
 | 19 | `CG-S16-RGL-019` | `RGL-409` | Post-Implementation Review | 18 | Repository | `RGL-409.md` | `PIR_COMPLETE` | n/a | `BLOCKED` on 18 |
 | 20 | `CG-S16-RGL-020` | `RGL-410` | Release Go-Live Integrated Verification | 19 | All of the above, one lineage | `RGL-410.md`, `RELEASE_READINESS_MATRIX.md` update | none | `git revert` | `BLOCKED` on 19 |
@@ -666,15 +666,19 @@ explicitly before executing — the same discipline Step 15 imposed on `HDN-383`
 |---|---|
 | Any Step 16 checkpoint | `git revert` the checkpoint's single commit. One commit per prompt is the standing rollback granularity |
 | A repair migration | Additive and reversible by design; a forward-fix migration, **never** an edit of an applied file |
-| A production deployment | **Vercel instant rollback** to a prior `READY` production deployment. The current one, `dpl_4vgM6mR6Y5xpA3UfGxsdY2WFCs4U` at `2670cb5`, is the standing rollback target until `RGL-405` names a new one. `isRollbackCandidate: true` confirmed live this checkpoint |
+| A production deployment | **Vercel instant rollback** to a prior `READY` production deployment. The current one, `dpl_5HVE4jExwWFQrRGw3Xva4uQGSKZd` at `d343eb7` (Track B Batch 7's own merge — the prior `target: production` deployment before Batch 8's own `c77d479`), is the standing rollback target, `isRollbackCandidate: true` confirmed live at `RGL-407` (2026-08-28) — superseding the `dpl_4vgM6mR6Y5xpA3UfGxsdY2WFCs4U`/`2670cb5` value this table previously carried, itself stale since `RGL-405` |
 | The live database | **No Step 16 lane mutates live project data** (§10). Schema restore path is `PARTIAL` — `HDN-BLK-030`, untested for Storage/Auth/hosted-project |
-| Last known good checkpoint | `2670cb5` (merge of PR #67) until this checkpoint's commit lands; thereafter this checkpoint's commit |
+| Last known good checkpoint | `c77d479` (merge of PR #77, Track B Batch 8) as of `RGL-407` |
 
 **Known limit, disclosed now rather than discovered at `RGL-407`:** a Vercel rollback reverts
 *application code only*. It cannot revert an applied database migration, because no deploy-time
 migration step exists (§6) — migrations are applied out-of-band. A candidate that ships both a
 code change and a migration therefore has **no single-action rollback**. `RGL-405` and `RGL-407`
-must plan for that explicitly.
+must plan for that explicitly. **`RGL-407`'s own resolution**: `docs/runbooks/deployment-
+rollback.md` (new) makes this explicit as its own §4.1 closing note — a Vercel-only rollback that
+leaves a newer schema in place must be checked for backward-compatibility with the reverted code,
+or the schema issue must be forward-fixed first (§4.2 of that runbook), rather than assuming a
+single Vercel action is ever sufficient when a migration shipped in the same release.
 
 ### 11.3 Communication plan (Prompt 391 step 5/8)
 
@@ -713,7 +717,7 @@ index (17 runbooks). Step 16's additional needs:
 | Runbook | Current state | Lane that must produce/refresh its evidence |
 |---|---|---|
 | Release/cutover runbook | **does not exist** | `RGL-405` |
-| Rollback decision tree | **does not exist** as a runbook (`docs/runbooks/` has no release-rollback entry) | `RGL-407` |
+| Rollback decision tree | **exists**: `docs/runbooks/deployment-rollback.md` (new, `RGL-407`, 2026-08-28) — this row's own planning name, `ROLLBACK_DECISION_TREE.md`, is served by that file rather than a separately-named one, keeping one canonical runbook directory per this repository's own established naming-reconciliation convention (`ISS-2026-262`'s own precedent: the built equivalent under a different, more consistent name, not a missing file). Real Vercel rollback mechanics verified live; end-to-end execution honestly marked `NOT_YET_REHEARSED` (the file's own §7) | `RGL-407` |
 | Hypercare / go-live support | **does not exist** | `RGL-408` |
 | `docs/runbooks/deployment-migration-guard.md` | exists (`HDN-388`); has not been reconciled against the fact that a real deploy pipeline now exists | `RGL-405` |
 | `docs/runbooks/on-call-ownership.md` | exists (`HDN-388`); every name slot is empty | `RGL-408` |

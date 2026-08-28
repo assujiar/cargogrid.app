@@ -22,6 +22,7 @@ Most files in this directory instantiate `docs/templates/SUPPORT_RUNBOOK_TEMPLAT
 | [`disaster-recovery.md`](./disaster-recovery.md) | DR rehearsal across 4 scenarios (major outage, data corruption, provider failure, security incident) — data corruption and security incident live-rehearsed, the other two tabletop-only per disclosed sandbox constraints | `HDN-384` (Prompt 384, Disaster Recovery Rehearsal) |
 | [`data-migration-rehearsal.md`](./data-migration-rehearsal.md) | Rehearsal of the Import/Export Job Framework and domain data-migration adapters (master-data, tenant-setup, bulk financial import are disclosed as not-yet-built) | `HDN-385` (Prompt 385, Data Migration Rehearsal) |
 | [`deployment-migration-guard.md`](./deployment-migration-guard.md) | The canonical, single-home statement of the migration re-run guard: migrations are not idempotent, `supabase_migrations.schema_migrations` is the only guard, plus the teardown-batching and `auth.users`-survival constraints | `HDN-383`/`HDN-384` (facts first verified there); consolidated into its own file at `HDN-388` (Prompt 388, Documentation Handoff) |
+| [`deployment-rollback.md`](./deployment-rollback.md) | Per-layer rollback decision/procedure (Frontend/API/DB-schema/Config/Feature/Data), consolidating the `deployment-rollback.md`/`migration-rollback.md`/`cutover-rollback.md` doctrine `ISS-2026-262` found genuinely unbuilt — real Vercel rollback mechanics verified live, honestly marked `NOT_YET_REHEARSED` for actual execution | `RGL-407` (Prompt 407, Rollback Decision) |
 
 ## Observability, performance, capacity
 
@@ -48,3 +49,4 @@ This file is maintained by direct `docs/runbooks/` directory inspection each tim
 | Date | Version | Change |
 |---|---|---|
 | 2026-08-24 | 0.1.0 | Initial — created at `HDN-388` (Documentation Handoff), indexing the 14 pre-existing runbooks plus the 3 new ones this checkpoint added (`performance-capacity.md`, `on-call-ownership.md`, `deployment-migration-guard.md`). |
+| 2026-08-28 | 0.2.0 | Added `deployment-rollback.md`, authored at `RGL-407` (Prompt 407, Rollback Decision). |
