@@ -278,7 +278,7 @@ prompt's own header fixes; additional required outputs are named where the promp
 | 19 | `CG-S16-RGL-019` | `RGL-409` | Post-Implementation Review | 18 | Repository | `RGL-409.md` | `PIR_COMPLETE` | n/a | **`PIR_COMPLETE`** — delivery/quality/data/performance/adoption/support/incidents reviewed; improvement backlog consolidated; `ISS-2026-284` addressed |
 | 20 | `CG-S16-RGL-020` | `RGL-410` | Release Go-Live Integrated Verification | 19 | All of the above, one lineage | `RGL-410.md`, `RELEASE_READINESS_MATRIX.md` update | none | `git revert` | **`VERIFIED`** — all gates re-run fresh at one checkpoint; one mixed-checkpoint drift found and reconciled (`BLOCKER_LEDGER.md`) |
 | 21 | `CG-S16-RGL-021` | `RGL-411` | Release Go-Live Documentation Handoff | 20 | Repository | `RGL-411.md` | none | `git revert` | **`VERIFIED`** — release notes authored, all reconciliation items checked current, Step 17 eligibility blocker (`RGL-BLK-001`) named explicitly in `HANDOFF.md` |
-| 22 | `CG-S16-RGL-022` | `RGL-412` | Release Go-Live Closure Verification | 21 | Independent re-verification of all | `RGL-412.md`, `RELEASE_GO_LIVE_CLOSURE_REPORT.md` | **sets `RELEASE_GO_LIVE_VERIFIED` or a closure state** | `git revert` | `BLOCKED` on 21 |
+| 22 | `CG-S16-RGL-022` | `RGL-412` | Release Go-Live Closure Verification | 21 | Independent re-verification of all | `RGL-412.md`, `RELEASE_GO_LIVE_CLOSURE_REPORT.md` | **sets `RELEASE_GO_LIVE_VERIFIED` or a closure state** | `git revert` | **`RELEASE_GO_LIVE_PARTIALLY_COMPLETE`** — all 20 required-verification items disposed of explicitly; Step 17 not yet eligible per §13 condition 3 (`RGL-BLK-001`) |
 
 ### 5.1 Dependency graph
 
