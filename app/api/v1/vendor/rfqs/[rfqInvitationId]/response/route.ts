@@ -10,7 +10,7 @@
 
 import { authorizeApiV1Request, recordApiV1Success, apiV1ResponseHeaders, type AuthorizedApiV1Request } from "../../../../../../../lib/api-gateway/authenticate.server.ts";
 import { submitRfqResponseViaVendorApi, VendorApiMutationError, type VendorApiMutationRpcClient } from "../../../../../../../server/mutations/vendor-api.ts";
-import { buildApiError, IdempotencyKeySchema } from "../../../../../../../server/contracts/api/api.ts";
+import { buildApiError, IdempotencyKeySchema, PathParamUuidSchema } from "../../../../../../../server/contracts/api/api.ts";
 
 /** The gateway's own rpcClient is narrowly typed for its own RPC names; the underlying object is the real service-role SupabaseClient, which structurally satisfies `Pick<SupabaseClient, "rpc">` at runtime -- same cast class as app/api/v1/customer/bookings/route.ts's own toBookingClient(). */
 function toVendorApiClient(rpcClient: AuthorizedApiV1Request["rpcClient"]): VendorApiMutationRpcClient {
@@ -43,6 +43,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ rfq
   if (!authorized.request.vendorMasterRecordId) {
     statusCode = 403;
     responseBody = { error: buildApiError({ code: "forbidden_scope", message: "This endpoint requires a vendor-scoped API key.", requestId: authorized.request.correlationId }) };
+  } else if (!PathParamUuidSchema.safeParse(rfqInvitationId).success) {
+    // ISS-2026-214: rejected here, before any downstream call, so a malformed id never
+    // reaches submitRfqResponseViaVendorApi's own z.string().uuid().parse() (whose thrown
+    // ZodError would otherwise leak its raw issue array into the response).
+    statusCode = 400;
+    responseBody = { error: buildApiError({ code: "invalid_path_parameter", message: "rfqInvitationId must be a valid UUID.", requestId: authorized.request.correlationId }) };
   } else if (!idempotencyKeyResult.success) {
     statusCode = 400;
     responseBody = { error: buildApiError({ code: "missing_idempotency_key", message: "An Idempotency-Key header is required for this mutation.", requestId: authorized.request.correlationId }) };

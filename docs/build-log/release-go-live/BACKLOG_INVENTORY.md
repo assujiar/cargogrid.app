@@ -43,12 +43,12 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 113** (0 Critical, 5 High, 56 Medium, 52 Low) — updated during Batch 1
+**Working total for Track B: 108** (0 Critical, 5 High, 54 Medium, 49 Low) — updated during Batch 1
 review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
 `RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), Batch 3 (135), Batch 4
-(131), Batch 5 (125), and Batch 6 (113, this figure) — see the "Batch 1 status"/"Batch 2
-status"/"Batch 3 status"/"Batch 4 status"/"Batch 5 status"/"Batch 6 status" sections below and
-`RGL-404.md` §12 items 22-53 for the authoritative running log.
+(131), Batch 5 (125), Batch 6 (113), and Batch 7 (108, this figure) — see the "Batch 1 status"/"Batch
+2 status"/"Batch 3 status"/"Batch 4 status"/"Batch 5 status"/"Batch 6 status"/"Batch 7 status"
+sections below and `RGL-404.md` §12 items 22-66 for the authoritative running log.
 
 ---
 
@@ -398,6 +398,79 @@ Working total after Batch 6: **113 remaining** (0 Critical, 5 High, 56 Medium, 5
 125 by 12: `ISS-2026-101` (Medium), `102` (Low), `103` (Low), `177` (Low), `178` (Low), `187`
 (Medium), `188` (Medium), `190` (Medium), `191` (Low), `192` (Low), `240` (Low), `253` (Low). See
 `RGL-404.md` §12 items 48-53 for the authoritative running log.
+
+## Batch 7 status: complete
+
+`operations-lineage` (2: 203, 206) + `public-api-registry-idempotency` (2: 207, 208) +
+`self-approval-hardening` (1: 213) + `rest-path-validation` (1: 214) + `rbac-convention-file-access`
+(1: 223) + `procurement-evidence-scope` (1: 224) + `audit-visibility-residual-risk` (1: 231) +
+`automation-rule-column-grant` (1: 237) + `pagination-completeness` (1: 238) +
+`migration-rehearsal-followups` (3: 274, 277, and re-cross-referenced against each other) +
+`fx-profitability` (1: 197) — 14 items: 5 fully closed, 2 partially closed (both stay `OPEN`), 7
+confirmed-still-open dispositions (all 7 sharpened with fresh evidence, none merely reconfirmed
+unchanged — 2 with corrected counts, 1 with a newly-found compensating control). By far the most
+difficult batch to date: 10 full `db-tests` suite runs and 10 distinct self-caught issues (9 local,
+1 live-only) before a fully clean, live-verified state — see `RGL-404.md` §12's own item 60-66 rows
+for the detailed self-correction accounting.
+
+`ISS-2026-203` — `RESOLVED`: `app.prepare_job_order` now merges `{"quotationId","quotationVersion"}`
+into 4 of its 5 snapshot columns at the one write site, closing the Low-severity
+self-describability gap without touching any existing reader. Rewritten mid-draft after being
+caught building on a stale base body missing two later hardening passes.
+
+`ISS-2026-206` — `PARTIALLY RESOLVED`: new validation triggers close the orphan-`source_id` gap on
+`app.inventory_movements`/`app.inventory_reservations` (2 of the 4 named tables). The other 2
+(`finance_subledger_batches`, `finance_bank_transactions.matched_source_id`) re-confirmed to break
+established, deliberate `finance-subledger.sql` fixtures — stays `OPEN`, Medium, scope narrowed.
+
+`ISS-2026-213` — `RESOLVED`: all 6 self-approval/maker-checker functions now use
+`coalesce(<nullable actor column> = p_actor_auth_user_id, true)`, closing the defense-in-depth gap
+`ISS-2026-209`'s own shape warned about. A second stale-base-body regression
+(`app.approve_warehouse_billing_event` missing a later lost-update guard) was caught and fixed
+before the migration was ever applied, via the same exhaustive-redefinition-search discipline
+`ISS-2026-203`'s own regression established earlier in this batch.
+
+`ISS-2026-214` — `RESOLVED`, TypeScript-only: all 4 named REST routes now validate the path
+parameter with a new shared `PathParamUuidSchema` before any downstream call, returning a clean
+`400` instead of leaking a raw Zod issue array.
+
+`ISS-2026-224` — `RESOLVED`: a new, narrowly-scoped sibling function
+(`app.authorize_vendor_evidence_file_access`, the record-scope branch omitted since all 3 callers
+already verify `PRC:Download`) unblocks the "second reviewer verifies evidence" workflow without
+touching `app.authorize_file_access`'s own general contract. Caught and fixed a real live-only
+security-widening leak after local tests passed: this hosted Supabase project's own platform-level
+default-privilege bootstrap silently granted `anon`/`authenticated` EXECUTE on the new `public.*`
+wrapper at creation time (a `revoke ... from public` alone does not undo a role-specific
+default-privilege grant) — corrected both live and in the migration file.
+
+`ISS-2026-231` — `PARTIALLY RESOLVED`, audit-visibility only: re-confirmed a blocking schema
+backstop still conflicts with an established, deliberate, already-tested no-session correction
+pattern used in 4 domains' own test suites — correctly not added. A new `AFTER UPDATE` trigger
+closes the narrower, non-conflicting gap RPD-022's own doctrine actually requires (an audit trail,
+not prevention). Corrected before commit to defensively wrap `auth.uid()` after finding it throws
+(not NULLs) under a "no session" GUC shape this repo's own tests also deliberately exercise.
+
+`ISS-2026-237` — `RESOLVED`, TypeScript-only: `getLatestAutomationRulePublishApprovalRequest` now
+uses an explicit column list matching the real `authenticated` grant, synthesizing the one omitted
+field as `null` since this specific caller never renders it — unblocking the entire live Automation
+Rule detail page.
+
+`ISS-2026-197`, `207`, `208`, `223`, `238`, `274`, `277` — re-verified still genuinely open against
+current code, each dispositioned with fresh, independently-gathered evidence: a real compensating
+control found for `197` (both `calculate_job_profitability` bodies already refuse to answer under a
+currency mismatch); confirmed no bounded wiring exists for `207` that wouldn't itself force an
+undecided enforcement-semantics choice; confirmed `208`'s existing idempotency-key column still
+cannot be safely reused; re-confirmed `223`'s ~35-domain convention question still blocks even a
+file-scoped fix; sharpened `238`'s sibling count from "~12" to 10 live instances (4 candidates
+turned out call-unreachable); identified 2 reusable building blocks for `274`'s future import
+adapter and cross-referenced them against `277`'s own guard count (corrected 3→5) to confirm no
+legal-hold-eligible table has a reachable import path today.
+
+Working total after Batch 7: **108 remaining** (0 Critical, 5 High, 54 Medium, 49 Low). Down from
+113 by 5: `ISS-2026-203` (Low), `213` (Low), `214` (Low), `224` (Medium), `237` (Medium). (`206` and
+`231` each get a real, narrower bounded fix but stay `OPEN`, Medium, not counted — same discipline
+as `186`'s own Batch 6 accounting.) See `RGL-404.md` §12 items 60-66 for the authoritative running
+log.
 
 ## Medium/Low batches (140 items, working count)
 

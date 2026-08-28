@@ -1080,6 +1080,46 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-213 regression: app.approve_warehouse_billing_event''s self_approval_not_allowed check now denies (fails closed) a NULL reviewed_by_auth_user_id rather than the silent pass-through a bare `=` comparison against a nullable column previously produced -- structurally unreachable via any live caller today (app.review_warehouse_billing_event always writes a real, non-null reviewer), forced directly here to prove the comparison itself, in isolation, is now deterministic'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'whbill1');
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-WB-1');
+  v_account_alpha uuid := (select owner_account_id from app.wms_inbound_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-wb-inbound-1');
+  v_supervisor uuid := '00000000-0000-0000-0000-000000210002';
+  -- 'storage' (this fixture's own contract has deliberately no published rate for it,
+  -- per the comment above idem-wb-cap-manual-alpha) cannot reach pending_review at all --
+  -- calculate_warehouse_billing_event raises no_effective_rate before ever getting there.
+  -- v_task2 (SKU-WB-2's putaway task) is a real, rated 'putaway' source already looked up
+  -- earlier in this file for a negative idempotency-key-conflict assertion only -- never
+  -- actually captured under its own real key, so it is still available here.
+  v_task2 app.wms_putaway_tasks;
+  v_event app.warehouse_billing_events;
+begin
+  select * into v_task2 from app.wms_putaway_tasks pt join app.wms_receipt_lines rl on rl.id = pt.receipt_line_id join app.item_masters im on im.id = rl.item_master_id where im.code = 'SKU-WB-2' and pt.tenant_id = v_tenant1;
+
+  v_event := app.capture_warehouse_billing_event(v_tenant1, v_warehouse_id, v_account_alpha, 'putaway', 'wms_putaway_confirmation', v_task2.id, 30, 'PCS', now(), 'idem-wb-cap-nullactor-213', null, v_supervisor, 'supervisor');
+  v_event := app.calculate_warehouse_billing_event(v_event.id, v_event.record_version, null, v_supervisor, 'supervisor');
+  if v_event.status <> 'pending_review' then
+    raise exception 'test setup assumption violated: expected pending_review after a real rated capture+calculate, got %', v_event.status;
+  end if;
+  v_event := app.review_warehouse_billing_event(v_event.id, v_event.record_version, v_supervisor, 'supervisor');
+
+  -- Force the nullable actor column directly -- no live caller can leave it null (review
+  -- always writes a real, non-null reviewer); re-select afterwards since the table's own
+  -- touch trigger bumps record_version on this UPDATE too.
+  update app.warehouse_billing_events set reviewed_by_auth_user_id = null where id = v_event.id;
+  select * into v_event from app.warehouse_billing_events where id = v_event.id;
+
+  begin
+    perform app.approve_warehouse_billing_event(v_event.id, v_event.record_version, v_supervisor, 'supervisor');
+    raise exception 'assertion failed: expected self_approval_not_allowed for a NULL reviewed_by_auth_user_id (ISS-2026-213 fail-open regression)';
+  exception
+    when others then
+      if sqlerrm not like 'self_approval_not_allowed%' then raise; end if;
+  end;
+end $$;
+
 drop function if exists pack_task_fully(uuid, uuid, uuid, numeric, text);
 drop procedure if exists pick_fully(uuid, uuid, numeric, uuid, uuid, text);
 drop function if exists receive_and_putaway_fully(uuid, uuid, numeric, uuid, text);

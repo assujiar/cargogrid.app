@@ -1156,6 +1156,67 @@ import { readFileSync } from "node:fs";
  * hosted project via `apply_migration` immediately after this local run
  * passed; every new/changed grant and function body live-verified
  * correct.
+ *
+ * AMENDED 2026-08-28 (twenty-seventh pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md §12,
+ * items 60-73 (Track B, Batch 7 -- `lineage-provenance` +
+ * `rest-api-consistency` + `rest-api-error-shape` +
+ * `files-legal-hold-residual` + `crypto-scan-recovery` +
+ * `schema-completeness-gaps` + `finance-fx` + `migration-import`). Five
+ * migrations added (372 -> 377 files: +5):
+ * `20260828150000_harden_job_order_snapshot_source_lineage.sql`
+ * (ISS-2026-203: `app.prepare_job_order` merges quotation id/version into
+ * 4 of 5 snapshot columns; rewritten mid-draft after a stale-base-body
+ * regression was caught against a pre-existing test);
+ * `20260828151000_harden_inventory_movement_reservation_source_lineage.sql`
+ * (ISS-2026-206 partial: 2 new validation triggers on `app.inventory_
+ * movements`/`app.inventory_reservations`; the other 2 named tables
+ * re-confirmed to break established `finance-subledger.sql` fixtures,
+ * left open);
+ * `20260828160000_harden_self_approval_null_actor_fail_open.sql`
+ * (ISS-2026-213: 6 self-approval functions widened to
+ * `coalesce(<nullable actor column> = p_actor_auth_user_id, true)`; a
+ * second stale-base-body regression on `app.approve_warehouse_billing_
+ * event` caught and fixed before ever applying);
+ * `20260828171000_harden_vendor_evidence_reviewer_record_scope.sql`
+ * (ISS-2026-224: new narrow sibling `app.authorize_vendor_evidence_file_
+ * access()` unblocks the vendor-evidence second-reviewer workflow; a
+ * live-only grant leak on its `public.*` wrapper, from this hosted
+ * project's own platform default-privilege bootstrap, found and fixed
+ * both live and in this file after local db-tests had already passed);
+ * and `20260828173000_harden_files_malware_scan_raw_correction_audit.sql`
+ * (ISS-2026-231 partial, audit-visibility only: new `AFTER UPDATE` trigger
+ * records an audit_logs entry for a raw malware-scan-status correction; a
+ * blocking schema backstop was investigated and correctly NOT added,
+ * confirmed to conflict with an established, already-tested repository
+ * pattern used in 4 other domains). By far the most difficult batch to
+ * date: 10 full local db-tests runs and 9 further self-caught issues
+ * before a clean local pass (2 fixture-quantity bugs, 1
+ * fixture-isolation/shared-balance conflict, 1 data-modifying-CTE-in-
+ * EXISTS PostgreSQL syntax error, 1 missing `auth.users` seed row, 1
+ * new-trigger `auth.uid()` robustness gap, 1 missing required `public.*`
+ * wrapper, plus the 2 stale-base-body regressions named above).
+ * dbTestSetSha256 changed (234 files unchanged in count -- 10 existing
+ * files widened, no file added or removed):
+ * `scripts/db-tests/operations-job-order.sql`, `advanced-tms-inventory-
+ * ledger.sql`, `advanced-tms-cycle-count-adjustment.sql`, `advanced-tms-
+ * warehouse-billing-events.sql`, `procurement-vendor-compliance.sql`,
+ * `procurement-vendor-financial-security.sql`, `document-file.sql`,
+ * `approval.sql`, `dedicated-enterprise-deployment.sql`, `multi-region-
+ * data-residency.sql`. `app/api/v1/vendor/assignments/[invitationId]/
+ * accept/route.ts`, `.../decline/route.ts`, `app/api/v1/vendor/rfqs/
+ * [rfqInvitationId]/response/route.ts`, `app/api/v1/customer/bookings/
+ * [bookingRequestId]/submit/route.ts`, `server/contracts/api/api.ts`,
+ * `server/queries/automation-rule.ts`(`.test.ts`), and 4
+ * `tests/api/v1/*.test.ts` files (ISS-2026-214/237, TypeScript-only) also
+ * changed but fall outside either tracked set. Re-verified via a fresh
+ * full local db-test suite run (377 migrations, 234 runner files, ALL
+ * PASSED, tenth attempt after the self-caught fixes above) before this
+ * digest was changed, and applied to the live hosted project via
+ * `apply_migration` immediately after this local run passed; every
+ * new/changed grant and function body live-verified correct, including a
+ * live-only grant-leak correction found via mandatory post-apply grant
+ * introspection.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1304,8 +1365,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // active_grant.sql, 20260828111000_harden_support_session_open_audit_
   // trail.sql, 20260828121000_harden_shared_record_scope_primitives_actor_
   // identity.sql, 20260828140000_harden_customer_ticket_links_entity_id_
-  // registry_redaction.sql). See the class-level doc comment above.
-  migrationSetSha256: "ac5fba0df49a0777dc05745dbf00ab2b706ce3cd8040cdddaf7a72cc70cd5ef0",
+  // registry_redaction.sql).
+  // History: ac5fba0df49a0777dc05745dbf00ab2b706ce3cd8040cdddaf7a72cc70cd5ef0
+  // (372 files, twenty-sixth-pass amendment above). Superseded 2026-08-28
+  // (twenty-seventh pass) by Track B Batch 7's ISS-2026-203/206/213/224/231
+  // fixes (377 files: +5, 20260828150000_harden_job_order_snapshot_source_
+  // lineage.sql, 20260828151000_harden_inventory_movement_reservation_
+  // source_lineage.sql, 20260828160000_harden_self_approval_null_actor_
+  // fail_open.sql, 20260828171000_harden_vendor_evidence_reviewer_record_
+  // scope.sql, 20260828173000_harden_files_malware_scan_raw_correction_
+  // audit.sql). See the class-level doc comment above.
+  migrationSetSha256: "2f8b8c272e6b00db9132dc954786f0e2337b7e8a7386b0e15db16f7d57106d18",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1460,9 +1530,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (twenty-sixth pass) by Track B Batch 6 (234 files unchanged in count --
   // support-access.sql, audit-trail.sql, rbac-enforcement.sql,
   // hris-kpi-performance.sql, and ticketing-linked-records.sql all
-  // widened, no file added or removed). See the class-level doc comment
-  // above.
-  dbTestSetSha256: "9c6faf9a551c36165bd90836eab1e9a84ddafac8be8397b958d9be9c260cec3e",
+  // widened, no file added or removed).
+  // History: 9c6faf9a551c36165bd90836eab1e9a84ddafac8be8397b958d9be9c260cec3e
+  // (234 files, twenty-sixth-pass amendment above). Superseded 2026-08-28
+  // (twenty-seventh pass) by Track B Batch 7 (234 files unchanged in count
+  // -- operations-job-order.sql, advanced-tms-inventory-ledger.sql,
+  // advanced-tms-cycle-count-adjustment.sql, advanced-tms-warehouse-
+  // billing-events.sql, procurement-vendor-compliance.sql, procurement-
+  // vendor-financial-security.sql, document-file.sql, approval.sql,
+  // dedicated-enterprise-deployment.sql, and multi-region-data-
+  // residency.sql all widened, no file added or removed). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "6128cd424ad1aa108a22c013cf8c790aa1feff99449724ea972cd345accfdb90",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

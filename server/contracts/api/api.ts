@@ -110,6 +110,22 @@ export const IdempotencyKeySchema = z.string().min(1).max(255);
 /** The value both an X-CargoGrid-Request-Id header and app.capture_audit_event()'s p_correlation_id thread through -- one request's full downstream effect traceable across app.api_logs/app.audit_logs/etc. */
 export const CorrelationIdSchema = z.string().uuid();
 
+/**
+ * ISS-2026-214: a malformed-uuid path-parameter guard shared by every REST /v1 route with
+ * a uuid path segment. Validated at the route boundary (mirroring the already-shipped
+ * `invalid_expected_version` precedent, ISS-2026-212, which validates its own body field
+ * at the same boundary before it ever reaches a downstream call) so a malformed id is
+ * rejected with a clean, generic 400 BEFORE it ever reaches an underlying mutation
+ * function's own `z.string().uuid().parse(...)` (whose thrown ZodError would otherwise
+ * leak its raw issue array into the response body verbatim) or an untyped RPC call (whose
+ * resulting Postgres invalid-input-syntax error would otherwise leak raw internal error
+ * text). Route-boundary validation, not a post-hoc catch, so it also correctly covers a
+ * route like customer/bookings/[bookingRequestId]/submit whose OWN pre-check query
+ * function (getCustomerBookingRequest) would otherwise be the first thing to reach a
+ * malformed id, before the mutation function's own ZodError-throwing schema ever runs.
+ */
+export const PathParamUuidSchema = z.string().uuid();
+
 export const ApiLogSchema = z.object({
   id: z.string().uuid(),
   correlationId: z.string().uuid(),

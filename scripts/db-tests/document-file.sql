@@ -351,6 +351,55 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-231 regression: app.record_file_scan_result''s own "cannot re-resolve" invariant has no BLOCKING schema-level backstop (deliberate, matches an established pattern used by 4 other domains'' own test suites -- see the raw UPDATE tests in customer-epod-access.sql/procurement-vendor-compliance.sql/procurement-vendor-financial-security.sql/ticketing-customer.sql), but a raw, session-context-free out-of-band correction now DOES produce an app.audit_logs entry (RPD-022''s own "every such mutation is audited" doctrine), where before it produced none'
+do $$
+declare
+  v_tenant_id uuid;
+  v_file_id uuid;
+  v_audit_count integer;
+  v_before_status text;
+  v_after_status text;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+  v_file_id := (select id from app.files where tenant_id = v_tenant_id and idempotency_key = 'idem-msa-upload-1');
+
+  -- Same shape as the 4 other domains' own established RPD-022 residual-risk raw
+  -- correction: a plain UPDATE, no session context (no set local request.jwt.claims
+  -- in this session at this point), re-flagging an already-'clean' file. Confirmed
+  -- NOT blocked -- app.record_file_scan_result's own RPC-level check (the primary,
+  -- documented control) already refused this above; this is the schema-level path.
+  update app.files set malware_scan_status = 'infected' where id = v_file_id;
+
+  select count(*) into v_audit_count from app.audit_logs
+  where action = 'files_malware_scan_status_raw_correction' and resource_id = v_file_id
+    and result = 'success' and actor_auth_user_id is null;
+  if v_audit_count <> 1 then
+    raise exception 'assertion failed: expected exactly one no-session-actor app.audit_logs row for the raw malware_scan_status correction, got %', v_audit_count;
+  end if;
+
+  select before_value ->> 'malware_scan_status', after_value ->> 'malware_scan_status'
+    into v_before_status, v_after_status
+  from app.audit_logs
+  where action = 'files_malware_scan_status_raw_correction' and resource_id = v_file_id
+  order by occurred_at desc limit 1;
+  if v_before_status <> 'clean' or v_after_status <> 'infected' then
+    raise exception 'assertion failed: expected before/after malware_scan_status of clean/infected captured on the raw-correction audit row, got %/%', v_before_status, v_after_status;
+  end if;
+
+  -- The RPC's own no-op re-resolution path (same status) does NOT double-fire this
+  -- trigger's audit capture -- it never reaches the UPDATE statement for a same-value
+  -- transition at all (early return), so the count above stays exactly 1.
+  perform app.record_file_scan_result(v_file_id, 'infected', null, '00000000-0000-0000-0000-000000002001', 'uploader');
+  select count(*) into v_audit_count from app.audit_logs
+  where action = 'files_malware_scan_status_raw_correction' and resource_id = v_file_id;
+  if v_audit_count <> 1 then
+    raise exception 'assertion failed: expected the raw-correction audit count to stay at 1 after a same-status no-op re-resolution attempt, got %', v_audit_count;
+  end if;
+
+  update app.files set malware_scan_status = 'clean' where id = v_file_id;
+end;
+$$;
+
 \echo '>> app.record_file_scan_result: an infected result audits as failure, not the raw ''infected'' literal (the exact audit_logs.result CHECK class of bug PLT-127 found)'
 do $$
 declare

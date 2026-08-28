@@ -35,6 +35,7 @@ begin
     ('00000000-0000-0000-0000-000000092106', 'viewer@pfin1.test'),
     ('00000000-0000-0000-0000-000000092107', 'customer@pfin1.test'),
     ('00000000-0000-0000-0000-000000092108', 'manager2@pfin1.test'),
+    ('00000000-0000-0000-0000-000000092109', 'reviewer@pfin1.test'),
     ('00000000-0000-0000-0000-000000092201', 'admin@pfin2.test'),
     ('00000000-0000-0000-0000-000000092202', 'staff@pfin2.test'),
     ('00000000-0000-0000-0000-000000092999', 'supreme@pfin.test');
@@ -746,6 +747,34 @@ begin
     raise exception 'assertion failed: expected file_id nulled out on the content-gate denial branch too, got result=% file_id=%', v_access.access_result, v_access.file_id;
   end if;
   update app.files set malware_scan_status = 'clean' where id = v_clean_file.id;
+end $$;
+
+\echo '>> ISS-2026-224 regression: a second reviewer who holds PRC:Download but did not upload the evidence and shares no org unit/customer account with the uploader is GRANTED bank-account evidence access (not denied via document_record_access_denied, the identical shape a genuinely unauthorized caller gets)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pfin1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000092101';
+  v_reviewer uuid := '00000000-0000-0000-0000-000000092109';
+  v_account app.vendor_bank_accounts;
+  v_reviewer_role uuid;
+  v_reviewer_draft app.role_versions;
+  v_access record;
+begin
+  select * into v_account from app.vendor_bank_accounts where idempotency_key = 'idem-pfin-evidence-doc-4';
+
+  perform app.invite_user(v_tenant1, v_reviewer, 'reviewer@pfin1.test', 'Pfin1 Reviewer', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'reviewer@pfin1.test'), 'active', 'onboarded', 'tester');
+
+  v_reviewer_role := (app.create_role(v_tenant1, 'PRC Financial Second Reviewer', 'Download only -- ISS-2026-224 regression', 'tester')).id;
+  v_reviewer_draft := app.create_role_version(v_reviewer_role, 'tester');
+  perform app.set_role_version_permissions(v_reviewer_draft.id, array(select id from app.permissions where resource_module_code = 'PRC' and action = 'Download'), 'tester');
+  perform app.publish_role_version(v_reviewer_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_reviewer_role and status = 'published'), v_reviewer, v_admin1, 'tester');
+
+  select * into v_access from app.access_vendor_bank_account_evidence(v_account.id, 'metadata_view', v_reviewer, 'reviewer');
+  if v_access.access_result <> 'granted' or v_access.original_filename is null then
+    raise exception 'assertion failed: ISS-2026-224 -- expected a non-uploading actor holding PRC:Download to be granted bank-account evidence access, got result=% reason=%', v_access.access_result, v_access.access_reason;
+  end if;
 end $$;
 
 \echo '>> tax identity lifecycle: create/update/submit/decide (self-approval + MFA blocked), masked read, reveal (audited, plaintext never in the audit row), duplicate-hash detection, hold/deactivate'

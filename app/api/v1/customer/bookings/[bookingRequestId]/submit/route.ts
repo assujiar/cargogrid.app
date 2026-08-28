@@ -10,7 +10,7 @@
 import { authorizeApiV1Request, recordApiV1Success, apiV1ResponseHeaders, type AuthorizedApiV1Request } from "../../../../../../../lib/api-gateway/authenticate.server.ts";
 import { submitCustomerBookingRequest, CustomerBookingRequestMutationError, type CustomerBookingRequestMutationRpcClient } from "../../../../../../../server/mutations/customer-booking-request.ts";
 import { getCustomerBookingRequest, CustomerBookingRequestQueryError } from "../../../../../../../server/queries/customer-booking-request.ts";
-import { buildApiError } from "../../../../../../../server/contracts/api/api.ts";
+import { buildApiError, PathParamUuidSchema } from "../../../../../../../server/contracts/api/api.ts";
 
 /** See app/api/v1/customer/bookings/route.ts's own toBookingClient() for why this cast is needed. */
 function toBookingClient(rpcClient: AuthorizedApiV1Request["rpcClient"]): CustomerBookingRequestMutationRpcClient {
@@ -39,7 +39,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ boo
 
   let statusCode: number;
   let responseBody: unknown;
-  if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
+  if (!PathParamUuidSchema.safeParse(bookingRequestId).success) {
+    // ISS-2026-214: rejected here, before any downstream call. This route's own pre-check
+    // getCustomerBookingRequest() passes a malformed id straight to an RPC typed `uuid`
+    // (a raw Postgres invalid-input-syntax error would otherwise leak into the response),
+    // and submitCustomerBookingRequest()'s own z.string().uuid().parse() would otherwise
+    // leak a raw ZodError issue array -- validating here, before either is ever reached,
+    // covers both.
+    statusCode = 400;
+    responseBody = { error: buildApiError({ code: "invalid_path_parameter", message: "bookingRequestId must be a valid UUID.", requestId: authorized.request.correlationId }) };
+  } else if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
     statusCode = 400;
     responseBody = { error: buildApiError({ code: "invalid_expected_version", message: "A positive integer expectedVersion is required.", requestId: authorized.request.correlationId }) };
   } else {
