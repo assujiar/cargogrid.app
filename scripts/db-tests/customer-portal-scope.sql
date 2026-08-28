@@ -296,12 +296,21 @@ begin
 
   -- Forged/copied auth_user_id: alpha-member (a real, different, already-active
   -- identity) tries to accept alpha-pending's own invite by id.
+  --
+  -- ISS-2026-116 Track B Batch 4 fix: this wrong-actor branch now raises the
+  -- identical customer_portal_membership_not_found (errcode no_data_found) as
+  -- a genuinely nonexistent membership id, not a distinguishable
+  -- insufficient_authority -- mirrors app.get_customer_inventory_balance's
+  -- own single anti-enumeration error shape (20260828030000_harden_customer_
+  -- portal_membership_anti_enumeration.sql). This assertion previously
+  -- expected 'insufficient_authority%'; updated because it was directly
+  -- testing the exact pre-fix behavior this migration changes.
   begin
     perform app.accept_customer_portal_invite(v_pending.id, v_pending.record_version, '00000000-0000-0000-0000-000000300011');
-    raise exception 'assertion failed: expected insufficient_authority -- only the invited identity (300012) may accept this invite, not 300011';
+    raise exception 'assertion failed: expected customer_portal_membership_not_found -- only the invited identity (300012) may accept this invite, not 300011, and that must be indistinguishable from a nonexistent membership id';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'customer_portal_membership_not_found%' then raise; end if;
   end;
 
   -- Stale version: a wrong expected_version is rejected even for the genuinely
@@ -536,12 +545,45 @@ begin
 
   -- Wrong-account actor: beta-admin (a genuine account_admin, just on a
   -- different account) may not suspend an Alpha member.
+  --
+  -- ISS-2026-116 Track B Batch 4 fix: this wrong-actor branch now raises the
+  -- identical customer_portal_membership_not_found (errcode no_data_found) as
+  -- a genuinely nonexistent membership id, not a distinguishable
+  -- insufficient_authority -- mirrors app.get_customer_inventory_balance's
+  -- own single anti-enumeration error shape (20260828030000_harden_customer_
+  -- portal_membership_anti_enumeration.sql). This assertion previously
+  -- expected 'insufficient_authority%'; updated because it was directly
+  -- testing the exact pre-fix behavior this migration changes.
   begin
     perform app.set_customer_portal_account_membership_status(v_row.id, v_row.record_version, 'suspended', 'unauthorized attempt', '00000000-0000-0000-0000-000000300020', 'beta-admin');
-    raise exception 'assertion failed: expected insufficient_authority -- beta-admin is not an account_admin on Alpha';
+    raise exception 'assertion failed: expected customer_portal_membership_not_found -- beta-admin is not an account_admin on Alpha, and that must be indistinguishable from a nonexistent membership id';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'customer_portal_membership_not_found%' then raise; end if;
+  end;
+
+  -- ISS-2026-116 Track B Batch 4 regression proof: the not-found and
+  -- wrong-actor branches raise byte-identical message text, not merely the
+  -- same prefix -- proves the two codepaths are genuinely unified, not just
+  -- coincidentally sharing a prefix.
+  declare
+    v_msg_not_found text;
+    v_msg_wrong_actor text;
+    v_random_id uuid := gen_random_uuid();
+  begin
+    begin
+      perform app.set_customer_portal_account_membership_status(v_random_id, 1, 'suspended', 'anti-enumeration probe', '00000000-0000-0000-0000-000000300010', 'alpha-admin');
+    exception
+      when others then v_msg_not_found := sqlerrm;
+    end;
+    begin
+      perform app.set_customer_portal_account_membership_status(v_row.id, v_row.record_version, 'suspended', 'anti-enumeration probe', '00000000-0000-0000-0000-000000300020', 'beta-admin');
+    exception
+      when others then v_msg_wrong_actor := sqlerrm;
+    end;
+    if v_msg_not_found is distinct from replace(v_msg_wrong_actor, v_row.id::text, v_random_id::text) then
+      raise exception 'assertion failed: expected the not-found and wrong-actor branches to raise byte-identical anti-enumeration text (modulo the membership id itself), got % vs %', v_msg_not_found, v_msg_wrong_actor;
+    end if;
   end;
 
   -- Stale version.

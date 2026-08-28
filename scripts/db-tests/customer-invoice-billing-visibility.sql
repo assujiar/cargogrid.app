@@ -30,7 +30,12 @@
 -- raw-function grant defense in depth (anon denied, authenticated/
 -- service_role granted, the private helper granted to service_role only);
 -- (j) the actor-identity session cross-check on every public RPC; (k) a
--- real, live authenticated-role positive path.
+-- real, live authenticated-role positive path; (l) ISS-2026-124 fix
+-- regression -- customer_account_id IS now projected by both
+-- app.get_customer_portal_invoice and app.list_customer_portal_invoices
+-- (previously the one outlier among sibling Phase 8 read RPCs to omit its
+-- own owning-account id), verified equal to the real fixture row's account
+-- on every returned row, including across cursor pagination.
 
 \set ON_ERROR_STOP on
 
@@ -251,11 +256,12 @@ end $$;
 -- Fixture-only helper, no longer needed once the chain rows above exist.
 drop function if exists app._cib_test_make_chain(uuid, uuid, uuid, text, uuid);
 
-\echo '>> app.get_customer_portal_invoice: draft/submitted/approved are invisible to Alpha''s own customer -- identical record_not_found to a genuinely fake id; issued/void ARE visible; cross-account (Beta) denied; structural field-leak check (never company_id/job_order_id/billing_readiness_handoff_id/posting_period_id/ar_open_item_id)'
+\echo '>> app.get_customer_portal_invoice: draft/submitted/approved are invisible to Alpha''s own customer -- identical record_not_found to a genuinely fake id; issued/void ARE visible; cross-account (Beta) denied; structural field-leak check (never company_id/job_order_id/billing_readiness_handoff_id/posting_period_id/ar_open_item_id); customer_account_id IS now projected (ISS-2026-124 fix) and matches Alpha''s own account'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'cib1');
   v_customer_alpha uuid := '00000000-0000-0000-0000-000000322010';
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'cib1') and legal_name = 'Cib Account Alpha');
   v_fake_id uuid := '77777777-7777-7777-7777-777777777777';
   v_row record;
   v_row_json jsonb;
@@ -264,12 +270,19 @@ declare
   v_msg_approved text;
   v_msg_beta text;
   v_msg_fake text;
-  v_internal_only_fields text[] := array['company_id', 'job_order_id', 'billing_readiness_handoff_id', 'posting_period_id', 'ar_open_item_id', 'void_reason', 'voided_by', 'voided_at', 'submitted_by', 'approved_by', 'issued_by', 'created_by', 'customer_account_id'];
+  -- customer_account_id is deliberately NOT in this list (ISS-2026-124 fix):
+  -- it is now an intentionally-projected, customer-safe owning-account id,
+  -- matching every sibling Phase 8 read RPC's own owner_account_id/
+  -- customer_account_id precedent -- not an internal linkage field.
+  v_internal_only_fields text[] := array['company_id', 'job_order_id', 'billing_readiness_handoff_id', 'posting_period_id', 'ar_open_item_id', 'void_reason', 'voided_by', 'voided_at', 'submitted_by', 'approved_by', 'issued_by', 'created_by'];
 begin
   -- Issued invoice succeeds with the full customer-safe projection.
   select * into v_row from app.get_customer_portal_invoice(v_tenant1, v_customer_alpha, '00000000-0000-0000-0000-000000322104');
   if v_row.id <> '00000000-0000-0000-0000-000000322104' or v_row.status <> 'issued' or v_row.invoice_number <> 'INV-CIB-000001' or v_row.total_amount <> 1100 then
     raise exception 'assertion failed: expected Alpha''s own issued invoice with total_amount=1100, got %', v_row;
+  end if;
+  if v_row.customer_account_id is distinct from v_account_alpha then
+    raise exception 'assertion failed (ISS-2026-124): expected app.get_customer_portal_invoice to project customer_account_id=%, got %', v_account_alpha, v_row.customer_account_id;
   end if;
   v_row_json := to_jsonb(v_row);
   if v_row_json ?| v_internal_only_fields then
@@ -280,6 +293,9 @@ begin
   select * into v_row from app.get_customer_portal_invoice(v_tenant1, v_customer_alpha, '00000000-0000-0000-0000-000000322107');
   if v_row.id <> '00000000-0000-0000-0000-000000322107' or v_row.status <> 'void' or v_row.invoice_number is not null then
     raise exception 'assertion failed: expected the void-before-issuance invoice to be visible with a null invoice_number, got %', v_row;
+  end if;
+  if v_row.customer_account_id is distinct from v_account_alpha then
+    raise exception 'assertion failed (ISS-2026-124): expected the void invoice''s own customer_account_id=%, got %', v_account_alpha, v_row.customer_account_id;
   end if;
 
   begin
@@ -378,11 +394,12 @@ begin
   end if;
 end $$;
 
-\echo '>> app.list_customer_portal_invoices: Alpha sees exactly its own 4 issued/void invoices (never the 3 pre-issuance ones, never Beta''s), status filter correctness (including an excluded-by-design status matching zero rows), cursor pagination terminates cleanly'
+\echo '>> app.list_customer_portal_invoices: Alpha sees exactly its own 4 issued/void invoices (never the 3 pre-issuance ones, never Beta''s), status filter correctness (including an excluded-by-design status matching zero rows), cursor pagination terminates cleanly; every row''s customer_account_id is Alpha''s own account (ISS-2026-124 fix)'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'cib1');
   v_customer_alpha uuid := '00000000-0000-0000-0000-000000322010';
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'cib1') and legal_name = 'Cib Account Alpha');
   v_count integer;
   v_row record;
   v_seen_ids uuid[] := array[]::uuid[];
@@ -394,6 +411,14 @@ begin
   select count(*) into v_count from app.list_customer_portal_invoices(v_tenant1, v_customer_alpha, null, null, null, 200);
   if v_count <> 4 then
     raise exception 'assertion failed: expected exactly 4 (3 issued + 1 void) invoices for Alpha, got %', v_count;
+  end if;
+
+  -- ISS-2026-124 fix: every row Alpha can see projects Alpha's own account id
+  -- (this fixture is single-account for Alpha, so this also structurally
+  -- proves the column is populated from the real row, never null/fabricated).
+  select count(*) into v_count from app.list_customer_portal_invoices(v_tenant1, v_customer_alpha, null, null, null, 200) v where v.customer_account_id is distinct from v_account_alpha;
+  if v_count <> 0 then
+    raise exception 'assertion failed (ISS-2026-124): expected every row''s customer_account_id to equal Alpha''s own account %, % row(s) did not', v_account_alpha, v_count;
   end if;
 
   select count(*) into v_count from app.list_customer_portal_invoices(v_tenant1, v_customer_alpha, 'issued', null, null, 200);
@@ -429,6 +454,9 @@ begin
       v_page_count := v_page_count + 1;
       if v_row.id = any(v_seen_ids) then
         raise exception 'assertion failed: cursor pagination returned a duplicate row %, seen so far %', v_row.id, v_seen_ids;
+      end if;
+      if v_row.customer_account_id is distinct from v_account_alpha then
+        raise exception 'assertion failed (ISS-2026-124): paginated row % projected customer_account_id=%, expected %', v_row.id, v_row.customer_account_id, v_account_alpha;
       end if;
       v_seen_ids := v_seen_ids || v_row.id;
       v_cursor_updated_at := v_row.updated_at;

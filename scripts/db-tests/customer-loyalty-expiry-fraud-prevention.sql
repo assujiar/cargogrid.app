@@ -51,6 +51,12 @@ declare
   v_account_gamma uuid;
   v_account_zeta uuid;
   v_manager1 uuid := '00000000-0000-0000-0000-000000345001';
+  -- ISS-2026-133 item 1 fix regression: a SECOND LYL:Configure staff
+  -- identity in tenant1, used wherever a case opened by v_manager1 must be
+  -- DECIDED by a different actor -- self-approval is now structurally
+  -- blocked (app.decide_loyalty_fraud_review_case rejects the SAME actor
+  -- who opened the case).
+  v_manager1b uuid := '00000000-0000-0000-0000-000000345002';
   v_plain1 uuid := '00000000-0000-0000-0000-000000345004';
   v_customer_alpha uuid := '00000000-0000-0000-0000-000000345010';
   v_customer_beta uuid := '00000000-0000-0000-0000-000000345020';
@@ -66,6 +72,7 @@ declare
 begin
   insert into auth.users (id, email) values
     (v_manager1, 'manager1@efp1.test'),
+    (v_manager1b, 'manager1b@efp1.test'),
     (v_plain1, 'plain1@efp1.test'),
     (v_customer_alpha, 'customer-alpha@efp1.test'),
     (v_customer_beta, 'customer-beta@efp1.test'),
@@ -92,6 +99,10 @@ begin
   perform app.set_role_version_permissions(v_manager_draft1.id, array(select id from app.permissions where resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit', 'Configure')), 'tester');
   perform app.publish_role_version(v_manager_draft1.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_manager_role1 and status = 'published'), v_manager1, v_manager1, 'tester');
+
+  perform app.invite_user(v_tenant1, v_manager1b, 'manager1b@efp1.test', 'Efp1 Manager B', v_company1, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'manager1b@efp1.test'), 'active', 'onboarded', 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_manager_role1 and status = 'published'), v_manager1b, v_manager1b, 'tester');
 
   perform app.invite_user(v_tenant1, v_plain1, 'plain1@efp1.test', 'Efp1 Plain User', v_company1, 'tester', now() + interval '7 days');
   perform app.transition_user_status((select id from app.users where email = 'plain1@efp1.test'), 'active', 'onboarded', 'tester');
@@ -392,6 +403,9 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'efp1');
   v_manager1 uuid := '00000000-0000-0000-0000-000000345001';
+  -- ISS-2026-133 item 1 fix: decide is performed by a DIFFERENT LYL:Configure
+  -- actor than the one who opened the case (self-approval is now blocked).
+  v_manager1b uuid := '00000000-0000-0000-0000-000000345002';
   v_plain1 uuid := '00000000-0000-0000-0000-000000345004';
   v_loyalty_account_alpha uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and legal_name = 'Efp Account Alpha'));
   v_case app.loyalty_fraud_review_cases;
@@ -440,16 +454,24 @@ begin
 
   -- decide: confirm, mandatory non-empty reason.
   begin
-    perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'confirm', '', v_manager1, 'manager1');
+    perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'confirm', '', v_manager1b, 'manager1b');
     raise exception 'assertion failed: expected reason_required for an empty review_reason';
   exception when others then if sqlerrm not like 'reason_required%' then raise; end if;
   end;
 
-  v_case := app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'confirm', 'confirmed genuine velocity anomaly after manual review', v_manager1, 'manager1');
+  -- ISS-2026-133 item 1 fix (mandatory test): v_manager1 opened this case
+  -- and may NOT also decide it -- self-approval is structurally blocked.
+  begin
+    perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'confirm', 'attempting to decide my own case', v_manager1, 'manager1');
+    raise exception 'assertion failed: expected self_approval_not_allowed when the opening actor also tries to decide';
+  exception when others then if sqlerrm not like 'self_approval_not_allowed%' then raise; end if;
+  end;
+
+  v_case := app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'confirm', 'confirmed genuine velocity anomaly after manual review', v_manager1b, 'manager1b');
   if v_case.status <> 'confirmed' then
     raise exception 'assertion failed: expected status=confirmed, got %', v_case.status;
   end if;
-  if v_case.reviewed_by <> 'manager1' or v_case.review_reason is null or v_case.decided_at is null then
+  if v_case.reviewed_by <> 'manager1b' or v_case.review_reason is null or v_case.decided_at is null then
     raise exception 'assertion failed: expected a real reviewed_by/review_reason/decided_at on confirm';
   end if;
 
@@ -473,6 +495,9 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'efp1');
   v_manager1 uuid := '00000000-0000-0000-0000-000000345001';
+  -- ISS-2026-133 item 1 fix: decide is performed by a DIFFERENT LYL:Configure
+  -- actor than the one who opened the case (self-approval is now blocked).
+  v_manager1b uuid := '00000000-0000-0000-0000-000000345002';
   v_loyalty_account_beta uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and legal_name = 'Efp Account Beta'));
   v_case app.loyalty_fraud_review_cases;
   v_hold app.loyalty_account_tier_holds;
@@ -484,8 +509,9 @@ begin
   end if;
 
   -- decide directly from 'open' (never claimed) -- proves BOTH open and
-  -- under_review are valid pre-decision states.
-  v_case := app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'clear', 'verified false positive -- same household, shared device', v_manager1, 'manager1');
+  -- under_review are valid pre-decision states. A DIFFERENT actor than the
+  -- opener (ISS-2026-133 item 1 fix).
+  v_case := app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'clear', 'verified false positive -- same household, shared device', v_manager1b, 'manager1b');
   if v_case.status <> 'cleared' then
     raise exception 'assertion failed: expected status=cleared, got %', v_case.status;
   end if;
@@ -501,6 +527,9 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'efp1');
   v_manager1 uuid := '00000000-0000-0000-0000-000000345001';
+  -- ISS-2026-133 item 1 fix: the cleanup decide below must use a DIFFERENT
+  -- actor than the one who opened the case (self-approval is now blocked).
+  v_manager1b uuid := '00000000-0000-0000-0000-000000345002';
   v_loyalty_account_beta uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and legal_name = 'Efp Account Beta'));
   v_suppression app.loyalty_fraud_review_suppressions;
   v_case app.loyalty_fraud_review_cases;
@@ -556,8 +585,9 @@ begin
   end if;
 
   -- Clean up: decide this case so it does not interfere with later cross-
-  -- tenant/pagination assertions expecting a known state.
-  perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'clear', 'resolved for test cleanup', v_manager1, 'manager1');
+  -- tenant/pagination assertions expecting a known state. A DIFFERENT actor
+  -- than the opener (ISS-2026-133 item 1 fix).
+  perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'clear', 'resolved for test cleanup', v_manager1b, 'manager1b');
 end $$;
 
 \echo '>> revoke_loyalty_fraud_review_suppression (mandatory test): staff-only, idempotent on an already-revoked row'
@@ -588,6 +618,10 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'efp1');
   v_manager1 uuid := '00000000-0000-0000-0000-000000345001';
+  -- ISS-2026-133 item 1 fix: the real-version decide call below must use a
+  -- DIFFERENT actor than the one who opened the case (self-approval is now
+  -- blocked) -- claim has no such restriction, so it stays on v_manager1.
+  v_manager1b uuid := '00000000-0000-0000-0000-000000345002';
   v_loyalty_account_gamma uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and legal_name = 'Efp Account Gamma'));
   v_case app.loyalty_fraud_review_cases;
   v_before app.loyalty_fraud_review_cases;
@@ -612,14 +646,14 @@ begin
 
   v_before := v_case;
   begin
-    perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, null, 'clear', 'null-bypass check', v_manager1, 'manager1');
+    perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, null, 'clear', 'null-bypass check', v_manager1b, 'manager1b');
     raise exception 'assertion failed: expected stale_version for a NULL p_expected_version on decide';
   exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
   end;
   if (select record_version from app.loyalty_fraud_review_cases where id = v_case.id) <> v_before.record_version then
     raise exception 'assertion failed: expected the case row to be byte-for-byte unchanged after the rejected NULL-version decide attempt';
   end if;
-  v_case := app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_before.record_version, 'clear', 'resolved for test', v_manager1, 'manager1');
+  v_case := app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_before.record_version, 'clear', 'resolved for test', v_manager1b, 'manager1b');
   if v_case.status <> 'cleared' then
     raise exception 'assertion failed: expected the real-version decide call to succeed';
   end if;
@@ -872,6 +906,49 @@ begin
     raise exception 'assertion failed: expected invalid_cursor for a half-supplied cursor';
   exception when others then if sqlerrm not like 'invalid_cursor%' then raise; end if;
   end;
+end $$;
+
+\echo '>> ISS-2026-133 item 1 regression (mandatory test): self-approval is now blocked between app.open_loyalty_fraud_review_case and app.decide_loyalty_fraud_review_case for the SAME staff identity; a DIFFERENT LYL:Configure staff identity in the same tenant may still decide it'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'efp1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000345001';
+  -- v_manager1b (a second LYL:Configure staff identity) already exists --
+  -- created in this file's own top-level setup block, above.
+  v_manager1b uuid := '00000000-0000-0000-0000-000000345002';
+  -- Alpha's own case from lifecycle A (above) already reached a terminal
+  -- 'confirmed' status, so its account is free to open a new case on.
+  v_loyalty_account_alpha uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'efp1') and legal_name = 'Efp Account Alpha'));
+  v_case app.loyalty_fraud_review_cases;
+begin
+  v_case := app.open_loyalty_fraud_review_case(v_tenant1, v_loyalty_account_alpha, 'manual_flag', 'ISS-2026-133 self-approval regression fixture', 'case-self-approval', v_manager1, 'manager1');
+
+  -- Column-level proof: the real opening actor identity is now captured.
+  if v_case.opened_by_auth_user_id <> v_manager1 then
+    raise exception 'assertion failed: expected opened_by_auth_user_id=%, got %', v_manager1, v_case.opened_by_auth_user_id;
+  end if;
+
+  -- The SAME actor who opened it may not also decide it.
+  begin
+    perform app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'confirm', 'attempting to decide my own case', v_manager1, 'manager1');
+    raise exception 'assertion failed: expected self_approval_not_allowed when the opening actor also tries to decide';
+  exception when others then if sqlerrm not like 'self_approval_not_allowed%' then raise; end if;
+  end;
+
+  -- The case is untouched by the rejected attempt -- still open, still
+  -- undecided (mirrors every other self_approval_not_allowed precedent:
+  -- a rejected self-decision is a true no-op, never a partial state change).
+  select * into v_case from app.loyalty_fraud_review_cases where id = v_case.id;
+  if v_case.status <> 'open' or v_case.reviewed_by is not null then
+    raise exception 'assertion failed: expected the case to remain open/undecided after the rejected self-approval attempt, got status=%', v_case.status;
+  end if;
+
+  -- A DIFFERENT LYL:Configure staff identity in the same tenant is NOT
+  -- blocked -- the check is narrowly self-approval, not a broader ban.
+  v_case := app.decide_loyalty_fraud_review_case(v_tenant1, v_case.id, v_case.record_version, 'confirm', 'decided by a different reviewer than the opener', v_manager1b, 'manager1b');
+  if v_case.status <> 'confirmed' or v_case.reviewed_by <> 'manager1b' then
+    raise exception 'assertion failed: expected a different actor to successfully decide the case, got status=% reviewed_by=%', v_case.status, v_case.reviewed_by;
+  end if;
 end $$;
 
 \echo '>> LYL:View authority boundary on staff reads (Viewer succeeds, Plain User denied)'

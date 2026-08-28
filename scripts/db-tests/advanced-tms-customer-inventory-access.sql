@@ -847,3 +847,97 @@ begin
     end if;
   end loop;
 end $$;
+
+\echo '>> ISS-2026-117 Track B Batch 4 regression: a genuinely different authenticated session (customer-beta, 230003) may not claim to act as customer-alpha (230002) on any of the ten actor-taking RPCs in this migration -- every call now raises actor_identity_mismatch before ever reaching app.resolve_customer_owner_account_scope/app.evaluate_customer_inventory_access, closing the gap this migration file predated (app.assert_actor_is_session_identity, ATW-031, was introduced by a later migration and never retrofitted here until 20260828040000_harden_advanced_tms_customer_inventory_access_actor_identity.sql)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cia1');
+  v_alpha uuid := '00000000-0000-0000-0000-000000230002';
+  v_impersonator uuid := '00000000-0000-0000-0000-000000230003';
+  v_random_id uuid := gen_random_uuid();
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000230003", "role": "authenticated"}';
+
+  begin
+    perform app.get_customer_inventory_balance(v_tenant1, v_alpha, v_random_id);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.get_customer_inventory_balance';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_inventory_balances(v_tenant1, v_alpha, null, null, null, null, 50);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_inventory_balances';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_lot_identities(v_tenant1, v_alpha, null, null, null, null, null, null, 50);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_lot_identities';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_serial_identities(v_tenant1, v_alpha, null, null, null, null, null, null, 50);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_serial_identities';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.get_customer_outbound_order(v_tenant1, v_alpha, v_random_id);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.get_customer_outbound_order';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_outbound_order_lines(v_random_id, v_alpha);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_outbound_order_lines';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_outbound_orders(v_tenant1, v_alpha, null, null, null, null, 50);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_outbound_orders';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_inventory_movement_summary(v_tenant1, v_alpha, null, null, null, null, 50);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_inventory_movement_summary';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.export_customer_inventory_snapshot(v_tenant1, v_alpha, null, null, 500, 'forged-label');
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.export_customer_inventory_snapshot';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_warehouse_eligibility(v_tenant1, v_alpha);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_warehouse_eligibility';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  reset role;
+end $$;
