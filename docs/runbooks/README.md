@@ -29,6 +29,7 @@ Most files in this directory instantiate `docs/templates/SUPPORT_RUNBOOK_TEMPLAT
 | Runbook | Purpose | Produced/owned by |
 |---|---|---|
 | [`on-call-ownership.md`](./on-call-ownership.md) | What alert-producing mechanisms exist today (job dead-letter, webhook signature failures), what remains unwired, the support-tier ownership table, and escalation-mechanism status | `HDN-382` (Prompt 382, Observability Audit); `HDN-387` (Prompt 387, Release-Blocker Triage) widened it; consolidated at `HDN-388` |
+| [`hypercare.md`](./hypercare.md) | Post-launch intensified-monitoring window: the live hypercare check performed, adoption-tracking/known-issue-publication state, and the honest, unstaffed escalation-ladder gap | `RGL-408` (Prompt 408, Hypercare) |
 | [`observability-exporter-outage.md`](./observability-exporter-outage.md) | The telemetry-*export* pipeline (`scripts/observability/logger.ts` → Better Stack) being unreachable — distinct from `on-call-ownership.md`'s in-application alerting schema | `CG-S5-PH0-014` (Prompt 93, Phase 0) |
 | [`performance-capacity.md`](./performance-capacity.md) | What load/performance/capacity evidence exists (Phase 5 load-test harness, real measured figures) and the disclosed evidence gap for everything built since (Phase 8/9) | `HDN-379` (Prompt 379, Performance and Scalability); consolidated at `HDN-388` |
 
@@ -50,3 +51,4 @@ This file is maintained by direct `docs/runbooks/` directory inspection each tim
 |---|---|---|
 | 2026-08-24 | 0.1.0 | Initial — created at `HDN-388` (Documentation Handoff), indexing the 14 pre-existing runbooks plus the 3 new ones this checkpoint added (`performance-capacity.md`, `on-call-ownership.md`, `deployment-migration-guard.md`). |
 | 2026-08-28 | 0.2.0 | Added `deployment-rollback.md`, authored at `RGL-407` (Prompt 407, Rollback Decision). |
+| 2026-08-28 | 0.3.0 | Added `hypercare.md`, authored at `RGL-408` (Prompt 408, Hypercare). |

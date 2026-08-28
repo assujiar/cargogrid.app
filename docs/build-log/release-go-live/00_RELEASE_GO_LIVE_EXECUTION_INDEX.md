@@ -274,7 +274,7 @@ prompt's own header fixes; additional required outputs are named where the promp
 | 15 | `CG-S16-RGL-015` | `RGL-405` | Production Deployment | 14 | Vercel production (real) — **gated on 14** | `RGL-404.md` §12A (no separate `RGL-405.md` — recorded as an addendum) | `PRODUCTION_DEPLOYED` | Vercel instant rollback — see §11.2, target updated at `RGL-407` | **`PRODUCTION_DEPLOYED`** (2026-08-27, PR #69, commit `c11c616`; production has since advanced through 8 further Track B batch merges, most recently `c77d479`) |
 | 16 | `CG-S16-RGL-016` | `RGL-406` | Post-Deployment Validation | 15 | Live production (real) | `RGL-404.md` §12A (no separate `RGL-406.md` — recorded as an addendum) | `POST_DEPLOYMENT_VALIDATED` | triggers `RGL-407` on failure | **`POST_DEPLOYMENT_VALIDATED`** (2026-08-27; re-confirmed live at `RGL-407`, 2026-08-28, against the current production state) |
 | 17 | `CG-S16-RGL-017` | `RGL-407` | Rollback Decision | 16 | Repository + Vercel/Supabase (real) | `RGL-407.md`, `docs/runbooks/deployment-rollback.md` (serves this row's own planned `ROLLBACK_DECISION_TREE.md` name — see §12) | authority-bound | is the rollback path | **`VERIFIED`** — no rollback indicated |
-| 18 | `CG-S16-RGL-018` | `RGL-408` | Hypercare | 17 | Repository + live monitoring | `RGL-408.md` | `HYPERCARE_ACTIVE` | n/a | `BLOCKED` on 17 |
+| 18 | `CG-S16-RGL-018` | `RGL-408` | Hypercare | 17 | Repository + live monitoring | `RGL-408.md`, `docs/runbooks/hypercare.md` | `HYPERCARE_ACTIVE` (evidence-backed; escalation-ladder staffing `NOT_YET_STAFFED`, disclosed) | n/a | **`VERIFIED`** — no active incident found |
 | 19 | `CG-S16-RGL-019` | `RGL-409` | Post-Implementation Review | 18 | Repository | `RGL-409.md` | `PIR_COMPLETE` | n/a | `BLOCKED` on 18 |
 | 20 | `CG-S16-RGL-020` | `RGL-410` | Release Go-Live Integrated Verification | 19 | All of the above, one lineage | `RGL-410.md`, `RELEASE_READINESS_MATRIX.md` update | none | `git revert` | `BLOCKED` on 19 |
 | 21 | `CG-S16-RGL-021` | `RGL-411` | Release Go-Live Documentation Handoff | 20 | Repository | `RGL-411.md` | none | `git revert` | `BLOCKED` on 20 |
@@ -692,13 +692,18 @@ single Vercel action is ever sufficient when a migration shipped in the same rel
 
 No lane may invent a customer-communication record for an audience that does not exist.
 
-### 11.4 Hypercare plan skeleton (owner `RGL-408`)
+### 11.4 Hypercare plan (owner `RGL-408`, real artifact: `docs/runbooks/hypercare.md`)
 
-Seeded here as planning input, per Prompt 391 step 8; `RGL-408` produces the real artifact.
-Required elements: incident intake path, support tier/routing model, monitoring and alert
-destinations, adoption tracking, known-issue publication, escalation ladder with named humans,
-RCA process, and customer communication. **Current honest state: the monitoring half is
-`PARTIAL` (`HDN-BLK-027`/`028`), and every "named human" slot is empty.**
+Every required element from this section's own original skeleton is now addressed, honestly:
+incident intake path and support tier/routing model (reuses `on-call-ownership.md` §5, unchanged);
+monitoring and alert destinations (§3 of the new runbook — live-checked this checkpoint, 5
+historical error groups confirmed non-recurring since 2026-08-25, zero new incident); adoption
+tracking (confirmed correctly empty — no real tenant onboarded yet); known-issue publication
+(`docs/runtime/KNOWN_ISSUES.md` itself, 102 items, continuously maintained); RCA process (reuses
+`on-call-ownership.md` §5's own binding requirement, unchanged). **Escalation ladder with named
+humans remains genuinely empty — `NOT_YET_STAFFED`, a real, disclosed, human-only gap this session
+cannot close (no tool available can hire, assign, or roster a person into an on-call rotation),
+matching this section's own original honest framing rather than papering over it.**
 
 ### 11.5 PIR plan skeleton (owner `RGL-409`)
 
@@ -718,7 +723,7 @@ index (17 runbooks). Step 16's additional needs:
 |---|---|---|
 | Release/cutover runbook | **does not exist** | `RGL-405` |
 | Rollback decision tree | **exists**: `docs/runbooks/deployment-rollback.md` (new, `RGL-407`, 2026-08-28) — this row's own planning name, `ROLLBACK_DECISION_TREE.md`, is served by that file rather than a separately-named one, keeping one canonical runbook directory per this repository's own established naming-reconciliation convention (`ISS-2026-262`'s own precedent: the built equivalent under a different, more consistent name, not a missing file). Real Vercel rollback mechanics verified live; end-to-end execution honestly marked `NOT_YET_REHEARSED` (the file's own §7) | `RGL-407` |
-| Hypercare / go-live support | **does not exist** | `RGL-408` |
+| Hypercare / go-live support | **exists**: `docs/runbooks/hypercare.md` (new, `RGL-408`, 2026-08-28) — a real point-in-time hypercare check performed; escalation-ladder human staffing honestly marked `NOT_YET_STAFFED` | `RGL-408` |
 | `docs/runbooks/deployment-migration-guard.md` | exists (`HDN-388`); has not been reconciled against the fact that a real deploy pipeline now exists | `RGL-405` |
 | `docs/runbooks/on-call-ownership.md` | exists (`HDN-388`); every name slot is empty | `RGL-408` |
 | `docs/runbooks/performance-capacity.md` | exists (`HDN-388`); no budget has been measured against a real deployed target | `RGL-403` |
