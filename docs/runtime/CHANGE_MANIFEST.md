@@ -8671,3 +8671,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
 | Status | **`COMPLETED`**. `RGL-407` `VERIFIED`. `RGL-408` (Hypercare, `CG-S16-RGL-018`, Prompt 408) next per the Step 16 WBS |
 | Date | 2026-08-28 |
+
+### CHG-2026-276 — `RGL-408` (Hypercare, `CG-S16-RGL-018`): no active incident; `docs/runbooks/hypercare.md` authored
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-018` (Prompt 408, Hypercare) — the Step 16 WBS row immediately following `RGL-407` (Rollback Decision, `VERIFIED`) |
+| Change type | DOCUMENTATION (new runbook + index/README/ledger updates) — no code, migration, or contract change |
+| Authorization | The operator's own "jalankan semua step 16" instruction, continuing the Step 16 WBS sequence directly from `RGL-407` |
+| Build process | Ran a real, live hypercare check against the current production release candidate: `get_runtime_errors` over a 7-day window (5 error groups found, all historical — every group's own `last=` timestamp at or before `2026-08-25T09:08`, predating the Track A production fix and all 8 Track B batches; zero occurrences since), 3 live health-endpoint probes (`/api/health` 200, `/api/ready` 200, `/api/v1/status` clean 401 without a Bearer key — all green), a live Supabase `get_advisors` security sweep (unchanged from `RGL-407`'s own same-day pull — 1 pre-existing accepted `ERROR`, no new `ERROR`), and confirmation that adoption tracking remains correctly empty (no real tenant data yet) and that `KNOWN_ISSUES.md` continues to serve as the real known-issue publication mechanism (102 items, 0 Critical/6 High/52 Medium/44 Low). Authored `docs/runbooks/hypercare.md`, reusing `docs/runbooks/on-call-ownership.md`'s own already-real support-tier/RCA/escalation model rather than inventing a parallel one |
+| Findings and disposition | No active incident — nothing in the evidence gathered rises to any P1-P4 severity requiring intervention. The hypercare plan skeleton `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §11.4 seeded is now addressed element-by-element; the one genuinely unactionable element — the escalation ladder's named-human slots (on-call rotation, Incident Commander, Security Lead, DevOps/SRE on-call) — is honestly marked `NOT_YET_STAFFED` in the new runbook, not fabricated as staffed. This is a Track-C-class, human-only gap, the same class already accepted by the operator for the staging tier, UAT acceptor, and external penetration test, and does not block this checkpoint's `VERIFIED` verdict |
+| Files edited | `docs/runbooks/hypercare.md` (new); `docs/runbooks/README.md` (index entry + revision-history row); `docs/build-log/release-go-live/RGL-408.md` (new); `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` (§5 row 18, §11.4, §12); `docs/runtime/HANDOFF.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md` |
+| Migration | None |
+| Risk | None — documentation only, no live system mutated |
+| Scope justification | Direct execution of the next eligible Step 16 WBS row per the operator's own standing instruction |
+| Gates | `pnpm run docs:check`: green. No code changed, so `typecheck`/`lint`/`test`/`db:test` are unaffected — the immediately-preceding checkpoint (`RGL-407`) already recorded a clean full gate run |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
+| Status | **`COMPLETED`**. `RGL-408` `VERIFIED`. `RGL-409` (Post-Implementation Review, `CG-S16-RGL-019`, Prompt 409) next per the Step 16 WBS |
+| Date | 2026-08-28 |
