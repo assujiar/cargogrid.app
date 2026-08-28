@@ -8747,3 +8747,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
 | Status | **`COMPLETED`**. `RGL-411` `VERIFIED`. `RGL-412` (Release Go-Live Closure Verification, `CG-S16-RGL-022`, Prompt 412) next per the Step 16 WBS — the final task in this range |
 | Date | 2026-08-28 |
+
+### CHG-2026-280 — `RGL-412` (Release Go-Live Closure Verification, `CG-S16-RGL-022`): `RELEASE_GO_LIVE_PARTIALLY_COMPLETE` — Step 16 closed
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-022` (Prompt 412, Release Go-Live Closure Verification) — the final Step 16 WBS row, immediately following `RGL-411` (Documentation Handoff, `VERIFIED`) |
+| Change type | INDEPENDENT VERIFICATION + DOCUMENTATION (closure report) — no code, migration, or contract change |
+| Authorization | The operator's own "jalankan semua step 16" instruction, completing the Step 16 WBS sequence directly from `RGL-411` |
+| Build process | Independently re-verified all 21 prior Step 16 checkpoints (`RGL-391`-`RGL-411`) against real, cited evidence — re-reading each build log directly, re-pulling live production state fresh (3 health probes, all green, consistent since `RGL-406`) rather than inheriting `RGL-410`'s own pull. Disposed of all 20 of Prompt 412's own required-verification items explicitly in `docs/build-log/release-go-live/RELEASE_GO_LIVE_CLOSURE_REPORT.md`, citing real evidence per item, none silently dropped |
+| Findings and disposition | 18 of 20 items `PROVEN` or `PROVEN-with-disclosed-residual`. 2 items (7/8: staging-UAT deployment and UAT acceptance; effectively also 10 and 20, the same underlying gaps) ruled explicitly as not fully met rather than silently passed — both already operator-accepted for the purpose of proceeding through Step 16 itself (`RGL-404.md` §3.4/§7), but the execution index's own §13 condition 3 ties Step 17 eligibility specifically to `RGL-BLK-001`'s own unfixed mechanism, and that override's own recorded language does not extend to Step 17. Closure state set to `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`, not the clean `RELEASE_GO_LIVE_VERIFIED` — the honest, correct call per this prompt's own five defined closure states, not a defect in this checkpoint's own work. A residual-risk table with named owners consolidates every standing gap (`RGL-BLK-001`, no staging/UAT/pentest, hypercare staffing, `ISS-2026-300`, the "tenant zero" re-examination obligation on `RGL-BLK-003`'s 15 conditionally-accepted members, `ISS-2026-297`, the 96 remaining `KNOWN_ISSUES.md` items) |
+| Files edited | `docs/build-log/release-go-live/RELEASE_GO_LIVE_CLOSURE_REPORT.md` (new, the required output); `docs/build-log/release-go-live/RGL-412.md` (new); `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` (§5 row 22); `docs/runtime/HANDOFF.md` (new §0.-2 banner, superseding §0.-1); `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md` |
+| Migration | None |
+| Risk | None — documentation and independent review only, no live system mutated |
+| Scope justification | Direct execution of the final Step 16 WBS row per the operator's own standing instruction |
+| Gates | `pnpm run docs:check`: green. No code changed, so `typecheck`/`lint`/`test`/`db:test` are unaffected — `RGL-410` already recorded the most recent full fresh gate run, all `PASS` |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
+| Status | **`COMPLETED`**. `RGL-412` sets `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`. **Step 16 (Prompts 390-412) is closed. There is no `RGL-413`.** Step 17 requires an explicit operator decision (see the closure report's own two named paths) before `LANJUT STEP 17` |
+| Date | 2026-08-28 |
