@@ -8709,3 +8709,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
 | Status | **`COMPLETED`**. `RGL-409` `PIR_COMPLETE`. `RGL-410` (Release Go-Live Integrated Verification, `CG-S16-RGL-020`, Prompt 410) next per the Step 16 WBS |
 | Date | 2026-08-28 |
+
+### CHG-2026-278 — `RGL-410` (Release Go-Live Integrated Verification, `CG-S16-RGL-020`): all Tier A/B gates re-verified fresh at one checkpoint, `VERIFIED`
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-020` (Prompt 410, Release Go-Live Integrated Verification) — the Step 16 WBS row immediately following `RGL-409` (Post-Implementation Review, `PIR_COMPLETE`) |
+| Change type | VERIFICATION + DOCUMENTATION (gate re-run, live evidence reconciliation, `RELEASE_READINESS_MATRIX.md` update) — no code, migration, or contract change |
+| Authorization | The operator's own "jalankan semua step 16" instruction, continuing the Step 16 WBS sequence directly from `RGL-409` |
+| Build process | Re-ran every Tier A/B gate fresh, at one checkpoint, on the current HEAD (`typecheck`/`lint`/`test`/`db:test`/`docs:check`/`security:check`/`security:check-rls-initplan`/`standards:check`/`git:check-paths`/`release:check-freeze`) — real exit codes captured, not inferred from truncated output. Re-pulled live production state (Vercel deployment list, runtime errors, 3 health probes, Supabase security advisors). Per execution-index §5.3's own "mixed-checkpoint evidence is invalid" requirement, checked every prior checkpoint's own recorded evidence for internal consistency against this fresh pull rather than assuming it still held |
+| Findings and disposition | One real, diagnosed, non-regression test condition found (`check-worktree-collision.test.ts`'s own branch-divergence assertion, failing only because the branch had just been reset to `origin/main` with zero commits ahead) — re-confirmed passing 5522/5522 after this checkpoint's own commit, not silently waived. One real mixed-checkpoint evidence drift found and reconciled: `BLOCKER_LEDGER.md` still recorded `RGL-BLK-007`/`RGL-BLK-008` as undeployed from `RGL-401`'s own 2026-08-25 entry, though both have been live-deployed and confirmed fixed since Track A — closed with a new, dated, appended status section, not a rewrite of the historical entry. `GO_NO_GO_REPORT.md`'s own literal `NO_GO` header checked for contradiction against the execution index's `GO_DECIDED` framing — none found; the two are consistent by the report's own explicit design |
+| Files edited | `docs/build-log/release-go-live/RGL-410.md` (new); `docs/build-log/release-go-live/BLOCKER_LEDGER.md` (reconciliation section appended); `docs/runtime/RELEASE_READINESS_MATRIX.md` (new §6); `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` (§5 row 20); `docs/runtime/HANDOFF.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md` (including correcting `RGL-021`'s stale `NO_GO`-blocked framing) |
+| Migration | None |
+| Risk | None — no code, migration, or production mutation; verification and documentation only |
+| Scope justification | Direct execution of the next eligible Step 16 WBS row per the operator's own standing instruction |
+| Gates | All Tier A/B gates re-run fresh this checkpoint, all `PASS` (§2/§9 of `RGL-410.md`); `pnpm run docs:check` green after the doc edits |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit — verification and documentation only, trivially reversible |
+| Status | **`COMPLETED`**. `RGL-410` `VERIFIED`. `RGL-411` (Release Go-Live Documentation Handoff, `CG-S16-RGL-021`, Prompt 411) next per the Step 16 WBS |
+| Date | 2026-08-28 |

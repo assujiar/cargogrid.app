@@ -1189,3 +1189,29 @@ a §8.2 acceptance; it removes the finding rather than accepting it, so no accep
 needed or invoked. **`RGL-BLK-001` (Critical) and `RGL-BLK-003` (High-aggregate) remain open** and
 still require `RGL-404`'s disposition — this checkpoint's charter (Full CI Gate) does not extend to
 either.
+
+## Status summary as of `RGL-410` (Release Go-Live Integrated Verification), 2026-08-28
+
+This file's own most recent per-entry status summary (above) is dated `RGL-404`'s operator-override
+addendum, 2026-08-25 — before Track A's production deployment and all 8 Track B batches. Reconciled
+here, not by editing that historical entry:
+
+- **`RGL-BLK-007`/`RGL-BLK-008`** (both entries above marked `RESOLVED in code, not yet deployed` as
+  of `RGL-401`): **now confirmed deployed and live-verified fixed.** This checkpoint's own fresh
+  probe: `GET /api/v1/status` with no Bearer key → clean `401` (not the `500` these blockers
+  describe); `RGL-406`'s own post-deployment validation and every subsequent checkpoint's live
+  probes (`RGL-407`/`408`/`409`/`410`) confirm no regression.
+- **`RGL-BLK-001`**: still open, still fully armed, unchanged — re-verified live this checkpoint via
+  `mcp__Vercel__list_deployments` (`isRollbackCandidate`/`target: production` fields consistent with
+  every prior pull; no branch-protection or promotion-gate change occurred, as expected — no tool in
+  this session can configure either). Remains `ACCEPTED (operator override)`, per `RGL-404`'s own
+  ruling, unchanged.
+- **The broader `docs/runtime/KNOWN_ISSUES.md` backlog** this ledger's own §8.3-adjacent items feed
+  into is tracked separately and far more granularly in
+  `docs/build-log/release-go-live/BACKLOG_INVENTORY.md` (102 remaining as of `RGL-408`'s own Batch 8
+  close: 0 Critical, 6 High, 52 Medium, 44 Low) — that document, not a restatement here, is the
+  authoritative current count; this ledger's own scope is the smaller `RGL-BLK-*` set opened
+  directly during Step 16 itself.
+
+**Net: 0 Critical, 0 unruled High** among this ledger's own `RGL-BLK-*` entries — consistent with
+every checkpoint since `RGL-404`'s own override, re-confirmed rather than assumed unchanged.

@@ -121,3 +121,28 @@ This matrix does not restate or narrow any prior residual-risk ruling. In partic
 - `docs/runtime/KNOWN_ISSUES.md` — every finding's own full narrative.
 - `docs/runbooks/README.md` — the current runbook index.
 - `docs/runtime/HANDOFF.md` — the Step 16 handoff section (§0 of that file, added at `HDN-388`).
+
+---
+
+## 6. Step 16 — Release Go-Live integrated verification (`RGL-410`, 2026-08-28)
+
+**Authored by:** `RGL-410` (Prompt 410, `CG-S16-RGL-020`, Release Go-Live Integrated Verification),
+per this document's own §"Status" note that Step 16 updates it as needed. This section does not
+alter §1-5 above (Step 15's own closed record) — it adds Step 16's own current state on top.
+
+| Item | Status | Evidence |
+|---|---|---|
+| The ten §8.1 gates (§1 above) | **Unchanged since `HDN-389`** | No Step 16 lane touched the underlying hardening work these gates measure; 7 `PASS`, 3 disclosed `PARTIAL`, all still owned exactly as `HDN-389` left them |
+| Step 16 blockers (`RGL-BLK-001..010`) | **0 Critical, 0 unruled High** | `docs/build-log/release-go-live/BLOCKER_LEDGER.md`'s own `RGL-410` reconciliation section — `RGL-BLK-001` remains open, `ACCEPTED (operator override)`; `RGL-BLK-007`/`008` confirmed deployed and live-fixed; all others `RESOLVED` |
+| Step 16 WBS delivery | **19 of 22 lanes `VERIFIED`/complete** | `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §5, re-verified consistent at `RGL-410` |
+| Historical `KNOWN_ISSUES.md` backlog | **102 remaining** (0 Critical, 6 High, 52 Medium, 44 Low) | `docs/build-log/release-go-live/BACKLOG_INVENTORY.md`, closed as of Batch 8 (`RGL-408`); each carries a `RESOLVED` paragraph or an explicit owner-named disposition, none fabricated |
+| Live production | **Healthy, consistent since `RGL-406`** | `RGL-410.md` §4 — 3 health probes green, 0 runtime errors (24h), 1 pre-existing accepted security `ERROR`, unchanged |
+| Gates (typecheck/lint/test/db:test/docs/security/standards/paths/freeze) | **All `PASS`** at one checkpoint | `RGL-410.md` §2/§9 — one disclosed, diagnosed, non-regression test condition, re-confirmed passing after commit |
+| Track C (human-only) gaps | **Unchanged, all disclosed** | `RGL-BLK-001` (branch-protection/promotion-gate config); no staging tier; no UAT acceptor; no external pentest; hypercare escalation-ladder staffing `NOT_YET_STAFFED` (`RGL-408`) |
+
+**Go-live integrated-verification recommendation**: **`VERIFIED`.** No new Critical or unruled High
+finding at this checkpoint; one real mixed-checkpoint evidence drift found and reconciled
+(`BLOCKER_LEDGER.md`, not silently inherited); every gate this session's own Tier A discipline
+requires passes at this one checkpoint. Still not a production, pilot, GA, or market-ready claim —
+that determination is `RGL-412`'s alone to make, per this document's own governing constraint (§9
+above, inherited unchanged from Step 15's own charter).
