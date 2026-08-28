@@ -698,4 +698,102 @@ begin
   reset role;
 end $$;
 
+\echo '>> ISS-2026-125 item 3 regression (Track B Batch 8): app.set_customer_portal_account_membership_status now carries the identical last-account_admin guard app.update_customer_portal_account_membership_role already has (design decision 3) -- a sole account_admin cannot suspend or revoke themselves; on a 2-admin account, a non-last admin CAN be suspended (leaving one); the true last admin then cannot be suspended OR revoked either, and their own status stays untouched by the rejected attempts; suspending a plain member is never blocked by this guard'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cum1');
+  v_company1 uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CUM1-CO');
+  v_account_beta uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Cum1 Account Beta');
+  v_account_gamma uuid;
+  v_beta_admin app.customer_portal_account_memberships;
+  v_gamma_admin_1 app.customer_portal_account_memberships;
+  v_gamma_admin_2 app.customer_portal_account_memberships;
+  v_gamma_member app.customer_portal_account_memberships;
+  v_updated app.customer_portal_account_memberships;
+begin
+  -- Beta already has exactly ONE active account_admin (beta-admin) --
+  -- reused as-is, untouched by any earlier block in this file.
+  select * into v_beta_admin from app.customer_portal_account_memberships
+  where tenant_id = v_tenant1 and account_id = v_account_beta and auth_user_id = '00000000-0000-0000-0000-000000332030';
+
+  begin
+    perform app.set_customer_portal_account_membership_status(v_beta_admin.id, v_beta_admin.record_version, 'suspended', 'self-suspend attempt', '00000000-0000-0000-0000-000000332030', 'beta-admin');
+    raise exception 'assertion failed: expected last_account_admin -- beta-admin is the ONLY active account_admin on Beta';
+  exception
+    when others then
+      if sqlerrm not like 'last_account_admin%' then raise; end if;
+  end;
+  begin
+    perform app.set_customer_portal_account_membership_status(v_beta_admin.id, v_beta_admin.record_version, 'revoked', 'self-revoke attempt', '00000000-0000-0000-0000-000000332030', 'beta-admin');
+    raise exception 'assertion failed: expected last_account_admin -- beta-admin is still the ONLY active account_admin on Beta (revoked path)';
+  exception
+    when others then
+      if sqlerrm not like 'last_account_admin%' then raise; end if;
+  end;
+  if (select status from app.customer_portal_account_memberships where id = v_beta_admin.id) <> 'active' then
+    raise exception 'assertion failed: beta-admin''s own status must remain active after both rejected self-suspend/self-revoke attempts';
+  end if;
+
+  -- A fresh, dedicated 2-admin account (Gamma) -- self-contained, never
+  -- touched by any earlier block in this file -- proving the FULL shape the
+  -- issue itself asked for: one admin is suspended (a non-last admin, still
+  -- leaving one) and the true last is then rejected too.
+  insert into auth.users (id, email) values
+    ('00000000-0000-0000-0000-000000332050', 'gamma-admin-1@cum1.test'),
+    ('00000000-0000-0000-0000-000000332051', 'gamma-admin-2@cum1.test'),
+    ('00000000-0000-0000-0000-000000332052', 'gamma-member@cum1.test');
+
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant1, 'Cum1 Account Gamma', 'cum1-gamma-fp', '{}'::jsonb, v_company1, 'tester')
+  returning id into v_account_gamma;
+
+  perform app.grant_initial_customer_portal_account_admin(v_tenant1, v_account_gamma, '00000000-0000-0000-0000-000000332050', '00000000-0000-0000-0000-000000332001', 'cum1-staff');
+  select * into v_gamma_admin_1 from app.customer_portal_account_memberships
+  where tenant_id = v_tenant1 and account_id = v_account_gamma and auth_user_id = '00000000-0000-0000-0000-000000332050';
+
+  select * into v_gamma_admin_2 from app.invite_customer_portal_user(v_tenant1, v_account_gamma, '00000000-0000-0000-0000-000000332051', 'account_admin', '00000000-0000-0000-0000-000000332050', 'gamma-admin-1');
+  perform app.accept_customer_portal_invite(v_gamma_admin_2.id, v_gamma_admin_2.record_version, '00000000-0000-0000-0000-000000332051');
+  select * into v_gamma_admin_2 from app.customer_portal_account_memberships where id = v_gamma_admin_2.id;
+
+  select * into v_gamma_member from app.invite_customer_portal_user(v_tenant1, v_account_gamma, '00000000-0000-0000-0000-000000332052', 'member', '00000000-0000-0000-0000-000000332050', 'gamma-admin-1');
+  perform app.accept_customer_portal_invite(v_gamma_member.id, v_gamma_member.record_version, '00000000-0000-0000-0000-000000332052');
+  select * into v_gamma_member from app.customer_portal_account_memberships where id = v_gamma_member.id;
+
+  -- Suspending a plain MEMBER is never blocked by this guard (it only
+  -- inspects the target row's own role/status, never anyone else's).
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_gamma_member.id, v_gamma_member.record_version, 'suspended', 'member suspend, unrelated to the admin guard', '00000000-0000-0000-0000-000000332050', 'gamma-admin-1');
+  if v_updated.status <> 'suspended' then
+    raise exception 'assertion failed: expected the plain member to be suspended (the last-account_admin guard must never block a non-admin target)';
+  end if;
+
+  -- Gamma has TWO active admins -- gamma-admin-1 suspends gamma-admin-2,
+  -- which must succeed (one admin, gamma-admin-1, still remains active).
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_gamma_admin_2.id, v_gamma_admin_2.record_version, 'suspended', 'a non-last admin may be suspended', '00000000-0000-0000-0000-000000332050', 'gamma-admin-1');
+  if v_updated.status <> 'suspended' then
+    raise exception 'assertion failed: expected gamma-admin-2 to be suspended (a non-last admin), got status=%', v_updated.status;
+  end if;
+
+  -- gamma-admin-1 is now the SOLE active account_admin on Gamma -- may not
+  -- suspend or revoke themselves either.
+  begin
+    perform app.set_customer_portal_account_membership_status(v_gamma_admin_1.id, v_gamma_admin_1.record_version, 'suspended', 'self-suspend attempt as the true last admin', '00000000-0000-0000-0000-000000332050', 'gamma-admin-1');
+    raise exception 'assertion failed: expected last_account_admin -- gamma-admin-1 is now the ONLY active account_admin on Gamma';
+  exception
+    when others then
+      if sqlerrm not like 'last_account_admin%' then raise; end if;
+  end;
+  begin
+    perform app.set_customer_portal_account_membership_status(v_gamma_admin_1.id, v_gamma_admin_1.record_version, 'revoked', 'self-revoke attempt as the true last admin', '00000000-0000-0000-0000-000000332050', 'gamma-admin-1');
+    raise exception 'assertion failed: expected last_account_admin -- gamma-admin-1 is still the ONLY active account_admin on Gamma (revoked path)';
+  exception
+    when others then
+      if sqlerrm not like 'last_account_admin%' then raise; end if;
+  end;
+  if (select status from app.customer_portal_account_memberships where id = v_gamma_admin_1.id) <> 'active' then
+    raise exception 'assertion failed: gamma-admin-1''s own status must remain active after both rejected self-suspend/self-revoke attempts';
+  end if;
+
+  raise notice 'PASS (ISS-2026-125 item 3): the sole active account_admin on an account (Beta, and Gamma once reduced to one) can no longer suspend or revoke themselves via app.set_customer_portal_account_membership_status; a non-last admin and a plain member are both unaffected by the guard';
+end $$;
+
 \echo 'customer-user-management.sql: ALL PASSED'

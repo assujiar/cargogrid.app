@@ -254,7 +254,8 @@ function CreateRunFormRow({ period, createPayrollRunAction }: { period: PayrollP
 }
 
 function RunRowItem({
-  row, myStepId, calculatePayrollRunAction, submitPayrollRunForFinalizationAction, finalizePayrollRunAction, cancelPayrollRunAction, generateFinancePayrollHandoffAction,
+  row, myStepId, calculatePayrollRunAction, submitPayrollRunForFinalizationAction, finalizePayrollRunAction, cancelPayrollRunAction,
+  requestPayrollRunCalculationCancellationAction, generateFinancePayrollHandoffAction,
 }: {
   row: PayrollRunRow;
   myStepId: string | undefined;
@@ -262,6 +263,7 @@ function RunRowItem({
   submitPayrollRunForFinalizationAction: (runId: string, expectedVersion: number) => BoundAction;
   finalizePayrollRunAction: (requestStepId: string, decision: "approved" | "rejected") => BoundAction;
   cancelPayrollRunAction: (runId: string, expectedVersion: number) => BoundAction;
+  requestPayrollRunCalculationCancellationAction: (runId: string) => BoundAction;
   generateFinancePayrollHandoffAction: (runId: string) => BoundAction;
 }) {
   const [calcState, calcAction, calcPending] = useActionState(calculatePayrollRunAction(row.id, row.recordVersion), INITIAL_STATE);
@@ -269,6 +271,7 @@ function RunRowItem({
   const [finalizeState, finalizeAction, finalizePending] = useActionState(finalizePayrollRunAction(myStepId ?? "", "approved"), INITIAL_STATE);
   const [rejectState, rejectAction, rejectPending] = useActionState(finalizePayrollRunAction(myStepId ?? "", "rejected"), INITIAL_STATE);
   const [cancelState, cancelAction, cancelPending] = useActionState(cancelPayrollRunAction(row.id, row.recordVersion), INITIAL_STATE);
+  const [requestCancelState, requestCancelAction, requestCancelPending] = useActionState(requestPayrollRunCalculationCancellationAction(row.id), INITIAL_STATE);
   const [handoffState, handoffAction, handoffPending] = useActionState(generateFinancePayrollHandoffAction(row.id), INITIAL_STATE);
 
   return (
@@ -309,13 +312,18 @@ function RunRowItem({
             <Button type="submit" variant="destructive" loading={cancelPending} loadingLabel="Cancelling…">Cancel run</Button>
           </form>
         ) : null}
+        {row.status === "calculating" ? (
+          <form action={requestCancelAction}>
+            <Button type="submit" variant="destructive" loading={requestCancelPending} loadingLabel="Requesting…">Request cancellation</Button>
+          </form>
+        ) : null}
         {row.status === "finalized" ? (
           <form action={handoffAction}>
             <Button type="submit" variant="secondary" loading={handoffPending} loadingLabel="Generating…">Generate Finance handoff</Button>
           </form>
         ) : null}
       </div>
-      <ErrorLine error={calcState.error ?? submitState.error ?? finalizeState.error ?? rejectState.error ?? cancelState.error ?? handoffState.error} />
+      <ErrorLine error={calcState.error ?? submitState.error ?? finalizeState.error ?? rejectState.error ?? cancelState.error ?? requestCancelState.error ?? handoffState.error} />
     </li>
   );
 }
@@ -385,7 +393,7 @@ export function PayrollAdminPanel({
   createPayrollPeriodAction, freezePayrollPeriodInputsAction, reopenPayrollPeriodInputsAction, createPayrollComponentAction, assignPayrollComponentAction,
   decidePayrollReimbursementAction, issuePayrollLoanAction, createPayrollRunAction, calculatePayrollRunAction,
   resolvePayrollExceptionAction, waivePayrollExceptionAction, submitPayrollRunForFinalizationAction, finalizePayrollRunAction,
-  cancelPayrollRunAction, generateFinancePayrollHandoffAction, acknowledgeFinancePayrollHandoffAction,
+  cancelPayrollRunAction, requestPayrollRunCalculationCancellationAction, generateFinancePayrollHandoffAction, acknowledgeFinancePayrollHandoffAction,
 }: {
   periods: PayrollPeriodRow[];
   components: PayrollComponentRow[];
@@ -409,6 +417,7 @@ export function PayrollAdminPanel({
   submitPayrollRunForFinalizationAction: (runId: string, expectedVersion: number) => BoundAction;
   finalizePayrollRunAction: (requestStepId: string, decision: "approved" | "rejected") => BoundAction;
   cancelPayrollRunAction: (runId: string, expectedVersion: number) => BoundAction;
+  requestPayrollRunCalculationCancellationAction: (runId: string) => BoundAction;
   generateFinancePayrollHandoffAction: (runId: string) => BoundAction;
   acknowledgeFinancePayrollHandoffAction: (batchId: string, expectedVersion: number) => BoundAction;
 }) {
@@ -482,6 +491,7 @@ export function PayrollAdminPanel({
                 submitPayrollRunForFinalizationAction={submitPayrollRunForFinalizationAction}
                 finalizePayrollRunAction={finalizePayrollRunAction}
                 cancelPayrollRunAction={cancelPayrollRunAction}
+                requestPayrollRunCalculationCancellationAction={requestPayrollRunCalculationCancellationAction}
                 generateFinancePayrollHandoffAction={generateFinancePayrollHandoffAction}
               />
             ))}

@@ -43,21 +43,26 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 108** (0 Critical, 5 High, 54 Medium, 49 Low) — updated during Batch 1
+**Working total for Track B: 102** (0 Critical, 6 High, 52 Medium, 44 Low) — updated during Batch 1
 review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
 `RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), Batch 3 (135), Batch 4
-(131), Batch 5 (125), Batch 6 (113), and Batch 7 (108, this figure) — see the "Batch 1 status"/"Batch
-2 status"/"Batch 3 status"/"Batch 4 status"/"Batch 5 status"/"Batch 6 status"/"Batch 7 status"
-sections below and `RGL-404.md` §12 items 22-66 for the authoritative running log.
+(131), Batch 5 (125), Batch 6 (113), Batch 7 (108), and Batch 8 (102, this figure — includes a
+corrected baseline of 109 before Batch 8's own closures, since Batch 8 found `ISS-2026-255`, a real
+High-severity item, was never tracked in this document's own High-severity table at all; see that
+table above and the "Batch 8 status" section below for the full accounting) — see the "Batch 1
+status"/"Batch 2 status"/"Batch 3 status"/"Batch 4 status"/"Batch 5 status"/"Batch 6 status"/"Batch 7
+status"/"Batch 8 status" sections below and `RGL-404.md` §12 items 22-99 for the authoritative
+running log.
 
 ---
 
-## High severity (6) — first batch priority per the approved plan
+## High severity (7, corrected at Batch 8 — was tracked as 6, a real omission) — first batch priority per the approved plan
 
 | ID | Summary | Fix | Batch | Status |
 |---|---|---|---|---|
-| `ISS-2026-249` | Alert system unwired from webhook/AI/security failure producers | `CODE` | step-up-mfa-enforcement | in progress (Batch 1) |
-| `ISS-2026-250` | No monitoring/incident dashboard UI consumes the alerting backend | `CODE`/`BIG` (TBD by research) | observability-alerting | in progress (Batch 1) |
+| `ISS-2026-249` | Alert system unwired from webhook/AI/security failure producers | `CODE` | step-up-mfa-enforcement | `RESOLVED (partial by design — disclosed)`, `RGL-404.md` §12 item 22 |
+| `ISS-2026-250` | No monitoring/incident dashboard UI consumes the alerting backend | `BIG` (resolved at Batch 8 — was `CODE`/`BIG` TBD) | observability-alerting | re-verified, first real disposition given (Batch 8) — still `OPEN` |
+| `ISS-2026-255` | Real production-like restore evidence (Storage, Auth-service state) remains untested | `INFRA`, `TRACKED_GAP` | dr-runbook | **added at Batch 8** — never previously tracked in this table; re-verified, still `OPEN` (correctly environment-bound, not agent-fixable) |
 | `ISS-2026-258` | No real DR communication mechanism exists anywhere | `BIG` | dr-runbook | dispositioned (KNOWN_ISSUES.md, not agent-fixable) |
 | `ISS-2026-261` | No second infrastructure vendor; Supabase-wide outage has no failover | `INFRA` | dr-runbook | dispositioned (KNOWN_ISSUES.md, not agent-fixable) |
 | `ISS-2026-273` | No bulk financial opening-balance import path exists at all | `BIG` | migration-import | dispositioned (KNOWN_ISSUES.md, not agent-fixable) |
@@ -472,6 +477,105 @@ Working total after Batch 7: **108 remaining** (0 Critical, 5 High, 54 Medium, 4
 as `186`'s own Batch 6 accounting.) See `RGL-404.md` §12 items 60-66 for the authoritative running
 log.
 
+## Batch 8 status: complete
+
+The final "sweep up everything" disposition batch per the plan's own "Batch 8 (disposition batch):
+every remaining `INFRA`/`BIZ`/pure-`BIG` item not already folded into batches 1-7" scoping. Rather
+than trust this document's own batch-completion narrative at face value, Batch 8 opened with an
+independent, entry-by-entry re-derivation directly against `docs/runtime/KNOWN_ISSUES.md` — every
+`ISS-2026-NNN` entry's own latest disposition paragraph, checked for a "Track B Batch N" mention
+anywhere in its own text. This surfaced a real, disclosed inventory gap this document's own tables
+had carried since Batch 1: **`ISS-2026-255` (High, `TRACKED_GAP`, real production-like restore
+evidence untested) was never entered into the "High severity" table above at all** — a genuine 7th
+High item, not an arithmetic undercount. The High-severity table above is corrected in place (6 →
+7, `ISS-2026-249` also corrected from a stale "in progress" tag to its own already-`RESOLVED`
+status). A first-pass research finding that 13 `table-only-procurement-hardening` items were
+"never actually written back" despite `BACKLOG_INVENTORY.md` claiming Batch 2 completion was
+independently re-verified and found to be a **false positive** — a regex miss against this
+repository's own pipe-table row format (the "Track B Batch 2" annotations were present all along,
+just inside table cells the first-pass sweep's own pattern did not match against). Reported here
+rather than silently discarded, since a wrong finding acted on would have wasted real work
+re-investigating already-closed items.
+
+`lineage-provenance`-adjacent items already closed elsewhere (`postgis-extension`, `dr-runbook`,
+`prod-seed-hygiene`, `perf-live-latency`, `ISS-2026-300` — the plan's own 5 named groups) plus 21
+further genuinely never-tracked items found by the re-derivation sweep — 26 items total: 4 fully
+resolved with real bounded fixes (`080`, `090`, `125` item 3, `161`), 2 resolved as doc-only
+duplicates of already-fixed entries (`144`, `159`), 1 resolved on live re-measurement no longer
+reproducing (`297`), 1 partially resolved with a real, narrower bounded fix that stays `OPEN`
+(`259`), 1 drafted then withdrawn after the full local `db-tests` suite caught a real regression an
+isolated verification missed (`053`, mirrors the `ISS-2026-038`/`040` precedent exactly), and 16
+confirmed-still-open dispositions with fresh evidence (`234`, `250`, `255`, `256`, `284`, `294`,
+`300`, `075`, `079`, `083`, `084`, `086`, `087`, `088`, `147` item 2, `287`, `288`) — most notably
+`ISS-2026-250`, the one original High-severity item that slipped through every prior batch
+untouched despite being tagged "in progress (Batch 1)," and `255`, the newly-tracked 6th (now 7th)
+High item, both receiving their first real Track B disposition this batch.
+
+`ISS-2026-080` — `RESOLVED`, TypeScript-only: the existing `requestPayrollRunCalculationCancellation`
+wrapper, real and tested but with no UI caller, wired into the admin workspace via a "Request
+cancellation" button — mirrors `ISS-2026-101`'s own already-closed shape exactly.
+
+`ISS-2026-090` — `RESOLVED`, test-only: a new regression block drives the SLA engine through real
+customer- and helpdesk-channel tickets for the first time, closing the coverage gap that let a
+sibling RLS leak (already independently fixed and re-verified elsewhere) ship undetected.
+
+`ISS-2026-125` (item 3) — `RESOLVED`: the sole active `account_admin` on a customer-portal account
+can no longer suspend or revoke themselves (or the account's only other admin), applying the
+identical last-admin guard the sibling role-change RPC already carries. Items 1-2 (MFA/step-up,
+session revocation) stay `OPEN` as standing, repository-wide infrastructure gaps.
+
+`ISS-2026-161` — `RESOLVED`: `cargogrid_setup_disposable_db()` now sets `set -euo pipefail`
+internally rather than depending on every caller remembering the documented contract — zero
+behavior change for any of the 3 real shipped callers, all already safe.
+
+`ISS-2026-259` — `PARTIALLY RESOLVED`: a new statement-level tripwire trigger detects (never
+blocks) every raw DELETE/UPDATE/TRUNCATE against `app.leads` and `app.audit_logs` with no
+corresponding audit-trail entry, closing the exact live-proved scenario `HDN-384`'s own DR drill
+found — genuinely bounded to 2 tables, honestly disclosed as narrowing rather than closing the
+general repo-wide audit blindness.
+
+`ISS-2026-144`, `159` — `RESOLVED`, doc-only: both already fixed elsewhere (`RGL-394`/`ISS-2026-059`/
+`204`, and `ISS-2026-286`/`RGL-395` respectively), never cross-referenced back to these entries'
+own text — the same `ISS-2026-285`/`013`/`036`/`092`/`115`/`139` doc-drift class found repeatedly
+across this session.
+
+`ISS-2026-297` — `RESOLVED`, re-measured: live production `GET /api/ready` p50 latency no longer
+exceeds its budget (30 fresh samples across 2 independent batches, cross-checked against 2 stable
+control endpoints), plausibly explained by the original measurement predating this branch's own
+actual Track A production deployment.
+
+`ISS-2026-053` — drafted (a payload-comparison extension to `app.enqueue_job`'s existing job_type
+idempotency guard), then **withdrawn before being applied anywhere**: the full local `db-tests`
+suite — not the migration's own isolated regression, which passed clean — caught a real defect
+the narrower verification missed: `app.run_loyalty_expiry_sweep`'s own deliberate idempotent-replay
+design legitimately embeds a `clock_timestamp()`-derived, microsecond-varying value in its payload
+while its idempotency key correctly scopes only to the calendar day, exactly the shape a full-tuple
+payload comparison cannot distinguish from a genuinely different request without per-caller
+knowledge. Mirrors the `ISS-2026-038`/`040` withdrawal precedent exactly — a repository-wide audit
+across all 73 `app.enqueue_job` call sites is a real, larger undertaking than one bounded
+migration should attempt unaudited. The `job_type` half of this entry's own original finding was
+separately found to already be fixed, pre-existing (`ATW-031`, 2026-08-05, predating this entry's
+own filing by 3 days) — closed by attribution correction, not by this batch's own work.
+
+`ISS-2026-234`, `250`, `255`, `256`, `284`, `294`, `300`, `075`, `079`, `083`, `084`, `086`, `087`,
+`088`, `147` (item 2), `287`, `288` — re-verified still genuinely open against current code/live
+state, each dispositioned with fresh, independently-gathered evidence rather than merely
+reconfirmed unchanged: a stale sub-count corrected for `234` (3→1); `250`'s own `CODE`/`BIG`
+classification ambiguity resolved to `BIG`, and its status as the one untouched original High item
+disclosed; `255`'s own omission from this document's tracking corrected; `147`'s own disposition
+text sharpened from "under-evidenced" to "genuinely missing capability"; live re-derivation for
+`256`/`294`/`300` against the real hosted project; a re-confirmed, still-real collision risk for
+`288` (the stale branch still exists, unchanged); confirmed no tool in this session can change
+`287`'s Vercel Node-version setting even if authorized.
+
+Working total after Batch 8: **102 remaining** (0 Critical, 6 High, 52 Medium, 44 Low). Corrected
+baseline before this batch's own closures: 108 + 1 (the `ISS-2026-255` omission correction) = 109
+(0 Critical, 6 High, 54 Medium, 49 Low). Down from there by 7: `ISS-2026-080` (Low), `090` (Low),
+`125` item 3 (Medium), `144` (Low), `159` (Medium), `161` (Low), `297` (Low). (`259` gets a real,
+narrower bounded fix but stays `OPEN`, Medium, not counted — same discipline as `186`/`206`/`231`'s
+own prior accounting; `053` was drafted then withdrawn, not counted.) See `RGL-404.md` §12 items
+74-99 for the authoritative running log.
+
 ## Medium/Low batches (140 items, working count)
 
 Batches below reproduce the categorization research pass performed for this document (full
@@ -537,7 +641,7 @@ Severity orders the first batch; domain/mechanism groups the rest, per the appro
 5. **Batch 5 (complete)**: `accessibility` (7) + `browser-compat` (1) + `docs-consistency` (5) + `perf-load-evidence` (3) + `iae-hardening-residual` (3) — 19 items (6 resolved, 1 withdrawn, 12 dispositioned).
 6. **Batch 6**: `rbac-defense-in-depth` (5) + `support-access-audit` (2) + `rls-own-row-narrowing` (1) + `step-up-mfa-enforcement` (1) + `observability-alerting` (2) + `db-test-flakiness` (3) + `ticketing-links-gaps` (2) + `perf-cache-safety` (1) — 17 items. (complete)
 7. **Batch 7**: `lineage-provenance` (2) + `rest-api-consistency` (2) + `rest-api-error-shape` (2) + `files-legal-hold-residual` (2) + `crypto-scan-recovery` (1) + `schema-completeness-gaps` (2) + `finance-fx` (1) + `migration-import` (2) — 14 items.
-8. **Batch 8 (disposition batch)**: every remaining `INFRA`/`BIZ`/pure-`BIG` item not already folded into batches 1-7 — `postgis-extension`, `dr-runbook`, `prod-seed-hygiene`, `perf-live-latency`, `ISS-2026-300`, plus any `BIG` items from earlier batches whose own code-shaped half was built but whose full capability was not. Per the operator's own instruction: build the code-shaped part, write an explicit owner-named disposition for the rest.
+8. **Batch 8 (disposition batch, complete)**: every remaining `INFRA`/`BIZ`/pure-`BIG` item not already folded into batches 1-7 — `postgis-extension`, `dr-runbook`, `prod-seed-hygiene`, `perf-live-latency`, `ISS-2026-300`, plus any `BIG` items from earlier batches whose own code-shaped half was built but whose full capability was not. Per the operator's own instruction: build the code-shaped part, write an explicit owner-named disposition for the rest. Widened in execution to a full 26-item independent re-derivation against `KNOWN_ISSUES.md` directly (see "Batch 8 status" above) — the 5 named groups turned out to be only a subset of what had genuinely never been touched by any Track B batch.
 
 Batch composition may shift as work proceeds (an item found to share a root cause with another
 batch moves to join it) — this table is a plan, not a contract; changes are recorded in `RGL-404.md`

@@ -247,7 +247,10 @@ do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'cpd1');
   v_dash_revoke uuid := '00000000-0000-0000-0000-000000301030';
+  v_dash_revoke_co_co_admin uuid := '00000000-0000-0000-0000-000000301050';
+  v_account_revoke_id uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Dash Revoke Co');
   v_membership app.customer_portal_account_memberships;
+  v_second_admin app.customer_portal_account_memberships;
   v_row record;
 begin
   select * into v_membership from app.customer_portal_account_memberships where auth_user_id = v_dash_revoke and tenant_id = v_tenant1;
@@ -258,11 +261,24 @@ begin
     end if;
   end loop;
 
-  -- dash-revoke is the only account_admin on "Dash Revoke Co" -- CPL-300's own
-  -- Layer-4-only authority chain (app.actor_is_active_customer_portal_
-  -- account_admin) does not forbid an account_admin from revoking their own
-  -- membership, so this self-revoke is a real, legal call, not a fixture
-  -- shortcut.
+  -- Track B Batch 8, ISS-2026-125 item 3: app.set_customer_portal_account_
+  -- membership_status now rejects a self-revoke that would leave "Dash
+  -- Revoke Co" with zero active account_admins (last_account_admin) --
+  -- give it a second admin first so dash-revoke's own self-revoke below
+  -- stays a real, legal call exercising this test's own actual target
+  -- (dashboard revocation-immediacy), not the last-admin guard.
+  insert into auth.users (id, email) values (v_dash_revoke_co_co_admin, 'dash-revoke-co-2@cpd1.test');
+  perform app.invite_user(v_tenant1, v_dash_revoke_co_co_admin, 'dash-revoke-co-2@cpd1.test', 'Dash Revoke Co Second Admin', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'dash-revoke-co-2@cpd1.test'), 'active', 'onboarded', 'tester');
+  select * into v_second_admin from app.invite_customer_portal_user(v_tenant1, v_account_revoke_id, v_dash_revoke_co_co_admin, 'account_admin', v_dash_revoke, 'dash-revoke');
+  perform app.accept_customer_portal_invite(v_second_admin.id, v_second_admin.record_version, v_dash_revoke_co_co_admin);
+
+  -- dash-revoke was originally the only account_admin on "Dash Revoke Co" --
+  -- CPL-300's own Layer-4-only authority chain (app.actor_is_active_
+  -- customer_portal_account_admin) does not forbid an account_admin from
+  -- revoking their own membership PER SE, so this self-revoke is a real,
+  -- legal call, not a fixture shortcut -- it is legal here specifically
+  -- because a second admin now exists (ISS-2026-125 item 3's own guard).
   perform app.set_customer_portal_account_membership_status(v_membership.id, v_membership.record_version, 'revoked', 'test revoke', v_dash_revoke, 'dash-revoke');
 
   for v_row in select * from app.get_customer_portal_dashboard_summary(v_dash_revoke, v_tenant1) loop
