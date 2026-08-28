@@ -97,6 +97,14 @@ jobs:
       - name: Secret scan (docs/standards/SECURITY_STANDARDS.md §3)
         run: pnpm run security:check
 
+      # ISS-2026-240 (Track B Batch 6): the auth_rls_initplan regression check had
+      # never existed as committed tooling -- only as an ad hoc manual grep re-run
+      # by hand at each checkpoint. This wires the real, committed guard in so it
+      # actually runs, rather than existing as an unused script (the exact
+      # "looks fixed without being fixed" anti-pattern this repo forbids).
+      - name: RLS auth.uid() initplan regression guard (bare-call + override detection)
+        run: pnpm run security:check-rls-initplan
+
       # ATW-031 (closes ISS-2026-007): the repository had NO automated dependency
       # vulnerability gate from PH0-094 until this checkpoint, because `pnpm audit`
       # was returning 410 Gone against npm's retired advisory endpoints and PH0-094

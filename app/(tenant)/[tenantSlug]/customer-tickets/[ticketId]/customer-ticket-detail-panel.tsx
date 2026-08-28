@@ -14,6 +14,7 @@ import type {
   TicketPortalLinkRow,
   TicketPortalLinkEntityType,
   TicketSlaStatusForRequesterRow,
+  TicketEscalationStatusForRequesterRow,
 } from "../../../../../server/contracts/ticketing/ticketing.ts";
 import { TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS, TICKET_PORTAL_LINK_ENTITY_TYPES } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
@@ -361,6 +362,22 @@ function SlaStatusSection({ slaStatus }: { slaStatus: TicketSlaStatusForRequeste
   );
 }
 
+// ISS-2026-101 (Track B Batch 6): sourced ONLY from
+// app.get_ticket_escalation_status_for_requester (HRT-291, already-VERIFIED)
+// -- never derived from the staff-only get_ticket_escalation. A single
+// boolean by construction (decision 12) -- no level/target/trigger/
+// hierarchy can leak here because the RPC itself never returns one.
+// `escalationStatus === null` covers both "not escalated" and "ticket not
+// found/not a party" (the RPC returns no row for either) -- rendered as
+// simply omitting the badge, mirroring SlaStatusSection's own
+// no-fabricated-state discipline.
+function EscalationBadge({ escalationStatus }: { escalationStatus: TicketEscalationStatusForRequesterRow | null }) {
+  if (!escalationStatus?.isEscalated) {
+    return null;
+  }
+  return <StatusBadge tone="warning" label="Escalated" />;
+}
+
 const STATUS_TONE: Record<TicketStatus, StatusTone> = {
   new: "info",
   open: "info",
@@ -473,6 +490,7 @@ export function CustomerTicketDetailPanel({
   replyAction,
   transitionAction,
   slaStatus,
+  escalationStatus,
   ticketLinks,
   searchTicketLinksAction,
   linkTicketRecordAction,
@@ -487,6 +505,7 @@ export function CustomerTicketDetailPanel({
   replyAction: BoundAction;
   transitionAction: (toStatus: TicketStatus) => BoundAction;
   slaStatus: TicketSlaStatusForRequesterRow | null;
+  escalationStatus: TicketEscalationStatusForRequesterRow | null;
   ticketLinks: readonly TicketLinkRow[];
   searchTicketLinksAction: (prevState: CustomerTicketLinkSearchActionState, formData: FormData) => Promise<CustomerTicketLinkSearchActionState>;
   linkTicketRecordAction: (entityType: TicketLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => LinkBoundAction;
@@ -504,6 +523,7 @@ export function CustomerTicketDetailPanel({
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-semibold text-neutral-900">{detail.ticketNumber}</h1>
           <StatusBadge tone={STATUS_TONE[detail.status]} label={detail.status.replace(/_/g, " ")} />
+          <EscalationBadge escalationStatus={escalationStatus} />
         </div>
         <p className="text-sm text-neutral-700">{detail.subject}</p>
         <dl className="grid grid-cols-2 gap-2 text-xs text-neutral-500 sm:grid-cols-4">

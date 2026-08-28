@@ -292,7 +292,7 @@ release gate.
 |---|---|---|
 | Four-layer access model | Supreme Admin, User Admin, internal hierarchy, Customer User — built at Platform Core | Positive **and** negative matrix per module/action/field/record/status/amount/scope |
 | `SECURITY DEFINER` posture | 1,878 functions, **100% pinned search_path**, 0 with mutable search_path, 0 mutable + anon/auth-callable | Re-verify; this is a real, measured property, not an assumption |
-| `function_search_path_mutable` advisories | 791 — **all `security invoker`**, so no privilege to escalate | Do not "fix" as a batch; confirm the invoker property still holds |
+| `function_search_path_mutable` advisories | ~~791~~ **639**, corrected `2026-08-28` (Track B Batch 6, `ISS-2026-191`) — **all `security invoker`**, so no privilege to escalate | Do not "fix" as a batch; confirm the invoker property still holds |
 | `rls_enabled_no_policy` | 120 — INFO, default-deny by design | Confirm intent per table |
 | Field masking (finance, payroll, personal, tax, bank, margin, support, AI evidence) | Built per phase | Verify |
 | Supreme Admin absolute CRUD | **RPD-022 ratified accepted residual risk** | Must be **disclosed**, never weakened silently, and never described as tamper-proof or immutable-for-all |
@@ -300,6 +300,23 @@ release gate.
 | Supreme-Admin-override gap | **`ISS-2026-137`** — `app.loyalty_account_tier_movements` missed from `ISS-2026-130`'s fix scope | **Independently re-verified at `HDN-373`** — the table is actually MORE locked down than its siblings (missing both the append-only trigger and any `UPDATE`/`DELETE` grant at all, so a Supreme Admin cannot correct tier history today), confirming the existing disposition (`OPEN`, Low, "no live vulnerability, only a missing correction path") is accurate. No change made |
 | Actor-identity-forgery class, deferred from `HDN-372` | **`HDN-BLK-012`/`ISS-2026-165`** (High) — 13 dashboard functions (`app.get_ops_dashboard_*` ×6, `app.get_dashboard_*` ×7) share `HDN-BLK-011`'s exact defect shape (no `assert_actor_is_session_identity`), no common root to fix once. **`HDN-BLK-014`/`ISS-2026-179`** (Medium) — ~24 further boolean-oracle/narrow-scope candidate functions from a wider closure sweep, only 3 individually live-verified (`resolve_locale_context`, `has_active_tenant_membership`, `actor_holds_customer_user_layer`) | **`HDN-BLK-012` fixed at `HDN-373`** — `supabase/migrations/20260810200000_harden_dashboard_actor_identity_gaps.sql`, all 13 converted `language sql` → `plpgsql` carrying `assert_actor_is_session_identity`; 5 of the 13 additionally closed a genuine field-masking bypass (cost/margin/selling-price entitlements gated on the same forged parameter), not merely a record-scope widening. **`HDN-BLK-014` narrowed, not closed** — of ~30 candidates (not ~24; the candidate list grew once every actual call site was grepped), 16 confirmed terminal/self-referential and fixed at `supabase/migrations/20260810400000_harden_crm_ops_actor_identity_gaps.sql`; ~14 (`has_active_tenant_membership`, `can_access_record`, `is_supreme_admin`, `actor_holds_customer_user_layer`, and others) confirmed genuinely called with THIRD-PARTY actor arguments elsewhere in the schema — an unconditional assert would break those legitimate uses, so they are re-registered narrower as `ISS-2026-186`, needing a per-call-site audit, owner a future checkpoint. Full detail `HDN-373.md` §5, §6.1 |
 | RLS gaps post-revocation, deferred from `HDN-372` | **`ISS-2026-171`** — `app.notifications` RLS has no tenant-membership conjunct, a revoked ex-member retains read access to past notifications. **`ISS-2026-173`** — same shape, `app.saved_report_views`. **`ISS-2026-176`** — 35 `authenticated`-readable views bypass base-table RLS by construction, structurally fragile (no current leak, no mechanical gate to catch a future regression) | **`171`/`173` fixed at `HDN-373`** — `supabase/migrations/20260810500000_harden_own_row_rls_membership_gap.sql` adds the missing tenant-membership conjunct, mirroring the already-correct `notification_contact_addresses_select_own` reference pattern; one further instance found and fixed in the same migration (`ISS-2026-185`, `app.notification_preferences`, identical shape). **`176` re-confirmed, unchanged** — 35/37 views correctly bypass base RLS by construction with a correct predicate of their own; still no mechanical sweep to catch a future regression, not built this checkpoint |
+
+> **`function_search_path_mutable` count, corrected `2026-08-28` (Track B Batch 6,
+> `ISS-2026-191`).** The 791 figure this row originally carried was already known stale
+> as of `HDN-372`'s own Tier C re-verification (787, `2026-08-23` — see `HDN-373.md`
+> §6.2, "Lens 2"), which registered the drift as `ISS-2026-191` rather than correcting
+> this file in place. Re-counted live via `get_advisors(type=security)` (the same
+> methodology `HDN-372`'s figure and this row's original figure both used, per
+> `docs/build-log/phase-09/LIVE_SUPABASE_MIGRATION_REPORT.md`'s own initial pull),
+> filtered to `name = function_search_path_mutable`: **639** (636 in schema `app`, 3 in
+> `public` — the thin PostgREST pass-through wrappers), all `security invoker`, none
+> newly `security definer`. The count is a live, moving target — it drops as further
+> hardening migrations pin `search_path` on previously-untouched `SECURITY INVOKER`
+> functions (`docs/build-log/release-go-live/RGL-402.md`'s own `2026-08-25` pull already
+> independently found 645, using the identical method) — so a small further drift by the
+> next checkpoint that reads this row is expected drift, not necessarily a fresh
+> doc-drift defect in its own right; re-pull live rather than assume either this figure
+> or a prior one is still current.
 
 ---
 

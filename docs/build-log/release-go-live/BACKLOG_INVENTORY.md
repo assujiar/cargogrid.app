@@ -43,12 +43,12 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 125** (0 Critical, 5 High, 60 Medium, 60 Low) — updated during Batch 1
+**Working total for Track B: 113** (0 Critical, 5 High, 56 Medium, 52 Low) — updated during Batch 1
 review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
 `RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), Batch 3 (135), Batch 4
-(131), and Batch 5 (125, this figure) — see the "Batch 1 status"/"Batch 2 status"/"Batch 3
-status"/"Batch 4 status"/"Batch 5 status" sections below and `RGL-404.md` §12 items 22-47 for the
-authoritative running log.
+(131), Batch 5 (125), and Batch 6 (113, this figure) — see the "Batch 1 status"/"Batch 2
+status"/"Batch 3 status"/"Batch 4 status"/"Batch 5 status"/"Batch 6 status" sections below and
+`RGL-404.md` §12 items 22-53 for the authoritative running log.
 
 ---
 
@@ -319,6 +319,86 @@ Working total after Batch 5: **125 remaining** (0 Critical, 5 High, 60 Medium, 6
 `ISS-2026-157` (Low), `ISS-2026-247` (Low), `ISS-2026-252` (Low). See `RGL-404.md` §12 items 42-47
 for the authoritative running log.
 
+## Batch 6 status: complete
+
+`rbac-defense-in-depth` (5: 186, 187, 188, 190, 191) + `support-access-audit` (2: 177, 178) +
+`rls-own-row-narrowing` (1: 192) + `step-up-mfa-enforcement` (1: 151) + `observability-alerting`
+(2: 251, 253) + `db-test-flakiness` (3: 103, 146, 155) + `ticketing-links-gaps` (2: 101, 102) +
+`perf-cache-safety` (1: 240) — 17 items: 12 fully closed, 5 confirmed-still-open dispositions (all 5
+sharpened with fresh evidence, none merely reconfirmed unchanged).
+
+`ISS-2026-187`, `188` — `RESOLVED` together, same fix: `app.has_active_support_grant` now also
+requires a live, open `app.support_access_sessions` row for the grant, not merely an approved grant
+row — closing both the reauth-bypass (`187`) and the `end_support_session`-is-a-no-op (`188`) gaps
+with the one change ISS-2026-188's own text prescribed. Chose the "requires an open session" model
+over "end-session revokes the grant" specifically because the schema's own documented
+multiple-sequential-sessions-per-grant design would have been contradicted by the alternative.
+
+`ISS-2026-177` — `RESOLVED`: `app.start_support_session` now also writes a canonical
+`app.audit_logs` entry on a genuine new session (mirroring `app.revoke_support_access`'s own
+existing call), closing the gap where session-open was recorded only in the capability-scoped
+`app.support_access_events` trail, never the tenant-admin-queryable surface.
+
+`ISS-2026-178` — `RESOLVED`, TypeScript-only: the webhook-delivery-retry worker now cross-checks a
+delivery's own tenant against the enqueuing job's tenant before any dispatch, failing closed on a
+mismatch. Not independently exploitable today (per this entry's own disclosure), closed before any
+future jobs-admin UI could make it reachable.
+
+`ISS-2026-190` — `RESOLVED`, stale finding, no code change: live-verified the RLS policy this entry
+named was already fixed by a same-day follow-up migration the original investigation never read,
+weeks before this entry was even filed. New regression added to prove the fix live.
+
+`ISS-2026-191` — `RESOLVED`, doc-only: `HARDENING_MATRIX.md` §4's `function_search_path_mutable`
+count corrected from the stale 791 to a live-verified 639, with a dated note explaining the figure
+is a moving target, not a fixed constant.
+
+`ISS-2026-192` — `RESOLVED`: triaged in depth for the first time (the entry's own text said "not
+triaged in depth"), confirmed correct-as-designed — the one own-row-shaped branch is structurally
+unreachable by any privilege-bearing principal and carries no privilege of its own regardless.
+
+`ISS-2026-186` — `PARTIALLY RESOLVED`: re-derived the ~14-candidate list against the current schema
+and found it stale (one candidate already fixed elsewhere, mis-carried forward). 3 of the remaining
+candidates were confirmed genuinely self-referential-only (zero third-party call sites) and fixed
+with the established assert-first pattern. 3 more are structurally not applicable (no actor
+parameter at all). 6 stay genuinely open, re-confirmed. Severity unchanged (Medium) — real work
+remains.
+
+`ISS-2026-240` — `RESOLVED`: the `auth_rls_initplan` regression guard this entry described as
+"structurally blind" to a documented pattern turned out not to exist as committed tooling at all —
+only as an ad hoc manual grep. Built and committed the real guard (both the original bare-call check
+and the new default-param-blind-spot classifier), wired into CI. Live run against the full tree:
+zero regressions, zero unexpected overrides, the documented blind spot confirmed present and safe at
+1,131 call sites.
+
+`ISS-2026-253` — `RESOLVED`: `/api/ready`'s failure path now emits a structured server-side log
+event distinguishing DB-unreachable, missing-env-var, and unexpected-exception — the client-visible
+response is unchanged (still no secret/stack-trace leak). First real caller of
+`scripts/observability/logger.ts`'s `log()`, previously a tested-but-unused foundation.
+
+`ISS-2026-101` — `RESOLVED`: the already-correct, already-customer-safe
+`getTicketEscalationStatusForRequester` RPC simply had no UI caller reachable by a real
+`customer_user` — wired into the customer ticket detail page, mirroring the SLA-status wiring
+immediately beside it. Pure UI-reachability fix, no query/contract change.
+
+`ISS-2026-102` — `RESOLVED`: `app.list_customer_ticket_links` now redacts `entity_id` to a fixed
+nil-UUID marker for any row whose `entity_type` falls outside the customer-safe registry
+(vendor/user), closing the gap `HRT-295`'s own resolution note explicitly deferred to this entry.
+`entity_type` itself stays visible (a bare category, not a record id).
+
+`ISS-2026-103` — `RESOLVED`, doc-only: both named wall-clock-fragile test files turned out to
+already be fixed elsewhere (one under the sibling `ISS-2026-115` entry, one as `ISS-2026-285`) —
+only this entry's own status text had never been reconciled.
+
+`ISS-2026-151`, `155`, `146`, `251` — re-verified still genuinely open against current code, each
+dispositioned with fresh, independently-gathered evidence (updated blast-radius counts, confirmed
+zero-live-caller status, confirmed no adoptable shared helper exists, confirmed no vendor dispatch
+integration exists anywhere) rather than merely reconfirmed unchanged.
+
+Working total after Batch 6: **113 remaining** (0 Critical, 5 High, 56 Medium, 52 Low). Down from
+125 by 12: `ISS-2026-101` (Medium), `102` (Low), `103` (Low), `177` (Low), `178` (Low), `187`
+(Medium), `188` (Medium), `190` (Medium), `191` (Low), `192` (Low), `240` (Low), `253` (Low). See
+`RGL-404.md` §12 items 48-53 for the authoritative running log.
+
 ## Medium/Low batches (140 items, working count)
 
 Batches below reproduce the categorization research pass performed for this document (full
@@ -382,7 +462,7 @@ Severity orders the first batch; domain/mechanism groups the rest, per the appro
 3. **Batch 3 (complete)**: `hris-integrated-verification-residual` (14) + `hris-overtime-timesheet-gaps` (2) + `hris-payroll-personal-data` (3) — 19 items (1 resolved doc-only, 1 partially resolved, 17 dispositioned).
 4. **Batch 4 (complete)**: `cpl-customer-portal-scope` (14) + `loyalty-fraud-reconciliation` (5) + `loyalty-approval-authority` (2) — 21 items (4 resolved, 4 partially resolved, 13 dispositioned).
 5. **Batch 5 (complete)**: `accessibility` (7) + `browser-compat` (1) + `docs-consistency` (5) + `perf-load-evidence` (3) + `iae-hardening-residual` (3) — 19 items (6 resolved, 1 withdrawn, 12 dispositioned).
-6. **Batch 6**: `rbac-defense-in-depth` (5) + `support-access-audit` (2) + `rls-own-row-narrowing` (1) + `step-up-mfa-enforcement` (1) + `observability-alerting` (2) + `db-test-flakiness` (3) + `ticketing-links-gaps` (2) + `perf-cache-safety` (1) — 17 items.
+6. **Batch 6**: `rbac-defense-in-depth` (5) + `support-access-audit` (2) + `rls-own-row-narrowing` (1) + `step-up-mfa-enforcement` (1) + `observability-alerting` (2) + `db-test-flakiness` (3) + `ticketing-links-gaps` (2) + `perf-cache-safety` (1) — 17 items. (complete)
 7. **Batch 7**: `lineage-provenance` (2) + `rest-api-consistency` (2) + `rest-api-error-shape` (2) + `files-legal-hold-residual` (2) + `crypto-scan-recovery` (1) + `schema-completeness-gaps` (2) + `finance-fx` (1) + `migration-import` (2) — 14 items.
 8. **Batch 8 (disposition batch)**: every remaining `INFRA`/`BIZ`/pure-`BIG` item not already folded into batches 1-7 — `postgis-extension`, `dr-runbook`, `prod-seed-hygiene`, `perf-live-latency`, `ISS-2026-300`, plus any `BIG` items from earlier batches whose own code-shaped half was built but whose full capability was not. Per the operator's own instruction: build the code-shaped part, write an explicit owner-named disposition for the rest.
 

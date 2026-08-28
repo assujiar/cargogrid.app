@@ -336,6 +336,61 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-177: PLT-115''s start_support_session() also now leaves a canonical app.audit_logs entry at session-open, not only revoke_support_access -- and re-starting an already-open session (idempotent no-op) does not double-log'
+do $$
+declare
+  v_tenant_id uuid;
+  v_grant app.support_access_grants;
+  v_session1 app.support_access_sessions;
+  v_session2 app.support_access_sessions;
+  v_audit_count integer;
+  v_audit_row app.audit_logs;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmeaud');
+  v_grant := app.request_support_access(v_tenant_id, '00000000-0000-0000-0000-000000000805', 'session-open audit integration test', 'CASE-AUD-2', 60, 'tester');
+  perform app.approve_support_access(v_grant.id, '00000000-0000-0000-0000-000000000801', 'tenant admin approval');
+
+  select count(*) into v_audit_count from app.audit_logs where action = 'start_support_session' and tenant_id = v_tenant_id and actor_auth_user_id = '00000000-0000-0000-0000-000000000805';
+  if v_audit_count <> 0 then
+    raise exception 'assertion failed: expected zero start_support_session audit entries for this grantee before any session is started, saw %', v_audit_count;
+  end if;
+
+  v_session1 := app.start_support_session(v_grant.id, now(), 'support agent');
+
+  select * into v_audit_row from app.audit_logs where action = 'start_support_session' and resource_id = v_session1.id;
+  if v_audit_row.id is null then
+    raise exception 'assertion failed: expected exactly one start_support_session audit entry after the session opened, found none';
+  end if;
+  if v_audit_row.resource_type <> 'app.support_access_sessions' then
+    raise exception 'assertion failed: expected resource_type=app.support_access_sessions, got %', v_audit_row.resource_type;
+  end if;
+  if v_audit_row.tenant_id <> v_tenant_id then
+    raise exception 'assertion failed: expected the audit row''s tenant_id to match the grant''s own tenant';
+  end if;
+  if v_audit_row.actor_auth_user_id <> '00000000-0000-0000-0000-000000000805' then
+    raise exception 'assertion failed: expected actor_auth_user_id to be the grantee, got %', v_audit_row.actor_auth_user_id;
+  end if;
+  -- app.capture_audit_event's own IAE-037 auto-default (the actor's currently-open
+  -- support session for this tenant) should populate the grant linkage even though this
+  -- call site never passes it explicitly, the same behavior revoke_support_access relies on.
+  if v_audit_row.support_access_grant_id <> v_grant.id then
+    raise exception 'assertion failed: expected support_access_grant_id auto-defaulted to %, got %', v_grant.id, v_audit_row.support_access_grant_id;
+  end if;
+
+  -- Idempotent re-start (grant already has an open session) must not double-log --
+  -- nothing new actually happened.
+  v_session2 := app.start_support_session(v_grant.id, now(), 'support agent retry');
+  if v_session1.id <> v_session2.id then
+    raise exception 'assertion failed: expected re-starting an already-open session to be idempotent';
+  end if;
+
+  select count(*) into v_audit_count from app.audit_logs where action = 'start_support_session' and resource_id = v_session1.id;
+  if v_audit_count <> 1 then
+    raise exception 'assertion failed: expected exactly one start_support_session audit entry after an idempotent re-start, got %', v_audit_count;
+  end if;
+end;
+$$;
+
 \echo '>> defense in depth: anon and authenticated are denied direct table access to app.audit_logs; service_role has explicit access'
 do $$
 begin

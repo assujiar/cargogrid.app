@@ -906,6 +906,121 @@ begin
 end;
 $$;
 
+\echo '>> Track B Batch 6 (ISS-2026-186 partial fix, 20260828121000): position-aware wiring check for the 3 shared record-scope primitives re-derived as genuinely self-referential-only (zero third-party call sites anywhere in supabase/migrations/) and fixed with the identical HDN-372/373 assert-first pattern. LANGUAGE sql functions have no BEGIN block, so the assert is the first SELECT statement in the body, not "begin ... perform" -- mirrors app.current_support_session''s own already-shipped convention.'
+do $$
+declare
+  v_fn text;
+  v_missing text[];
+begin
+  -- app.claim_case_record_scope_ok / app.wms_pick_record_scope_ok: LANGUAGE sql, the
+  -- assert is the body's first statement (a bare `select`, not `begin ... perform`).
+  -- pg_get_functiondef() re-renders the dollar-quote tag as "function", never
+  -- preserving the source's own two-dollar-sign tag -- confirmed directly (a
+  -- throwaway LANGUAGE sql function created and inspected via
+  -- pg_get_functiondef renders "AS dollar-function-dollar", not the original
+  -- two-dollar-sign tag) -- so the tag itself must be matched generically,
+  -- not hardcoded to a bare two-dollar-sign pattern (which never matches and
+  -- made this check unconditionally fail as a false positive, not a real
+  -- regression). NOTE: this comment deliberately avoids writing the literal
+  -- two-character dollar-quote sequence itself -- inside a do-block already
+  -- opened with that same sequence, Postgres' lexer treats ANY occurrence of
+  -- it (even inside a -- comment) as the block's own closing delimiter, which
+  -- is exactly the self-inflicted syntax error a first version of this note
+  -- caused and this rewrite fixes.
+  foreach v_fn in array array['claim_case_record_scope_ok', 'wms_pick_record_scope_ok'] loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = v_fn
+        and pg_get_functiondef(p.oid) ~ '\$[A-Za-z_]*\$\s*(--[^\n]*\n\s*)*select\s+app\.assert_actor_is_session_identity\('
+    ) then
+      v_missing := array_append(v_missing, v_fn);
+    end if;
+  end loop;
+
+  -- app.label_subject_record_scope_ok: LANGUAGE plpgsql, the standard
+  -- "begin ... perform app.assert_actor_is_session_identity(...)" shape.
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.proname = 'label_subject_record_scope_ok'
+      and pg_get_functiondef(p.oid) ~ 'begin\s*(--[^\n]*\n\s*)*perform\s+app\.assert_actor_is_session_identity\('
+  ) then
+    v_missing := array_append(v_missing, 'label_subject_record_scope_ok');
+  end if;
+
+  if v_missing is not null then
+    raise exception 'assertion failed: % of the 3 shared record-scope primitives Track B Batch 6 fixed no longer call app.assert_actor_is_session_identity as their first statement -- ISS-2026-186''s partial fix has regressed: %', array_length(v_missing, 1), v_missing;
+  end if;
+
+  raise notice 'Track B Batch 6 record-scope-primitive actor-identity regression proof: all 3 fixed functions still call app.assert_actor_is_session_identity as their first statement';
+end;
+$$;
+
+\echo '>> Track B Batch 6 (ISS-2026-186 partial fix): live two-session forced-spoof regression for the same 3 functions, identical methodology to the HDN-372/373 proofs above.'
+do $$
+declare
+  v_self uuid := '00000000-0000-0000-0000-000000000401';
+  v_victim uuid := '00000000-0000-0000-0000-000000000402';
+  v_fake_tenant uuid := gen_random_uuid();
+  v_fake_id uuid := gen_random_uuid();
+  v_raised boolean;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text, 'role', 'authenticated')::text, true);
+
+  v_raised := false;
+  begin
+    perform app.claim_case_record_scope_ok(v_victim, v_fake_tenant, v_fake_id);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.claim_case_record_scope_ok did not reject a forged actor from a genuine authenticated session -- ISS-2026-186''s partial fix has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform app.wms_pick_record_scope_ok(v_victim, v_fake_id, 'irrelevant');
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.wms_pick_record_scope_ok did not reject a forged actor -- ISS-2026-186''s partial fix has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform app.label_subject_record_scope_ok(v_victim, v_fake_tenant, 'bin', v_fake_id);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.label_subject_record_scope_ok did not reject a forged actor -- ISS-2026-186''s partial fix has regressed';
+  end if;
+
+  -- The same session acting as ITSELF must not be blanket-denied -- v_self holds no real
+  -- warehouse/case/label row, so this must fail on a DIFFERENT, later check (or return
+  -- false), never actor_identity_mismatch, proving the fix is not a blanket deny.
+  begin
+    perform app.wms_pick_record_scope_ok(v_self, v_fake_id, 'irrelevant');
+  exception
+    when insufficient_privilege then
+      if sqlerrm ~ 'actor_identity_mismatch' then
+        raise exception 'assertion failed: app.wms_pick_record_scope_ok rejected the caller acting as themselves -- the fix has become a blanket deny, not an identity check';
+      end if;
+    when others then
+      null; -- any non-identity failure past the assert is fine and expected here
+  end;
+
+  perform set_config('request.jwt.claims', '', true);
+  raise notice 'Track B Batch 6 live two-session forced-spoof proof: app.claim_case_record_scope_ok, app.wms_pick_record_scope_ok and app.label_subject_record_scope_ok all reject a forged actor from a genuine authenticated session; an own-identity call is not blanket-denied';
+end;
+$$;
+
 \echo '>> ATW-032 (ISS-2026-010): a customer_user-layer principal must fail CLOSED by default. app.invite_user writes a tenant_user_identities row and app.has_active_tenant_membership reads exactly that table, so a portal principal satisfies plain tenant membership -- any SELECT policy whose ENTIRE test is that membership admits it. Which records the portal may read is Phase 8 scope; that the default is deny is not, and this gate holds the default.'
 do $$
 declare

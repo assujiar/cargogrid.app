@@ -89,6 +89,24 @@ export async function processWebhookDeliveryJob(client: ProcessWebhookDeliveryJo
     return { outcome: "failed", httpStatusCode: null, errorMessage: "delivery not found" };
   }
 
+  // ISS-2026-178 (docs/runtime/KNOWN_ISSUES.md): app.get_webhook_delivery_dispatch_info
+  // takes no tenant argument and applies no tenant predicate, and this worker previously
+  // took deliveryId verbatim from job.payload without ever comparing the delivery's own
+  // tenant_id against the enqueuing job's tenant_id. Both are already real, typed fields
+  // on data this function already has in hand (job.tenantId, dispatchInfo.tenantId) --
+  // fail closed before any live dispatch or state-machine write on a mismatch, the same
+  // "check before doing anything with the row" posture as the not-found branch above.
+  // Not currently independently exploitable (see the issue's own disclosure: no
+  // authenticated caller can reach app.enqueue_job, and webhook_deliveries.id is a v4 UUID
+  // never exposed to another tenant) -- this closes the gap before any jobs-admin/requeue
+  // UI is built on top of this worker, per the issue's own stated fix scope.
+  if (dispatchInfo.tenantId !== job.tenantId) {
+    const errorMessage = `webhook_delivery ${deliveryId} belongs to tenant ${dispatchInfo.tenantId}, not the enqueuing job's tenant ${job.tenantId}`;
+    await recordWebhookDeliveryAttempt(client, { deliveryId, status: "failed", httpStatusCode: null, errorMessage, actorAuthUserId, actorLabel });
+    await recordJobFailure(client, { jobId: job.jobId, errorMessage, actorAuthUserId, actorLabel });
+    return { outcome: "failed", httpStatusCode: null, errorMessage };
+  }
+
   // A stale re-claim (the job's own lease expired after a worker crash, but a
   // PRIOR attempt already reached a terminal delivery state) -- complete the
   // job without a redundant live HTTP call.
