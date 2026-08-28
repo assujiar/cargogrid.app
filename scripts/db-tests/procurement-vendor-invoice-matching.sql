@@ -680,6 +680,35 @@ begin
   if not v_failed then raise exception 'assertion failed: expected an IDR PO attached to a same-vendor USD bill to be rejected'; end if;
 end $$;
 
+\echo '>> create_vendor_bill_match_case: match_mode=non_po (no PO, no active vendor contract) plus is_partial_invoice/is_consolidated_invoice genuinely stored and read back (ISS-2026-063 db-test gap closure)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vim1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000265102';
+  v_bill5_id uuid;
+  v_line5 app.finance_vendor_bill_lines;
+  v_case_nonpo app.vendor_bill_match_cases;
+begin
+  select id into v_bill5_id from app.finance_vendor_bills where tenant_id = v_tenant1 and vendor_reference = 'VIM-BILL-005';
+  select * into v_line5 from app.finance_vendor_bill_lines where bill_id = v_bill5_id order by line_number asc limit 1;
+
+  -- bill5 (vendor2, NO active vendor contract), no PO attached, both flags true: the only fixture
+  -- combination in this file that reaches match_mode='non_po' -- every other no-PO create here
+  -- targets vendor1, which always resolves to contract_two_way via its own active contract, and
+  -- vendor1's own decided cases (bill1/bill2) feed the invoice_accuracy KPI aggregate below, so
+  -- this deliberately stays on vendor2 to avoid perturbing that fixed 2-case denominator. Both
+  -- previously-dispatchable-but-never-exercised flags are asserted genuinely stored and read
+  -- back, not merely accepted and discarded.
+  v_case_nonpo := app.create_vendor_bill_match_case(
+    v_tenant1, v_bill5_id, null, true, true,
+    jsonb_build_array(jsonb_build_object('billLineId', v_line5.id, 'vendorStatedAmount', v_line5.amount)),
+    'idem-vim-mc-5-nonpo-both-flags', v_staff1, 'staff'
+  );
+  if v_case_nonpo.match_mode <> 'non_po' or not v_case_nonpo.is_partial_invoice or not v_case_nonpo.is_consolidated_invoice then
+    raise exception 'assertion failed: expected non_po/is_partial_invoice=true/is_consolidated_invoice=true, got %/%/%', v_case_nonpo.match_mode, v_case_nonpo.is_partial_invoice, v_case_nonpo.is_consolidated_invoice;
+  end if;
+end $$;
+
 \echo '>> dispute: raise against bill1''s already-matched case -> disputed/not_ready; respond; self-approval blocked (raiser cannot resolve); resolved (rejected) by a distinct actor -> case returns to pending -> re-accept -> matched'
 do $$
 declare

@@ -43,11 +43,11 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 136** (0 Critical, 5 High, 64 Medium, 67 Low) — updated during Batch 1
+**Working total for Track B: 135** (0 Critical, 5 High, 63 Medium, 67 Low) — updated during Batch 1
 review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
-`RGL-404.md` §12 item 21. Further updated after Batch 1 (141) and Batch 2 (136, this figure) —
-see the "Batch 1 status"/"Batch 2 status" sections below and `RGL-404.md` §12 items 22-31 for the
-authoritative running log.
+`RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), and Batch 3 (135,
+this figure) — see the "Batch 1 status"/"Batch 2 status"/"Batch 3 status" sections below and
+`RGL-404.md` §12 items 22-33 for the authoritative running log.
 
 ---
 
@@ -148,6 +148,56 @@ Working total after Batch 2: **136 remaining** (0 Critical, 5 High, 64 Medium, 6
 (tracked as one combined tally reduction since both share the identical fix migration and
 disclosure text). See `RGL-404.md` §12 items 27-31 for the authoritative running log.
 
+## Batch 3 status: complete
+
+`hris-integrated-verification-residual` (14: 057, 058, 060, 061, 062, 063, 064, 066, 067, 068, 069,
+070, 071, 073) + `hris-overtime-timesheet-gaps` (2: 076, 100) + `hris-payroll-personal-data` (3:
+091, 092, 093) — 19 items, genuinely `mixed` as the table predicted: 1 item closed doc-only
+(already fixed elsewhere, never reconciled), 1 item partially closed (2 of 3 sub-items — a real
+test-coverage fix), 17 confirmed-still-open dispositions (16 pure, plus `064`'s own doc-drift
+correction on an already-open item).
+
+`ISS-2026-092` — `RESOLVED (doc-only, already fixed, not annotated in place)`: the identical
+raw-table-SELECT PII-disclosure shape as this checkpoint's own already-fixed Finding A
+(`app.employee_change_requests.reason`/`decided_reason`), closed by a LATER entry in the same
+file, `ISS-2026-099` (`app.get_employee_change_requests`, a new masked RPC; raw grant on
+`app.employee_change_requests` excludes `reason`/`decided_reason`; `page.tsx` updated to call the
+RPC instead of a raw `.select("*")`). The same `ISS-2026-285`/`013`/`036`-class doc-drift finding
+recurring for a fourth time this session. **Not edited in `KNOWN_ISSUES.md` itself** — `ISS-2026-099`'s
+own text explicitly directs "`ISS-2026-092`'s own text remains unchanged, per this file's
+append-only discipline; this entry supersedes its disposition," so its own `###` section stays
+`OPEN` verbatim by that entry's own instruction; this paragraph (plus `RGL-404.md` §12 and
+`CHANGE_MANIFEST.md`) is the closure record instead.
+
+`ISS-2026-063` — partial: (1) `server/queries/procurement-dashboard.test.ts` created (no dedicated
+test existed; every sibling dashboard query module had one) — 31 tests, `pnpm run test` green. (3,
+the `FINTEST-016` sibling note tracked under this same ID) `scripts/db-tests/procurement-vendor-
+invoice-matching.sql` gained a new block exercising `match_mode='non_po'` with both
+`is_partial_invoice=true`/`is_consolidated_invoice=true` on one case (vendor2, no active contract,
+no PO) — all three previously dispatchable but never exercised by any live test (every existing
+case-creation call passed `false,false`), kept off vendor1 to avoid perturbing the fixed 2-case
+denominator its own decided cases feed into the file's `invoice_accuracy` KPI aggregate. (2) **Not fixed** — extending the `PRC-268`/`PRC-269` large-scale load proof to the
+remaining 5 of 9 named surfaces needs new `scripts/load-tests/` scenarios, materially larger than a
+bounded test addition; genuinely out of scope. The item as a whole stays `OPEN` (narrowed to
+sub-item 2 only), so is NOT counted as resolved in the running tally.
+
+`ISS-2026-057`, `058`, `060`, `061`, `062`, `066`, `067`, `068`, `069`, `070`, `071`, `073`, `076`,
+`091`, `093`, `100` — re-verified still genuinely open against current code (a dedicated
+verification pass independently checked all 17 for a hidden superseding entry — the `092`-class
+doc-drift pattern — and found none for any of them) and redispositioned with a fresh "Track B
+Batch 3" update paragraph each, consistent with `00_EXECUTION_INDEX.md` §8.1's own "registered
+with a named owner and a disposition" treatment.
+
+`ISS-2026-064` — a genuine doc-drift correction, not a resolution: the verification pass found
+item (1) of this entry's own text ("no manager-team UI route exists") is now stale — a real route
+was built later at HRT-285 and was not cross-referenced back to this entry. Items (2)/(3) remain
+independently re-verified genuinely open, so the item as a whole stays `OPEN`, unchanged severity.
+
+Working total after Batch 3: **135 remaining** (0 Critical, 5 High, 63 Medium, 67 Low). Down from
+136 by 1 (Medium, `ISS-2026-092`'s own severity): the sole doc-only closure. `ISS-2026-063`
+(Low-Medium) stays counted as open since only 2 of its 3 sub-items closed. See `RGL-404.md` §12
+items 32-33 for the authoritative running log.
+
 ## Medium/Low batches (140 items, working count)
 
 Batches below reproduce the categorization research pass performed for this document (full
@@ -158,10 +208,10 @@ High items above go in the first batch regardless of theme.
 
 | Batch key | Items | Count | Dominant class | Note |
 |---|---|---|---|---|
-| `hris-integrated-verification-residual` | 057, 058, 060, 061, 062, 063, 064, 066, 067, 068, 069, 070, 071, 073 | 14 | mixed CODE/BIG/DOC | Cross-capability gaps from HRT-294; per-item handling, not one migration |
-| `hris-overtime-timesheet-gaps` | 076, 100 | 2 | CODE | Unwired mutation wrappers |
+| `hris-integrated-verification-residual` | 057, 058, 060, 061, 062, 063, 064, 066, 067, 068, 069, 070, 071, 073 | 14 | mixed CODE/BIG/DOC | **Batch 3, complete.** 063 partial (test-coverage sub-items fixed, load-proof sub-item open); 064 doc-drift corrected; rest confirmed still-open BIG/DOC, dispositioned |
+| `hris-overtime-timesheet-gaps` | 076, 100 | 2 | CODE | **Batch 3, complete.** Both confirmed still-open (accepted, disclosed UI-wiring gap per repo convention), dispositioned |
 | `db-test-flakiness` | 103, 146, 155 | 3 | TEST/CODE | Wall-clock fixtures, tenant-id disclosure, registration dedup gap |
-| `hris-payroll-personal-data` | 091, 092, 093 | 3 | CODE | Retention/legal-hold classification, raw-column exposure |
+| `hris-payroll-personal-data` | 091, 092, 093 | 3 | CODE | **Batch 3, complete.** 092 resolved doc-only (closed by `ISS-2026-099`); 091/093 confirmed still-open BIG, dispositioned |
 | `ticketing-links-gaps` | 101, 102 | 2 | CODE | Missing UI caller, internal ID leak |
 | `cpl-customer-portal-scope` | 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 126, 127, 128, 129 | 14 | mostly BIG/DOC | Disclosed Phase-8 scope narrowings; per-item, not one migration |
 | `loyalty-fraud-reconciliation` | 131, 132, 133, 134, 136 | 5 | mixed | Same domain (CPL-322/325), different mechanisms; 132+134 share an override-gap shape |
@@ -208,7 +258,7 @@ Severity orders the first batch; domain/mechanism groups the rest, per the appro
 1. **Batch 1 (High + quick wins)**: all 6 High items, plus `rls-grants` (7, one candidate migration) — 13 items.
 2. **Batch 2 (complete)**: `table-only-procurement-hardening` (19 items — 5 closed, 2 withdrawn/
    redispositioned, 12 dispositioned; see "Batch 2 status" above).
-3. **Batch 3**: `hris-integrated-verification-residual` (14) + `hris-overtime-timesheet-gaps` (2) + `hris-payroll-personal-data` (3) — 19 items.
+3. **Batch 3 (complete)**: `hris-integrated-verification-residual` (14) + `hris-overtime-timesheet-gaps` (2) + `hris-payroll-personal-data` (3) — 19 items (1 resolved doc-only, 1 partially resolved, 17 dispositioned).
 4. **Batch 4**: `cpl-customer-portal-scope` (14) + `loyalty-fraud-reconciliation` (5) + `loyalty-approval-authority` (2) — 21 items.
 5. **Batch 5**: `accessibility` (7) + `browser-compat` (1) + `docs-consistency` (5) + `perf-load-evidence` (3) + `iae-hardening-residual` (3) — 19 items.
 6. **Batch 6**: `rbac-defense-in-depth` (5) + `support-access-audit` (2) + `rls-own-row-narrowing` (1) + `step-up-mfa-enforcement` (1) + `observability-alerting` (2) + `db-test-flakiness` (3) + `ticketing-links-gaps` (2) + `perf-cache-safety` (1) — 17 items.

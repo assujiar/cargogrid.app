@@ -975,6 +975,35 @@ import { readFileSync } from "node:fs";
  * PASSED) before this digest was changed, and applied to the live
  * hosted project via `apply_migration` immediately after this local run
  * passed.
+ *
+ * AMENDED 2026-08-27 (twenty-third pass), dbTestSetSha256 only
+ * (migrationSetSha256 unchanged -- no migration this batch). Ruling:
+ * docs/build-log/release-go-live/RGL-404.md §12, items 32-33 (Track B,
+ * Batch 3 -- `hris-integrated-verification-residual` +
+ * `hris-overtime-timesheet-gaps` + `hris-payroll-personal-data`). No
+ * schema change: `ISS-2026-092` was doc-only (closed by a later entry,
+ * `ISS-2026-099`, never applied here); `ISS-2026-063` is test-coverage
+ * only. dbTestSetSha256 changed (234 files unchanged in count -- 1
+ * existing file widened, no file added or removed):
+ * `scripts/db-tests/procurement-vendor-invoice-matching.sql` gained one
+ * new block exercising `match_mode='non_po'` (vendor2, which carries no
+ * active vendor contract, created with no PO attached) with both
+ * `is_partial_invoice=true`/`is_consolidated_invoice=true` on the same
+ * case -- three previously-dispatchable-but-never-exercised code paths
+ * in `app.create_vendor_bill_match_case`, none of which any existing
+ * test in this file reached (every prior successful case-creation call
+ * passed `false,false` for both flags). A separate new file,
+ * `server/queries/procurement-dashboard.test.ts` (31 tests), is a
+ * TypeScript unit test outside this digest's own tracked
+ * `scripts/db-tests/` set and does not affect it. An earlier draft of
+ * the new db-test block used a vendor1 case for `is_consolidated_invoice`
+ * instead, which broke this file's own `invoice_accuracy` KPI aggregate
+ * assertion (a fixed 2-case denominator over vendor1's own decided
+ * cases) -- caught by the local db-tests suite before this digest was
+ * changed, corrected by moving both flags onto a single vendor2 case.
+ * Re-verified via a fresh full local db-test suite run (359 migrations,
+ * 234 runner files, ALL PASSED) before this digest was changed. No live
+ * database write this batch -- nothing to apply via `apply_migration`.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1236,8 +1265,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // approval.sql, procurement-sourcing.sql, procurement-vendor-rate-tiers.sql,
   // procurement-vendor-financial-security.sql, finance-invoice.sql, and
   // advanced-tms-wms-inbound.sql all widened, no file added or removed).
-  // See the class-level doc comment above.
-  dbTestSetSha256: "2361bc6950e59dbe9ac8d029cc0a7d45a8cd296080b7e8de30cf7f2269b33003",
+  // History: 2361bc6950e59dbe9ac8d029cc0a7d45a8cd296080b7e8de30cf7f2269b33003
+  // (234 files, twenty-second-pass amendment above). Superseded 2026-08-27
+  // (twenty-third pass) by Track B Batch 3 (234 files unchanged in count --
+  // procurement-vendor-invoice-matching.sql widened, no file added or
+  // removed). See the class-level doc comment above.
+  dbTestSetSha256: "834154f63adbc87e9e732601ec836ac9a4239835dda75300c892dc3625179fbb",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
