@@ -8728,3 +8728,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit — verification and documentation only, trivially reversible |
 | Status | **`COMPLETED`**. `RGL-410` `VERIFIED`. `RGL-411` (Release Go-Live Documentation Handoff, `CG-S16-RGL-021`, Prompt 411) next per the Step 16 WBS |
 | Date | 2026-08-28 |
+
+### CHG-2026-279 — `RGL-411` (Release Go-Live Documentation Handoff, `CG-S16-RGL-021`): release notes authored, all reconciliation items current, Step 17 eligibility blocker named
+
+| Field | Value |
+|---|---|
+| Task/prompt | `CG-S16-RGL-021` (Prompt 411, Release Go-Live Documentation Handoff) — the Step 16 WBS row immediately following `RGL-410` (Release Go-Live Integrated Verification, `VERIFIED`) |
+| Change type | DOCUMENTATION (new release notes + handoff banner + index/ledger updates) — no code, migration, or contract change |
+| Authorization | The operator's own "jalankan semua step 16" instruction, continuing the Step 16 WBS sequence directly from `RGL-410` |
+| Build process | Reconciled each item Prompt 411 §4 names (release notes, runbooks, deployment records, support docs, customer communication, known issues, rollback/resume, Step 17 handoff) against `RGL-410`'s own fresh, single-checkpoint evidence. Authored the one genuinely missing artifact — `docs/build-log/release-go-live/RELEASE_NOTES.md`, populated from `docs/templates/RELEASE_NOTES_TEMPLATE.md`'s own 8-section structure with real, cited content, no placeholder left unfilled. Re-checked the execution index §2.1 "no deployed environment" stale-fact propagation directly (a repository-wide search, not an assumption) — found already complete across `RGL-391`'s own kickoff correction and every checkpoint's ongoing discipline since; no further edit needed. Corrected `TASK_LEDGER.md` row `CG-S16-RGL-022`'s own stale claim that `RGL-BLK-009`/`010` remain open — both are now fixed/re-ruled-down per `BLOCKER_LEDGER.md`, only `RGL-BLK-001` remains genuinely open |
+| Findings and disposition | No new defect found. The one substantive addition: a new `docs/runtime/HANDOFF.md` §0.-1 banner stating explicitly, for the first time in one place, that Step 17 cannot become eligible while `RGL-BLK-001` remains armed (execution-index §13 condition 3), and naming the two honest paths forward (get the mechanism genuinely fixed, or obtain a fresh explicit operator ruling on how `RGL-412` should treat an unresolved non-negotiable-gate failure) |
+| Files edited | `docs/build-log/release-go-live/RELEASE_NOTES.md` (new); `docs/build-log/release-go-live/RGL-411.md` (new); `docs/runtime/HANDOFF.md` (new §0.-1 banner); `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` (§5 row 21); `docs/runtime/CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md` (rows `CG-S16-RGL-021`/`022`) |
+| Migration | None |
+| Risk | None — documentation only, no live system mutated |
+| Scope justification | Direct execution of the next eligible Step 16 WBS row per the operator's own standing instruction |
+| Gates | `pnpm run docs:check`: green. No code changed, so `typecheck`/`lint`/`test`/`db:test` are unaffected — the immediately-preceding checkpoint (`RGL-410`) already recorded a clean full gate run |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
+| Status | **`COMPLETED`**. `RGL-411` `VERIFIED`. `RGL-412` (Release Go-Live Closure Verification, `CG-S16-RGL-022`, Prompt 412) next per the Step 16 WBS — the final task in this range |
+| Date | 2026-08-28 |
