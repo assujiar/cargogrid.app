@@ -1063,6 +1063,52 @@ import { readFileSync } from "node:fs";
  * before this digest was changed, and applied to the live hosted project
  * via `apply_migration` immediately after this local run passed; every
  * new/changed grant and function body live-verified correct.
+ *
+ * AMENDED 2026-08-28 (twenty-fifth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md §12,
+ * items 42-47 (Track B, Batch 5 -- `perf-load-evidence` +
+ * `docs-consistency` + `iae-hardening-residual` + `accessibility` +
+ * `browser-compat`). Two migrations added (366 -> 368 files: +2):
+ * `20260828090000_harden_ai_governed_action_region_capability_consult.sql`
+ * (ISS-2026-152: `app.request_ai_governed_action` now consults the
+ * region/service-capability matrix at dispatch time, same signature, zero
+ * behavior change for the default `apac` case) and
+ * `20260828100000_harden_enterprise_idp_domain_lookup_rate_limit.sql`
+ * (ISS-2026-149: `app.resolve_enterprise_idp_by_email_domain`, escalated
+ * in severity during verification since RGL-394's own `public.*` wrapper
+ * layer made it a real, live, anon-reachable endpoint after this entry
+ * was written, gains a `client_key`-scoped rate limiter mirroring
+ * `app.lookup_public_shipment_tracking`'s own established shape --
+ * `DROP`+`CREATE`, never a bare `CREATE OR REPLACE` with an added
+ * parameter, taxonomy class C-29). A third draft
+ * (`retention_class`/`legal_hold` columns on 6 Loyalty ledger tables,
+ * ISS-2026-142) was deleted before being applied anywhere after this
+ * batch's own integration pass found the true scope (registry.ts entries
+ * + an enforcement mechanism + db-test coverage, none of which the draft
+ * itself had) exceeds the entry's own bounded-fix assessment -- its own
+ * timestamp slot (`20260828080000`, which briefly collided with a
+ * sibling draft from the same research pass) was freed by the deletion,
+ * not reused. dbTestSetSha256 changed (234 files unchanged in count -- 2
+ * existing files widened, no file added or removed):
+ * `scripts/db-tests/ai-governance-provider-boundary.sql` gained a new
+ * block proving the default-region case is unaffected, an
+ * unsupported-with-no-exception dispatch is refused, and an
+ * unsupported-with-a-real-exception dispatch succeeds and is
+ * audit-tagged; `scripts/db-tests/enterprise-iam-sso-scim.sql` gained a
+ * new block proving the client_key-scoped rate limit (10 not-found
+ * lookups rate-limit the 11th for one client_key, a distinct client_key
+ * unaffected) plus updated its 3 pre-existing call sites and its own
+ * schema-privilege regression to the new 2-parameter signature.
+ * `scripts/load-tests/pagination-explain.sh`/`pgbench/claim-next-job.sql`
+ * and 19 accessibility component files under `app/(tenant)/[tenantSlug]/`
+ * are also part of this batch but fall outside either tracked set (load
+ * scripts are not `scripts/db-tests/`; component files are not
+ * migrations or db-tests) and so do not affect either digest. Re-verified
+ * via a fresh full local db-test suite run (368 migrations, 234 runner
+ * files, ALL PASSED) before this digest was changed, and applied to the
+ * live hosted project via `apply_migration` immediately after this local
+ * run passed; every new/changed grant and function body live-verified
+ * correct.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1198,8 +1244,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (twenty-fourth pass) by Track B Batch 4's ISS-2026-116/117/124/128/133/
   // 134/137 fixes (366 files: +7, 20260827140000, 20260828000000,
   // 20260828030000, 20260828040000, 20260828050000, 20260828060000,
-  // 20260828070000). See the class-level doc comment above.
-  migrationSetSha256: "9a1fecf2af2f4ab64f64b67a10d4773b3979ab0711c457dcab3587dba09541c9",
+  // 20260828070000).
+  // History: 9a1fecf2af2f4ab64f64b67a10d4773b3979ab0711c457dcab3587dba09541c9
+  // (366 files, twenty-fourth-pass amendment above). Superseded 2026-08-28
+  // (twenty-fifth pass) by Track B Batch 5's ISS-2026-149/152 fixes
+  // (368 files: +2, 20260828090000, 20260828100000). See the class-level
+  // doc comment above.
+  migrationSetSha256: "afbf205da403b240c532b861aac219391f790024aa56254fbc751f3e1b0553e3",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1342,9 +1393,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // customer-loyalty-liability-reconciliation.sql, customer-loyalty-
   // membership-tier.sql, customer-loyalty-points-ledger.sql, customer-
   // portal-loyalty-ledger-supreme-admin-override.sql, and customer-portal-
-  // scope.sql all widened, no file added or removed). See the class-level
-  // doc comment above.
-  dbTestSetSha256: "3e48578beba727ba14b0bae623f3da0abf258d5ed528377537438f7900bed688",
+  // scope.sql all widened, no file added or removed).
+  // History: 3e48578beba727ba14b0bae623f3da0abf258d5ed528377537438f7900bed688
+  // (234 files, twenty-fourth-pass amendment above). Superseded 2026-08-28
+  // (twenty-fifth pass) by Track B Batch 5 (234 files unchanged in count --
+  // ai-governance-provider-boundary.sql and enterprise-iam-sso-scim.sql
+  // both widened, no file added or removed). See the class-level doc
+  // comment above.
+  dbTestSetSha256: "a71e939f07a16879b52d744324231cbab3436a8529ec2a07d80ae14ac827528b",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
