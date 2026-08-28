@@ -1109,6 +1109,53 @@ import { readFileSync } from "node:fs";
  * live hosted project via `apply_migration` immediately after this local
  * run passed; every new/changed grant and function body live-verified
  * correct.
+ *
+ * AMENDED 2026-08-28 (twenty-sixth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/build-log/release-go-live/RGL-404.md §12,
+ * items 48-59 (Track B, Batch 6 -- `rbac-defense-in-depth` +
+ * `support-access-audit` + `rls-own-row-narrowing` +
+ * `step-up-mfa-enforcement` + `observability-alerting` +
+ * `db-test-flakiness` + `ticketing-links-gaps` + `perf-cache-safety`).
+ * Four migrations added (368 -> 372 files: +4):
+ * `20260828110000_harden_support_session_gates_active_grant.sql`
+ * (ISS-2026-187+188: `app.has_active_support_grant` now also requires a
+ * live, open `support_access_sessions` row for the grant, closing both
+ * the reauth-bypass and the end-session-is-a-no-op gaps with one fix);
+ * `20260828111000_harden_support_session_open_audit_trail.sql`
+ * (ISS-2026-177: `app.start_support_session` now also writes a canonical
+ * `app.audit_logs` entry on a genuine new session);
+ * `20260828121000_harden_shared_record_scope_primitives_actor_identity.sql`
+ * (ISS-2026-186 partial: 3 of the ~14 candidates re-derived as genuinely
+ * self-referential-only gain the established assert-first pattern; 6
+ * remain genuinely open); and
+ * `20260828140000_harden_customer_ticket_links_entity_id_registry_
+ * redaction.sql` (ISS-2026-102: `app.list_customer_ticket_links` redacts
+ * `entity_id` to a fixed nil-UUID marker for any row whose `entity_type`
+ * falls outside the customer-safe registry). Two self-caught regressions
+ * found and fixed during this batch's own db-tests run before anything
+ * was applied live -- a hardcoded row-count assertion that didn't account
+ * for a function being called twice in the same fixture, and a
+ * wiring-check regex anchored on a dollar-quote tag `pg_get_functiondef()`
+ * never actually produces (it renders `$function$`, not `$$`) -- both
+ * fixed in the db-test files themselves, not the migrations.
+ * dbTestSetSha256 changed (234 files unchanged in count -- 5 existing
+ * files widened, no file added or removed): `scripts/db-tests/support-
+ * access.sql` (section 8 updated for the new session-gate semantics),
+ * `audit-trail.sql` (new session-open audit-event proof),
+ * `rbac-enforcement.sql` (position-aware wiring check + live two-session
+ * forced-spoof proof for the 3 newly-fixed primitives), `hris-kpi-
+ * performance.sql` (new RLS contrast proof for ISS-2026-190, a stale
+ * finding requiring no code fix), and `ticketing-linked-records.sql`
+ * (new section 20 proving the entity_id redaction). `.github/workflows/
+ * ci.yml` and `package.json` also changed (new `security:check-rls-
+ * initplan` CI step, closing ISS-2026-240's finding that no such guard
+ * existed as committed tooling) but fall outside either tracked set.
+ * Re-verified via a fresh full local db-test suite run (372 migrations,
+ * 234 runner files, ALL PASSED, third attempt after the two self-caught
+ * fixes above) before this digest was changed, and applied to the live
+ * hosted project via `apply_migration` immediately after this local run
+ * passed; every new/changed grant and function body live-verified
+ * correct.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1250,7 +1297,15 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (twenty-fifth pass) by Track B Batch 5's ISS-2026-149/152 fixes
   // (368 files: +2, 20260828090000, 20260828100000). See the class-level
   // doc comment above.
-  migrationSetSha256: "afbf205da403b240c532b861aac219391f790024aa56254fbc751f3e1b0553e3",
+  // History: afbf205da403b240c532b861aac219391f790024aa56254fbc751f3e1b0553e3
+  // (368 files, twenty-fifth-pass amendment above). Superseded 2026-08-28
+  // (twenty-sixth pass) by Track B Batch 6's ISS-2026-187/188/177/186/102
+  // fixes (372 files: +4, 20260828110000_harden_support_session_gates_
+  // active_grant.sql, 20260828111000_harden_support_session_open_audit_
+  // trail.sql, 20260828121000_harden_shared_record_scope_primitives_actor_
+  // identity.sql, 20260828140000_harden_customer_ticket_links_entity_id_
+  // registry_redaction.sql). See the class-level doc comment above.
+  migrationSetSha256: "ac5fba0df49a0777dc05745dbf00ab2b706ce3cd8040cdddaf7a72cc70cd5ef0",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1400,7 +1455,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ai-governance-provider-boundary.sql and enterprise-iam-sso-scim.sql
   // both widened, no file added or removed). See the class-level doc
   // comment above.
-  dbTestSetSha256: "a71e939f07a16879b52d744324231cbab3436a8529ec2a07d80ae14ac827528b",
+  // History: a71e939f07a16879b52d744324231cbab3436a8529ec2a07d80ae14ac827528b
+  // (234 files, twenty-fifth-pass amendment above). Superseded 2026-08-28
+  // (twenty-sixth pass) by Track B Batch 6 (234 files unchanged in count --
+  // support-access.sql, audit-trail.sql, rbac-enforcement.sql,
+  // hris-kpi-performance.sql, and ticketing-linked-records.sql all
+  // widened, no file added or removed). See the class-level doc comment
+  // above.
+  dbTestSetSha256: "9c6faf9a551c36165bd90836eab1e9a84ddafac8be8397b958d9be9c260cec3e",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
