@@ -627,4 +627,68 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-152 (Track B Batch 5): app.request_ai_governed_action now consults IAE-033''s own region/service-capability matrix at dispatch time -- an ordinary (default apac, fully supported) tenant is completely unaffected; a tenant driven to a real dedicated deployment + active emea region assignment with NO ai_provider exception on file is refused; the identical tenant, once a real accepted-risk exception is on file, dispatches successfully and the captured audit event carries a non-null region_capability_exception_id'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug = 'iaeaigov');
+  v_connection_id uuid := (select id from app.integration_connections where tenant_id = (select id from app.tenants where slug = 'iaeaigov') and adapter_code = 'openai_multimodal');
+  v_rep uuid := '00000000-0000-0000-0000-000021000002';
+  v_assignment_id uuid;
+  v_request app.ai_governed_requests;
+  v_detail jsonb;
+begin
+  -- Baseline (unaffected): this tenant has no dedicated deployment/region
+  -- assignment at all -- app.resolve_tenant_region already defaults it to
+  -- 'apac', fully supported for every category -- so dispatch behaves exactly
+  -- as before this checkpoint's own migration.
+  v_request := app.request_ai_governed_action(v_tenant, v_connection_id, 'region_baseline_probe', null, null, jsonb_build_object('origin', 'baseline'), v_rep, 'rep');
+  select after_value into v_detail from app.audit_logs where resource_id = v_request.id and action = 'request_ai_governed_action' order by occurred_at desc limit 1;
+  if v_detail ->> 'region' <> 'apac' or v_detail ->> 'region_capability_exception_id' is not null then
+    raise exception 'assertion failed: expected the default-region baseline case to resolve region=apac with a null region_capability_exception_id, got %', v_detail;
+  end if;
+
+  -- Disclosed fixture shortcut (mirrors customer-loyalty-redemption.sql's own
+  -- documented "direct insert, not the real approval RPC chain" convention):
+  -- this block is about app.request_ai_governed_action's OWN region-consult
+  -- logic, not IAE-032/033's own already-covered dedicated-deployment/region-
+  -- assignment approval chain -- so the precondition state is seeded directly
+  -- rather than composed through app.request_dedicated_deployment_
+  -- qualification/app.approve_region_assignment's own multi-step RBAC-gated
+  -- flow.
+  insert into app.tenant_deployment_records (tenant_id, status, qualification_reason, created_by, approved_by)
+  values (v_tenant, 'active', 'ISS-2026-152 regression fixture', 'tester', 'tester');
+  insert into app.tenant_region_assignments (tenant_id, region_code, status, qualification_reason, approved_by, approved_at, activated_at, created_by)
+  values (v_tenant, 'emea', 'active', 'ISS-2026-152 regression fixture', 'tester', now(), now(), 'tester')
+  returning id into v_assignment_id;
+
+  if app.resolve_tenant_region(v_tenant) <> 'emea' then
+    raise exception 'assertion failed: fixture error -- expected app.resolve_tenant_region to resolve emea once a real active dedicated deployment + region assignment exist';
+  end if;
+  if (select supported from app.region_service_capabilities where region_code = 'emea' and service_category = 'ai_provider') then
+    raise exception 'assertion failed: fixture error -- this regression is only meaningful while emea/ai_provider is genuinely unsupported';
+  end if;
+
+  -- No exception on file yet -- refused, not silently allowed.
+  begin
+    perform app.request_ai_governed_action(v_tenant, v_connection_id, 'region_unsupported_probe', null, null, jsonb_build_object('origin', 'emea'), v_rep, 'rep');
+    raise exception 'assertion failed: expected ai_governed_action_region_capability_unsupported with no exception on file, the call unexpectedly succeeded';
+  exception when check_violation then
+    if sqlerrm !~ 'ai_governed_action_region_capability_unsupported' then raise; end if;
+  end;
+
+  -- A real, approved accepted-risk exception on file -- dispatch now succeeds,
+  -- and the audit event is genuinely traceable as operating under it.
+  insert into app.region_capability_exceptions (region_assignment_id, service_category, reason, approved_by, approved_at)
+  values (v_assignment_id, 'ai_provider', 'ISS-2026-152 regression fixture: accepted risk', 'tester', now());
+
+  v_request := app.request_ai_governed_action(v_tenant, v_connection_id, 'region_exception_probe', null, null, jsonb_build_object('origin', 'emea'), v_rep, 'rep');
+  select after_value into v_detail from app.audit_logs where resource_id = v_request.id and action = 'request_ai_governed_action' order by occurred_at desc limit 1;
+  if v_detail ->> 'region' <> 'emea' or v_detail ->> 'region_capability_exception_id' is null then
+    raise exception 'assertion failed: expected region=emea with a non-null region_capability_exception_id once a real exception is on file, got %', v_detail;
+  end if;
+
+  raise notice 'ISS-2026-152 region/capability-matrix regression proof: default-region dispatch unaffected, unsupported-with-no-exception refused, unsupported-with-a-real-exception succeeds and is audit-tagged';
+end;
+$$;
+
 \echo '>> ai-governance-provider-boundary.sql: ALL PASSED'

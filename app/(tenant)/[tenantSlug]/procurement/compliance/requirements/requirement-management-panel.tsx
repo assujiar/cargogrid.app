@@ -59,7 +59,8 @@ export function RequirementManagementPanel({
         {requirements.length === 0 ? (
           <EmptyState title="No requirements match this view" description="Create a new draft requirement below." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Name</th>
@@ -89,6 +90,7 @@ export function RequirementManagementPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

@@ -77,7 +77,8 @@ export function VehicleSection({
       {vehicles.length === 0 ? (
         <p className="text-sm text-neutral-500">No vehicles registered yet.</p>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="text-left text-xs text-neutral-500">
               <th className="pb-1">Vehicle</th>
@@ -107,6 +108,7 @@ export function VehicleSection({
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className="border-t border-neutral-200 pt-3">
@@ -520,7 +522,8 @@ export function ProviderMappingSection({
       {mappings.length === 0 ? (
         <p className="text-sm text-neutral-500">No provider mappings registered yet.</p>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-sm">
           <thead>
             <tr className="text-left text-xs text-neutral-500">
               <th className="pb-1">Vehicle</th>
@@ -542,6 +545,7 @@ export function ProviderMappingSection({
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className="border-t border-neutral-200 pt-3">
@@ -603,7 +607,8 @@ export function SourcePrioritySection({
       {priorities.length === 0 ? (
         <p className="text-sm text-neutral-500">No per-vehicle overrides set yet.</p>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[420px] text-sm">
           <thead>
             <tr className="text-left text-xs text-neutral-500">
               <th className="pb-1">Vehicle</th>
@@ -625,6 +630,7 @@ export function SourcePrioritySection({
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className="border-t border-neutral-200 pt-3">

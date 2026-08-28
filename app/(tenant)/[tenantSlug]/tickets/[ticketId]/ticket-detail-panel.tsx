@@ -354,7 +354,8 @@ function AssignmentDrawer({
         {candidates.length === 0 ? (
           <p className="text-xs text-neutral-500">No active queue members.</p>
         ) : (
-          <table className="mt-1 w-full border-collapse text-xs">
+          <div className="overflow-x-auto">
+          <table className="mt-1 w-full min-w-[480px] border-collapse text-xs">
             <thead>
               <tr className="text-left text-neutral-500">
                 <th className="p-1">Employee</th>
@@ -376,6 +377,7 @@ function AssignmentDrawer({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

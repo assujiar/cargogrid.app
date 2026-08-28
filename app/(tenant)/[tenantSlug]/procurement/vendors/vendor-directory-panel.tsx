@@ -86,7 +86,8 @@ export function VendorDirectoryPanel({
         {vendors.length === 0 ? (
           <EmptyState title="No vendors match this view" description="Adjust your search/status filter, or register a new vendor below." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Code</th>
@@ -117,6 +118,7 @@ export function VendorDirectoryPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

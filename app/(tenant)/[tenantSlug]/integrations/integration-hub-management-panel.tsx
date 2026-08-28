@@ -52,7 +52,8 @@ export function IntegrationHubManagementPanel({
         {connections.length === 0 ? (
           <EmptyState title="No connections yet" description="Connect an adapter below." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Name</th>
@@ -80,6 +81,7 @@ export function IntegrationHubManagementPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
