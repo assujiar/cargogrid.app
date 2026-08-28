@@ -275,7 +275,7 @@ prompt's own header fixes; additional required outputs are named where the promp
 | 16 | `CG-S16-RGL-016` | `RGL-406` | Post-Deployment Validation | 15 | Live production (real) | `RGL-404.md` §12A (no separate `RGL-406.md` — recorded as an addendum) | `POST_DEPLOYMENT_VALIDATED` | triggers `RGL-407` on failure | **`POST_DEPLOYMENT_VALIDATED`** (2026-08-27; re-confirmed live at `RGL-407`, 2026-08-28, against the current production state) |
 | 17 | `CG-S16-RGL-017` | `RGL-407` | Rollback Decision | 16 | Repository + Vercel/Supabase (real) | `RGL-407.md`, `docs/runbooks/deployment-rollback.md` (serves this row's own planned `ROLLBACK_DECISION_TREE.md` name — see §12) | authority-bound | is the rollback path | **`VERIFIED`** — no rollback indicated |
 | 18 | `CG-S16-RGL-018` | `RGL-408` | Hypercare | 17 | Repository + live monitoring | `RGL-408.md`, `docs/runbooks/hypercare.md` | `HYPERCARE_ACTIVE` (evidence-backed; escalation-ladder staffing `NOT_YET_STAFFED`, disclosed) | n/a | **`VERIFIED`** — no active incident found |
-| 19 | `CG-S16-RGL-019` | `RGL-409` | Post-Implementation Review | 18 | Repository | `RGL-409.md` | `PIR_COMPLETE` | n/a | `BLOCKED` on 18 |
+| 19 | `CG-S16-RGL-019` | `RGL-409` | Post-Implementation Review | 18 | Repository | `RGL-409.md` | `PIR_COMPLETE` | n/a | **`PIR_COMPLETE`** — delivery/quality/data/performance/adoption/support/incidents reviewed; improvement backlog consolidated; `ISS-2026-284` addressed |
 | 20 | `CG-S16-RGL-020` | `RGL-410` | Release Go-Live Integrated Verification | 19 | All of the above, one lineage | `RGL-410.md`, `RELEASE_READINESS_MATRIX.md` update | none | `git revert` | `BLOCKED` on 19 |
 | 21 | `CG-S16-RGL-021` | `RGL-411` | Release Go-Live Documentation Handoff | 20 | Repository | `RGL-411.md` | none | `git revert` | `BLOCKED` on 20 |
 | 22 | `CG-S16-RGL-022` | `RGL-412` | Release Go-Live Closure Verification | 21 | Independent re-verification of all | `RGL-412.md`, `RELEASE_GO_LIVE_CLOSURE_REPORT.md` | **sets `RELEASE_GO_LIVE_VERIFIED` or a closure state** | `git revert` | `BLOCKED` on 21 |
@@ -705,12 +705,17 @@ humans remains genuinely empty — `NOT_YET_STAFFED`, a real, disclosed, human-o
 cannot close (no tool available can hire, assign, or roster a person into an on-call rotation),
 matching this section's own original honest framing rather than papering over it.**
 
-### 11.5 PIR plan skeleton (owner `RGL-409`)
+### 11.5 PIR plan (owner `RGL-409`, real artifact: `docs/build-log/release-go-live/RGL-409.md`)
 
-Required coverage: delivery (scope vs. actual, the 22-lane record), quality (defect counts by
-severity and origin phase), data, performance, adoption, support, incidents, and an improvement
-backlog with owners. **`ISS-2026-284` (§8.3) is a mandatory PIR input** — a 13-day, 21-checkpoint
-environment-fact drift is exactly the class a PIR exists to surface.
+Every required coverage element from this section's own original skeleton is now addressed: delivery
+(19 of 22 WBS lanes complete, 0 dropped without a recorded disposition), quality (backlog 147 → 102
+across 8 Track B batches, 0 Critical/6 High remaining, a derived origin-phase breakdown), data
+(`ISS-2026-300` migration-ledger drift carried forward, not silently dropped), performance (`RGL-403`
+evidence plus `ISS-2026-297` carried forward), adoption (confirmed still empty), support (two
+Track-C staffing gaps named), incidents (zero this range), and a consolidated improvement backlog
+with owners. **`ISS-2026-284` (§8.3) is addressed directly** (`RGL-409.md` §10) — not as a new fix,
+but as a process defect closed by the demonstrated practice of re-verifying live state at every
+checkpoint since it was found, exactly the mitigation a PIR is meant to confirm took hold.
 
 ---
 
