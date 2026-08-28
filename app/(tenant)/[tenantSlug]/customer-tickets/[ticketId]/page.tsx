@@ -7,6 +7,7 @@ import {
   listCustomerTicketLinks,
   listTicketPortalLinks,
   getTicketSlaStatusForRequester,
+  getTicketEscalationStatusForRequester,
   TicketQueryError,
 } from "../../../../../server/queries/ticketing.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
@@ -50,6 +51,17 @@ import {
  * with no SLA clock started yet (the common case immediately after
  * creation) returns `null`, rendered as an honest "not yet tracked" state,
  * never a fabricated target.
+ *
+ * ISS-2026-101 (Track B Batch 6): `getTicketEscalationStatusForRequester`
+ * (app.get_ticket_escalation_status_for_requester, HRT-291) was built and
+ * already customer-safe (a single `is_escalated` boolean -- decision 12, no
+ * level/target/trigger/hierarchy) but had no real caller reachable by a
+ * genuine `customer_user` -- the only prior call site
+ * (tickets/[ticketId]/page.tsx) is gated to org_user/tenant_admin, never a
+ * customer-channel ticket's own customer. Wired here, mirroring
+ * getTicketSlaStatusForRequester immediately above exactly (same Promise.all
+ * batch, same customer-safe RPC family) -- the TS wrapper already existed,
+ * this is a pure UI-reachability fix, no query/contract change.
  */
 export default async function CustomerTicketDetailPage({ params }: { params: Promise<{ tenantSlug: string; ticketId: string }> }) {
   const { tenantSlug, ticketId } = await params;
@@ -65,15 +77,17 @@ export default async function CustomerTicketDetailPage({ params }: { params: Pro
   let ticketLinks: Awaited<ReturnType<typeof listCustomerTicketLinks>> = [];
   let ticketPortalLinks: Awaited<ReturnType<typeof listTicketPortalLinks>> = [];
   let slaStatus: Awaited<ReturnType<typeof getTicketSlaStatusForRequester>> = null;
+  let escalationStatus: Awaited<ReturnType<typeof getTicketEscalationStatusForRequester>> = null;
 
   try {
     detail = await getCustomerTicket(supabase, ticketId, access.authUserId);
     if (detail) {
-      [messages, ticketLinks, ticketPortalLinks, slaStatus] = await Promise.all([
+      [messages, ticketLinks, ticketPortalLinks, slaStatus, escalationStatus] = await Promise.all([
         listCustomerTicketMessages(supabase, ticketId, access.authUserId, { limit: 200 }),
         listCustomerTicketLinks(supabase, ticketId, access.authUserId),
         listTicketPortalLinks(supabase, ticketId, access.authUserId),
         getTicketSlaStatusForRequester(supabase, ticketId, access.authUserId),
+        getTicketEscalationStatusForRequester(supabase, ticketId, access.authUserId),
       ]);
     }
   } catch (error) {
@@ -99,6 +113,7 @@ export default async function CustomerTicketDetailPage({ params }: { params: Pro
         replyAction={replyToCustomerTicketAction.bind(null, tenantSlug, ticketId)}
         transitionAction={(toStatus) => transitionCustomerTicketStatusAction.bind(null, tenantSlug, ticketId, recordVersion, toStatus)}
         slaStatus={slaStatus}
+        escalationStatus={escalationStatus}
         ticketLinks={ticketLinks}
         searchTicketLinksAction={searchCustomerTicketLinkCandidatesAction.bind(null, tenantSlug, ticketId)}
         linkTicketRecordAction={(entityType, entityId, relationship) => linkCustomerTicketRecordAction.bind(null, tenantSlug, ticketId, entityType, entityId, relationship)}

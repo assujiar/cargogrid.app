@@ -648,6 +648,7 @@ declare
   v_denied_count_before integer;
   v_denied_count_after integer;
   v_link app.ticket_links;
+  v_grant app.support_access_grants;
 begin
   v_ticket := app.create_helpdesk_ticket(v_tenant1, v_category, 'normal', 'high', 'Billing', 'production', null, 'Helpdesk Linking Test', 'body', 'idem-lnk-hd-1', v_admin, 'admin');
 
@@ -673,7 +674,13 @@ begin
   -- A real, live PLT-115 emergency grant (self-authorized by the Supreme
   -- Admin, a genuinely allowed path per app.request_support_access''s own
   -- rule) into lnk1, case-bound (case_id is NOT NULL by construction).
-  perform app.request_support_access(v_tenant1, v_supreme, 'investigating a billing case via helpdesk ticket', 'CASE-LNK-1', 60, 'Supreme', 'read_only', true, v_supreme);
+  -- ISS-2026-187/188 fix (harden_support_session_gates_active_grant.sql):
+  -- app.has_active_support_grant now also requires a live, open
+  -- app.support_access_sessions row under the grant, not the grant alone --
+  -- a grant with no started session must start one before it grants any
+  -- visibility, same as a real support agent would have to.
+  v_grant := app.request_support_access(v_tenant1, v_supreme, 'investigating a billing case via helpdesk ticket', 'CASE-LNK-1', 60, 'Supreme', 'read_only', true, v_supreme);
+  perform app.start_support_session(v_grant.id, now(), 'Supreme');
 
   select count(*) into v_candidate_count from app.search_ticket_link_candidates(v_ticket.id, 'shipment', null, v_supreme, 20);
   if v_candidate_count <> 1 then
@@ -1290,6 +1297,93 @@ begin
   end if;
 
   raise notice 'PASS (HRT-295 Tier C, 20260731300000), part 2: the SAME genuine forged customer session both creates a new link AND re-reads the full list (2 rows: staff-created genericized, customer-created real label) -- durable across repeated real-session reads, never a first-call artifact';
+end;
+$$;
+
+-- ===========================================================================
+-- ISS-2026-102 (Track B Batch 6, supabase/migrations/20260828140000): a
+-- customer reading app.list_customer_ticket_links still saw the REAL
+-- entity_id (and entity_type) for a link whose type is outside the
+-- customer-safe registry (vendor/user) -- label/detail were already
+-- correctly withheld for these rows, but the raw internal id was not.
+-- ===========================================================================
+
+\echo '>> 20. ISS-2026-102 fix: app.list_customer_ticket_links redacts entity_id to the fixed nil-UUID marker for an out-of-registry link type (vendor/user); entity_type stays visible; the staff-facing app.list_ticket_links is unaffected and keeps returning the real id'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lnk1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'GENERAL');
+  v_admin uuid := '00000000-0000-0000-0000-000000292101';
+  v_customer1 uuid := '00000000-0000-0000-0000-000000292110';
+  v_account_a uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Lnk Customer A');
+  v_vendor_id uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'Lnk Vendor One');
+  v_req1_user_id uuid := (select id from app.users where tenant_id = v_tenant1 and email = 'req1@lnk1.test');
+  v_nil_uuid constant uuid := '00000000-0000-0000-0000-000000000000';
+  v_ticket app.tickets;
+  v_vendor_link app.ticket_links;
+  v_user_link app.ticket_links;
+  v_customer_vendor_row record;
+  v_customer_user_row record;
+  v_staff_vendor_row record;
+begin
+  v_ticket := app.create_customer_ticket(v_tenant1, v_account_a, v_category, 'normal', 'ISS-2026-102 Entity ID Redaction Test', 'body', 'idem-lnk-cust-102-1', v_customer1, 'customer1');
+
+  -- Staff is NOT type-restricted when linking (decision 7 of 20260731170000
+  -- scopes the restriction to a customer-layer ACTOR, never staff) -- an
+  -- admin links a real vendor and a real user record to this customer-
+  -- channel ticket, exactly as this finding's own live reproduction did.
+  v_vendor_link := app.link_ticket_record(v_ticket.id, 'vendor', v_vendor_id, 'related', v_admin, 'admin');
+  v_user_link := app.link_ticket_record(v_ticket.id, 'user', v_req1_user_id, 'context', v_admin, 'admin');
+
+  -- Customer-facing read: entity_id redacted to the nil-UUID marker for
+  -- BOTH out-of-registry rows; entity_type stays the real category; label/
+  -- detail/status_label were already correctly withheld before this fix
+  -- (re-asserted here, not merely assumed, so a future regression in
+  -- app._ticket_link_resolve_candidate's own customer-layer gating would
+  -- also be caught by this same section).
+  select * into v_customer_vendor_row from app.list_customer_ticket_links(v_ticket.id, v_customer1) where id = v_vendor_link.id;
+  if v_customer_vendor_row.entity_id <> v_nil_uuid then
+    raise exception 'FAIL: expected the vendor link''s entity_id redacted to the nil-UUID marker for a customer caller, got %', v_customer_vendor_row.entity_id;
+  end if;
+  if v_customer_vendor_row.entity_id = v_vendor_id then
+    raise exception 'CRITICAL: app.list_customer_ticket_links leaked the real internal vendor entity_id to a customer caller';
+  end if;
+  if v_customer_vendor_row.entity_type <> 'vendor' then
+    raise exception 'FAIL: entity_type must stay visible (a bare category, not a record id), got %', v_customer_vendor_row.entity_type;
+  end if;
+  if v_customer_vendor_row.live_available or v_customer_vendor_row.label is not null or v_customer_vendor_row.status_label <> 'unavailable' then
+    raise exception 'FAIL: expected the pre-existing label/detail/status_label withholding for an out-of-registry type to be unaffected by this fix';
+  end if;
+
+  select * into v_customer_user_row from app.list_customer_ticket_links(v_ticket.id, v_customer1) where id = v_user_link.id;
+  if v_customer_user_row.entity_id <> v_nil_uuid then
+    raise exception 'FAIL: expected the user link''s entity_id redacted to the nil-UUID marker for a customer caller, got %', v_customer_user_row.entity_id;
+  end if;
+  if v_customer_user_row.entity_id = v_req1_user_id then
+    raise exception 'CRITICAL: app.list_customer_ticket_links leaked the real internal user entity_id to a customer caller';
+  end if;
+  if v_customer_user_row.entity_type <> 'user' then
+    raise exception 'FAIL: entity_type must stay visible, got %', v_customer_user_row.entity_type;
+  end if;
+
+  -- A customer-safe-registry row (shipment/invoice/warehouse/customer)
+  -- keeps its own real entity_id -- the redaction is scoped to the
+  -- out-of-registry rows only, never a blanket redaction of every link.
+  perform app.link_ticket_record(v_ticket.id, 'warehouse', (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-LNK1'), 'related', v_admin, 'admin');
+  if (select entity_id from app.list_customer_ticket_links(v_ticket.id, v_customer1) where entity_type = 'warehouse')
+     <> (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-LNK1') then
+    raise exception 'FAIL: a customer-safe-registry link (warehouse) must keep its own real entity_id -- redaction must not widen beyond the out-of-registry rows';
+  end if;
+
+  -- The staff-facing app.list_ticket_links is completely unaffected -- staff
+  -- legitimately need the real entity_id for every link type, including
+  -- vendor/user.
+  select * into v_staff_vendor_row from app.list_ticket_links(v_ticket.id, v_admin) where id = v_vendor_link.id;
+  if v_staff_vendor_row.entity_id <> v_vendor_id then
+    raise exception 'FAIL: app.list_ticket_links (staff-facing) must be unaffected by this fix -- expected the real vendor entity_id, got %', v_staff_vendor_row.entity_id;
+  end if;
+
+  raise notice 'PASS: app.list_customer_ticket_links redacts entity_id to the fixed nil-UUID marker for out-of-registry link types (vendor/user) while keeping entity_type visible and a customer-safe-registry row''s own real entity_id unaffected; app.list_ticket_links (staff-facing) keeps returning the real id unconditionally';
 end;
 $$;
 

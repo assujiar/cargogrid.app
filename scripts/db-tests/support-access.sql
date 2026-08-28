@@ -143,58 +143,24 @@ begin
 end;
 $$;
 
-\echo '>> support_access_gated: now that CASE-100 is approved, RLS admits the support agent into the tenant (layering, not a permission grant -- email stays masked, since they hold no View personal data permission; can_access_record still denies on ownership)'
+\echo '>> ISS-2026-187: an approved grant with no session EVER started grants zero access -- reauthorization/session-start is no longer bypassable; app.has_active_support_grant now requires a live, open app.support_access_sessions row under the grant, not the grant alone'
 do $$
 declare
   v_tenant_id uuid;
-  v_after_count integer;
-  v_masked_email text;
-  v_masked_flag boolean;
-  v_owner_id uuid;
-  v_can_access boolean;
-begin
-  v_tenant_id := (select id from app.tenants where slug = 'acmesup');
-  v_owner_id := '00000000-0000-0000-0000-000000000701';
-
-  set local role authenticated;
-  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000703", "role": "authenticated"}';
-  select count(*) into v_after_count from app.tenants where id = v_tenant_id;
-  reset role;
-  if v_after_count <> 1 then
-    raise exception 'assertion failed: expected the support agent to see the tenant row now that their grant is approved (support_access_gated layering onto has_active_tenant_membership), saw %', v_after_count;
-  end if;
-
-  set local role authenticated;
-  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000703", "role": "authenticated"}';
-  select email, email_masked into v_masked_email, v_masked_flag from app.users_directory where auth_user_id = v_owner_id;
-  reset role;
-  if v_masked_flag is not true then
-    raise exception 'assertion failed: a support grant must not silently unmask PII -- expected email_masked=true for the support agent (no View personal data permission), got %', v_masked_flag;
-  end if;
-
-  -- can_access_record still denies: the grant satisfies only the tenant-membership
-  -- prerequisite, not ownership/team-share/customer-scope -- "layers over, does not bypass"
-  -- (Prompt 115 §26), proven directly against PLT-114's evaluator.
-  v_can_access := app.can_access_record('00000000-0000-0000-0000-000000000703', v_tenant_id, v_owner_id);
-  if v_can_access then
-    raise exception 'assertion failed: expected a support grant to satisfy can_access_record''s tenant-membership prerequisite only, still denying on ownership -- got granted';
-  end if;
-end;
-$$;
-
-\echo '>> cross-tenant: a grant into tenant A does not leak visibility into tenant B'
-do $$
-declare
-  v_other_tenant_id uuid;
   v_count integer;
 begin
-  v_other_tenant_id := (select id from app.tenants where slug = 'gizmosup');
+  v_tenant_id := (select id from app.tenants where slug = 'acmesup');
+
+  if app.has_active_support_grant(v_tenant_id, '00000000-0000-0000-0000-000000000703') then
+    raise exception 'assertion failed: expected has_active_support_grant to be false for an approved grant with no session ever started (ISS-2026-187)';
+  end if;
+
   set local role authenticated;
   set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000703", "role": "authenticated"}';
-  select count(*) into v_count from app.tenants where id = v_other_tenant_id;
+  select count(*) into v_count from app.tenants where slug = 'acmesup';
   reset role;
   if v_count <> 0 then
-    raise exception 'assertion failed: expected the support agent''s tenant-A-scoped grant to grant zero visibility into tenant B, saw %', v_count;
+    raise exception 'assertion failed: expected zero RLS visibility for an approved-but-not-yet-session-started grant, saw %', v_count;
   end if;
 end;
 $$;
@@ -230,6 +196,62 @@ begin
 end;
 $$;
 
+\echo '>> support_access_gated: now that CASE-100 is approved AND a session is open, RLS admits the support agent into the tenant (layering, not a permission grant -- email stays masked, since they hold no View personal data permission; can_access_record still denies on ownership)'
+do $$
+declare
+  v_tenant_id uuid;
+  v_after_count integer;
+  v_masked_email text;
+  v_masked_flag boolean;
+  v_owner_id uuid;
+  v_can_access boolean;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmesup');
+  v_owner_id := '00000000-0000-0000-0000-000000000701';
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000703", "role": "authenticated"}';
+  select count(*) into v_after_count from app.tenants where id = v_tenant_id;
+  reset role;
+  if v_after_count <> 1 then
+    raise exception 'assertion failed: expected the support agent to see the tenant row now that their grant is approved AND a session is open (support_access_gated layering onto has_active_tenant_membership), saw %', v_after_count;
+  end if;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000703", "role": "authenticated"}';
+  select email, email_masked into v_masked_email, v_masked_flag from app.users_directory where auth_user_id = v_owner_id;
+  reset role;
+  if v_masked_flag is not true then
+    raise exception 'assertion failed: a support grant must not silently unmask PII -- expected email_masked=true for the support agent (no View personal data permission), got %', v_masked_flag;
+  end if;
+
+  -- can_access_record still denies: the grant satisfies only the tenant-membership
+  -- prerequisite, not ownership/team-share/customer-scope -- "layers over, does not bypass"
+  -- (Prompt 115 §26), proven directly against PLT-114's evaluator.
+  v_can_access := app.can_access_record('00000000-0000-0000-0000-000000000703', v_tenant_id, v_owner_id);
+  if v_can_access then
+    raise exception 'assertion failed: expected a support grant to satisfy can_access_record''s tenant-membership prerequisite only, still denying on ownership -- got granted';
+  end if;
+end;
+$$;
+
+\echo '>> cross-tenant: a grant (with an open session) into tenant A does not leak visibility into tenant B'
+do $$
+declare
+  v_other_tenant_id uuid;
+  v_count integer;
+begin
+  v_other_tenant_id := (select id from app.tenants where slug = 'gizmosup');
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000703", "role": "authenticated"}';
+  select count(*) into v_count from app.tenants where id = v_other_tenant_id;
+  reset role;
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected the support agent''s tenant-A-scoped grant to grant zero visibility into tenant B, saw %', v_count;
+  end if;
+end;
+$$;
+
 \echo '>> app.current_support_session surfaces the active session for banner/attribution purposes'
 do $$
 declare
@@ -243,6 +265,51 @@ begin
   end if;
   if v_session.ended_at is not null then
     raise exception 'assertion failed: expected the surfaced session to still be open';
+  end if;
+end;
+$$;
+
+\echo '>> ISS-2026-188: ending the open session ALONE blocks access immediately, with no separate revoke_support_access call -- the underlying grant stays approved (session-scoped end, not a grant revocation, matching this migration''s own "may support multiple sequential sessions within its own time window" table comment), and a fresh session on the SAME still-approved grant restores access'
+do $$
+declare
+  v_tenant_id uuid;
+  v_grant_id uuid;
+  v_open_session_id uuid;
+  v_count integer;
+  v_new_session app.support_access_sessions;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmesup');
+  v_grant_id := (select id from app.support_access_grants where tenant_id = v_tenant_id and case_id = 'CASE-100');
+  v_open_session_id := (select id from app.support_access_sessions where grant_id = v_grant_id and ended_at is null);
+
+  perform app.end_support_session(v_open_session_id, 'tester', 'manual_end');
+
+  if (select status from app.support_access_grants where id = v_grant_id) <> 'approved' then
+    raise exception 'assertion failed: expected end_support_session to leave the underlying grant approved (session-scoped end, not a grant revocation)';
+  end if;
+
+  if app.has_active_support_grant(v_tenant_id, '00000000-0000-0000-0000-000000000703') then
+    raise exception 'assertion failed: expected has_active_support_grant to be false immediately after end_support_session, with no separate revoke_support_access call (ISS-2026-188)';
+  end if;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000703", "role": "authenticated"}';
+  select count(*) into v_count from app.tenants where id = v_tenant_id;
+  reset role;
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected RLS visibility to close immediately after end_support_session, saw %', v_count;
+  end if;
+
+  -- The grant survives its first session ending -- a fresh session on the SAME
+  -- still-approved grant restores access, proving end_support_session is
+  -- session-scoped, not a grant-consuming action.
+  v_new_session := app.start_support_session(v_grant_id, now(), 'tester');
+  if v_new_session.id = v_open_session_id then
+    raise exception 'assertion failed: expected a genuinely new session after the prior one ended, got the same session id';
+  end if;
+
+  if not app.has_active_support_grant(v_tenant_id, '00000000-0000-0000-0000-000000000703') then
+    raise exception 'assertion failed: expected access to resume once a fresh session is open on the still-approved grant';
   end if;
 end;
 $$;

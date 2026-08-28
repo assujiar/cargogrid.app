@@ -717,6 +717,34 @@ begin
   raise notice 'OK: mgr1''s raw-table row count above should read exactly 2 (emp1''s + emp2''s outcomes, never the 5 unrelated Big-Dept ones) -- verify against the mgr1_raw_outcome_count output';
 end $$;
 
+\echo '>> Track B Batch 6 (ISS-2026-190 triage): app.performance_calibration_adjustments_select_scoped raw-table RLS proof. mgr1 can see emp1''s OUTCOME directly (proof above -- a real manager-scope branch exists on performance_outcomes), but holds zero HRS:View personal data and must see ZERO rows on this table -- its own policy has NO self/manager branch at all, HR-only by design (HRT-283). A real calibration_adjustments row exists for emp1''s outcome (asserted above at line ~500-505), so this is a genuine contrast proof, not merely "the table happens to be empty". Also confirms the live policy actually reaches app.check_performance_authority (a SECURITY DEFINER wrapper, granted directly to authenticated) rather than the bare SECURITY INVOKER app.evaluate_permission(...) call ISS-2026-190 describes -- a bare invoker call would raise "permission denied for table permissions" for this real authenticated session instead of returning a clean, correctly-scoped zero rows.'
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000028304", "role": "authenticated"}', false);
+set role authenticated;
+select count(*) as mgr1_raw_calibration_adjustment_count from app.performance_calibration_adjustments;
+reset role;
+select set_config('request.jwt.claims', 'null', false);
+do $$
+declare
+  v_emp1_outcome_id uuid;
+begin
+  select o.id into v_emp1_outcome_id
+    from app.performance_outcomes o
+    join app.employees e on e.master_record_id = o.employee_id
+    where e.tenant_id = (select id from app.tenants where slug = 'kpi1')
+      and e.work_email = 'emp1work@kpi1.test';
+
+  -- >= 1, not = 1: emp1's outcome is calibrated twice in this same file (the
+  -- initial calibration at line ~494, then again after the appeal is
+  -- overturned at line ~596) -- app.calibrate_performance_outcome_score
+  -- appends one row per call, never upserts, so 2 real rows is the correct,
+  -- expected count. The proof only needs the table to be genuinely non-empty
+  -- for emp1's outcome, not a specific row count.
+  if (select count(*) from app.performance_calibration_adjustments where outcome_id = v_emp1_outcome_id) < 1 then
+    raise exception 'test setup assumption violated: expected at least 1 real calibration_adjustments row for emp1''s outcome (this proof requires a non-empty table to be meaningful)';
+  end if;
+  raise notice 'OK: mgr1''s raw-table row count above should read exactly 0 (HRS:View personal data is required and mgr1 holds no HRS grant at all -- there is no manager-scope carve-out on this table, unlike performance_outcomes) -- verify against the mgr1_raw_calibration_adjustment_count output';
+end $$;
+
 \echo '>> schema-privilege defense in depth: anon holds zero table privilege on any performance table; authenticated has RLS-scoped SELECT only; internal _-prefixed functions are service_role-only'
 do $$
 declare
