@@ -373,6 +373,79 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-206 regression: app.inventory_movements / app.inventory_reservations reject a source_id that does not resolve to a real row of the type source_type claims, even for a direct raw INSERT bypassing app.post_inventory_movement/app.reserve_inventory entirely; a real, resolvable id and a legitimately-null id (manual/opening_balance) still insert'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmeinv1');
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-INV-1');
+  v_bin_id uuid := (select id from app.warehouse_locations where tenant_id = v_tenant1 and code = 'BIN-1');
+  v_balance_id uuid := (select id from app.inventory_balances where tenant_id = v_tenant1 and warehouse_id = v_warehouse_id and location_id = v_bin_id and status = 'on_hand' limit 1);
+  v_inbound_id uuid := (select id from app.wms_inbound_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-inv-inbound-1');
+  v_reservation_id uuid;
+  v_manual_reservation_id uuid;
+  v_real_movement_id uuid;
+  v_opening_movement_id uuid;
+begin
+  -- app.inventory_reservations: an unresolvable source_id for a resolvable source_type is rejected
+  begin
+    insert into app.inventory_reservations (tenant_id, balance_id, reserved_quantity, source_type, source_id, idempotency_key, created_by)
+    values (v_tenant1, v_balance_id, 1, 'wms_inbound_order', gen_random_uuid(), 'hdn-iss206-orphan-reservation-probe', 'test-fixture');
+    raise exception 'assertion failed: ISS-2026-206 regressed -- expected inventory_reservation_orphan_source for a source_id matching no real app.wms_inbound_orders row';
+  exception
+    when others then
+      if sqlerrm !~ 'inventory_reservation_orphan_source' then
+        raise exception 'assertion failed: expected inventory_reservation_orphan_source, got %', sqlerrm;
+      end if;
+  end;
+
+  -- ... a real, resolvable wms_inbound_order id is accepted
+  insert into app.inventory_reservations (tenant_id, balance_id, reserved_quantity, source_type, source_id, idempotency_key, created_by)
+  values (v_tenant1, v_balance_id, 1, 'wms_inbound_order', v_inbound_id, 'hdn-iss206-real-reservation-probe', 'test-fixture')
+  returning id into v_reservation_id;
+  if v_reservation_id is null then
+    raise exception 'assertion failed: expected a real wms_inbound_order-sourced reservation to insert successfully';
+  end if;
+
+  -- ... a manual reservation with a null source_id is still accepted (this guard only
+  -- validates a NON-null claim actually resolves). Plain top-level INSERT ... RETURNING
+  -- INTO, not a data-modifying CTE nested inside IF NOT EXISTS(...) -- Postgres rejects a
+  -- data-modifying WITH clause anywhere but the top level of a query.
+  insert into app.inventory_reservations (tenant_id, balance_id, reserved_quantity, source_type, source_id, idempotency_key, created_by)
+  values (v_tenant1, v_balance_id, 1, 'manual', null, 'hdn-iss206-manual-reservation-probe', 'test-fixture')
+  returning id into v_manual_reservation_id;
+  if v_manual_reservation_id is null then
+    raise exception 'assertion failed: expected a manual reservation with null source_id to insert successfully';
+  end if;
+
+  -- app.inventory_movements: an unresolvable source_id for a resolvable source_type is rejected
+  begin
+    insert into app.inventory_movements (tenant_id, warehouse_id, movement_type, source_type, source_id, idempotency_key, reason)
+    values (v_tenant1, v_warehouse_id, 'consumption', 'reservation', gen_random_uuid(), 'hdn-iss206-orphan-movement-probe', null);
+    raise exception 'assertion failed: ISS-2026-206 regressed -- expected inventory_movement_orphan_source for a source_id matching no real app.inventory_reservations row';
+  exception
+    when others then
+      if sqlerrm !~ 'inventory_movement_orphan_source' then
+        raise exception 'assertion failed: expected inventory_movement_orphan_source, got %', sqlerrm;
+      end if;
+  end;
+
+  -- ... a real, resolvable reservation id (the one just inserted above) is accepted
+  insert into app.inventory_movements (tenant_id, warehouse_id, movement_type, source_type, source_id, idempotency_key, reason)
+  values (v_tenant1, v_warehouse_id, 'consumption', 'reservation', v_reservation_id, 'hdn-iss206-real-movement-probe', null)
+  returning id into v_real_movement_id;
+  if v_real_movement_id is null then
+    raise exception 'assertion failed: expected a real reservation-sourced movement to insert successfully';
+  end if;
+
+  -- ... an opening_balance movement with a null source_id is still accepted
+  insert into app.inventory_movements (tenant_id, warehouse_id, movement_type, source_type, source_id, idempotency_key, reason)
+  values (v_tenant1, v_warehouse_id, 'opening_balance', 'opening_balance', null, 'hdn-iss206-manual-movement-probe', null)
+  returning id into v_opening_movement_id;
+  if v_opening_movement_id is null then
+    raise exception 'assertion failed: expected an opening_balance movement with null source_id to insert successfully';
+  end if;
+end $$;
+
 \echo '>> app.reverse_inventory_movement: posts a new movement with negated lines, never edits history, rejects double-reversal and reversing a reversal'
 do $$
 declare

@@ -219,6 +219,27 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-213 regression: app.approve_dedicated_deployment_qualification''s deployment_self_approval_forbidden check now denies (fails closed) a NULL created_by_auth_user_id rather than the silent pass-through a bare `=` comparison against a nullable column previously produced -- structurally unreachable via any live caller today (app.request_dedicated_deployment_qualification always writes a real, non-null requester), forced directly here to prove the comparison itself, in isolation, is now deterministic. Reuses tenant iaedep2''s own v_record2_id, which the block above deliberately left still pending_qualification.'
+do $$
+declare
+  v_admin2 uuid := '00000000-0000-0000-0000-000035000004';
+  v_record2_id uuid := (select id from app.tenant_deployment_records where tenant_id = (select id from app.tenants where slug = 'iaedep2'));
+begin
+  if (select status from app.tenant_deployment_records where id = v_record2_id) <> 'pending_qualification' then
+    raise exception 'assertion failed: fixture precondition failed -- expected tenant iaedep2''s own deployment record to still be pending_qualification before this regression''s own direct UPDATE';
+  end if;
+
+  update app.tenant_deployment_records set created_by_auth_user_id = null where id = v_record2_id;
+
+  begin
+    perform app.approve_dedicated_deployment_qualification(v_record2_id, v_admin2, 'admin2');
+    raise exception 'assertion failed: expected deployment_self_approval_forbidden for a NULL created_by_auth_user_id (ISS-2026-213 fail-open regression)';
+  exception when insufficient_privilege then
+    if sqlerrm not like 'deployment_self_approval_forbidden%' then raise; end if;
+  end;
+end;
+$$;
+
 \echo '>> app.set_deployment_provisioning_status: the real, ordered transition graph -- qualified cannot skip straight to active; provisioning cannot skip straight to decommissioned; viewer1 (no Configure) rejected; admin1 (Configure) drives qualified->provisioning->active->decommissioned; app.resolve_tenant_deployment_type flips to dedicated ONLY at active, and back to shared once decommissioned'
 do $$
 declare

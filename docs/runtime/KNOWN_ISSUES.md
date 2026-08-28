@@ -1868,6 +1868,24 @@ database repair. **Owner: `HDN-386`** (Full-System Hardening Integrated Verifica
 first downstream checkpoint positioned to rule on cross-cutting scope questions before Step 16
 go/no-go; forward to `HDN-387`/`389` if `HDN-386` does not resolve it explicitly.
 
+**Re-verified, disposition confirmed accurate, real compensating control found (2026-08-28, Track
+B Batch 7).** Re-confirmed both structural observations still hold on the current schema (no FX
+read anywhere in the revenue chain; `app.calculate_job_profitability` still uses the static
+quote-time figure). Went further than the original disclosure and found a real compensating
+control neither prior pass had named: **both** `app.calculate_job_profitability` bodies (the
+Operations-side function this entry names, and the separately-formula'd Finance-side "billed
+basis" sibling) already detect a currency mismatch between the job's own currency and the figure
+being compared, and set `status = 'unavailable', blocked_reason = 'mixed_currency'` rather than
+silently computing and returning a wrong number. So while true FX conversion genuinely does not
+exist, the specific failure mode this entry's own text worried about most — "a viewer cannot
+mistake the Operations-side planned figure for a final, invoiced margin" under a currency
+mismatch — cannot occur silently today: the function refuses to answer instead. `RPD-016`
+(single-currency-per-tenant as a standing, deliberate product decision) independently confirms
+this is accepted product scope, not an oversight. **Not fixed by this batch** — still genuinely a
+product-scope/BIG-class question (building real multi-currency FX conversion), correctly deferred
+per this entry's own prior disposition. Owner and scope unchanged (`HDN-386`); the newly-found
+`blocked_reason = 'mixed_currency'` compensating control recorded here for the next reader.
+
 ### ISS-2026-198 — `app.prepare_finance_vendor_bill_from_actual_cost`'s idempotency replay lookup had no `status <> 'void'` predicate, silently returning a discarded draft instead of allowing a fresh one (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, Medium, owner `HDN-374`)
 
 **Disclosure correction, not a new fix** — this fix was already shipped, mechanically, inside
@@ -2090,6 +2108,27 @@ larger consistency change than a bounded repair for a Low-severity, already-reco
 gap. **Owner: `HDN-386`** — a documentation/lineage-matrix note at minimum, a JSONB-shape
 addition if judged worth the cross-domain touch.
 
+**`RESOLVED`, bounded to the one write site (2026-08-28, Track B Batch 7,
+`supabase/migrations/20260828150000_harden_job_order_snapshot_source_lineage.sql`).**
+`app.prepare_job_order` now looks up `app.quotations.version_number` for the job order's
+`quotation_id` and merges `{"quotationId": ..., "quotationVersion": ...}` into 4 of the 5
+named snapshot columns at the one INSERT site — `customer_snapshot`, `cargo_service_
+snapshot`, `revenue_snapshot`, `acceptance_snapshot` (`contract_snapshot`/`credit_snapshot`
+left untouched — neither carries quotation-derived data by design). This closes exactly the
+Low-severity gap this entry itself scoped ("a reader given only the raw snapshot JSONB in
+isolation... cannot self-trace its own source version") without the larger cross-domain
+JSONB-shape change the entry's own prior disposition worried about — no existing reader of
+these columns is touched, since the new keys are additive. Drafted first against a stale
+base body (missing `OPS-186`'s own record-scope check and `HDN-387`/`ISS-2026-163`'s own
+`unique_violation` re-raise fix, both from later redefinitions); caught via `scripts/db-
+tests/operations-security-financial-hardening.sql`'s own pre-existing regression failing,
+and rewritten on the true current body with both later fixes preserved verbatim.
+`CREATE OR REPLACE`, byte-identical signature; no `public.*` wrapper update needed (pure
+body-only change). Regression: `scripts/db-tests/operations-job-order.sql`, new block
+proving the merged keys on a real `prepare_job_order` call. Live-verified: `SECURITY
+DEFINER`, `search_path` pinned, grants unchanged. Full `db-tests` suite re-run clean.
+Owner: closed.
+
 ### ISS-2026-204 — `app._calc_vendor_kpi_rate_validity`'s day-window generation can silently misreport a genuinely non-empty window as zero calendar days when the window spans less than 24h and straddles a specific hour-of-day boundary (found incidentally at `CG-S15-HDN-007`'s own Tier A gate run, `OPEN`, Medium, owner `HDN-387`, not this checkpoint's own charter)
 
 Found incidentally, not by any of `HDN-375`'s own four investigation lenses (Data
@@ -2247,6 +2286,30 @@ already passes a resolvable id, THEN add the same `BEFORE INSERT OR UPDATE` vali
 trigger pattern — updating any test fixture that currently relies on a synthetic
 non-resolving id to use a real one, rather than working around the new guard.
 
+**`PARTIALLY RESOLVED` (2026-08-28, Track B Batch 7,
+`supabase/migrations/20260828151000_harden_inventory_movement_reservation_source_lineage.sql`).**
+Closed 2 of the 4 named tables — the ones this entry's own text flagged as only
+"code-shape-inspected, not live-forced or call-site-audited," and which turned out, on a
+real call-site audit, to have no legitimate synthetic-id caller: `app.inventory_movements`
+and `app.inventory_reservations`. Two new `BEFORE INSERT OR UPDATE` trigger functions —
+`app.validate_inventory_movement_source()`/`app.validate_inventory_reservation_source()` —
+resolve each polymorphic `source_type`/`source_id` pair against its real target table,
+mirroring `ISS-2026-202`'s own proven pattern exactly. The other 2 named tables were
+explicitly re-investigated and confirmed, not merely re-asserted, to still be genuinely
+NOT bounded-repair-sized: `app.finance_subledger_batches.source_id` and `app.finance_bank_
+transactions.matched_source_id` both break established, deliberate test fixtures
+(`scripts/db-tests/finance-subledger.sql`'s own ~15 isolated-posting-primitive call sites
+using `gen_random_uuid()` on purpose) exactly as this entry's own text already found —
+re-confirmed here rather than re-attempted, since nothing about the underlying test design
+has changed since the original finding. Regression: `scripts/db-tests/advanced-tms-
+inventory-ledger.sql`, new blocks proving a real movement/reservation still inserts cleanly
+and an unresolvable synthetic `source_id` is now denied. `CREATE OR REPLACE`-free (both are
+new trigger functions, no existing function body touched); no `public.*` wrapper needed
+(trigger functions, never externally callable). Live-verified: both `SECURITY DEFINER`,
+`search_path` pinned, `service_role`-only. Full `db-tests` suite re-run clean. **Status
+stays `OPEN`, Medium** — 2 of 4 tables remain genuinely unfixed for the reasons already on
+record. Owner unchanged (`HDN-387`), scope narrowed to the 2 finance tables named above.
+
 ### ISS-2026-207 — `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests (found at `CG-S15-HDN-008`, `OPEN`, Medium, owner `HDN-387`)
 
 Found by this checkpoint's own public/customer/vendor API lens, live-forced. `app.api_
@@ -2272,6 +2335,21 @@ additive change (~2-3 files: `lib/api-gateway/authenticate.server.ts`, `server/
 mutations/public-api-platform.ts`, possibly `server/contracts/api/api.ts`) but requires
 an explicit ruling on when/whether to enforce it (per `00_EXECUTION_INDEX.md` §8.2's
 accepted-risk process) rather than a same-session bounded repair. **Owner: `HDN-387`.**
+
+**Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 7).**
+Re-live-forced the exact same probe: `v1` marked `deprecated` then `sunset`, gateway RPC
+called with an otherwise-valid key — still `outcome=ok`, no header change, confirming
+nothing has drifted since the original finding. Considered whether a bounded, additive
+wiring fix (checking `app.api_versions.status` inside the gateway RPC, without yet
+deciding the enforcement *semantics* — block vs. warn vs. header-only) could be drafted
+this batch regardless of the open ruling question. Rejected: any wiring at all forces an
+implicit enforcement-semantics choice (does `sunset` block the request or merely
+annotate it?), which is exactly the accepted-risk-process ruling this entry's own prior
+disposition correctly identified as needed first — a batch draft cannot make that ruling
+on the operator's behalf without risking a real behavior change to `v1` traffic (the only
+version that has ever existed) on a guess. **Not fixed by this batch** — same reasoning
+as the original disposition, re-confirmed rather than assumed. Owner and scope unchanged
+(`HDN-387`).
 
 ### ISS-2026-208 — `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every sibling Vendor API mutation (found at `CG-S15-HDN-008`, `OPEN`, Low, owner `HDN-387`)
 
@@ -2300,6 +2378,17 @@ fix did. A genuine fix needs a new parameter and its own column/index design, no
 of an existing pattern — a design decision, not a bounded repair. **Severity: Low** —
 the core "no duplicate transaction" business rule already holds; this is solely a retry-
 ergonomics improvement. **Not fixed here. Owner: `HDN-387`.**
+
+**Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 7).**
+Re-confirmed `app.vendor_assignment_invitations.idempotency_key`'s existing unique index
+is still scoped to creation-time dedup only (no accept/decline-time reads of it anywhere
+in the current migration set), and that no other Vendor API mutation added since the
+original finding follows a different pattern that could be reused instead. The core rule
+this entry itself already confirmed — no duplicate transaction is possible today, purely
+a retry-ergonomics gap — still holds under re-test (same accept-then-replay probe,
+same `stale_version` 409 result). **Not fixed by this batch** — still requires the new
+column/index design this entry's own prior disposition already correctly scoped as a
+design decision, not a mechanical pattern copy. Owner and scope unchanged (`HDN-387`).
 
 ### ISS-2026-209 — `app.verify_third_party_provider_webhook_signature` returned SQL NULL (not `false`) for a null signature, so `if not verify_...()` silently accepted a fully unsigned inbound GPS webhook as genuine (found and fixed at `CG-S15-HDN-008`, `RESOLVED` at `HDN-376`, Critical)
 
@@ -2439,6 +2528,28 @@ return/raise &lt;deny&gt;; end if;` before the equality check) across all 6, plu
 regression test per function proving a (structurally-unreachable-today but
 future-proofed) NULL actor is denied rather than silently passing.
 
+**`RESOLVED` (2026-08-28, Track B Batch 7,
+`supabase/migrations/20260828160000_harden_self_approval_null_actor_fail_open.sql`).**
+Chose a tighter idiom than the entry's own suggested "deny-if-either-side-is-null" shape:
+`coalesce(&lt;nullable_actor_column&gt; = p_actor_auth_user_id, true)` — already the
+established pattern immediately adjacent in `app.decide_approval_step`/`app.
+approve_region_assignment` before this fix, now made consistent across all 6 named
+functions (`app.decide_approval_step`, `app.approve_cycle_count_variance`, `app.
+reject_cycle_count_variance`, `app.approve_dedicated_deployment_qualification`, `app.
+approve_region_assignment`, `app.approve_warehouse_billing_event`): "if we cannot
+determine this is NOT a self-approval, treat it as one." Drafted first against a stale
+base body for `app.approve_warehouse_billing_event` (missing `ATW-032`/`ISS-2026-034`'s
+own lost-update guard from a later redefinition); caught proactively via the same
+exhaustive-redefinition-search discipline `ISS-2026-203`'s regression exposed earlier in
+this same batch, and corrected before the migration was ever applied. `CREATE OR
+REPLACE`, byte-identical signatures; `public.*` wrappers unaffected (pure body-only
+changes). Regression: new blocks across `scripts/db-tests/advanced-tms-cycle-count-
+adjustment.sql`, `advanced-tms-warehouse-billing-events.sql`, `approval.sql`, `dedicated-
+enterprise-deployment.sql`, `multi-region-data-residency.sql`, each proving the
+structurally-unreachable-today NULL-actor case is now denied. Live-verified: all 6
+functions confirmed `SECURITY DEFINER`, `search_path` pinned, grants unchanged. Full
+`db-tests` suite re-run clean. Owner: closed.
+
 ### ISS-2026-214 — 4 REST `/v1` mutation routes leak a raw Zod `ZodError` JSON structure into a 422 `mutation_failed` response body for a malformed path-parameter UUID (found at `CG-S15-HDN-008`'s own Tier C review, `OPEN`, Low, owner `HDN-387`)
 
 Found by this checkpoint's own Tier C attack-surface adversarial-testing lens,
@@ -2468,6 +2579,20 @@ specifically (before the generic `catch`) on all 4 routes, map it to `400 invali
 parameter` (or similar) with a clean message, mirroring `ISS-2026-212`'s own already-
 shipped `invalid_expected_version` precedent rather than surfacing the raw validation
 issue array.
+
+**`RESOLVED` (2026-08-28, Track B Batch 7, TypeScript-only, no migration).** Implemented
+exactly the fix shape this entry's own prior disposition already specified. New `export
+const PathParamUuidSchema = z.string().uuid();` in `server/contracts/api/api.ts`; all 4
+named routes (`app/api/v1/vendor/assignments/[invitationId]/accept/route.ts`, `.../
+decline/route.ts`, `app/api/v1/vendor/rfqs/[rfqInvitationId]/response/route.ts`, `app/
+api/v1/customer/bookings/[bookingRequestId]/submit/route.ts`) now call `PathParamUuidSchema
+.safeParse(...)` on the path parameter before any downstream mutation call, returning a
+clean `400 invalid_path_parameter` with a human-readable message on failure instead of
+reaching the mutation function's own `ZodError`-throwing parse and leaking the raw issue
+array. New regression tests: `tests/api/v1/vendor-assignment-accept.test.ts`, `vendor-
+assignment-decline.test.ts`, `vendor-rfq-response.test.ts`, `customer-bookings-submit.
+test.ts`. `pnpm run typecheck`/`lint`/`test` re-verified green (26 new/updated assertions
+passing). Owner: closed.
 
 ### ISS-2026-215 — 2 REST `/v1` GET routes collapsed every RPC error, including a genuine internal failure, into the domain 404 "not found" response, contradicting this checkpoint's own error-shape-consistency claim (found and fixed at `CG-S15-HDN-008`'s own Tier C review, `RESOLVED` at `HDN-376`, Low)
 
@@ -2747,6 +2872,15 @@ in isolation would not materially change the repository's actual exposure. **Not
 here. Owner: `HDN-378`** (Security Hardening — the WBS lane whose own charter is a
 repository-wide security-convention review, the correct scope for this question).
 
+**Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 7).**
+Re-confirmed the same ~35-call-site convention question is still unresolved and that a
+sibling test still explicitly asserts the CURRENT `tenant_admin`-has-override behavior as
+correct (a narrowing at even one file-scope call site would break that established,
+deliberate test, exactly as this entry's own text already found). No new evidence this
+batch changes the shape of the decision needed — genuinely still a systemic RBAC-
+convention ruling, not a file-specific bug. **Not fixed by this batch.** Owner and scope
+unchanged (`HDN-378`).
+
 ### ISS-2026-224 — `app.can_access_record`'s record-scope gate denies an authorized-but-non-uploading Procurement evidence reviewer, defeating the "second reviewer verifies evidence" workflow the vendor evidence-access RPCs were built for (found at `CG-S15-HDN-009`, `OPEN`, Medium, owner `HDN-387`)
 
 Found by the signed-URL/access-gating lens, live-forced while reproducing this
@@ -2780,6 +2914,31 @@ unilaterally. **Severity: Medium** — a functional/usability defect (the intend
 review workflow is currently unusable by anyone but the uploader), not a security
 disclosure — the RPC's own denial path is exactly as safe as before, just
 over-restrictive. **Not fixed here. Owner: `HDN-387`.**
+
+**`RESOLVED` (2026-08-28, Track B Batch 7,
+`supabase/migrations/20260828171000_harden_vendor_evidence_reviewer_record_scope.sql`).**
+Chose the first of the two options this entry's own text named, narrowly: a new sibling
+function `app.authorize_vendor_evidence_file_access()` — a copy of `app.authorize_file_
+access()` with only the ownership/record-scope branch omitted, since all 3 named callers
+already independently verify the caller holds `PRC:Download` before reaching this check.
+`app.access_vendor_compliance_document_evidence`/`app.access_vendor_bank_account_
+evidence`/`app.access_vendor_tax_identity_evidence` now call the new sibling instead of
+the general-purpose function — leaving `app.authorize_file_access`'s own contract
+completely untouched for every other caller, avoiding exactly the general-contract-
+weakening risk this entry's own prior disposition flagged. Corrected twice before commit:
+(1) added the required `public.authorize_vendor_evidence_file_access` PostgREST wrapper
+(the RGL-394 convention applies even to `service_role`-only functions, caught by
+`scripts/db-tests/public-api-wrapper-regression.sql`'s exhaustive sweep); (2) after live
+grant verification, found and fixed a live-only leak — this hosted Supabase project's own
+platform-level default-privilege bootstrap (`20260826010000`'s own documented precedent)
+silently granted `anon`/`authenticated` EXECUTE on the new wrapper at creation time, which
+a bare `revoke ... from public` does not undo; the migration's revoke statement was
+corrected to explicitly name `anon, authenticated, service_role, public`, and the live
+grant was corrected to match. Regression: new blocks in `scripts/db-tests/procurement-
+vendor-compliance.sql`/`procurement-vendor-financial-security.sql` proving an authorized
+non-uploading reviewer can now access evidence. Live-verified clean after correction:
+`execute_grantees: [postgres, service_role]` only. Full `db-tests` suite re-run clean.
+Owner: closed.
 
 ### ISS-2026-225 — the coarse-tenant-membership-RLS-plus-fine-RPC-gate pattern behind `ISS-2026-220` recurs across at least ~35 more Procurement/HR tables that DO carry the `authenticated` grant and ARE live-exploitable, correcting this entry's own first-round "safe by construction" disposition (found at `CG-S15-HDN-009`, `PARTIALLY RESOLVED at HDN-387` — remainder `ACCEPTED_EXCEPTION` at `HDN-389`, **High** (corrected at Tier C from Low), owner `Step 16`)
 
@@ -3011,6 +3170,33 @@ right lane to reconcile a repository-wide "out-of-band correction" actor-context
 convention, matching how `ISS-2026-223` also deferred a repository-wide RBAC-convention
 question to the same tier).
 
+**`PARTIALLY RESOLVED`, audit-visibility only, not enforcement (2026-08-28, Track B Batch
+7, `supabase/migrations/20260828173000_harden_files_malware_scan_raw_correction_audit.sql`).**
+Independently re-investigated the same BLOCKING-guard idea this entry already drafted and
+discarded — re-confirmed, not merely re-asserted, that it still conflicts with the same 4
+domains' own established, deliberate tests (`customer-epod-access.sql`, `procurement-
+vendor-compliance.sql`, `procurement-vendor-financial-security.sql`, `ticketing-customer.
+sql`), each simulating the disclosed RPD-022 residual-risk correction path with no
+session-bound actor context. **Confirmed again: a blocking schema backstop is correctly
+NOT added.** Found a narrower, non-conflicting fix instead: RPD-022's own doctrine
+(`06_RLS_RBAC_WORKSTREAM.md` §8) requires only an audit trail as the accountability
+substitute for true immutability, not blocking — and today a raw correction of `app.
+files.malware_scan_status` produces ZERO audit trail at all, bypassing `record_file_scan_
+result()`'s own `capture_audit_event` call along with everything else. New `AFTER UPDATE`
+trigger `app.audit_files_malware_scan_raw_correction()` (never blocks, never raises, never
+touches `NEW`) fires only on the exact transition shape the RPC can never itself produce
+(`OLD.malware_scan_status IS DISTINCT FROM NEW.malware_scan_status AND OLD.malware_scan_
+status <> 'pending'`), writing one `app.audit_logs` row per raw correction. Corrected
+before commit to wrap the trigger's own `auth.uid()` call in a local exception handler
+after discovering it genuinely throws (not returns NULL) when `request.jwt.claims` is
+explicitly set to empty string `''` — a second, distinct "no session" GUC shape this
+repository's own test suite deliberately exercises alongside genuinely-unset. Regression:
+`scripts/db-tests/document-file.sql`, new block. Live-verified: `SECURITY DEFINER`,
+`search_path` pinned. Full `db-tests` suite re-run clean. **Status stays `OPEN`, Medium**
+— the underlying enforcement/design-reconciliation question this entry named remains
+genuinely unresolved; only the narrower visibility gap is closed. Owner unchanged
+(`HDN-386`).
+
 ### ISS-2026-232 — 3 more `token_hash` columns exposed via a blanket table-level grant, contradicting each table's own "mirrors `app.quotation_acceptance_tokens`" design claim, the same class as this checkpoint's own headline `ISS-2026-216` fix (found at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED` at `HDN-378`, Medium, owner `HDN-378`)
 
 Found by the Tier C completeness-sweep lens while sweeping for more instances of the
@@ -3113,6 +3299,8 @@ Live-verified via direct `pg_proc.prosrc` inspection across the whole `app` sche
 
 This is the same defect shape as `ISS-2026-232`'s own second regression (a `select("*")` call outrun by a column-privilege restriction added elsewhere) but is a genuinely pre-existing condition, not something `HDN-378` introduced — the restriction predates this checkpoint by two weeks. Unlike `ISS-2026-232`'s own regression, the fix here is not a simple column-list narrowing: `ApprovalRequestSchema` (`server/contracts/approval/approval.ts`) genuinely expects `endedReason` in its parsed output, so an explicit column list omitting `ended_reason` would need a real design decision (a narrower type for this specific caller that never needs `endedReason`, or routing this read through a properly tenant-scoped service-role path) rather than a mechanical fix. **Status `OPEN`**, Medium severity (a live functional breakage of an entire admin page, not a security exposure — the DB is now stricter than the app expects, not looser). **Not fixed by this checkpoint** — mirrors `HDN-377`'s own precedent for `ISS-2026-224` (a pre-existing over-restriction found during an unrelated Tier C sweep, registered rather than rushed). Owner: `HDN-387`, scoped to deciding the right shape for `endedReason` visibility on this read path.
 
+**`RESOLVED` (2026-08-28, Track B Batch 7, `server/queries/automation-rule.ts`, TypeScript-only, no migration).** Took the design decision this entry's own text left open: `getLatestAutomationRulePublishApprovalRequest` now uses an explicit 14-column `select(...)` list (matching exactly what `app.approval_requests` grants to `authenticated`, re-verified against `20260731210000`'s own revoke+column-grant statement) instead of `select("*")`, and synthesizes `ended_reason: null` before parsing — `ApprovalRequestSchema` genuinely expects the field, but this specific caller (the Automation Rule detail page's approval panel) never renders it, so a hardcoded `null` satisfies the schema without a narrower duplicate type or a service-role detour. New regression test in `server/queries/automation-rule.test.ts` proving the query succeeds as `authenticated` and `endedReason` comes back `null` rather than throwing. `pnpm run typecheck`/`lint`/`test` re-verified green. Owner: closed.
+
 ### ISS-2026-238 — 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity siblings share the same code pattern (found at `HDN-379` Performance and Scalability, load/performance-evidence lens + Tier C completeness sweep + attack-surface testing, `OPEN`, Medium, owner a dedicated future task)
 
 Live-verified via real `EXPLAIN (ANALYZE, BUFFERS)` against a seeded disposable database (25,000 `accounts`, 10,000 `customer_contracts` rows, one tenant): `listAccounts` (`server/queries/account.ts:29`) and `listCustomerContracts` (`server/queries/contract.ts:31`) each do `client.from(table).select("*").eq("tenant_id", tenantId).order(...)` with **no `.range()`/`.limit()` at all** — every row for the tenant is fetched and returned to the browser on every page load, confirmed by a `quicksort` over the full row set in the query plan (9.9ms/455 buffers and 3.9ms/194 buffers respectively at this seeded volume — fast today, but cost and payload size scale linearly with tenant data volume with no cap). `listQuotationsForTenant` (`server/queries/quotation.ts:68`) shares the identical shape, confirmed by direct code read. All 3 are real, live-reachable via `app/(tenant)/[tenantSlug]/commercial/{accounts,quotations,contracts}/page.tsx`.
@@ -3128,6 +3316,22 @@ Confirmed narrow, not systemic: `server/mutations/*.ts` (transactional write API
 **Tier C schema-wide completeness sweep found 5 more real instances, independently, not named in the first-round sweep.** Most notable: `app/(tenant)/[tenantSlug]/operations/fleet/page.tsx` loads **4 unbounded whole-tenant lists in parallel on one page** — `listVehicleOperationalProfiles`, `listDriverOperationalProfiles`, `listGpsDevices`, `listSimCards` (all `server/queries/fleet-driver-device.ts`, lines 37/46/55/64), each the identical `select("*").eq("tenant_id", tenantId)` shape with no cap. Fleet assets (vehicles/drivers/devices/SIM cards) for a large enterprise logistics tenant plausibly scale into the thousands — closer in growth profile to the 3 originally-confirmed Medium-severity cases than to the low-cardinality config tables the first-round sweep named as lower-severity siblings; graded **Low-Medium** here since no live `EXPLAIN` evidence was gathered to confirm current cost, unlike the 3 originally-confirmed cases. 4 more, Low severity (same bucket as the already-named ~10 siblings): `listSalesPlans` (`server/queries/pipeline.ts:77`), `listProcurementApprovalPolicyVersions` (`server/queries/procurement-approval.ts:49`, its own code comment already mirrors the already-named `listQuotationApprovalRuleVersions` shape), `listScheduledReports` (`server/queries/scheduled-report.ts:29`), `listTenantDashboards` (`server/queries/tenant-dashboard.ts:33`). A broader independent sweep of all 366 `server/queries/*.ts` files found no other live-reachable instance beyond these 5 plus the first round's own 13 (3 confirmed + ~10 siblings) — `listPipelineCategories`/`listWinLossReasons`/`listTenantRoles` share the shape but are confirmed call-unreachable (dead code, zero callers anywhere under `app/`), not a live defect.
 
 **Status `OPEN`**, Medium severity (a real, live, unbounded-payload defect on 3 genuinely transactional-volume tables — not yet a measured incident, since seeded volume today is modest, but the cost and payload size are unbounded by construction and will degrade as real tenant data accumulates; this is exactly the class matrix item 7's own business rule names: "No `SELECT *` or client-loaded full datasets on critical paths"). **Not fixed by this checkpoint** — a real fix needs actual pagination UI (cursor state, a count query, a `Pagination` control) on all 3 routes, not a silent query-layer `.limit(500)` cap, which would be exactly the "cosmetic partial fix" this repository's own discipline forbids (silently truncating a list with no UI indication is worse than the current unbounded-but-honest behavior). Owner: a dedicated future task, scoped to building real pagination for `commercial/accounts`, `commercial/quotations`, `commercial/contracts` first (the 3 confirmed transactional-volume cases), then auditing the ~10 lower-severity siblings for whether their own bounded cardinality genuinely makes pagination unnecessary or whether they should get the same treatment defensively.
+
+**Re-verified, disposition confirmed accurate, sibling count sharpened (2026-08-28, Track
+B Batch 7).** Re-ran the same `select("*")`/no-`.range()` sweep across all `server/
+queries/*.ts` files: the 4 previously-named `~12 more lower-severity siblings` candidates
+this entry's own header line still rounds to "~12" turned out, on a real call-site trace,
+to include 4 that are call-unreachable dead code (no caller anywhere under `app/`) —
+sharpening the true live sibling count to **10**, not "~12". The fleet-assets page
+(`operations/fleet/page.tsx`, its own 4-list parallel-load finding) was independently
+re-assessed for a bounded same-batch fix and correctly NOT force-fixed: unlike the
+`ISS-2026-237`/`224`-style query-layer fixes this batch did ship, real pagination here is
+genuine UI-state rework (cursor state across 4 simultaneously-loaded lists, not a single
+query), matching this entry's own explicit rejection of a "silent query-layer `.limit(500)`
+cap" as a forbidden cosmetic partial fix. **Not fixed by this batch** — same reasoning as
+the original disposition. Owner and scope unchanged; sibling count corrected to 10 live
+instances (plus the 3 originally-confirmed Medium-severity routes and the fleet-assets
+page) for the next reader.
 
 ### ISS-2026-239 — 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real production query telemetry that does not yet exist anywhere in this system (found at `HDN-379` Performance and Scalability, unindexed-FK triage lens, `ACCEPTED_EXCEPTION`, Low, owner: re-open once real production query traffic exists — re-ruled at `HDN-387` per `BLOCKER_LEDGER.md`'s `HDN-BLK-006`, correcting `HDN-379`'s own procedurally-invalid self-acceptance caught at `HDN-386`)
 
@@ -3594,6 +3798,21 @@ Confirmed by direct code inventory: no `customer_import`, `vendor_import` (maste
 
 **Status `OPEN`**, Medium severity (a real, structural gap directly relevant to 2 of the 3 data scopes Prompt 385 §4 explicitly names — not a live incident, since no tenant has attempted a real bulk master-data migration yet, but a real onboarding-scalability gap: every new tenant's own master data must be entered manually today). **Not fixed by this checkpoint** — building master-data and tenant-setup import adapters is a real, substantial feature addition, well outside this checkpoint's own documentation-only charter. Disclosed in `docs/runbooks/data-migration-rehearsal.md` §3 item 2. Owner: a dedicated future task.
 
+**Re-verified, disposition confirmed accurate, building-block context identified
+(2026-08-28, Track B Batch 7).** Re-confirmed no `customer_import`/`vendor_import`/
+`item_import` schema exists anywhere in the current migration set. Investigated whether
+any bounded, additive piece of a real master-data import mechanism could be built this
+batch without committing to the full feature: identified `app.create_master_record` (the
+existing single-record primitive every master-data creation path already funnels through)
+and the `import_reference_currency`-style idempotent-registration pattern (an existing
+import adapter that upserts-by-natural-key rather than blind-inserting) as the two real
+building blocks a future bulk-import adapter should compose, rather than reinventing
+either. Building even a minimal batch-import adapter on top of them is still a genuine
+multi-file feature (a new import domain adapter, contract, and UI surface), not a bounded
+repair. **Not fixed by this batch** — same reasoning as the original disposition. Owner
+and scope unchanged; the two reusable building blocks recorded here for whoever picks this
+up.
+
 ### ISS-2026-275 — `app.finance_journals_protect_posted` never fires on `INSERT`, only `UPDATE`/`DELETE`; a direct bulk insert of an already-posted, unbalanced, source-less journal is completely unguarded (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
 
 Read the exact trigger definition (`supabase/migrations/20260729180000_create_finance_posted_journal_integrity.sql`): `create trigger finance_journals_protect_posted before update or delete on app.finance_journals for each row execute function app.protect_posted_finance_journal();` — its own `WHEN` scope never includes `INSERT`, by construction. `app.finance_journals` also carries a direct `service_role` INSERT grant, and its `status` CHECK constraint permits inserting a row with `status='posted'` directly — there is no INSERT-time workflow guard forcing a row through `draft→submitted→approved→posted`; that sequencing is enforced only by the separate RPCs, which a bulk migration script preserving historical already-posted data has every practical reason to bypass. Consequently, a `service_role`-run migration script inserting an already-`'posted'` journal is (a) not blocked by the posted-journal-immutability trigger (fires on UPDATE/DELETE only), (b) not checked by `app.validate_finance_journal_line_balance()` (invoked only from inside the RPC functions, never as a table constraint/trigger — an unbalanced debit≠credit journal could be inserted with no DB-level rejection), and (c) only partially checked by HDN-375's own orphan-source trigger (a `source_type='manual'` insert with `source_id=null` sails through it).
@@ -3617,6 +3836,19 @@ Read the exact trigger definition (`supabase/migrations/20260729180000_create_fi
 **Corrected at `HDN-385` Tier C**: the first-round text claimed `app._is_under_legal_hold()` had "exactly one call site" and was "not a table-level trigger." Both claims were wrong — the function actually has 3 call sites: `app.request_retention_archive()` (`20260807500000_create_intelligence_data_retention_archival.sql`), `app.request_file_deletion()` (`20260814000000_harden_storage_signed_url_audit_findings.sql`), and it already backs a real table-level trigger, `files_protect_legal_hold_from_deletion` (`BEFORE UPDATE OR DELETE ON app.files`, `20260814100000_harden_storage_signed_url_audit_tierc_fixes.sql`). The underlying gap is narrower than first described but still real: that trigger only fires on `UPDATE OR DELETE` of `app.files` specifically, guarding deletion/archival-flagging of files — it is not a generic, schema-wide write guard covering every legal-hold-eligible table, and in particular would not guard a future import adapter's `INSERT`-only writes to a different hold-eligible table (e.g. overwriting/superseding a held record via a fresh row rather than an `UPDATE`). Since no canonical import write-path exists yet for any legal-hold-eligible table (the generic framework's own header discloses `commit_import_job()` never writes to a business table — only the 4 real domain adapters do, none of which touch a legal-hold-eligible table type today), this remains a latent, not live-exploitable, gap.
 
 **Status `OPEN`**, Low severity (narrower than `HDN-384`'s own finding pattern suggested — one real table-level guard already exists, just scoped to `UPDATE`/`DELETE` on `app.files` rather than every hold-eligible table/write-type — so this is a coverage gap, not the total absence of enforcement originally described). **Not fixed by this checkpoint** — widening enforcement to every legal-hold-eligible table and write type (including `INSERT`-based supersession) is a real architectural decision, best made once a real need (a future import adapter touching hold-eligible data) exists. Disclosed in `docs/runbooks/data-migration-rehearsal.md` §3 item 3. Owner: a dedicated future task.
+
+**Re-verified, disposition confirmed accurate, cross-referenced against `ISS-2026-274`
+(2026-08-28, Track B Batch 7).** Re-counted the real guard's own call-site/trigger backing:
+now **5** live legal-hold enforcement points (not 3), all still `UPDATE`/`DELETE`-scoped
+only — no new `INSERT`-time guard exists anywhere. Cross-referenced directly against this
+same batch's own `ISS-2026-274` finding (no master-data or tenant-setup bulk-import
+mechanism exists anywhere, and none of the 4 real import domain adapters write to a
+legal-hold-eligible table type): confirmed there is genuinely no reachable gap to patch
+today — a table-level `INSERT` guard would have zero live caller to exercise or verify
+against, exactly this entry's own "latent, not live-exploitable" characterization,
+independently re-confirmed rather than merely repeated. **Not fixed by this batch** — same
+reasoning as the original disposition. Owner and scope unchanged; guard count corrected to
+5 for the next reader.
 
 ### ISS-2026-278 — no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk class (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, Low, owner a dedicated future task)
 

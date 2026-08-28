@@ -27,6 +27,7 @@ begin
     ('00000000-0000-0000-0000-000000091104', 'manager@pcmp1.test'),
     ('00000000-0000-0000-0000-000000091105', 'viewer@pcmp1.test'),
     ('00000000-0000-0000-0000-000000091106', 'customer@pcmp1.test'),
+    ('00000000-0000-0000-0000-000000091107', 'reviewer@pcmp1.test'),
     ('00000000-0000-0000-0000-000000091201', 'admin@pcmp2.test'),
     ('00000000-0000-0000-0000-000000091202', 'staff@pcmp2.test'),
     ('00000000-0000-0000-0000-000000091999', 'supreme@pcmp.test');
@@ -646,6 +647,42 @@ begin
     where specific_schema = 'app' and specific_name like 'access_vendor_compliance_document_evidence%' and parameter_name = 'storage_path'
   ) then
     raise exception 'assertion failed: expected no storage_path column in app.access_vendor_compliance_document_evidence''s own return shape';
+  end if;
+end $$;
+
+\echo '>> ISS-2026-224 regression: a second reviewer who holds PRC:Download but did not upload the evidence and shares no org unit/customer account with the uploader is GRANTED evidence access (not denied via document_record_access_denied, the identical shape a genuinely unauthorized caller gets) -- the "second reviewer verifies evidence" workflow app.access_vendor_compliance_document_evidence''s own header comment claims to support'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pcmp1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000091101';
+  v_reviewer uuid := '00000000-0000-0000-0000-000000091107';
+  v_vendor_id uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and idempotency_key = 'idem-pcmp-vendor-1');
+  v_doc app.vendor_compliance_documents;
+  v_reviewer_role uuid;
+  v_reviewer_draft app.role_versions;
+  v_result record;
+begin
+  select * into v_doc from app.vendor_compliance_documents where vendor_master_record_id = v_vendor_id and is_latest_version and idempotency_key is null order by created_at desc limit 1;
+
+  perform app.invite_user(v_tenant1, v_reviewer, 'reviewer@pcmp1.test', 'Pcmp1 Reviewer', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'reviewer@pcmp1.test'), 'active', 'onboarded', 'tester');
+
+  -- Download-only role, deliberately never given Create/Edit/View so this is a clean
+  -- probe of the record-scope gate alone, not any other PRC:* authority.
+  v_reviewer_role := (app.create_role(v_tenant1, 'PRC Compliance Second Reviewer', 'Download only -- ISS-2026-224 regression', 'tester')).id;
+  v_reviewer_draft := app.create_role_version(v_reviewer_role, 'tester');
+  perform app.set_role_version_permissions(v_reviewer_draft.id, array(select id from app.permissions where resource_module_code = 'PRC' and action = 'Download'), 'tester');
+  perform app.publish_role_version(v_reviewer_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_reviewer_role and status = 'published'), v_reviewer, v_admin1, 'tester');
+
+  -- v_reviewer is NOT the uploader (staff, 091102), shares no org unit and no
+  -- customer-account membership with the uploader -- before this fix,
+  -- app.can_access_record's ownership/share/customer-scope model had no vocabulary
+  -- for "holds the tenant's own PRC:Download review permission", so this got
+  -- document_record_access_denied identically to an actually-unauthorized caller.
+  select * into v_result from app.access_vendor_compliance_document_evidence(v_doc.id, 'metadata_view', v_reviewer, 'reviewer', null);
+  if v_result.access_result <> 'granted' or v_result.original_filename is null then
+    raise exception 'assertion failed: ISS-2026-224 -- expected a non-uploading actor holding PRC:Download to be granted evidence access, got result=% reason=%', v_result.access_result, v_result.access_reason;
   end if;
 end $$;
 

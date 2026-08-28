@@ -482,6 +482,51 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-213 regression: app.approve_region_assignment''s region_self_approval_forbidden check now denies (fails closed) a NULL created_by_auth_user_id rather than the silent pass-through a bare `=` comparison against a nullable column previously produced -- structurally unreachable via any live caller today (app.request_region_assignment always writes a real, non-null requester), forced directly here to prove the comparison itself, in isolation, is now deterministic. Its own self-approval check runs BEFORE the region_requires_dedicated_deployment check in the function body, so a fresh, minimal tenant with no dedicated deployment at all is sufficient fixture -- the self-approval raise is reached first.'
+do $$
+declare
+  v_tenant4 uuid;
+  v_supreme uuid := '00000000-0000-0000-0000-000036000000';
+  v_admin4 uuid := '00000000-0000-0000-0000-000036000007';
+  v_admin4_role uuid;
+  v_admin4_draft app.role_versions;
+  v_assignment_id uuid;
+begin
+  insert into auth.users (id, email) values (v_admin4, 'admin4@iaeres4.test');
+
+  perform app.provision_tenant('iaeres4', 'IaeRes4 Co', 'idem-iaeres4', 'tester');
+  v_tenant4 := (select id from app.tenants where slug = 'iaeres4');
+  perform app.transition_tenant_status(v_tenant4, 'active', 'setup', 'tester');
+  perform app.invite_user(v_tenant4, v_admin4, 'admin4@iaeres4.test', 'Admin Four', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin4@iaeres4.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin4, 'tenant_admin', v_tenant4, null, 'tester');
+
+  -- DEPLOY:Approve is a protected=true permission (20260808000000 line 72) -- a
+  -- self-assign (actor = target) would raise self_escalation, so this reuses the
+  -- file's own existing supreme-admin fixture as the granting actor, mirroring
+  -- every other DEPLOY-role assignment in this file's own setup block.
+  v_admin4_role := (app.create_role(v_tenant4, 'IaeRes4 Admin', 'DEPLOY:Configure/View/Approve -- ISS-2026-213 null-actor regression probe actor', 'tester')).id;
+  v_admin4_draft := app.create_role_version(v_admin4_role, 'tester');
+  perform app.set_role_version_permissions(v_admin4_draft.id, array(select id from app.permissions where resource_module_code = 'DEPLOY' and action in ('Configure', 'View', 'Approve')), 'tester');
+  perform app.publish_role_version(v_admin4_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant4, (select id from app.role_versions where role_id = v_admin4_role and status = 'published'), v_admin4, v_supreme, 'supreme');
+
+  perform app.request_region_assignment(v_tenant4, 'americas', 'ISS-2026-213 regression fixture', 'MSA-2026-213', v_admin4, 'admin4');
+  select id into v_assignment_id from app.tenant_region_assignments where tenant_id = v_tenant4;
+
+  -- Force the nullable actor column directly -- no live caller can leave it null
+  -- (app.request_region_assignment always writes a real, non-null requester).
+  update app.tenant_region_assignments set created_by_auth_user_id = null where id = v_assignment_id;
+
+  begin
+    perform app.approve_region_assignment(v_assignment_id, v_admin4, 'admin4');
+    raise exception 'assertion failed: expected region_self_approval_forbidden for a NULL created_by_auth_user_id (ISS-2026-213 fail-open regression)';
+  exception when insufficient_privilege then
+    if sqlerrm not like 'region_self_approval_forbidden%' then raise; end if;
+  end;
+end;
+$$;
+
 \echo '>> cross-tenant isolation: admin2 (tenant iaeres2, its own DEPLOY:Configure/View/Approve) cannot set status/register exception/read tenant1''s own (decommissioned) region assignment, and cannot list platform capabilities under tenant1''s own scope'
 do $$
 declare

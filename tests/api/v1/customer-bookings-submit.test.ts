@@ -50,6 +50,24 @@ describe("POST /api/v1/customer/bookings/{bookingRequestId}/submit", () => {
     }
   });
 
+  test("ISS-2026-214: a malformed (non-uuid) bookingRequestId -> 400 invalid_path_parameter, never reaches get_customer_booking_request or submit_customer_booking_request (previously leaked a raw ZodError issue array as a 422 mutation_failed message)", async () => {
+    const stub = installRpcFetchStub({ authenticate_and_authorize_api_request: { data: okAuthRow() } });
+    try {
+      const response = await POST(
+        new Request(`http://localhost/api/v1/customer/bookings/not-a-uuid/submit`, { method: "POST", headers: { authorization: "Bearer cgk_test_valid" }, body: JSON.stringify({ expectedVersion: 1 }) }),
+        { params: Promise.resolve({ bookingRequestId: "not-a-uuid" }) },
+      );
+      assert.equal(response.status, 400);
+      const body = (await response.json()) as { error: { code: string; message: string } };
+      assert.equal(body.error.code, "invalid_path_parameter");
+      assert.doesNotMatch(body.error.message, /"code":|"issues":|ZodError/);
+      assert.equal(stub.calls.some((c) => c.fn === "get_customer_booking_request"), false);
+      assert.equal(stub.calls.some((c) => c.fn === "submit_customer_booking_request"), false);
+    } finally {
+      stub.restore();
+    }
+  });
+
   test("malformed expectedVersion (missing) -> 400 invalid_expected_version, never reaches the mutation RPC (HDN-376 Defect B regression: previously the wrong code stale_version, indistinguishable from a real 409 conflict)", async () => {
     const stub = installRpcFetchStub({ authenticate_and_authorize_api_request: { data: okAuthRow() } });
     try {

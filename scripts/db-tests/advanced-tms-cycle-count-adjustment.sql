@@ -233,6 +233,18 @@ begin
   perform app.create_item_master(v_tenant1, v_account_alpha.id, 'SKU-CC-OBSIDEM-P', 'CC Widget Obsidem P (observation idempotency collision)', null, 'PCS', false, false, false, v_actor, 'supervisor');
   perform app.create_item_master(v_tenant1, v_account_alpha.id, 'SKU-CC-OBSIDEM-Q', 'CC Widget Obsidem Q (observation idempotency collision)', null, 'PCS', false, false, false, v_actor, 'supervisor');
   perform app.create_item_master(v_tenant1, v_account_alpha.id, 'SKU-CC-RESV', 'CC Widget Resv (reservation record_version)', null, 'PCS', false, false, false, v_actor, 'supervisor');
+  -- ISS-2026-213 regression fixtures (Track B Batch 7) -- dedicated items, never reused
+  -- from SKU-CC-A6/A7 above: SKU-CC-A6 already gets a real, successful approval in
+  -- scenario 6 below (its own balance is no longer the fixture's original value
+  -- afterward) and is also read again later in this file via a bare scalar subquery
+  -- expecting exactly one scope item to exist for it -- either of these two new
+  -- regression blocks creating a SECOND scope item for SKU-CC-A6 would break one or the
+  -- other. Two dedicated items, one per regression (approve-path/reject-path), so
+  -- neither collides with the other's own still-active (unresolved pending_review)
+  -- scope item either -- freeze_cycle_count_scope refuses a second active count against
+  -- a balance already in one.
+  perform app.create_item_master(v_tenant1, v_account_alpha.id, 'SKU-CC-ISS213-APPROVE', 'CC Widget ISS-2026-213 (null-actor approve regression)', null, 'PCS', false, false, false, v_actor, 'supervisor');
+  perform app.create_item_master(v_tenant1, v_account_alpha.id, 'SKU-CC-ISS213-REJECT', 'CC Widget ISS-2026-213 (null-actor reject regression)', null, 'PCS', false, false, false, v_actor, 'supervisor');
 
   -- Opening balances (movement_type=opening_balance, already an allowed source_type
   -- pre-widen). Every balance dimension lands on RACK-CC-A unless noted.
@@ -279,6 +291,12 @@ begin
     v_actor, 'supervisor');
   perform app.post_inventory_movement(v_tenant1, v_warehouse_id, 'opening_balance', 'opening_balance', null, 'idem-cc-ob-beta', null,
     jsonb_build_array(jsonb_build_object('owner_account_id', v_account_beta.id, 'item_master_id', (select id from app.item_masters where tenant_id = v_tenant1 and code = 'SKU-CC-BETA'), 'location_id', v_rack_a_id, 'uom_code', 'PCS', 'signed_quantity', 60)),
+    v_actor, 'supervisor');
+  perform app.post_inventory_movement(v_tenant1, v_warehouse_id, 'opening_balance', 'opening_balance', null, 'idem-cc-ob-iss213-approve', null,
+    jsonb_build_array(jsonb_build_object('owner_account_id', v_account_alpha.id, 'item_master_id', (select id from app.item_masters where tenant_id = v_tenant1 and code = 'SKU-CC-ISS213-APPROVE'), 'location_id', v_rack_a_id, 'uom_code', 'PCS', 'signed_quantity', 10)),
+    v_actor, 'supervisor');
+  perform app.post_inventory_movement(v_tenant1, v_warehouse_id, 'opening_balance', 'opening_balance', null, 'idem-cc-ob-iss213-reject', null,
+    jsonb_build_array(jsonb_build_object('owner_account_id', v_account_alpha.id, 'item_master_id', (select id from app.item_masters where tenant_id = v_tenant1 and code = 'SKU-CC-ISS213-REJECT'), 'location_id', v_rack_a_id, 'uom_code', 'PCS', 'signed_quantity', 10)),
     v_actor, 'supervisor');
 
   perform app.post_inventory_movement(v_tenant1, v_warehouse_id, 'opening_balance', 'opening_balance', null, 'idem-cc-ob-a10', null,
@@ -642,6 +660,83 @@ begin
   if v_item.status <> 'adjusted' then
     raise exception 'assertion failed: expected S7 status=adjusted once approved by a genuinely separate supervisor, got %', v_item.status;
   end if;
+end $$;
+
+\echo '>> ISS-2026-213 regression: app.approve_cycle_count_variance''s self_approval_not_allowed check now denies (fails closed) a NULL counted_by_auth_user_id on the most recent observation rather than the silent pass-through a bare `=` comparison against a nullable column previously produced -- structurally unreachable via any live caller today (app.record_cycle_count_observation always writes a real, non-null counter), forced directly here to prove the comparison itself, in isolation, is now deterministic'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cyclecnt1');
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-CC-1');
+  v_rack_a_id uuid := (select id from app.warehouse_locations where tenant_id = v_tenant1 and code = 'RACK-CC-A');
+  v_item_id uuid := (select id from app.item_masters where tenant_id = v_tenant1 and code = 'SKU-CC-ISS213-APPROVE');
+  v_supervisor uuid := '00000000-0000-0000-0000-000000200302';
+  v_plan app.cycle_count_plans;
+  v_item app.cycle_count_scope_items;
+begin
+  v_plan := app.create_cycle_count_plan(v_tenant1, v_warehouse_id, 'full', 0, 20, true, null, null, v_item_id, null, 'idem-cc-plan-213-approve', v_supervisor, 'supervisor');
+  perform app.freeze_cycle_count_scope(v_plan.id, v_plan.record_version, v_supervisor, 'supervisor');
+  select * into v_item from app.cycle_count_scope_items where plan_id = v_plan.id and item_master_id = v_item_id;
+
+  v_item := app.assign_cycle_count_scope_item(v_item.id, v_supervisor, 'supervisor', v_item.record_version, v_supervisor, 'supervisor');
+  -- Dedicated fixture item (opening balance 10, never touched by any other scenario in
+  -- this file). 11 against a balance of 10 is a 10% variance -- above this plan's own 0%
+  -- variance_threshold_pct (so it is not auto-closed as immaterial) but within its 20%
+  -- recount_threshold_pct (so a FIRST attempt lands directly on pending_review, not
+  -- recount_required) -- the state this regression needs to reach app.approve_cycle_
+  -- count_variance's own self-approval check at all.
+  v_item := app.record_cycle_count_observation(v_item.id, 11, 'PCS', v_rack_a_id, v_item_id, null, null, 'idem-cc-obs-213-approve', v_item.record_version, v_supervisor, 'supervisor');
+  if v_item.status <> 'pending_review' then
+    raise exception 'test setup assumption violated: expected pending_review after a genuine variance count, got %', v_item.status;
+  end if;
+
+  -- Force the nullable actor column directly -- no live caller can leave it null (a real
+  -- observation always writes a real, non-null counter). Does not touch
+  -- cycle_count_scope_items, so v_item.record_version is unaffected.
+  update app.cycle_count_observations set counted_by_auth_user_id = null where scope_item_id = v_item.id;
+
+  begin
+    perform app.approve_cycle_count_variance(v_item.id, v_item.record_version, 'attempting approval over a null-actor observation', 'idem-cc-approve-213-nullactor', v_supervisor, 'supervisor');
+    raise exception 'assertion failed: expected self_approval_not_allowed for a NULL counted_by_auth_user_id (ISS-2026-213 fail-open regression)';
+  exception
+    when others then
+      if sqlerrm not like 'self_approval_not_allowed%' then raise; end if;
+  end;
+end $$;
+
+\echo '>> ISS-2026-213 regression: app.reject_cycle_count_variance''s identical self_approval_not_allowed check, same nullable counted_by_auth_user_id, same fail-closed fix'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cyclecnt1');
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-CC-1');
+  v_rack_a_id uuid := (select id from app.warehouse_locations where tenant_id = v_tenant1 and code = 'RACK-CC-A');
+  v_item_id uuid := (select id from app.item_masters where tenant_id = v_tenant1 and code = 'SKU-CC-ISS213-REJECT');
+  v_supervisor uuid := '00000000-0000-0000-0000-000000200302';
+  v_plan app.cycle_count_plans;
+  v_item app.cycle_count_scope_items;
+begin
+  v_plan := app.create_cycle_count_plan(v_tenant1, v_warehouse_id, 'full', 0, 20, true, null, null, v_item_id, null, 'idem-cc-plan-213-reject', v_supervisor, 'supervisor');
+  perform app.freeze_cycle_count_scope(v_plan.id, v_plan.record_version, v_supervisor, 'supervisor');
+  select * into v_item from app.cycle_count_scope_items where plan_id = v_plan.id and item_master_id = v_item_id;
+
+  v_item := app.assign_cycle_count_scope_item(v_item.id, v_supervisor, 'supervisor', v_item.record_version, v_supervisor, 'supervisor');
+  -- Dedicated fixture item (opening balance 10, never touched by any other scenario in
+  -- this file, and distinct from the approve-path regression's own item above so neither
+  -- block's still-active pending_review scope item blocks the other's freeze). Same 10%
+  -- variance shape as the approve-path regression.
+  v_item := app.record_cycle_count_observation(v_item.id, 11, 'PCS', v_rack_a_id, v_item_id, null, null, 'idem-cc-obs-213-reject', v_item.record_version, v_supervisor, 'supervisor');
+  if v_item.status <> 'pending_review' then
+    raise exception 'test setup assumption violated: expected pending_review after a genuine variance count, got %', v_item.status;
+  end if;
+
+  update app.cycle_count_observations set counted_by_auth_user_id = null where scope_item_id = v_item.id;
+
+  begin
+    perform app.reject_cycle_count_variance(v_item.id, v_item.record_version, 'attempting rejection over a null-actor observation', v_supervisor, 'supervisor');
+    raise exception 'assertion failed: expected self_approval_not_allowed for a NULL counted_by_auth_user_id (ISS-2026-213 fail-open regression)';
+  exception
+    when others then
+      if sqlerrm not like 'self_approval_not_allowed%' then raise; end if;
+  end;
 end $$;
 
 \echo '>> scenario 8: balance_changed_since_snapshot -- an unrelated real movement posted against the same balance between freeze and approval must reject the approval'

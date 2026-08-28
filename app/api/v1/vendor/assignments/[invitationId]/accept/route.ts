@@ -10,7 +10,7 @@
 
 import { authorizeApiV1Request, recordApiV1Success, apiV1ResponseHeaders, type AuthorizedApiV1Request } from "../../../../../../../lib/api-gateway/authenticate.server.ts";
 import { acceptVendorAssignmentInvitationViaVendorApi, VendorApiMutationError, type VendorApiMutationRpcClient } from "../../../../../../../server/mutations/vendor-api.ts";
-import { buildApiError } from "../../../../../../../server/contracts/api/api.ts";
+import { buildApiError, PathParamUuidSchema } from "../../../../../../../server/contracts/api/api.ts";
 
 /** See app/api/v1/vendor/rfqs/[rfqInvitationId]/response/route.ts's own toVendorApiClient() for why this cast is needed. */
 function toVendorApiClient(rpcClient: AuthorizedApiV1Request["rpcClient"]): VendorApiMutationRpcClient {
@@ -42,6 +42,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ inv
   if (!authorized.request.vendorMasterRecordId) {
     statusCode = 403;
     responseBody = { error: buildApiError({ code: "forbidden_scope", message: "This endpoint requires a vendor-scoped API key.", requestId: authorized.request.correlationId }) };
+  } else if (!PathParamUuidSchema.safeParse(invitationId).success) {
+    // ISS-2026-214: rejected here, before any downstream call, so a malformed id never
+    // reaches acceptVendorAssignmentInvitationViaVendorApi's own z.string().uuid().parse()
+    // (whose thrown ZodError would otherwise leak its raw issue array into the response).
+    statusCode = 400;
+    responseBody = { error: buildApiError({ code: "invalid_path_parameter", message: "invitationId must be a valid UUID.", requestId: authorized.request.correlationId }) };
   } else if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
     statusCode = 400;
     responseBody = { error: buildApiError({ code: "invalid_expected_version", message: "A positive integer expectedVersion is required.", requestId: authorized.request.correlationId }) };

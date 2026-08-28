@@ -74,11 +74,29 @@ export async function listAutomationRuleExecutions(client: AutomationRuleQueryCl
  * a direct, RLS-scoped read of the shared Approval Engine's own table
  * (PLT-123), never forked. Returns null when this exact draft has never had
  * a publish approval requested.
+ *
+ * ISS-2026-237: `ended_reason` is deliberately excluded from `authenticated`'s
+ * column grant on app.approval_requests (20260731210000, Finding 5 CRITICAL) --
+ * it can carry a free-text cancellation/rejection narrative readable by ANY
+ * active tenant member with zero permission, and this query runs as the
+ * ordinary session-authenticated client. A bare `select("*")` therefore fails
+ * outright (`permission denied for table approval_requests`), degrading the
+ * entire Automation Rule detail page. The explicit list below mirrors that
+ * grant exactly (verified against the currently-applied grant statement
+ * before writing this fix); `ended_reason` is synthesized as `null` before
+ * parsing rather than selected, since automation-rule-detail-panel.tsx never
+ * renders `endedReason` for this caller -- confirmed by direct read, zero
+ * occurrences. This keeps the shared `ApprovalRequest` contract/type
+ * unchanged (no new narrower type needed) while this specific read path
+ * never requests the restricted column, matching the DB's own intent rather
+ * than working around it.
  */
 export async function getLatestAutomationRulePublishApprovalRequest(client: AutomationRuleQueryClient, automationRuleVersionId: string): Promise<ApprovalRequest | null> {
   const { data, error } = await client
     .from("approval_requests")
-    .select("*")
+    .select(
+      "id, tenant_id, config_version_id, entity_type, entity_id, pattern, status, idempotency_key, requested_by_auth_user_id, requested_by, started_at, ended_at, record_version, created_at, updated_at",
+    )
     .eq("entity_type", "automation_rule_version")
     .eq("entity_id", automationRuleVersionId)
     .order("started_at", { ascending: false })
@@ -90,7 +108,7 @@ export async function getLatestAutomationRulePublishApprovalRequest(client: Auto
   if (!data) {
     return null;
   }
-  return parseApprovalRequest(data as Record<string, unknown>);
+  return parseApprovalRequest({ ...(data as Record<string, unknown>), ended_reason: null });
 }
 
 /** Every step of one approval request, in step_order -- a direct, RLS-scoped read of the shared Approval Engine's own table (PLT-123). */

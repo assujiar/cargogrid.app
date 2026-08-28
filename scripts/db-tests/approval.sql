@@ -344,6 +344,37 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-213 regression: app.decide_approval_step''s approval_self_approval_denied check now denies (fails closed) a NULL requested_by_auth_user_id rather than the silent pass-through a bare `=` comparison against a nullable column previously produced -- structurally unreachable via any live caller today (app.request_approval always writes a real, non-null requester), forced directly here to prove the comparison itself, in isolation, is now deterministic. manager two (an eligible step-1 approver, genuinely NOT the original requester) is denied too, proving this is a real fail-closed deny, not an accidental match on manager two''s own id.'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmeap');
+  v_published_version_id uuid;
+  v_request app.approval_requests;
+  v_step1_id uuid;
+begin
+  select v.id into v_published_version_id
+  from app.config_versions v join app.config_objects o on o.id = v.config_object_id
+  where o.tenant_id = v_tenant_id and o.config_type_code = 'approval' and o.scope_level = 'tenant' and v.status = 'published';
+
+  v_request := app.request_approval(v_published_version_id, v_tenant_id, 'purchase_order', '00000000-0000-0000-0000-000000009213', 'req-ap-213', '00000000-0000-0000-0000-000000001504', 'manager one');
+  select id into v_step1_id from app.approval_request_steps where request_id = v_request.id and step_order = 1;
+
+  -- Force the nullable actor column directly -- no live caller can leave it null
+  -- (app.request_approval always writes a real, non-null requester).
+  update app.approval_requests set requested_by_auth_user_id = null where id = v_request.id;
+
+  begin
+    perform app.decide_approval_step(v_step1_id, 'approved', '00000000-0000-0000-0000-000000001505', 'manager two');
+    raise exception 'assertion failed: expected approval_self_approval_denied for a NULL requested_by_auth_user_id (ISS-2026-213 fail-open regression)';
+  exception
+    when check_violation then
+      if sqlerrm not like 'approval_self_approval_denied%' then
+        raise exception 'assertion failed: expected approval_self_approval_denied, got %', sqlerrm;
+      end if;
+  end;
+end;
+$$;
+
 \echo '>> sequential pattern: a rejection anywhere fails the whole request immediately and skips every remaining step'
 do $$
 declare

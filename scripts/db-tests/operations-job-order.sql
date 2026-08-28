@@ -192,6 +192,54 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-203 regression: customer_snapshot/cargo_service_snapshot/revenue_snapshot/acceptance_snapshot each self-embed quotationId/quotationVersion matching the real source quotation row/version, without disturbing any pre-existing snapshot key; contract_snapshot/credit_snapshot are unchanged (not in scope)'
+do $$
+declare
+  v_tenant1 uuid;
+  v_handoff_id uuid;
+  v_job_order app.job_orders;
+  v_quotation_id uuid;
+  v_quotation_version integer;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'acmeops');
+  select id into v_handoff_id from app.job_order_handoffs where tenant_id = v_tenant1;
+  select * into v_job_order from app.job_orders where tenant_id = v_tenant1 and source_handoff_id = v_handoff_id;
+  select quotation_id into v_quotation_id from app.job_order_handoffs where id = v_handoff_id;
+  select version_number into v_quotation_version from app.quotations where id = v_quotation_id;
+
+  if (v_job_order.customer_snapshot ->> 'quotationId')::uuid <> v_quotation_id
+     or (v_job_order.cargo_service_snapshot ->> 'quotationId')::uuid <> v_quotation_id
+     or (v_job_order.revenue_snapshot ->> 'quotationId')::uuid <> v_quotation_id
+     or (v_job_order.acceptance_snapshot ->> 'quotationId')::uuid <> v_quotation_id then
+    raise exception 'assertion failed: expected quotationId=% self-embedded in all 4 named snapshots, got customer=% cargo=% revenue=% acceptance=%',
+      v_quotation_id, v_job_order.customer_snapshot ->> 'quotationId', v_job_order.cargo_service_snapshot ->> 'quotationId',
+      v_job_order.revenue_snapshot ->> 'quotationId', v_job_order.acceptance_snapshot ->> 'quotationId';
+  end if;
+  if (v_job_order.customer_snapshot ->> 'quotationVersion')::integer <> v_quotation_version
+     or (v_job_order.cargo_service_snapshot ->> 'quotationVersion')::integer <> v_quotation_version
+     or (v_job_order.revenue_snapshot ->> 'quotationVersion')::integer <> v_quotation_version
+     or (v_job_order.acceptance_snapshot ->> 'quotationVersion')::integer <> v_quotation_version then
+    raise exception 'assertion failed: expected quotationVersion=% self-embedded in all 4 named snapshots, got customer=% cargo=% revenue=% acceptance=%',
+      v_quotation_version, v_job_order.customer_snapshot ->> 'quotationVersion', v_job_order.cargo_service_snapshot ->> 'quotationVersion',
+      v_job_order.revenue_snapshot ->> 'quotationVersion', v_job_order.acceptance_snapshot ->> 'quotationVersion';
+  end if;
+
+  -- Pre-existing keys survive the merge untouched (additive, not a replacement).
+  if v_job_order.customer_snapshot ->> 'contactName' <> 'Jane Ops'
+     or v_job_order.cargo_service_snapshot ->> 'service_type' <> 'ocean_freight'
+     or (v_job_order.revenue_snapshot ->> 'totalAmount')::numeric <> 15000000 then
+    raise exception 'assertion failed: expected pre-existing snapshot keys to survive the quotationId/quotationVersion merge unchanged, got customer=% cargo=% revenue=%',
+      v_job_order.customer_snapshot, v_job_order.cargo_service_snapshot, v_job_order.revenue_snapshot;
+  end if;
+
+  -- contract_snapshot/credit_snapshot are out of this entry's own named scope, untouched.
+  if v_job_order.contract_snapshot ? 'quotationId' or v_job_order.credit_snapshot ? 'quotationId' then
+    raise exception 'assertion failed: expected contract_snapshot/credit_snapshot to remain untouched by the ISS-2026-203 fix, got contract=% credit=%',
+      v_job_order.contract_snapshot, v_job_order.credit_snapshot;
+  end if;
+end;
+$$;
+
 \echo '>> app.confirm_job_order: optimistic concurrency (stale version rejected), draft -> confirmed, and a second confirm attempt is rejected (not a draft anymore)'
 do $$
 declare

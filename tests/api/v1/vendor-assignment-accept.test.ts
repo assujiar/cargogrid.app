@@ -33,6 +33,23 @@ describe("POST /api/v1/vendor/assignments/{invitationId}/accept", () => {
     }
   });
 
+  test("ISS-2026-214: a malformed (non-uuid) invitationId -> 400 invalid_path_parameter, never reaches accept_vendor_assignment_invitation_via_vendor_api (previously leaked a raw ZodError issue array as a 422 mutation_failed message)", async () => {
+    const stub = installRpcFetchStub({ authenticate_and_authorize_api_request: { data: okAuthRow({ vendorMasterRecordId: VENDOR_ID }) } });
+    try {
+      const response = await POST(
+        new Request(`http://localhost/api/v1/vendor/assignments/not-a-uuid/accept`, { method: "POST", headers: { authorization: "Bearer cgk_test_vendor" }, body: JSON.stringify({ expectedVersion: 1 }) }),
+        { params: Promise.resolve({ invitationId: "not-a-uuid" }) },
+      );
+      assert.equal(response.status, 400);
+      const body = (await response.json()) as { error: { code: string; message: string } };
+      assert.equal(body.error.code, "invalid_path_parameter");
+      assert.doesNotMatch(body.error.message, /"code":|"issues":|ZodError/);
+      assert.equal(stub.calls.some((c) => c.fn === "accept_vendor_assignment_invitation_via_vendor_api"), false);
+    } finally {
+      stub.restore();
+    }
+  });
+
   test("malformed expectedVersion -> 400 invalid_expected_version (HDN-376 Defect B regression: previously the wrong code stale_version, indistinguishable from a real 409 conflict)", async () => {
     const stub = installRpcFetchStub({ authenticate_and_authorize_api_request: { data: okAuthRow({ vendorMasterRecordId: VENDOR_ID }) } });
     try {

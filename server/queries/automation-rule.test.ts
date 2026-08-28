@@ -169,6 +169,21 @@ describe("getLatestAutomationRulePublishApprovalRequest", () => {
     assert.equal(request?.status, "pending");
     assert.equal(request?.entityId, VERSION_ID);
   });
+
+  // ISS-2026-237 regression: app.approval_requests.ended_reason is not granted
+  // to `authenticated` (20260731210000, Finding 5 CRITICAL) -- a real row read
+  // through this path never carries that key at all, unlike this file's other
+  // fixtures which set it explicitly. Prove the parse still succeeds (never a
+  // ZodError/AutomationRuleQueryError from a missing `ended_reason`) and that
+  // `endedReason` comes back `null`, never leaking whatever the column would
+  // have held.
+  test("parses a row with no ended_reason key at all, never throwing (ISS-2026-237)", async () => {
+    const { ended_reason: _omitted, ...rowWithoutEndedReason } = VALID_APPROVAL_REQUEST_ROW;
+    const client = fakeTableClient({ data: rowWithoutEndedReason, error: null });
+    const request = await getLatestAutomationRulePublishApprovalRequest(client, VERSION_ID);
+    assert.equal(request?.status, "pending");
+    assert.equal(request?.endedReason, null);
+  });
 });
 
 describe("listApprovalRequestSteps", () => {

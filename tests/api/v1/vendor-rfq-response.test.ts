@@ -35,6 +35,23 @@ describe("POST /api/v1/vendor/rfqs/{rfqInvitationId}/response", () => {
     }
   });
 
+  test("ISS-2026-214: a malformed (non-uuid) rfqInvitationId -> 400 invalid_path_parameter, never reaches submit_rfq_response_via_vendor_api (previously leaked a raw ZodError issue array as a 422 mutation_failed message), and takes priority over the missing-Idempotency-Key check", async () => {
+    const stub = installRpcFetchStub({ authenticate_and_authorize_api_request: { data: okAuthRow({ vendorMasterRecordId: VENDOR_ID }) } });
+    try {
+      const response = await POST(
+        new Request(`http://localhost/api/v1/vendor/rfqs/not-a-uuid/response`, { method: "POST", headers: { authorization: "Bearer cgk_test_vendor" }, body: BODY }),
+        { params: Promise.resolve({ rfqInvitationId: "not-a-uuid" }) },
+      );
+      assert.equal(response.status, 400);
+      const body = (await response.json()) as { error: { code: string; message: string } };
+      assert.equal(body.error.code, "invalid_path_parameter");
+      assert.doesNotMatch(body.error.message, /"code":|"issues":|ZodError/);
+      assert.equal(stub.calls.some((c) => c.fn === "submit_rfq_response_via_vendor_api"), false);
+    } finally {
+      stub.restore();
+    }
+  });
+
   test("missing Idempotency-Key header -> 400 missing_idempotency_key (HDN-376 Defect A regression: previously the wrong-domain code webhook_missing_idempotency_key)", async () => {
     const stub = installRpcFetchStub({ authenticate_and_authorize_api_request: { data: okAuthRow({ vendorMasterRecordId: VENDOR_ID }) } });
     try {
