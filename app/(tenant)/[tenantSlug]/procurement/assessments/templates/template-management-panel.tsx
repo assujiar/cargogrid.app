@@ -59,7 +59,8 @@ export function TemplateManagementPanel({
         {templates.length === 0 ? (
           <EmptyState title="No templates match this view" description="Create a new draft template below." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Name</th>
@@ -85,6 +86,7 @@ export function TemplateManagementPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

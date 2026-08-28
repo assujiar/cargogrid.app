@@ -43,11 +43,12 @@ items, re-verifies their true current status as a side effect — this residual 
 naturally as batches complete, and any correction found will be disclosed here and in `RGL-404.md`
 §12, never silently absorbed.
 
-**Working total for Track B: 131** (0 Critical, 5 High, 62 Medium, 64 Low) — updated during Batch 1
+**Working total for Track B: 125** (0 Critical, 5 High, 60 Medium, 60 Low) — updated during Batch 1
 review: `ISS-2026-285` turned out to already be fixed (`RGL-394`), just never annotated; see
-`RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), Batch 3 (135), and
-Batch 4 (131, this figure) — see the "Batch 1 status"/"Batch 2 status"/"Batch 3 status"/"Batch 4
-status" sections below and `RGL-404.md` §12 items 22-41 for the authoritative running log.
+`RGL-404.md` §12 item 21. Further updated after Batch 1 (141), Batch 2 (136), Batch 3 (135), Batch 4
+(131), and Batch 5 (125, this figure) — see the "Batch 1 status"/"Batch 2 status"/"Batch 3
+status"/"Batch 4 status"/"Batch 5 status" sections below and `RGL-404.md` §12 items 22-47 for the
+authoritative running log.
 
 ---
 
@@ -260,6 +261,64 @@ are NOT counted toward this reduction — each still has a genuinely open sub-it
 file's own discipline of only counting an item once its own disposition is a real terminus. See
 `RGL-404.md` §12 items 34-41 for the authoritative running log.
 
+## Batch 5 status: complete
+
+`perf-load-evidence` (3: 139, 140, 141) + `docs-consistency` (5: 142, 153, 157, 252, 281) +
+`iae-hardening-residual` (3: 148, 149, 152) + `accessibility` (7: 241, 242, 243, 245, 246, 247, 248)
++ `browser-compat` (1: 244) — 19 items, genuinely `mixed` as the table predicted: 6 items fully
+closed, 1 drafted then withdrawn, 12 confirmed-still-open dispositions (2 of those narrowed by new
+evidence, not merely reconfirmed).
+
+`ISS-2026-139` — `RESOLVED` (doc-only, already fixed): the same `ISS-2026-285`-class doc-drift
+finding recurring a sixth time this session — already fixed at `20260810600000_harden_loyalty_
+redemption_maker_checker.sql`, which explicitly states "closes ISS-2026-139," never reconciled.
+
+`ISS-2026-149` — `RESOLVED`: `app.resolve_enterprise_idp_by_email_domain`, the one anon-reachable
+function in the schema with zero throttle, gained a client_key-scoped rate limiter mirroring
+`app.lookup_public_shipment_tracking`'s own established shape. **Escalated in severity during
+verification**: the entry's own stated mitigation ("`app` not yet PostgREST-exposed") no longer
+held — `RGL-394`'s `public.*` wrapper layer (landed after this entry was written) made this a real,
+live, anon-reachable endpoint.
+
+`ISS-2026-152` — `RESOLVED`: `app.request_ai_governed_action` now consults the region/service-
+capability matrix (`IAE-033`) at dispatch time — a tenant whose region doesn't support `ai_provider`
+is refused unless a real, approved exception is on file, in which case the audit event is tagged.
+Zero behavior change for the default (`apac`) case.
+
+`ISS-2026-157`, `252` — `RESOLVED`: two direct documentation corrections (`CARGOGRID_BUILD_STATUS.md`
+§1 retitled/flagged stale rather than wholesale re-derived; `OBSERVABILITY_STANDARDS.md` §7's
+Health/readiness row corrected in place, the other 4 rows independently re-verified still accurate
+and left untouched).
+
+`ISS-2026-247` — `RESOLVED`: all 19 remaining unwrapped tables (of 96) wrapped in
+`overflow-x-auto`, mirroring this checkpoint's own established pattern for the 4 worst offenders
+already fixed. Post-fix re-sweep: 0 remaining.
+
+`ISS-2026-142` — drafted, then withdrawn — true scope exceeds this entry's own "6 append-only
+ledger tables" bounded-fix assessment. A migration adding `retention_class`/`legal_hold` columns to
+the 6 tables was drafted, but its own drafting agent flagged it incomplete before this integration
+pass ever reached it: no companion `scripts/data-classification/registry.ts` entries (needed for
+the columns to be reachable by the `data-classification:check` gate at all), no purge/hold-
+enforcement mechanism, and no db-test coverage. Deleted before being applied anywhere, redispositioned
+with the corrected scope — mirrors this session's own `ISS-2026-170`/`189`/`038`/`040` precedent.
+
+`ISS-2026-141`, `148` — narrowed, not closed: both received a real, disclosed evidence addition
+(a new `EXPLAIN` block for Phase 8's real CPL-309 function; a disclosure that the pre-existing
+generic job-queue load-test scenario already covers, undisclosed, the throughput backing 1 Phase 8
+and 4 Phase 9 async job types) but full target-volume/route-level coverage remains genuinely
+capability-sized for both, matching each entry's own scoping.
+
+`ISS-2026-140`, `153`, `241`, `242`, `243`, `244`, `245`, `246`, `248`, `281` — re-verified still
+genuinely open against current code, dispositioned. The batch table's own "241/242/247/248 share a
+component-level fix pattern, batchable" hint was investigated specifically and found to be an
+overclaim for 241/242/248 — no single shared root component or token covers all four; only 247 was
+genuinely bounded and closed on its own.
+
+Working total after Batch 5: **125 remaining** (0 Critical, 5 High, 60 Medium, 60 Low). Down from
+131 by 6: `ISS-2026-139` (Medium, doc-only), `ISS-2026-149` (Low), `ISS-2026-152` (Medium),
+`ISS-2026-157` (Low), `ISS-2026-247` (Low), `ISS-2026-252` (Low). See `RGL-404.md` §12 items 42-47
+for the authoritative running log.
+
 ## Medium/Low batches (140 items, working count)
 
 Batches below reproduce the categorization research pass performed for this document (full
@@ -278,9 +337,9 @@ High items above go in the first batch regardless of theme.
 | `cpl-customer-portal-scope` | 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 126, 127, 128, 129 | 14 | mostly BIG/DOC | **Batch 4, complete.** 115/116/117 resolved (117 escalated in severity); 124/128 partial; rest confirmed still-open BIG/DOC, dispositioned |
 | `loyalty-fraud-reconciliation` | 131, 132, 133, 134, 136 | 5 | mixed | **Batch 4, complete.** 133/134 partial (self-approval + cost-missing exception fixed); rest confirmed still-open, dispositioned |
 | `loyalty-approval-authority` | 137, 138 | 2 | CODE/BIG | **Batch 4, complete.** 137 resolved (6th-table trigger extension); 138 confirmed a doc-only gap, dispositioned |
-| `perf-load-evidence` | 139, 140, 141 | 3 | TEST/CODE | Zero load/perf evidence for Phase 8/9 routes; retention gap |
-| `docs-consistency` | 142, 153, 157, 252, 281 | 5 | DOC/BIG | Doc mislabels, stale sections, accessibility-audit gap |
-| `iae-hardening-residual` | 148, 149, 152 | 3 | TEST/CODE | Load evidence, anon enumeration oracle, inert capability matrix |
+| `perf-load-evidence` | 139, 140, 141 | 3 | TEST/CODE | **Batch 5, complete.** 139 resolved (doc-drift); 141 narrowed; 140 confirmed still-open INFRA, dispositioned |
+| `docs-consistency` | 142, 153, 157, 252, 281 | 5 | DOC/BIG | **Batch 5, complete.** 157/252 resolved (direct doc fixes); 142 withdrawn; 153/281 confirmed still-open, dispositioned |
+| `iae-hardening-residual` | 148, 149, 152 | 3 | TEST/CODE | **Batch 5, complete.** 149/152 resolved; 148 narrowed |
 | `step-up-mfa-enforcement` | 151 | 1 | CODE | `create_integration_connection` unwired to step-up MFA |
 | `rls-grants` | ~~167~~, 170, ~~172~~, ~~174~~, ~~175~~, ~~176~~, 189 | 7 | CODE | **Batch 1: 5 of 7 resolved, 2 withdrawn/deferred** (170, 189) — each item turned out to need its own distinct mechanism (error-text collapse, column grant, cache key, view allow-list), not one shared migration as originally guessed; see per-item detail below |
 | `support-access-audit` | 177, 178 | 2 | CODE | Session-open audit gap, webhook-retry tenant cross-check |
@@ -295,8 +354,8 @@ High items above go in the first batch regardless of theme.
 | `postgis-extension` | 234 | 1 | INFRA | Cannot relocate `postgis` out of `public`; 6 advisories permanently open |
 | `schema-completeness-gaps` | 237, 238 | 2 | CODE | Broken `select("*")` page; 4 unpaginated tenant-wide routes |
 | `perf-cache-safety` | 240 | 1 | CODE | `auth_rls_initplan` guard blind to default `auth.uid()` pattern |
-| `accessibility` | 241, 242, 243, 245, 246, 247, 248 | 7 | CODE/DOC | 241/242/247/248 share a component-level fix pattern, batchable |
-| `browser-compat` | 244 | 1 | INFRA | Safari/Firefox structurally untestable in this sandbox |
+| `accessibility` | 241, 242, 243, 245, 246, 247, 248 | 7 | CODE/DOC | **Batch 5, complete.** 247 resolved; the "shared pattern" hint investigated and found to be an overclaim for 241/242/248; rest confirmed still-open, dispositioned |
+| `browser-compat` | 244 | 1 | INFRA | **Batch 5, complete.** Confirmed genuinely not boundable — no WebKit/Firefox binaries exist in this sandbox |
 | `observability-alerting` | 251, 253 | 2 | CODE | Alert dispatch mechanism; unlogged `/api/ready` failure path |
 | `dr-runbook` | 256, 259, 284 | 3 | INFRA/CODE/DOC | RPO/RTO never confirmed live; audit_logs blind to raw-SQL corruption; stale doc fact |
 | `migration-import` | 274, 277 | 2 | BIG/CODE | No master-data bulk-import mechanism; legal-hold scoped to deletion only |
@@ -322,7 +381,7 @@ Severity orders the first batch; domain/mechanism groups the rest, per the appro
    redispositioned, 12 dispositioned; see "Batch 2 status" above).
 3. **Batch 3 (complete)**: `hris-integrated-verification-residual` (14) + `hris-overtime-timesheet-gaps` (2) + `hris-payroll-personal-data` (3) — 19 items (1 resolved doc-only, 1 partially resolved, 17 dispositioned).
 4. **Batch 4 (complete)**: `cpl-customer-portal-scope` (14) + `loyalty-fraud-reconciliation` (5) + `loyalty-approval-authority` (2) — 21 items (4 resolved, 4 partially resolved, 13 dispositioned).
-5. **Batch 5**: `accessibility` (7) + `browser-compat` (1) + `docs-consistency` (5) + `perf-load-evidence` (3) + `iae-hardening-residual` (3) — 19 items.
+5. **Batch 5 (complete)**: `accessibility` (7) + `browser-compat` (1) + `docs-consistency` (5) + `perf-load-evidence` (3) + `iae-hardening-residual` (3) — 19 items (6 resolved, 1 withdrawn, 12 dispositioned).
 6. **Batch 6**: `rbac-defense-in-depth` (5) + `support-access-audit` (2) + `rls-own-row-narrowing` (1) + `step-up-mfa-enforcement` (1) + `observability-alerting` (2) + `db-test-flakiness` (3) + `ticketing-links-gaps` (2) + `perf-cache-safety` (1) — 17 items.
 7. **Batch 7**: `lineage-provenance` (2) + `rest-api-consistency` (2) + `rest-api-error-shape` (2) + `files-legal-hold-residual` (2) + `crypto-scan-recovery` (1) + `schema-completeness-gaps` (2) + `finance-fx` (1) + `migration-import` (2) — 14 items.
 8. **Batch 8 (disposition batch)**: every remaining `INFRA`/`BIZ`/pure-`BIG` item not already folded into batches 1-7 — `postgis-extension`, `dr-runbook`, `prod-seed-hygiene`, `perf-live-latency`, `ISS-2026-300`, plus any `BIG` items from earlier batches whose own code-shaped half was built but whose full capability was not. Per the operator's own instruction: build the code-shaped part, write an explicit owner-named disposition for the rest.

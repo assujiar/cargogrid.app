@@ -281,7 +281,8 @@ export default async function ProcurementDashboardPage({
           rfqCycle.value.length === 0 ? (
             <EmptyState title="No RFQs yet" description="No RFQs have been issued in this tenant." />
           ) : (
-            <table className="w-full border-collapse text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-neutral-500">
                   <th className="py-2 pr-4 font-medium">Status</th>
@@ -303,6 +304,7 @@ export default async function ProcurementDashboardPage({
                 ))}
               </tbody>
             </table>
+            </div>
           )
         ) : null}
       </section>
@@ -336,7 +338,8 @@ export default async function ProcurementDashboardPage({
 
         <WidgetStatus {...assignmentAcceptance} />
         {assignmentAcceptance.value && assignmentAcceptance.value.length > 0 ? (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-neutral-500">
                 <th className="py-2 pr-4 font-medium">Status</th>
@@ -354,6 +357,7 @@ export default async function ProcurementDashboardPage({
               ))}
             </tbody>
           </table>
+          </div>
         ) : null}
       </section>
 
@@ -372,7 +376,8 @@ export default async function ProcurementDashboardPage({
         </div>
         <WidgetStatus {...poSummary} />
         {poSummary.value && poSummary.value.length > 0 ? (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-neutral-500">
                 <th className="py-2 pr-4 font-medium">Status</th>
@@ -392,6 +397,7 @@ export default async function ProcurementDashboardPage({
               ))}
             </tbody>
           </table>
+          </div>
         ) : poSummary.value ? (
           <EmptyState title="No purchase orders yet" description="No purchase orders exist in this tenant." />
         ) : null}
@@ -447,7 +453,8 @@ export default async function ProcurementDashboardPage({
           matchVariance.value.length === 0 ? (
             <EmptyState title="No match cases yet" description="No vendor bill match cases exist in this tenant." />
           ) : (
-            <table className="w-full border-collapse text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-neutral-500">
                   <th className="py-2 pr-4 font-medium">Status</th>
@@ -467,6 +474,7 @@ export default async function ProcurementDashboardPage({
                 ))}
               </tbody>
             </table>
+            </div>
           )
         ) : null}
       </section>
@@ -508,7 +516,8 @@ export default async function ProcurementDashboardPage({
         {reportRuns.length === 0 ? (
           <EmptyState title="No export has been requested yet" description="Request an export above to see it here." />
         ) : (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-neutral-500">
                 <th className="py-2 pr-4 font-medium">Report</th>
@@ -528,6 +537,7 @@ export default async function ProcurementDashboardPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

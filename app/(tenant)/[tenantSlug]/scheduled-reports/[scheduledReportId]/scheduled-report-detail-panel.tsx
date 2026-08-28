@@ -107,28 +107,30 @@ export function ScheduledReportDetailPanel({
         {runs.length === 0 ? (
           <EmptyState title="No runs yet" />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-neutral-500">
-                <th className="pb-1">Started</th>
-                <th className="pb-1">Status</th>
-                <th className="pb-1">Recipients</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((r) => (
-                <tr key={r.id} className="border-t border-neutral-100">
-                  <td className="py-1">{r.startedAt}</td>
-                  <td className="py-1">
-                    <StatusBadge tone={RUN_STATUS_TONE[r.status]} label={r.status} />
-                  </td>
-                  <td className="py-1">
-                    {r.recipientsReauthorized}/{r.recipientsTotal} reauthorized{r.recipientsDenied > 0 ? `, ${r.recipientsDenied} denied` : ""}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="text-left text-xs text-neutral-500">
+                  <th className="pb-1">Started</th>
+                  <th className="pb-1">Status</th>
+                  <th className="pb-1">Recipients</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {runs.map((r) => (
+                  <tr key={r.id} className="border-t border-neutral-100">
+                    <td className="py-1">{r.startedAt}</td>
+                    <td className="py-1">
+                      <StatusBadge tone={RUN_STATUS_TONE[r.status]} label={r.status} />
+                    </td>
+                    <td className="py-1">
+                      {r.recipientsReauthorized}/{r.recipientsTotal} reauthorized{r.recipientsDenied > 0 ? `, ${r.recipientsDenied} denied` : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

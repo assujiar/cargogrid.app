@@ -33,7 +33,8 @@ export function DashboardManagementPanel({
         {dashboards.length === 0 ? (
           <EmptyState title="No dashboards yet" description="Create your first dashboard below." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Name</th>
@@ -57,6 +58,7 @@ export function DashboardManagementPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

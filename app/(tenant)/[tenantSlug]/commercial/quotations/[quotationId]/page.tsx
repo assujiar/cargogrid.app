@@ -171,7 +171,8 @@ export default async function QuotationDetailPage({
         {lines.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-600">No lines yet.</p>
         ) : (
-          <table className="mt-2 w-full border-collapse text-sm">
+          <div className="overflow-x-auto">
+          <table className="mt-2 w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-neutral-600">
                 <th scope="col" className="py-2 pr-4 font-medium">
@@ -224,6 +225,7 @@ export default async function QuotationDetailPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -36,7 +36,8 @@ export function ScheduledReportManagementPanel({
         {schedules.length === 0 ? (
           <EmptyState title="No scheduled reports yet" description="Create one below." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Name</th>
@@ -62,6 +63,7 @@ export function ScheduledReportManagementPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

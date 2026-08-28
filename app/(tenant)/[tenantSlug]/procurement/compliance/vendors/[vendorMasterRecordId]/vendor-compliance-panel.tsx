@@ -120,7 +120,8 @@ export function VendorCompliancePanel({
         {eligibility.length === 0 ? (
           <EmptyState title="No requirements tracked yet" description="Submit a document below against a published requirement to begin tracking." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Requirement</th>
@@ -148,6 +149,7 @@ export function VendorCompliancePanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

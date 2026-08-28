@@ -83,7 +83,8 @@ export function AssessmentQueuePanel({
         {assessments.length === 0 ? (
           <EmptyState title="No assessments match this view" description="Adjust your filters, or start a new assessment below." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Type</th>
@@ -111,6 +112,7 @@ export function AssessmentQueuePanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

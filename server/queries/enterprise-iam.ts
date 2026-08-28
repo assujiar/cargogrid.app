@@ -75,9 +75,18 @@ export async function listScimProvisioningEvents(client: EnterpriseIamQueryRpcCl
   return asRows(data).map(parseIamScimProvisioningEvent);
 }
 
-/** Deliberately public (no actor required) -- returns null when no active domain claim + active connection exists for this email domain. */
-export async function resolveEnterpriseIdpByEmailDomain(client: EnterpriseIamQueryRpcClient, emailDomain: string): Promise<EnterpriseIdpByEmailDomain | null> {
-  const { data, error } = await client.rpc("resolve_enterprise_idp_by_email_domain", { p_email_domain: emailDomain });
+/**
+ * Deliberately public (no actor required) -- returns null when no active domain claim +
+ * active connection exists for this email domain, OR when clientKey has been rate-limited
+ * (ISS-2026-149, Track B Batch 5: 10+ non-matching lookups for the same clientKey within a
+ * trailing 15-minute window) -- both outcomes are indistinguishable to the caller by design.
+ * clientKey should be a stable-per-caller value the calling route derives (e.g. a hash of the
+ * caller's own IP/session), mirroring resolveShipmentTracking's own client_key convention --
+ * never the raw email domain itself, which would let every distinct probed domain reset its
+ * own throttle.
+ */
+export async function resolveEnterpriseIdpByEmailDomain(client: EnterpriseIamQueryRpcClient, emailDomain: string, clientKey: string): Promise<EnterpriseIdpByEmailDomain | null> {
+  const { data, error } = await client.rpc("resolve_enterprise_idp_by_email_domain", { p_email_domain: emailDomain, p_client_key: clientKey });
   if (error) {
     throw new EnterpriseIamQueryError(error.message);
   }

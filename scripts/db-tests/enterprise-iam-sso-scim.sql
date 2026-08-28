@@ -336,7 +336,7 @@ declare
   v_count integer;
 begin
   -- The corp.test domain claim was just disabled above -- expect zero rows now.
-  select count(*) into v_count from app.resolve_enterprise_idp_by_email_domain('iaeiam-corp.test');
+  select count(*) into v_count from app.resolve_enterprise_idp_by_email_domain('iaeiam-corp.test', 'db-test-idp-lookup-1');
   if v_count <> 0 then
     raise exception 'assertion failed: expected zero rows for a disabled domain claim, got %', v_count;
   end if;
@@ -358,15 +358,74 @@ begin
   perform app.verify_mfa_step_up_challenge((app.request_mfa_step_up_challenge(v_tenant1, 'IAM', 'Configure', v_admin1, 'admin1')).id, v_admin1, 'admin1');
   perform app.activate_enterprise_idp_connection(v_saml_conn_id, v_admin1, 'admin1');
 
-  select * into v_row from app.resolve_enterprise_idp_by_email_domain('iaeiam-corp.test');
+  select * into v_row from app.resolve_enterprise_idp_by_email_domain('iaeiam-corp.test', 'db-test-idp-lookup-2');
   if v_row.connection_id <> v_saml_conn_id or v_row.protocol <> 'enterprise_sso_saml' then
     raise exception 'assertion failed: expected connection %/enterprise_sso_saml, got %/%', v_saml_conn_id, v_row.connection_id, v_row.protocol;
   end if;
 
-  select count(*) into v_count from app.resolve_enterprise_idp_by_email_domain('completely-unclaimed-domain.test');
+  select count(*) into v_count from app.resolve_enterprise_idp_by_email_domain('completely-unclaimed-domain.test', 'db-test-idp-lookup-3');
   if v_count <> 0 then
     raise exception 'assertion failed: expected zero rows for an unclaimed domain, got %', v_count;
   end if;
+
+  -- ISS-2026-149 (Track B Batch 5): a null/empty client_key is refused outright
+  -- (mirrors app.lookup_public_shipment_tracking's own tracking_client_key_
+  -- required convention) -- never silently treated as "no throttle requested."
+  begin
+    perform app.resolve_enterprise_idp_by_email_domain('iaeiam-corp.test', null);
+    raise exception 'assertion failed: expected iam_domain_lookup_client_key_required for a null client_key, the call unexpectedly succeeded';
+  exception when others then
+    if sqlerrm not like 'iam_domain_lookup_client_key_required%' then
+      raise;
+    end if;
+  end;
+end;
+$$;
+
+\echo '>> ISS-2026-149 (Track B Batch 5): app.resolve_enterprise_idp_by_email_domain is now client_key-scoped rate-limited -- 10 non-matching lookups for the SAME client_key within the trailing 15-minute window rate-limit the 11th (returned as zero rows, indistinguishable from a genuine non-match); a DIFFERENT client_key against the identical domain is unaffected, proving the throttle is per-caller, never global or per-domain'
+do $$
+declare
+  v_row record;
+  v_count integer;
+  v_not_found_logged integer;
+  v_rate_limited_logged integer;
+begin
+  for i in 1..10 loop
+    select count(*) into v_count from app.resolve_enterprise_idp_by_email_domain('rate-limit-probe-domain.test', 'db-test-rate-limit-client-A');
+    if v_count <> 0 then
+      raise exception 'assertion failed: expected zero rows for a genuinely unclaimed probe domain on attempt %, got %', i, v_count;
+    end if;
+  end loop;
+
+  select count(*) into v_not_found_logged from app.enterprise_idp_domain_lookup_attempts where client_key = 'db-test-rate-limit-client-A' and result = 'not_found';
+  if v_not_found_logged <> 10 then
+    raise exception 'assertion failed: expected exactly 10 logged not_found attempts for client-A, got %', v_not_found_logged;
+  end if;
+
+  -- The 11th lookup for the SAME client_key is rate-limited, not merely a
+  -- fresh not_found -- proven by inspecting the attempt log, not just the
+  -- (identical either way) zero-row return shape.
+  select count(*) into v_count from app.resolve_enterprise_idp_by_email_domain('rate-limit-probe-domain.test', 'db-test-rate-limit-client-A');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero rows for the 11th (rate-limited) lookup, got %', v_count;
+  end if;
+  select count(*) into v_rate_limited_logged from app.enterprise_idp_domain_lookup_attempts where client_key = 'db-test-rate-limit-client-A' and result = 'rate_limited';
+  if v_rate_limited_logged <> 1 then
+    raise exception 'assertion failed: expected exactly 1 logged rate_limited attempt for client-A after 11 lookups, got %', v_rate_limited_logged;
+  end if;
+
+  -- A DIFFERENT client_key probing the identical domain is completely
+  -- unaffected -- the throttle is client_key-scoped, never global/per-domain.
+  select count(*) into v_count from app.resolve_enterprise_idp_by_email_domain('rate-limit-probe-domain.test', 'db-test-rate-limit-client-B');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero rows (genuine not_found, not rate_limited) for client-B''s first lookup, got %', v_count;
+  end if;
+  select count(*) into v_rate_limited_logged from app.enterprise_idp_domain_lookup_attempts where client_key = 'db-test-rate-limit-client-B' and result = 'rate_limited';
+  if v_rate_limited_logged <> 0 then
+    raise exception 'assertion failed: expected client-B to carry zero rate_limited entries (a distinct client_key must never inherit client-A''s own throttle), got %', v_rate_limited_logged;
+  end if;
+
+  raise notice 'ISS-2026-149 client_key-scoped rate-limit regression proof: 10 not_found lookups logged, the 11th rate-limited for client-A, a distinct client-B unaffected';
 end;
 $$;
 
@@ -548,7 +607,9 @@ begin
     raise exception 'assertion failed: expected zero anon EXECUTE grants across this checkpoint''s 11 authority-gated functions, found %', v_anon_grant_count;
   end if;
 
-  select has_function_privilege('anon', 'app.resolve_enterprise_idp_by_email_domain(text)', 'EXECUTE') into v_public_fn_grant;
+  -- ISS-2026-149 (Track B Batch 5): signature widened to (text, text) -- the
+  -- p_client_key rate-limit parameter -- the old 1-arg overload no longer exists.
+  select has_function_privilege('anon', 'app.resolve_enterprise_idp_by_email_domain(text, text)', 'EXECUTE') into v_public_fn_grant;
   if not v_public_fn_grant then
     raise exception 'assertion failed: expected app.resolve_enterprise_idp_by_email_domain to be anon-reachable by design, it is not';
   end if;

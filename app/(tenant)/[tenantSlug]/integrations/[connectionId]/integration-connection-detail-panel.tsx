@@ -199,7 +199,8 @@ export function IntegrationConnectionDetailPanel({
         {healthChecks.length === 0 ? (
           <EmptyState title="No health checks yet" description="Run a test above to record the first one." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500">
                 <th className="pb-1">Checked</th>
@@ -219,6 +220,7 @@ export function IntegrationConnectionDetailPanel({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

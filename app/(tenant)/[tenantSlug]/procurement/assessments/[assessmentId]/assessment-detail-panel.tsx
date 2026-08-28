@@ -197,7 +197,8 @@ export function AssessmentDetailPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Score explanation</h2>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-sm">
           <thead>
             <tr className="text-left text-xs text-neutral-500">
               <th className="pb-1">Criterion</th>
@@ -217,6 +218,7 @@ export function AssessmentDetailPanel({
             ))}
           </tbody>
         </table>
+        </div>
         <p className="text-sm text-neutral-700">
           Calculated score: <strong>{assessment.calculatedScore ?? "—"}</strong> ({assessment.scoreBand ?? "not yet calculated"})
           {assessment.adjustedScore !== null ? (
