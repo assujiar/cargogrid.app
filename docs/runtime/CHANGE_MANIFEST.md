@@ -6672,6 +6672,52 @@ Self-closing. `ATW-029` is `VERIFIED`. **`PHASE_5_VERIFIED` is set.** The tenth 
 | Status | `VERIFIED` |
 | Date | 2026-08-09 |
 
+### CHG-2026-282 — Step 17 Final Package Validation executed at runtime (`CG-S17-FPV-001..017`, Prompts 414-430, 2026-08-29)
+
+**Task IDs:** `CG-S17-FPV-001` … `CG-S17-FPV-017` · **Type:** DOCS + TOOLING · **Migration:** NONE
+**Risk:** LOW · **Status:** `COMPLETED` · **Branch:** `claude/step-17-implementation-0fbul7`
+**Commits:** `90f9593` (authority) → `62c5a40` (closure), 17 commits, one per lane
+
+**What changed.**
+
+1. **Authority (`ADR-0026` + `CON-016`).** Step 17's prompts require the executing agent to correct
+   package metadata, while `scripts/git/check-protected-paths.ts` made the whole prompt package
+   `FORBIDDEN`. Resolved by narrowing on the operator's explicit instruction: five
+   register/derived-metadata files downgraded to `CAUTION`, matched literally. **All 324 prompt
+   files and all 18 step READMEs stay `FORBIDDEN`.** Mirrored in `docs/git/GIT_STRATEGY.md` §4 and
+   `AGENTS.md`.
+2. **New gate.** `scripts/docs/check-prompt-package.ts` + 32 unit tests, wired in as
+   `pnpm run package:check` and added to the `quality` job of `.github/workflows/ci.yml`. Checks
+   inventory, manifest bijection, ID uniqueness, 36-heading order, empty sections, control-file
+   versions, and the §36 dependency graph.
+3. **17 runtime lanes**, one commit each, each with its own Tier A + Tier B + Tier C round
+   (Step 17 is never-batched). Outputs under `docs/build-log/final-package-validation/`: the
+   execution index, `FPV-415`…`FPV-429`, `FINAL_GAP_RISK_REGISTER.md` and
+   `FINAL_PACKAGE_VALIDATION_REPORT.md`.
+4. **Three in-package corrections, four edits, all under `CON-016`** — `M-004`'s stale version
+   cell plus a manifest change-summary row (`FPV-426`), and the false "already validated" claim in
+   `START_HERE.md` §8 and `06_PACKAGE_BUILD_STATUS.md`'s header (`FPV-430`). Nothing else in the
+   package was touched; all 324 prompt files are byte-identical to how Step 17 found them.
+
+**Outcome: `FINAL_PACKAGE_PARTIALLY_COMPLETE`. `FINAL_PACKAGE_VALIDATED` is NOT set.** 15/15
+required-verification items disposed of — 13 PASS, 1 PARTIAL (item 1: 5 of 9 control files
+reference `0.18.0-step17`), 1 SUBSTITUTED (item 15: no ZIP exists, so a deterministic SHA-256
+manifest over the 430 files was substituted and disclosed as a substitute — digest
+`ea46a79f3c56d37a8220aef7a69bf4f34c27524f82a81a89bbfbb6cf0b943b90`).
+
+**Residual:** 9 findings registered, 1 closed in-step, 8 open — 0 Critical, 1 High, 4 Medium,
+3 Low. The High (`RPD-020` carried by no prompt) is escalated to `ISS-2026-301`.
+
+**Compatibility and rollback.** No product code, migration, schema, environment or external system
+changed. The only behavioural change to the repository is the new `package:check` gate and the
+narrowed protected-path rule; `ADR-0026` records the reversal condition for the latter — revert
+the change, restore the five paths to `FORBIDDEN`, and re-run the affected lanes findings-only.
+Rolling back costs the three corrections, not the audit.
+
+**Not claimed.** CargoGrid is not implemented, not production ready, not market ready, not
+generally available. `RGL-BLK-001`, the absent `UAT_ACCEPTED`, the absent staging tier and the red
+CI (`RGL-BLK-005`) are all unchanged; Step 16 remains `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`.
+
 ## 3. Maintenance rules
 
 1. A change entry is required even for rollback and documentation-only work.
