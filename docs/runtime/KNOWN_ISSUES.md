@@ -4445,6 +4445,50 @@ future session discovers it as a fresh mystery.
 
 **Re-verified, disposition confirmed accurate and unchanged (2026-08-28, Track B Batch 8) — live-reconfirmed via direct `list_migrations` query.** Queried `supabase_migrations.schema_migrations` on the live hosted project: all 9 wall-clock-versioned rows this entry's own table names are still present, byte-identical, unreconciled — none of the corresponding correct filename-versions appear anywhere in the ledger, confirming the drift is unchanged since discovery. No write attempted against this system catalog, per this batch's own explicit no-live-mutation scope — matching this entry's own already-correct deferral (its prior attempt was itself denied by the session's own write-safety classifier, correctly not worked around). **Not fixed by this batch.** The exact reconciliation SQL this entry already provides remains valid and unexecuted, pending an operator with Supabase Dashboard SQL-editor access or a session with this specific write pre-approved. Owner unchanged.
 
+### ISS-2026-301 — `RPD-020` (tenant merge/split is an admin-run migration) is carried by no prompt anywhere in the 430-file build prompt package, found by Step 17's Requirement Coverage Audit (`CG-S17-FPV-002`, Prompt 415, 2026-08-29)
+
+**Severity: High. Status: `OPEN`. Owner: a future package revision (`0.19.x`) — no Step 17 lane is
+authorized to close it.**
+
+`RPD-020` is a ratified product decision in
+`docs/ai-agent-build-prompt-package/00-control/02_CONFIRMED_DECISION_REGISTER.md`. No prompt in
+the package carries it, so **a future agent executing the package from `START_HERE.md` straight
+through to Prompt 430 will never build tenant merge/split, and nothing in the package will tell
+them it is missing.**
+
+**Confirmed by reading, not by grep.** The only match outside the control documents is
+`docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/244_ADVANCED_CLAIM_INCIDENT_PROMPT.md`
+lines 100 and 128 — *claim record* merge/split ("Merge duplicates while retaining lineage, split
+affected items"), an unrelated use of the same words. The three prompts that would plausibly own
+the capability were each opened and read:
+
+| Prompt | Its own §4 Objective | Carries `RPD-020`? |
+|---|---|---|
+| `105_TENANT_PROVISIONING_LIFECYCLE_PROMPT.md` | "one canonical tenant lifecycle with idempotent provisioning, isolated bootstrap, guarded state transitions and auditable recovery" | **No** — its single `merge|split` line is "no broad portal screen unless task is **split**/authorized", a scoping sentence |
+| `106_SUBSCRIPTION_MODULE_FEATURE_ENTITLEMENT_PROMPT.md` | "versioned tenant entitlements for subscription package, modules, features, quotas and effective dates" | **No** |
+| `136_SUPREME_ADMIN_PORTAL_PROMPT.md` | Supreme Admin portal | **No** |
+
+**Exposure, precisely scoped.** No tenant data is at risk from the omission itself and no existing
+capability is weakened — the package does not instruct anyone to do anything unsafe. The risk is
+that a ratified decision goes silently unimplemented, and that its absence is invisible to the
+agent executing the package.
+
+**Why it is not fixed.** Closing it requires authoring a new capability prompt. That is the
+"changes what a future agent builds" class `docs/adr/ADR-0026-step17-package-metadata-correction-authority.md`
+decision 5 forbids Step 17 from applying, and all 324 prompt files remain `FORBIDDEN` under
+decision 2. Step 17 audits the package; it is not chartered to extend it.
+
+**Proposed patch, for whoever holds that authority.** Add a Platform Core capability prompt
+(Phase 1, sequenced after prompt `105`) owning tenant merge/split as an admin-run, audited,
+reversible migration with tenant-isolation negative tests; add its manifest row to
+`00-control/07_PROMPT_PACKAGE_MANIFEST.md` and a coverage row citing `RPD-020` to
+`00-control/05_REQUIREMENT_COVERAGE_MATRIX.md`.
+
+**Full record:** `docs/build-log/final-package-validation/FPV-415.md` §4, and
+`docs/build-log/final-package-validation/FINAL_GAP_RISK_REGISTER.md` row `FPV-F001`.
+
+## 5. Maintenance rules
+
 1. Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`.
 2. Link reproducible failures to Error Ledger entries.
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
