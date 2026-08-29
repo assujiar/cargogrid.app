@@ -303,6 +303,34 @@ This report does not choose between them — that choice belongs to the operator
 
 ---
 
+### Addendum, 2026-08-28, same day, after this report's own close — operator chose path 2
+
+**The operator gave an explicit, separate instruction** ("pake opsi dua, gue akan lanjut step 17 di
+session lain" — "use option two, I'll continue Step 17 in another session") extending the existing
+`RGL-404.md` §7 override to cover Step 17 eligibility, not only Step 16's own proceed decision.
+Recorded here verbatim per this range's own standing discipline: an operator override is captured as
+a dated addendum to the point-in-time record it amends, never as a silent retroactive edit.
+
+**Effect, stated precisely.** `RGL-BLK-001`'s own mechanism remains genuinely unfixed — this
+addendum does not change that, and does not claim otherwise. What changes is disposition only:
+condition 3 of `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §13 is now satisfied by explicit operator
+risk-acceptance, the same mechanism this entire range has used consistently since `RGL-404.md`'s own
+first override (§7) — accepting a standing risk is not the same as fixing it, and is not represented
+as one anywhere in this addendum.
+
+**Step 17 eligibility, re-determined**: **ELIGIBLE**, by explicit operator override, as of
+2026-08-28. All six conditions of §13 are now met: 1/2/4/5/6 as this report's own body already
+established, and 3 by this addendum's own override. This does **not** upgrade Step 16's own closure
+state above — `RELEASE_GO_LIVE_PARTIALLY_COMPLETE` stands as the accurate record of what was true at
+`RGL-412`'s own checkpoint, before this instruction. Step 17 itself remains bound by its own
+package's own rules (`AGENTS.md`'s "Never batch" list, Step 17's own prerequisites/kickoff) and by
+every standing residual risk this report's own table already names (`RGL-BLK-001` foremost among
+them) — this addendum removes one specific eligibility blocker, nothing more.
+
+**No file, code, or migration change accompanies this addendum** — it is a decision record only.
+
+---
+
 ## Exact resume / next command
 
 If the operator resolves Step 17 eligibility (either path above), the next command at the package

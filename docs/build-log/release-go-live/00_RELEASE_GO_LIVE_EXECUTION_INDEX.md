@@ -278,7 +278,7 @@ prompt's own header fixes; additional required outputs are named where the promp
 | 19 | `CG-S16-RGL-019` | `RGL-409` | Post-Implementation Review | 18 | Repository | `RGL-409.md` | `PIR_COMPLETE` | n/a | **`PIR_COMPLETE`** — delivery/quality/data/performance/adoption/support/incidents reviewed; improvement backlog consolidated; `ISS-2026-284` addressed |
 | 20 | `CG-S16-RGL-020` | `RGL-410` | Release Go-Live Integrated Verification | 19 | All of the above, one lineage | `RGL-410.md`, `RELEASE_READINESS_MATRIX.md` update | none | `git revert` | **`VERIFIED`** — all gates re-run fresh at one checkpoint; one mixed-checkpoint drift found and reconciled (`BLOCKER_LEDGER.md`) |
 | 21 | `CG-S16-RGL-021` | `RGL-411` | Release Go-Live Documentation Handoff | 20 | Repository | `RGL-411.md` | none | `git revert` | **`VERIFIED`** — release notes authored, all reconciliation items checked current, Step 17 eligibility blocker (`RGL-BLK-001`) named explicitly in `HANDOFF.md` |
-| 22 | `CG-S16-RGL-022` | `RGL-412` | Release Go-Live Closure Verification | 21 | Independent re-verification of all | `RGL-412.md`, `RELEASE_GO_LIVE_CLOSURE_REPORT.md` | **sets `RELEASE_GO_LIVE_VERIFIED` or a closure state** | `git revert` | **`RELEASE_GO_LIVE_PARTIALLY_COMPLETE`** — all 20 required-verification items disposed of explicitly; Step 17 not yet eligible per §13 condition 3 (`RGL-BLK-001`) |
+| 22 | `CG-S16-RGL-022` | `RGL-412` | Release Go-Live Closure Verification | 21 | Independent re-verification of all | `RGL-412.md`, `RELEASE_GO_LIVE_CLOSURE_REPORT.md` | **sets `RELEASE_GO_LIVE_VERIFIED` or a closure state** | `git revert` | **`RELEASE_GO_LIVE_PARTIALLY_COMPLETE`** — all 20 required-verification items disposed of explicitly. **Step 17 later made `ELIGIBLE`, same day, by explicit operator override addendum** (§13 above, `RELEASE_GO_LIVE_CLOSURE_REPORT.md`'s own addendum) — `RGL-BLK-001`'s mechanism remains unfixed, only its disposition changed |
 
 ### 5.1 Dependency graph
 
@@ -765,6 +765,18 @@ Step 17 becomes eligible only when **all** hold:
 **If `UAT_ACCEPTED` cannot be obtained (§7.2), `RGL-412` may not silently drop Prompt 412 item
 8.** It must rule explicitly — `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`, `RELEASE_GO_LIVE_BLOCKED`,
 or `RELEASE_GO_LIVE_NO_GO` — and say why. That is the honest outcome, and it is available.
+
+**Addendum, 2026-08-28, after `RGL-412` closed at `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`.** The
+operator gave a fresh, explicit instruction extending the existing `RGL-404.md` §7 override to
+cover condition 3 above, not only Step 16's own proceed decision — full record:
+`RELEASE_GO_LIVE_CLOSURE_REPORT.md`'s own "Step 17 eligibility" addendum. `RGL-BLK-001`'s mechanism
+remains genuinely unfixed; only its disposition changed. **Step 17 is now `ELIGIBLE`** — condition 3
+is met by explicit operator risk-acceptance; conditions 1/4/5/6 were already met by `RGL-412`'s own
+body, and condition 2 is treated as met on the same basis the closure report's own addendum states
+(`RGL-412` ran and set a legitimate Step 16 completion flag per Prompt 412's own five defined
+closure states, `RELEASE_GO_LIVE_PARTIALLY_COMPLETE` among them — condition 2's own literal text
+anticipated only the clean `VERIFIED` outcome, not the range's own explicitly-provided alternative
+states).
 
 ---
 
