@@ -142,8 +142,19 @@ is why `FPV-423` and `FPV-429` each found the defect and each declined to fix it
 Re-verified after the edits: `package:check` 0 errors, `docs:check` pass, `git:check-paths` two
 `CAUTION` lines and zero `FORBIDDEN`.
 
-**Total in-package writes by all of Step 17: three files, four edits.** All 324 prompt files and
-all 18 step READMEs are byte-identical to how Step 17 found them.
+**Total in-package writes by all of Step 17: four files, six edits** — verified with
+`git diff --stat 576d1cb..HEAD -- docs/ai-agent-build-prompt-package/`, against the true merge
+base rather than a stale local `main`:
+
+| File | Edits | Which lane, and why |
+|---|---:|---|
+| `00-control/04_CONFLICT_REGISTER.md` | 2 | The authority checkpoint — `CON-016`'s own row plus the document version bump. Not a correction; the record that makes the other three legitimate. |
+| `00-control/07_PROMPT_PACKAGE_MANIFEST.md` | 2 | `FPV-426` correction 1 — `M-004`'s stale version cell plus the required change-summary row. |
+| `00-control/06_PACKAGE_BUILD_STATUS.md` | 1 | `FPV-430` correction 3 — the false `FINAL_PACKAGE_VALIDATED` header. |
+| `START_HERE.md` | 1 | `FPV-430` correction 2 — §8's "generated and validated" claim. |
+
+Three corrections and one authority record, across four of the package's 430 files. **All 324
+prompt files and all 18 step READMEs are byte-identical to how Step 17 found them.**
 
 ## 7. Item 15 — there is no ZIP, and this is what was done instead
 

@@ -36,7 +36,10 @@
 > - **A new gate**: `pnpm run package:check` (`scripts/docs/check-prompt-package.ts`, 32 tests),
 >   wired into CI's `quality` job. It enforces the 14 known template-variant files as an
 >   **exhaustive allowlist** — a fifteenth fails the gate.
-> - **Three in-package files corrected, four edits total.** Nothing else in the package was touched.
+> - **Four in-package files written, six edits** — one authority record (`04_CONFLICT_REGISTER.md`)
+>   and three corrections (`07_PROMPT_PACKAGE_MANIFEST.md`, `06_PACKAGE_BUILD_STATUS.md`,
+>   `START_HERE.md`). **All 324 prompt files and all 18 step READMEs are byte-identical**, verified
+>   against the true merge base `576d1cb` rather than a stale local `main`.
 >
 > ### The findings a future agent must not rediscover the hard way
 >

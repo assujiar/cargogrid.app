@@ -6694,10 +6694,12 @@ Self-closing. `ATW-029` is `VERIFIED`. **`PHASE_5_VERIFIED` is set.** The tenth 
    (Step 17 is never-batched). Outputs under `docs/build-log/final-package-validation/`: the
    execution index, `FPV-415`…`FPV-429`, `FINAL_GAP_RISK_REGISTER.md` and
    `FINAL_PACKAGE_VALIDATION_REPORT.md`.
-4. **Three in-package corrections, four edits, all under `CON-016`** — `M-004`'s stale version
-   cell plus a manifest change-summary row (`FPV-426`), and the false "already validated" claim in
-   `START_HERE.md` §8 and `06_PACKAGE_BUILD_STATUS.md`'s header (`FPV-430`). Nothing else in the
-   package was touched; all 324 prompt files are byte-identical to how Step 17 found them.
+4. **Four in-package files written, six edits** — one authority record (`04_CONFLICT_REGISTER.md`:
+   `CON-016`'s row plus its version bump) and three corrections under `CON-016` (`M-004`'s stale
+   version cell plus a manifest change-summary row at `FPV-426`; the false "already validated"
+   claim in `START_HERE.md` §8 and `06_PACKAGE_BUILD_STATUS.md`'s header at `FPV-430`). Nothing
+   else in the package was touched; all 324 prompt files and all 18 step READMEs are byte-identical
+   to how Step 17 found them, verified against the true merge base `576d1cb`.
 
 **Outcome: `FINAL_PACKAGE_PARTIALLY_COMPLETE`. `FINAL_PACKAGE_VALIDATED` is NOT set.** 15/15
 required-verification items disposed of — 13 PASS, 1 PARTIAL (item 1: 5 of 9 control files
