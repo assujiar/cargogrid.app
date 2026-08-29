@@ -8766,3 +8766,22 @@ corrections below. Corrected rather than left standing.*
 | Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
 | Status | **`COMPLETED`**. `RGL-412` sets `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`. **Step 16 (Prompts 390-412) is closed. There is no `RGL-413`.** Step 17 requires an explicit operator decision (see the closure report's own two named paths) before `LANJUT STEP 17` |
 | Date | 2026-08-28 |
+
+### CHG-2026-281 — Operator override extended to Step 17 eligibility (out-of-band, same day, after `RGL-412` closed)
+
+| Field | Value |
+|---|---|
+| Task/prompt | None — out-of-band operator decision, not a Step 16 or Step 17 WBS row. Step 16 (Prompts 390-412) is already closed; this is an addendum to its own closure record |
+| Change type | DOCUMENTATION (decision record only) — no code, migration, or contract change |
+| Authorization | The operator's own fresh, explicit instruction, given directly in chat after reviewing `RGL-412`'s own closure verdict: "pake opsi dua, gue akan lanjut step 17 di session lain" — choosing path 2 of the two paths `RELEASE_GO_LIVE_CLOSURE_REPORT.md`'s own "Step 17 eligibility" section named (extend the existing `RGL-404.md` §7 override to cover Step 17 eligibility, rather than fixing `RGL-BLK-001`'s mechanism for real) |
+| Build process | Recorded the instruction verbatim, dated, as an addendum to the point-in-time record it amends — never a silent retroactive edit — in three places: `RELEASE_GO_LIVE_CLOSURE_REPORT.md`'s own "Step 17 eligibility" section, `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` §13, and a new `HANDOFF.md` §0.-3 banner (supersedes §0.-2 on this one point only, both retained) |
+| Findings and disposition | `RGL-BLK-001`'s own mechanism remains genuinely unfixed — this addendum changes disposition only, exactly the same mechanism this entire range has used since `RGL-404.md`'s own first override. Step 17 eligibility re-determined: **`ELIGIBLE`** (all six §13 conditions now met). Step 16's own closure verdict (`RELEASE_GO_LIVE_PARTIALLY_COMPLETE`) is **not** retroactively upgraded — it remains the accurate record of what was true at `RGL-412`'s own checkpoint |
+| Files edited | `docs/build-log/release-go-live/RELEASE_GO_LIVE_CLOSURE_REPORT.md` (addendum); `00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` (§13 addendum, §5 row 22 note); `docs/runtime/HANDOFF.md` (new §0.-3 banner); `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md` (row `CG-S16-RGL-022` addendum) |
+| Migration | None |
+| Risk | None — documentation only, no live system mutated. The underlying risk `RGL-BLK-001` itself represents (ungated production auto-deploy) is unchanged by this addendum — it was already live and already accepted for Step 16 itself |
+| Scope justification | Direct capture of an explicit, separate operator instruction, per this range's own standing discipline that an override is recorded as a dated addendum, never inferred or silently assumed |
+| Gates | `pnpm run docs:check`: green. No code changed |
+| Commits | see branch `claude/step-16-prompt-390-412-okbd6v` |
+| Rollback | `git revert` this checkpoint's commit — documentation only, trivially reversible |
+| Status | **`COMPLETED`**. Step 17 is `ELIGIBLE`. The operator will run Step 17 in a future session — `LANJUT STEP 17` is the next command at the package level whenever that session begins |
+| Date | 2026-08-28 |
