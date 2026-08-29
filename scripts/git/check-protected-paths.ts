@@ -8,6 +8,13 @@
  *     reminder to follow the append-only/reconciliation discipline, not a
  *     block).
  *
+ * Rules are evaluated in order and the FIRST match wins, so a narrow rule may
+ * be placed ahead of a broader one to override it. The only such narrowing today
+ * is CON-016/ADR-0026's: five register/derived-metadata files under the otherwise
+ * FORBIDDEN prompt-package tree are CAUTION, because Step 17's own prompts
+ * (415-429 §20.4/§31, 429 §4) require the executing agent to correct them.
+ * All 324 prompt files and all 18 step READMEs remain FORBIDDEN.
+ *
  * The migrations rule is git-status-aware: a brand-new migration file (git
  * status `A`) is never flagged — only a modification to one that already
  * existed before this change (`M`, or any status other than `A`) is. A
@@ -31,8 +38,38 @@ export interface ProtectedPathRule {
 /** A migration path is exempt from the FORBIDDEN migrations rule only when its git status is known and is exactly "added". */
 const MIGRATIONS_PATTERN = /^supabase\/migrations\/\d.*\.sql$/;
 
+/**
+ * The five register/derived-metadata files Step 17 (Final Package Validation) may correct, per
+ * `CON-016` / `ADR-0026`. Matched LITERALLY and exactly — never by prefix or glob — so no
+ * file can be brought inside the exemption by being placed next to one of these. Everything
+ * else under docs/ai-agent-build-prompt-package/ stays FORBIDDEN, in particular all 324
+ * prompt files and all 18 step READMEs (BUILD_EXECUTION_PROTOCOL.md §3.5, AGENTS.md).
+ */
+export const STEP17_CORRECTABLE_PACKAGE_PATHS: readonly string[] = [
+  // 04 carries CON-016 itself. Its binding authority stays "decision-change protocol only"
+  // (GIT_STRATEGY.md §4) -- a policy control a path-based gate cannot express, exactly as
+  // docs/runtime/**'s append-only discipline is. CAUTION makes the write visible; the ADR,
+  // not this list, is what makes it legitimate.
+  "docs/ai-agent-build-prompt-package/00-control/04_CONFLICT_REGISTER.md",
+  "docs/ai-agent-build-prompt-package/00-control/05_REQUIREMENT_COVERAGE_MATRIX.md",
+  "docs/ai-agent-build-prompt-package/00-control/06_PACKAGE_BUILD_STATUS.md",
+  "docs/ai-agent-build-prompt-package/00-control/07_PROMPT_PACKAGE_MANIFEST.md",
+  "docs/ai-agent-build-prompt-package/START_HERE.md",
+];
+
+/** Escapes a literal path so it can anchor an exact-match RegExp. */
+function exactPathPattern(paths: readonly string[]): RegExp {
+  const alternation = paths.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return new RegExp(`^(?:${alternation})$`);
+}
+
+const STEP17_CORRECTABLE_PATTERN = exactPathPattern(STEP17_CORRECTABLE_PACKAGE_PATHS);
+
 export const PROTECTED_PATH_RULES: readonly ProtectedPathRule[] = [
   { pattern: /^docs\/blueprint\//, severity: "FORBIDDEN", reason: "read-only authoritative source (decision-change protocol only)" },
+  // Ordered BEFORE the blanket package rule below: first match wins for these four paths
+  // (see the loop in checkProtectedPaths, which breaks on the first matching rule).
+  { pattern: STEP17_CORRECTABLE_PATTERN, severity: "CAUTION", reason: "package metadata correctable by Step 17 only, mechanical/source-safe corrections with cited evidence (CON-016, ADR-0026) — re-verify with `pnpm run package:check`" },
   { pattern: /^docs\/ai-agent-build-prompt-package\//, severity: "FORBIDDEN", reason: "read-only execution plan — never edited by a runtime agent" },
   { pattern: MIGRATIONS_PATTERN, severity: "FORBIDDEN", reason: "applied migration — never edit, add a new migration instead (AGENTS.md)" },
   { pattern: /(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/, severity: "FORBIDDEN", reason: "real environment/secret file — must never be committed (.env.example/.sample/.template are the safe, allowed exception)" },
@@ -57,6 +94,10 @@ export function checkProtectedPaths(changedPaths: readonly ChangedPathEntry[]): 
       if (!rule.pattern.test(path)) continue;
       if (rule.pattern === MIGRATIONS_PATTERN && status === "A") continue;
       findings.push({ path, severity: rule.severity, reason: rule.reason });
+      // First match wins, so a narrowing rule placed ahead of a broader one (CON-016's four
+      // Step 17 metadata paths ahead of the blanket package rule) genuinely overrides it
+      // instead of both firing and the FORBIDDEN one still blocking.
+      break;
     }
   }
   return findings;
