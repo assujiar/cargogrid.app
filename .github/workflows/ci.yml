@@ -94,6 +94,9 @@ jobs:
       - name: Documentation checks (link resolution, canonical files, ADR index, HANDOFF coherence)
         run: pnpm run docs:check
 
+      - name: Prompt package structure check (docs/build-log/final-package-validation/, Step 17)
+        run: pnpm run package:check
+
       - name: Secret scan (docs/standards/SECURITY_STANDARDS.md §3)
         run: pnpm run security:check
 
