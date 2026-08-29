@@ -66,4 +66,6 @@ If a task fails or is interrupted, resume from the latest verified checkpoint us
 
 ## 8. Final package state
 
-At this checkpoint, Step 0 through Step 17 package files are generated and validated as prompt-package artifacts. Runtime discovery, architecture, implementation, hardening and release/go-live execution remain separate future work.
+Step 0 through Step 17 package files are generated. **Package validation was executed at runtime on 2026-08-29 by Prompt 430 (`CG-S17-FPV-017`) and closed `FINAL_PACKAGE_PARTIALLY_COMPLETE`, not `FINAL_PACKAGE_VALIDATED`.** Eight findings are open and explicitly recorded, none Critical: one High (`RPD-020`, tenant merge/split, is carried by no prompt in this package — also `ISS-2026-301`), four Medium and three Low. **Read `docs/build-log/final-package-validation/FINAL_PACKAGE_VALIDATION_REPORT.md` and `FINAL_GAP_RISK_REGISTER.md` before executing this package** — they name what is missing and what is inconsistent, so you do not rediscover it mid-build.
+
+Runtime discovery, architecture, implementation, hardening and release/go-live execution remain separate future work. This file previously said the package was "generated and validated"; that claim was written at generation time (2026-07-13), before the validation that establishes it had run, and is corrected here under `CON-016`/`ADR-0026`.

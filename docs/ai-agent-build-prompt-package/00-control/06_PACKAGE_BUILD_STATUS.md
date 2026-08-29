@@ -2,8 +2,9 @@
 
 **Package ID:** `CG-AABPP`  
 **Version:** `0.18.0-step17`  
-**Updated:** 2026-07-13 Asia/Jakarta  
-**Current checkpoint:** `FINAL_PACKAGE_VALIDATED`  
+**Updated:** 2026-08-29 Asia/Jakarta (was 2026-07-13; package-generation content below is unchanged)  
+**Current checkpoint:** `FINAL_PACKAGE_PARTIALLY_COMPLETE`  
+**Corrected 2026-08-29 at `CG-S17-FPV-017` (Prompt 430) under `CON-016`/`ADR-0026`:** this line previously read `FINAL_PACKAGE_VALIDATED`, dated 2026-07-13 — the package's *generation* date. `FINAL_PACKAGE_VALIDATED` is the state Prompt 430 alone may set, and Prompt 430's runtime execution had not happened. It has now, and it closed **`FINAL_PACKAGE_PARTIALLY_COMPLETE`**: eight findings are open and explicitly recorded, none Critical, one High (`RPD-020` is carried by no prompt — `ISS-2026-301`). Full disposition of all 15 required-verification items: `docs/build-log/final-package-validation/FINAL_PACKAGE_VALIDATION_REPORT.md`.  
 **Implementation authorization:** Prompt-package generation complete; runtime execution remains separate and must start from `START_HERE.md` against an authorized target repository
 
 ## 1. Overall status
