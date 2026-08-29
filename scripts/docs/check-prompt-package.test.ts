@@ -10,6 +10,8 @@ import {
   parseManifestRows,
   REQUIRED_PROMPT_HEADINGS,
   REQUIRED_CONTROL_FILES,
+  hasIndentedBody,
+  KNOWN_TEMPLATE_VARIANT_FILES,
   VERSION_BEARING_CONTROL_FILES,
   EXPECTED_PACKAGE_VERSION,
 } from "./check-prompt-package.ts";
@@ -282,6 +284,75 @@ describe("classifyNextSection", () => {
   });
 });
 
+describe("indented bodies — the defect that hid from the first version of this script", () => {
+  test("hasIndentedBody distinguishes an indented body from a normal one", () => {
+    assert.equal(hasIndentedBody("# T\n\n    ## 1. Prompt ID\n\n    body\n"), true);
+    assert.equal(hasIndentedBody("# T\n\n## 1. Prompt ID\n\nbody\n"), false);
+    // A fenced code block that happens to contain a heading-like line is not an indented body,
+    // because the document still has real top-level headings.
+    assert.equal(hasIndentedBody("# T\n\n## 1. Prompt ID\n\n    ## 2. Not a heading\n"), false);
+  });
+
+  test("parseSections still finds the structure inside an indented body", () => {
+    // One defect must not hide every other defect in the same file.
+    const sections = parseSections("# T\n\n    ## 1. Prompt ID\n\n    alpha\n\n    ## 2. Parent phase\n\n    beta\n");
+    assert.deepEqual(sections.map((s) => s.heading), ["1. Prompt ID", "2. Parent phase"]);
+  });
+
+  test("an indented body is ERROR when unknown, WARN when pinned as a disclosed variant", () => {
+    const indent = (content: string): string => content.split("\n").map((l) => (l ? `    ${l}` : l)).join("\n");
+
+    const unknown = buildPackage((f) => {
+      f.set("17-final-validation/415_A_PROMPT.md", indent(f.get("17-final-validation/415_A_PROMPT.md")!));
+    });
+    try {
+      const findings = checkPromptPackage(unknown).findings.filter((x) => x.code === "INDENTED_BODY");
+      assert.equal(findings.length, 1);
+      assert.equal(findings[0]?.severity, "ERROR", "a NEW indented file must fail the gate");
+    } finally {
+      rmSync(unknown, { recursive: true, force: true });
+    }
+  });
+
+  test("the pinned allowlist is exhaustive and matches the real package exactly", () => {
+    // If someone de-indents one of the 14, or a 15th appears, this test says so rather than
+    // letting the allowlist quietly drift out of step with reality.
+    const { findings, stats } = checkPromptPackage("docs/ai-agent-build-prompt-package");
+    const indented = findings.filter((f) => f.code === "INDENTED_BODY");
+    assert.equal(indented.length, KNOWN_TEMPLATE_VARIANT_FILES.length);
+    assert.equal(stats.indentedBodyCount, 14);
+    assert.ok(indented.every((f) => f.severity === "WARN"), "all 14 are disclosed, none blocks");
+    assert.deepEqual(
+      indented.map((f) => f.path).sort(),
+      [...KNOWN_TEMPLATE_VARIANT_FILES].sort(),
+    );
+  });
+});
+
+describe("classifyNextSection — preconditions and prohibitions are not successors", () => {
+  test("\"after X is verified\" names a precondition, not the next prompt", () => {
+    const ref = classifyNextSection(
+      "Only the execution index may release ATW-247 after ATW-246 is verified. Prompt 248 alone may close Phase 5.",
+      [219, 248],
+    );
+    assert.deepEqual(ref.targets, [247], "246 is the precondition, 248 is a prohibition");
+  });
+
+  test("the same clause with words in between is still a precondition", () => {
+    // The real Phase 5 wording that survived the first fix and had to be generalized.
+    const ref = classifyNextSection(
+      "Only the execution index may release ATW-227 or another dependency-clean task after all required ATW-226 child tasks are verified. Prompt 248 alone may close Phase 5.",
+      [219, 248],
+    );
+    assert.deepEqual(ref.targets, [227]);
+  });
+
+  test("\"Prompt N alone may close\" is a prohibition", () => {
+    const ref = classifyNextSection("Only the execution index may release ATW-244 or another dependency-clean task. Prompt 248 alone may close Phase 5.", [219, 248]);
+    assert.deepEqual(ref.targets, [244]);
+  });
+});
+
 describe("parsers", () => {
   test("parseSections keeps document order and captures bodies", () => {
     const sections = parseSections("# Title\n\n## 1. A\n\nalpha\n\n## 2. B\n\nbeta\n");
@@ -309,6 +380,6 @@ describe("the real package", () => {
     // Pin the shape of the package so silent drift is a test failure, not a surprise later.
     assert.equal(stats.fileCount, 430);
     assert.equal(stats.manifestRowCount, 430);
-    assert.equal(stats.structuredPromptCount, 324);
+    assert.equal(stats.structuredPromptCount, 338, "324 parseable + the 14 indented ones the first version missed");
   });
 });
