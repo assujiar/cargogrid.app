@@ -3595,7 +3595,7 @@ However, a structurally invisible variant of the same underlying inefficiency wa
 
 **`RESOLVED` (2026-08-28, Track B Batch 6, `scripts/security/check-rls-initplan.ts` + `.test.ts`, new).** This entry's own premise — that "the guard" is existing tooling to extend — turned out to be inaccurate: no persisted guard script existed anywhere in the repository; what earlier checkpoints called "the guard" was an ad hoc manual grep re-run by hand at each checkpoint, never committed. Authored a real, committed guard performing both checks: (1) the original bare/unwrapped `auth.uid()`/`jwt()`/`role()` regression check, and (2) self-discovering detection of RLS helper functions with a trailing `default auth.*()` parameter, classifying every real policy call site as the documented, informational blind spot this entry names (never fails the guard), an already-safe explicit-hoist call, or a genuinely different, higher-priority identity-substitution override (fails the guard). Run against the live tree: 0 bare-auth regressions, 0 unexpected overrides, 1,131 call sites hit the documented blind spot (all confirmed safe by the guard's own classification — no unsafe/exploitable case found), 39 already explicitly hoist `(select auth.uid())`. Wired into CI (`.github/workflows/ci.yml`, new `security:check-rls-initplan` step) so it actually runs as a regression guard going forward, not an unused script. 14 unit tests, all passing. `pnpm run typecheck`/`lint`/`test` re-verified green. Owner: closed (tooling now exists and runs; the underlying architectural convention itself remains intentional and unchanged, per this entry's own original disposition).
 
-### ISS-2026-241 — 36 of 38 tenant-module top-level routes render with no `<main>` (or `role="main"`) landmark anywhere in their render tree, so screen-reader users have no way to skip repeated chrome and jump to page content (found at `HDN-380` Accessibility Audit, source-evidence sweep + independently re-derived, `OPEN`, Medium, owner a dedicated future task)
+### ISS-2026-241 — 36 of 38 tenant-module top-level routes render with no `<main>` (or `role="main"`) landmark anywhere in their render tree, so screen-reader users have no way to skip repeated chrome and jump to page content (found at `HDN-380` Accessibility Audit, source-evidence sweep + independently re-derived, `RESOLVED` 2026-08-30, Medium)
 
 Independently re-derived directly against the file tree (not taken on an earlier report's word): `app/(tenant)/[tenantSlug]/` has 38 top-level module directories (`admin`, `analytics`, `automation-rules`, `commercial`, 20 `customer-*` portal modules, `dashboards`, `finance`, `helpdesk`, `hris`, `integrations`, `knowledge-base`, `operations`, `procurement`, `reports`, `saved-views`, `scheduled-reports`, `tickets`). Only 2 (`admin`, `commercial`) have a `layout.tsx` at all, and both of those are the only 2 module trees anywhere with a `<main>` element in their own `layout.tsx`/`page.tsx` files (grepped `<main` across every `layout.tsx`/`page.tsx` under each module directory). There is no shared tenant-shell `layout.tsx` at `app/(tenant)/[tenantSlug]/layout.tsx` (confirmed: the file does not exist) and no shared `PortalShell`-style component anywhere under `components/`/`lib/`/`app/` that could be injecting a landmark client-side instead — each of the other 36 modules' `page.tsx` files render their own content directly into whatever the root `app/layout.tsx` provides, and that root layout itself has no `<main>`/`role="main"` either.
 
@@ -3604,6 +3604,62 @@ This is exactly the shape the checkpoint's own charter (`docs/ai-agent-build-pro
 **Status `OPEN`**, Medium severity (a real, live, app-wide structural gap affecting every screen-reader user on nearly every authenticated route — not a crash or data-exposure defect, but a serious navigation-efficiency and WCAG 2.2 AA 1.3.1/2.4.1 conformance gap). **Not fixed by this checkpoint** — the correct fix is a single shared tenant-shell `layout.tsx` wrapping all 38 modules in one `<main>` (plus `<nav>` for the persistent portal navigation, if one exists once verified), not 36 individual per-page patches; introducing a new shared layout file for `app/(tenant)/[tenantSlug]/` is an architectural change explicitly outside this checkpoint's own "5-15 files, bounded repair" charter (`380_ACCESSIBILITY_AUDIT_PROMPT.md` §11) and risks unintended layout/styling regressions across all 38 modules if rushed. Owner: a dedicated future task, scoped to introducing one shared tenant-shell layout with `<main>`/landmark structure, verified against all 38 modules' existing markup for conflicts before rollout.
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — `app/(tenant)/[tenantSlug]/layout.tsx` still does not exist; only `admin/layout.tsx` and `commercial/layout.tsx` (of 38 modules) have a `<main>`. Direct read of `admin/layout.tsx` in full confirms its auth/theme/nav logic is tightly module-specific, so a generic shared shell is real architecture work, not additive, exactly as this entry argues. The batch's own "share a component-level fix pattern with `242`/`247`/`248`" hypothesis was investigated and found not to hold for this item specifically — no single shared component covers all four. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A. Every tenant module now renders a
+`<main>` landmark, and every tenant route carries a skip link.
+
+**The shape of the fix differs from this entry's own prescription, deliberately.** The entry
+says "a single shared tenant-shell `layout.tsx` wrapping all 38 modules in one `<main>`".
+That would have been wrong, and the reason is structural rather than stylistic: Next.js
+nests layouts parent-first, so a `<main>` at `app/(tenant)/[tenantSlug]/layout.tsx` would
+contain the `<header>`/`<nav>` that `admin/layout.tsx` and `commercial/layout.tsx` render for
+their own modules — putting site navigation *inside* the landmark whose entire purpose is to
+be what you skip *to*, past the navigation. It would have satisfied a `<main>`-exists check
+while making the landmark meaningless for the two modules that already had one.
+
+What was built instead:
+
+* `app/(tenant)/[tenantSlug]/layout.tsx` — the shared tenant shell, deliberately thin. It
+  owns the **skip link** and nothing else, and does **no** authorization: every route below
+  already resolves its own access, and a second weaker check here would invite the assumption
+  that this layout is the boundary, which it is not.
+* `components/layout/tenant-main.tsx` — the `<main id="main-content" tabIndex={-1}>`
+  landmark, one component so the anchor and styling live in one place.
+* `components/layout/skip-to-content-link.tsx` — visually hidden until focused. A permanently
+  visible skip link is the usual first casualty of a design review; a `display: none` one is
+  not focusable and does nothing at all. The clip-based pattern is the version that both
+  survives and works.
+* 36 module `layout.tsx` files, each three lines, rendering `TenantMain`.
+* `admin/` and `commercial/` keep their own `<main>` (placed correctly *after* their chrome)
+  and gained `id="main-content"` and `tabIndex={-1}` — on **all four** elements, including
+  each module's access-denied render, which is a real page a user can land on and must still
+  be skippable.
+
+`tabIndex={-1}` is not decoration: without a programmatically focusable target, a skip link
+scrolls the viewport but leaves focus in the navigation on Safari and some Firefox versions.
+That is the bug that makes skip links feel broken to the people who depend on them.
+
+**A 36-file fix decays** — the next module someone adds will not have a layout, and nothing
+would notice. `tests/accessibility/tenant-main-landmark.test.ts` is the thing that notices:
+it walks the real file tree rather than snapshotting today's 38 modules (a snapshot would
+pass forever while new modules quietly arrived without a landmark), and asserts the shell has
+the skip link and *no* `<main>`, that the link's target and the landmark's anchor are the same
+string, that every module directory renders a landmark, and that `admin`/`commercial` anchor
+every one of their own.
+
+**A defect in that guard was caught by running it, not by writing it, and is recorded rather
+than quietly fixed.** Its first version matched `<main>` inside these files' own header
+*comments* — which failed the shell check on prose, and, far worse, would have let any module
+pass on a comment alone. The guard now strips comments before every structural check. A test
+that passes for the wrong reason is worse than no test.
+
+Verification: `next build` clean with all 36 new layouts; `pnpm run test` 5584/5584 (4 new);
+typecheck clean; lint 0 errors.
+
+**What this does not claim.** This closes the landmark and bypass requirements (WCAG 2.2 AA
+1.3.1, 2.4.1). It does not make the product accessible: `ISS-2026-242` (field-level error
+association across ~200 forms) and `ISS-2026-140`/`ISS-2026-153` (no automated
+accessibility-audit evidence for any route) remain open and are separate work.
 
 ### ISS-2026-242 — the repository's own dedicated accessible form primitives (`components/forms/form-field.tsx`, `components/forms/validation-message.tsx`) are adopted in only a handful of the 200 files that render a `<form>`, and `aria-invalid` appears in only 5 files app-wide (found at `HDN-380` Accessibility Audit, source-evidence sweep + independently re-derived, `OPEN`, Medium, owner a dedicated future task)
 

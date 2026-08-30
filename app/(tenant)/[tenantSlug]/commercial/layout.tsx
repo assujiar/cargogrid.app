@@ -33,7 +33,7 @@ export default async function CommercialLayout({
 
   if (access.status !== "allowed") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
+      <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
         <h1 className="text-xl font-semibold text-neutral-900">Access denied</h1>
         <p className="text-sm text-neutral-600">
           {access.status === "tenant_suspended"
@@ -99,7 +99,9 @@ export default async function CommercialLayout({
           </a>
         </nav>
       </header>
-      <main className="flex-1 px-6 py-6">{children}</main>
+      <main id="main-content" tabIndex={-1} className="flex-1 px-6 py-6">
+        {children}
+      </main>
     </div>
   );
 }
