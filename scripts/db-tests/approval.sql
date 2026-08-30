@@ -980,3 +980,97 @@ begin
   end if;
 end;
 $$;
+
+-- ===========================================================================
+-- ISS-2026-093 -- a caller-supplied reason must reach exactly one properly
+-- access-controlled place, never also app.audit_logs.
+-- ===========================================================================
+
+\echo '>> ISS-2026-093: neither app.decide_approval_step nor app.cancel_approval_request duplicates its caller-supplied reason into app.audit_logs -- not as the scalar reason column, and not inside the before/after jsonb snapshots either'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmeap');
+  v_published_version_id uuid;
+  v_request app.approval_requests;
+  v_step1_id uuid;
+  v_reject_reason text := 'ISS93-REJECT-CANARY budget was already committed elsewhere';
+  v_cancel_reason text := 'ISS93-CANCEL-CANARY the requester left the company';
+  v_leak_count integer;
+begin
+  select v.id into v_published_version_id
+  from app.config_versions v join app.config_objects o on o.id = v.config_object_id
+  where o.tenant_id = v_tenant_id and o.config_type_code = 'approval' and o.scope_level = 'tenant' and v.status = 'published';
+
+  -- 1. A REJECTION with a reason. This is the half that matters most:
+  --    app.approval_decisions carries no `authenticated` grant at all, so before this fix
+  --    app.audit_logs was the one path by which a plain tenant_admin with zero domain
+  --    permission could read an approver's stated reason for rejecting something.
+  v_request := app.request_approval(v_published_version_id, v_tenant_id, 'purchase_order', '00000000-0000-0000-0000-000000009301', 'req-iss93-reject', '00000000-0000-0000-0000-000000001502', 'regular user');
+  select id into v_step1_id from app.approval_request_steps where request_id = v_request.id and step_order = 1;
+  perform app.decide_approval_step(v_step1_id, 'rejected', '00000000-0000-0000-0000-000000001504', 'manager one', v_reject_reason);
+
+  -- The reason IS durably stored where it belongs.
+  if not exists (select 1 from app.approval_decisions where request_step_id = v_step1_id and reason = v_reject_reason) then
+    raise exception 'assertion failed: the rejection reason must still be stored in app.approval_decisions -- suppressing the audit copy must not lose the record';
+  end if;
+
+  -- 2. A CANCELLATION with a reason.
+  v_request := app.request_approval(v_published_version_id, v_tenant_id, 'purchase_order', '00000000-0000-0000-0000-000000009302', 'req-iss93-cancel', '00000000-0000-0000-0000-000000001502', 'regular user');
+  perform app.cancel_approval_request(v_request.id, '00000000-0000-0000-0000-000000001501', 'tenant admin', v_cancel_reason);
+  if (select ended_reason from app.approval_requests where id = v_request.id) is distinct from v_cancel_reason then
+    raise exception 'assertion failed: the cancellation reason must still be stored in app.approval_requests.ended_reason';
+  end if;
+
+  -- 3. Neither canary may appear ANYWHERE in app.audit_logs -- scalar column or jsonb
+  --    payloads. Searching the whole row's text is deliberate: checking only the reason
+  --    column is what let the jsonb after_value vector survive the first time this defect
+  --    class was fixed elsewhere.
+  select count(*) into v_leak_count
+  from app.audit_logs
+  where coalesce(reason, '') like '%ISS93-%'
+     or coalesce(before_value::text, '') like '%ISS93-%'
+     or coalesce(after_value::text, '') like '%ISS93-%';
+  if v_leak_count > 0 then
+    raise exception 'assertion failed: % audit_logs row(s) still carry a caller-supplied approval reason (ISS-2026-093). A reason must live in exactly one properly access-controlled place.', v_leak_count;
+  end if;
+
+  -- 4. ...and the audit events themselves still exist. Suppressing the reason must not
+  --    suppress the evidence that the action happened.
+  if not exists (select 1 from app.audit_logs where action = 'decide_approval_step' and tenant_id = v_tenant_id) then
+    raise exception 'assertion failed: expected a decide_approval_step audit event to still be captured';
+  end if;
+  if not exists (select 1 from app.audit_logs where action = 'cancel_approval_request' and tenant_id = v_tenant_id) then
+    raise exception 'assertion failed: expected a cancel_approval_request audit event to still be captured';
+  end if;
+end $$;
+
+\echo '>> ISS-2026-093: the approval-request audit projection carries the request''s real shape but never ended_reason -- and app.redact_audit_payload would not have caught it, which is why the projection exists'
+do $$
+declare
+  v_request app.approval_requests;
+  v_projected jsonb;
+begin
+  select * into v_request from app.approval_requests where ended_reason is not null limit 1;
+  if not found then
+    raise exception 'assertion failed: this case needs a cancelled request with an ended_reason; fixture drifted';
+  end if;
+
+  v_projected := app._approval_request_audit_projection(v_request);
+  if v_projected ? 'endedReason' or v_projected::text like '%' || v_request.ended_reason || '%' then
+    raise exception 'assertion failed: the projection must never carry ended_reason, got %', v_projected;
+  end if;
+  -- It must still be a useful audit record, not an empty object.
+  if (v_projected ->> 'id') is distinct from v_request.id::text
+     or (v_projected ->> 'status') is distinct from v_request.status
+     or (v_projected ->> 'entityType') is distinct from v_request.entity_type then
+    raise exception 'assertion failed: the projection must still carry the request''s real identity and status, got %', v_projected;
+  end if;
+
+  -- The reason app.redact_audit_payload cannot be relied on here: it matches by KEY NAME
+  -- against (secret|password|token|key|authorization|cookie|ssn|npwp|bank|account_number|
+  -- salary|payroll), and ended_reason matches none of them. Pinned so that if someone later
+  -- assumes the generic redactor covers this, the assumption fails loudly.
+  if app.redact_audit_payload(jsonb_build_object('ended_reason', 'still visible')) ->> 'ended_reason' <> 'still visible' then
+    raise exception 'assertion failed: app.redact_audit_payload now redacts ended_reason -- if that is deliberate, this projection can be simplified; until then it is the only thing standing between a free-text reason and app.audit_logs';
+  end if;
+end $$;

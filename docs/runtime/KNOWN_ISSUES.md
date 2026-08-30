@@ -624,13 +624,101 @@ Self-found `2026-08-14` while fixing Finding A (the five `app.employees` HR-narr
 
 **Disposition:** Real, but narrower in content-sensitivity than Finding A's own five columns — a request to correct a phone number or mailing address is not inherently disciplinary/medical narrative the way a termination or suspension reason is, though it can occasionally disclose personal circumstances (the field_key allow-list is entirely `personal_email`/`personal_phone`/`personal_address_*`, so the surrounding narrative is always personal-contact-adjacent, never work-content). **Not fixed by this checkpoint** — closing it properly (mirroring Finding A's own fix shape) requires a genuinely new masking read path: a dedicated `get_employee_change_requests`-shaped RPC (mirroring `app.list_employee_emergency_contacts`'s own established self-or-`HRS:View-personal-data` masking convention), a new `server/queries/employee.ts` wrapper, and a `page.tsx` edit to stop reading the raw table — real, bounded, but genuinely NEW service/UI-layer work beyond this checkpoint's own migration-plus-registry-plus-docs mandate (Findings A–D), and this checkpoint's own scope discipline (§5.6-equivalent: a confirmed Medium finding outside the bounded scope is disclosed, not silently dropped, and no Critical/High finding is left open uncontained — this is assessed Medium, not High, given the narrower content class). **Status `OPEN`**, Medium severity — owner: the same near-term HR/payroll follow-up that would also reasonably pick up `ISS-2026-091`, since both are Phase 7 HR field-level-control completeness gaps this same audit surfaced.
 
-### ISS-2026-093 — Sensitive Personal and Payroll Data Controls (HRT-293): `app.cancel_approval_request`, the shared cross-domain PLT-123 approval-engine primitive, duplicates its own raw `p_reason` into `app.audit_logs.reason` -- a repository-wide C-24 gap, not scoped to HR, self-found and disclosed (OPEN, Medium)
+### ISS-2026-093 — Sensitive Personal and Payroll Data Controls (HRT-293): `app.cancel_approval_request`, the shared cross-domain PLT-123 approval-engine primitive, duplicates its own raw `p_reason` into `app.audit_logs.reason` -- a repository-wide C-24 gap, not scoped to HR, self-found and disclosed (`RESOLVED` 2026-08-30, Medium) — the table-grant half split out as `ISS-2026-305`
 
 Self-found `2026-08-14` while adding a live regression test for this checkpoint's own Finding B fix (`app.cancel_onboarding_case`, HRT-277): `app.cancel_onboarding_case` (and every other HR capability's own cancel-with-reason function, all fixed this checkpoint to stop passing their OWN raw reason to `capture_audit_event`) internally calls the SHARED, cross-domain `app.cancel_approval_request` (PLT-123) to cancel a still-in-flight approval request, passing the same caller-supplied reason through as that function's own `p_reason` parameter. `app.cancel_approval_request` has its own, separate `capture_audit_event` call (`action = 'cancel_approval_request'`) that passes this reason RAW, unaffected by any of this checkpoint's own fixes (which only touched the calling HR functions' own outer audit calls, never PLT-123's own inner one). Live-confirmed: cancelling an onboarding case with reason `'reorg cancelled the exit'` produces a genuine `app.audit_logs` row with `action='cancel_approval_request'` and `reason='reorg cancelled the exit'` in plaintext, readable by any plain `tenant_admin` via `app.query_audit_logs` — identical mechanism to Finding B, but on infrastructure this checkpoint's own charter (Phase 7 HR/payroll) does not own.
 
 **Disposition:** Real, live-reproduced, same severity class as Finding B (a `tenant_admin` with zero domain-specific permission can read a cancellation reason through the generic audit log) — but `app.cancel_approval_request` is Platform Core's own PLT-123 primitive, called by every domain in this repository that has an approval workflow (Finance, Commercial, Procurement, HR, and more), not an HR-owned function. Fixing it here would mean altering shared Platform Core infrastructure and would need re-verification across every OTHER domain's own approval-cancellation call sites and their own regression suites — squarely outside this checkpoint's own Critical/High-focused, Phase-7-HR-scoped mandate (Findings A-D), and a genuinely different, larger-blast-radius change than this checkpoint's own additive-migration-only fix shape. **Not fixed by this checkpoint.** **Status `OPEN`**, Medium severity (same disclosure-not-fix reasoning as `ISS-2026-091`/`092`: a confirmed finding outside the batch's bounded scope, disclosed with full reasoning, never silently dropped) — owner: a dedicated Platform Core (PLT-1xx) follow-up prompt scoped to "close the C-24 shape in `app.cancel_approval_request` (and any other shared, unredacted-reason `capture_audit_event` call in Platform Core) once, for every domain that calls it," rather than a per-domain patch.
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — the latest redefinition of `app.cancel_approval_request` (`supabase/migrations/20260827130000_harden_tenant_disclosure_representative_extension_batch2.sql`, Part C, applied this session for `ISS-2026-048`) explicitly changed only the authority-check branch; its own header states the body is otherwise verbatim, so the `capture_audit_event(...'success', p_reason, ...)` call still passes `p_reason` raw. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A — with two corrections to this entry's
+own premise, and one genuinely wider exposure split out as `ISS-2026-305` rather than changed
+quietly.
+
+Closed by `20260830160000_harden_approval_engine_audit_reason_redaction.sql`.
+
+**Correction 1 — it is two functions, not one.** `app.decide_approval_step`, the same
+engine's decision primitive and by far the more frequently called of the two, passes
+`p_reason` raw in exactly the same shape. This entry names only `cancel_approval_request`.
+Fixing that one alone would have closed the smaller half of the same defect.
+
+**Correction 2 — the two halves are not equally severe, and this entry's reasoning fits the
+one it does not name.** Checked directly against the approval engine's own grants rather than
+assumed:
+
+* `app.approval_decisions` — where `decide_approval_step`'s reason is durably stored —
+  carries **no `authenticated` grant at all** (`service_role` only). So for that function,
+  `app.audit_logs` genuinely was the one path by which a plain `tenant_admin` with zero
+  domain permission could read an approver's stated reason for rejecting something. **That is
+  the real narrowing.**
+* `app.approval_requests` — where `cancel_approval_request`'s reason lands, in
+  `ended_reason` — carries `grant select` on the whole table to `authenticated`, and its RLS
+  policy admits **any active member of the tenant**. So that reason was already readable by a
+  *broader* audience than the tenant_admins this entry is concerned about. Removing it from
+  the audit log is consistency and defence-in-depth, and is recorded as that rather than
+  dressed up as a narrowing it is not.
+
+**A second leak vector the obvious fix would have missed.** `app.capture_audit_event` runs
+both payloads through `app.redact_audit_payload`, which matches by **key name** against
+`(secret|password|token|key|authorization|cookie|ssn|npwp|bank|account_number|salary|payroll)`.
+`ended_reason` matches none of those — so `cancel_approval_request`'s `to_jsonb(v_updated)`
+carried the reason verbatim into `after_value`, and passing `null` for the scalar argument
+alone would have closed one vector while leaving the other untouched: a fix that reads as
+complete and is not. `app._approval_request_audit_projection` is the answer, mirroring
+`app.leave_request_audit_projection` (HRT-280/293), the shape this repository already settled
+on for exactly this. `decide_approval_step` needs no projection —
+`app.approval_request_steps` has no reason column, checked rather than assumed.
+
+Both function bodies are **mechanically extracted** copies of their current definitions with
+only the `capture_audit_event` call changed. Between them they carry the C-21 lock-ordering
+fix, `ISS-2026-048`/`049`'s not-found-shaped tenant-disclosure fixes and `ISS-2026-213`'s
+null-actor self-approval guard; re-stating ~170 lines of that by hand to change two arguments
+is the transcription hazard this repository keeps meeting.
+
+Evidence: `scripts/db-tests/approval.sql` gained two regression blocks. The first plants
+distinct canary strings in a real rejection reason and a real cancellation reason, asserts
+both are still durably stored where they belong (suppressing the audit copy must not lose the
+record), then asserts **neither string appears anywhere in `app.audit_logs`** — scalar column
+*and* both jsonb payloads, searched as text, because checking only the reason column is
+precisely what let the jsonb vector survive the first time this defect class was fixed
+elsewhere — and that the audit events themselves still exist, since suppressing the reason
+must not suppress the evidence that the action happened. The second pins that
+`app.redact_audit_payload` does **not** redact `ended_reason`, so that if someone later
+assumes the generic redactor covers this, the assumption fails loudly instead of silently
+re-opening the gap. Full `pnpm run db:test` `ALL PASSED`.
+
+One defect in this fix was caught by an existing gate: the projection was first named without
+the `app._` prefix and granted to `authenticated`, which obliged it to carry a `public.*`
+wrapper — `public-api-wrapper-regression.sql` failed the run. It is an internal audit helper,
+so the prefix and a `service_role`-only grant are the correct answer, not a wrapper.
+
+### ISS-2026-305 — `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant (OPEN, Medium)
+
+Split out of `ISS-2026-093` on 2026-08-30. That entry treated `app.audit_logs` as the
+widening vector for an approval cancellation reason. Fixing it revealed that the audit log was
+the *narrower* of the two paths: `app.approval_requests` carries `grant select` on the whole
+table to `authenticated`, and `approval_requests_select_scoped` admits any active member of
+the tenant — so `ended_reason`, a caller-supplied free-text field that can name why a person
+left or why a decision was reversed, is readable by every ordinary user of the tenant, not
+merely by tenant admins.
+
+It is **not** fixed alongside `ISS-2026-093` because the fix is a different kind of change.
+Narrowing that grant means either a column-restricted `grant select (...)` excluding
+`ended_reason` plus a masking read RPC (the `app.employees` Finding-A shape), or a
+column-level policy — and `app.approval_requests` is PLT-123 infrastructure read by Finance,
+Commercial, Procurement and HR alike, several of which read the table directly rather than
+through an RPC. That is a real cross-domain change needing every one of those read paths
+re-verified, not a hardening tweak, and doing it quietly inside a fix for a different finding
+would be exactly the kind of unreviewed blast radius `ISS-2026-093`'s own disposition was
+right to refuse.
+
+**Status `OPEN`**, Medium. **Risk in plain terms:** when someone cancels an approval — a
+purchase order, a leave request, an onboarding case — the reason they typed is visible to
+every colleague in that organisation who uses CargoGrid, not only to administrators. Most
+cancellation reasons are mundane. Some are not: "cancelled, employee is under investigation"
+is the shape that matters. The same field is used across every domain that has approvals, so
+the exposure is not confined to one team's data.
 
 ### ISS-2026-094 — Batch review (Prompts 291-293, `CG-S12-HRT-019/020/021`): `app.ticket_links`/`app.ticket_link_events` raw-table SELECT admitted the exact cross-domain, cross-tenant access the capability's own RPC layer exists to deny (RESOLVED — CRITICAL, fixed)
 

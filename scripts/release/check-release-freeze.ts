@@ -1588,6 +1588,60 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (385 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-fifth pass), migrationSetSha256 and
+ * dbTestSetSha256. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-093` (Medium, C-24) -- `app.cancel_approval_request`, a shared
+ * PLT-123 primitive, duplicated its caller-supplied reason into
+ * app.audit_logs.reason, readable by any plain tenant_admin with zero domain
+ * permission. One new migration (385 -> 386 files: +1,
+ * `20260830160000_harden_approval_engine_audit_reason_redaction.sql`).
+ *
+ * Two corrections to that entry's own premise, both from checking rather than
+ * assuming. (1) It is TWO functions: app.decide_approval_step passes p_reason
+ * raw in the same shape and is the more frequently called of the two.
+ * (2) They are not equally severe, and the entry's reasoning fits the one it
+ * does not name -- app.approval_decisions carries NO authenticated grant, so
+ * the audit log genuinely was the only path to a rejection reason; whereas
+ * app.approval_requests grants select on the whole table to authenticated with
+ * an any-active-member policy, so ended_reason was ALREADY readable by a
+ * broader audience than tenant_admins. The cancel half is recorded as
+ * defence-in-depth rather than dressed up as a narrowing it is not.
+ *
+ * A second leak vector the obvious fix would have missed:
+ * app.redact_audit_payload matches by KEY NAME and 'ended_reason' matches none
+ * of its patterns, so to_jsonb(v_updated) carried the reason verbatim into
+ * after_value. Passing null for the scalar alone would have closed one vector
+ * and left the other -- a fix that reads as complete and is not. Hence
+ * app._approval_request_audit_projection, mirroring
+ * app.leave_request_audit_projection (HRT-280/293).
+ *
+ * The genuinely wider exposure -- the table grant itself -- is NOT changed here
+ * and is registered as `ISS-2026-305` (Medium). app.approval_requests is read
+ * directly by Finance, Commercial, Procurement and HR; narrowing that grant
+ * needs every one of those read paths re-verified, and doing it quietly inside
+ * a fix for a different finding would be exactly the unreviewed blast radius
+ * ISS-2026-093's own disposition was right to refuse.
+ *
+ * Both function bodies are MECHANICALLY EXTRACTED copies of their current
+ * definitions with only the capture_audit_event call changed -- between them
+ * they carry the C-21 lock-ordering fix, ISS-2026-048/049's tenant-disclosure
+ * fixes and ISS-2026-213's null-actor self-approval guard.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count -- `approval.sql`
+ * widened with two regression blocks, no file added or removed). The first
+ * plants canary strings in a real rejection and cancellation reason and asserts
+ * neither appears anywhere in app.audit_logs -- scalar column AND both jsonb
+ * payloads, searched as text, because checking only the reason column is what
+ * let the jsonb vector survive the first time this defect class was fixed
+ * elsewhere -- while asserting both reasons are still durably stored and both
+ * audit events still exist. The second pins that redact_audit_payload does NOT
+ * cover ended_reason, so a later assumption that it does fails loudly.
+ *
+ * Re-verified via a fresh full local db-test suite run (386 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1775,9 +1829,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: ef8fe38708c2d672934527015279bce7a065a5c3b90600a42b3d52326c441a21
   // (384 files, thirty-third-pass amendment above). Superseded 2026-08-30
   // (thirty-fourth pass) by ISS-2026-251's escalation sweep (385 files: +1,
-  // 20260830150000_create_incident_escalation_sweep.sql). See the class-level
-  // doc comment above.
-  migrationSetSha256: "301d42ffd8a27a6c1c3a5821433f516200c1516fadb534c03a6793dbafbf9a56",
+  // 20260830150000_create_incident_escalation_sweep.sql).
+  // History: 301d42ffd8a27a6c1c3a5821433f516200c1516fadb534c03a6793dbafbf9a56
+  // (385 files, thirty-fourth-pass amendment above). Superseded 2026-08-30
+  // (thirty-fifth pass) by ISS-2026-093 (386 files: +1, 20260830160000_harden_
+  // approval_engine_audit_reason_redaction.sql). See the class-level doc
+  // comment above.
+  migrationSetSha256: "30b093fea9ee698b13918049b8b32f5637bcd63e0ffe140cf66bb83db8d64f69",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1974,8 +2032,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (236 files, thirty-third-pass amendment above). Superseded 2026-08-30
   // (thirty-fourth pass) by ISS-2026-251 (236 files unchanged in count --
   // enterprise-monitoring-observability.sql widened again, background-job.sql's
-  // TS-mirror literal updated). See the class-level doc comment above.
-  dbTestSetSha256: "65044b3c407abb5e8d269f66f3635ce4e83e5c3b68400a512357fb8e384d5d1c",
+  // TS-mirror literal updated).
+  // History: 65044b3c407abb5e8d269f66f3635ce4e83e5c3b68400a512357fb8e384d5d1c
+  // (236 files, thirty-fourth-pass amendment above). Superseded 2026-08-30
+  // (thirty-fifth pass) by ISS-2026-093 (236 files unchanged in count --
+  // approval.sql widened). See the class-level doc comment above.
+  dbTestSetSha256: "d94aad5edcf1ba3cf303d564246be6331b28df5de8ed60380838b5823e9b626b",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
