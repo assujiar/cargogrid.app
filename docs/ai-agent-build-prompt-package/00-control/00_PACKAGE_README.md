@@ -1,7 +1,7 @@
 # CargoGrid AI Agent Build Prompt Package
 
 **Package ID:** `CG-AABPP`  
-**Package version:** `0.18.0-step17`  
+**Package version:** `0.19.0-step17-r1`  
 **Checkpoint date:** 2026-07-13  
 **Current scope:** Step 17 — Final Package Validation and START_HERE  
 **Build authorization:** Prompt-package generation only. Final validation is package-level; runtime discovery, implementation, hardening and release/go-live remain unexecuted.

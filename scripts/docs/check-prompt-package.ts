@@ -104,44 +104,54 @@ export const REQUIRED_CONTROL_FILES: readonly string[] = [
 
 /** Control files that must declare the package version. Prompt 430 §1 requires this. */
 export const VERSION_BEARING_CONTROL_FILES: readonly string[] = [
+  // Widened at revision 0.19.0 (FPV-F009, ADR-0028) from four files to all nine control
+  // documents. Prompt 430 item 1 requires ALL control files to reference the package version;
+  // four of them did not, and the gate only checked the four that already did -- so the gate
+  // agreed with the defect. The four registers keep their own lifecycle version AND carry a
+  // separate **Package version:** line, which satisfies item 1 literally without falsifying
+  // the lifecycle versioning that was itself correct.
   "00-control/00_PACKAGE_README.md",
+  "00-control/01_SOURCE_OF_TRUTH_MATRIX.md",
+  "00-control/02_CONFIRMED_DECISION_REGISTER.md",
+  "00-control/03_ASSUMPTION_REGISTER.md",
+  "00-control/04_CONFLICT_REGISTER.md",
+  "00-control/05_REQUIREMENT_COVERAGE_MATRIX.md",
   "00-control/06_PACKAGE_BUILD_STATUS.md",
   "00-control/07_PROMPT_PACKAGE_MANIFEST.md",
   "START_HERE.md",
 ];
 
-export const EXPECTED_PACKAGE_VERSION = "0.18.0-step17";
+export const EXPECTED_PACKAGE_VERSION = "0.19.0-step17-r1";
 
 /**
- * Prompt files carrying a known, disclosed template defect: their bodies are indented into a
- * Markdown code block, and five of their 36 headings use an older, longer wording
- * ("14. API and integration impact" rather than "14. API impact", and likewise for 16-19).
+ * Prompt files exempted from the "body is not indented into a code block" rule, and from the
+ * canonical wording of five of the 36 headings.
  *
- * Registered by `FPV-416` as `FPV-F003`/`FPV-F004` and disclosed in
- * `docs/runtime/KNOWN_ISSUES.md`. **Step 17 cannot fix them** -- prompt files remain
- * `FORBIDDEN` under `ADR-0026` decision 2, and de-indenting 14 files is not a mechanical
- * metadata correction.
+ * **This list is empty, and is meant to stay empty.** It held 14 files between `FPV-416`
+ * (which found the defect as `FPV-F003`/`FPV-F004`) and package revision `0.19.0` (which
+ * fixed it). While it held them, an allowlisted file's defect was a WARN rather than an
+ * ERROR, so the gate stayed usable while the defect stayed visible -- and the list was
+ * exhaustive and pinned, so a 15th file was an ERROR and failed the gate.
  *
- * They are therefore reported as WARN rather than ERROR, so the gate stays usable while the
- * defect stays visible. The list is exhaustive and pinned: a 15th file with either defect is
- * an ERROR and fails the gate. That is the whole point of enumerating them rather than
- * suppressing the check.
+ * With the list empty, that distinction is gone and every file is held to the rule. Keeping
+ * the mechanism rather than deleting it is deliberate; see the comment inside.
  */
 export const KNOWN_TEMPLATE_VARIANT_FILES: readonly string[] = [
-  "10-phase-05-advanced-tms-wms/222_DISPATCH_BOARD_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/223_FLEET_DRIVER_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/224_ROUTE_LOAD_PLANNING_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/225_FIRST_MIDDLE_LAST_MILE_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/226_GPS_TELEMATICS_INTEGRATION_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/227_CAPACITY_UTILIZATION_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/228_ADVANCED_MILESTONE_EXCEPTION_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/243_HIGH_VOLUME_OPERATIONS_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/245_ADVANCED_TMS_WMS_INTEGRATED_VERIFICATION_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/246_ADVANCED_TMS_WMS_INTEGRITY_SECURITY_HARDENING_PROMPT.md",
-  "10-phase-05-advanced-tms-wms/247_ADVANCED_TMS_WMS_DOCUMENTATION_HANDOFF_PROMPT.md",
-  "13-phase-08-customer-portal-loyalty/305_TRACKING_PROMPT.md",
-  "13-phase-08-customer-portal-loyalty/306_SHIPMENT_MONITORING_PROMPT.md",
-  "14-phase-09-intelligence-enterprise/343_MAPS_GPS_TELEMATICS_INTEGRATIONS_PROMPT.md",
+  // DELIBERATELY EMPTY since package revision 0.19.0 (ADR-0028).
+  //
+  // This list held 14 capability prompts whose bodies were indented four spaces, rendering
+  // each whole prompt as one Markdown code block. They were allowlisted and downgraded to
+  // WARN because Step 17 had no authority to edit prompt files (ADR-0026) -- the exception
+  // existed to disclose the defect, never to bless it.
+  //
+  // All 14 were de-indented and their five legacy headings canonicalized at revision 0.19.0
+  // (FPV-F003/FPV-F004), by scripts/docs/normalize-template-variant-prompts.ts, which proves
+  // each result content-identical to its original modulo exactly those two differences.
+  //
+  // The list stays here, empty, rather than being deleted: an INDENTED_BODY finding is now an
+  // ERROR for every file with no exception available, and leaving the mechanism visible makes
+  // that fact legible. An allowlist that outlives its reason becomes a place for the next
+  // defect to hide.
 ];
 
 /** The older heading wording those files use, by field number. */

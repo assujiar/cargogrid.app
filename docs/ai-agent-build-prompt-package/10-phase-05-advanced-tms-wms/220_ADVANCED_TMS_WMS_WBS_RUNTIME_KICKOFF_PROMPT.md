@@ -2,7 +2,7 @@
 
 **Prompt ID:** `CG-S10-ATW-001`  
 **Package document:** `CG-AABPP-ATW-220`  
-**Version:** `0.12.0-multisource-gps`  
+**Version:** `0.11.0`  
 **Runtime output:** `docs/build-log/phase-05/ADVANCED_TMS_WMS_EXECUTION_INDEX.md`
 
 ## Objective

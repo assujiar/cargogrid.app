@@ -5212,10 +5212,11 @@ future session discovers it as a fresh mystery.
 
 **Re-verified, disposition confirmed accurate and unchanged (2026-08-28, Track B Batch 8) — live-reconfirmed via direct `list_migrations` query.** Queried `supabase_migrations.schema_migrations` on the live hosted project: all 9 wall-clock-versioned rows this entry's own table names are still present, byte-identical, unreconciled — none of the corresponding correct filename-versions appear anywhere in the ledger, confirming the drift is unchanged since discovery. No write attempted against this system catalog, per this batch's own explicit no-live-mutation scope — matching this entry's own already-correct deferral (its prior attempt was itself denied by the session's own write-safety classifier, correctly not worked around). **Not fixed by this batch.** The exact reconciliation SQL this entry already provides remains valid and unexecuted, pending an operator with Supabase Dashboard SQL-editor access or a session with this specific write pre-approved. Owner unchanged.
 
-### ISS-2026-301 — `RPD-020` (tenant merge/split is an admin-run migration) is carried by no prompt anywhere in the 430-file build prompt package, found by Step 17's Requirement Coverage Audit (`CG-S17-FPV-002`, Prompt 415, 2026-08-29)
+### ISS-2026-301 — `RPD-020` (tenant merge/split is an admin-run migration) is carried by no prompt anywhere in the 430-file build prompt package, found by Step 17's Requirement Coverage Audit (`CG-S17-FPV-002`, Prompt 415, 2026-08-29) (`RESOLVED` 2026-08-30, High)
 
-**Severity: High. Status: `OPEN`. Owner: a future package revision (`0.19.x`) — no Step 17 lane is
-authorized to close it.**
+**Severity: High. Status: `RESOLVED` 2026-08-30 at package revision `0.19.0-step17-r1`, under
+`ADR-0028`/`CON-017`.** Originally: `OPEN`, owner "a future package revision (`0.19.x`) — no Step
+17 lane is authorized to close it."
 
 `RPD-020` is a ratified product decision in
 `docs/ai-agent-build-prompt-package/00-control/02_CONFIRMED_DECISION_REGISTER.md`. No prompt in
@@ -5253,6 +5254,85 @@ reversible migration with tenant-isolation negative tests; add its manifest row 
 
 **Full record:** `docs/build-log/final-package-validation/FPV-415.md` §4, and
 `docs/build-log/final-package-validation/FINAL_GAP_RISK_REGISTER.md` row `FPV-F001`.
+
+**`RESOLVED`, 2026-08-30.** The "future package revision (`0.19.x`)" this entry was waiting for
+arrived: the project owner instructed *"lanjut step 17 hingga selesai"*, `ADR-0028` authorised the
+bounded revision, and `CON-017` recorded the narrowing in the package's own conflict register.
+
+Closed by `docs/ai-agent-build-prompt-package/06-phase-01-platform-core/431_TENANT_MERGE_SPLIT_PROMPT.md`
+(`CG-S6-PLT-039`, `CG-AABPP-PLT-431`), which follows the proposed patch above exactly: all 36
+fields, `RPD-020` cited in §6, `CG-S6-PLT-002` (Prompt 105) declared as its upstream in §9, and
+tenant-isolation negative tests required in §28 ("the neighbouring tenant must be provably
+unaffected"). Manifest row `M-432` added; `05_REQUIREMENT_COVERAGE_MATRIX.md` gained an `RPD-020`
+row. `pnpm run package:check` reports 431 files / 431 manifest rows, 0 errors.
+
+**Two things this closure is deliberately not.**
+
+*It is not the capability.* The package is made of prompts, and `FPV-F001` was a **coverage** gap —
+a ratified decision no prompt carried, so a future agent would never build it and nothing would
+flag the omission. Writing the prompt closes exactly that. Building tenant merge/split is that
+future agent's work, and conflating the two would repeat the category error the finding is about.
+`ADR-0028` decision 4 states this.
+
+*It is not a revised Step 17 verdict.* `FINAL_PACKAGE_PARTIALLY_COMPLETE` was correct on
+2026-08-29's evidence and stands. This entry closes as *fixed by a later revision, dated* — a
+weaker and more honest claim than the audit having found nothing.
+
+**One cost, carried openly.** The prompt is numbered `431`, which sits after the package's
+contiguous `00..430` sequence but before where it executes (Phase 1, right after Prompt 105).
+Seating it at its execution position would have meant renumbering the 325 files between `106` and
+`430`, falsifying every committed citation to every one of them. Tracked as `ISS-2026-306`.
+
+---
+
+### ISS-2026-306 — Per-directory prompt numbering contiguity is deliberately broken: `431_TENANT_MERGE_SPLIT_PROMPT.md` executes in Phase 1 but is numbered after the whole package (OPEN, Low)
+
+**Severity: Low. Status: `OPEN` — accepted as the cheaper of two costs, not undiagnosed. Owner:
+whoever next renumbers the package wholesale, if that ever happens for another reason.**
+
+Registered 2026-08-30 at package revision `0.19.0-step17-r1`, by the same revision that created
+the condition. Self-disclosed rather than discovered later.
+
+**What is true.** Until this revision, prompt file numbers in
+`docs/ai-agent-build-prompt-package/` were contiguous `00..430` across all 18 directories and
+ascended with execution order, so a reader could infer "runs before" from "numbered lower".
+`431_TENANT_MERGE_SPLIT_PROMPT.md` lives in `06-phase-01-platform-core/` — whose other files are
+`104..136` — and executes immediately after Prompt 105. **Its number no longer implies its
+position.**
+
+**Why it was done this way.** The alternative was to insert it as `106` and renumber the 325 files
+between `106` and `430`. Every one of those numbers is cited — in the manifest, in
+`05_REQUIREMENT_COVERAGE_MATRIX.md`, in `06_PACKAGE_BUILD_STATUS.md`, in §9/§10/§36 dependency
+lines inside other prompts, in 17 Step-17 build-log lanes, in this file, and in commit messages
+already pushed. Renumbering would falsify all of them at once, and a citation that silently points
+at the wrong prompt is a far worse defect than a number that does not sort. This is the same
+append-only reasoning that governs every other correction in this revision: **history is not
+rewritten to look tidier.**
+
+**What actually orders the prompt**, and why nothing is ambiguous in practice:
+
+| Signal | Value |
+|---|---|
+| Directory | `06-phase-01-platform-core/` |
+| §2 Parent phase | `Phase 1 — Platform Core` |
+| §9 Upstream dependency | `CG-S6-PLT-002` (Prompt 105) must be `VERIFIED` |
+| Header note + §36 note | Both state explicitly that it executes after 105 despite its number |
+
+An agent following the execution index or the §9 dependency edge reaches it correctly. Only an
+agent sorting filenames and assuming the order is meaningful is misled — which is why the file
+says so twice, in the two places such an agent would look.
+
+**Exposure.** No tenant data, no security control, no financial path. The realistic failure is a
+human skimming the directory and assuming `431` is the last thing the package does.
+
+**Closure route, for whoever wants it gone.** Do not renumber for this alone. If the package is
+ever renumbered wholesale for an independent reason, seat this prompt at `106` in the same pass,
+update every citation mechanically, and record the mapping — then this entry closes. Otherwise it
+stays open and disclosed, which is the honest state.
+
+**Full record:** `docs/adr/ADR-0028-package-revision-0-19-0-authority.md`,
+`docs/build-log/final-package-validation/FINAL_GAP_RISK_REGISTER.md` §4.1, and `CON-017` in
+`docs/ai-agent-build-prompt-package/00-control/04_CONFLICT_REGISTER.md`.
 
 ## 5. Maintenance rules
 

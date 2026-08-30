@@ -1,7 +1,7 @@
 # Phase 5 — Advanced TMS and WMS Prompt Package
 
 **Document ID:** `CG-AABPP-ATW-219`  
-**Version:** `0.12.0-multisource-gps`  
+**Version:** `0.11.0`  
 **Status:** `FINAL_FOR_RUNTIME_PLANNING`
 
 ## 1. Purpose

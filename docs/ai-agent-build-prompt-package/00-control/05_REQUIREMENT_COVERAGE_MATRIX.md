@@ -2,6 +2,7 @@
 
 **Document ID:** `CG-AABPP-CTRL-005`  
 **Version:** `0.18.0`  
+**Package version:** `0.19.0-step17-r1`  
 **Status:** `FINAL_FOR_STEP`  
 **Coverage meaning at Step 0:** source requirement is identified, normalized, and assigned to a future package step. No implementation prompt or code is claimed complete; Step 15 adds hardening prompt coverage, Step 16 adds release/go-live prompt coverage and Step 17 validates the package without runtime execution.
 
@@ -41,6 +42,7 @@ Within each functional family, `001` is create/maintain, `002` configurable work
 | Source family / IDs | Capability | Key source controls | Release owner | Prompt-package step | State |
 |---|---|---|---|---|---|
 | PLT-TNT-001..004 | Tenant & Subscription | Entitlement, limits, trial, renewal, suspension, audit | Phase 1 | Step 6 | `SOURCE_MAPPED; PROMPT_COMPLETE` |
+| RPD-020 | Tenant & Subscription | Tenant merge/split as an admin-run migration: preflight, approval by a second identity, backup, reconciliation and audit evidence; no tenant self-service. Carried by Prompt 431 (`CG-S6-PLT-039`), authored at revision `0.19.0` to close `FPV-F001` — no prompt anywhere in the package covered it before. | Phase 1 | Step 6 | `SOURCE_MAPPED; PROMPT_COMPLETE` |
 | PLT-WLB-001..004 | White-label & Localization | Branding, domain, terminology, templates, canonical semantics | Phase 1/enterprise depth | Step 6, Step 14 | `SOURCE_MAPPED; CORE_PROMPT_COMPLETE; ENTERPRISE_DEPTH_PROMPT_COMPLETE` |
 | PLT-IAM-001..004 | User, Organization, Role & Permission | Four layers, hierarchy, RBAC, scopes, fields, support grants | Phase 1 | Step 6 | `SOURCE_MAPPED; PROMPT_COMPLETE` |
 | PLT-CFG-001..004 | Workflow, Approval & Configuration | Draft/publish/version/effective date/rollback/dependency | Phase 1 | Step 6 | `SOURCE_MAPPED; PROMPT_COMPLETE` |

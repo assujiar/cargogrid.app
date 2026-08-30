@@ -314,18 +314,27 @@ describe("indented bodies — the defect that hid from the first version of this
     }
   });
 
-  test("the pinned allowlist is exhaustive and matches the real package exactly", () => {
-    // If someone de-indents one of the 14, or a 15th appears, this test says so rather than
-    // letting the allowlist quietly drift out of step with reality.
+  test("no prompt in the package has an indented body, and no exception is available to one that does", () => {
+    // Was: "the pinned allowlist is exhaustive and matches the real package exactly", asserting
+    // the 14 known-indented files were disclosed as WARN. Revision 0.19.0 (ADR-0028) fixed all
+    // 14 (FPV-F003), so the assertion inverts: there must now be NO indented body anywhere, and
+    // -- the half that matters more -- no allowlist entry left that could soften a new one.
     const { findings, stats } = checkPromptPackage("docs/ai-agent-build-prompt-package");
     const indented = findings.filter((f) => f.code === "INDENTED_BODY");
-    assert.equal(indented.length, KNOWN_TEMPLATE_VARIANT_FILES.length);
-    assert.equal(stats.indentedBodyCount, 14);
-    assert.ok(indented.every((f) => f.severity === "WARN"), "all 14 are disclosed, none blocks");
+    assert.deepEqual(indented.map((f) => f.path), [], "no prompt may render as a single code block");
+    assert.equal(stats.indentedBodyCount, 0);
     assert.deepEqual(
-      indented.map((f) => f.path).sort(),
-      [...KNOWN_TEMPLATE_VARIANT_FILES].sort(),
+      [...KNOWN_TEMPLATE_VARIANT_FILES],
+      [],
+      "the allowlist must stay empty — an exception that outlives its reason is where the next defect hides",
     );
+  });
+
+  test("a hypothetical indented file would now be an ERROR, not a WARN", () => {
+    // The allowlist being empty is only meaningful if the un-allowlisted path is blocking.
+    // Asserted on the classifier directly rather than by mutating the real package.
+    assert.equal(KNOWN_TEMPLATE_VARIANT_FILES.includes("anything/at/all.md"), false);
+    assert.ok(hasIndentedBody("    ## 1. Prompt ID\n    Some body\n"), "the detector still detects");
   });
 });
 
@@ -378,8 +387,19 @@ describe("the real package", () => {
     assert.deepEqual(errors, [], `real package has structural errors: ${JSON.stringify(errors, null, 2)}`);
 
     // Pin the shape of the package so silent drift is a test failure, not a surprise later.
-    assert.equal(stats.fileCount, 430);
-    assert.equal(stats.manifestRowCount, 430);
-    assert.equal(stats.structuredPromptCount, 338, "324 parseable + the 14 indented ones the first version missed");
+    //
+    // Moved at package revision 0.19.0-step17-r1 (ADR-0028). The previous pin was
+    // 430 / 430 / 338; the +1 is `431_TENANT_MERGE_SPLIT_PROMPT.md`, authored to close
+    // FPV-F001 (`RPD-020` carried by no prompt anywhere). The pin is not relaxed — it is
+    // moved to the new documented value, which is the whole point of pinning: a change to
+    // these numbers must be someone's deliberate act, recorded, never a silent drift.
+    assert.equal(stats.fileCount, 431);
+    assert.equal(stats.manifestRowCount, 431);
+    assert.equal(stats.structuredPromptCount, 339, "338 + the tenant merge/split prompt closing FPV-F001");
+
+    // FPV-F003's closure, asserted rather than assumed: the 14 template-variant files were
+    // de-indented, KNOWN_TEMPLATE_VARIANT_FILES is empty, and no file anywhere renders its
+    // body as a code block. If a future prompt reintroduces the shape, this fails.
+    assert.equal(stats.indentedBodyCount, 0, "no prompt may render its whole body as a code block");
   });
 });

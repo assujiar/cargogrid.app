@@ -183,6 +183,33 @@ The digest is order-independent by construction (`LC_ALL=C sort`) and reproducib
 the tree. The two digests differ by exactly the two corrections in §6 — recorded so the change is
 attributable rather than merely asserted.
 
+### 7.1 Superseded — package revision `0.19.0-step17-r1`, 2026-08-30
+
+The digest above pins the package **as Step 17 closed it**, and is left as written: it is the
+checksum of the artifact the 2026-08-29 verdict describes, and rewriting it in place would
+destroy the only evidence that ties that verdict to a specific tree.
+
+The revision authorised by `ADR-0028` closed all eight remaining findings (see
+`FINAL_GAP_RISK_REGISTER.md` §4.1), which necessarily changed the package. The current digest,
+computed by the same recorded command:
+
+| | |
+|---|---|
+| **Aggregate package digest** | `d1dbe21817b61be2de871efe63b25ca36bd5a8041e869408318d4a41a7c7361c` |
+| Files | 431 (`+1`: the new `431_TENANT_MERGE_SPLIT_PROMPT.md` closing `FPV-F001`) |
+| Bytes | 4,028,399 (`+10,075`) |
+| Supersedes | `ea46a79f…0b943b90` (430 files, 4,018,324 bytes, 2026-08-29) |
+
+The difference is accounted for in full: one new prompt file, 1,078 de-indented body lines across
+14 files (`FPV-F003`), 70 canonicalized headings (`FPV-F004`), 17 aligned version headers
+(`FPV-F007`), 4 prompts gaining RPD citations (`FPV-F002`), and the control-file version lines
+(`FPV-F008`/`FPV-F009`). Anyone holding the old tree can reproduce the new digest by applying
+`scripts/docs/normalize-template-variant-prompts.ts --write` and the enumerated edits — the
+revision is reproducible, not merely asserted.
+
+**Item 15's disposition does not change.** No ZIP exists now either, so this remains a disclosed
+substitute rather than the archive-integrity check the item asks for.
+
 ## 8. Fresh gate suite, re-run from scratch at this checkpoint
 
 Per `BUILD_EXECUTION_PROTOCOL.md` §5.5 the closing session re-runs the complete suite itself
@@ -257,34 +284,65 @@ survives Step 17 closing.
 overlapping file cluster — 11 of 14 Phase 5 files common to all three. One unrecorded revision
 pass touching 17 files, not three slips. Their patches belong to a single future revision.
 
+> **All nine findings are now closed.** The `0.19.x` owner named in the table above arrived on
+> 2026-08-30: package revision `0.19.0-step17-r1`, authorised by `ADR-0028` / `CON-017`, applied
+> the proposed patch for every open row. The per-finding closure evidence is
+> `FINAL_GAP_RISK_REGISTER.md` §4.1; the new package digest is §7.1 above. The three clustered
+> findings were indeed fixed in a single revision, as predicted here. **The `PARTIAL` and
+> `FINAL_PACKAGE_PARTIALLY_COMPLETE` verdicts in this report are not revised** — they were correct
+> on 2026-08-29's evidence, and an audit that edits its own verdict once the defects are fixed is
+> an audit nobody can trust the next time.
+
 ## 10. Conditions inherited from Step 16 — none closed, none claimed closed
 
-| Item | State entering Step 17 | State now |
-|---|---|---|
-| `RGL-BLK-001` — production auto-deploys from `main`, ungated | Architecturally unfixed | **Unchanged.** The operator override altered its disposition, never the mechanism. |
-| `UAT_ACCEPTED` | Never obtained | **Unchanged.** No UAT environment, no named business acceptor. No agent may simulate one. |
-| Staging tier | Does not exist | **Unchanged.** |
-| `RGL-BLK-005` — CI red | Unchanged | **Unchanged.** Local `db:test` green is not evidence about CI. |
-| Step 16 closure | `RELEASE_GO_LIVE_PARTIALLY_COMPLETE` | **Unchanged.** Step 17 does not upgrade it. |
+| Item | State entering Step 17 | State at Step 17 closure (2026-08-29) | State now (2026-08-30) |
+|---|---|---|---|
+| `RGL-BLK-001` — production auto-deploys from `main`, ungated | Architecturally unfixed | **Unchanged.** The operator override altered its disposition, never the mechanism. | **`RESOLVED` by mechanism**, under `ADR-0027` Part A: `vercel.json` disables git deployment of `main`; `check-go-decision.ts` gates production builds on a recorded go-decision matching the deploying SHA. Live-verified from a Vercel preview build log. |
+| `UAT_ACCEPTED` | Never obtained | **Unchanged.** No UAT environment, no named business acceptor. No agent may simulate one. | **Still never obtained.** Recorded as `ACCEPTED_RISK (OWNER_OVERRIDE)` under `ADR-0027` Part B — *accepted*, never *passed*. Scenarios and a sign-off form are ready in `docs/runbooks/human-execution-pack.md`. |
+| Staging tier | Does not exist | **Unchanged.** | **Unchanged.** Vercel previews remain a disclosed substitute; relabelling production as staging stays prohibited. |
+| `RGL-BLK-005` — CI red | Unchanged | ~~**Unchanged.** Local `db:test` green is not evidence about CI.~~ **This cell was wrong** — see §8. | **`RESOLVED` at `RGL-395`, 2026-08-25.** 17 consecutive successful CI runs on `main`, verified live via the Actions API. The narrower rule the cell was reaching for still holds: a local gate result is not evidence about CI. |
+| Step 16 closure | `RELEASE_GO_LIVE_PARTIALLY_COMPLETE` | **Unchanged.** Step 17 does not upgrade it. | **Unchanged.** Neither Step 17 nor this revision upgrades it. |
 
-Step 17 validated a prompt package. It could not and did not resolve a runtime environment.
+Step 17 validated a prompt package. It could not and did not resolve a runtime environment. The
+2026-08-30 column records work done *after* Step 17 under separate authority (`ADR-0027`,
+`ADR-0028`) — it is not a Step 17 result and does not alter Step 17's verdict.
 
 ## 11. Future execution handoff
 
+**Rewritten 2026-08-30 at package revision `0.19.0-step17-r1`.** Unlike this report's verdicts —
+which are a dated record and stay as written — this section is *operating instructions to the next
+agent*, and instructions that have gone stale actively mislead. The superseded text is quoted
+below each item it replaces, so nothing is silently disappeared.
+
 Whoever executes this package next:
 
-1. **Read this report and `FINAL_GAP_RISK_REGISTER.md` first.** `START_HERE.md` §8 now points you
-   here. Eight things are known to be wrong; you should not rediscover them mid-build.
-2. **`RPD-020` is not in the package.** If tenant merge/split is required, it needs a new
-   capability prompt — see `ISS-2026-301` for the proposed shape.
-3. **Fourteen Phase 5/8/9 prompts render as code blocks.** Their content is complete; read them
-   as plain text, and expect any heading-based tooling to skip them.
-4. **`RGL-BLK-001` is still armed.** Merging to `main` deploys to production with no go/no-go
-   gate, against an endpoint Step 16 measured as degraded. Step 17 pushed a branch and opened no
-   pull request for exactly this reason.
+1. **Read this report and `FINAL_GAP_RISK_REGISTER.md` first.** `START_HERE.md` §8 points you
+   here. All nine findings this step raised are now **closed** (register §4.1) — read them anyway,
+   because they tell you which parts of the package were weakest and why.
+   > *Superseded:* "Eight things are known to be wrong; you should not rediscover them mid-build."
+2. **`RPD-020` is now carried by `06-phase-01-platform-core/431_TENANT_MERGE_SPLIT_PROMPT.md`**
+   (`CG-S6-PLT-039`). It is numbered `431` but **executes in Phase 1, immediately after Prompt
+   105** — its §9 upstream dependency is what orders it, not its number. Do not read the number as
+   a position; see the numbering note at the head of that file and `ISS-2026-306`.
+   > *Superseded:* "`RPD-020` is not in the package. If tenant merge/split is required, it needs a
+   > new capability prompt — see `ISS-2026-301` for the proposed shape."
+3. **All 339 structured prompts now parse.** The 14 Phase 5/8/9 files that rendered as code blocks
+   were de-indented by script under `ADR-0028`, verified content-identical modulo the indent and
+   five heading strings. Heading-based tooling skips nothing.
+   > *Superseded:* "Fourteen Phase 5/8/9 prompts render as code blocks. Their content is complete;
+   > read them as plain text, and expect any heading-based tooling to skip them."
+4. **`RGL-BLK-001` is closed by mechanism.** `vercel.json` disables git deployment of `main`, and
+   `scripts/release/check-go-decision.ts` runs as the `ignoreCommand`: a production build proceeds
+   only when a recorded go-decision matches the deploying SHA. Merging to `main` no longer deploys
+   to production by itself. Step 17 itself still pushed a branch and opened no pull request.
+   > *Superseded:* "`RGL-BLK-001` is still armed. Merging to `main` deploys to production with no
+   > go/no-go gate, against an endpoint Step 16 measured as degraded."
 5. **Re-run `pnpm run package:check`** before trusting any package structural claim. It is wired
-   into CI and pinned by 32 tests, and it enforces the 14 known variants as an exhaustive
-   allowlist — a fifteenth fails the gate.
+   into CI and pinned by tests. `KNOWN_TEMPLATE_VARIANT_FILES` is now **empty** — the structural
+   rule is enforced on every prompt with no exception standing, so *any* indented file is an
+   error, not just a fifteenth one.
+   > *Superseded:* "it enforces the 14 known variants as an exhaustive allowlist — a fifteenth
+   > fails the gate."
 
 ## 12. Boundary statement
 

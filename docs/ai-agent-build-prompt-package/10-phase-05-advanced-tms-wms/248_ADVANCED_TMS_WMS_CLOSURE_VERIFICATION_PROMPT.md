@@ -2,7 +2,7 @@
 
 **Prompt ID:** `CG-S10-ATW-029`  
 **Package document:** `CG-AABPP-ATW-248`  
-**Version:** `0.12.0-multisource-gps`  
+**Version:** `0.11.0`  
 **Runtime output:** `docs/build-log/phase-05/ADVANCED_TMS_WMS_CLOSURE_REPORT.md`
 
 Do not begin until Prompt 247 is `VERIFIED`, all Phase 5 evidence is available, and the active checkpoint still carries the required Phase 4 closure.

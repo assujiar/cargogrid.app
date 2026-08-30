@@ -29,7 +29,7 @@ Let tenants present their brand without code forks or altered business meaning.
 
 ## 6. Source requirement
 
-PLT-WLB-001..004; design-system foundation; tenant/config decisions. Cite exact runtime evidence, ADR and prerequisite task IDs.
+PLT-WLB-001..004; design-system foundation; controlled white-label RPD-019; tenant/config decisions. Cite exact runtime evidence, ADR and prerequisite task IDs.
 
 ## 7. Current repository context
 

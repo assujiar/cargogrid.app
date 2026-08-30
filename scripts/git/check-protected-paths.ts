@@ -57,6 +57,62 @@ export const STEP17_CORRECTABLE_PACKAGE_PATHS: readonly string[] = [
   "docs/ai-agent-build-prompt-package/START_HERE.md",
 ];
 
+/**
+ * The prompt files package revision `0.19.0` may correct, per `ADR-0028` / `CON-017`.
+ *
+ * `ADR-0026` kept every prompt file `FORBIDDEN` so that Step 17's audit could not edit its own
+ * subject while auditing it. That audit is finished and its verdict is recorded; correcting the
+ * defects it *found* is the intended next action, and the Owner column on all eight open
+ * findings says `Future package revision (0.19.x)` — this is that revision.
+ *
+ * Enumerated by finding, matched LITERALLY, never by glob. A file is on this list because a
+ * named Step 17 finding requires it, and for no other reason. Everything else under
+ * docs/ai-agent-build-prompt-package/ stays FORBIDDEN.
+ */
+export const REVISION_0_19_CORRECTABLE_PROMPT_PATHS: readonly string[] = [
+  // FPV-F003 (indented bodies) + FPV-F004 (legacy heading wording) + FPV-F007 (unrecorded
+  // version) -- the same 14-file cluster, three independent defects from one revision pass.
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/222_DISPATCH_BOARD_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/223_FLEET_DRIVER_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/224_ROUTE_LOAD_PLANNING_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/225_FIRST_MIDDLE_LAST_MILE_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/226_GPS_TELEMATICS_INTEGRATION_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/227_CAPACITY_UTILIZATION_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/228_ADVANCED_MILESTONE_EXCEPTION_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/243_HIGH_VOLUME_OPERATIONS_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/245_ADVANCED_TMS_WMS_INTEGRATED_VERIFICATION_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/246_ADVANCED_TMS_WMS_INTEGRITY_SECURITY_HARDENING_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/247_ADVANCED_TMS_WMS_DOCUMENTATION_HANDOFF_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/13-phase-08-customer-portal-loyalty/305_TRACKING_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/13-phase-08-customer-portal-loyalty/306_SHIPMENT_MONITORING_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/14-phase-09-intelligence-enterprise/343_MAPS_GPS_TELEMATICS_INTEGRATIONS_PROMPT.md",
+  // FPV-F007 only -- three further files in the same unrecorded revision pass that were NOT
+  // indented and so were not in the FPV-F003 cluster. 219 is a step README, which ADR-0026
+  // decision 2 kept FORBIDDEN alongside the prompt files; it is named here explicitly rather
+  // than reached by a directory rule, because a README slipping in under a glob is exactly
+  // the failure that list was written to prevent.
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/219_ADVANCED_TMS_WMS_README.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/220_ADVANCED_TMS_WMS_WBS_RUNTIME_KICKOFF_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/248_ADVANCED_TMS_WMS_CLOSURE_VERIFICATION_PROMPT.md",
+  // FPV-F002 only -- one line each, adding the RPD id to the §6 Source requirement of the
+  // prompt that already covers that decision by content. No requirement changes; the
+  // traceability becomes mechanically checkable rather than only re-derivable by topic.
+  "docs/ai-agent-build-prompt-package/05-phase-00-discovery-foundation/95_DATA_CLASSIFICATION_FOUNDATION_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/06-phase-01-platform-core/106_SUBSCRIPTION_MODULE_FEATURE_ENTITLEMENT_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/06-phase-01-platform-core/117_WHITE_LABEL_FOUNDATION_PROMPT.md",
+  "docs/ai-agent-build-prompt-package/15-hardening/380_ACCESSIBILITY_AUDIT_PROMPT.md",
+];
+
+/**
+ * FPV-F001: the one NEW file this revision authors -- the tenant merge/split capability prompt
+ * carrying `RPD-020`, which no prompt anywhere in the package covered. Listed separately from
+ * the corrections above because it is a different kind of act: adding an artifact, not
+ * repairing one.
+ */
+export const REVISION_0_19_NEW_PROMPT_PATHS: readonly string[] = [
+  "docs/ai-agent-build-prompt-package/06-phase-01-platform-core/137_TENANT_MERGE_SPLIT_PROMPT.md",
+];
+
 /** Escapes a literal path so it can anchor an exact-match RegExp. */
 function exactPathPattern(paths: readonly string[]): RegExp {
   const alternation = paths.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
@@ -64,12 +120,17 @@ function exactPathPattern(paths: readonly string[]): RegExp {
 }
 
 const STEP17_CORRECTABLE_PATTERN = exactPathPattern(STEP17_CORRECTABLE_PACKAGE_PATHS);
+const REVISION_0_19_PATTERN = exactPathPattern([
+  ...REVISION_0_19_CORRECTABLE_PROMPT_PATHS,
+  ...REVISION_0_19_NEW_PROMPT_PATHS,
+]);
 
 export const PROTECTED_PATH_RULES: readonly ProtectedPathRule[] = [
   { pattern: /^docs\/blueprint\//, severity: "FORBIDDEN", reason: "read-only authoritative source (decision-change protocol only)" },
   // Ordered BEFORE the blanket package rule below: first match wins for these four paths
   // (see the loop in checkProtectedPaths, which breaks on the first matching rule).
   { pattern: STEP17_CORRECTABLE_PATTERN, severity: "CAUTION", reason: "package metadata correctable by Step 17 only, mechanical/source-safe corrections with cited evidence (CON-016, ADR-0026) — re-verify with `pnpm run package:check`" },
+  { pattern: REVISION_0_19_PATTERN, severity: "CAUTION", reason: "prompt file unlocked by package revision 0.19.0 for one named Step 17 finding only (CON-017, ADR-0028) — re-verify with `pnpm run package:check`" },
   { pattern: /^docs\/ai-agent-build-prompt-package\//, severity: "FORBIDDEN", reason: "read-only execution plan — never edited by a runtime agent" },
   { pattern: MIGRATIONS_PATTERN, severity: "FORBIDDEN", reason: "applied migration — never edit, add a new migration instead (AGENTS.md)" },
   { pattern: /(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/, severity: "FORBIDDEN", reason: "real environment/secret file — must never be committed (.env.example/.sample/.template are the safe, allowed exception)" },

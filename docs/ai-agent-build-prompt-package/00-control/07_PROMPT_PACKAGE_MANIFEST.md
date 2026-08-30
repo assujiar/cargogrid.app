@@ -1,7 +1,7 @@
 # Prompt Package Manifest
 
 **Manifest ID:** `CG-AABPP-MANIFEST`  
-**Package version:** `0.18.0-step17`  
+**Package version:** `0.19.0-step17-r1`  
 **Status:** `FINAL_FOR_STEP`  
 **Generated:** 2026-07-13  
 **Root:** `CargoGrid_AI_Agent_Build_Prompt_Package/`
@@ -19,14 +19,14 @@
 
 | Manifest item | Relative path | Purpose | Version | Status | Inputs |
 |---|---|---|---:|---|---|
-| M-000 | `00-control/00_PACKAGE_README.md` | Package entry point, source inventory, Step 0–17 checkpoint | 0.18.0 | `FINAL_FOR_STEP` | Master prompt, six sources, RPD-001..040, Step 1–17 artifacts, START_HERE |
+| M-000 | `00-control/00_PACKAGE_README.md` | Package entry point, source inventory, Step 0–17 checkpoint | 0.19.0 | `FINAL_FOR_STEP` | Master prompt, six sources, RPD-001..040, Step 1–17 artifacts, START_HERE |
 | M-001 | `00-control/01_SOURCE_OF_TRUTH_MATRIX.md` | Authority, ownership and cross-source alignment | 0.1.1 | `FINAL_FOR_STEP` | Six sources, ratified decisions |
 | M-002 | `00-control/02_CONFIRMED_DECISION_REGISTER.md` | 23 source CPDs, invariants, and 40 ratified decisions | 0.1.1 | `FINAL_FOR_STEP` | Product Concept Brief, master fixed stack, founder decision sprint |
 | M-003 | `00-control/03_ASSUMPTION_REGISTER.md` | Approved/revised source and package defaults | 0.1.1 | `FINAL_FOR_STEP` | Charter, BPR, UX, Tech, Delivery, RPD-040 |
-| M-004 | `00-control/04_CONFLICT_REGISTER.md` | Resolved conflicts, gap routes, duplicates, and closed decisions | 0.1.3 | `FINAL_FOR_STEP` | All sources, defaults, RPD-001..040 |
+| M-004 | `00-control/04_CONFLICT_REGISTER.md` | Resolved conflicts, gap routes, duplicates, and closed decisions | 0.1.4 | `FINAL_FOR_STEP` | All sources, defaults, RPD-001..040 |
 | M-005 | `00-control/05_REQUIREMENT_COVERAGE_MATRIX.md` | Requirement through Final Package Validation traceability | 0.18.0 | `FINAL_FOR_STEP` | BPR, GOV/DISC/ARCH/REUSE/PH0/PLT/COM/OPS/FIN/ATW/PRC/HRT/CPL/IAE/HDN/RGL/FPV artifacts |
-| M-006 | `00-control/06_PACKAGE_BUILD_STATUS.md` | Current checkpoint, accepted risks, gates, and next action | 0.18.0 | `FINAL_FOR_STEP` | M-000..M-005, M-010..M-431 |
-| M-007 | `00-control/07_PROMPT_PACKAGE_MANIFEST.md` | File inventory and package lifecycle | 0.18.0 | `FINAL_FOR_STEP` | M-000..M-006, M-010..M-431 |
+| M-006 | `00-control/06_PACKAGE_BUILD_STATUS.md` | Current checkpoint, accepted risks, gates, and next action | 0.19.0 | `FINAL_FOR_STEP` | M-000..M-005, M-010..M-431 |
+| M-007 | `00-control/07_PROMPT_PACKAGE_MANIFEST.md` | File inventory and package lifecycle | 0.19.0 | `FINAL_FOR_STEP` | M-000..M-006, M-010..M-431 |
 | M-010 | `01-agent-governance/10_MASTER_AGENT_SYSTEM_PROMPT.md` | Binding system prompt for safe atomic implementation | 0.2.0 | `FINAL_FOR_STEP` | Master Prompt §§1–4,8–21; Step 0 controls |
 | M-011 | `01-agent-governance/11_AGENTS.md` | Repository operating rules and escalation boundaries | 0.2.0 | `FINAL_FOR_STEP` | GOV-010; Step 0 controls |
 | M-012 | `01-agent-governance/12_CARGOGRID_CONTEXT_TEMPLATE.md` | Durable product/repository/environment context template | 0.2.0 | `FINAL_FOR_STEP` | Master Prompt §§10,17–18; GOV-010/011 |
@@ -448,7 +448,8 @@
 | M-428 | `17-final-validation/428_FINAL_EXECUTION_SEQUENCE_AUDIT_PROMPT.md` | Final execution sequence audit | 0.18.0 | `FINAL_FOR_STEP` | M-427 |
 | M-429 | `17-final-validation/429_START_HERE_ENTRY_POINT_AUDIT_PROMPT.md` | START_HERE entrypoint audit | 0.18.0 | `FINAL_FOR_STEP` | M-428 |
 | M-430 | `17-final-validation/430_FINAL_PACKAGE_VALIDATION_CLOSURE_VERIFICATION_PROMPT.md` | Independent final package validation closure | 0.18.0 | `FINAL_FOR_STEP` | M-429 |
-| M-431 | `START_HERE.md` | Final operator entrypoint for new agents | 0.18.0 | `FINAL_FOR_STEP` | M-413..M-430 |
+| M-431 | `START_HERE.md` | Final operator entrypoint for new agents | 0.19.0 | `FINAL_FOR_STEP` | M-413..M-430 |
+| M-432 | `06-phase-01-platform-core/431_TENANT_MERGE_SPLIT_PROMPT.md` | Admin-run tenant merge/split migration: preflight, approval, backup, execution, reconciliation, audit (`RPD-020`) | 0.19.0 | `FINAL_FOR_STEP` | M-108 (Prompt 105) |
 
 ## 3. Planned package groups
 
@@ -847,10 +848,11 @@ Sources remain external inputs and are not copied into this package in Step 0.
 | 0.17.0-step16 | 2026-07-13 | Added 23-file Release/Go-Live package covering 18 gates, 720 mandatory fields, RC freeze, no-new-feature, defect triage, full CI, clean rebuild, migration/seed validation, staging/UAT, smoke, penetration/performance evidence, go/no-go, production deployment, post-deployment validation, rollback, hypercare, PIR, handoff and independent closure | M-000, M-005..M-007, M-390..M-412 | `FINAL_FOR_STEP` |
 | 0.18.0-step17 | 2026-07-13 | Added 18-file Final Package Validation package plus root START_HERE, covering 15 audit gates, 540 mandatory fields, requirement coverage, phase/module coverage, dependencies, atomicity, circularity, regression, cross-domain closure, restartability, context completeness, scope safety, evidence/docs, consistency, final risk, final sequence, START_HERE and independent closure | M-000, M-005..M-007, M-413..M-431 | `FINAL_FOR_STEP` |
 | 0.18.0-step17 (`M-004` revision) | 2026-08-29 | `04_CONFLICT_REGISTER.md` revised `0.1.1` → `0.1.3` by the Step 17 runtime execution, adding `CON-016` (Step 17 package-metadata correction authority, per `ADR-0026`); no existing conflict row altered. This manifest row is corrected to match under `CON-016` itself. Found by `FPV-426`'s file-versus-manifest version comparison; the drift was introduced by the Step 17 authority checkpoint and is corrected in the same step that caused it. | M-004, M-007 | `FINAL_FOR_STEP` |
+| 0.19.0-step17-r1 | 2026-08-30 | Package revision closing Step 17's own eight open findings (`ADR-0028`, `CON-017`). `FPV-F003`/`FPV-F004`: 14 prompts de-indented and their five legacy headings canonicalized, script-applied and machine-verified content-identical modulo those two differences; the validator's allowlist is now empty and `INDENTED_BODY` is an ERROR with no exception available. `FPV-F007`: 17 files' unrecorded `-multisource-gps` versions aligned to their manifest rows (manifest authoritative — two control documents stood against 17 file headers). `FPV-F008`/`FPV-F009`: all nine control files now carry a package version, the four registers keeping their own lifecycle version alongside it; the gate widened from four files to nine. `FPV-F002`: `RPD-007/008/019/024/026/039` cited by ID in the prompts already covering them. `FPV-F001`: new `431_TENANT_MERGE_SPLIT_PROMPT.md` carrying `RPD-020`, which no prompt anywhere covered. | M-000..M-007, M-219..M-248, M-305, M-306, M-343, M-095, M-106, M-117, M-380, M-431, M-432 | `FINAL_FOR_STEP` |
 
 ## 24. Final package state
 
-The prompt package generation sequence is complete at `0.18.0-step17`.
+The prompt package generation sequence is complete at `0.19.0-step17-r1`.
 
 - `START_HERE.md` is the final operator entrypoint for new agents.
 - Step 0-17 package artifacts are generated and controlled.

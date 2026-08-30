@@ -29,7 +29,7 @@ Ensure tenants access only subscribed capabilities while preserving separate use
 
 ## 6. Source requirement
 
-PLT-TNT-001..004; entitlement decisions; pricing/package policy; WBS task. Cite exact runtime evidence, ADR and prerequisite task IDs.
+PLT-TNT-001..004; entitlement decisions; pricing/package policy; modular packaging RPD-007; four-dimension subscription pricing RPD-008; ten-suite module catalogue RPD-026; WBS task. Cite exact runtime evidence, ADR and prerequisite task IDs.
 
 ## 7. Current repository context
 

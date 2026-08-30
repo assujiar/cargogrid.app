@@ -29,7 +29,7 @@ Make the system usable and reduce enterprise adoption risk.
 
 ## 6. Source requirement
 
-Master Prompt Step 15 Accessibility; BPR NFR-ACC; UX complete-state requirements.. Cite exact source sections, runtime evidence, decisions/config versions and prerequisite task IDs.
+Master Prompt Step 15 Accessibility; BPR NFR-ACC; WCAG 2.2 AA target and four-browser QA matrix RPD-024; UX complete-state requirements.. Cite exact source sections, runtime evidence, decisions/config versions and prerequisite task IDs.
 
 ## 7. Current repository context
 

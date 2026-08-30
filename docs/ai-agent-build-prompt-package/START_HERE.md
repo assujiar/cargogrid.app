@@ -1,7 +1,7 @@
 # START_HERE - CargoGrid AI Agent Build Prompt Package
 
 **Package ID:** `CG-AABPP`  
-**Package version:** `0.18.0-step17`  
+**Package version:** `0.19.0-step17-r1`  
 **Status:** Final package-generation checkpoint  
 **Use this file when:** a new AI agent needs to understand and execute the CargoGrid build prompt package without prior conversation context.
 
@@ -66,6 +66,12 @@ If a task fails or is interrupted, resume from the latest verified checkpoint us
 
 ## 8. Final package state
 
-Step 0 through Step 17 package files are generated. **Package validation was executed at runtime on 2026-08-29 by Prompt 430 (`CG-S17-FPV-017`) and closed `FINAL_PACKAGE_PARTIALLY_COMPLETE`, not `FINAL_PACKAGE_VALIDATED`.** Eight findings are open and explicitly recorded, none Critical: one High (`RPD-020`, tenant merge/split, is carried by no prompt in this package — also `ISS-2026-301`), four Medium and three Low. **Read `docs/build-log/final-package-validation/FINAL_PACKAGE_VALIDATION_REPORT.md` and `FINAL_GAP_RISK_REGISTER.md` before executing this package** — they name what is missing and what is inconsistent, so you do not rediscover it mid-build.
+Step 0 through Step 17 package files are generated. **Package validation was executed at runtime on 2026-08-29 by Prompt 430 (`CG-S17-FPV-017`) and closed `FINAL_PACKAGE_PARTIALLY_COMPLETE`, not `FINAL_PACKAGE_VALIDATED`.** It registered nine findings, none Critical: one High (`RPD-020`, tenant merge/split, was carried by no prompt in this package — also `ISS-2026-301`), five Medium and three Low.
+
+**All nine are now closed**, at package revision `0.19.0-step17-r1` on 2026-08-30, under `docs/adr/ADR-0028-package-revision-0-19-0-authority.md` and `CON-017`. `RPD-020` is carried by `06-phase-01-platform-core/431_TENANT_MERGE_SPLIT_PROMPT.md`; the 14 prompts that rendered as code blocks now parse; the version schemes agree. **The 2026-08-29 verdict itself is not revised** — an audit that edits its own verdict once the defects are fixed is an audit nobody can trust the next time.
+
+**Read `docs/build-log/final-package-validation/FINAL_PACKAGE_VALIDATION_REPORT.md` §11 and `FINAL_GAP_RISK_REGISTER.md` §4.1 before executing this package.** §11 is the current handoff — what to expect and what changed. §4.1 is the per-finding closure evidence. They tell you which parts of this package were weakest and why, which is worth knowing even now that they are fixed.
+
+**One thing to carry into your reading:** `431_TENANT_MERGE_SPLIT_PROMPT.md` is numbered after the whole package but **executes in Phase 1, immediately after Prompt 105**. Its §9 upstream dependency orders it, not its number. See `ISS-2026-306`.
 
 Runtime discovery, architecture, implementation, hardening and release/go-live execution remain separate future work. This file previously said the package was "generated and validated"; that claim was written at generation time (2026-07-13), before the validation that establishes it had run, and is corrected here under `CON-016`/`ADR-0026`.

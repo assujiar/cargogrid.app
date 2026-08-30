@@ -2,6 +2,7 @@
 
 **Document ID:** `CG-AABPP-CTRL-003`  
 **Version:** `0.1.1`  
+**Package version:** `0.19.0-step17-r1`  
 **Status:** `FINAL_FOR_STEP`  
 **Default status:** `APPROVED_DEFAULT`
 

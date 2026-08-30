@@ -29,7 +29,7 @@ Make access, masking, retention, audit and incident decisions consistent before 
 
 ## 6. Source requirement
 
-UX/Data/Access Design; Technical Architecture data classification; retention RPD-025; RPD-022. Cite exact runtime evidence and approved ADRs.
+UX/Data/Access Design; Technical Architecture data classification; retention RPD-025; RPD-022; PostgreSQL-first search and server-side field security RPD-039. Cite exact runtime evidence and approved ADRs.
 
 ## 7. Current repository context
 

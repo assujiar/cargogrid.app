@@ -1,10 +1,11 @@
 # Package Build Status
 
 **Package ID:** `CG-AABPP`  
-**Version:** `0.18.0-step17`  
+**Version:** `0.19.0-step17-r1`  
 **Updated:** 2026-08-29 Asia/Jakarta (was 2026-07-13; package-generation content below is unchanged)  
 **Current checkpoint:** `FINAL_PACKAGE_PARTIALLY_COMPLETE`  
 **Corrected 2026-08-29 at `CG-S17-FPV-017` (Prompt 430) under `CON-016`/`ADR-0026`:** this line previously read `FINAL_PACKAGE_VALIDATED`, dated 2026-07-13 — the package's *generation* date. `FINAL_PACKAGE_VALIDATED` is the state Prompt 430 alone may set, and Prompt 430's runtime execution had not happened. It has now, and it closed **`FINAL_PACKAGE_PARTIALLY_COMPLETE`**: eight findings are open and explicitly recorded, none Critical, one High (`RPD-020` is carried by no prompt — `ISS-2026-301`). Full disposition of all 15 required-verification items: `docs/build-log/final-package-validation/FINAL_PACKAGE_VALIDATION_REPORT.md`.  
+**Revision 2026-08-30 (`0.19.0-step17-r1`, `ADR-0028`/`CON-017`):** all nine registered findings are now **closed** — see `FINAL_GAP_RISK_REGISTER.md` §4.1. The checkpoint line above is **not** changed to `FINAL_PACKAGE_VALIDATED`: that state is Prompt 430's alone to set, Prompt 430 ran on 2026-08-29 and reached `FINAL_PACKAGE_PARTIALLY_COMPLETE` on the evidence it had, and this revision is remediation performed *after* that step under separate authority — not a re-run of it. Upgrading the checkpoint here would be the same defect this very line was written to correct: asserting a validation outcome that no validation produced. Whoever next executes Prompt 430 against this package may reach `FINAL_PACKAGE_VALIDATED` legitimately.  
 **Implementation authorization:** Prompt-package generation complete; runtime execution remains separate and must start from `START_HERE.md` against an authorized target repository
 
 ## 1. Overall status
@@ -387,7 +388,7 @@
 
 ## 23. Checkpoint handoff
 
-Last valid checkpoint: `CG-AABPP/0.18.0-step17`.
+Last valid checkpoint: `CG-AABPP/0.19.0-step17-r1`.
 
 Completed: Step 0 controls through Step 16 Release/Go-Live plus Step 17 Final Package Validation and START_HERE; controls and manifest updated.
 

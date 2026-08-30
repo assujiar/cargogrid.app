@@ -4,6 +4,7 @@
 **Owner:** `CG-S17-FPV-014` (Prompt 427, Final Gap Risk Register Audit)
 **Created:** 2026-08-29, at the Step 17 authority checkpoint (`ADR-0026`/`CON-016`), before any audit lane ran
 **Status:** `CLOSED` at `CG-S17-FPV-017` (Prompt 430), 2026-08-29 — 9 findings registered (0 Critical, 1 High, 5 Medium, 3 Low), 3 corrections applied. Step 17 closed `FINAL_PACKAGE_PARTIALLY_COMPLETE`.
+**Findings closed:** 9 of 9, at package revision `0.19.0-step17-r1`, 2026-08-30, under `ADR-0028`/`CON-017` — see §4.1. The 2026-08-29 verdict is **not** revised; the defects it found are fixed.
 
 ## 1. What this register is for
 
@@ -51,6 +52,69 @@ Two distinct kinds of entry land here, and they must not be confused:
 | `FPV-F007` | `FPV-426` | `MEDIUM` | Package consistency / unrecorded revision | 17 prompt files declare a `-multisource-gps`-suffixed version that is also one minor version **ahead** of their manifest row: 14 in `10-phase-05-advanced-tms-wms` (`0.12.0-multisource-gps` vs `0.11.0`), 2 in `13-phase-08-customer-portal-loyalty` (`0.15.0-multisource-gps` vs `0.14.0`), 1 in `14-phase-09-intelligence-enterprise` (`0.16.0-multisource-gps` vs `0.15.0`). A revision was applied and the manifest never updated — what manifest §1 rule 2 forbids. No `-multisource-gps` row exists anywhere in the manifest's version history, so the revision is unrecorded. | Programmatic file-header-versus-manifest-row version comparison across all 430 files. **Corroboration:** 11 of the 14 Phase 5 files are the same files `FPV-F003`/`FPV-F004` found with indented bodies and legacy heading wording — three independent defects on one overlapping cluster, i.e. a single unrecorded revision pass, not three slips. | **REGISTERED, not fixed.** Which side is authoritative is a judgement, not a mechanical fact: `06_PACKAGE_BUILD_STATUS.md` independently agrees with the manifest on `0.11.0`, so two control documents stand against 17 prompt files, and writing `-multisource-gps` into the manifest would propagate a scheme contradicting the build status. `ADR-0026` decision 5: when in doubt, it is a finding. **Proposed patch:** decide the authoritative version in the same revision that fixes `FPV-F003`/`FPV-F004`, then align the manifest rows and add the missing change-summary row. | Future package revision (`0.19.x`) |
 | `FPV-F008` | `FPV-426` | `LOW` | Package consistency / version scheme | `00_PACKAGE_README.md`, `06_PACKAGE_BUILD_STATUS.md`, `07_PROMPT_PACKAGE_MANIFEST.md` and `START_HERE.md` declare `0.18.0-step17`; their manifest rows (`M-000`, `M-006`, `M-007`, `M-431`) say `0.18.0`. Two version notions coexist — qualified package version in the file header, bare step version in the manifest column — and the package does not apply either uniformly: `05_REQUIREMENT_COVERAGE_MATRIX.md` says `0.18.0` in both places and is consistent. Resolves the question `FPV-414` §2.1 deferred. | Same programmatic comparison. | **REGISTERED, not fixed.** Both readings are defensible, so `ADR-0026` decision 5 makes it a finding rather than a correction. **Prompt 430 item 1 is unaffected** — it requires the control *files* to reference `0.18.0-step17`, and all four do. **Proposed patch:** state one convention for the manifest Version column in manifest §1 and apply it to all 430 rows. | Future package revision (`0.19.x`) |
 | `FPV-F009` | `FPV-430` | `MEDIUM` | Package consistency / Prompt 430 item 1 | Prompt 430 item 1 requires **all** control files to reference package version `0.18.0-step17`. Five of nine do (`00_PACKAGE_README`, `04_CONFLICT_REGISTER`, `06_PACKAGE_BUILD_STATUS`, `07_PROMPT_PACKAGE_MANIFEST`, `START_HERE.md`). Four do not: `01_SOURCE_OF_TRUTH_MATRIX` (`0.1.1`), `02_CONFIRMED_DECISION_REGISTER` (`0.1.1`), `03_ASSUMPTION_REGISTER` (`0.1.1`) and `05_REQUIREMENT_COVERAGE_MATRIX` (`0.18.0`). Existence and non-emptiness pass 8/8. | Direct measurement of all nine files at the closure checkpoint. `FPV-414` §2.1 raised the two-version-scheme question and deferred it; `FPV-426` resolved the manifest half (`FPV-F008`) and not this half. | **REGISTERED, not fixed.** Two readings are defensible — the registers are correctly versioned on their own lifecycle, or they literally fail item 1 — and `ADR-0026` decision 5 makes an ambiguous case a finding. Item 1 is therefore reported `PARTIAL` rather than resolved either way. **Proposed patch:** settle one convention alongside `FPV-F008`, then either add a package-version line to the four registers or amend item 1's wording in a package revision. | Future package revision (`0.19.x`) |
+
+### 4.1 All nine findings closed — package revision `0.19.0-step17-r1`
+
+> **Closed 2026-08-30, under `ADR-0028` / `CON-017`.**
+
+Eight of the nine were still open on the morning of 2026-08-30, and every one of them gave the
+same reason for staying open: closing it required writing to a package prompt file, which
+`ADR-0026` decision 2 kept `FORBIDDEN`. Each row's Owner column named the same successor —
+*"Future package revision (`0.19.x`)"*. None of them was ever meant to stay open; they were
+waiting on a revision that had not been authorised.
+
+The project owner then instructed, verbatim:
+
+> *"lanjut hingga seluruh issue, backlog yg masih ada di semua step sebelumnya dan lanjut step 17
+> hingga selesai"*
+
+— continue until every issue and backlog item from every previous step is done, and continue Step
+17 until it is finished. **That instruction is the `0.19.x` revision those eight rows were waiting
+for.** `ADR-0028` is the authority; this section is the disposition.
+
+| Finding | Severity | Closed by | Evidence |
+|---|---|---|---|
+| `FPV-F001` | `HIGH` | New capability prompt `06-phase-01-platform-core/431_TENANT_MERGE_SPLIT_PROMPT.md` (`CG-S6-PLT-039`), all 36 fields, citing `RPD-020`; manifest row `M-432`; `05_REQUIREMENT_COVERAGE_MATRIX.md` gained an `RPD-020` row. | `package:check` reports 431 files / 431 manifest rows. `RPD-020` now returns a non-control hit. The prompt declares `CG-S6-PLT-002` (Prompt 105) as its upstream, so it executes where it belongs regardless of its number. |
+| `FPV-F002` | `MEDIUM` | `RPD-007`, `008`, `019`, `024`, `026`, `039` cited in the §6 Source requirement line of their covering prompt (4 files; two RPDs shared a covering prompt). | Each citation added to a line that already carried the covering content — the finding was *uncited coverage*, not absent coverage, and the patch does not change what any prompt tells an agent to build. |
+| `FPV-F003` | `MEDIUM` | 1,078 body lines de-indented across the 14 files, by script, with a verifier. | `scripts/docs/normalize-template-variant-prompts.ts`. `KNOWN_TEMPLATE_VARIANT_FILES` is now **empty**, so `package:check` enforces the structural rule on all 339 structured prompts with **no exception standing**: `0 with indented bodies`. |
+| `FPV-F004` | `LOW` | 70 legacy headings replaced with the canonical wording, in the same scripted pass. | Same script, same verifier. 5 heading strings × 14 files = 70. |
+| `FPV-F005` | `LOW` | Nothing to fix — a disclosure about audit reach, disposed of at `FPV-430` with the narrow wording it required. | Unchanged by this revision. Recorded here only so the count reads nine, not eight. |
+| `FPV-F006` | `MEDIUM` | Already `CLOSED` by `FPV-430` §6. | Unchanged by this revision. |
+| `FPV-F007` | `MEDIUM` | The 17 `-multisource-gps` headers aligned to the manifest. | The judgement is recorded in `ADR-0028` decision 3, with the losing reading stated, not implied by the diff. |
+| `FPV-F008` | `LOW` | One convention stated in manifest §1: bare step version in the manifest Version column, qualified package version in file headers. | The convention `05_REQUIREMENT_COVERAGE_MATRIX.md` already followed; now stated once rather than inferred. |
+| `FPV-F009` | `MEDIUM` | All nine control files now carry `**Package version:** 0.19.0-step17-r1`. `04`'s own lifecycle version moved `0.1.3` → `0.1.4` for the `CON-017` entry. | `VERSION_BEARING_CONTROL_FILES` in `check-prompt-package.ts` widened from 4 files to all 9, so the condition item 1 tests is now enforced by the gate rather than measured once. Item 1 would now report `PASS`, not `PARTIAL`. |
+
+**The mechanical changes are provably mechanical.** `FPV-F003` and `FPV-F004` together touch 14
+files and 70 headings, and a transcription slip there would corrupt the package this step had just
+certified. So they were not applied by hand and not verified by reading. The script applies the
+transform and then `verifyOnlyPermittedDifferences()` reduces both the original and the result to
+a form where the two permitted differences are erased, and requires the two to be **byte-identical**.
+A dropped table row, a mangled character, a reflowed line — any of them makes the reduced forms
+diverge and the file is never written. "I read the diff and it looked fine" is not a proof for a
+change of that shape; this is.
+
+**Two judgements are recorded as judgements, not buried in a diff.** `FPV-F007`: the manifest and
+`06_PACKAGE_BUILD_STATUS.md` are authoritative over the 17 file headers, because two independent
+control documents agree with each other against the files, and writing `-multisource-gps` into the
+manifest would propagate a version scheme that contradicts the build status. `FPV-F008`/`FPV-F009`:
+the manifest column carries the bare step version and file headers carry the qualified one. Both
+are argued in `ADR-0028` with the losing reading stated, so a future reader can re-open either on
+the evidence rather than on surprise.
+
+**One cost, stated plainly.** The new prompt is numbered `431`, which sits after the package's
+contiguous `00..430` sequence but **before** where it executes (Phase 1, after Prompt 105). Seating
+it at its execution position would have meant renumbering the 325 files between `106` and `430`,
+falsifying every committed citation to every one of them. Per-directory numbering contiguity is
+therefore deliberately broken, once, in exchange for citation stability. The prompt carries a
+numbering note explaining this at its head and again at §36; its §9 upstream dependency is what
+actually orders it. Tracked as `ISS-2026-306`.
+
+**No Step 17 verdict is revised.** `FINAL_PACKAGE_PARTIALLY_COMPLETE` was the correct verdict on
+the evidence available on 2026-08-29 and stands as written. This section records each finding as
+*closed by a later revision, dated*, which is a different and weaker claim than the audit having
+found nothing. An audit that retroactively edits its own verdict once the defects are fixed is an
+audit nobody can trust the next time.
+
 ## 5. Applied mechanical corrections (CON-016 audit trail)
 
 Every in-package correction Step 17 applies is logged here, whether or not it also appears as a

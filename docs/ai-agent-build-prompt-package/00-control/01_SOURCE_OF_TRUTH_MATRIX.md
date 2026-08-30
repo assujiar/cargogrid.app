@@ -2,6 +2,7 @@
 
 **Document ID:** `CG-AABPP-CTRL-001`  
 **Version:** `0.1.1`  
+**Package version:** `0.19.0-step17-r1`  
 **Status:** `FINAL_FOR_STEP`  
 **Primary authority:** `CargoGrid_Product_Concept_Brief.md`
 

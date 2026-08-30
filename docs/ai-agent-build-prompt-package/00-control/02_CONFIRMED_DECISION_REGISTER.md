@@ -2,6 +2,7 @@
 
 **Document ID:** `CG-AABPP-CTRL-002`  
 **Version:** `0.1.1`  
+**Package version:** `0.19.0-step17-r1`  
 **Status:** `FINAL_FOR_STEP`  
 **Change authority:** Steering Committee plus update to the Product Concept Brief
 

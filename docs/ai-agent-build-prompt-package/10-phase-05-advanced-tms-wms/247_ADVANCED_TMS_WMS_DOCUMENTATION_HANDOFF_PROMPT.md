@@ -1,91 +1,91 @@
 # Prompt 247 — Advanced TMS/WMS Documentation and Handoff
 
-    **Prompt ID:** `CG-S10-ATW-028`  
-    **Package document:** `CG-AABPP-ATW-247`  
-    **Version:** `0.12.0-multisource-gps`  
-    **Runtime build log:** `docs/build-log/phase-05/ATW-247.md`
+**Prompt ID:** `CG-S10-ATW-028`  
+**Package document:** `CG-AABPP-ATW-247`  
+**Version:** `0.11.0`  
+**Runtime build log:** `docs/build-log/phase-05/ATW-247.md`
 
-    Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
+Do not begin until the runtime execution index marks this task `READY`, all variables are resolved, and the required upstream phase closure matches the active checkpoint.
 
-    ## 1. Prompt ID
+## 1. Prompt ID
 
-    `{{TASK_ID}}` maps to `CG-S10-ATW-028` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
+`{{TASK_ID}}` maps to `CG-S10-ATW-028` and exactly one approved WBS/task-ledger item. When Prompt 220 decomposes this capability into child tasks, every child must retain this parent prompt ID and receive its own atomic task ID, owner, paths, evidence, rollback, and status.
 
-    ## 2. Parent phase
+## 2. Parent phase
 
-    `Phase 5 — Advanced TMS and WMS`; package version `0.12.0-multisource-gps`.
+`Phase 5 — Advanced TMS and WMS`; package version `0.11.0`.
 
-    ## 3. Workstream
+## 3. Workstream
 
-    Workstream: Phase 5 Operational Readiness; Epic: Documentation and Handoff; Capability: Durable Operator, Developer and Next-Phase Handoff; Feature slice: architecture, deployment, device/mobile/provider operations, contracts, runbooks and evidence; Atomic task: `{{WBS_TASK_ID}}`.
+Workstream: Phase 5 Operational Readiness; Epic: Documentation and Handoff; Capability: Durable Operator, Developer and Next-Phase Handoff; Feature slice: architecture, deployment, device/mobile/provider operations, contracts, runbooks and evidence; Atomic task: `{{WBS_TASK_ID}}`.
 
-    ## 4. Objective
+## 4. Objective
 
-    Make the verified Phase 5 implementation supportable by operators, device technicians, drivers, developers, support, and downstream phases.
+Make the verified Phase 5 implementation supportable by operators, device technicians, drivers, developers, support, and downstream phases.
 
-    ## 5. Business value
+## 5. Business value
 
-    Reduce operational error, installation mistakes, outage recovery time and integration ambiguity.
+Reduce operational error, installation mistakes, outage recovery time and integration ambiguity.
 
-    ## 6. Source requirement
+## 6. Source requirement
 
-    All Phase 5 evidence and revised multi-source tracking controls. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
+All Phase 5 evidence and revised multi-source tracking controls. Cite exact source sections, runtime evidence, ADR/configuration versions, and prerequisite task IDs.
 
-    ## 7. Current repository context
+## 7. Current repository context
 
-    Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
+Record the repository root, active branch, exact HEAD, dirty-worktree ownership, runtime closure IDs, schema and migration state, deployed services, package manager, commands, environment, baseline test results, last trusted checkpoint, and unresolved ledgers. Inspect the actual repository before selecting paths; never infer implementation paths only from this package.
 
-    ## 8. Preconditions
+## 8. Preconditions
 
-    Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
+Read `CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `DECISION_REGISTER.md`, `ASSUMPTION_REGISTER.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, relevant handoff/build logs, architecture decisions, source requirements, and every verified upstream contract. Run feasible baseline gates before mutation. Stop and register a blocker on tenant isolation, customer scope, security, privacy, financial integrity, canonical-source ownership, migration safety, or phase-boundary conflict.
 
-    ## 9. Upstream dependencies
+## 9. Upstream dependencies
 
-    ATW-246 verified and all earlier evidence current. Every execution-index prerequisite must be `VERIFIED`.
+ATW-246 verified and all earlier evidence current. Every execution-index prerequisite must be `VERIFIED`.
 
-    ## 10. Downstream impact
+## 10. Downstream impact
 
-    ATW-248, Procurement, HR, Customer Portal, Enterprise integrations. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
+ATW-248, Procurement, HR, Customer Portal, Enterprise integrations. Identify every affected schema, service, REST/GraphQL contract, job, integration, deployment, UI, customer projection, test, document, and compatibility consumer.
 
-    ## 11. Allowed files/folders
+## 11. Allowed files/folders
 
-    Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
+Use only exact schema, additive migration, service, API, integration, job, UI, test, deployment, observability, and documentation paths authorized by the runtime WBS. Resolve paths from the repository. Split work when one atomic task would exceed a reviewable migration, deployment, test, or rollback boundary.
 
-    ## 12. Forbidden files/folders
+## 12. Forbidden files/folders
 
-    Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
+Unrelated domains; duplicate shipment, trip, vehicle, driver, telemetry, milestone, customer, Finance, or inventory roots; tenant-specific forks; applied-migration edits; destructive cleanup; client-side secrets; hidden authorization or test weakening; fabricated production evidence; unsupported native/offline claims; autonomous operational commitment; and unrelated user-owned changes.
 
-    ## 13. Database impact
+## 13. Database impact
 
-    None. Document verified canonical entities, relations, RLS, retention and migration behavior.
+None. Document verified canonical entities, relations, RLS, retention and migration behavior.
 
-    ## 14. API and integration impact
+## 14. API impact
 
-    None. Publish verified REST/GraphQL, mobile HTTPS, gateway protocol/deployment, provider adapter, jobs and projection contracts.
+None. Publish verified REST/GraphQL, mobile HTTPS, gateway protocol/deployment, provider adapter, jobs and projection contracts.
 
-    ## 15. UI/UX impact
+## 15. UI/UX impact
 
-    Document dispatcher, Driver PWA, device/SIM admin, Fleet Control Tower, customer-safe projection and all degraded states.
+Document dispatcher, Driver PWA, device/SIM admin, Fleet Control Tower, customer-safe projection and all degraded states.
 
-    ## 16. Security and privacy impact
+## 16. Security impact
 
-    Sanitize secrets/PII/customer data; document purpose/retention, access, incident response and residual risks.
+Sanitize secrets/PII/customer data; document purpose/retention, access, incident response and residual risks.
 
-    ## 17. Performance and reliability impact
+## 17. Performance impact
 
-    Publish target profiles, measured results, scaling, queue/socket budgets, backpressure and monitoring guidance.
+Publish target profiles, measured results, scaling, queue/socket budgets, backpressure and monitoring guidance.
 
-    ## 18. Audit and observability impact
+## 18. Audit impact
 
-    Document audit fields, correlations, event order, source switch, denied access and evidence retrieval.
+Document audit fields, correlations, event order, source switch, denied access and evidence retrieval.
 
-    ## 19. Data migration and compatibility impact
+## 19. Data migration impact
 
-    Document clean install, gateway deployment, upgrade, backup/restore, replay, reconciliation and rollback.
+Document clean install, gateway deployment, upgrade, backup/restore, replay, reconciliation and rollback.
 
-    ## 20. Detailed implementation tasks
+## 20. Detailed implementation tasks
 
-    Publish at minimum:
+Publish at minimum:
 - Phase 5 architecture index and canonical telemetry data flow;
 - subscription/package and entitlement guide;
 - Driver Mobile tracking user/admin guide and limitations;
@@ -101,44 +101,44 @@
 - deferred physical-device test plan and conditional provider evidence record;
 - Steps 11–14 handoff contracts.
 
-    ## 21. Main flow
+## 21. Main flow
 
-    Readers start at one index, choose role/use case, follow versioned procedures, and reach exact diagnostics/recovery.
+Readers start at one index, choose role/use case, follow versioned procedures, and reach exact diagnostics/recovery.
 
-    ## 22. Alternative flow
+## 22. Alternative flow
 
-    Generate contract references from source where reproducible while retaining curated operational guidance.
+Generate contract references from source where reproducible while retaining curated operational guidance.
 
-    ## 23. Exception flow
+## 23. Exception flow
 
-    If docs conflict with code/evidence, register blocker and do not invent behavior. Remove secrets safely.
+If docs conflict with code/evidence, register blocker and do not invent behavior. Remove secrets safely.
 
-    ## 24. Business rules
+## 24. Business rules
 
-    - Docs describe only verified behavior.
+- Docs describe only verified behavior.
 - External tests are labeled accurately.
 - One canonical term/entity/state definition is reused.
 - Customer-safe and restricted docs are separated.
 - No unsupported marketing claim.
 
-    ## 25. Validation rules
+## 25. Validation rules
 
-    - Links/examples/commands match verified contracts.
+- Links/examples/commands match verified contracts.
 - No secret/private URL/customer data.
 - Runbooks are executable.
 - Downstream consumers know owned data and forbidden mutations.
 
-    ## 26. Access rules
+## 26. Access rules
 
-    Separate public/customer-safe, tenant admin, operations, driver, installer, developer and restricted security content.
+Separate public/customer-safe, tenant admin, operations, driver, installer, developer and restricted security content.
 
-    ## 27. Test data requirement
+## 27. Test data requirement
 
-    Sanitized mobile/device/provider/hybrid, outage, installation, replay and customer examples.
+Sanitized mobile/device/provider/hybrid, outage, installation, replay and customer examples.
 
-    ## 28. Tests to create/update
+## 28. Tests to create/update
 
-    - Link/format/schema/API example validation.
+- Link/format/schema/API example validation.
 - Secret/PII scanning.
 - Runbook tabletop for gateway/provider/mobile/database outage.
 - Fresh-reader walkthrough and deferred-test procedure review.
@@ -164,37 +164,37 @@ The implementation must not be blocked merely because physical hardware or a liv
    - These two deferred/conditional external tests are non-blocking when all repository-controlled implementation, simulator/contract, security, migration, load, recovery, and canonical-data gates pass.
    - Any unresolved repository-controlled defect remains blocking.
 
-    ## 29. Regression tests
+## 29. Regression tests
 
-    Docs build/lint/link checks and Phase 1–4 cross-links.
+Docs build/lint/link checks and Phase 1–4 cross-links.
 
-    ## 30. Commands to run
+## 30. Commands to run
 
-    Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
+Detect and run the repository equivalents of lint, formatting, type checking, unit tests, database reset/migration tests, API/contract tests, integration/job tests, browser/accessibility tests, security and dependency checks, production build, container build, deployment smoke tests, load/failure/recovery tests, and reconciliation commands relevant to the task. Never disable a gate. Record exact commands, environment, fixtures, and results; classify proven pre-existing failures separately.
 
-    ## 31. Documentation to update
+## 31. Documentation to update
 
-    This task owns the complete Phase 5 docs, runbooks, evidence index and downstream handoff.
+This task owns the complete Phase 5 docs, runbooks, evidence index and downstream handoff.
 
-    ## 32. Rollback/recovery note
+## 32. Rollback/recovery note
 
-    Revert incorrect docs to last verified version, preserve evidence, and block closure on runtime conflict.
+Revert incorrect docs to last verified version, preserve evidence, and block closure on runtime conflict.
 
-    ## 33. Acceptance criteria
+## 33. Acceptance criteria
 
-    - Documentation is complete and evidence-backed.
+- Documentation is complete and evidence-backed.
 - Critical runbooks and installation/deployment guides are usable.
 - External-evidence status is explicit.
 - Downstream handoffs are stable.
 
-    ## 34. Definition of Done
+## 34. Definition of Done
 
-    All role guides, contracts, runbooks, evidence indexes and handoffs are current at one checkpoint with no placeholder or unsupported claim.
+All role guides, contracts, runbooks, evidence indexes and handoffs are current at one checkpoint with no placeholder or unsupported claim.
 
-    ## 35. Completion report format
+## 35. Completion report format
 
-    Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
+Report task/prompt IDs; repository checkpoint; changed files, migrations, services, containers, contracts, routes, configuration, and deployment topology; implementation summary; commands and before/after results; tenant/customer/access/privacy evidence; idempotency, concurrency, ordering, reconciliation, performance, outage, recovery, and observability evidence; deferred external-evidence items; residual errors/issues/risks; documentation; rollback/resume; and recommended next task. Update all persistent ledgers before `VERIFIED`.
 
-    ## 36. Next eligible prompt
+## 36. Next eligible prompt
 
-    Only the execution index may release ATW-248 after ATW-247 is verified. Prompt 248 alone may close Phase 5.
+Only the execution index may release ATW-248 after ATW-247 is verified. Prompt 248 alone may close Phase 5.
