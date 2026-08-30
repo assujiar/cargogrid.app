@@ -19,6 +19,7 @@
     "standards:check": "node --experimental-strip-types scripts/standards/check-suppressions.ts",
     "docs:check": "node --experimental-strip-types scripts/docs/check-doc-links.ts",
     "package:check": "node --experimental-strip-types scripts/docs/check-prompt-package.ts",
+    "issues:check": "node --experimental-strip-types scripts/docs/check-known-issues.ts",
     "security:check": "node --experimental-strip-types scripts/security/check-secrets.ts",
     "security:audit": "node --experimental-strip-types scripts/security/check-dependency-audit.ts",
     "security:check-rls-initplan": "node --experimental-strip-types scripts/security/check-rls-initplan.ts",

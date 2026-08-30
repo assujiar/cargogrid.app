@@ -97,6 +97,13 @@ jobs:
       - name: Prompt package structure check (docs/build-log/final-package-validation/, Step 17)
         run: pnpm run package:check
 
+      # The §3 issue index had drifted to 63 rows for 261 records, and 78 record
+      # headings declared a status their own body contradicted -- so every backlog
+      # count taken from KNOWN_ISSUES.md was wrong, always understating how much was
+      # already done. Reconciled 2026-08-30; this keeps it reconciled.
+      - name: Known-issues ledger check (index covers every record, statuses agree)
+        run: pnpm run issues:check
+
       - name: Secret scan (docs/standards/SECURITY_STANDARDS.md §3)
         run: pnpm run security:check
 
