@@ -3567,6 +3567,34 @@ Confirmed by repository-wide search (not assumed): no page anywhere under `app/(
 
 **Re-verified, first real Track B disposition given (2026-08-28, Track B Batch 8).** One of the original 6 High-severity items in `BACKLOG_INVENTORY.md`'s own tracking table, tagged "in progress (Batch 1)" and never actually touched again — confirmed by exhaustive search: `RGL-404.md`'s own item log (items 1-73, every completed Track B fix) never once mentions this entry; Batches 2 through 7 (all independently confirmed complete) touched RBAC/RLS, ticketing, HRIS, accessibility, loyalty, and finance surfaces, never a monitoring/incident route. Independently re-verified the finding is still fully accurate, not stale: repository-wide search for `enterprise-monitoring`/`EnterpriseMonitoring`/`Incident`/`AlertRoute`/`listIncidentsForTenant` returns hits only in the TypeScript service layer (`server/queries/`, `server/mutations/`, `server/contracts/enterprise-monitoring/*`), never a page or component; a full directory listing of `app/(tenant)/`, `app/(internal)/`, `app/(supreme)/` confirms no monitoring/observability/incident/alert route exists anywhere. If anything, the gap has **widened**: `app.list_incidents_for_tenant`/`app.get_incident_timeline`/`app.list_alert_routes_for_tenant` now also carry `public.*` Option 2 PostgREST wrappers (`20260826000000_create_public_api_data_wrappers.sql`), making the backend more externally reachable while the UI consumer count stays zero. This resolves `BACKLOG_INVENTORY.md`'s own "`CODE`/`BIG` (TBD by research)" classification: it is `BIG`, not a bounded `CODE` fix — a real monitoring/incident dashboard needs, at minimum, an incident list view, an incident detail/timeline view, and an alert-route management view, genuinely new UI surface area outside this lane's charter. **Not fixed by this batch.** Owner unchanged (a dedicated future UI-feature task), logically sequenced before `ISS-2026-251`'s own escalation/dispatch mechanism.
 
+**`RESOLVED` 2026-08-30, owner-authorized remediation phase (`ADR-0027` Part A).** The consumer now
+exists: `app/(tenant)/[tenantSlug]/admin/monitoring/` (`page.tsx`, `monitoring-admin-panel.tsx`,
+`loading.tsx`). It calls `listIncidentsForTenant`, `listAlertRoutesForTenant` and
+`computeJobQueueBacklog` — the three RPCs this entry recorded as having zero callers — and renders
+an incident list ordered unresolved-first by severity then age, summary tiles (unresolved,
+critical open, high open, unacknowledged, job-queue backlog), and an alert-route table.
+
+**Why this was reachable now when Batch 8 correctly judged it `BIG` and out of charter.**
+`ADR-0027` Part A lifted the per-task scope cap for a declared remediation task; the classification
+was right for the rule in force at the time, and the rule changed.
+
+Two things this entry's own analysis asked for, and how they are handled:
+
+- **Incident detail/timeline view** — `getIncidentTimeline` is *not* yet consumed. The list view
+  is the part that makes an unseen alert visible, which is this entry's actual harm. The timeline
+  view remains genuinely unbuilt and is **not** claimed here.
+- **Alert-route *management*** — the route table is **read-only**. Creating and editing routes
+  goes through their own audited RPCs; adding a second, weaker write path from a dashboard would
+  widen the surface without adding evidence. The table does surface the failure mode that matters:
+  routes with no owner address are flagged, and a zero-route state is called out explicitly as
+  "raises an incident but notifies nobody".
+
+Verified by `pnpm exec next build`: route `/[tenantSlug]/admin/monitoring` compiles and appears in
+the route table. `typecheck` clean.
+
+**`ISS-2026-251` (escalation/dispatch) is unaffected and stays open** — this page makes incidents
+visible to someone who opens it; it does not notify anyone who has not.
+
 ### ISS-2026-251 — alert routes have real owner metadata (`owner_team`/`owner_email`) and real severity/dedup, but no escalation/dispatch mechanism exists at all — an unacknowledged incident never pages anyone (found at `HDN-382` Observability Audit, runbook/dashboard review lens, `OPEN`, Medium, owner a dedicated future task)
 
 Verified directly against `supabase/migrations/20260807400000_create_intelligence_enterprise_monitoring_observability.sql`: `app.alert_routes.owner_team`/`owner_email` are real, and correctly copied onto each `app.incidents` row at creation — but both fields are inert routing metadata only. `docs/build-log/phase-09/IAE-358.md` self-discloses directly: "No live alert delivery — no email/Slack/PagerDuty dispatch is built or wired here." There is no automatic escalation (e.g. an unacknowledged-after-N-minutes reminder) and no paging mechanism of any kind. Business Rule §24 requires "owner, severity, deduplication **and escalation path**" — three of four are real (owner, severity, dedup — the last one live-verified concurrency-safe at `IAE-030`'s own Tier C, `pg_advisory_xact_lock`); escalation path is the one genuinely absent piece, distinct from and narrower than the already-disclosed "no live alerting endpoint" framing in `HARDENING_MATRIX.md` §13 (that framing describes no *export destination* existing; this framing is that even once one exists, nothing in the schema *invokes* it on a timer).
