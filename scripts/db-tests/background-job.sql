@@ -695,3 +695,57 @@ begin
 
   raise notice 'HDN-382 dead-letter observability wiring proof: a job reaching dead_letter raises (or correctly reuses, per ISS-2026-155''s own dedup key) exactly 1 real, correctly-severed (high) incident; a second distinct job_type dead-lettering for the same tenant within the dedup window correctly collapses into it as a duplicate_signal event; a merely-retryable (non-terminal) failure raises no alert at all';
 end $$;
+
+\echo '>> ISS-2026-053: enqueue_job idempotency compares the FULL request tuple -- same key + same type + different payload is a conflict, not a silent replay'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmejob');
+  v_actor uuid := '00000000-0000-0000-0000-000000004001';
+  v_first app.jobs;
+  v_replay app.jobs;
+begin
+  -- Baseline: a genuine replay -- same key, same type, same payload -- must still return the
+  -- SAME row. A tuple check that rejected honest retries would be worse than the gap it closes.
+  v_first := app.enqueue_job(v_tenant_id, 'retention_archive', '{"olderThanDays": 30}'::jsonb, 0, 'iss053-key', 3, v_actor, 'requester');
+  v_replay := app.enqueue_job(v_tenant_id, 'retention_archive', '{"olderThanDays": 30}'::jsonb, 0, 'iss053-key', 3, v_actor, 'requester');
+  if v_replay.job_id <> v_first.job_id then
+    raise exception 'assertion failed: an identical replay must return the same job, got % then %', v_first.job_id, v_replay.job_id;
+  end if;
+
+  -- The defect: same key, same type, DIFFERENT payload. Before this fix the caller got the
+  -- 30-day job back and was told it succeeded, so the 3650-day archive silently never ran.
+  begin
+    perform app.enqueue_job(v_tenant_id, 'retention_archive', '{"olderThanDays": 3650}'::jsonb, 0, 'iss053-key', 3, v_actor, 'requester');
+    raise exception 'assertion failed: expected idempotency_key_conflict for a same-key, same-type, DIFFERENT-payload request';
+  exception
+    when unique_violation then
+      if sqlerrm !~ 'idempotency_key_conflict' or sqlerrm !~ 'different payload' then raise; end if;
+  end;
+
+  -- The half 20260731050000 already closed, re-asserted here so a future edit cannot drop one
+  -- guard while keeping the other.
+  begin
+    perform app.enqueue_job(v_tenant_id, 'notification_batch', '{"olderThanDays": 30}'::jsonb, 0, 'iss053-key', 3, v_actor, 'requester');
+    raise exception 'assertion failed: expected idempotency_key_conflict for a same-key, DIFFERENT-type request';
+  exception
+    when unique_violation then
+      if sqlerrm !~ 'idempotency_key_conflict' then raise; end if;
+  end;
+
+  -- null payload must normalize to '{}' on BOTH sides, or a null replay of a '{}' original
+  -- would read as a conflict -- an honest retry turned into an error by the fix itself.
+  v_first := app.enqueue_job(v_tenant_id, 'retention_archive', null, 0, 'iss053-null', 3, v_actor, 'requester');
+  v_replay := app.enqueue_job(v_tenant_id, 'retention_archive', '{}'::jsonb, 0, 'iss053-null', 3, v_actor, 'requester');
+  if v_replay.job_id <> v_first.job_id then
+    raise exception 'assertion failed: a null payload and an empty-object payload are the same request, got % then %', v_first.job_id, v_replay.job_id;
+  end if;
+
+  -- priority and max_attempts are deliberately OUTSIDE the tuple: a retry at a higher priority
+  -- is the same work, and rejecting it would turn a harmless retry into an error.
+  v_replay := app.enqueue_job(v_tenant_id, 'retention_archive', '{"olderThanDays": 30}'::jsonb, 9, 'iss053-key', 7, v_actor, 'requester');
+  if v_replay.job_id <> (select job_id from app.jobs where tenant_id = v_tenant_id and idempotency_key = 'iss053-key') then
+    raise exception 'assertion failed: a replay differing only in priority/max_attempts must still be an idempotent replay';
+  end if;
+
+  raise notice 'PASS: ISS-2026-053 -- enqueue_job compares job_type AND payload, normalizes null to empty, and keeps dispatch hints out of the tuple';
+end $$;

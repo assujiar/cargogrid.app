@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 90 — 4 High, 42 Medium, 44 Low |
+| `OPEN` | 88 — 4 High, 41 Medium, 43 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 167 |
-| **Total records** | **262** |
+| `RESOLVED` | 170 |
+| **Total records** | **263** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -100,9 +100,10 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-302` | Medium | `OPEN` | the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring |
 | `ISS-2026-303` | Medium | `OPEN` | Inventory and HRIS still have no bulk opening-balance import |
 | `ISS-2026-304` | Medium | `OPEN` | no public status page for unauthenticated visitors |
-| `ISS-2026-305` | Medium | `OPEN` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
-| `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
-| `ISS-2026-053` | Low | `OPEN` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
+| `ISS-2026-305` | Medium | `SUPERSEDED` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
+| `ISS-2026-307` | Medium | `OPEN` |
+| `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
+| `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
 | `ISS-2026-064` | Low | `OPEN` | Employee Master (HRT-274): manager-team UI route, client-side document upload, and browser/accessibility E2E are disclosed, not built |
 | `ISS-2026-066` | Low | `OPEN` | Organization and Position Linkage (HRT-275): no bulk/multi-employee reorganization wizard, no live scheduler for future-dated assignment activation, n |
@@ -401,7 +402,7 @@ Discovered `2026-07-16` during `CG-S5-PH0-020` (Prompt 99, Phase 0 Integrated Ve
 
 **Resolved `2026-07-16` during `CG-S5-PH0-021` (Prompt 100, Phase 0 Hardening)** — the dedicated task Prompt 99 named. Decision: **keep `check-secrets.ts` scoped to credential shapes; do not widen it to general PII detection.** Rationale: (1) industry-standard secret scanners (gitleaks/trufflehog/detect-secrets) target key/token/password shapes, not arbitrary PII — widening the scope would make `check-secrets.ts` a second, overlapping PII scanner, which Prompt 100 §24's "no new capability" rule forbids; (2) this repository already has three real, tested, purpose-built PII-handling mechanisms for their own respective data-flow surfaces — `scripts/data-classification/registry.ts`/`check-registry.ts` (schema-field classification), `scripts/product-analytics/analytics.ts` (event-property rejection), `scripts/observability/logger.ts` (log-field redaction) — so a hardcoded PII literal in source is correctly out of `check-secrets.ts`'s lane, not an uncovered risk; (3) a real PII value should never be a literal in tracked source regardless of its key name, which is a code-review/data-classification concern, not a key-name-pattern-matching one. **Evidence:** `docs/standards/SECURITY_STANDARDS.md` §3 now states this boundary explicitly; `scripts/security/check-secrets.ts` carries a one-line scope comment; `scripts/verification/phase0-integration.test.ts`'s dedicated test was rewritten from "documents a disclosed gap" to "proves the intentional boundary holds in both directions" (asserts `check-secrets.ts` still does not match the PII-shaped keys, and that `logger.ts` still redacts them regardless — the PII-handling responsibility is proven to land somewhere, not merely absent from one module). Full detail: `docs/build-log/phase-00/PH0-100.md`. **Status `RESOLVED`** — a documented design boundary, not a defect; no code behavior changed, `pnpm run security:check` still reports zero findings.
 
-### ISS-2026-053 — `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple (OPEN, Low)
+### ISS-2026-053 — `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple (RESOLVED 2026-08-30, Low)
 
 Discovered `2026-08-08` during `CG-S11-PRC-017` (Prompt 266, Procurement Dashboard and Reports), while implementing `app.enqueue_procurement_report_export`. `app.enqueue_job` (`supabase/migrations/20260719180000_create_background_job_framework.sql`, PLT-132) accepts an `idempotency_key` and, on a replay with the same key, returns the existing `app.jobs` row unconditionally — it never compares the replay's own `job_type`/`payload` against the original row's, so a caller that reuses a key for a genuinely *different* request silently receives the first request's job back instead of a rejection. This is the C-01 class ("idempotency-tuple gaps... claiming full tuple comparison but comparing only a leading subset," recurring at `PRC-257`/`258`/`259`, `PRC-261`/`262`/`263`) applied to a shared Platform primitive rather than a single domain RPC.
 
@@ -409,6 +410,41 @@ Discovered `2026-08-08` during `CG-S11-PRC-017` (Prompt 266, Procurement Dashboa
 
 **Re-verified, drafted, then withdrawn (2026-08-28, Track B Batch 8).** This entry's own `job_type` half is stale: `20260730390000_harden_platform_operations_finance_idempotency_target_mismatch.sql` (ATW-031, closing `ISS-2026-029`, committed 2026-08-05, three days before this entry was filed) already added a `job_type` mismatch check to `app.enqueue_job` — the entry does not cite it. The `payload` half remains a real, live gap: a replay with the same key/job_type but a different payload still silently returns the first job. A migration extending the existing check with `or v_existing.payload is distinct from p_payload` was drafted, applied to a local disposable database, and initially reported clean — but running the FULL local `db-tests` suite (not just this migration's own new regression) surfaced a genuine regression the isolated verification missed: `scripts/db-tests/customer-loyalty-expiry-fraud-prevention.sql`'s own "idempotency/replay (mandatory test)" block calls `app.run_loyalty_expiry_sweep` twice with an idempotency key correctly scoped to the calendar day, but a payload that legitimately embeds `clock_timestamp()`-derived `as_of` — differing by microseconds between the two calls by design, exactly the kind of advisory/non-identity payload data a full-tuple comparison cannot distinguish from a genuinely different request without per-caller knowledge. **Withdrawn before being applied live**, mirroring this session's own established `ISS-2026-038`/`040`/`170`/`189` precedent: a repository-wide audit across all 73 `app.enqueue_job` call sites to classify which embed only advisory/non-identity data in `payload` versus genuinely target-identifying data is a real, larger undertaking than a single bounded migration should attempt, and applying it unaudited risks silently breaking other legitimate wall-clock-embedding idempotent-replay callers this batch has not inventoried. **Status stays `OPEN`, Low** — the `job_type` half is closed (pre-existing, now correctly attributed); the `payload` half remains open, correctly scoped narrower than originally filed, with the withdrawal's own root cause now on record so a future attempt does not repeat it blind.
 
+
+**`RESOLVED`, 2026-08-30, under `ADR-0027` Part A** —
+`supabase/migrations/20260830190000_harden_enqueue_job_idempotency_payload_tuple.sql`.
+
+The `job_type` half was already closed by `20260731050000`, as this entry's own last update said.
+The `payload` half is closed now, and closing it surfaced two things the entry could not have
+known.
+
+**The obvious fix is wrong, and writing it proved so.** Comparing `v_existing.payload` against
+the request failed the suite immediately — not on the new assertions, but on
+`app.run_loyalty_expiry_sweep`'s own long-standing "running the sweep AGAIN for the same day does
+NOT double-expire" test. **`app.jobs.payload` is not a request field**: the sweep UPDATEs it after
+the job runs, appending its counts. A stored payload can therefore never equal the request that
+created it once the job has done any work — for every producer that records results there, not
+just this one. A containment check (`@>`) tolerates appended result keys but accepts a replay
+that OMITS a key the original set, which is most of the original defect back.
+
+So the fix separates the two: `app.jobs.request_payload` records what was asked for, at insert,
+and is never written again. Idempotency compares against that; `payload` keeps its dual role
+untouched. Rows predating the column carry null, and null skips the comparison — the guard never
+applies retroactively to a job enqueued under the old rules.
+
+`priority` and `max_attempts` stay out of the tuple deliberately: they are dispatch hints, and a
+retry at a higher priority is the same request.
+
+**Evidence.** `scripts/db-tests/background-job.sql` asserts an identical replay still returns the
+same job; same key + same type + different payload now raises `idempotency_key_conflict`; the
+already-closed `job_type` half still raises (so a future edit cannot drop one guard and keep the
+other); a null payload and `'{}'` are the same request; and a replay differing only in priority
+or max_attempts is still a replay.
+
+One pre-existing test was corrected as a side effect: `data-retention-archival.sql` counted
+`app.jobs where job_type = 'retention_archive'` **globally**, which held only because no other
+file in the shared disposable database enqueued one. It now scopes to its own tenant, stating
+what it actually tests rather than resting on what the rest of the suite happens not to do.
 ### ISS-2026-054 — C-05 tenant-id-disclosure oracle, widened to ≥10 more by-id RPCs across PRC-251/252/253/254/256 (RESOLVED, Medium)
 
 Discovered `2026-08-09` during `CG-S11-PRC-019` (Prompt 268, Procurement/Vendor Integrated Verification), by a live security-isolation sweep introspecting the full `get_/list_` by-id RPC surface (107 functions) via `pg_get_functiondef` against a live, fully-migrated database, independently re-derived by the Prompt 268 synthesis itself. `ISS-2026-043` (read RPCs) and `ISS-2026-048` (write RPCs) already register the pattern "a by-id RPC resolves the target row's real `tenant_id`, then echoes it verbatim into the `insufficient_authority` error text to a caller who has not yet been shown to belong to that tenant" — both entries enumerate specific fixed/still-open function lists. This sweep found the identical vulnerable shape, unfixed, in at least 10 further functions spanning PRC-251 (the phase's very first, unbatched, pre-`ADR-0021` capability), PRC-252, PRC-253, PRC-254, and PRC-256 — none of which appear in either issue's own enumerated disposition text: `app.suspend_vendor_profile` (and, by the identical code template, its lifecycle-transition siblings `reactivate_`/`archive_`/`blacklist_vendor_profile`), `app.get_vendor_assessment_score_breakdown`, `app.list_vendor_assessment_findings`, `app.list_vendor_assessment_template_criteria`, `app.list_vendor_assessment_corrective_actions`, `app.get_vendor_compliance_requirement`, `app.get_vendor_compliance_waiver`, `app.get_vendor_compliance_document`, `app.decide_vendor_compliance_waiver`, `app.get_vendor_payment_term_proposal`, `app.get_sourcing_request_history`, `app.list_sourcing_candidates`. Live-reproduced directly by the Prompt 268 synthesis for one instance (`app.get_vendor_compliance_requirement`): a fresh tenant + a real `vendor_compliance_requirements` row + an `auth.users` identity with ZERO `principal_memberships` rows anywhere, called with that identity's own session simulated — raised `insufficient_authority: identity 00000000-0000-0000-0000-0000000c0502 lacks PRC:View (no_active_assignment) for tenant 11111111-1111-1111-1111-111111111111`, disclosing the real tenant_id to a caller who is not a member of any tenant. The two write-path instances tested (`suspend_vendor_profile`, `decide_vendor_compliance_waiver`) correctly BLOCKED the actual state-changing action — only the tenant_id disclosure is the defect, not a privilege-escalation-to-write. `app.get_sourcing_request` itself remains the one already-disclosed, still-open `ISS-2026-043` instance, reconfirmed unchanged, not a new finding.
@@ -954,7 +990,7 @@ the `app._` prefix and granted to `authenticated`, which obliged it to carry a `
 wrapper — `public-api-wrapper-regression.sql` failed the run. It is an internal audit helper,
 so the prefix and a `service_role`-only grant are the correct answer, not a wrapper.
 
-### ISS-2026-305 — `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant (OPEN, Medium)
+### ISS-2026-305 — `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant (SUPERSEDED 2026-08-30 — the premise was factually wrong, Medium)
 
 Split out of `ISS-2026-093` on 2026-08-30. That entry treated `app.audit_logs` as the
 widening vector for an approval cancellation reason. Fixing it revealed that the audit log was
@@ -981,6 +1017,57 @@ cancellation reasons are mundane. Some are not: "cancelled, employee is under in
 is the shape that matters. The same field is used across every domain that has approvals, so
 the exposure is not confined to one team's data.
 
+
+**`SUPERSEDED`, 2026-08-30, same day it was filed — because its premise was wrong, and the
+premise was mine.**
+
+I split this entry out of `ISS-2026-093` on the reasoning that `app.approval_requests` "carries
+`grant select` on the whole table to `authenticated`, and its RLS admits any active tenant
+member", so `ended_reason` was readable by a broader audience than the audit-log vector
+`ISS-2026-093` closed.
+
+**That was true on 2026-07-19 and had not been true since 2026-08-14.**
+
+`supabase/migrations/20260731210000_…_batch_291_293_review_fixes.sql` Finding 5 — rated CRITICAL
+at the time — had already done exactly the fix this entry proposed:
+
+```sql
+revoke select on app.approval_requests from authenticated;
+grant select (
+  id, tenant_id, config_version_id, entity_type, entity_id, pattern, status, idempotency_key,
+  requested_by_auth_user_id, requested_by, started_at, ended_at,
+  record_version, created_at, updated_at
+) on app.approval_requests to authenticated;   -- ended_reason is not in the list
+```
+
+And `scripts/db-tests/approval.sql:937` has asserted the result ever since, in both directions:
+`status` stays selectable, `ended_reason` is not. That assertion has been passing in every
+`db:test` run I have made this session, including the ones I quoted as evidence for other fixes.
+
+**How I got it wrong.** I read the original grant in `20260719090000_create_approval_engine.sql`
+and did not check whether a later migration had narrowed it. That is the same mistake this
+session has now found four times in inherited entries — a claim true of one migration, stale
+against the current schema — except this time I made it while *writing* a finding rather than
+inheriting one. Writing a false finding is worse than repeating one: it manufactures backlog, and
+the next reader has no reason to doubt a freshly-dated entry.
+
+**The cheap check I skipped**, and which takes one command:
+
+```
+grep -rn "on app.approval_requests to\|revoke .* on app.approval_requests" supabase/migrations/
+```
+
+Two hits, and the second is the fix. Grepping the migration set for *every* grant on a table,
+rather than reading the migration that created it, is the difference.
+
+**Nothing to build.** No new migration, no new assertion — the fix and its regression guard both
+predate this entry by two weeks. `ISS-2026-093`'s own audit-log vector, the half that genuinely
+was open, was closed separately on 2026-08-30 by
+`20260830160000_harden_approval_engine_audit_reason_redaction.sql`.
+
+Marked `SUPERSEDED` rather than `RESOLVED`: nothing was resolved here, because nothing was ever
+broken. The record stays, per this file's own append-only rule — a wrong finding is evidence
+about how findings get made, and deleting it would hide that.
 ### ISS-2026-094 — Batch review (Prompts 291-293, `CG-S12-HRT-019/020/021`): `app.ticket_links`/`app.ticket_link_events` raw-table SELECT admitted the exact cross-domain, cross-tenant access the capability's own RPC layer exists to deny (RESOLVED — CRITICAL, fixed, Medium)
 
 Discovered `2026-08-15` during the Tier C batch review for Prompts 291-293 (security/RLS/tenant-isolation lens), independently re-derived live by the fix phase before fixing: `20260731170000`'s own RLS policies (`ticket_links_select_scoped`/`ticket_link_events_select_scoped`) admit any caller who can `app.can_access_ticket` the parent ticket (staff/watcher/requester) — or any Supreme Admin unconditionally — with no re-check of the linked record's own cross-domain FIN/PRC/OPS authorization or of `app._ticket_link_actor_may_view_tenant_data` (the capability's own decision-5 gate closing "any Supreme Admin can browse any tenant's data via a helpdesk ticket"). Live-reproduced twice pre-fix: (1) a same-tenant, domain-denied ticket-staff member's raw `select * from app.ticket_links` returned full `safe_snapshot` content (real invoice amounts, vendor names, shipment numbers) that `app.list_ticket_links` correctly withheld; (2) a fresh, zero-grant Supreme Admin's raw select against a helpdesk ticket in an unrelated tenant returned a real linked vendor's `safe_snapshot` in full, even though `app.search_ticket_link_candidates` correctly returned zero candidates for the identical actor/ticket — defeating the exact scenario the migration's own decision-5 commentary says this capability was built to close.
@@ -5786,6 +5873,42 @@ throughout and still is. The loss is evidentiary: after an incident, "which addr
 block, and when" cannot be answered from the platform for denials raised inside a business
 transaction. Denials through the evaluator are now answerable, and so is every one of them via
 the security incident it opens.
+
+---
+
+### ISS-2026-308 — `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload; the two contradicted each other (found and fixed 2026-08-30 while closing `ISS-2026-053`, RESOLVED, Low)
+
+**Severity: Low. Status: `RESOLVED` 2026-08-30, same change that found it.**
+
+**What was true.** The sweep enqueues with key `loyalty_expiry_sweep:<tenant>:<run_label>`, where
+`run_label` defaults to a date — deliberately one run per label. Its payload carried
+`as_of: clock_timestamp()`, a value different on every call.
+
+So the key said "once per label" and the payload said "every call is a different request". Both
+statements lived in the same function call, and only the absence of any payload comparison kept
+them from meeting. `ISS-2026-053`'s fix made them meet, and the sweep's own regression test
+failed on the second run.
+
+**Why it mattered even before that.** The payload is evidence: an operator reading a job row sees
+what was requested. Recording a per-call instant in a per-label request made that evidence
+misleading — two runs that the system treats as one appeared to be two different requests.
+
+**Fixed** in the same migration. The request payload now carries `run_label` alone, matching the
+key exactly. Nothing is lost: the instant actually swept is recorded on completion as `swept_at`,
+and the caller's own `p_as_of` as `requested_as_of` — both on the result side, where a value that
+varies per call belongs. `v_as_of` still drives both expiry primitives, byte-identically.
+
+**A second defect, found the same way and worth its own note.** Rebuilding this function copied
+its body from `20260811000000` — the newest migration a grep for the name surfaced. That was
+stale, and so was `app.enqueue_job`'s: `20260810700000` had since made it `SECURITY DEFINER` with
+a pinned `search_path`. Copying the older body silently reverted that hardening, and
+`scripts/db-tests/public-api-wrapper-regression.sql` caught it — `public.enqueue_job` (definer) no
+longer matched its `app.*` counterpart (now invoker).
+
+Both bodies were then rebuilt from `pg_get_functiondef` against a database with every migration
+applied, with each edit asserted to apply exactly once and the security attributes asserted
+present afterwards. **The live catalog is the source of truth for a function body, not the newest
+file a grep happens to find** — a rule this repository has now paid for more than once.
 
 ## 5. Maintenance rules
 

@@ -1788,6 +1788,52 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (388 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-ninth pass), migrationSetSha256 and
+ * dbTestSetSha256. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-053` (Low) -- app.enqueue_job's idempotency replay compared the key
+ * and job_type but not the payload, so reusing a key for the same job type with
+ * different work silently returned the first job and reported success. One new
+ * migration (388 -> 389 files: +1,
+ * 20260830190000_harden_enqueue_job_idempotency_payload_tuple.sql).
+ *
+ * Two things this fix discovered, both recorded rather than absorbed:
+ *
+ * 1. The obvious fix is wrong. Comparing app.jobs.payload failed the suite on
+ *    app.run_loyalty_expiry_sweep's own "same day does NOT double-expire" test,
+ *    because payload is a request AND result store -- the sweep appends its
+ *    counts to it after the job runs, so a stored payload can never equal the
+ *    request that created it. Hence app.jobs.request_payload: written once at
+ *    insert, never updated, null on pre-existing rows (and null skips the
+ *    comparison, so the guard is never retroactive).
+ *
+ * 2. Registered as ISS-2026-308: the sweep keyed idempotency per run_label (a
+ *    date) while putting clock_timestamp() in its request payload. Key said
+ *    "once per label", payload said "every call differs". Its request payload
+ *    now carries run_label alone; the resolved instant and the caller's own
+ *    p_as_of moved to the completion update, on the result side.
+ *
+ * A third thing, and the one worth remembering. The first draft copied both
+ * function bodies from the newest migration a GREP for the name surfaced. Both
+ * were stale -- 20260810700000 had since made enqueue_job SECURITY DEFINER with
+ * a pinned search_path -- so the draft silently reverted a security hardening.
+ * public-api-wrapper-regression.sql caught it: public.enqueue_job (definer) no
+ * longer matched its app.* counterpart (now invoker). Both bodies were rebuilt
+ * from pg_get_functiondef against a fully-migrated database, each edit asserted
+ * to apply exactly once and the security attributes asserted present after
+ * patching. The live catalog is the source of truth for a function body, not
+ * the newest file a grep finds.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count). background-job.sql
+ * gained the request-tuple proof; data-retention-archival.sql's
+ * "ZERO retention_archive jobs" assertion was scoped to its own tenant, having
+ * counted globally and so depended on no other file in the shared disposable
+ * database ever enqueueing one.
+ *
+ * Re-verified via a fresh full local db-test suite run (389 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1991,7 +2037,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (thirty-eighth pass) by ISS-2026-155's alert dedup discriminator (388
   // files: +1, 20260830180000_add_observability_alert_dedupe_discriminator.sql).
   // See the class-level doc comment above.
-  migrationSetSha256: "d594538bf46479d34d1cb77dae790869ce87b7f37dfb033f63a5e05aa5467827",
+  // History: d594538bf46479d34d1cb77dae790869ce87b7f37dfb033f63a5e05aa5467827
+  // (388 files, thirty-eighth-pass amendment above). Superseded 2026-08-30
+  // (thirty-ninth pass) by ISS-2026-053/ISS-2026-308 (389 files: +1,
+  // 20260830190000_harden_enqueue_job_idempotency_payload_tuple.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "f4f470c48da0be14c4209b69cfad8d1ed86aaf4011b410819f48de96751df4f9",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2209,7 +2260,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (thirty-eighth pass) by ISS-2026-155 (236 files unchanged in count --
   // scale-up-architecture.sql widened with the dedup-discriminator proof). See
   // the class-level doc comment above.
-  dbTestSetSha256: "33b21176ca55a840895858d839c6f7c0670c63d4c77a699ff9e231ed86cb6b2f",
+  // History: 33b21176ca55a840895858d839c6f7c0670c63d4c77a699ff9e231ed86cb6b2f
+  // (236 files, thirty-eighth-pass amendment above). Superseded 2026-08-30
+  // (thirty-ninth pass) by ISS-2026-053 (236 files unchanged in count --
+  // background-job.sql widened with the request-tuple proof, and
+  // data-retention-archival.sql's global job count scoped to its own tenant).
+  // See the class-level doc comment above.
+  dbTestSetSha256: "32857b68d97f5ccef86af1a1645699260cbd3218f7281178deeff6f33fdd2306",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

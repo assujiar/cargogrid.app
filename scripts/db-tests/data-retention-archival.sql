@@ -296,9 +296,14 @@ begin
     raise exception 'assertion failed: expected blocked_within_retention for a 10-day-old record against a 200-day policy, got %', v_recent_request.status;
   end if;
 
-  select count(*) into v_job_count from app.jobs where job_type = 'retention_archive';
+  -- Scoped to this tenant. The count was global, which made it depend on no OTHER test file in
+  -- the shared disposable database ever enqueueing a retention_archive job -- a coupling that
+  -- held only by accident, and broke the moment background-job.sql gained one (ISS-2026-053).
+  -- The claim being tested is about the two requests made above, and tenant scope states that
+  -- faithfully instead of resting on what the rest of the suite happens not to do.
+  select count(*) into v_job_count from app.jobs where job_type = 'retention_archive' and tenant_id = v_tenant1;
   if v_job_count <> 0 then
-    raise exception 'assertion failed: expected ZERO app.jobs rows enqueued for any dry_run=true request, found %', v_job_count;
+    raise exception 'assertion failed: expected ZERO app.jobs rows enqueued for any dry_run=true request in this tenant, found %', v_job_count;
   end if;
 end;
 $$;
