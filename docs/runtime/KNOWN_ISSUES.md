@@ -4564,12 +4564,26 @@ every gate's runtime to test a version this repository has no reason to run: `en
 statement about what CargoGrid is supported on, and it should say what is actually
 verified.
 
-**Two things this does not claim.** The Vercel project setting itself is still `24.x` —
-`engines.node` overrides it at build time, but the two now disagree on paper, and aligning
-the dashboard is a one-click follow-up for whoever owns that account. And the override is
-recorded here as the intended mechanism, **verified on the next real build rather than
-asserted**: `docs/build-log/release-go-live/` will carry the build log line showing the
-resolved Node version. If that line reads 24.x, this entry reopens.
+**Verified live on the next real build, as promised, rather than asserted.** Vercel
+deployment `dpl_73kKHj5AkJxYSzNZroj9QYeBmoxk` (commit `76c7d77`, 2026-08-30 05:34 UTC) says
+it in its own words:
+
+```
+Skipping build cache since Node.js version changed from "24.x" to "22.x"
+Warning: Due to "engines": { "node": "22.x" } in your `package.json` file, the Node.js
+Version defined in your Project Settings ("24.x") will not apply, Node.js Version "22.x"
+will be used instead.
+```
+
+The immediately preceding build (`dpl_BwWz4avzaAU8Xqbdg6JUYVnJWttt`, commit `aeb58ae`, the
+last one before the pin) is the control case, and it warned about exactly the mechanism this
+entry describes: *"Detected `engines: { node: '>=22.11.0' }` … that will automatically
+upgrade when a new major Node.js Version is released."* An open range was the divergence.
+
+**One thing this still does not claim.** The Vercel project setting itself remains `24.x` —
+`engines.node` overrides it at build time, which is now proven, but the two disagree on
+paper. Aligning the dashboard is a one-click follow-up for whoever owns that account, and
+until it happens the pin lives in one place only: `package.json`.
 
 ### ISS-2026-288 — `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the parallel-lineage collision class that caused `ERR-2026-001..003` (found at `RGL-393`, Medium)
 

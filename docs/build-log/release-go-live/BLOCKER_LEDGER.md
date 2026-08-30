@@ -1061,6 +1061,24 @@ test. The suite also pins the sharpest bypass: **a real `GO` recorded for an ear
 not authorize a later one** (full-SHA comparison, no prefix match), plus corrupt-file,
 missing-SHA and `NO_GO` cases — all fail closed.
 
+**Live-confirmed on the real platform, 2026-08-30 — not only locally.** The local run above
+proves the script's own logic; it does not prove Vercel actually invokes it. That is now
+proven directly, from Vercel's own build log for deployment
+`dpl_73kKHj5AkJxYSzNZroj9QYeBmoxk` (commit `76c7d77`):
+
+```
+Running "node --experimental-strip-types scripts/release/check-go-decision.ts"
+▶ BUILD PROCEEDS: VERCEL_ENV is "preview", not "production" — gate does not apply
+```
+
+That line is this repository's own gate speaking, from inside Vercel's build container,
+before `vercel build` ran. `ignoreCommand` is genuinely wired and genuinely executing, and
+the preview arm behaves as designed — a candidate can still be built and inspected without a
+go decision, which is the entire point of previews. The production arm's refusal remains
+proven by the local run and its test suite; it will be exercised for real at the first
+production promotion, and that build log line belongs in `GO_DECISION.json`'s own record when
+it happens.
+
 **What this does NOT cover, stated rather than glossed.** A `vercel --prod` deploy from a laptop,
 or a redeploy triggered from the Vercel dashboard, does not necessarily evaluate `ignoreCommand`.
 A human holding Vercel credentials can still deploy by hand. That is a deliberate escape hatch for
