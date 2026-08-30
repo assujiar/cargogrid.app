@@ -256,7 +256,23 @@ declare
   v_rep1_ops_draft app.role_versions;
   v_session_count integer;
   v_key_status text;
+  v_step_up app.mfa_step_up_challenges;
 begin
+  -- ISS-2026-236: `iaemfa` set tenant_wide_required = true earlier in this file, and
+  -- SEC:Configure is a platform-default high-risk tuple -- so app.evaluate_permission now
+  -- requires a current verified step-up for every SEC:Configure call in this tenant. Both
+  -- actors below get a REAL challenge through the shipped mechanism, exactly as a live
+  -- client would and exactly as IAE-039 adapted its own three call sites.
+  --
+  -- viewer1 gets one deliberately, even though viewer1 is the NEGATIVE case: without it
+  -- viewer1's rejection below would fire on the new step-up branch and the assertion would
+  -- pass for the wrong reason, silently ceasing to test the SEC:Configure role gap it was
+  -- written for. The fixture is adapted to the control; no assertion is relaxed to it.
+  v_step_up := app.request_mfa_step_up_challenge(v_tenant1, 'SEC', 'Configure', v_admin1, 'admin1');
+  perform app.verify_mfa_step_up_challenge(v_step_up.id, v_admin1, 'admin1');
+  v_step_up := app.request_mfa_step_up_challenge(v_tenant1, 'SEC', 'Configure', v_viewer1, 'viewer1');
+  perform app.verify_mfa_step_up_challenge(v_step_up.id, v_viewer1, 'viewer1');
+
   v_session1 := app.register_user_session(v_tenant1, 'reps laptop', '203.0.113.10', v_rep1, 'rep1');
   if v_session1.status <> 'active' then
     raise exception 'assertion failed: expected a new session status active, got %', v_session1.status;
@@ -305,6 +321,10 @@ begin
     raise exception 'assertion failed: expected the fixture api key to start active, got %', v_key_status;
   end if;
 
+  -- ISS-2026-236: covered by admin1's own verified step-up at the top of this block
+  -- (policy window is 20 minutes; this block runs in well under a second). This call is
+  -- itself end-to-end proof that the new enforcement reaches a real, previously-unwired
+  -- SEC:Configure function -- app.revoke_all_actor_sessions.
   v_session_count := app.revoke_all_actor_sessions(v_tenant1, v_rep1, 'account compromise', v_admin1, 'admin1');
   if v_session_count < 1 then
     raise exception 'assertion failed: expected at least 1 session revoked (v_session3, still active), got %', v_session_count;
@@ -571,3 +591,95 @@ end;
 $$;
 
 \echo 'ALL IAE-027 (Enterprise MFA and Session Controls) ASSERTIONS PASSED'
+
+-- ===========================================================================
+-- ISS-2026-236 -- step-up enforcement at the app.evaluate_permission chokepoint.
+-- ===========================================================================
+
+\echo '>> ISS-2026-236: app.evaluate_permission denies a high-risk tuple with reason mfa_step_up_required when the tenant has MFA on and the actor holds no current verified challenge; a real verified challenge allows it; the challenge is scoped to the exact tuple and expires; a tenant WITHOUT MFA enabled is completely unaffected; and a Supreme Admin is NOT exempt'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'iaemfa2');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_admin2 uuid := '00000000-0000-0000-0000-000031000004';
+  v_supreme uuid := '00000000-0000-0000-0000-000031000000';
+  v_decision app.rbac_decision;
+  v_challenge app.mfa_step_up_challenges;
+  v_policy app.mfa_tenant_policies;
+begin
+  -- Earlier blocks in this file verified real step-up challenges for this tenant, and the
+  -- policy window is 20 minutes -- so this block first ages those verifications out, to
+  -- start from a genuine "no current step-up" state rather than inheriting one. This is
+  -- test setup, not a relaxation: it makes the assertions below test what they claim.
+  update app.mfa_step_up_challenges
+  set verified_at = now() - interval '10 years'
+  where tenant_id = v_tenant1 and status = 'verified';
+
+  -- iaemfa has tenant_wide_required = true (set earlier in this file). SEC:Configure is a
+  -- platform-default high-risk tuple, and admin1 genuinely holds the granting role -- so
+  -- before this fix this evaluated to allowed/role_grant with no step-up anywhere.
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'SEC', 'Configure');
+  if v_decision.allowed or v_decision.reason <> 'mfa_step_up_required' then
+    raise exception 'assertion failed: expected mfa_step_up_required for SEC:Configure in an MFA-enabled tenant, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- A REAL challenge, requested and verified through the shipped mechanism.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'SEC', 'Configure', v_admin1, 'admin1');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'SEC', 'Configure');
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected a verified step-up to restore the ordinary role_grant decision, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Scoped to the EXACT tuple: the SEC:Configure challenge must not satisfy FIN:Approve.
+  -- A challenge that leaked across tuples would make the control decorative -- one
+  -- step-up anywhere would unlock every high-risk action in the tenant.
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'FIN', 'Approve');
+  if v_decision.allowed or v_decision.reason <> 'mfa_step_up_required' then
+    raise exception 'assertion failed: expected a SEC:Configure challenge NOT to satisfy FIN:Approve, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Scoped in time: ageing the verification past the policy window re-denies.
+  update app.mfa_step_up_challenges
+  set verified_at = now() - interval '10 years'
+  where id = v_challenge.id;
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'SEC', 'Configure');
+  if v_decision.allowed or v_decision.reason <> 'mfa_step_up_required' then
+    raise exception 'assertion failed: expected a stale verification to re-deny, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- A Supreme Admin is deliberately NOT exempt: mfa_tenant_policies.required_layers
+  -- contemplates supreme_admin, and exempting the most powerful identity would reproduce
+  -- exactly the guard-the-guards gap ISS-2026-236 is about. This assertion is the reason
+  -- the new branch sits BEFORE the supreme_admin_exception early-return.
+  v_decision := app.evaluate_permission(v_supreme, v_tenant1, 'SEC', 'Configure');
+  if v_decision.allowed or v_decision.reason <> 'mfa_step_up_required' then
+    raise exception 'assertion failed: expected a Supreme Admin to be subject to step-up in an MFA-enabled tenant, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+  -- ...and can genuinely obtain one (request_mfa_step_up_challenge carries its own
+  -- is_supreme_admin bypass on the membership precondition), so this is a gate, not a
+  -- lockout.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'SEC', 'Configure', v_supreme, 'supreme');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, v_supreme, 'supreme');
+  v_decision := app.evaluate_permission(v_supreme, v_tenant1, 'SEC', 'Configure');
+  if not v_decision.allowed or v_decision.reason <> 'supreme_admin_exception' then
+    raise exception 'assertion failed: expected a verified Supreme Admin to pass through to supreme_admin_exception, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- A tenant that has NOT turned MFA on is completely unaffected -- this is what bounds
+  -- the blast radius, and it is bounded on a real tenant-owned switch rather than on any
+  -- narrowing of app.is_high_risk_action's own classification.
+  select * into v_policy from app.mfa_tenant_policies where tenant_id = v_tenant2;
+  if found and v_policy.tenant_wide_required then
+    raise exception 'assertion failed: this case needs iaemfa2 to have MFA off; fixture drifted';
+  end if;
+  if not app.is_high_risk_action(v_tenant2, 'SEC', 'Configure') then
+    raise exception 'assertion failed: SEC:Configure must remain platform-default high-risk for every tenant -- app.is_high_risk_action is deliberately unchanged by this fix';
+  end if;
+  v_decision := app.evaluate_permission(v_admin2, v_tenant2, 'SEC', 'Configure');
+  if v_decision.reason = 'mfa_step_up_required' then
+    raise exception 'assertion failed: a tenant with MFA off must reach an identical decision to before this fix, got reason=%', v_decision.reason;
+  end if;
+end $$;

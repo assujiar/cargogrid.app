@@ -1336,6 +1336,61 @@ import { readFileSync } from "node:fs";
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project -- live application is Part 5 of this phase's own
  * plan, and this amendment does not claim it.
+ *
+ * AMENDED 2026-08-30 (thirtieth pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling as the twenty-ninth pass: ADR-0027 Part A.
+ *
+ * `ISS-2026-236` (High, `HDN-BLK-024`/`HDN-BLK-040`) -- 3 of
+ * `app.is_high_risk_action`'s own 7 platform-default high-risk tuples
+ * (`SEC:Configure`, `FIN:Approve`, `HRS:Approve`, covering 61 real,
+ * reachable, `authenticated`-executable functions) were classified
+ * high-risk and enforced nothing, across the entire IAE-037 -> IAE-039 ->
+ * HDN-378 lineage. Step-up half closed additively by one new migration
+ * (380 -> 381 files: +1,
+ * `20260830110000_harden_evaluate_permission_step_up_enforcement.sql`) --
+ * a single unchanged-signature CREATE OR REPLACE of
+ * `app.evaluate_permission`, carrying forward every branch 20260810300000,
+ * 20260826040000 and 20260826110000 added, verbatim and in order, plus one
+ * new branch. Not 61 function-body rewrites: that shape is what every prior
+ * checkpoint correctly declined (61 verbatim body restatements, one slip
+ * inside `approve_finance_invoice` being worse than the gap), and IAE-037
+ * live-proved the second cost when wiring 4 of them unconditionally broke
+ * 17 already-VERIFIED fixtures and was reverted. All 61 pass through
+ * `evaluate_permission`, and this repository already established the
+ * chokepoint precedent at `20260826110000` (ISS-2026-264, session-
+ * revocation enforcement in that same function).
+ *
+ * `app.is_high_risk_action` is deliberately NOT changed -- narrowing its
+ * platform-default tuple list would have made every fixture pass trivially
+ * and would have been a weakening of a declared security classification
+ * dressed up as a fix. The blast radius is bounded instead on a real,
+ * tenant-owned, already-shipped switch (`mfa_tenant_policies.
+ * tenant_wide_required`), so a tenant with MFA off reaches an identical
+ * decision to before. Measured across the whole suite, that radius was one
+ * file.
+ *
+ * dbTestSetSha256 changed (235 files unchanged in count --
+ * `scripts/db-tests/enterprise-mfa-session-controls.sql` widened, no file
+ * added or removed): a new regression block for the branch itself
+ * (denial with the exact reason, a real verified challenge restoring
+ * `role_grant`, tuple-scoping, time-scoping, a Supreme Admin subject to the
+ * gate and able to clear it, and an MFA-off tenant unaffected while
+ * `is_high_risk_action` still reports the tuple high-risk), plus two
+ * existing `SEC:Configure` call sites adapted the way IAE-039 adapted its
+ * own -- by requesting and verifying a real challenge, never by relaxing an
+ * assertion. The negative (`viewer1`) case was given a challenge too,
+ * deliberately, so its rejection still fires on the SEC:Configure role gap
+ * it was written for rather than passing for the wrong reason.
+ *
+ * The IP-restriction half of ISS-2026-236 is NOT closed and is carried
+ * forward as `ISS-2026-302` (Medium) -- `app.assert_ip_allowed` needs the
+ * caller's own IP, which `evaluate_permission` has no parameter for, so the
+ * chokepoint cannot serve it. A half-fix is not allowed to retire a
+ * two-part finding.
+ *
+ * Re-verified via a fresh full local db-test suite run (381 migrations, 235
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied
+ * to the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1502,9 +1557,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: c2caf7cec32d7dc08535ee11f477e01f3c3ed7a2c0ec14b26a746a1ca4707d26
   // (379 files, twenty-eighth-pass amendment above). Superseded 2026-08-30
   // (twenty-ninth pass) by ISS-2026-057's vendor bulk-import adapter (380
-  // files: +1, 20260830100000_create_vendor_import_adapter.sql). See the
-  // class-level doc comment above.
-  migrationSetSha256: "0430b50b46eadaaf5d0c45c28e68c2a15c79c1784d5e84c132d991050d36defd",
+  // files: +1, 20260830100000_create_vendor_import_adapter.sql).
+  // History: 0430b50b46eadaaf5d0c45c28e68c2a15c79c1784d5e84c132d991050d36defd
+  // (380 files, twenty-ninth-pass amendment above). Superseded 2026-08-30
+  // (thirtieth pass) by ISS-2026-236's step-up enforcement (381 files: +1,
+  // 20260830110000_harden_evaluate_permission_step_up_enforcement.sql). See
+  // the class-level doc comment above.
+  migrationSetSha256: "e626706010a913a8e59c0b7241e2434fada7ecd0d5f5915c83f362f3feeae09b",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1679,8 +1738,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (235 files, twenty-eighth-pass amendment above). Superseded 2026-08-30
   // (twenty-ninth pass) by ISS-2026-057 (235 files unchanged in count --
   // procurement-vendor-registration.sql widened with six new regression
-  // blocks, no file added or removed). See the class-level doc comment above.
-  dbTestSetSha256: "9d123c8162ed7342874245b03c757bed4c355ee7deb6239565b0c0904af32d0c",
+  // blocks, no file added or removed).
+  // History: 9d123c8162ed7342874245b03c757bed4c355ee7deb6239565b0c0904af32d0c
+  // (235 files, twenty-ninth-pass amendment above). Superseded 2026-08-30
+  // (thirtieth pass) by ISS-2026-236 (235 files unchanged in count --
+  // enterprise-mfa-session-controls.sql widened, no file added or removed).
+  // See the class-level doc comment above.
+  dbTestSetSha256: "312ceebcbdcb65023606c9e912b3475c9f77b58873f3967692b32aeb0a2e21b4",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

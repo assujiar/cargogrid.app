@@ -3389,7 +3389,7 @@ reactivates unchanged; the core's grant confirmed revoked, the new entry point's
 present — full transcript `HDN-387.md` §11. `supabase/migrations/
 20260819000000_harden_release_blocker_triage_remediation.sql` Part 1.
 
-### ISS-2026-236 — 3 of `app.is_high_risk_action`'s own 7 hardcoded platform-default high-risk tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve` — 61 real, reachable functions) received neither step-up-MFA nor IP-restriction wiring across the entire `IAE-037` → `CG-S14-IAE-039` → `HDN-378` lineage (found at `HDN-378` Tier C schema-wide completeness sweep lens, `ACCEPTED_EXCEPTION` at `HDN-389`, High, own `HDN-BLK-024` entry, owner `Step 16`)
+### ISS-2026-236 — 3 of `app.is_high_risk_action`'s own 7 hardcoded platform-default high-risk tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve` — 61 real, reachable functions) received neither step-up-MFA nor IP-restriction wiring across the entire `IAE-037` → `CG-S14-IAE-039` → `HDN-378` lineage (found at `HDN-378` Tier C schema-wide completeness sweep lens, `ACCEPTED_EXCEPTION` at `HDN-389`, High, own `HDN-BLK-024` entry, owner `Step 16`) — step-up half RESOLVED 2026-08-30; IP-restriction half carried forward as `ISS-2026-302`
 
 **Corrected at `HDN-385` Tier C ledger/documentation consistency lens**: this finding was originally mis-numbered `ISS-2026-235` at authoring time (colliding with the unrelated Critical finding immediately above it, `app.set_integration_connection_status`'s own IP-restriction/lockout/step-up-MFA bypass), leaving `BLOCKER_LEDGER.md`'s own `HDN-BLK-024` entry cross-referencing a number (`ISS-2026-236`) that did not yet exist anywhere in this file. No prior checkpoint's own Tier C ledger-consistency sweep caught the collision. Renumbered here to match the cross-reference already on record; no other content changed.
 
@@ -3402,6 +3402,100 @@ Live-verified via direct `pg_proc.prosrc` inspection across the whole `app` sche
 **`ACCEPTED_EXCEPTION` at `HDN-389`.** Formally ruled under `00_EXECUTION_INDEX.md` §8.2's full
 5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
 `Step 16`.
+
+**Step-up half `RESOLVED`, 2026-08-30**, under `ADR-0027` Part A. The IP-restriction half is
+**not** closed and is carried forward as its own entry, `ISS-2026-302` — this annotation
+deliberately does not let a half-fix retire a two-part finding.
+
+Closed by `supabase/migrations/20260830110000_harden_evaluate_permission_step_up_enforcement.sql`
+— **one** `CREATE OR REPLACE`, not 61.
+
+*Why one function and not 61.* The obvious fix (add `perform
+app.assert_current_step_up_authorization(...)` to each of the 61 bodies, `IAE-039`'s own shape)
+is what every prior checkpoint declined, and they were right to: it requires 61 statements each
+restating a full function body verbatim, and one transcription slip inside
+`app.approve_finance_invoice` or `app.close_finance_period` would be worse than the gap.
+`IAE-037` also live-proved the second cost — wiring 4 such functions unconditionally broke 17
+already-`VERIFIED` fixtures and was reverted. But all 61 reach their authority decision through
+one door: `app.evaluate_permission`. That is the real chokepoint, and this repository already
+established the precedent for using it —
+`20260826110000_harden_evaluate_permission_session_revocation_enforcement.sql`
+(`ISS-2026-264`) put session-revocation enforcement in exactly this function for exactly this
+reason. Coverage now extends to every future caller of a high-risk tuple, not to a list frozen
+today.
+
+*What the branch does.* Denies with reason `mfa_step_up_required` when all three hold: the
+(module, action) is high-risk for this tenant (`app.is_high_risk_action`, **unchanged**); the
+tenant has an `app.mfa_tenant_policies` row with `tenant_wide_required = true`; and the actor
+holds no `verified` challenge for that exact tuple inside the policy's own
+`step_up_max_age_minutes`.
+
+*Two things it deliberately does not do.* It does not touch `app.is_high_risk_action` —
+narrowing its platform-default tuple list would have made every fixture pass trivially and
+would have been a weakening of a declared classification dressed up as a fix;
+`scripts/db-tests/enterprise-mfa-session-controls.sql`'s assertion that `FIN:Approve` is
+platform-default high-risk for every tenant is correct and stays untouched, and a new
+assertion pins it. And it does not deny anyone unaffected today: a tenant with no MFA policy
+row, or with `tenant_wide_required = false` — every tenant in every fixture, and every tenant
+on the live project — reaches an identical decision to before. The honest claim is therefore
+*"enforcement for these 61 functions is now real and reachable, gated on the tenant's own MFA
+switch, where previously it did not exist at any setting"* — a strict increase in enforcement
+and zero decrease, and deliberately **not** the claim that all 61 always require step-up.
+
+*Placement.* Immediately after the tenant-membership check and **before** the Supreme Admin
+exception. `mfa_tenant_policies.required_layers` defaults to
+`["supreme_admin", "tenant_admin"]`, so the shipped policy explicitly contemplates a Supreme
+Admin being subject to MFA; placing the branch after the Supreme Admin early-return would have
+exempted precisely the most powerful identity, reproducing the "guard the guards" shape this
+entry is about. A Supreme Admin is gated, not locked out —
+`app.request_mfa_step_up_challenge` carries its own `app.is_supreme_admin` bypass on the
+membership precondition, and a regression asserts both halves.
+
+*Evidence.* `scripts/db-tests/enterprise-mfa-session-controls.sql` gained a regression block
+asserting: denial with the exact reason for a role-holding actor; a real requested-and-verified
+challenge restoring `role_grant`; challenge scoping to the exact tuple (a `SEC:Configure`
+challenge must not satisfy `FIN:Approve` — a leak across tuples would make the control
+decorative); time-scoping (a stale verification re-denies); a Supreme Admin subject to the gate
+and able to clear it; and a non-MFA tenant reaching an identical decision to before while
+`is_high_risk_action` still reports the tuple high-risk. The measured blast radius across the
+whole suite was **one** file, and the two adapted call sites are themselves end-to-end proof
+that the enforcement reaches real, previously-unwired `SEC:Configure` functions
+(`app.revoke_user_session`, `app.revoke_all_actor_sessions`). Both were adapted the way
+`IAE-039` adapted its own — by requesting and verifying a real challenge — and the negative
+(`viewer1`) case was given a challenge too, deliberately, so its rejection still fires on the
+`SEC:Configure` role gap it was written for rather than passing for the wrong reason. Full
+`pnpm run db:test` `ALL PASSED`.
+
+### ISS-2026-302 — the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring (OPEN, Medium)
+
+Split out of `ISS-2026-236` on 2026-08-30 when that entry's step-up half was closed, rather
+than allowing a half-fix to retire a two-part finding.
+
+`ISS-2026-236` named two missing controls for the same 3 high-risk tuples: step-up MFA **and**
+IP restriction. The step-up half is closed at the `app.evaluate_permission` chokepoint. The IP
+half **cannot** use that chokepoint, and this is a structural fact rather than a scoping
+choice: IP enforcement in this repository is `app.assert_ip_allowed(tenant, client_ip, ...)`,
+which requires the caller's own IP address, and `app.evaluate_permission` has no such parameter
+and no way to obtain one — the pattern every wired function uses is an explicit optional
+trailing `p_client_ip` parameter supplied by the caller (see
+`20260826190000_harden_import_commit_ip_allowlist_gating.sql`, and
+`app.commit_vendor_import_job` for a fresh instance).
+
+Closing it therefore means adding a trailing `p_client_ip` parameter to each of the 61
+functions and threading it from each TypeScript caller — a signature change per function
+(`DROP` + `CREATE`, since a defaulted parameter cannot be added by `CREATE OR REPLACE`), plus
+its `public.*` wrapper, plus every call site. That is a real, bounded, mechanical piece of work,
+but it is a large one and it is not the same change as the step-up fix.
+
+**Status `OPEN`**, Medium severity — reduced from `ISS-2026-236`'s High because the actions in
+question are no longer entirely unguarded: an MFA-enabled tenant now gets step-up enforcement on
+all 61, so the "classified high-risk, enforces nothing" condition that drove the High rating no
+longer holds. **Risk in plain terms:** a tenant that has configured an IP allowlist expects
+approvals and security-configuration changes to be refused from outside its own network. Today
+they are not — the allowlist is enforced on the paths that were explicitly wired for it, and
+these 61 are not among them. An attacker who already holds a valid session and the right role
+(and, in an MFA-enabled tenant, can complete a step-up) is not additionally stopped by network
+location on these actions.
 
 ### ISS-2026-237 — `server/queries/automation-rule.ts::getLatestAutomationRulePublishApprovalRequest` uses `select("*")` against `app.approval_requests`, whose `ended_reason` column is deliberately not granted to `authenticated`, breaking the live Automation Rule detail page (found at `HDN-378` Tier C schema-wide completeness sweep lens, `OPEN`, Medium, owner `HDN-387`)
 
