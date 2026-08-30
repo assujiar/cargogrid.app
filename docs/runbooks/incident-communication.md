@@ -130,6 +130,6 @@ whole story of an incident stays in one place.
 
 | Limit | Consequence | Tracked as |
 |---|---|---|
-| No public status page | Customers who cannot sign in cannot be reached through CargoGrid at all | `ISS-2026-304` |
+| No public status page | Customers who cannot sign in cannot be reached through CargoGrid at all | `ISS-2026-304` — see `human-execution-pack.md` §7 |
 | No SLA clock | Send times are recorded, but nothing measures or alerts on a P1 response-time breach | `ISS-2026-258` annotation |
 | `internal` depends on an `app.alert_routes` row | An incident with no matching route resolves to the tenant's admins only, and the owning team is not paged | Configure routes via the monitoring console |
