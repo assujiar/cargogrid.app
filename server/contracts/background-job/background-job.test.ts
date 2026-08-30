@@ -143,6 +143,7 @@ test("ATW-031 (ISS-2026-012): GENERIC_JOB_TYPES matches app.generic_job_types() 
       "external_sync",
       "audit_export",
       "retention_archive",
+      "incident_escalation_sweep",
     ],
   );
 });

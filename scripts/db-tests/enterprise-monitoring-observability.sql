@@ -837,3 +837,231 @@ begin
     if not v_has then raise exception 'assertion failed: expected RLS enabled on %', v_tbl; end if;
   end loop;
 end $$;
+
+-- ===========================================================================
+-- ISS-2026-251 -- automatic escalation: an unacknowledged incident now pages
+-- someone, on a threshold, exactly once per level.
+-- ===========================================================================
+
+\echo '>> ISS-2026-251: escalation thresholds are policy -- platform defaults exist per severity, a tenant override wins over the default, the ladder cannot be inverted, and setting one is authority-gated'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemon');
+  v_admin1 uuid := '00000000-0000-0000-0000-000033000001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000033000002';
+  v_supreme uuid := '00000000-0000-0000-0000-000033000000';
+  v_policy app.incident_escalation_policies;
+  v_count integer;
+begin
+  select count(*) into v_count from app.incident_escalation_policies where tenant_id is null;
+  if v_count <> 4 then
+    raise exception 'assertion failed: expected one platform-default policy per severity (4), found %', v_count;
+  end if;
+
+  -- The critical default is anchored to 11_DEVOPS_WORKSTREAM.md §8.4's P1 = 15 minutes,
+  -- not an invented number. If that architecture target ever changes, this fails loudly.
+  v_policy := app.resolve_incident_escalation_policy(v_tenant1, 'critical');
+  if v_policy.unacknowledged_after_minutes <> 15 then
+    raise exception 'assertion failed: expected the critical platform default to be 15 minutes (§8.4 P1), got %', v_policy.unacknowledged_after_minutes;
+  end if;
+
+  -- MON:View cannot set policy; MON:Configure can.
+  begin
+    perform app.set_incident_escalation_policy(v_tenant1, 'critical', 5, 10, v_viewer1, 'viewer1');
+    raise exception 'assertion failed: expected insufficient_authority for a MON:View-only actor setting escalation policy';
+  exception when insufficient_privilege then
+    null;
+  end;
+  -- A tenant admin must not be able to move the PLATFORM default.
+  begin
+    perform app.set_incident_escalation_policy(null, 'critical', 5, 10, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected only Supreme Admin to set the platform default';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- An inverted ladder would page the second level before the first.
+  begin
+    perform app.set_incident_escalation_policy(v_tenant1, 'critical', 60, 30, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected unresolved >= unacknowledged to be enforced';
+  exception when check_violation then
+    null;
+  end;
+
+  v_policy := app.set_incident_escalation_policy(v_tenant1, 'critical', 5, 20, v_admin1, 'admin1');
+  v_policy := app.resolve_incident_escalation_policy(v_tenant1, 'critical');
+  if v_policy.unacknowledged_after_minutes <> 5 or v_policy.tenant_id is null then
+    raise exception 'assertion failed: expected the tenant override to win over the platform default, got %', v_policy;
+  end if;
+  -- ...and only for that tenant. A different tenant still sees the default.
+  v_policy := app.resolve_incident_escalation_policy((select id from app.tenants where slug = 'iaemon2'), 'critical');
+  if v_policy.unacknowledged_after_minutes <> 15 or v_policy.tenant_id is not null then
+    raise exception 'assertion failed: one tenant''s override must not leak to another, got %', v_policy;
+  end if;
+
+  -- Upsert, not duplicate.
+  perform app.set_incident_escalation_policy(v_tenant1, 'critical', 7, 20, v_admin1, 'admin1');
+  select count(*) into v_count from app.incident_escalation_policies where tenant_id = v_tenant1 and severity = 'critical';
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected setting the same (tenant, severity) twice to upsert, found % rows', v_count;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-251: the sweep escalates an unacknowledged incident past its threshold, sends a real communication through the SAME mechanism a human broadcast uses, escalates exactly once per level however often it runs, leaves a fresh incident alone, and stops escalating unacknowledged once someone acknowledges'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemon');
+  v_admin1 uuid := '00000000-0000-0000-0000-000033000001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000033000002';
+  v_stale app.incidents;
+  v_fresh app.incidents;
+  v_acked app.incidents;
+  v_escalated integer;
+  v_job uuid;
+  v_count integer;
+  v_comm_id uuid;
+begin
+  -- Three incidents with controlled ages. opened_at is set directly so the scenario does
+  -- not depend on wall-clock time or on the suite taking minutes to run.
+  v_stale := app.raise_observability_alert(v_tenant1, 'api', 'error', 'Stale unacknowledged incident', 'critical', 'x');
+  update app.incidents set opened_at = now() - interval '3 hours' where id = v_stale.id;
+  v_fresh := app.raise_observability_alert(v_tenant1, 'webhook', 'error', 'Fresh incident', 'critical', 'y');
+  v_acked := app.raise_observability_alert(v_tenant1, 'ai', 'error', 'Acknowledged incident', 'critical', 'z');
+  update app.incidents set opened_at = now() - interval '3 hours' where id = v_acked.id;
+  perform app.acknowledge_incident(v_acked.id, v_admin1, 'admin1');
+
+  -- MON:View cannot run the sweep.
+  begin
+    perform app.run_incident_escalation_sweep(v_tenant1, now(), 'probe', v_viewer1, 'viewer1');
+    raise exception 'assertion failed: expected insufficient_authority for a MON:View-only actor running the sweep';
+  exception when insufficient_privilege then
+    null;
+  end;
+  -- A period label is required: an unlabelled run could not be idempotent per period.
+  begin
+    perform app.run_incident_escalation_sweep(v_tenant1, now(), '  ', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected an empty period label to be refused';
+  exception when check_violation then
+    null;
+  end;
+
+  select s.escalated_count, s.job_id into v_escalated, v_job
+    from app.run_incident_escalation_sweep(v_tenant1, now(), 'sweep-1', v_admin1, 'admin1') s;
+
+  -- The stale one escalated. The acknowledged one escalated too, but at the UNRESOLVED
+  -- level -- acknowledging stops the unacknowledged clock, not the unresolved one.
+  if not exists (select 1 from app.incident_escalations where incident_id = v_stale.id and level = 'unresolved') then
+    raise exception 'assertion failed: expected the 3-hour-old critical incident to escalate (20-minute unresolved threshold)';
+  end if;
+  if exists (select 1 from app.incident_escalations where incident_id = v_fresh.id) then
+    raise exception 'assertion failed: a fresh incident must not escalate -- a sweep that escalates everything is noise, not escalation';
+  end if;
+  if exists (select 1 from app.incident_escalations where incident_id = v_acked.id and level = 'unacknowledged') then
+    raise exception 'assertion failed: an ACKNOWLEDGED incident must never raise an unacknowledged escalation';
+  end if;
+
+  -- A real PLT-132 job row was tracked, and completed.
+  if v_job is null then
+    raise exception 'assertion failed: expected a tenant-scoped sweep to track a real job row';
+  end if;
+  if (select status from app.jobs where job_id = v_job) <> 'completed' then
+    raise exception 'assertion failed: expected the sweep job to reach completed, got %', (select status from app.jobs where job_id = v_job);
+  end if;
+
+  -- The escalation SENT something, through the same path a human broadcast uses -- and the
+  -- link proves "we escalated" and "we told someone" are one event, not two claims.
+  select communication_id into v_comm_id from app.incident_escalations where incident_id = v_stale.id and level = 'unresolved';
+  if v_comm_id is null then
+    raise exception 'assertion failed: an escalation with no communication is a log line, not an escalation';
+  end if;
+  if not exists (
+    select 1 from app.incident_communications
+    where id = v_comm_id and incident_id = v_stale.id and audience_code = 'internal' and subject like 'ESCALATION:%'
+  ) then
+    raise exception 'assertion failed: expected the escalation to have produced a real internal communication on this incident';
+  end if;
+
+  -- Re-running escalates nothing further. This is the property that matters most: a sweep
+  -- on a 5-minute timer must not re-page every 5 minutes forever.
+  select count(*) into v_count from app.incident_escalations;
+  select s.escalated_count into v_escalated
+    from app.run_incident_escalation_sweep(v_tenant1, now(), 'sweep-2', v_admin1, 'admin1') s;
+  if v_escalated <> 0 then
+    raise exception 'assertion failed: expected a second sweep to escalate nothing already escalated, got %', v_escalated;
+  end if;
+  if (select count(*) from app.incident_escalations) <> v_count then
+    raise exception 'assertion failed: expected no additional escalation rows on re-sweep';
+  end if;
+  if (select count(*) from app.incident_communications where incident_id = v_stale.id) <> 1 then
+    raise exception 'assertion failed: expected re-sweeping NOT to re-send -- double-paging an on-call engineer is the failure this guards';
+  end if;
+
+  -- Replaying the SAME period label is a job-level no-op.
+  select s.escalated_count into v_escalated
+    from app.run_incident_escalation_sweep(v_tenant1, now(), 'sweep-1', v_admin1, 'admin1') s;
+  if v_escalated <> 0 then
+    raise exception 'assertion failed: expected a replayed period label to be a no-op, got %', v_escalated;
+  end if;
+
+  -- Resolving takes an incident out of scope entirely.
+  perform app.resolve_incident(v_fresh.id, 'resolved in test', v_admin1, 'admin1');
+  update app.incidents set opened_at = now() - interval '3 hours' where id = v_fresh.id;
+  select s.escalated_count into v_escalated
+    from app.run_incident_escalation_sweep(v_tenant1, now(), 'sweep-3', v_admin1, 'admin1') s;
+  if exists (select 1 from app.incident_escalations where incident_id = v_fresh.id) then
+    raise exception 'assertion failed: a RESOLVED incident must never escalate, however old it is';
+  end if;
+
+  -- The history is readable and MON:View-gated.
+  select count(*) into v_count from app.list_incident_escalations(v_stale.id, v_viewer1);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected MON:View to read one escalation for the stale incident, got %', v_count;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-251: a platform-scoped sweep runs without a job row (app.jobs.tenant_id is NOT NULL) and is Supreme-Admin-only; neither anon nor authenticated holds direct table access'
+do $$
+declare
+  v_admin1 uuid := '00000000-0000-0000-0000-000033000001';
+  v_supreme uuid := '00000000-0000-0000-0000-000033000000';
+  v_incident app.incidents;
+  v_escalated integer;
+  v_job uuid;
+  v_has boolean;
+  v_tbl text;
+begin
+  v_incident := app.raise_observability_alert(null, 'job', 'error', 'Platform-scoped stale incident', 'critical', 'p');
+  update app.incidents set opened_at = now() - interval '3 hours' where id = v_incident.id;
+
+  begin
+    perform app.run_incident_escalation_sweep(null, now(), 'platform-1', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected a tenant_admin to be refused a PLATFORM-scoped sweep';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  select s.escalated_count, s.job_id into v_escalated, v_job
+    from app.run_incident_escalation_sweep(null, now(), 'platform-1', v_supreme, 'supreme') s;
+  if v_escalated < 1 then
+    raise exception 'assertion failed: expected the platform-scoped stale incident to escalate, got %', v_escalated;
+  end if;
+  -- No job row, and that is a fact about app.jobs rather than a shortcut.
+  if v_job is not null then
+    raise exception 'assertion failed: expected no job row for a platform-scoped sweep (app.jobs.tenant_id is NOT NULL), got %', v_job;
+  end if;
+  -- Idempotency still holds without a job, because the unique index is the real guarantee.
+  select s.escalated_count into v_escalated
+    from app.run_incident_escalation_sweep(null, now(), 'platform-2', v_supreme, 'supreme') s;
+  if v_escalated <> 0 then
+    raise exception 'assertion failed: expected platform-scoped idempotency to hold WITHOUT a job row -- incident_escalations_unique is the real guarantee, got %', v_escalated;
+  end if;
+
+  foreach v_tbl in array array['app.incident_escalation_policies', 'app.incident_escalations'] loop
+    select has_table_privilege('anon', v_tbl, 'SELECT') into v_has;
+    if v_has then raise exception 'assertion failed: anon must hold no SELECT on %', v_tbl; end if;
+    select has_table_privilege('authenticated', v_tbl, 'SELECT') into v_has;
+    if v_has then raise exception 'assertion failed: authenticated must hold no direct SELECT on %', v_tbl; end if;
+    select relrowsecurity into v_has from pg_class where oid = v_tbl::regclass;
+    if not v_has then raise exception 'assertion failed: expected RLS enabled on %', v_tbl; end if;
+  end loop;
+end $$;

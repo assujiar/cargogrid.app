@@ -3802,13 +3802,91 @@ the route table. `typecheck` clean.
 **`ISS-2026-251` (escalation/dispatch) is unaffected and stays open** — this page makes incidents
 visible to someone who opens it; it does not notify anyone who has not.
 
-### ISS-2026-251 — alert routes have real owner metadata (`owner_team`/`owner_email`) and real severity/dedup, but no escalation/dispatch mechanism exists at all — an unacknowledged incident never pages anyone (found at `HDN-382` Observability Audit, runbook/dashboard review lens, `OPEN`, Medium, owner a dedicated future task)
+### ISS-2026-251 — alert routes have real owner metadata (`owner_team`/`owner_email`) and real severity/dedup, but no escalation/dispatch mechanism exists at all — an unacknowledged incident never pages anyone (found at `HDN-382` Observability Audit, runbook/dashboard review lens, `RESOLVED` 2026-08-30, Medium) — the scheduler that invokes the sweep is a deployment step, named in the annotation
 
 Verified directly against `supabase/migrations/20260807400000_create_intelligence_enterprise_monitoring_observability.sql`: `app.alert_routes.owner_team`/`owner_email` are real, and correctly copied onto each `app.incidents` row at creation — but both fields are inert routing metadata only. `docs/build-log/phase-09/IAE-358.md` self-discloses directly: "No live alert delivery — no email/Slack/PagerDuty dispatch is built or wired here." There is no automatic escalation (e.g. an unacknowledged-after-N-minutes reminder) and no paging mechanism of any kind. Business Rule §24 requires "owner, severity, deduplication **and escalation path**" — three of four are real (owner, severity, dedup — the last one live-verified concurrency-safe at `IAE-030`'s own Tier C, `pg_advisory_xact_lock`); escalation path is the one genuinely absent piece, distinct from and narrower than the already-disclosed "no live alerting endpoint" framing in `HARDENING_MATRIX.md` §13 (that framing describes no *export destination* existing; this framing is that even once one exists, nothing in the schema *invokes* it on a timer).
 
 **Status `OPEN`**, Medium severity (a real gap against an explicit business rule, but every incident this system creates remains fully visible and queryable via `app.list_incidents_for_tenant`/`app.get_incident_timeline` even without automatic paging — not a silent-failure risk on its own, given `ISS-2026-250`'s own UI gap is fixed first). **Not fixed by this checkpoint** — building a real dispatch mechanism (email/Slack/PagerDuty integration, plus a scheduled escalation sweep) is a substantial feature addition outside this lane's "no new product features"/"5-15 files" charter boundary, and is naturally sequenced after `ISS-2026-250`'s own dashboard UI (paging without any UI to acknowledge from is a weaker fix). Owner: a dedicated future task.
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 6).** Independently re-confirmed, not trusting the entry's own word: repository-wide search for `pagerduty|slack.*webhook|sendgrid|smtp|nodemailer|twilio|mailgun|resend\.com|hooks\.slack\.com` across `app/`, `server/`, `scripts/`, `lib/`, plus a `package.json` dependency scan — zero matches anywhere, no vendor SDK, no webhook dispatch mechanism of any kind. This fully confirms the entry's premise and its cross-reference to `ISS-2026-258` (identical missing-dispatch root cause). **Status stays `OPEN`, Medium** — genuinely infra/vendor-integration work, not code-shaped; no bounded repair exists. **Owner, named:** Product/Support Engineering, the same dedicated task that should close `ISS-2026-258`'s dispatch gap (do not build the Slack/email/PagerDuty integration twice). **Compensating control:** `app.alert_routes.owner_team`/`owner_email` (real, correctly populated on every incident), real severity, and concurrency-safe dedup (`pg_advisory_xact_lock`) — every incident remains fully visible/queryable via `app.list_incidents_for_tenant`/`app.get_incident_timeline` even without paging. **Accepted-risk statement:** an unacknowledged incident today relies on a human polling the incident list rather than being paged; this is disclosed, not silent, and is unchanged by this re-verification.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A — both halves, in two migrations, with
+one operational step named rather than implied.
+
+This entry names two distinct absences, and its 2026-08-28 re-verification confirmed both by
+searching for vendor SDKs (`pagerduty|slack|sendgrid|smtp|twilio|…`) and finding none:
+
+1. **No dispatch mechanism.** Closed by `20260830140000_create_incident_communication.sql`
+   (`ISS-2026-258`). That re-verification searched for third-party *vendor* SDKs and
+   correctly found none — but this repository's own `PLT-127` Notification Engine was never
+   in that search pattern, and it **is** the dispatch mechanism.
+   `app.alert_routes.owner_email` is no longer inert: an incident communication reaches the
+   incident's own alert-route owner.
+2. **No automatic escalation** — "an unacknowledged-after-N-minutes reminder". Closed by
+   `20260830150000_create_incident_escalation_sweep.sql`.
+
+`app.run_incident_escalation_sweep` **composes** `app.broadcast_incident_communication`
+rather than building a second dispatch path — the precise caution this entry raises. An
+escalation therefore reaches its audience through the same mechanism, and leaves the same
+record, as any other incident message, and the two cannot drift apart.
+
+Thresholds are policy, not constants: `app.incident_escalation_policies` carries per-severity
+pairs with `tenant_id is null` platform defaults and per-tenant overrides layered on top —
+the same nullable-tenant registry shape `app.alert_routes` already uses. The seeded defaults
+are anchored to `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.4's own P1–P4 response targets
+rather than invented (a `critical` incident escalates unacknowledged at 15 minutes, which is
+§8.4's P1), and a regression pins that number so a change to the architecture target fails
+loudly instead of drifting.
+
+**A real bug in this fix was caught by its own regression, not by review, and is recorded
+rather than quietly corrected.** The first version treated the two levels as independent
+flags: it escalated an incident at the higher level (`unresolved`) on one sweep and then, on
+the next sweep, escalated the *same* incident again at the lower level (`unacknowledged`),
+because that row did not exist yet. On a five-minute timer that is a double-page. They are a
+**ladder**: once the top is raised, nothing below it fires again.
+
+Two further properties worth naming: the escalation row is claimed **before** the message is
+sent, so two concurrent sweeps cannot both page; and `incident_escalations_unique` — not the
+job row — is the real idempotency guarantee, which is why a platform-scoped sweep works
+correctly with **no** job at all (`app.jobs.tenant_id` is `NOT NULL`, so there is no job row
+such a run could legitimately attach to; that is a fact about `app.jobs`, not a shortcut).
+
+Evidence: `scripts/db-tests/enterprise-monitoring-observability.sql` gained three regression
+blocks — the policy layer (platform defaults per severity, the §8.4-anchored critical
+threshold, tenant override winning without leaking to another tenant, an inverted ladder
+refused, upsert-not-duplicate, and the Supreme-Admin-only platform default); the sweep
+itself (authority refusals, required period label, a stale incident escalating, a fresh one
+left alone, an acknowledged one never raising an *unacknowledged* escalation, a real
+completed `PLT-132` job, the escalation genuinely **sending** a linked communication —
+"an escalation with no communication is a log line, not an escalation" — re-sweep escalating
+and re-sending nothing, replayed period label a no-op, and a resolved incident never
+escalating however old); and the platform-scoped case (tenant_admin refused, no job row,
+idempotency still holding without one) plus the RLS/grant matrix. Four places had to move in
+lockstep for the new job type — and it turned out to be **five**, not the four the gate
+named: `jobs_job_type_check`, `app.generic_job_types()`, the TypeScript `GENERIC_JOB_TYPES`
+contract and its test, the db-test mirror, and `IMPORT_EXPORT_JOB_TYPES` in
+`server/contracts/import-export/import-export.ts`. The `ATW-031` drift gate caught the first
+four immediately and named each; the fifth was caught by `ATW-032`'s own separate assertion —
+which exists precisely because an earlier remediation widened `GENERIC_JOB_TYPES` and missed
+this array, and it is "the assertion whose absence let the drift survive" in its own words.
+`app.all_job_types()` needed no change: it is derived (`generic_job_types() || {import,
+export}`) rather than a sixth literal. Full
+`pnpm run db:test` `ALL PASSED`.
+
+**What this does not close, and it is an operational step rather than a code gap.** *Nothing
+invokes the sweep on a timer.* `app.run_incident_escalation_sweep` is real, authority-gated,
+idempotent and tested; what calls it every N minutes is deployment wiring (a scheduler, a
+cron, a platform hook) that does not exist in this repository for **any** batch —
+`app.run_ticket_sla_evaluation_batch`, `app.run_ticket_escalation_evaluation_batch`,
+`app.run_leave_accrual_batch` and `app.run_loyalty_expiry_sweep` all sit in exactly the same
+position, and `PLT-131`'s own header already disclosed that `app.jobs.locked_by`/
+`locked_until` are real columns with no live worker behind them. Escalation now **exists and
+is callable** where before it did not exist at all. **Risk in plain terms:** until something
+calls it on a schedule, escalation happens when a person runs it — which is better than the
+previous state (no escalation at any time, by any means) but is not the unattended safety net
+the mechanism is built to be. This is the same missing scheduler that every other batch in
+CargoGrid waits on; it is one deployment task, not one per feature, and it belongs in the
+launch readiness pack rather than in this entry.
 
 ### ISS-2026-252 — `docs/standards/OBSERVABILITY_STANDARDS.md` §7's own `NOT_RUN` table is unrevised Phase-0 prose, still describing a since-superseded "no `app/` exists yet" precondition 14 phases after it stopped being true (found at `HDN-382` Observability Audit, coverage-mapping lens, `RESOLVED` Track B Batch 5, Low)
 

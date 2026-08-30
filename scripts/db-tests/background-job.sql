@@ -581,7 +581,8 @@ declare
     'leave_carry_forward_expiry', 'payroll_calculation', 'training_certificate_expiry',
     'training_certificate_expiry_reminder', 'ticket_sla_evaluation', 'kb_article_expiry',
     'ticket_escalation_evaluation', 'loyalty_expiry_sweep', 'automation_action_execution',
-    'logistics_partner_sync', 'finance_bank_feed_sync', 'external_sync', 'audit_export', 'retention_archive'
+    'logistics_partner_sync', 'finance_bank_feed_sync', 'external_sync', 'audit_export', 'retention_archive',
+    'incident_escalation_sweep'
   ];
   v_missing text[];
   v_extra text[];
