@@ -411,16 +411,28 @@ begin
     raise exception 'assertion failed: expected AP control balance and open total to each move by exactly 300 from this scenario''s own real vendor bill, got before=% after=%', v_summary_before, v_summary;
   end if;
 
-  -- An AR open item posted with no matching subledger batch (mirrors the
-  -- disclosed opening_balance gap) does NOT break reconciliation here,
-  -- because it is deliberately posted with source_document_type =
-  -- 'opening_balance' rather than 'invoice' -- excluded from this
-  -- comparison's own invoice-sourced filter by construction, proving the
-  -- filter itself works, not merely that reconciliation always reports true.
+  -- An AR open item posted with no matching subledger batch does NOT break
+  -- reconciliation, and must not silently disappear from the report either.
+  --
+  -- ISS-2026-236-era note, updated at ISS-2026-273: this used to hold because the
+  -- comparison filtered open items to source_document_type = 'invoice', excluding
+  -- opening balances outright. That filter is gone -- opening balances now emit real
+  -- subledger batches, and one that HAS a batch is counted in arOpenItemTotal (see the
+  -- dedicated import block later in this file). This item is excluded from the total
+  -- because it has NO batch, and it is now reported explicitly as
+  -- arOpeningBalanceNotPostedToGl rather than vanishing into a filter. That distinction
+  -- is the whole point: Prompt 385 §24's "exact reconciliation" means being able to see a
+  -- difference, not excluding it from the comparison.
   v_extra_item := app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'opening_balance', gen_random_uuid(), 'USD', 999, '2026-03-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
   select app.get_finance_subledger_reconciliation_summary(v_tenant_a, '00000000-0000-0000-0000-000000029702') into v_summary;
   if (v_summary ->> 'arReconciled')::boolean is not true or (v_summary ->> 'arOpenItemTotal')::numeric <> 500 + (v_summary_before ->> 'arOpenItemTotal')::numeric then
-    raise exception 'assertion failed: expected arReconciled to remain true and arOpenItemTotal unmoved by the opening_balance-sourced item (still only the earlier real invoice''s own 500 above the pre-scenario baseline), got before=% after=%', v_summary_before, v_summary;
+    raise exception 'assertion failed: expected arReconciled to remain true and arOpenItemTotal unmoved by the un-posted opening_balance item, got before=% after=%', v_summary_before, v_summary;
+  end if;
+  if (v_summary ->> 'arOpeningBalanceNotPostedToGl')::numeric <> 999 then
+    raise exception 'assertion failed: expected the un-posted opening balance to be REPORTED as arOpeningBalanceNotPostedToGl = 999, not silently filtered out, got %', v_summary ->> 'arOpeningBalanceNotPostedToGl';
+  end if;
+  if (v_summary ->> 'openingBalancesFullyPostedToGl')::boolean is not false then
+    raise exception 'assertion failed: expected openingBalancesFullyPostedToGl to be false while an opening balance has no GL batch, got %', v_summary ->> 'openingBalancesFullyPostedToGl';
   end if;
 end;
 $$;
@@ -549,3 +561,328 @@ begin
   raise notice 'concurrent subledger-batch-post race proof: exactly 1 batch row / 1 backing journal survived two genuinely concurrent psql processes racing the SAME (tenant, source_type, source_id) -- the loser was handed the winner''s row gracefully, never a raw unique_violation';
 end;
 $$;
+
+-- ===========================================================================
+-- ISS-2026-273 -- bulk opening-balance import, and the GL posting opening
+-- balances never had.
+-- ===========================================================================
+
+\echo '>> ISS-2026-273 setup: an opening-balance equity account, the opening_balance_equity posting-map key, a FIN:Import role for the finance manager, and the tenant''s published finance_opening_balance_import column definition'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmesubla');
+  v_fm uuid := '00000000-0000-0000-0000-000000029702';
+  -- This file seeds no Supreme Admin of its own (029701 is tenant_admin), and
+  -- app.register_document_type is Supreme-only by design. One is created here rather
+  -- than the check being worked around.
+  v_supreme uuid := '00000000-0000-0000-0000-000000029799';
+  v_account app.finance_accounts;
+  v_pm_draft app.config_versions;
+  v_import_role uuid;
+  v_import_draft app.role_versions;
+  v_doctype_draft app.config_versions;
+  v_schema_draft app.config_versions;
+begin
+  insert into auth.users (id, email) values (v_supreme, 'supreme@acmesubl.test')
+  on conflict (id) do nothing;
+  perform app.grant_principal_membership(v_supreme, 'supreme_admin', null, null, 'tester');
+
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'OB-EQUITY', 'Opening Balance Equity', 'equity', 'credit', null, false, null, v_fm, 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, v_fm, 'financemanagera');
+
+  -- A new published posting-map version. Every previously-published key is restated:
+  -- set_finance_config_items replaces the item set, so omitting one would silently
+  -- unconfigure it -- and fee_expense_default/tax_payable_default/input_tax_default stay
+  -- deliberately held back, exactly as the original fixture left them, so the
+  -- finance_subledger_missing_mapping negative path this file already exercises keeps
+  -- working.
+  select * into v_pm_draft from app.create_finance_config_draft('finance_posting_map', v_tenant_a, 'tenant', null, v_fm, 'financemanagera');
+  perform app.set_finance_config_items(v_pm_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'ar_control', 'value', jsonb_build_object('accountCodeRef', 'AR-CTRL')),
+    jsonb_build_object('key', 'ap_control', 'value', jsonb_build_object('accountCodeRef', 'AP-CTRL')),
+    jsonb_build_object('key', 'revenue_default', 'value', jsonb_build_object('accountCodeRef', 'REV-DEFAULT')),
+    jsonb_build_object('key', 'expense_default', 'value', jsonb_build_object('accountCodeRef', 'EXP-DEFAULT')),
+    jsonb_build_object('key', 'cash_default', 'value', jsonb_build_object('accountCodeRef', 'CASH-DEFAULT')),
+    jsonb_build_object('key', 'opening_balance_equity', 'value', jsonb_build_object('accountCodeRef', 'OB-EQUITY'))
+  ), v_fm, 'financemanagera');
+  perform app.publish_finance_config_version(v_pm_draft.id, v_fm, null, 'financemanagera');
+
+  -- FIN:Import is a distinct permission from FIN:Approve, and holding tenant_admin does
+  -- not confer it -- the finance manager needs a granting role like anyone else.
+  v_import_role := (app.create_role(v_tenant_a, 'Finance Importer', 'FIN:Import', 'tester')).id;
+  v_import_draft := app.create_role_version(v_import_role, 'tester');
+  perform app.set_role_version_permissions(v_import_draft.id, array(select id from app.permissions where resource_module_code = 'FIN' and action = 'Import'), 'tester');
+  perform app.publish_role_version(v_import_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_import_role and status = 'published'), v_fm, v_fm, 'tester');
+
+  perform app.register_document_type('finance_opening_balance_source', 'Finance Opening Balance Source File', 'FIN', v_supreme, 'supreme');
+  v_doctype_draft := app.create_config_draft('document:finance_opening_balance_source', v_tenant_a, 'tenant', null, v_fm, 'financemanagera');
+  perform app.set_config_items(v_doctype_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('text/csv')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', to_jsonb(10485760)),
+    jsonb_build_object('key', 'retention_class', 'value', to_jsonb('operational_contract_plus_90d'::text)),
+    jsonb_build_object('key', 'default_classification', 'value', to_jsonb('internal'::text)),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', to_jsonb(false))
+  ), v_fm, 'financemanagera');
+  perform app.publish_document_type_definition(v_doctype_draft.id, v_fm, now(), 'financemanagera');
+
+  v_schema_draft := app.create_config_draft('import_export:finance_opening_balance_import', v_tenant_a, 'tenant', null, v_fm, 'financemanagera');
+  perform app.set_config_items(
+    v_schema_draft.id,
+    jsonb_build_array(jsonb_build_object('key', 'columns', 'value', jsonb_build_array(
+      jsonb_build_object('key', 'open_item_type', 'label', 'AR or AP', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'party_tax_id', 'label', 'Customer tax id', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'party_legal_name', 'label', 'Customer legal name', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'party_vendor_code', 'label', 'Vendor code', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'currency', 'label', 'Currency', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'original_amount', 'label', 'Amount', 'required', true, 'data_type', 'number'),
+      jsonb_build_object('key', 'document_date', 'label', 'Document date', 'required', true, 'data_type', 'date'),
+      jsonb_build_object('key', 'due_date', 'label', 'Due date', 'required', true, 'data_type', 'date')
+    ), 'canonical_ref', null)),
+    v_fm, 'financemanagera'
+  );
+  perform app.publish_import_export_schema(v_schema_draft.id, v_fm, now(), 'financemanagera');
+end $$;
+
+\echo '>> ISS-2026-273: the opening-balance import validates ar/ap, currency, amount sign and scale, dates, an OPEN fiscal period and counterparty resolution (ambiguity refused); a real batch posts BOTH the open item and its balanced GL entry in one transaction; the equity counter-account carries the offset; reconciliation now counts them and reports openingBalancesFullyPostedToGl'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmesubla');
+  v_fm uuid := '00000000-0000-0000-0000-000000029702';
+  v_editor uuid := '00000000-0000-0000-0000-000000029703';
+  v_customer_id uuid;
+  v_customer_tax text := '09.876.543.2-109.000';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+  v_ids uuid[];
+  v_idx integer;
+  v_status text;
+  v_error text;
+  v_ar app.finance_ar_open_items;
+  v_ap app.finance_ap_open_items;
+  v_batch app.finance_subledger_batches;
+  v_equity app.finance_accounts;
+  v_equity_balance numeric(14, 2);
+  v_summary jsonb;
+  v_summary_before jsonb;
+begin
+  -- A customer with a resolvable tax id, and a second one whose legal name collides, so
+  -- the ambiguity path is exercised against a real collision rather than a contrived one.
+  select id into v_customer_id from app.accounts where tenant_id = v_tenant_a and legal_name = 'Acme Subledger Customer';
+  update app.accounts
+  set tax_id = v_customer_tax, normalized_tax_id = app.normalize_prospect_identifier(v_customer_tax),
+      normalized_legal_name = app.normalize_prospect_identifier('Acme Subledger Customer')
+  where id = v_customer_id;
+
+  insert into app.accounts (tenant_id, legal_name, normalized_legal_name, duplicate_fingerprint, billing_address, created_by)
+  values (v_tenant_a, 'Acme Subledger Customer', app.normalize_prospect_identifier('Acme Subledger Customer'),
+          'acmesubl-ambiguous-twin-fingerprint', '{}'::jsonb, 'tester');
+
+  select app.get_finance_subledger_reconciliation_summary(v_tenant_a, v_fm) into v_summary_before;
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant_a, 'finance_opening_balance_source', 'import_source', gen_random_uuid(),
+    'opening-balances.csv', 'text/csv', 4096, 'internal', false, null, null, null,
+    'idem-fin-ob-source', v_fm, 'financemanagera'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_fm, 'financemanagera');
+  v_job := app.create_import_export_job(v_tenant_a, 'import', 'finance_opening_balance_import', v_source_file.id, '{}'::jsonb, 'idem-fin-ob-job', v_fm, 'financemanagera');
+
+  perform app.stage_import_rows(
+    v_job.job_id,
+    jsonb_build_array(
+      -- 1: valid AR, customer resolved by tax id.
+      jsonb_build_object('open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+                         'original_amount', '1250.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25'),
+      -- 2: valid AP, vendor resolved by code (VEND-SUBL-1 exists from the earlier block).
+      jsonb_build_object('open_item_type', 'ap', 'party_vendor_code', 'VEND-SUBL-1', 'currency', 'USD',
+                         'original_amount', '400.00', 'document_date', '2026-03-06', 'due_date', '2026-03-26'),
+      -- 3: neither ar nor ap.
+      jsonb_build_object('open_item_type', 'gl', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+                         'original_amount', '10.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25'),
+      -- 4: a negative amount -- a sign error in a cutover extract must not abort the batch
+      --    at row 700; it is caught at validation.
+      jsonb_build_object('open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+                         'original_amount', '-50.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25'),
+      -- 5: more precision than numeric(14,2) can store. Rounding a customer's opening debt
+      --    is exactly the quiet difference §24 forbids, so it is refused, not rounded.
+      jsonb_build_object('open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+                         'original_amount', '10.005', 'document_date', '2026-03-05', 'due_date', '2026-03-25'),
+      -- 6: a date outside any open fiscal period.
+      jsonb_build_object('open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+                         'original_amount', '10.00', 'document_date', '2019-01-01', 'due_date', '2019-02-01'),
+      -- 7: due before document date.
+      jsonb_build_object('open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+                         'original_amount', '10.00', 'document_date', '2026-03-20', 'due_date', '2026-03-10'),
+      -- 8: an AMBIGUOUS customer name -- two active accounts normalize identically.
+      jsonb_build_object('open_item_type', 'ar', 'party_legal_name', 'Acme Subledger Customer', 'currency', 'USD',
+                         'original_amount', '10.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25'),
+      -- 9: an AP row naming no vendor at all.
+      jsonb_build_object('open_item_type', 'ap', 'currency', 'USD',
+                         'original_amount', '10.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25'),
+      -- 10: an unregistered currency.
+      jsonb_build_object('open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'ZZZ',
+                         'original_amount', '10.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25')
+    ),
+    v_fm, 'financemanagera'
+  );
+
+  select array_agg(id order by row_number) into v_ids from app.import_staging_rows where job_id = v_job.job_id;
+  for v_idx in 1..10 loop
+    perform app.validate_finance_opening_balance_import_row(v_ids[v_idx], v_fm, 'financemanagera');
+  end loop;
+
+  if (select validation_status from app.import_staging_rows where id = v_ids[1]) <> 'valid'
+     or (select validation_status from app.import_staging_rows where id = v_ids[2]) <> 'valid' then
+    raise exception 'assertion failed: expected rows 1 (AR) and 2 (AP) to validate cleanly';
+  end if;
+
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[3];
+  if v_status <> 'invalid' or v_error not like '%must be ar or ap%' then
+    raise exception 'assertion failed: row 3, got status=% error=%', v_status, v_error;
+  end if;
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[4];
+  if v_status <> 'invalid' or v_error not like '%must be positive%' then
+    raise exception 'assertion failed: row 4, got status=% error=%', v_status, v_error;
+  end if;
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[5];
+  if v_status <> 'invalid' or v_error not like '%would be silently rounded on storage%' then
+    raise exception 'assertion failed: row 5, got status=% error=%', v_status, v_error;
+  end if;
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[6];
+  if v_status <> 'invalid' or v_error not like '%no fiscal period covers%' then
+    raise exception 'assertion failed: row 6, got status=% error=%', v_status, v_error;
+  end if;
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[7];
+  if v_status <> 'invalid' or v_error not like '%is before document_date%' then
+    raise exception 'assertion failed: row 7, got status=% error=%', v_status, v_error;
+  end if;
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[8];
+  if v_status <> 'invalid' or v_error not like '%ambiguous%' then
+    raise exception 'assertion failed: row 8 -- posting one customer''s opening debt against another''s account is a misstatement, so ambiguity must be refused, got status=% error=%', v_status, v_error;
+  end if;
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[9];
+  if v_status <> 'invalid' or v_error not like '%requires party_vendor_code%' then
+    raise exception 'assertion failed: row 9, got status=% error=%', v_status, v_error;
+  end if;
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[10];
+  if v_status <> 'invalid' or v_error not like '%not a registered, active currency%' then
+    raise exception 'assertion failed: row 10, got status=% error=%', v_status, v_error;
+  end if;
+
+  -- The Finance Editor holds FIN:Edit/View but neither tenant_admin nor FIN:Import.
+  begin
+    perform app.commit_finance_opening_balance_import_job(v_job.job_id, true, v_editor, 'financeeditora');
+    raise exception 'assertion failed: expected insufficient_authority for an actor without FIN:Import';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  v_updated := app.commit_finance_opening_balance_import_job(v_job.job_id, true, v_fm, 'financemanagera');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected the opening-balance job to complete, got %', v_updated.status;
+  end if;
+
+  -- The open item exists, keyed by the staging row id -- no second provenance column.
+  select * into v_ar from app.finance_ar_open_items
+  where tenant_id = v_tenant_a and source_document_type = 'opening_balance' and source_document_id = v_ids[1];
+  if not found or v_ar.original_amount <> 1250.00 or v_ar.customer_account_id <> v_customer_id then
+    raise exception 'assertion failed: expected row 1 to have produced a 1250.00 AR opening balance against the resolved customer, got %', v_ar;
+  end if;
+  select * into v_ap from app.finance_ap_open_items
+  where tenant_id = v_tenant_a and source_document_type = 'opening_balance' and source_document_id = v_ids[2];
+  if not found or v_ap.original_amount <> 400.00 then
+    raise exception 'assertion failed: expected row 2 to have produced a 400.00 AP opening balance, got %', v_ap;
+  end if;
+
+  -- ...and so does its GL batch. This is the half that never existed before ISS-2026-273.
+  select * into v_batch from app.finance_subledger_batches
+  where tenant_id = v_tenant_a and source_type = 'opening_balance' and source_id = v_ar.id;
+  if not found or v_batch.total_amount <> 1250.00 then
+    raise exception 'assertion failed: expected a balanced opening_balance subledger batch of 1250.00 for the AR item, got %', v_batch;
+  end if;
+  if (select count(*) from app.finance_subledger_lines where batch_id = v_batch.id) <> 2 then
+    raise exception 'assertion failed: expected exactly 2 lines (control + equity) on the opening-balance batch';
+  end if;
+
+  -- The equity counter-account carries the offset, in the right direction on both sides:
+  -- credited 1250 by the AR item and debited 400 by the AP item, net 850 credit.
+  v_equity := app.resolve_finance_posting_map_account(v_tenant_a, 'opening_balance_equity');
+  select coalesce(sum(case when l.direction = 'credit' then l.amount else -l.amount end), 0) into v_equity_balance
+    from app.finance_subledger_lines l join app.finance_subledger_batches b on b.id = l.batch_id
+    where b.tenant_id = v_tenant_a and l.account_id = v_equity.id;
+  if v_equity_balance <> 850.00 then
+    raise exception 'assertion failed: expected opening_balance_equity net credit of 850.00 (1250 AR credit less 400 AP debit), got %', v_equity_balance;
+  end if;
+
+  -- Reconciliation counts the newly-posted opening balances on BOTH sides and stays exact.
+  select app.get_finance_subledger_reconciliation_summary(v_tenant_a, v_fm) into v_summary;
+  if (v_summary ->> 'arReconciled')::boolean is not true or (v_summary ->> 'apReconciled')::boolean is not true then
+    raise exception 'assertion failed: expected reconciliation to remain exact once opening balances post to the GL -- this is the case that would have read UNRECONCILED under the old invoice-only filter, got %', v_summary;
+  end if;
+  if (v_summary ->> 'arOpenItemTotal')::numeric - (v_summary_before ->> 'arOpenItemTotal')::numeric <> 1250.00 then
+    raise exception 'assertion failed: expected arOpenItemTotal to move by exactly the imported 1250.00, before=% after=%', v_summary_before, v_summary;
+  end if;
+  if (v_summary ->> 'apOpenItemTotal')::numeric - (v_summary_before ->> 'apOpenItemTotal')::numeric <> 400.00 then
+    raise exception 'assertion failed: expected apOpenItemTotal to move by exactly the imported 400.00, before=% after=%', v_summary_before, v_summary;
+  end if;
+  -- The earlier un-posted 999 opening balance is still outstanding and still reported.
+  if (v_summary ->> 'arOpeningBalanceNotPostedToGl')::numeric <> 999
+     or (v_summary ->> 'openingBalancesFullyPostedToGl')::boolean is not false then
+    raise exception 'assertion failed: expected the earlier un-posted 999 opening balance to remain visible and keep openingBalancesFullyPostedToGl false, got %', v_summary;
+  end if;
+
+  -- Posting THAT one closes the loop: the report flips to fully posted.
+  perform app.post_finance_opening_balance_batch('ar', (select id from app.finance_ar_open_items where tenant_id = v_tenant_a and source_document_type = 'opening_balance' and original_amount = 999), v_fm, 'financemanagera');
+  select app.get_finance_subledger_reconciliation_summary(v_tenant_a, v_fm) into v_summary;
+  if (v_summary ->> 'arOpeningBalanceNotPostedToGl')::numeric <> 0
+     or (v_summary ->> 'openingBalancesFullyPostedToGl')::boolean is not true
+     or (v_summary ->> 'arReconciled')::boolean is not true then
+    raise exception 'assertion failed: expected posting the last outstanding opening balance to flip openingBalancesFullyPostedToGl true with reconciliation still exact, got %', v_summary;
+  end if;
+
+  -- Replay is refused, and creates nothing.
+  begin
+    perform app.commit_finance_opening_balance_import_job(v_job.job_id, true, v_fm, 'financemanagera');
+    raise exception 'assertion failed: expected import_export_job_not_committable on a replayed commit';
+  exception when sqlstate '23514' then
+    if sqlerrm not like 'import_export_job_not_committable%' then raise; end if;
+  end;
+
+  -- The GL posting is itself idempotent per open item.
+  v_batch := app.post_finance_opening_balance_batch('ar', v_ar.id, v_fm, 'financemanagera');
+  if (select count(*) from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'opening_balance' and source_id = v_ar.id) <> 1 then
+    raise exception 'assertion failed: expected a repeated opening-balance GL post to return the existing batch, not create a second';
+  end if;
+
+  -- It refuses a non-opening-balance open item outright, so it can never be used to
+  -- double-post an invoice that already has its own batch.
+  begin
+    perform app.post_finance_opening_balance_batch('ar', (select id from app.finance_ar_open_items where tenant_id = v_tenant_a and source_document_type = 'invoice' limit 1), v_fm, 'financemanagera');
+    raise exception 'assertion failed: expected finance_opening_balance_wrong_source_type for an invoice-sourced open item';
+  exception when check_violation then
+    null;
+  end;
+end $$;
+
+\echo '>> ISS-2026-273: neither anon nor authenticated holds EXECUTE on the new opening-balance functions or their public wrappers'
+do $$
+declare
+  v_has boolean;
+  v_fn text;
+begin
+  foreach v_fn in array array[
+    'app.post_finance_opening_balance_batch(text, uuid, uuid, text)',
+    'app.validate_finance_opening_balance_import_row(uuid, uuid, text)',
+    'app.commit_finance_opening_balance_import_job(uuid, boolean, uuid, text, text)',
+    'public.post_finance_opening_balance_batch(text, uuid, uuid, text)',
+    'public.validate_finance_opening_balance_import_row(uuid, uuid, text)',
+    'public.commit_finance_opening_balance_import_job(uuid, boolean, uuid, text, text)'
+  ] loop
+    select has_function_privilege('anon', v_fn, 'EXECUTE') into v_has;
+    if v_has then raise exception 'assertion failed: anon must hold no EXECUTE on %', v_fn; end if;
+    select has_function_privilege('authenticated', v_fn, 'EXECUTE') into v_has;
+    if v_has then raise exception 'assertion failed: authenticated must hold no EXECUTE on %', v_fn; end if;
+  end loop;
+end $$;

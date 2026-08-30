@@ -1427,6 +1427,63 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (382 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-second pass), migrationSetSha256 and
+ * dbTestSetSha256. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-273` (High) -- two coupled gaps: no bulk opening-balance import
+ * path existed at all, and opening balances never reached the general ledger
+ * (FIN-202 disclosed the second and named it a live constraint on any future
+ * opening-balance import; this migration builds that import). Closed together
+ * in one new migration (382 -> 383 files: +1,
+ * `20260830130000_create_finance_opening_balance_import_and_gl_posting.sql`),
+ * because closing either alone would leave the other making the first untrue.
+ *
+ * The GL entry posts against a NEW `opening_balance_equity` finance_posting_map
+ * key rather than a hardcoded account: an unconfigured tenant fails closed with
+ * finance_subledger_missing_mapping instead of having an equity account guessed
+ * for it. `app.get_finance_subledger_reconciliation_summary` is corrected, not
+ * merely widened -- its old invoice-only filter would have made a correctly
+ * migrated tenant read UNRECONCILED once opening balances started emitting
+ * batches, while including all of them would have hidden a real difference; it
+ * now counts posted opening balances in the total, reports unposted ones
+ * explicitly, and carries an openingBalancesFullyPostedToGl boolean.
+ *
+ * TWO defects in this migration were caught by existing gates rather than by
+ * its author, and are recorded rather than quietly corrected: (1) the
+ * CREATE OR REPLACE of get_finance_subledger_reconciliation_summary was written
+ * from the ORIGINAL 20260729160000 definition and silently dropped the
+ * SECURITY DEFINER that 20260810900000 had added -- the exact defect
+ * 20260811200000 introduced on request_finance_settlement_reversal and RGL-404
+ * later had to find; public-api-wrapper-regression.sql's mode-parity check
+ * failed the run. (2) The CHECK constraint on
+ * finance_subledger_batches.source_type is not the only gate --
+ * app.post_finance_subledger_batch carries its own `not in (...)` list, and
+ * widening one without the other left opening balances rejected outright. That
+ * function's ~140-line body is now a SCRIPT-EXTRACTED, mechanically patched
+ * copy of 20260811000000's definition with exactly one line changed, its
+ * security definer and search_path clauses carried along -- nothing retyped,
+ * because restating that much balanced-posting and journal-emission logic by
+ * hand is the transcription risk the thirtieth pass argued against.
+ *
+ * The Inventory and HRIS instances of the same non-bulk opening-balance pattern
+ * are NOT closed and are carried forward as `ISS-2026-303` (Medium) -- ordinary
+ * PLT-131 adapter work with no double-entry coupling, and not the same change.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count --
+ * `scripts/db-tests/finance-subledger.sql` widened, no file added or removed):
+ * an opening-balance setup block and a 10-row import scenario covering every
+ * validator branch, both halves posting in one transaction, the equity
+ * counter-account carrying a net 850.00 credit in the right direction on both
+ * sides, reconciliation staying exact (the case that would have read
+ * UNRECONCILED under the old filter), GL-post idempotency, and refusal to post
+ * an invoice-sourced item. The file's pre-existing assertion about an un-posted
+ * opening balance was STRENGTHENED rather than adjusted -- it now also asserts
+ * the item is reported rather than filtered away.
+ *
+ * Re-verified via a fresh full local db-test suite run (383 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1602,8 +1659,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (381 files, thirtieth-pass amendment above). Superseded 2026-08-30
   // (thirty-first pass) by ISS-2026-274's customer/item import adapters (382
   // files: +1, 20260830120000_create_customer_and_item_import_adapters.sql).
-  // See the class-level doc comment above.
-  migrationSetSha256: "eebd52b277bc7674ba8870c65949343319fe602eefc8d0071ea34eaf1ffa447e",
+  // History: eebd52b277bc7674ba8870c65949343319fe602eefc8d0071ea34eaf1ffa447e
+  // (382 files, thirty-first-pass amendment above). Superseded 2026-08-30
+  // (thirty-second pass) by ISS-2026-273's opening-balance import and GL
+  // posting (383 files: +1, 20260830130000_create_finance_opening_balance_
+  // import_and_gl_posting.sql). See the class-level doc comment above.
+  migrationSetSha256: "b5d845458ed0e16e687446511fa19132ee8f89ecf9a161e302face6769cd444c",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1787,9 +1848,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (235 files, thirtieth-pass amendment above). Superseded 2026-08-30
   // (thirty-first pass) by ISS-2026-274 (236 files: +1, scripts/db-tests/
   // master-data-import.sql, new -- advanced-tms-item-uom-master.sql also
-  // changed, a corrected comment rather than a new file). See the class-level
-  // doc comment above.
-  dbTestSetSha256: "2c74593b6c4df816cc476824fd656e97bc153b3d0b5ac5b177d06c4a47ea6572",
+  // changed, a corrected comment rather than a new file).
+  // History: 2c74593b6c4df816cc476824fd656e97bc153b3d0b5ac5b177d06c4a47ea6572
+  // (236 files, thirty-first-pass amendment above). Superseded 2026-08-30
+  // (thirty-second pass) by ISS-2026-273 (236 files unchanged in count --
+  // finance-subledger.sql widened, no file added or removed). See the
+  // class-level doc comment above.
+  dbTestSetSha256: "748ede7ef8b7a48e15084ea67a964610b1edaaa1aa5810ae43bbc2f402ab4c4b",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

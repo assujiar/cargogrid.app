@@ -4014,7 +4014,7 @@ Business rule (Prompt 385 §24) states "Enterprise tenants require at least two 
 
 **`RESOLVED` (partial by design, disclosed), 2026-08-25 (Step 16 historical-issue-backlog remediation), the real additive schema change this entry's own text anticipated.** `supabase/migrations/20260826140000_create_migration_rehearsal_tracking.sql` adds `app.migration_rehearsal_tests`/`app.record_migration_rehearsal_test` — a real evidence table and recording RPC mirroring `app.dr_restore_tests`/`app.record_dr_restore_test`'s own honesty discipline verbatim (a `'failed'` result requires a real `failure_reason`/`recovery_steps`/future `retest_scheduled_at`; a blank `scope_summary` is rejected) — plus a 7th checklist item, `migration_rehearsal_verified`, computed live on `app.verify_onboarding_checklist_item` as `>=2` passed rehearsals recorded for the tenant, exactly like the other 5 automated items on that same table. **Confirmed with the operator via `AskUserQuestion` before implementing** the one real design ambiguity this fix surfaced: the underlying business rule is "at least two rehearsals **where contracted**", and no "is migration rehearsal contracted" flag exists anywhere in this schema — wiring the new item unconditionally into the existing `status='ready_for_production'` composite gate the other 6 items form would have newly required *every* tenant, contracted or not, to complete 2 rehearsals to reach that status, a real behavior change to existing tenant onboarding gating. Per the operator's explicit choice, `migration_rehearsal_verified` is deliberately **not** added to that gate — it is a real, live-computed, visible signal on its own, confirmed by direct diff to leave the original 6-item composite byte-for-byte unchanged. New regression in `scripts/db-tests/disaster-recovery-enterprise-support.sql` proves the new RPC's authority/validation discipline, that the item correctly requires 2 passed rehearsals and recomputes live, and — the central point of this fix — that flipping it from `false` to `true` never changes `status`, proved directly by comparing the checklist's `status` before and after rather than merely asserted in a comment. Verified via a full local `db-tests` suite re-run, `ALL PASSED` on the first attempt. Applied to the live hosted project via `apply_migration`, live-verified via `has_function_privilege`/`pg_get_functiondef`. Wiring this item into the readiness gate (once a real "contracted" flag exists to condition it on) remains a dedicated future task, same as this entry's own original disposition.
 
-### ISS-2026-273 — no bulk financial opening-balance import path exists at all; the one domain requiring "exact reconciliation" by business rule has no batch mechanism, and the existing single-record path never reaches the GL journal (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, High, owner a dedicated future task)
+### ISS-2026-273 — no bulk financial opening-balance import path exists at all; the one domain requiring "exact reconciliation" by business rule has no batch mechanism, and the existing single-record path never reaches the GL journal (found at `HDN-385` Data Migration Rehearsal, live investigation, `RESOLVED` 2026-08-30, High) — Inventory/HRIS half carried forward as `ISS-2026-303`
 
 Business rule (Prompt 385 §24) states "Financial opening balances require exact reconciliation." `app.post_finance_ar_open_item()`/`app.post_finance_ap_open_item()` are real, genuinely idempotent single-record RPCs (live-confirmed: a retried call on the same `source_document_id` returns the identical row, no duplicate) — but no staging/mapping/preview pipeline, no CSV/file ingestion, and no batch wrapper exists anywhere for them, confirmed by direct code inventory (`server/mutations/accounts-receivable.ts`/`accounts-payable.ts` expose the RPCs 1:1, no bulk variant). **`FIN-202.md` self-discloses** that an `opening_balance`-sourced AR/AP item "does not yet emit a subledger batch" — meaning it posts to the AR/AP subledger but never reaches the GL journal — and `FIN-202`'s own reconciliation function explicitly excludes `opening_balance`-sourced items from its comparison rather than breaking on them. Live-reproduced this checkpoint: 3 opening-balance postings reconciled exactly at the open-items level (USD 19250.50, SGD 9999.99, 3 items), but `app.finance_subledger_batches` remained at 0 rows for them, confirming the disclosed gap directly rather than assuming it. The identical bespoke, non-bulk, disconnected-from-`PLT-131` pattern repeats independently in Inventory (`opening_balance` movement type) and HRIS (leave/permit balances, payroll loan cutover flags).
 
@@ -4034,6 +4034,112 @@ session has used for every other Finance-correctness decision. **Compensating co
 built**: the single-record `post_finance_ar_open_item`/`app.post_finance_ap_open_item` RPCs remain
 the only sanctioned path, and `FIN-202`'s own reconciliation function continues to correctly
 exclude `opening_balance`-sourced items rather than silently misreporting them as reconciled.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A — both halves, in one migration,
+`20260830130000_create_finance_opening_balance_import_and_gl_posting.sql`. They are closed
+together deliberately: closing either alone would leave the other making the first one
+untrue.
+
+**On the GL half.** `FIN-202`'s own disclosure was correct when written and says so
+precisely — the gap was acceptable "since Phase 4 remains a greenfield internal delivery
+gate with no real historical balance to reconcile yet", and its §19 constraint is described
+as live "on any *future* opening-balance import". This migration builds that import, so
+closing the GL gap is the follow-through `FIN-202` itself anticipated, not a reversal of it.
+
+`app.post_finance_opening_balance_batch` emits the balanced entry an opening balance never
+had: AR debits `ar_control` and credits `opening_balance_equity`; AP debits
+`opening_balance_equity` and credits `ap_control`. **`opening_balance_equity` is a new
+`finance_posting_map` key, never a hardcoded account** — which real GL account it points at
+is the tenant's accountant's decision, and a tenant that has not configured it gets
+`finance_subledger_missing_mapping` and posts nothing. Guessing an equity account on a
+customer's behalf is how migrations end up silently wrong.
+
+**The reconciliation summary is corrected, not merely widened.** Once opening balances emit
+batches, the old `source_document_type = 'invoice'` filter becomes *actively wrong*: the
+subledger side sums every line hitting `ar_control` (now including opening balances) while
+the open-item side would still exclude them, so a correctly-migrated tenant would read as
+UNRECONCILED. Widening the filter to include all opening balances would be wrong the other
+way: one with no batch would vanish into a total. So the summary now counts opening
+balances that **have** a batch inside the reconciled total, reports those that do **not** as
+`arOpeningBalanceNotPostedToGl`/`apOpeningBalanceNotPostedToGl`, and carries a top-level
+`openingBalancesFullyPostedToGl`. Prompt 385 §24's "exact reconciliation" means being able
+to see a difference, not excluding it from the comparison.
+
+**On the import half.** One `finance_opening_balance_import` schema handles both AR and AP
+(a cutover extract is normally one trial-balance file). Every committed row does **both**
+halves in the same transaction — the open item and its GL batch — so a state where the
+subledger and the ledger disagree is not reachable even by a commit that fails midway. The
+staged row id **is** the `source_document_id`: `finance_ar_open_items_source_unique` already
+makes that the idempotency key and both primitives already return the existing row on retry,
+so no second provenance column is added — two sources of truth for one fact can disagree.
+Authority is additive, never a bypass: `app.is_support_grant_authority` AND `FIN:Import` on
+the adapter, with the primitives' own `FIN:Approve` still enforced per row.
+
+The validator does its work at validation time precisely so a thousand-row cutover does not
+abort on row 700 and roll back everything before it: `ar`/`ap` discrimination, a registered
+active currency, a positive amount **that does not carry more than 2 decimal places**
+(rounding a customer's opening debt is exactly the quiet difference §24 forbids), real dates
+with due ≥ document, a fiscal period that exists **and is open**, and counterparty
+resolution. An ambiguous customer name is an error, never a silent pick — posting one
+customer's opening debt against another's account is a financial misstatement. The
+counterparty is re-resolved at write time, since an account can be merged in between.
+
+**Two defects in this fix were caught by existing gates rather than by me, and are recorded
+rather than quietly corrected.** (1) The `CREATE OR REPLACE` of
+`app.get_finance_subledger_reconciliation_summary` was written from the original
+`20260729160000` definition and silently dropped the `SECURITY DEFINER`
+`20260810900000` had added — the exact latent defect `20260811200000` introduced on
+`app.request_finance_settlement_reversal` and `RGL-404` later had to find;
+`public-api-wrapper-regression.sql`'s mode-parity check failed the run. (2) The `CHECK`
+constraint on `finance_subledger_batches.source_type` is not the only gate —
+`app.post_finance_subledger_batch` carries its own `not in (...)` list, and widening one
+without the other left opening balances rejected outright; the regression caught it. That
+function's ~140-line body is now a **script-extracted, mechanically patched** copy of
+`20260811000000`'s definition with exactly one line changed, `security definer` and
+`search_path` carried along — nothing retyped.
+
+Evidence: `scripts/db-tests/finance-subledger.sql` gained an opening-balance setup block and
+a 10-row import scenario covering every validator branch, the authority refusal, both halves
+posting in one transaction, the equity counter-account carrying a net 850.00 credit
+(1250 AR credit less 400 AP debit) in the right direction on both sides, reconciliation
+staying exact — the case that would have read UNRECONCILED under the old filter — the last
+outstanding opening balance flipping `openingBalancesFullyPostedToGl` true, replay refusal,
+GL-post idempotency, refusal to post an invoice-sourced item (so it can never double-post an
+invoice that already has a batch), and the anon/authenticated grant matrix. The file's
+pre-existing assertion about an un-posted opening balance was strengthened rather than
+adjusted: it now also asserts the item is **reported** as `arOpeningBalanceNotPostedToGl`
+instead of vanishing into a filter. Full `pnpm run db:test` `ALL PASSED`.
+
+**One thing this does not claim.** The identical bespoke, non-bulk `opening_balance` pattern
+this entry also names in Inventory (the `opening_balance` movement type) and HRIS (leave and
+permit balances, payroll loan cutover flags) is **not** closed here. Those are different
+domains with different primitives and no financial double-entry to reconcile; they are
+carried forward as `ISS-2026-303`.
+
+### ISS-2026-303 — Inventory and HRIS still have no bulk opening-balance import (OPEN, Medium)
+
+Split out of `ISS-2026-273` on 2026-08-30 when its Finance half was closed, so a partial
+closure does not retire a multi-domain finding.
+
+`ISS-2026-273` observed that the bespoke, non-bulk, disconnected-from-`PLT-131`
+opening-balance pattern repeats in three domains. Finance is closed
+(`20260830130000`). Inventory (the `opening_balance` movement type) and HRIS (leave/permit
+balances, payroll loan cutover flags) are not: each has its own single-record primitive, its
+own validation rules, and no import adapter.
+
+They were not folded into the Finance fix because they are not the same change. Finance's
+half was coupled to a real double-entry correctness gap (opening balances never reaching the
+GL) that had to be closed in the same migration or the import would have written a
+half-migrated ledger. Inventory and HRIS have no such coupling — they are ordinary
+`PLT-131` adapter work, following the pattern now established four times over
+(`vendor_import`, `customer_import`, `item_import`,
+`finance_opening_balance_import`).
+
+**Status `OPEN`**, Medium. **Risk in plain terms:** a tenant migrating from another system
+can now bring its customers, vendors, items and open financial balances across in bulk, but
+must still enter opening stock quantities and staff leave balances by hand. For a warehouse
+with thousands of SKUs or a company with hundreds of staff that is slow and error-prone, but
+nothing is silently wrong — the single-record paths that exist are correct and audited.
 
 ### ISS-2026-274 — no master-data (customer/vendor/item) or tenant-setup bulk-import mechanism exists anywhere (found at `HDN-385` Data Migration Rehearsal, live investigation, `RESOLVED` 2026-08-30, Medium)
 
