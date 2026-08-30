@@ -1740,6 +1740,54 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (387 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-eighth pass), migrationSetSha256 and
+ * dbTestSetSha256. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-155` (Medium) -- `app.raise_observability_alert` deduplicates on
+ * (tenant_id, source_type, signal_type), and `app.evaluate_workload_budget`
+ * maps seven workload types onto four source types, so `analytics` and
+ * `reports` both arrive as 'job'. A tenant breaching both inside the dedup
+ * window opened ONE incident; the second was filed as a duplicate_signal and
+ * its workload was never named anywhere. One new migration (387 -> 388 files:
+ * +1, 20260830180000_add_observability_alert_dedupe_discriminator.sql).
+ *
+ * Three earlier passes reached the same two options and rejected both,
+ * correctly: widen the shared CHECK enums, or let IAE-034 raise outside the
+ * dedup mechanism. The third shape none considered is an OPTIONAL extra
+ * dimension -- a nullable column, a seventh parameter defaulting to null, one
+ * caller that passes something. Same additive-optional-parameter move as
+ * `p_effective_date` (20260731310000) and `p_client_ip` (20260826190000), for
+ * the same reason: a parameter a caller does not know about cannot regress it.
+ *
+ * Overloaded rather than DROP+CREATE: CREATE OR REPLACE cannot add a
+ * parameter, and dropping the 6-argument form would mean dropping its public.*
+ * wrapper and recreating both. The 7-argument form carries the body; the
+ * 6-argument form delegates with null. One implementation, no dependency churn.
+ *
+ * `v_source_type` stays coarse deliberately -- it routes the incident to an
+ * owner team via app.alert_routes, and re-pointing it would have silently
+ * re-routed every workload alert while appearing to fix the symptom.
+ *
+ * Two things that would each have been a silent regression, both caught while
+ * writing rather than by a test: the lookup needs `is not distinct from`, since
+ * `=` would stop all seven null-discriminator producers deduplicating; and the
+ * advisory lock key needs the discriminator too, keyed on exactly what the
+ * lookup filters, or the check-then-act race the lock closes reopens.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count --
+ * scale-up-architecture.sql widened, no file added or removed). It asserts the
+ * two workloads now separate, that each incident carries its workload while
+ * source_type stays 'job', that a repeat breach of the SAME workload still
+ * reuses its incident with exactly one duplicate_signal, and that two
+ * null-discriminator signals still collapse. The strongest non-regression proof
+ * was already in the tree and is untouched: background-job.sql still asserts
+ * two distinct job_types dead-lettering for one tenant collapse into one
+ * incident -- that producer passes no discriminator.
+ *
+ * Re-verified via a fresh full local db-test suite run (388 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1938,7 +1986,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (thirty-sixth pass) by ISS-2026-307's durable IP-access evaluation (387
   // files: +1, 20260830170000_create_durable_ip_access_evaluation.sql). See
   // the class-level doc comment above.
-  migrationSetSha256: "9eaff92625219ddc8619c01e5012667089ca339789733cc97afe71af38974bc3",
+  // History: 9eaff92625219ddc8619c01e5012667089ca339789733cc97afe71af38974bc3
+  // (387 files, thirty-sixth-pass amendment above). Superseded 2026-08-30
+  // (thirty-eighth pass) by ISS-2026-155's alert dedup discriminator (388
+  // files: +1, 20260830180000_add_observability_alert_dedupe_discriminator.sql).
+  // See the class-level doc comment above.
+  migrationSetSha256: "d594538bf46479d34d1cb77dae790869ce87b7f37dfb033f63a5e05aa5467827",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2151,7 +2204,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // integration-hub.sql widened with the INTHUB:Configure step-up proof, no
   // migration added: the enforcement already shipped at 20260830110000). See
   // the class-level doc comment above.
-  dbTestSetSha256: "acbf2f047e9dc181408457c4d4401a2d18d6d0c4a609d228d76317364bc63f78",
+  // History: acbf2f047e9dc181408457c4d4401a2d18d6d0c4a609d228d76317364bc63f78
+  // (236 files, thirty-seventh-pass amendment above). Superseded 2026-08-30
+  // (thirty-eighth pass) by ISS-2026-155 (236 files unchanged in count --
+  // scale-up-architecture.sql widened with the dedup-discriminator proof). See
+  // the class-level doc comment above.
+  dbTestSetSha256: "33b21176ca55a840895858d839c6f7c0670c63d4c77a699ff9e231ed86cb6b2f",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

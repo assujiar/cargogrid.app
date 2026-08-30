@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 92 — 4 High, 44 Medium, 44 Low |
+| `OPEN` | 90 — 4 High, 42 Medium, 44 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 165 |
+| `RESOLVED` | 167 |
 | **Total records** | **262** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -71,7 +71,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-079` | Medium | `OPEN` | Payroll Foundation (HRT-282): `app.calculate_payroll_run`'s claimed multi-transaction crash-resumability (`app.claim_next_job`/`app.record_job_failure |
 | `ISS-2026-086` | Medium | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): `TKT:Edit` grants blanket, tenant-wide, non-queue-scoped ticket-content staff status via `app.is_tick |
 | `ISS-2026-091` | Medium | `OPEN` | Sensitive Personal and Payroll Data Controls (HRT-293): RPD-025 retention/legal-hold classification is unbuilt for every Phase 7 HR/payroll structured |
-| `ISS-2026-092` | Medium | `OPEN` | Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant membe |
+| `ISS-2026-092` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant membe |
 | `ISS-2026-100` | Medium | `OPEN` | Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the re |
 | `ISS-2026-125` | Medium | `OPEN` | Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), p |
 | `ISS-2026-138` | Medium | `OPEN` | RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud rele |
@@ -80,7 +80,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-142` | Medium | `OPEN` | Customer Portal and Loyalty Closure Verification (CPL-327): RPD-025 retention/legal-hold classification is unbuilt for every Phase 8 Customer Portal/L |
 | `ISS-2026-148` | Medium | `OPEN` | zero load/performance-test evidence exists for any Phase 9 route or RPC at a declared target volume, undisclosed until now |
 | `ISS-2026-153` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 9's own ~9 new admin/reporting/automation/integration UI routes |
-| `ISS-2026-155` | Medium | `OPEN` | a genuine breach of two different `job`-mapped workload types (e.g. `analytics` + `reports`) for the same tenant within the dedup window collapses int |
+| `ISS-2026-155` | Medium | `RESOLVED` | a genuine breach of two different `job`-mapped workload types (e.g. `analytics` + `reports`) for the same tenant within the dedup window collapses int |
 | `ISS-2026-160` | Medium | `OPEN` | the `e2e` CI job provides no environment, so every guarded route returns 500 and the portal-guard specs fail; the specs also encode a fail-safe intent |
 | `ISS-2026-172` | Medium | `OPEN` | `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold i |
 | `ISS-2026-179` | Medium | `OPEN` | roughly 24 further `SECURITY DEFINER` boolean-oracle / narrow-scope functions share `ISS-2026-164`'s shape, candidate-swept but not individually live- |
@@ -845,12 +845,46 @@ Discovered `2026-08-14` during the Phase 7 audit (`CG-S12-HRT-021`, Prompt 293, 
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `grep -l "legal_hold|retention_class"` across every HRT-274→293 migration (`20260730830000`–`20260731190000`) still returns zero hits; the only other repo-wide `retention_class` hits (generic PLT-128 config in `20260719140000`, and a view in `20260826000000` merely surfacing that existing column) do not add columns to any HR/payroll table. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-092 — Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant member via a raw table SELECT — the identical shape as Finding A, self-found, not named by the audit (OPEN, Medium)
+### ISS-2026-092 — Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant member via a raw table SELECT — the identical shape as Finding A, self-found, not named by the audit (RESOLVED 2026-08-14 at the same checkpoint that found it, Medium)
 
 Self-found `2026-08-14` while fixing Finding A (the five `app.employees` HR-narrative reason columns) for this same checkpoint: `app.employee_change_requests.reason`/`decided_reason` (an employee's own stated reason for requesting a personal_email/phone/address correction, and HR's own decision rationale — HRT-274, `20260730830000_create_hris_employee_master.sql`) are included in that table's column-restricted `grant select (...) to authenticated` (unlike the five `app.employees` columns Finding A named, this grant was never built to exclude them), and the table's own RLS policy (`employee_change_requests_select_scoped`) admits any active, non-`customer_user` tenant member — not gated on `HRS:View`/`HRS:View personal data` at all. `app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/page.tsx` reads this table directly via `.from("employee_change_requests").select("*")` (its own comment explicitly notes "no dedicated read RPC exists for change requests... RLS policy already governs this correctly" — a claim this finding shows is only true for row-scope, not field-scope, the identical Finding-A-shaped gap). Both `app.capture_audit_event` call sites for this table (`request_employee_change`/`decide_employee_change_request`) were independently found and fixed under Finding B in this same checkpoint (`20260731180000`) — only the raw-table-read vector remains open.
 
 **Disposition:** Real, but narrower in content-sensitivity than Finding A's own five columns — a request to correct a phone number or mailing address is not inherently disciplinary/medical narrative the way a termination or suspension reason is, though it can occasionally disclose personal circumstances (the field_key allow-list is entirely `personal_email`/`personal_phone`/`personal_address_*`, so the surrounding narrative is always personal-contact-adjacent, never work-content). **Not fixed by this checkpoint** — closing it properly (mirroring Finding A's own fix shape) requires a genuinely new masking read path: a dedicated `get_employee_change_requests`-shaped RPC (mirroring `app.list_employee_emergency_contacts`'s own established self-or-`HRS:View-personal-data` masking convention), a new `server/queries/employee.ts` wrapper, and a `page.tsx` edit to stop reading the raw table — real, bounded, but genuinely NEW service/UI-layer work beyond this checkpoint's own migration-plus-registry-plus-docs mandate (Findings A–D), and this checkpoint's own scope discipline (§5.6-equivalent: a confirmed Medium finding outside the bounded scope is disclosed, not silently dropped, and no Critical/High finding is left open uncontained — this is assessed Medium, not High, given the narrower content class). **Status `OPEN`**, Medium severity — owner: the same near-term HR/payroll follow-up that would also reasonably pick up `ISS-2026-091`, since both are Phase 7 HR field-level-control completeness gaps this same audit surfaced.
 
+
+**`RESOLVED`, and it always was — annotated 2026-08-30 after verifying against the code rather
+than this entry's own text.**
+
+The fix landed on **2026-08-14**, in the very checkpoint that filed this entry, as Finding 6 of
+`supabase/migrations/20260731210000_harden_ticketing_escalation_linked_records_hris_batch_291_293_review_fixes.sql`.
+Nobody came back to say so here, so it has been counted as open backlog ever since.
+
+Verified, piece by piece, against the live tree:
+
+| The entry's own worklist | Where it is |
+|---|---|
+| Exclude `reason`/`decided_reason` from the raw grant | `revoke select … from authenticated`, then a re-`grant select (…)` naming the 11 remaining columns and neither of these two |
+| A masked read RPC mirroring the self-or-`HRS:View personal data` convention | `app.get_employee_change_requests(p_master_record_id, p_actor_auth_user_id)`, `security definer`, `stable`, granted to `authenticated` |
+| A `server/queries/employee.ts` wrapper | `getEmployeeChangeRequests`, at `:134` |
+| `page.tsx` stops reading the raw table | `…/hris/employees/[masterRecordId]/page.tsx:92` calls the wrapper; the `.from("employee_change_requests").select("*")` read is gone |
+| — (not on the worklist, present anyway) | `public.get_employee_change_requests` Option-2 wrapper, and a contract test at `employee.test.ts:318` asserting the masked row nulls all four sensitive columns for a caller who is neither self nor `HRS:View personal data` |
+
+The revoke and the page edit had to ship together, and did: a bare `select("*")` against a
+column-restricted table is rejected outright by Postgres, so a half-done version of this fix
+would have broken the page rather than silently leaking.
+
+**Why this sat open for two weeks, recorded because it is a third distinct failure mode.**
+`ISS-2026-065` was a closure buried at the end of a long paragraph. `ISS-2026-254` was a partial
+closure never re-triaged. This one is different again: **the work was done under a different
+finding's number**, so neither this entry's heading nor its body ever mentioned a fix. No amount
+of reading this file would have found it. It took grepping the codebase for the issue id.
+
+The `POSSIBLE_BURIED_CLOSURE` warning in `scripts/docs/check-known-issues.ts` cannot catch this
+shape — there is nothing in the record to warn about. What catches it is the sweep that found it:
+grep every open issue id across `supabase/migrations/`, `scripts/`, `server/`, `app/` and `lib/`,
+and read anything that claims to close one. That sweep over all 97 open ids turned up six other
+closure claims; each was checked and each was a genuine partial already reflected in its entry.
+This was the only full closure hiding in the set.
 ### ISS-2026-093 — Sensitive Personal and Payroll Data Controls (HRT-293): `app.cancel_approval_request`, the shared cross-domain PLT-123 approval-engine primitive, duplicates its own raw `p_reason` into `app.audit_logs.reason` -- a repository-wide C-24 gap, not scoped to HR, self-found and disclosed (`RESOLVED` 2026-08-30, Medium) — the table-grant half split out as `ISS-2026-305`
 
 Self-found `2026-08-14` while adding a live regression test for this checkpoint's own Finding B fix (`app.cancel_onboarding_case`, HRT-277): `app.cancel_onboarding_case` (and every other HR capability's own cancel-with-reason function, all fixed this checkpoint to stop passing their OWN raw reason to `capture_audit_event`) internally calls the SHARED, cross-domain `app.cancel_approval_request` (PLT-123) to cancel a still-in-flight approval request, passing the same caller-supplied reason through as that function's own `p_reason` parameter. `app.cancel_approval_request` has its own, separate `capture_audit_event` call (`action = 'cancel_approval_request'`) that passes this reason RAW, unaffected by any of this checkpoint's own fixes (which only touched the calling HR functions' own outer audit calls, never PLT-123's own inner one). Live-confirmed: cancelling an onboarding case with reason `'reorg cancelled the exit'` produces a genuine `app.audit_logs` row with `action='cancel_approval_request'` and `reason='reorg cancelled the exit'` in plaintext, readable by any plain `tenant_admin` via `app.query_audit_logs` — identical mechanism to Finding B, but on infrastructure this checkpoint's own charter (Phase 7 HR/payroll) does not own.
@@ -1743,7 +1777,7 @@ Surfaced `2026-08-22` while independently re-running the full `bash scripts/db-t
 
 **RESOLVED 2026-08-23 at `CG-S15-HDN-002` (Prompt 370, Step 15 Full Regression).** The root cause recorded above was already precise and is confirmed unchanged. **Fixed** by deriving the manual entry's timestamp from the tenant's own attendance policy instead of assuming that "one hour ago" stays inside the same shift day: the policy row is read (never hardcoded, so the fixture stays correct if its timezone or 04:00 boundary is ever changed), the current shift day is resolved with `app.resolve_attendance_workday()`, and the backdated timestamp is clamped to `greatest(now() - interval '1 hour', shift_day_start)`. The block now also asserts its own invariant explicitly, so any future regression fails with a clear "fixture invariant broken" message rather than as a confusing behavioural mismatch. Swept at 5-minute granularity across a full 7-day week: the old expression resolved to the wrong work day at **84 of 2,016 instants — exactly one hour every day**; the new one at **0**, with **0** future timestamps. The sweep also caught a defect in the first draft of this very fix (clamping to `shift_start + 1 minute` emitted a future timestamp at 7 instants, one per day, in the minute after each boundary) — recorded in the fixture's own comment because it is the same one-boundary-instant reasoning error this defect class is made of. Evidence: `docs/build-log/full-system-hardening/HDN-370.md` §5.2/§8.
 
-### ISS-2026-155 — a genuine breach of two different `job`-mapped workload types (e.g. `analytics` + `reports`) for the same tenant within the dedup window collapses into ONE incident, never disclosed in `KNOWN_ISSUES.md` despite being found and documented at Group 8's own Tier C review (Phase 9, `IAE-034` Scale-Up Architecture / `IAE-030` Enterprise Monitoring, found `CG-S11`-era Group 8 Tier C review, registration gap surfaced at `CG-S14-IAE-039`, Prompt 367 Closure Verification, `OPEN`, Medium)
+### ISS-2026-155 — a genuine breach of two different `job`-mapped workload types (e.g. `analytics` + `reports`) for the same tenant within the dedup window collapses into ONE incident, never disclosed in `KNOWN_ISSUES.md` despite being found and documented at Group 8's own Tier C review (Phase 9, `IAE-034` Scale-Up Architecture / `IAE-030` Enterprise Monitoring, found `CG-S11`-era Group 8 Tier C review, registration gap surfaced at `CG-S14-IAE-039`, Prompt 367 Closure Verification, `RESOLVED` 2026-08-30, Medium)
 
 Found by `CG-S14-IAE-039`'s own Enterprise Deployment/Scale/DR closure-verification lens while re-confirming Group 8's own Tier C review findings against the current, live schema. `docs/build-log/phase-09/00_EXECUTION_INDEX.md:442,450` and `docs/build-log/phase-09/IAE-362.md:74,118` both already disclose this exact finding in prose — a genuine breach of two DIFFERENT workload types (both internally mapped to `job_type='job'`, e.g. `analytics` and `reports`) for the same tenant, occurring within `IAE-030`'s own alert-dedup window, collapses into a single incident, because `app.raise_observability_alert`'s own dedup key has no `workload_type` dimension. This is the exact same "found at Tier C review, never promoted into `KNOWN_ISSUES.md`" discipline gap `IAE-036` itself already caught once for Batch 3 (closed as `ISS-2026-147`) — this instance, from Group 8's own review, was missed by `IAE-036`'s later traceability sweep and remained unregistered through `IAE-037`/`038` until now.
 
@@ -1751,6 +1785,53 @@ Found by `CG-S14-IAE-039`'s own Enterprise Deployment/Scale/DR closure-verificat
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 6).** Independently re-confirmed the entry's own "zero live callers" claim: `grep -rn "evaluate_workload_budget" --include=*.ts app/ server/ lib/` finds only one hit, a comment in `server/mutations/scale-up-architecture.ts:6-8` stating it is intentionally NOT wrapped there. Traced the actual bug: `app.evaluate_workload_budget` (`20260808200000_create_intelligence_scale_up_architecture.sql:179-241`) maps `workload_type` to a coarse `source_type` (`webhooks→webhook`, `ai→ai`, `oltp→api`, else→`job` — so `analytics`, `reports`, `import_export`, `notifications` all collapse to `'job'`) before calling `app.raise_observability_alert`, whose dedup key (`tenant_id, source_type, signal_type`) has no workload dimension — confirming this entry's own root cause exactly. Evaluated whether a small, safe fix exists: both `source_type` and `signal_type` are closed `CHECK` enums shared with ~6 OTHER live, reachable alert producers (job dead-letter, 3 webhook-ingestion functions, webhook-delivery-replay, integration health-check) — a real fix requires either widening `app.incidents`/`app.alert_routes`/`raise_observability_alert`'s own schema (shared-infra blast radius on already-verified code) or bypassing the dedup mechanism for this one caller (violating `raise_observability_alert`'s own documented "never a second parallel alerting path" design) — with no live caller to validate the change against. **Not fixed by this batch** — this is shared-infra work, correctly scoped as its own dedicated task exactly as this entry and `HDN-379` already concluded, not a one-function edit. Owner and scope unchanged.
 
+
+**`RESOLVED`, 2026-08-30, under `ADR-0027` Part A** —
+`supabase/migrations/20260830180000_add_observability_alert_dedupe_discriminator.sql`.
+
+Three earlier passes reached the same two options and rejected both, correctly: widen the
+`source_type`/`signal_type` CHECK enums (shared with seven other live producers — shared-infra
+surgery on verified code), or let IAE-034 raise outside the dedup mechanism (breaking
+`raise_observability_alert`'s own "never a second parallel alerting path" rule).
+
+There is a third shape none of them considered: leave both enums alone and give the dedup key an
+**optional extra dimension**. A nullable `app.incidents.dedupe_discriminator`, a seventh
+parameter defaulting to null, and one caller that passes something. It is the same
+additive-optional-parameter move this repository already used for `p_effective_date`
+(`20260731310000`) and `p_client_ip` (`20260826190000`), chosen both times for the same reason: a
+parameter a caller does not know about cannot regress it.
+
+`CREATE OR REPLACE` cannot add a parameter, and dropping the 6-argument form would mean dropping
+its `public.*` wrapper and recreating both. Overloading avoids that: the 7-argument form carries
+the body, the 6-argument form is a one-line delegation passing null. One implementation, two
+entry points, no DROP, no dependency churn.
+
+**`v_source_type` is deliberately left coarse.** It is what routes an incident to an owner team
+through `app.alert_routes`; re-pointing it to the workload type would have silently re-routed
+every workload alert while appearing to fix the reported symptom.
+
+**Two subtleties that would each have been a silent regression:**
+
+* The dedup lookup uses `dedupe_discriminator is not distinct from p_dedupe_discriminator`, not
+  `=`. With `=`, every null-discriminator producer — all seven of them — would have stopped
+  deduplicating and opened a fresh incident per signal, which is the exact opposite of this
+  function's purpose.
+* The advisory lock key had to gain the discriminator too. Keyed on less, two callers with
+  different discriminators would serialize for no reason; keyed on more than the lookup filters,
+  two callers with the *same* discriminator would stop serializing and reopen the check-then-act
+  race the lock exists to close. `coalesce(…, '')` keeps a null discriminator's key byte-identical
+  to the pre-migration key.
+
+**Evidence.** `scale-up-architecture.sql` asserts analytics and reports now open two incidents,
+that each carries its own workload type while `source_type` stays `'job'`, that a repeat breach
+of the *same* workload still reuses its incident and files exactly one `duplicate_signal` (a fix
+that separated everything would have replaced one defect with a louder one), and that two
+null-discriminator signals still collapse into one.
+
+The strongest non-regression evidence was already in the tree: `background-job.sql`'s
+pre-existing assertion that two distinct `job_type`s dead-lettering for the same tenant collapse
+into one incident still passes untouched — that producer passes no discriminator, and its
+behaviour is unchanged.
 ### ISS-2026-156 — `scripts/db-tests/n8n-integration.sql:204`'s own webhook-endpoint lookup has no `ORDER BY`, nondeterministic if enough other test files' own webhook-endpoint rows accumulate first in a shared database — does not manifest in the real, alphabetically-ordered `bash scripts/db-tests/run.sh` suite (Phase 9, `IAE-013` n8n Integration, test-fixture fragility, found at `CG-S14-IAE-039`, Prompt 367 Closure Verification, `OPEN`, Low)
 
 Found and root-caused by `CG-S14-IAE-039`'s own Reporting/Automation/API/Integration closure-verification lens while live-testing shared-primitive regressions across capability boundaries. `scripts/db-tests/n8n-integration.sql:204` selects `v_endpoint_a` via `(select id from app.webhook_endpoints where tenant_id = v_tenant1 limit 1)` with no `ORDER BY` — by this line, the fixture's own tenant already has 2 webhook-endpoint rows (one active, one disabled by an earlier assertion), so the query's own row order is whatever the query planner happens to return. Bisected and reproduced 3/3 times: running `api-key-webhook.sql` then `webhook-management.sql` then `n8n-integration.sql` against one shared fresh database causes this query to nondeterministically return the disabled endpoint, failing the later `rotate_n8n_connector` regression (line 230) with a spurious `webhook_endpoint_not_active` — the product code (`create_n8n_connector`'s disabled-endpoint check) is working correctly; only the test's own row selection is nondeterministic.

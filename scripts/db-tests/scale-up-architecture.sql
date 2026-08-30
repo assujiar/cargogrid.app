@@ -535,4 +535,74 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-155: two DIFFERENT workload types that both map to source_type=job open two incidents, not one -- and a null discriminator still dedups exactly as before'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaescale');
+  v_admin uuid := '00000000-0000-0000-0000-000037000001';
+  v_analytics app.workload_backpressure_events;
+  v_reports app.workload_backpressure_events;
+  v_reports_again app.workload_backpressure_events;
+  v_first app.incidents;
+  v_second app.incidents;
+  v_count integer;
+begin
+  -- `analytics` and `reports` both map to source_type 'job'. Before this fix the dedup key was
+  -- (tenant, source_type, signal_type), so the second breach inside the window was filed as a
+  -- duplicate_signal on the first incident and its workload was never named anywhere.
+  perform app.set_workload_capacity_profile(v_tenant1, 'reports', 100, 60, v_admin, 'admin1');
+
+  v_analytics := app.evaluate_workload_budget(v_tenant1, 'analytics', 500);
+  v_reports := app.evaluate_workload_budget(v_tenant1, 'reports', 500);
+
+  if v_analytics.alert_incident_id is null or v_reports.alert_incident_id is null then
+    raise exception 'assertion failed: both breaches must raise an incident (analytics=%, reports=%)',
+      v_analytics.alert_incident_id, v_reports.alert_incident_id;
+  end if;
+  if v_analytics.alert_incident_id = v_reports.alert_incident_id then
+    raise exception 'assertion failed: analytics and reports collapsed into ONE incident (%) -- this is ISS-2026-155 reproducing', v_analytics.alert_incident_id;
+  end if;
+
+  select * into v_first from app.incidents where id = v_analytics.alert_incident_id;
+  select * into v_second from app.incidents where id = v_reports.alert_incident_id;
+
+  -- The discriminator is what separates them; source_type must stay coarse, because that is
+  -- what routes an incident to an owner team through app.alert_routes.
+  if v_first.dedupe_discriminator <> 'analytics' or v_second.dedupe_discriminator <> 'reports' then
+    raise exception 'assertion failed: expected the workload type on each incident, got % and %',
+      v_first.dedupe_discriminator, v_second.dedupe_discriminator;
+  end if;
+  if v_first.source_type <> 'job' or v_second.source_type <> 'job' then
+    raise exception 'assertion failed: source_type must stay coarse (job) so alert routing is unchanged, got % and %',
+      v_first.source_type, v_second.source_type;
+  end if;
+
+  -- Dedup must still WORK within a workload: a repeat breach of the same type reuses its
+  -- incident. A fix that separated everything would have replaced one defect with a louder one.
+  v_reports_again := app.evaluate_workload_budget(v_tenant1, 'reports', 600);
+  if v_reports_again.alert_incident_id <> v_reports.alert_incident_id then
+    raise exception 'assertion failed: a repeat breach of the SAME workload must reuse its own incident, got % then %',
+      v_reports.alert_incident_id, v_reports_again.alert_incident_id;
+  end if;
+  select count(*) into v_count from app.incident_timeline_events
+  where incident_id = v_reports.alert_incident_id and event_type = 'duplicate_signal';
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly one duplicate_signal event on the reports incident, found %', v_count;
+  end if;
+
+  -- And a null discriminator must dedup exactly as it did before this migration -- the property
+  -- that keeps all seven pre-existing producers unchanged. `is not distinct from` in the lookup
+  -- is what makes this hold; a plain `=` would silently stop every one of them deduplicating.
+  perform app.raise_observability_alert(v_tenant1, 'api', 'error', 'null-discriminator probe', 'high', 'first');
+  perform app.raise_observability_alert(v_tenant1, 'api', 'error', 'null-discriminator probe', 'high', 'second');
+  select count(*) into v_count from app.incidents
+  where tenant_id = v_tenant1 and source_type = 'api' and signal_type = 'error' and dedupe_discriminator is null;
+  if v_count <> 1 then
+    raise exception 'assertion failed: two null-discriminator signals must still collapse into ONE incident, found %', v_count;
+  end if;
+
+  raise notice 'PASS: ISS-2026-155 -- analytics and reports no longer collapse, same-workload dedup still holds, and a null discriminator behaves exactly as before';
+end;
+$$;
+
 \echo 'ALL IAE-034 (Scale-Up Architecture) ASSERTIONS PASSED'
