@@ -1701,6 +1701,45 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (387 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-seventh pass), dbTestSetSha256 ONLY -- no
+ * migration added or changed. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-151` (Medium) -- `app.create_integration_connection`
+ * (`INTHUB:Configure`) was the last of four platform-default high-risk actions
+ * with no step-up enforcement. Its own worklist said the fix required wiring
+ * the function AND adapting 52 call sites across 17 files in one change,
+ * "never one without the other". That worklist was right about the shape of
+ * fix it assumed: an unconditional `assert_current_step_up_authorization` in
+ * the body, which `CG-S14-IAE-037` live-proved breaks every fixture that does
+ * not model a challenge, and reverted.
+ *
+ * The enforcement already shipped, at the thirtieth pass. 20260830110000's
+ * chokepoint branch gates any high-risk (module, action) on the tenant's own
+ * `tenant_wide_required` switch, and `('INTHUB','Configure')` is one of the
+ * seven platform defaults. Condition (b) is the transition path the reverted
+ * attempt lacked, which is why none of the 52 call sites needed adapting:
+ * none of the 17 files turns tenant-wide MFA on.
+ *
+ * So this pass adds NO code. It adds the proof, because "it should be covered
+ * by the chokepoint" is a claim about a call graph, not evidence.
+ * `integration-hub.sql` now asserts four properties: the call succeeds with no
+ * step-up by default (the fixture-compatibility property IAE-037 failed); the
+ * same call by the same INTHUB:Configure holder is denied `mfa_step_up_required`
+ * once the tenant turns MFA on; a genuine request/verify challenge lets that
+ * actor through, so the gate is passable rather than a lockout; and turning the
+ * policy back OFF requires a step-up even for the Supreme Admin, since
+ * `SEC:Configure` is itself high-risk and the branch sits deliberately before
+ * the Supreme Admin exception. That last assertion fails if the ordering is
+ * ever lost.
+ *
+ * Also recorded rather than left as a surprise: turning tenant-wide MFA ON
+ * succeeds without a step-up, because condition (b) is not true yet. Gating it
+ * would make the control unadoptable.
+ *
+ * Re-verified via a fresh full local db-test suite run (387 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2106,7 +2145,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (thirty-sixth pass) by ISS-2026-307 (236 files unchanged in count --
   // ip-restriction-network-access.sql widened with the durable-denial
   // regression block). See the class-level doc comment above.
-  dbTestSetSha256: "b9fee1d89db1815841a392a1ffdf4fbc7e98d4fc1c04e738228d163abfe957f9",
+  // History: b9fee1d89db1815841a392a1ffdf4fbc7e98d4fc1c04e738228d163abfe957f9
+  // (236 files, thirty-sixth-pass amendment above). Superseded 2026-08-30
+  // (thirty-seventh pass) by ISS-2026-151 (236 files unchanged in count --
+  // integration-hub.sql widened with the INTHUB:Configure step-up proof, no
+  // migration added: the enforcement already shipped at 20260830110000). See
+  // the class-level doc comment above.
+  dbTestSetSha256: "acbf2f047e9dc181408457c4d4401a2d18d6d0c4a609d228d76317364bc63f78",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

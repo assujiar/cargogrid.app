@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 94 — 7 High, 43 Medium, 44 Low |
+| `OPEN` | 93 — 6 High, 43 Medium, 44 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 163 |
+| `RESOLVED` | 164 |
 | **Total records** | **262** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -53,7 +53,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | Issue ID | Severity | Status | Title |
 |---|---|---|---|
 | `ISS-2026-065` | High | `OPEN` | Employee Master (HRT-274): no effective-dated employee identity/lifecycle mechanism, despite a binding, repeated Prompt 274 requirement |
-| `ISS-2026-151` | High | `OPEN` | the mandatory RPD-023 step-up-authorization ruling: `app.assert_current_step_up_authorization` (IAE-027) is real and correct but has zero live callers |
+| `ISS-2026-151` | Medium | `RESOLVED` | the mandatory RPD-023 step-up-authorization ruling: `app.assert_current_step_up_authorization` (IAE-027) is real and correct but has zero live callers |
 | `ISS-2026-249` | High | `OPEN` | IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's o |
 | `ISS-2026-254` | High | `OPEN` | a database restore to a point predating an active security/compliance decision silently reverts that decision, with no compensating control |
 | `ISS-2026-255` | High | `OPEN` | real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in thi |
@@ -1636,7 +1636,7 @@ Root cause: `assert_ip_allowed` takes the caller's IP as a plain, caller-supplie
 
 **Corrected `PARTIALLY RESOLVED` → `RESOLVED` (`HDN-388`, Documentation Handoff, ledger reconciliation, zero code).** `ISS-2026-235`/`HDN-BLK-023` — the dependency this entry's own correction paragraph named as the reason for the `PARTIALLY RESOLVED` downgrade — was itself resolved at `HDN-387` (`app.set_integration_connection_status`'s shared `authenticated`/`service_role` grants revoked, a new narrow `app.request_integration_connection_status_change` entry point carries the grant instead and refuses SSO reactivation through the generic path; live-forced, not merely code-reviewed — see `HDN-387.md` §11). This entry's own status field was never revisited after that closure landed. No new code in this correction; it brings this row's own text into agreement with a state that has existed since `HDN-387` closed `VERIFIED`.
 
-### ISS-2026-151 — the mandatory RPD-023 step-up-authorization ruling: `app.assert_current_step_up_authorization` (IAE-027) is real and correct but has zero live callers; wiring it in was built, live-tested, and deliberately reverted after it broke 17 already-`VERIFIED` capabilities' own db-test fixtures (Phase 9, `CG-S14-IAE-037`, Prompt 365 Security/AI Hardening, enterprise IAM/hardening lens — mandatory ruling per §20 item 4, `OPEN` at `CG-S14-IAE-039`, Prompt 367 Closure Verification, High → Medium)
+### ISS-2026-151 — the mandatory RPD-023 step-up-authorization ruling: `app.assert_current_step_up_authorization` (IAE-027) is real and correct but has zero live callers; wiring it in was built, live-tested, and deliberately reverted after it broke 17 already-`VERIFIED` capabilities' own db-test fixtures (RESOLVED 2026-08-30 at the `app.evaluate_permission` chokepoint, Medium — Phase 9, `CG-S14-IAE-037`, Prompt 365 Security/AI Hardening, enterprise IAM/hardening lens, mandatory ruling per §20 item 4; was open at `CG-S14-IAE-039`, Prompt 367 Closure Verification)
 
 Found by `CG-S14-IAE-037`'s own enterprise IAM/hardening attack lens, live-confirmed against a real disposable database: `app.assert_current_step_up_authorization` correctly raises `mfa_step_up_required` when invoked directly for any platform-default high-risk `(module, action)` tuple with no current verified challenge (already independently proven correct at `IAE-355.md` §10) — but a repository-wide grep confirms zero real callers anywhere outside its own migration, db-test, and thin TS wrapper. Live-confirmed against four different platform-default high-risk tuples this checkpoint — `(SEC,Configure)`, `(SEC,Approve)`, `(IAM,Configure)`, `(INTHUB,Configure)` — each succeeded with zero step-up challenge via its own real business mutation (`app.set_mfa_tenant_policy`, `app.approve_ip_allowlist_bypass`, `app.activate_enterprise_idp_connection`, `app.create_integration_connection`). RPD-023 ("MFA/current authorization for privileged, AI-approval, integration, API key, SSO, export and support actions") is a currently-ratified, currently-violated mandatory business rule this checkpoint's own §24 charter operates under.
 
@@ -1658,6 +1658,52 @@ Wiring the gate in without also adapting all 17 fixtures would be exactly the "h
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 6).** Re-grepped independently: `app.assert_current_step_up_authorization` still has exactly the same 3 wired callers `HDN-378` established (`app.decide_ai_output_approval`, `app.activate_enterprise_idp_connection`, `app.approve_mfa_exception`) — `app.create_integration_connection` is still zero. A newer migration (`20260815000000_harden_ip_restriction_iss150_closure_wiring.sql`, a different, IP-restriction fix) explicitly states in its own header that "`ISS-2026-151` remains open and scoped to this one function alone," confirming the deferral is a deliberate, tracked decision, not an accidental gap. Blast radius re-measured precisely against current `HEAD`: **52 call sites across 17 files** (grown from the 43/16 `HDN-378` counted, as more capabilities were added since). Checked for any other narrow candidate this batch could safely close instead: the only other unwired platform-default tuples (`SEC:Configure`, `FIN:Approve`, `HRS:Approve`, 61 functions total) are separately, formally `ACCEPTED_EXCEPTION` at `HDN-389` (`ISS-2026-236`) — touching those would silently override an already-adjudicated governance ruling, not extend this entry's own scope. **Not fixed by this batch** — per this entry's own established history, a full or partial wire-up already broke 17 verified capabilities once (`CG-S14-IAE-037`); nothing safer than the already-deferred path exists. Owner and worklist unchanged, blast-radius figure updated (43/16 → 52/17).
 
+
+**`RESOLVED`, 2026-08-30, under `ADR-0027` Part A — closed from the chokepoint, not by touching
+the 52 call sites.**
+
+This entry's own worklist said the fix was to wire `app.create_integration_connection` and adapt
+52 call sites across 17 files "in the same change, never one without the other". That worklist was
+correct for the shape of fix it assumed — a `perform app.assert_current_step_up_authorization(...)`
+inside the function body, which is unconditional and therefore breaks every fixture that does not
+model a challenge. `CG-S14-IAE-037` proved that cost live and reverted.
+
+`supabase/migrations/20260830110000_harden_evaluate_permission_step_up_enforcement.sql` (written
+for `ISS-2026-236`) changes the shape, and closes this entry as a side effect that has now been
+verified rather than assumed. It adds one branch to `app.evaluate_permission` that requires a
+current verified step-up when **(a)** the `(module, action)` is high-risk *and* **(b)** the tenant
+has `app.mfa_tenant_policies.tenant_wide_required = true`.
+
+`('INTHUB','Configure')` is one of `app.is_high_risk_action`'s seven platform defaults, and
+`app.create_integration_connection` gates on
+`app.evaluate_permission(actor, tenant, 'INTHUB', 'Configure')` — so it is enforced, through the
+chokepoint, with **condition (b) as the transition path the reverted attempt lacked**. That is why
+the 52 call sites did not have to be adapted: none of the 17 files enables tenant-wide MFA, so
+none of them changes behaviour.
+
+**Verified live, not inferred from the call graph** — `scripts/db-tests/integration-hub.sql` proves
+four properties, and the first is the one `IAE-037` failed:
+
+1. With the tenant's policy at its default, `create_integration_connection` succeeds with no
+   step-up anywhere. This is the fixture-compatibility property.
+2. With `tenant_wide_required = true`, the same call by the same `INTHUB:Configure` holder is
+   denied `mfa_step_up_required`.
+3. A genuine `request_mfa_step_up_challenge` / `verify_mfa_step_up_challenge` sequence — the real
+   IAE-027 mechanism, not a fixture shortcut — lets that same actor through. The gate is passable,
+   so it is a control rather than a lockout.
+4. **Guard the guards:** turning the policy back *off* is `SEC:Configure`, itself high-risk, so
+   even the Supreme Admin needs a current step-up to do it. The chokepoint branch sits
+   deliberately *before* the Supreme Admin exception, and this assertion fails if that ordering is
+   ever lost.
+
+Also recorded, because it is the one action the control cannot gate and that is not an oversight:
+turning tenant-wide MFA **on** succeeds without a step-up, since condition (b) is not yet true.
+Gating it would make the feature unadoptable.
+
+**What is not claimed.** `app.assert_current_step_up_authorization` still has its three direct
+callers from `CG-S14-IAE-039` and no more. Nothing here wires that function into anything new —
+the enforcement now comes from the RBAC chokepoint every one of those 52 call sites already passes
+through, which is a different and much smaller change than the one this entry originally scoped.
 ### ISS-2026-152 — the region/service-capability matrix (`IAE-033`) has zero run-time consequence on any data-plane function (Phase 9, `CG-S14-IAE-037`, Prompt 365 Security/AI Hardening, enterprise IAM/hardening lens, `RESOLVED` Track B Batch 5, Medium)
 
 Found by `CG-S14-IAE-037`'s own enterprise IAM/hardening attack lens, live-reproduced against a real disposable database. A tenant driven to a genuine, active dedicated deployment plus an active, approved non-default region assignment, with `ai_provider` explicitly registered via `app.register_region_capability_exception` as a known, accepted-risk **unsupported** category for that region — an ordinary `app.request_ai_governed_action` call for that same tenant then succeeded end to end, with zero reference anywhere to the region/capability matrix. A repository-wide grep confirms `app.resolve_tenant_region`/`app.region_service_capabilities` have zero real callers outside their own migration/db-test/TS wrapper (which itself has zero callers).

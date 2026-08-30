@@ -533,4 +533,101 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-151 closure: INTHUB:Configure step-up is enforced on app.create_integration_connection through the app.evaluate_permission chokepoint -- off by default (no fixture breaks), real once the tenant turns MFA on'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaehubco');
+  v_admin uuid := '00000000-0000-0000-0000-000010000002';
+  v_supreme uuid := '00000000-0000-0000-0000-000010000001';
+  v_challenge app.mfa_step_up_challenges;
+  v_connection app.integration_connections;
+begin
+  -- Dedicated adapters, because app.integration_connections is unique on
+  -- (tenant_id, adapter_code, environment) and this block needs two real successful creations
+  -- either side of a denial. Registering its own adapters keeps it from consuming the slots
+  -- the assertions above depend on.
+  perform app.register_integration_adapter('iss151_adapter_a', 'ISS-151 Adapter A', 'communication', v_supreme, 'tester');
+  perform app.register_integration_adapter('iss151_adapter_b', 'ISS-151 Adapter B', 'communication', v_supreme, 'tester');
+
+  -- `('INTHUB','Configure')` is one of app.is_high_risk_action's 7 platform-default high-risk
+  -- tuples, and app.create_integration_connection gates on
+  -- app.evaluate_permission(actor, tenant, 'INTHUB', 'Configure').
+  --
+  -- IAE-037 wired step-up into this function directly and had to REVERT: the platform-default
+  -- classification is unconditional, so enforcement became mandatory for every tenant with no
+  -- transition path, breaking 17 already-VERIFIED fixtures across 5 groups. IAE-039 then wired
+  -- the other three target functions and deliberately left this one alone -- over 40 call sites
+  -- across 16 files, most using it as one-line setup for an unrelated capability.
+  --
+  -- 20260830110000 closes it from the chokepoint instead, gated on the tenant's own
+  -- already-shipped `tenant_wide_required` switch. The three assertions below are the three
+  -- properties that combination has to have, and the FIRST one is the one IAE-037 failed.
+
+  -- (1) Off by default: every existing call site in this file and the other 15 still works with
+  -- no step-up challenge anywhere. This is the transition path the reverted attempt lacked --
+  -- and it is why the 16 files did not have to be adapted.
+  v_connection := app.create_integration_connection(
+    v_tenant1, 'iss151_adapter_a', 'ISS-151 default-off', 'production',
+    null, null, null, '{}'::jsonb, 'sk_iss151_a', v_admin, 'tester'
+  );
+  if v_connection.status <> 'active' then
+    raise exception 'assertion failed: creating a connection must not require step-up while the tenant has not enabled tenant-wide MFA';
+  end if;
+
+  -- (2) Real once the tenant turns MFA on. Not a narrowed classification, not a relaxed
+  -- assertion -- the same call, the same holder of INTHUB:Configure, now denied.
+  --
+  -- Switched on by the Supreme Admin, because the INTHUB:Configure holder deliberately has no
+  -- SEC:Configure. Note this first call succeeds without a step-up even though SEC:Configure is
+  -- itself high-risk: condition 2 of the chokepoint branch is `tenant_wide_required = true`,
+  -- and it is not true yet. Turning the control ON is the one action it cannot gate, which is
+  -- the only way a tenant could ever adopt it.
+  perform app.set_mfa_tenant_policy(v_tenant1, true, '["supreme_admin", "tenant_admin"]'::jsonb, 20, '[]'::jsonb, v_supreme, 'tester');
+  begin
+    perform app.create_integration_connection(
+      v_tenant1, 'iss151_adapter_b', 'ISS-151 should be denied', 'production',
+      null, null, null, '{}'::jsonb, 'sk_iss151_b', v_admin, 'tester'
+    );
+    raise exception 'assertion failed: expected mfa_step_up_required once tenant-wide MFA is on -- INTHUB:Configure is a platform-default high-risk action';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'mfa_step_up_required' then raise; end if;
+  end;
+
+  -- (3) A genuine step-up clears it -- the real IAE-027 request/verify sequence a live client
+  -- would run, not a fixture shortcut. Proves the gate is passable, so enforcement is a real
+  -- control rather than a permanent lockout.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'INTHUB', 'Configure', v_admin, 'tester');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin, 'tester');
+  v_connection := app.create_integration_connection(
+    v_tenant1, 'iss151_adapter_b', 'ISS-151 after step-up', 'production',
+    null, null, null, '{}'::jsonb, 'sk_iss151_c', v_admin, 'tester'
+  );
+  if v_connection.status <> 'active' then
+    raise exception 'assertion failed: a verified step-up challenge must let the same actor through';
+  end if;
+
+  -- (4) Guard the guards, which is the property ISS-2026-236 was really about: turning the
+  -- control back OFF is `SEC:Configure`, itself high-risk, so even the Supreme Admin needs a
+  -- current step-up now that the policy is on. The chokepoint branch sits deliberately BEFORE
+  -- the Supreme Admin exception for exactly this reason. If this call ever starts succeeding
+  -- without the two lines above it, that ordering has been lost.
+  begin
+    perform app.set_mfa_tenant_policy(v_tenant1, false, '["supreme_admin", "tenant_admin"]'::jsonb, 20, '[]'::jsonb, v_supreme, 'tester');
+    raise exception 'assertion failed: disabling tenant-wide MFA is SEC:Configure (high-risk) and must itself require a current step-up, Supreme Admin included';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'mfa_step_up_required' then raise; end if;
+  end;
+
+  -- Leave the fixture as this file found it, so nothing after this block inherits an enforcing
+  -- policy it never asked for.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'SEC', 'Configure', v_supreme, 'tester');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, v_supreme, 'tester');
+  perform app.set_mfa_tenant_policy(v_tenant1, false, '["supreme_admin", "tenant_admin"]'::jsonb, 20, '[]'::jsonb, v_supreme, 'tester');
+
+  raise notice 'PASS: INTHUB:Configure step-up enforced via the evaluate_permission chokepoint -- inert by default, real under tenant-wide MFA, and passable with a verified challenge';
+end;
+$$;
+
 \echo 'ALL IAE-008 (Integration Hub) db-test assertions passed.'
