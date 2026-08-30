@@ -247,11 +247,59 @@ describe("the §3 summary counts", () => {
   });
 });
 
+describe("buried closures (the ISS-2026-065 failure)", () => {
+  const record = (body: string): string =>
+    build(["| `ISS-2026-001` | High | `OPEN` | a |"], [`### ISS-2026-001 — a (OPEN, High)\n\n${body}`]);
+
+  const warnings = (text: string): readonly string[] =>
+    checkKnownIssues(text).filter((f) => f.severity === "WARN").map((f) => f.code);
+
+  test("WARNS when the last disposition in an open record's body is a closure", () => {
+    // The real shape: a long update paragraph that OPENS by restating the finding as still open
+    // and CLOSES by recording the fix. Two passes over this file read the first half and stopped.
+    const w = warnings(record("**Update:** re-confirmed CONFIRMED STILL OPEN and named the sole blocker.\n\n**Status `RESOLVED`.** A migration closed it.\n"));
+    assert.deepEqual(w, ["POSSIBLE_BURIED_CLOSURE"]);
+  });
+
+  test("is a warning, not an error — a partial closure legitimately stays open", () => {
+    const f = checkKnownIssues(record("**`RESOLVED` for the raw-table vector.** The rest stands.\n"));
+    assert.ok(f.every((x) => x.severity === "WARN"), "must not fail the gate on a judgement call");
+  });
+
+  test("does NOT warn when the record's last word on itself is that it stays open", () => {
+    const w = warnings(record("**`RESOLVED` in part at HDN-387.**\n\n**Disposition unchanged, still `OPEN`.**\n"));
+    assert.deepEqual(w, []);
+  });
+
+  test("does NOT treat `VERIFIED` as a closure signal", () => {
+    // This codebase says "17 already-VERIFIED capabilities" to mean a checkpoint status. Counting
+    // that as a closure produced 19 false positives out of 21 hits on the sweep that found the
+    // two real ones.
+    const w = warnings(record("Wiring it in broke 17 already-`VERIFIED` capabilities and was reverted.\n"));
+    assert.deepEqual(w, []);
+  });
+
+  test("does NOT treat a closure belonging to ANOTHER issue as this record's own", () => {
+    const w = warnings(record("The related `ISS-2026-072` is **`RESOLVED` at HDN-373**, but this one is not.\n"));
+    assert.deepEqual(w, []);
+  });
+
+  test("says nothing about records that are already closed or formally accepted", () => {
+    const closed = build(
+      ["| `ISS-2026-001` | High | `RESOLVED` | a |", "| `ISS-2026-002` | Low | `ACCEPTED_RISK` | b |"],
+      ["### ISS-2026-001 — a (RESOLVED, High)\n\n**`RESOLVED`.**", "### ISS-2026-002 — b (ACCEPTED_RISK, Low)\n\n**`RESOLVED` in part.**"],
+    );
+    assert.deepEqual(warnings(closed), []);
+  });
+});
+
 describe("the real ledger", () => {
-  test("docs/runtime/KNOWN_ISSUES.md passes with zero findings", () => {
+  test("docs/runtime/KNOWN_ISSUES.md passes with zero errors", () => {
     const text = readFileSync(KNOWN_ISSUES_PATH, "utf8");
-    const findings = checkKnownIssues(text);
-    assert.deepEqual(findings, [], `ledger problems:\n${findings.map((f) => `${f.code} ${f.message}`).join("\n")}`);
+    // Warnings are allowed to stand: POSSIBLE_BURIED_CLOSURE is a prompt to re-read a record,
+    // and a partially-closed record legitimately trips it. Errors are structural and must be zero.
+    const errors = checkKnownIssues(text).filter((f) => f.severity !== "WARN");
+    assert.deepEqual(errors, [], `ledger problems:\n${errors.map((f) => `${f.code} ${f.message}`).join("\n")}`);
   });
 
   test("the index covers every record, both ways", () => {

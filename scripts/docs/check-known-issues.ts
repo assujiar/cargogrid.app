@@ -70,6 +70,8 @@ export interface IndexRow {
 export interface Finding {
   readonly code: string;
   readonly message: string;
+  /** Absent means ERROR. A WARN is surfaced but does not fail the gate. */
+  readonly severity?: "WARN";
 }
 
 /**
@@ -179,6 +181,66 @@ function checkSummaryTable(text: string, records: readonly IssueRecord[]): reado
   return findings;
 }
 
+/**
+ * Flags a record whose heading says it is open while its body's LAST disposition marker says it
+ * was closed.
+ *
+ * This is not a hypothetical. `ISS-2026-065` — the sole named blocker to `PHASE_7_VERIFIED` —
+ * sat with an `OPEN` heading for two weeks after a 99KB migration, a 61KB db-test and a 41KB
+ * build log closed it, because the closure was written at the END of a long paragraph that
+ * BEGAN "independently re-confirmed this entry CONFIRMED STILL OPEN". Two separate passes over
+ * this file read the start of that paragraph and stopped. `ISS-2026-254` was similar: closed in
+ * part, downgraded to Medium in its own text, still counted as an open High.
+ *
+ * The check deliberately looks only for `RESOLVED`/`SUPERSEDED`, never `VERIFIED`: this codebase
+ * uses "already-`VERIFIED` capabilities" to mean a checkpoint status, and treating that as a
+ * closure signal produces almost nothing but false positives (19 of 21 on the sweep that found
+ * the two real ones).
+ *
+ * It is a WARNING, not an error. Whether a record is really closed is a judgement — a body can
+ * legitimately say "RESOLVED for the raw-table vector" and stay open for the rest. The gate's job
+ * is to make sure a human looks, not to decide.
+ */
+function checkForBuriedClosures(text: string, records: readonly IssueRecord[]): readonly Finding[] {
+  const findings: Finding[] = [];
+  const bodies = text.split(/^### (?=ISS-\d{4}-\d+ — )/m);
+
+  for (const record of records) {
+    if (!record.status || CLOSED_STATUSES.includes(record.status) || record.status.startsWith("ACCEPTED_")) continue;
+    const body = bodies.find((b) => b.startsWith(`${record.id} — `));
+    if (!body) continue;
+
+    // Skip the heading line: its own status is what we are checking against.
+    const rest = body.slice(body.indexOf("\n") + 1);
+    let lastClosure = -1;
+    let lastOpen = -1;
+    // Scan for the status WORDS rather than for bold delimiters. Bold-span matching looks
+    // tidier and is wrong: in `**Update:** … STILL OPEN … **Status RESOLVED**` the closing `**`
+    // of "Update:" is consumed as the opening `**` of the next span, so the whole run collapses
+    // into one bogus match and the real closure at the end is never seen. Since these records
+    // are append-only, the LAST mention is the current disposition — which is the same rule a
+    // careful reader applies.
+    for (const m of rest.matchAll(/\b(RESOLVED|SUPERSEDED|OPEN)\b/gi)) {
+      const at = m.index ?? 0;
+      // A status word sitting next to another issue's id is a cross-reference to that issue's
+      // disposition, not a statement about this one.
+      if (/ISS-\d{4}-\d+/.test(rest.slice(Math.max(0, at - 120), at + 120))) continue;
+      if (/^open$/i.test(m[1] as string)) lastOpen = at;
+      else lastClosure = at;
+    }
+    if (lastClosure > lastOpen && lastClosure >= 0) {
+      findings.push({
+        code: "POSSIBLE_BURIED_CLOSURE",
+        severity: "WARN",
+        message:
+          `${record.id} (line ${record.line}): heading says ${record.status}, but the last disposition marker in its body reads as a closure. ` +
+          `Read the END of the record, not the start of its last update — that is how ISS-2026-065 stayed open for two weeks after it was fixed.`,
+      });
+    }
+  }
+  return findings;
+}
+
 export function checkKnownIssues(text: string): readonly Finding[] {
   const { records, indexRows } = parseKnownIssues(text);
   const findings: Finding[] = [];
@@ -208,6 +270,7 @@ export function checkKnownIssues(text: string): readonly Finding[] {
   }
 
   findings.push(...checkSummaryTable(text, records));
+  findings.push(...checkForBuriedClosures(text, records));
 
   const byId = new Map(records.map((r) => [r.id, r]));
   for (const row of indexRows) {
@@ -284,12 +347,20 @@ function main(): void {
       `${s.accepted} formally accepted; ${s.closed} closed.`,
   );
 
-  if (findings.length > 0) {
-    for (const f of findings) console.error(`✖ ${f.code} ${f.message}`);
-    console.error(`\n${findings.length} known-issues ledger problem(s).`);
+  const warnings = findings.filter((f) => f.severity === "WARN");
+  const errors = findings.filter((f) => f.severity !== "WARN");
+
+  for (const f of warnings) console.warn(`⚠ ${f.code} ${f.message}`);
+
+  if (errors.length > 0) {
+    for (const f of errors) console.error(`✖ ${f.code} ${f.message}`);
+    console.error(`\n${errors.length} known-issues ledger problem(s).`);
     process.exit(1);
   }
-  console.log("✔ issue index and records agree (coverage both ways, status and severity).");
+  console.log(
+    `✔ issue index and records agree (coverage both ways, status and severity)` +
+      `${warnings.length > 0 ? `, with ${warnings.length} record(s) worth re-reading` : ""}.`,
+  );
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
