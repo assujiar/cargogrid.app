@@ -110,7 +110,7 @@ and, on how the remaining gaps should be handled:
    its risk stated in non-technical language so the acceptance is *informed* rather than nominal.
    They **stop blocking** a go decision. The gates covered: UAT acceptance, external penetration
    test, GitHub branch protection, statutory tax-rate confirmation, and the individually-named
-   items in `docs/runtime/COMMERCIAL_LAUNCH_READINESS.md`.
+   items in `COMMERCIAL_LAUNCH_READINESS.md` (authored at the disposition step, in the runtime docs directory).
 
 5. **They are recorded as accepted, never as passed.** This is the one point where the owner's
    authority and the record's accuracy are separated, deliberately:
@@ -161,8 +161,8 @@ per batch; and the mandatory propagation sweep. The full local suite — `typech
 
 **The larger residual is Part B's, and it belongs to the owner.** Launching with UAT, penetration
 testing, branch protection and statutory tax confirmation all accepted-not-performed is a real
-commercial and legal exposure. `docs/runtime/COMMERCIAL_LAUNCH_READINESS.md` states each one's
-risk in plain language, and `docs/runbooks/human-execution-pack.md` makes each closable later
+commercial and legal exposure. `COMMERCIAL_LAUNCH_READINESS.md` (authored at the disposition step, in the runtime docs directory) states each one's
+risk in plain language, and `human-execution-pack.md` (authored at the disposition step, in the runbooks directory) makes each closable later
 without re-analysis. Accepting a risk is not the same as it being absent.
 
 **Reversal condition.** Part A expires when the agent-fixable backlog reaches zero. Part B is

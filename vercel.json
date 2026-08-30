@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
+  "ignoreCommand": "node --experimental-strip-types scripts/release/check-go-decision.ts"
+}

@@ -1015,6 +1015,62 @@ today"** — a distinct requirement from, and smaller than, `RGL-BLK-001`'s own 
 
 ---
 
+## `RGL-BLK-001` — **`RESOLVED` 2026-08-30, by mechanism** (supersedes every prior `ACCEPTED (operator override)` status; the historical entries above are retained unedited)
+
+| Field | Value |
+|---|---|
+| Status | **`RESOLVED`** — first time the mechanism itself is closed rather than the risk accepted |
+| Resolved at | 2026-08-30, owner-authorized remediation phase (`ADR-0027`) |
+| Closed by | `vercel.json` + `scripts/release/check-go-decision.ts` (+ `check-go-decision.test.ts`, 13 tests) |
+
+**What was wrong.** This entry's own words: *"A gate that can be bypassed by the ordinary act of
+merging is not a gate."* Every push or merge to `main` deployed straight to `target: production`
+with no approval step, defeating `390_RELEASE_GO_LIVE_README.md`'s non-negotiable *"No production
+deployment without recorded go decision."* It was carried as an operator-accepted risk from
+`RGL-404` onward because **no tool in those sessions could configure Vercel or GitHub** — the
+compensating control was recorded, honestly, as "none".
+
+**What closes it now, and why it is in the repository rather than in a provider setting.**
+
+1. **`vercel.json` → `git.deploymentEnabled.main = false`.** A merge to `main` no longer creates a
+   deployment at all. This addresses the exact mechanism this entry describes — including the case
+   it called out specifically, that *"the merge that closes this very Step 16 range will itself
+   auto-deploy production"*.
+2. **`vercel.json` → `ignoreCommand`** runs `scripts/release/check-go-decision.ts` on every
+   Git-triggered build. A **production** build proceeds only when
+   a `GO_DECISION.json` recorded alongside this ledger records a `GO` for the **exact commit being
+   built**. Preview builds are deliberately ungated — they are how a candidate gets verified
+   before anyone decides to promote it.
+
+Putting the gate in the repository means the decision it enforces is reviewable in a diff and
+auditable in git history, rather than being a setting in a dashboard with no record of why.
+
+**Evidence it actually refuses, not just that it exists.** Run against this very commit with
+`VERCEL_ENV=production`:
+
+```
+⛔ BUILD SKIPPED: no go decision recorded (docs/build-log/release-go-live/GO_DECISION.json is
+absent) — production build refused
+exit=0
+```
+
+Exit `0` is correct: Vercel's `ignoreCommand` **inverts** the usual convention — `1` proceeds, `0`
+skips. Getting that backwards would have turned this gate into an auto-approve, which is worse
+than no gate, so the exit codes are named constants and are asserted numerically by their own
+test. The suite also pins the sharpest bypass: **a real `GO` recorded for an earlier commit does
+not authorize a later one** (full-SHA comparison, no prefix match), plus corrupt-file,
+missing-SHA and `NO_GO` cases — all fail closed.
+
+**What this does NOT cover, stated rather than glossed.** A `vercel --prod` deploy from a laptop,
+or a redeploy triggered from the Vercel dashboard, does not necessarily evaluate `ignoreCommand`.
+A human holding Vercel credentials can still deploy by hand. That is a deliberate escape hatch for
+incident response (`docs/runbooks/deployment-rollback.md`), not an oversight — but it means this
+entry closes **the merge path and the Git path**, not every conceivable path. `ISS-2026-289`
+(GitHub branch protection) remains separately open and is the complementary control on the
+repository side.
+
+---
+
 ## Status summary as of `RGL-404` (Go/No-Go Report, including its own fix-pass follow-up), 2026-08-25
 
 | Severity (binding) | Open | Resolved/Accepted | IDs (open) |
