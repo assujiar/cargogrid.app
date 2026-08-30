@@ -1642,6 +1642,65 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (386 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-sixth pass), migrationSetSha256 and
+ * dbTestSetSha256. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-307` (Medium, found while closing `ISS-2026-249`) --
+ * `app.ip_access_evaluations`, the IP allowlist's own audit trail, can never
+ * contain a `denied` row. `app.assert_ip_allowed` was its only writer; on a
+ * denial it INSERTs the row and then raises `ip_not_allowed` to deny the
+ * caller, and that exception aborts the transaction and takes the INSERT with
+ * it. So the table holds exactly the accesses the control let through and none
+ * it blocked -- the harder the control works, the emptier its evidence gets.
+ * One new migration (386 -> 387 files: +1,
+ * `20260830170000_create_durable_ip_access_evaluation.sql`).
+ *
+ * Live-reproduced on a disposable database BEFORE the fix was written, with a
+ * control case in the same run: denied 203.0.113.9 left the table at 0 -> 0
+ * rows; allowed 10.1.2.3 left it at 0 -> 1. Without the control this would
+ * read as "the table is empty", not "the table cannot record denials".
+ *
+ * This was drafted once before, as Part D of
+ * `20260827000000_wire_observability_alert_producers.sql`, and WITHDRAWN before
+ * applying -- the local db-tests suite caught the rollback and that migration's
+ * header recorded the root cause honestly. But it framed the loss as being
+ * about the alert it was adding. The evaluation row one line above it, which
+ * predates the alert idea entirely, was already being lost the same way. A
+ * withdrawn fix with a correct diagnosis is a good outcome; the miss was not
+ * re-reading what else lived in the branch about to be abandoned.
+ *
+ * The shape that works is the one that note itself named -- move the recording
+ * out of the raising function. `app.evaluate_ip_access` makes the same decision
+ * and RETURNS it, so its evaluation row and its new security alert both
+ * survive; `app.assert_ip_allowed` keeps its signature and behaviour and now
+ * composes the evaluator, so there is exactly one copy of the decision logic
+ * and the two cannot drift about what counts as allowed. This also closes the
+ * IP-restriction slice of `ISS-2026-249` (security denials produced zero
+ * incident); its other two slices stay open, unchanged, for the architectural
+ * reasons already recorded there.
+ *
+ * The residual is stated in the migration header rather than left implicit: a
+ * denial raised INSIDE a business transaction still loses its own row, because
+ * that transaction still aborts. Closing that needs an autonomous transaction
+ * (a real new dependency) or a breaking contract change to every import-commit
+ * RPC. What changed is that a durable path now EXISTS, which it did not before.
+ *
+ * `public.evaluate_ip_access` was missing on this migration's first run and
+ * `public-api-wrapper-regression.sql` failed it -- the parity gate catching a
+ * real omission, recorded rather than quietly fixed.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count --
+ * `ip-restriction-network-access.sql` widened, no file added or removed). Its
+ * new block asserts the DEFECT as a property first (assert_ip_allowed's denial
+ * row is still rolled back, with a message saying that if this ever starts
+ * persisting the assertion should be inverted, not deleted), then the fix: the
+ * evaluator's row survives, carries the right subject and address, and opens
+ * exactly ONE deduplicated security incident.
+ *
+ * Re-verified via a fresh full local db-test suite run (387 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1835,7 +1894,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (thirty-fifth pass) by ISS-2026-093 (386 files: +1, 20260830160000_harden_
   // approval_engine_audit_reason_redaction.sql). See the class-level doc
   // comment above.
-  migrationSetSha256: "30b093fea9ee698b13918049b8b32f5637bcd63e0ffe140cf66bb83db8d64f69",
+  // History: 30b093fea9ee698b13918049b8b32f5637bcd63e0ffe140cf66bb83db8d64f69
+  // (386 files, thirty-fifth-pass amendment above). Superseded 2026-08-30
+  // (thirty-sixth pass) by ISS-2026-307's durable IP-access evaluation (387
+  // files: +1, 20260830170000_create_durable_ip_access_evaluation.sql). See
+  // the class-level doc comment above.
+  migrationSetSha256: "9eaff92625219ddc8619c01e5012667089ca339789733cc97afe71af38974bc3",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2037,7 +2101,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (236 files, thirty-fourth-pass amendment above). Superseded 2026-08-30
   // (thirty-fifth pass) by ISS-2026-093 (236 files unchanged in count --
   // approval.sql widened). See the class-level doc comment above.
-  dbTestSetSha256: "d94aad5edcf1ba3cf303d564246be6331b28df5de8ed60380838b5823e9b626b",
+  // History: d94aad5edcf1ba3cf303d564246be6331b28df5de8ed60380838b5823e9b626b
+  // (236 files, thirty-fifth-pass amendment above). Superseded 2026-08-30
+  // (thirty-sixth pass) by ISS-2026-307 (236 files unchanged in count --
+  // ip-restriction-network-access.sql widened with the durable-denial
+  // regression block). See the class-level doc comment above.
+  dbTestSetSha256: "b9fee1d89db1815841a392a1ffdf4fbc7e98d4fc1c04e738228d163abfe957f9",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

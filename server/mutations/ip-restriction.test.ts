@@ -5,6 +5,7 @@ import {
   addIpAllowlistEntry,
   revokeIpAllowlistEntry,
   assertIpAllowed,
+  evaluateIpAccess,
   requestIpAllowlistBypass,
   approveIpAllowlistBypass,
   IpRestrictionMutationError,
@@ -93,6 +94,43 @@ describe("assertIpAllowed", () => {
     await assert.rejects(
       assertIpAllowed(client, { tenantId: TENANT_ID, rawIpAddress: "198.51.100.7", scope: "all", subjectLabel: "test-caller" }),
       (err: unknown) => err instanceof IpRestrictionMutationError && err.code === "ip_not_allowed",
+    );
+  });
+});
+
+describe("evaluateIpAccess (ISS-2026-307)", () => {
+  test("returns the decision instead of throwing, so a denial can be recorded and acted on", async () => {
+    const { client, calls } = fakeRpcClient({ data: "denied", error: null });
+    const decision = await evaluateIpAccess(client, { tenantId: TENANT_ID, rawIpAddress: "198.51.100.7", scope: "admin", subjectLabel: "test-caller" });
+    assert.equal(decision, "denied");
+    assert.equal(calls[0]?.fn, "evaluate_ip_access");
+  });
+
+  test("distinguishes not_enforced from allowed", async () => {
+    // A tenant with the control switched off has not been checked. Collapsing that into
+    // "allowed" would put a decision in the audit trail that nobody actually made.
+    const { client } = fakeRpcClient({ data: "not_enforced", error: null });
+    assert.equal(
+      await evaluateIpAccess(client, { tenantId: TENANT_ID, rawIpAddress: "198.51.100.7", scope: "admin", subjectLabel: "t" }),
+      "not_enforced",
+    );
+  });
+
+  test("fails loudly rather than open on an unrecognized decision", async () => {
+    // The failure mode that matters for an access-control primitive: if the database ever
+    // returns something this layer does not understand, it must not be treated as a pass.
+    const { client } = fakeRpcClient({ data: "probably_fine", error: null });
+    await assert.rejects(
+      evaluateIpAccess(client, { tenantId: TENANT_ID, rawIpAddress: "198.51.100.7", scope: "admin", subjectLabel: "t" }),
+      (err: unknown) => err instanceof IpRestrictionMutationError && err.code === "invalid_response",
+    );
+  });
+
+  test("surfaces an RPC error rather than swallowing it into a decision", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "insufficient_authority: nope" } });
+    await assert.rejects(
+      evaluateIpAccess(client, { tenantId: TENANT_ID, rawIpAddress: "198.51.100.7", scope: "admin", subjectLabel: "t" }),
+      (err: unknown) => err instanceof IpRestrictionMutationError && err.code === "insufficient_authority",
     );
   });
 });

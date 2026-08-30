@@ -13,6 +13,8 @@ import {
   AddIpAllowlistEntryInputSchema,
   RevokeIpAllowlistEntryInputSchema,
   AssertIpAllowedInputSchema,
+  EvaluateIpAccessInputSchema,
+  IpAccessDecisionSchema,
   RequestIpAllowlistBypassInputSchema,
   ApproveIpAllowlistBypassInputSchema,
   parseIpAllowlistPolicy,
@@ -22,6 +24,8 @@ import {
   type AddIpAllowlistEntryInput,
   type RevokeIpAllowlistEntryInput,
   type AssertIpAllowedInput,
+  type EvaluateIpAccessInput,
+  type IpAccessDecision,
   type RequestIpAllowlistBypassInput,
   type ApproveIpAllowlistBypassInput,
   type IpAllowlistPolicy,
@@ -127,6 +131,46 @@ export async function assertIpAllowed(client: IpRestrictionMutationRpcClient, in
   if (error) {
     throw new IpRestrictionMutationError(classifyError(error.message), error.message);
   }
+}
+
+/**
+ * The same decision `assertIpAllowed` makes, returned instead of thrown — and therefore
+ * durably recorded (`ISS-2026-307`).
+ *
+ * Prefer this over `assertIpAllowed` wherever the denial has to survive as evidence.
+ * `app.assert_ip_allowed` writes its `app.ip_access_evaluations` row and then raises to deny
+ * the caller; the exception aborts the transaction and takes the row with it, so the allowlist's
+ * own audit trail can only ever contain the accesses it let through. Live-reproduced: a denied
+ * address left the table at 0 rows while an allowed one left 1.
+ *
+ * Called as its own RPC, this commits its evaluation row and raises a deduplicated security
+ * incident before returning `denied`, so the caller can refuse the operation with the record
+ * already written. `assertIpAllowed` remains correct for fail-closed enforcement inside a
+ * database transaction that must abort.
+ *
+ * service_role-only, and takes no actor parameter by design — same reasoning as
+ * `assertIpAllowed`: it must stay reachable from an API-key-authenticated caller with no
+ * `auth_user_id` at all. Call it with a trusted server-side client that has already resolved
+ * `tenantId` through an authorized path, never with an end-user session client.
+ */
+export async function evaluateIpAccess(client: IpRestrictionMutationRpcClient, input: EvaluateIpAccessInput): Promise<IpAccessDecision> {
+  const parsedInput = EvaluateIpAccessInputSchema.parse(input);
+  const { data, error } = await client.rpc("evaluate_ip_access", {
+    p_tenant_id: parsedInput.tenantId,
+    p_raw_ip_address: parsedInput.rawIpAddress,
+    p_scope: parsedInput.scope,
+    p_subject_label: parsedInput.subjectLabel,
+  });
+  if (error) {
+    throw new IpRestrictionMutationError(classifyError(error.message), error.message);
+  }
+  const decision = IpAccessDecisionSchema.safeParse(data);
+  if (!decision.success) {
+    // Never fall back to "assume allowed" on an unrecognized decision: an access-control
+    // primitive that fails open is worse than one that fails loudly.
+    throw new IpRestrictionMutationError("invalid_response", `evaluate_ip_access returned an unrecognized decision: ${JSON.stringify(data)}`);
+  }
+  return decision.data;
 }
 
 export async function requestIpAllowlistBypass(client: IpRestrictionMutationRpcClient, input: RequestIpAllowlistBypassInput): Promise<IpAllowlistBypassGrant> {

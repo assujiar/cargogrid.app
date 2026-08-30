@@ -37,12 +37,16 @@ columns that were populated for a minority of rows and stale for most. A complet
 index beats a seven-column one covering 24%. Owner, workaround and blocker detail live in each
 record in §4, which remains the authoritative narrative.
 
+These counts are themselves checked by `issues:check` — a hand-maintained tally inside the file
+it summarises is exactly the kind of number that drifts, and this one did within an hour of being
+written.
+
 | Status | Count |
 |---|---|
-| `OPEN` | 93 — 10 High, 43 Medium, 45 Low |
+| `OPEN` | 94 — 7 High, 43 Medium, 44 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
 | `RESOLVED` | 163 |
-| **Total records** | **261** |
+| **Total records** | **262** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -97,6 +101,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-303` | Medium | `OPEN` | Inventory and HRIS still have no bulk opening-balance import |
 | `ISS-2026-304` | Medium | `OPEN` | no public status page for unauthenticated visitors |
 | `ISS-2026-305` | Medium | `OPEN` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
+| `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
 | `ISS-2026-053` | Low | `OPEN` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
 | `ISS-2026-064` | Low | `OPEN` | Employee Master (HRT-274): manager-team UI route, client-side document upload, and browser/accessibility E2E are disclosed, not built |
@@ -4132,6 +4137,27 @@ withdrawal; applied live; grants unaffected (`app.raise_observability_alert` is 
 new grant, the same composition already proven for `app.record_job_failure` and the 3 webhook-
 ingestion functions).
 
+**Update (2026-08-30): the IP-restriction denial path — withdrawn Part D — is now closed, and the
+withdrawal turned out to be hiding a bigger defect than it described.**
+`supabase/migrations/20260830170000_create_durable_ip_access_evaluation.sql` adds
+`app.evaluate_ip_access`, which makes the same allowlist decision and **returns** it instead of
+raising. Because it never raises, both its evaluation row and its
+`app.raise_observability_alert(source_type='security', 'error', high)` survive — exactly the
+rollback that forced Part D's withdrawal. `app.assert_ip_allowed` keeps its signature and
+behaviour and now composes the evaluator, so the two cannot drift about what counts as allowed.
+
+Part D's own note framed the loss as being about the *alert*. Re-reading that branch showed the
+`app.ip_access_evaluations` INSERT one line above it — which predates the alert idea entirely —
+was already being lost the same way, so the allowlist's audit trail could only ever contain the
+accesses it let through. Live-reproduced, fixed, and registered as **`ISS-2026-307`** rather than
+folded in here, because it is a different defect that happened to live in the same branch.
+
+**Still open on this entry**, unchanged and for the reasons already recorded above:
+`app.evaluate_permission`'s general RBAC-denial path (false-positive flood by design) and
+`app.assert_current_step_up_authorization` (no durable evidence today, and `stable`, so it needs
+a new log table plus a volatility change). Both remain genuinely architectural, not one-line
+mirrors. This entry stays `OPEN` for those two.
+
 ### ISS-2026-250 — no monitoring/incident dashboard UI exists anywhere in the application — IAE-030's own real, well-built alerting backend has zero consumer (found at `HDN-382` Observability Audit, coverage-mapping lens + runbook/dashboard review lens, `RESOLVED`, High, owner a dedicated future task)
 
 Confirmed by repository-wide search (not assumed): no page anywhere under `app/(tenant)/` or `app/(internal)/` renders an incident, alert, SLO, or alert-route record — `grep` for `enterprise-monitoring`, `EnterpriseMonitoring`, `Incident`, `AlertRoute`, `listIncidentsForTenant` across `app/`/`components/` returns zero real matches. This is a genuine, self-disclosed gap, not a hidden defect — `docs/build-log/phase-09/IAE-358.md` (the capability's own original build log) states directly: "UI: none — consistent with every other Group 7 capability." `docs/standards/OBSERVABILITY_STANDARDS.md` §1's own fixed catalogue of "11 dashboards" (Application health, API health, Database performance, Slow query, Queue/job health, Integration health, Tenant usage and errors, Security events, Financial posting exceptions, Storage usage, Import/export jobs) is entirely aspirational — none exist in the real `app/` tree.
@@ -5555,6 +5581,84 @@ stays open and disclosed, which is the honest state.
 **Full record:** `docs/adr/ADR-0028-package-revision-0-19-0-authority.md`,
 `docs/build-log/final-package-validation/FINAL_GAP_RISK_REGISTER.md` §4.1, and `CON-017` in
 `docs/ai-agent-build-prompt-package/00-control/04_CONFLICT_REGISTER.md`.
+
+---
+
+### ISS-2026-307 — `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked (found and live-reproduced 2026-08-30 while closing `ISS-2026-249`, `OPEN`, Medium)
+
+**Severity: Medium. Status: `OPEN` for the residual only — the durable path is built and tested.
+Owner: whoever wires the remaining call sites, tracked here.**
+
+**What is true, live-reproduced before a line of the fix was written.** On a disposable database
+with a real tenant, an enforced policy and one `10.0.0.0/8` allowlist entry:
+
+| Call | Outcome | `ip_access_evaluations` rows |
+|---|---|---|
+| `assert_ip_allowed(…, '203.0.113.9', 'admin', …)` | denied, exception raised | **0 → 0** |
+| `assert_ip_allowed(…, '10.1.2.3', 'admin', …)` | allowed | 0 → 1 (control: the table works) |
+
+**Root cause.** `app.assert_ip_allowed` was the table's only writer (grep-confirmed across every
+migration). On a denial it `INSERT`s the evaluation row and then immediately
+`raise exception 'ip_not_allowed…'` to deny the caller. That exception aborts the transaction,
+and the `INSERT` goes with it. Every path reaches it the same way — `perform
+app.assert_ip_allowed(…)` at the top of an import-commit RPC, or as a standalone RPC from
+`server/mutations/ip-restriction.ts` — and every one loses the row. `dry_run_would_deny` rows
+persist for the same reason inverted: dry run does not raise.
+
+So the table holds exactly the cases where the control did nothing, and never the cases where it
+acted. **The harder the control works, the emptier its evidence gets.** `ISS-2026-302` is about
+wiring IP restriction onto 61 more functions; doing that without this fix would have multiplied
+an audit hole rather than closed one.
+
+**Why this was not caught earlier, precisely.**
+`20260827000000_wire_observability_alert_producers.sql` drafted an alert call in this same
+branch as its Part D, then **withdrew it before applying**, having caught the rollback with the
+local db-tests suite — and recorded the root cause honestly in its own header. That note was
+correct as far as it went, but it framed the loss as being about the *alert*. The evaluation
+row, which predates the alert idea entirely, was already being lost the same way and nobody
+looked one line further up. A withdrawn fix with a correct diagnosis is still a good outcome;
+the miss was not re-reading what else sat inside the branch that was about to be abandoned.
+
+**What is fixed** (`supabase/migrations/20260830170000_create_durable_ip_access_evaluation.sql`):
+
+* `app.evaluate_ip_access(tenant, raw_ip, scope, subject_label) returns text` — the same
+  decision, **returned rather than raised**. Records the evaluation, and raises a deduplicated
+  `app.raise_observability_alert` (`source_type='security'`, `high`) on a genuine denial. The
+  alert survives for exactly the reason the withdrawn Part D's did not: this function never
+  raises. **This closes the security-denial slice of `ISS-2026-249`** for the reachable path.
+* `app.assert_ip_allowed` — signature and behaviour unchanged, now a thin composition of the
+  evaluator. Every existing caller is unaffected, and the two cannot drift apart about what
+  counts as allowed, because there is only one copy of the decision now.
+* `public.evaluate_ip_access` wrapper, `security definer`, service_role-only, mirroring
+  `public.assert_ip_allowed`. The parity gate caught this missing on the first run — the gate
+  working, not an afterthought.
+* `server/mutations/ip-restriction.ts` → `evaluateIpAccess`, which **fails loudly rather than
+  open** on an unrecognized decision, and keeps `not_enforced` distinct from `allowed` (a tenant
+  with the control off has not been checked; recording that as an allow would put a decision in
+  the audit trail that nobody made).
+
+**Evidence.** `scripts/db-tests/ip-restriction-network-access.sql` gained a block that asserts
+the defect *as a property* — `assert_ip_allowed`'s denial row is still rolled back, and the
+assertion says in its own message that if this ever starts persisting the test should be
+inverted, not deleted — then asserts the evaluator's row survives, carries the right subject and
+address, and produces **exactly one** deduplicated security incident. Plus a no-drift check that
+both functions still agree on an allowed address and on a malformed one. 4 TypeScript tests
+cover the wrapper. `db:test ALL PASSED`.
+
+**The residual, stated plainly rather than left to be discovered.** A denial raised from *inside*
+a business transaction (`app.commit_import_job` and its siblings) still loses its own evaluation
+row, because that transaction still aborts. Postgres offers no in-transaction escape: recording
+it needs either an autonomous transaction (`dblink`/`pg_background` — a real new dependency and
+a new security surface) or the business RPCs returning a denial instead of raising one, which is
+a breaking contract change for every caller. Neither is a bounded repair. **What changed is that
+a durable path now exists at all**, which it did not before; moving call sites onto it is this
+entry's remaining work, and belongs with `ISS-2026-302`'s wiring pass rather than ahead of it.
+
+**Exposure while the residual stands.** No access is wrongly allowed — enforcement was correct
+throughout and still is. The loss is evidentiary: after an incident, "which addresses did we
+block, and when" cannot be answered from the platform for denials raised inside a business
+transaction. Denials through the evaluator are now answerable, and so is every one of them via
+the security incident it opens.
 
 ## 5. Maintenance rules
 

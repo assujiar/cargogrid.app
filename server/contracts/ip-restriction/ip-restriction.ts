@@ -157,6 +157,24 @@ export const AssertIpAllowedInputSchema = z.object({
 });
 export type AssertIpAllowedInput = z.input<typeof AssertIpAllowedInputSchema>;
 
+/**
+ * `app.evaluate_ip_access` takes the same four inputs as `app.assert_ip_allowed` — it is the
+ * same decision, returned rather than raised (ISS-2026-307).
+ */
+export const EvaluateIpAccessInputSchema = AssertIpAllowedInputSchema;
+export type EvaluateIpAccessInput = z.input<typeof EvaluateIpAccessInputSchema>;
+
+/**
+ * The four decisions `app.evaluate_ip_access` can return.
+ *
+ * `not_enforced` is deliberately distinct from `allowed`: a tenant with the control switched
+ * off has not been checked, and recording that as an allow would put a decision in the audit
+ * trail that nobody made. The database records no row at all in that case, for the same reason.
+ */
+export const IP_ACCESS_DECISIONS = ["not_enforced", "allowed", "denied", "dry_run_would_deny"] as const;
+export const IpAccessDecisionSchema = z.enum(IP_ACCESS_DECISIONS);
+export type IpAccessDecision = z.infer<typeof IpAccessDecisionSchema>;
+
 export const RequestIpAllowlistBypassInputSchema = z.object({
   tenantId: z.string().uuid(),
   targetAuthUserId: z.string().uuid(),

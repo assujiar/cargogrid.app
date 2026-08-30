@@ -143,6 +143,42 @@ export function parseKnownIssues(text: string): {
   return { records, indexRows };
 }
 
+/**
+ * The §3 summary table restates the counts in prose, which makes it the one number in this file
+ * a reader is most likely to quote and least likely to recompute. It drifted within an hour of
+ * being written, so it is checked rather than trusted.
+ *
+ * Only rows the table actually declares are checked — the table is free to summarise less than
+ * everything, but not to be wrong about what it does say.
+ */
+function checkSummaryTable(text: string, records: readonly IssueRecord[]): readonly Finding[] {
+  const findings: Finding[] = [];
+  const actual = summarizeRecords(records);
+
+  const expect = (label: string, declared: number | undefined, real: number): void => {
+    if (declared !== undefined && declared !== real) {
+      findings.push({ code: "SUMMARY_COUNT_STALE", message: `§3 summary says ${declared} ${label}, the records say ${real}` });
+    }
+  };
+
+  const num = (m: RegExpMatchArray | null, i: number): number | undefined => {
+    const raw = m?.[i];
+    return raw === undefined ? undefined : Number(raw);
+  };
+
+  const openRow = text.match(/^\|\s*`OPEN`\s*\|\s*(\d+)\s*—\s*(\d+) High,\s*(\d+) Medium,\s*(\d+) Low/m);
+  expect("OPEN", num(openRow, 1), actual.open);
+  expect("open High", num(openRow, 2), actual.openBySeverity["High"] ?? 0);
+  expect("open Medium", num(openRow, 3), actual.openBySeverity["Medium"] ?? 0);
+  expect("open Low", num(openRow, 4), actual.openBySeverity["Low"] ?? 0);
+
+  expect("accepted", num(text.match(/^\|\s*`ACCEPTED_RISK`[^|]*\|\s*(\d+)/m), 1), actual.accepted);
+  expect("RESOLVED", num(text.match(/^\|\s*`RESOLVED`\s*\|\s*(\d+)/m), 1), actual.closed);
+  expect("total records", num(text.match(/^\|\s*\*\*Total records\*\*\s*\|\s*\*\*(\d+)\*\*/m), 1), actual.total);
+
+  return findings;
+}
+
 export function checkKnownIssues(text: string): readonly Finding[] {
   const { records, indexRows } = parseKnownIssues(text);
   const findings: Finding[] = [];
@@ -170,6 +206,8 @@ export function checkKnownIssues(text: string): readonly Finding[] {
       findings.push({ code: "UNKNOWN_STATUS", message: `${row.id} (line ${row.line}): status ${row.status} is not in the §1 vocabulary` });
     }
   }
+
+  findings.push(...checkSummaryTable(text, records));
 
   const byId = new Map(records.map((r) => [r.id, r]));
   for (const row of indexRows) {
@@ -212,7 +250,10 @@ export interface IssueStats {
 }
 
 export function summarize(text: string): IssueStats {
-  const { records } = parseKnownIssues(text);
+  return summarizeRecords(parseKnownIssues(text).records);
+}
+
+function summarizeRecords(records: readonly IssueRecord[]): IssueStats {
   const openBySeverity: Record<string, number> = {};
   let open = 0;
   let accepted = 0;

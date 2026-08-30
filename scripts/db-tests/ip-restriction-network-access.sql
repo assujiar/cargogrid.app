@@ -370,4 +370,84 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-307: a DENIED evaluation is durably recorded, where assert_ip_allowed loses its own row to the exception it raises'
+do $$
+declare
+  v_t uuid := (select id from app.tenants where slug = 'iaeip');
+  v_admin1 uuid := '00000000-0000-0000-0000-000032000001';
+  v_before bigint;
+  v_after_assert bigint;
+  v_after_evaluate bigint;
+  v_decision text;
+  v_alerts bigint;
+begin
+  -- This block runs after the break-glass rollback assertion above, which deliberately leaves
+  -- the policy `disabled` and its earlier entry revoked. Re-establish an enforcing policy with
+  -- one allowlisted range, through the real RPCs, so what follows exercises genuine
+  -- enforcement rather than a no-op.
+  perform app.add_ip_allowlist_entry(v_t, '10.0.0.0/8', 'iss307 range', 'all', v_admin1, 'admin1');
+  perform app.set_ip_allowlist_enforcement_mode(v_t, 'enforced', v_admin1, 'admin1');
+
+  select count(*) into v_before from app.ip_access_evaluations where tenant_id = v_t and decision = 'denied';
+
+  -- (1) The defect, asserted as a property rather than described in a comment: enforcement
+  -- through assert_ip_allowed cannot leave a denial record behind, because the exception it
+  -- raises to deny the caller rolls back the row it just wrote. Live-reproduced 2026-08-30.
+  begin
+    perform app.assert_ip_allowed(v_t, '203.0.113.9', 'admin', 'iss307-assert');
+    raise exception 'assertion failed: assert_ip_allowed did not deny a non-allowlisted address';
+  exception
+    when insufficient_privilege then null;
+  end;
+  select count(*) into v_after_assert from app.ip_access_evaluations where tenant_id = v_t and decision = 'denied';
+  if v_after_assert <> v_before then
+    raise exception 'assertion failed: expected assert_ip_allowed''s denial row to be rolled back with its own exception (before=%, after=%) -- if this now persists, the residual documented in 20260830170000 has been closed and this assertion should be inverted, not deleted',
+      v_before, v_after_assert;
+  end if;
+
+  -- (2) The fix: the evaluator returns the same decision and its row SURVIVES, because it
+  -- never raises. This is the durable path a caller uses when the denial must be recorded.
+  v_decision := app.evaluate_ip_access(v_t, '203.0.113.9', 'admin', 'iss307-evaluate');
+  if v_decision <> 'denied' then
+    raise exception 'assertion failed: expected decision denied, got %', v_decision;
+  end if;
+  select count(*) into v_after_evaluate from app.ip_access_evaluations where tenant_id = v_t and decision = 'denied';
+  if v_after_evaluate <> v_before + 1 then
+    raise exception 'assertion failed: expected exactly one durable denied row (before=%, after=%)', v_before, v_after_evaluate;
+  end if;
+  if not exists (
+    select 1 from app.ip_access_evaluations
+    where tenant_id = v_t and decision = 'denied' and subject_label = 'iss307-evaluate' and ip_address = '203.0.113.9'
+  ) then
+    raise exception 'assertion failed: the durable denied row does not carry the subject and address that were denied';
+  end if;
+
+  -- (3) ISS-2026-249's security-denial slice: a genuine denial now reaches the alerting
+  -- system. Before this, every security denial produced zero incident.
+  -- Exactly one, not "at least one": app.raise_observability_alert deduplicates on
+  -- (tenant, source_type, signal_type) inside its route's window, so a host being probed
+  -- repeatedly opens one incident and files the rest as duplicate_signal timeline events.
+  -- The assert_ip_allowed denial above raised its own alert too, and lost it to the same
+  -- rollback that lost its evaluation row -- so a count of 1 here also re-proves that.
+  select count(*) into v_alerts from app.incidents
+  where tenant_id = v_t and source_type = 'security' and signal_type = 'error';
+  if v_alerts <> 1 then
+    raise exception 'assertion failed: expected exactly one deduplicated security incident from the denied IP, found %', v_alerts;
+  end if;
+
+  -- (4) The decision logic did not drift: an allowlisted address still returns allowed, and
+  -- assert_ip_allowed still permits it. Both functions must agree, since one composes the other.
+  if app.evaluate_ip_access(v_t, '10.1.2.3', 'admin', 'iss307-allowed') <> 'allowed' then
+    raise exception 'assertion failed: an allowlisted address was not allowed by the evaluator';
+  end if;
+  perform app.assert_ip_allowed(v_t, '10.1.2.3', 'admin', 'iss307-allowed-assert');
+
+  -- (5) A malformed address is denied, not silently allowed and not an unclassified crash --
+  -- the original function's own documented rule, preserved through the split.
+  if app.evaluate_ip_access(v_t, 'not-an-ip', 'admin', 'iss307-malformed') <> 'denied' then
+    raise exception 'assertion failed: a malformed address was not denied under enforced mode';
+  end if;
+end;
+$$;
+
 \echo 'ALL IAE-028 (IP Restriction and Network Access) ASSERTIONS PASSED'

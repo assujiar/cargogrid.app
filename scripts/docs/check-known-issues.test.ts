@@ -204,6 +204,49 @@ describe("summarize", () => {
   });
 });
 
+describe("the §3 summary counts", () => {
+  const withSummary = (open: number, high: number, total: number): string =>
+    [
+      "# KNOWN_ISSUES.md",
+      "",
+      "## 3. Issue index",
+      "",
+      "| Status | Count |",
+      "|---|---|",
+      `| \`OPEN\` | ${open} — ${high} High, 0 Medium, 0 Low |`,
+      "| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 0 — formally ruled |",
+      "| `RESOLVED` | 0 |",
+      `| **Total records** | **${total}** |`,
+      "",
+      "| Issue ID | Severity | Status | Title |",
+      "|---|---|---|---|",
+      "| `ISS-2026-001` | High | `OPEN` | a |",
+      "",
+      "## 4. Issue records",
+      "",
+      "### ISS-2026-001 — a (OPEN, High)",
+      "",
+      "body",
+      "",
+    ].join("\n");
+
+  test("a correct summary passes", () => {
+    assert.deepEqual(checkKnownIssues(withSummary(1, 1, 1)), []);
+  });
+
+  // This drifted within an hour of being written, which is why it is checked at all.
+  test("REJECTS a stale total", () => {
+    const codes = checkKnownIssues(withSummary(1, 1, 261)).map((f) => f.code);
+    assert.ok(codes.includes("SUMMARY_COUNT_STALE"));
+  });
+
+  test("REJECTS a stale per-severity breakdown even when the total is right", () => {
+    const f = checkKnownIssues(withSummary(1, 10, 1));
+    assert.equal(f.length, 1);
+    assert.match(f[0]!.message, /10 open High.*records say 1/);
+  });
+});
+
 describe("the real ledger", () => {
   test("docs/runtime/KNOWN_ISSUES.md passes with zero findings", () => {
     const text = readFileSync(KNOWN_ISSUES_PATH, "utf8");
