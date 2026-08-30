@@ -124,6 +124,23 @@ Discovered `2026-07-15` during `CG-S5-PH0-012` (Prompt 91), while adding this ch
 
 **Update (`2026-08-03`, `ATW-226A`):** the identical failure mode recurred, this time in Phase 5. `docs/runtime/CHANGE_MANIFEST.md`'s last entry before this checkpoint was `CHG-2026-155` (Prompt 218, Finance Closure Verification, `2026-07-29`) — but Prompt 219 (Phase 5 README), `CG-S10-ATW-001..006` (Prompts 220–225), and the `ATW-226` nine-child decomposition reconciliation checkpoint each did real, evidenced work (build logs and execution-index rows all present and correct) without adding their own manifest entry. Unlike the Prompts-83–90 case, no ID-collision risk exists here (no phantom entry ever claimed `156`–onward), so no special numbering convention was needed — `ATW-226A`'s own entry simply uses the correct next sequential number, `CHG-2026-156`. Backfilling the six-plus missing historical entries remains out of scope for the checkpoint that discovers the gap, the same reasoning `PH0-091` already established; this issue's own title is retained as-is (Prompts 83–90) since renumbering/retitling it to cover both ranges would itself be exactly the kind of historical-record edit `ISS-2026-006`'s own handling section already declined to do.
 
+**`RESOLVED` — confirmed by re-verification, 2026-08-30.** Another stale entry: the
+disposition landed at `CG-S10-ATW-031` and was never annotated here.
+
+Re-verified against the live file this checkpoint: `docs/runtime/CHANGE_MANIFEST.md` §1
+now carries real index rows for `CHG-2026-024`–`CHG-2026-031` covering
+`CG-S5-PH0-004`–`011` (Prompts 83–90), each with its own scope, risk, status, commit and
+date — the eight missing entries this issue was opened for exist. §2 opens with a
+disambiguation note recording the double-use of those eight IDs as `ACCEPTED_RISK`, naming
+exactly which half is which and how to resolve a citation in that range.
+
+The collision itself is deliberately **not** renumbered, and that reasoning stands on
+re-reading: the Prompt 83–90 build logs and the `PH0-091`–`098` build logs each name their
+own ID in committed text, so renumbering either half would falsify the other's citations —
+the same append-only principle `ISS-2026-006` already declined to violate. Disambiguating
+costs nothing and falsifies nothing; rewriting eight historical evidence records so a later
+index reads tidily would do the opposite.
+
 ### ISS-2026-006 — Broken historical citations of deleted plural `docs/build-logs/` files (ACCEPTED_RISK, Low)
 
 Discovered `2026-07-15` during `CG-S5-PH0-013` (Prompt 92, Documentation Foundation), running the new `scripts/docs/check-doc-links.ts` validator against the full repository for the first time. Four files — `docs/build-logs/CG-S5-PH0-001_phase0_execution_index.md`, `..._phase0_wbs.md`, `..._002_source_alignment_context_bootstrap.md`, `..._003_requirement_traceability_baseline.md` — are cited by `docs/build-log/phase-00/PH0-81.md`, `PH0-82.md`, `docs/runtime/CHANGE_MANIFEST.md` (multiple historical checkpoint entries), and `docs/runtime/ERROR_LEDGER.md`. Every citation was correct at authoring time: these files were the plural-directory-convention Lineage B build logs, real and present when `PH0-81.md`/`PH0-82.md`/those `CHANGE_MANIFEST.md`/`ERROR_LEDGER.md` entries were written. A *later* checkpoint's `ERR-2026-003` recovery (`docs/runtime/HANDOFF.md` §1: "duplicate Phase 0 build logs consolidated") deleted them as part of standardizing on the singular `docs/build-log/phase-00/` path — correctly, per that checkpoint's own reconciliation decision — but did not also update the (by-then-historical, append-only) documents that cited the old paths. **Handling:** rewriting `PH0-81.md`/`PH0-82.md`'s own text, or the historical checkpoint sections of `CHANGE_MANIFEST.md`/`ERROR_LEDGER.md`, to erase what those documents actually cited at the time would itself compromise the append-only evidence discipline these records exist to provide (`AGENTS.md` "Branch, commit, and checkpoint rules": "a task is not a valid checkpoint until documentation and evidence are committed" — evidence, once committed, is not revised to look retroactively correct). Instead: `scripts/docs/check-doc-links.ts`'s `KNOWN_HISTORICAL_BROKEN_LINKS` allowlist excuses exactly these four enumerated, dated paths (with this issue ID cited in the code comment) so the validator stays useful for catching *new* breaks without either hiding this one or forcing a historical rewrite. **Status `ACCEPTED_RISK`** — no further action required; if a future documentation-focused task chooses to backfill `ISS-2026-005`'s `CHANGE_MANIFEST.md` gap, it may opportunistically add a forward-pointer note to these four historical entries, but that is not required to close this issue.
@@ -131,6 +148,25 @@ Discovered `2026-07-15` during `CG-S5-PH0-013` (Prompt 92, Documentation Foundat
 ### ISS-2026-007 — `pnpm audit` calls a retired npm endpoint (OPEN, Medium)
 
 Discovered `2026-07-15` during `CG-S5-PH0-015` (Prompt 94, Security Baseline Controls). Running `pnpm audit` against this repository's real, current lockfile (`pnpm-lock.yaml`) failed with `ERR_PNPM_AUDIT_BAD_RESPONSE`: both `registry.npmjs.org/-/npm/v1/security/audits/quick` and `registry.npmjs.org/-/npm/v1/security/audits` responded `410 Gone` — "This endpoint is being retired. Use the bulk advisory endpoint instead" (exact error captured this checkpoint, `docs/standards/SECURITY_STANDARDS.md` §5). `npm audit` was attempted as a fallback and requires a `package-lock.json`, which this repository deliberately does not carry (`ADR-0002`) — generating a second, non-authoritative lockfile solely to audit was rejected as a worse outcome. **Handling:** no CI gate was wired for this — either a hard-fail (blocks every future PR for an upstream endpoint problem, not a real dependency vulnerability) or a soft-pass via `--ignore-registry-errors` (a fabricated "audited, clean" signal with no real subject) would violate this repository's own established "never fabricate a passing gate" discipline (`docs/build-log/phase-00/PH0-88.md` §3). **What remains a real control:** `pnpm install --frozen-lockfile` (already wired in CI since `PH0-88`) still guarantees deterministic, lockfile-pinned installs — this issue is specifically about the *absence of automated vulnerability-database checking*, not about install determinism. **Status `OPEN`**, Medium severity (a real, disclosed gap in supply-chain evidence, though no specific vulnerability is known or suspected) — re-attempt owner: DevEx, once pnpm ships bulk-advisory-endpoint support (pnpm `11.13.1` is available upstream as of this checkpoint, but upgrading the pinned major version is out of `PH0-94`'s scope, Prompt 94 §12's "no broad dependency upgrade"; GitHub's native Dependabot alerts are a viable interim signal but enabling them is a repository-settings change, not a code change, and was not performed unilaterally this checkpoint).
+
+**`RESOLVED` — confirmed by re-verification, 2026-08-30.** This entry was stale: the fix
+landed at `CG-S10-ATW-031` and was never annotated here, so every subsequent backlog count
+carried it as open.
+
+Re-verified live this checkpoint, not assumed: `pnpm audit --json` against the current
+lockfile returns a real report (`526` dependencies, zero advisories at every severity) —
+pnpm `10.33.0` uses the bulk advisory endpoint, so the `410 Gone` failure this entry
+describes no longer occurs. `scripts/security/check-dependency-audit.ts` is the real gate,
+and it holds the line this entry insisted on: an unreachable registry exits **1** saying no
+audit was performed, rather than passing. `.github/workflows/ci.yml:119` runs
+`pnpm run security:audit`, so it is wired, not merely present. Run this checkpoint:
+`✔ dependency audit passed (no advisories)`.
+
+Worth recording rather than glossing: that gate's own header notes it found **20 real
+advisories on first run, 11 of them high, four in Next.js itself** — which had been sitting
+unseen for exactly as long as the gate was missing. That is the cost of leaving a broken
+gate unwired, and it is the reason `PH0-094`'s refusal to fabricate a passing gate was
+right *and* insufficient on its own.
 
 ### ISS-2026-008 — `check-secrets.ts`'s generic-assignment pattern is narrower than sibling foundations' PII coverage (RESOLVED, Low)
 
@@ -4418,6 +4454,33 @@ This is the same *class* as the "CI-mirrors-hosted" property Step 15 §2.2 made 
 **Status `OPEN`**, Medium (no break observed; the risk is untested surface, not a known failure). **Not fixed at `RGL-392`**, whose charter is to freeze state, not change it — and the remedy is a real decision (pin Vercel to 22.x to match the gates, or widen the gates to test 24.x) rather than a mechanical edit. Owner: `RGL-399` (Staging Deployment), which owns environment configuration diagnosis, with `RGL-395` (Full CI Gate) owning any gate-matrix widening.
 
 **Re-verified, disposition confirmed accurate — and confirmed NOT a bounded config fix even if one were attempted, live-checked (2026-08-28, Track B Batch 8).** Called Vercel's `get_project` directly against `prj_9ND1BsfbppHiqeKrSEldYh8xbC68` (team `saiki-tech`) — **`nodeVersion: "24.x"` is still the live setting today**, unchanged since `RGL-392`. No committed `vercel.json` exists to override it, and `package.json`'s `engines.node` does not pin the platform-level setting (confirmed consistent with Vercel's documented behavior). Checked every available Vercel MCP tool in this session for a way to change the project's Node version setting directly — none exists (`update_project_deployment_protection` only covers password/SSO/trusted-IP protection); the only path is the Vercel dashboard/API by an operator with account access, which this session does not exercise unprompted. More fundamentally, this is not a mechanical edit even if a tool existed: this entry's own framing already correctly identifies it as a genuine two-option policy decision (pin Vercel down to 22.x, vs. widen the CI/local gate matrix to also test 24.x) with real tradeoffs either way. **Not fixed by this batch.** Owner and scope unchanged.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A — by taking the first of the two
+remedies this entry itself names ("pin Vercel to 22.x to match the gates, or widen the
+gates to test 24.x").
+
+Re-verified live before changing anything: `get_project` on `prj_9ND1Bsfbpp…` still reports
+`nodeVersion: "24.x"`, so the divergence was real and current, not historical.
+
+`package.json` `engines.node` is changed from `>=22.11.0` to **`22.x`**. That range was the
+whole mechanism of the divergence: `>=22.11.0` does not exclude 24, so Vercel fell through
+to the project-level default and nothing anywhere reported a mismatch. A pinned major
+closes it from the code side, where it is reviewable and version-controlled, rather than as
+a dashboard setting no diff would ever show. `.github/workflows/ci.yml` resolves its runtime
+via `node-version-file: package.json`, so CI follows the same pin automatically — the gates
+and the production build now read their major version from one line.
+
+Pinning was chosen over widening the gate matrix to 24.x because the second option doubles
+every gate's runtime to test a version this repository has no reason to run: `engines` is a
+statement about what CargoGrid is supported on, and it should say what is actually
+verified.
+
+**Two things this does not claim.** The Vercel project setting itself is still `24.x` —
+`engines.node` overrides it at build time, but the two now disagree on paper, and aligning
+the dashboard is a one-click follow-up for whoever owns that account. And the override is
+recorded here as the intended mechanism, **verified on the next real build rather than
+asserted**: `docs/build-log/release-go-live/` will carry the build log line showing the
+resolved Node version. If that line reads 24.x, this entry reopens.
 
 ### ISS-2026-288 — `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the parallel-lineage collision class that caused `ERR-2026-001..003` (found at `RGL-393`, Medium)
 
