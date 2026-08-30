@@ -73,7 +73,7 @@ remain live, and every Step 17 record carries them forward unchanged.
 | `RGL-BLK-001` | Production auto-deploys from `main` with no go/no-go gate | **Still architecturally unfixed.** The operator's 2026-08-28 override changed its *disposition* (unblocking Step 17 eligibility), not the mechanism. |
 | — | `UAT_ACCEPTED` | Never obtained. No UAT environment and no named business acceptor exists. No agent may simulate one. |
 | — | Staging tier | Does not exist. Vercel previews are a disclosed substitute at best; relabelling production as staging is prohibited. |
-| `RGL-BLK-005` | CI red on consecutive runs; `db:test` aborts in CI at a `pg_read_file` client/server filesystem split | Local `db:test` passes; the CI-specific mechanism is unchanged. A local green is not evidence about CI. |
+| `RGL-BLK-005` | CI red on consecutive runs; `db:test` aborts in CI at a `pg_read_file` client/server filesystem split | **`RESOLVED` at `RGL-395`, 2026-08-25 — corrected 2026-08-30.** This row previously claimed "the CI-specific mechanism is unchanged". It was not: `main` has **17 consecutive successful CI runs** (run 131 → run 167, 2026-08-25 → 2026-08-29), verified live via the GitHub Actions API. Step 17 carried the Step 16 *kickoff banner's* wording forward without re-verifying it against the provider — the precise failure mode that banner itself warned about. The underlying discipline still holds: a green local gate is not evidence about CI, so check the API. Full record: `FINAL_PACKAGE_VALIDATION_REPORT.md` §8. |
 | — | Step 16 closure state | `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`, not `VERIFIED`. Step 17 does not upgrade it. |
 
 Full residual table: `docs/build-log/release-go-live/RELEASE_GO_LIVE_CLOSURE_REPORT.md`.

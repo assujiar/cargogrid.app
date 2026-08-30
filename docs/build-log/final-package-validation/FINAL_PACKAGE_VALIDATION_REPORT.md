@@ -207,9 +207,23 @@ rather than accepting any earlier report.
 **Every gate green.** The node:test suite grew from 5,522 at baseline to 5,554 — 32 new tests, all
 for the package validator this step authored.
 
-**The one honest caveat:** these are **local** results. `RGL-BLK-005` records that CI fails on a
-`pg_read_file` client/server filesystem split that does not reproduce locally. **A local green is
-not evidence about CI**, and this report does not claim CI is green.
+**Caveat as written at closure, and its correction.** This section originally read: *"`RGL-BLK-005`
+records that CI fails on a `pg_read_file` client/server filesystem split that does not reproduce
+locally … this report does not claim CI is green."*
+
+**That was wrong, and the error was mine.** `RGL-BLK-005` was `RESOLVED` at `RGL-395` on
+2026-08-25. Step 17 carried the Step 16 *kickoff banner's* description of it forward as a live
+condition without re-verifying against the GitHub Actions API — the exact failure mode Step 16's
+own kickoff had called out ("no checkpoint ever re-verified the claim against the provider").
+
+**Corrected 2026-08-30, verified live via the Actions API:** `main` has **17 consecutive
+successful CI runs** (run 131 through run 167, 2026-08-25T12:09Z → 2026-08-29T14:04Z). The last
+red run on `main` was run 114 at `2670cb5`, 2026-08-25T02:15Z — the state the Step 16 kickoff
+described, since remediated.
+
+The narrower point the caveat was reaching for still stands and is worth keeping: a local gate
+result is not itself evidence about CI, and any claim about CI should be checked against the API.
+This correction is an application of that rule, not an exception to it.
 
 ## 9. Residual risk register
 

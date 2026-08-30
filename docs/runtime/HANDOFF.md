@@ -55,8 +55,7 @@
 >
 > **Nothing about the runtime changed, and nothing is claimed.** `RGL-BLK-001` (production
 > auto-deploys from `main`, no go/no-go gate) is **still architecturally unfixed**; `UAT_ACCEPTED`
-> was never obtained; no staging tier exists; CI remains red per `RGL-BLK-005` (Step 17's gates were
-> green **locally**, which is not evidence about CI). Step 16 remains
+> was never obtained; no staging tier exists. Step 16 remains
 > `RELEASE_GO_LIVE_PARTIALLY_COMPLETE`. CargoGrid is **not** implemented, production ready, market
 > ready or generally available.
 >
@@ -64,6 +63,15 @@
 > deliberately: merging to `main` fires the ungated production auto-deploy `RGL-BLK-001` describes,
 > against an endpoint Step 16 measured as degraded (`/api/ready` → `503`). Whoever merges it owns
 > that decision.
+>
+> **Correction, 2026-08-30 — this banner's own error, fixed rather than left standing.** The
+> sentence above originally continued "…; CI remains red per `RGL-BLK-005` (Step 17's gates were
+> green locally, which is not evidence about CI)". **That was wrong.** `RGL-BLK-005` was
+> `RESOLVED` at `RGL-395` on 2026-08-25, and `main` has **17 consecutive successful CI runs**
+> (run 131 → run 167), verified live via the GitHub Actions API. Step 17 carried the Step 16
+> kickoff banner's description forward without re-checking it against the provider — exactly the
+> failure that banner itself warned about. The discipline behind the sentence is unchanged and
+> still right: a green local gate is not evidence about CI, so check the API.
 >
 > **Next command at the package level:** none. No further package-generation step is authorized by
 > the master prompt. Future work executes the package from `START_HERE.md` against an authorized
