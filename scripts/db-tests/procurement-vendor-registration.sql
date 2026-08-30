@@ -965,3 +965,409 @@ begin
     raise exception 'assertion failed: app.vendor_rate_versions.vendor_master_id is expected to exist (PRC-255, ADR-0020) -- if this fires, either PRC-255''s migration was reverted or this repository''s migration order regressed';
   end if;
 end $$;
+
+-- ===========================================================================
+-- ISS-2026-057 -- the vendor_import adapter (PRC-251 §22 "Bulk-import staged
+-- vendors", named in the source prompt and never built until now).
+-- ===========================================================================
+
+\echo '>> vendor_import setup: a source document type and the tenant''s own published column definition for the vendor_import schema'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000025101';
+  v_supreme uuid := '00000000-0000-0000-0000-000000025999';
+  v_doctype_draft app.config_versions;
+  v_schema_draft app.config_versions;
+  v_importer_role uuid;
+  v_importer_draft app.role_versions;
+begin
+  -- The two gates on app.commit_vendor_import_job are genuinely independent: holding
+  -- tenant_admin (app.is_support_grant_authority) does NOT confer PRC:Import, which still
+  -- has to come from a granting role like any other permission. admin1 therefore needs a
+  -- real PRC role carrying Import plus the Create/Edit/View the adapter's own composed
+  -- calls (create_vendor_profile_draft, search_vendor_duplicate_candidates,
+  -- flag_vendor_duplicate_candidate) each separately require.
+  v_importer_role := (app.create_role(v_tenant1, 'PRC Importer', 'Import/Create/Edit/View', 'tester')).id;
+  v_importer_draft := app.create_role_version(v_importer_role, 'tester');
+  perform app.set_role_version_permissions(v_importer_draft.id, array(select id from app.permissions where resource_module_code = 'PRC' and action in ('Import', 'Create', 'Edit', 'View')), 'tester');
+  perform app.publish_role_version(v_importer_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_importer_role and status = 'published'), v_admin1, v_admin1, 'tester');
+
+  perform app.register_document_type('vendor_import_source', 'Vendor Import Source File', 'PRC', v_supreme, 'supreme');
+  v_doctype_draft := app.create_config_draft('document:vendor_import_source', v_tenant1, 'tenant', null, v_admin1, 'admin');
+  perform app.set_config_items(v_doctype_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('text/csv')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', to_jsonb(10485760)),
+    jsonb_build_object('key', 'retention_class', 'value', to_jsonb('operational_contract_plus_90d'::text)),
+    jsonb_build_object('key', 'default_classification', 'value', to_jsonb('internal'::text)),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', to_jsonb(false))
+  ), v_admin1, 'admin');
+  perform app.publish_document_type_definition(v_doctype_draft.id, v_admin1, now(), 'admin');
+
+  -- The tenant publishes its OWN column definition through the ordinary Configuration
+  -- Engine -- the migration registers the schema KIND only, never a tenant's columns.
+  v_schema_draft := app.create_config_draft('import_export:vendor_import', v_tenant1, 'tenant', null, v_admin1, 'admin');
+  perform app.set_config_items(
+    v_schema_draft.id,
+    jsonb_build_array(jsonb_build_object('key', 'columns', 'value', to_jsonb((
+      select array_agg(jsonb_build_object('key', c.key, 'label', c.label, 'required', c.required, 'data_type', c.data_type))
+      from (values
+        ('legal_name', 'Legal name', true, 'text'),
+        ('trade_name', 'Trade name', false, 'text'),
+        ('legal_entity_type', 'Legal entity type', false, 'text'),
+        ('business_registration_number', 'Business registration number', false, 'text'),
+        ('vendor_category', 'Vendor category', false, 'text'),
+        ('payment_term_days', 'Payment term (days)', false, 'number')
+      ) as c(key, label, required, data_type)
+    )), 'canonical_ref', null)),
+    v_admin1, 'admin'
+  );
+  perform app.publish_import_export_schema(v_schema_draft.id, v_admin1, now(), 'admin');
+end $$;
+
+\echo '>> vendor_import: the schema kind and its config type are registered exactly once'
+do $$
+declare
+  v_count integer;
+begin
+  select count(*) into v_count from app.import_export_schemas where code = 'vendor_import';
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly one vendor_import schema registration, found %', v_count;
+  end if;
+  select count(*) into v_count from app.config_types where code = 'import_export:vendor_import';
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly one import_export:vendor_import config type, found %', v_count;
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'app' and table_name = 'vendor_profiles' and column_name = 'source_import_staging_row_id'
+  ) then
+    raise exception 'assertion failed: expected app.vendor_profiles.source_import_staging_row_id to exist (the adapter''s own idempotency guard)';
+  end if;
+end $$;
+
+\echo '>> vendor_import validator: a clean row passes; a formula-injection-shaped legal_name, a negative/fractional/non-numeric payment_term_days, a whitespace-only legal_name, a file-supplied intake_source and a file-supplied lifecycle_status are each rejected with a clear reason and the raw payload preserved verbatim'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000025101';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_ids uuid[];
+  v_idx integer;
+  v_status text;
+  v_error text;
+begin
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'vendor_import_source', 'import_source', gen_random_uuid(),
+    'vendors-validation.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-vndimp-source-val', v_admin1, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin1, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'vendor_import', v_source_file.id, '{}'::jsonb, 'idem-vndimp-job-val', v_admin1, 'admin');
+
+  perform app.stage_import_rows(
+    v_job.job_id,
+    jsonb_build_array(
+      jsonb_build_object('legal_name', 'PT Zenith Kargo Validasi', 'vendor_category', 'trucking', 'payment_term_days', '30'),
+      jsonb_build_object('legal_name', '=cmd|''/bin/calc''!A1', 'vendor_category', 'trucking'),
+      jsonb_build_object('legal_name', 'PT Term Negatif', 'payment_term_days', '-5'),
+      jsonb_build_object('legal_name', '   ', 'vendor_category', 'trucking'),
+      jsonb_build_object('legal_name', 'PT Klaim Provenance', 'intake_source', 'staff_created'),
+      jsonb_build_object('legal_name', 'PT Klaim Lifecycle', 'lifecycle_status', 'active'),
+      jsonb_build_object('legal_name', 'PT Term Bukan Angka', 'payment_term_days', 'thirty'),
+      jsonb_build_object('legal_name', 'PT Term Pecahan', 'payment_term_days', '2.5')
+    ),
+    v_admin1, 'admin'
+  );
+
+  select array_agg(id order by row_number) into v_ids from app.import_staging_rows where job_id = v_job.job_id;
+
+  for v_idx in 1..8 loop
+    perform app.validate_vendor_import_row(v_ids[v_idx], v_admin1, 'admin');
+  end loop;
+
+  select validation_status into v_status from app.import_staging_rows where id = v_ids[1];
+  if v_status <> 'valid' then
+    raise exception 'assertion failed: expected row 1 to validate cleanly, got %', v_status;
+  end if;
+
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[2];
+  if v_status <> 'invalid' or v_error not like '%disallowed formula/spreadsheet-injection prefix%' then
+    raise exception 'assertion failed: expected row 2 rejected with a clear formula-injection reason, got status=% error=%', v_status, v_error;
+  end if;
+  -- The raw value survives UNCHANGED: rejected, never silently sanitized.
+  if (select raw_payload ->> 'legal_name' from app.import_staging_rows where id = v_ids[2]) <> '=cmd|''/bin/calc''!A1' then
+    raise exception 'assertion failed: expected the raw payload to be preserved verbatim, not stripped';
+  end if;
+
+  -- -5 is a structurally VALID number as far as the generic validator is concerned
+  -- (its own pattern is `-?[0-9]+(\.[0-9]+)?`), so this row proves the domain layer is
+  -- doing real work: without it a negative payment term reaches
+  -- app.create_vendor_profile_draft mid-commit and aborts every other row in the batch
+  -- with a raw check_violation instead of being marked invalid at validation time.
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[3];
+  if v_status <> 'invalid' or v_error not like '%is not a whole, non-negative number of days%' then
+    raise exception 'assertion failed: expected row 3 rejected for a negative payment_term_days, got status=% error=%', v_status, v_error;
+  end if;
+
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[4];
+  if v_status <> 'invalid' or v_error not like '%must not be empty or whitespace-only%' then
+    raise exception 'assertion failed: expected row 4 rejected for a whitespace-only legal_name, got status=% error=%', v_status, v_error;
+  end if;
+
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[5];
+  if v_status <> 'invalid' or v_error not like '%intake_source: is not an importable column%' then
+    raise exception 'assertion failed: expected row 5 rejected -- a file must never be able to claim its own provenance, got status=% error=%', v_status, v_error;
+  end if;
+
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[6];
+  if v_status <> 'invalid' or v_error not like '%lifecycle_status: is not an importable column%' then
+    raise exception 'assertion failed: expected row 6 rejected -- a file must never be able to claim a vendor is already active, got status=% error=%', v_status, v_error;
+  end if;
+
+  -- A wholly non-numeric value is caught by the GENERIC structural pass, which this
+  -- validator calls unchanged and never reimplements -- asserted here so a future change
+  -- that accidentally stops calling it is caught rather than silently narrowing coverage.
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[7];
+  if v_status <> 'invalid' or v_error not like '%is not a valid number%' then
+    raise exception 'assertion failed: expected row 7 rejected by the generic structural pass, got status=% error=%', v_status, v_error;
+  end if;
+
+  -- A fractional term is likewise a valid number generically, and likewise not a real
+  -- number of days.
+  select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[8];
+  if v_status <> 'invalid' or v_error not like '%is not a whole, non-negative number of days%' then
+    raise exception 'assertion failed: expected row 8 rejected for a fractional payment_term_days, got status=% error=%', v_status, v_error;
+  end if;
+end $$;
+
+\echo '>> vendor_import commit: PRC:Import without support-grant authority is refused; a valid batch creates real bulk_import DRAFT vendors; invalid rows create nothing; an identical business registration number (punctuation/case normalized) is flagged as a duplicate candidate, which then blocks submit-for-review; replay creates zero duplicates'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000025101';
+  v_staff uuid := '00000000-0000-0000-0000-000000025102';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+  v_ids uuid[];
+  v_first app.vendor_profiles;
+  v_second app.vendor_profiles;
+  v_count integer;
+begin
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'vendor_import_source', 'import_source', gen_random_uuid(),
+    'vendors-commit.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-vndimp-source-commit', v_admin1, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin1, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'vendor_import', v_source_file.id, '{}'::jsonb, 'idem-vndimp-job-commit', v_admin1, 'admin');
+
+  perform app.stage_import_rows(
+    v_job.job_id,
+    jsonb_build_array(
+      -- Row 1: fully valid.
+      jsonb_build_object(
+        'legal_name', 'PT Zenith Kargo Impor', 'trade_name', 'Zenith Kargo', 'legal_entity_type', 'PT',
+        'business_registration_number', 'REG-IMP-0001', 'vendor_category', 'trucking', 'payment_term_days', '30'
+      ),
+      -- Row 2: invalid (formula injection) -- must create nothing at all.
+      jsonb_build_object('legal_name', '@SUM(1+1)*cmd', 'vendor_category', 'trucking'),
+      -- Row 3: a completely different NAME (so the trigram sweep cannot match it) but the
+      -- SAME registration number as row 1 with different punctuation and case. This is the
+      -- duplicate a name-similarity check alone would miss entirely, and it is a
+      -- within-batch duplicate -- proving the sweep sees rows committed earlier in this
+      -- same job, not only vendors that predate it.
+      jsonb_build_object(
+        'legal_name', 'PT Sumber Makmur Sentosa', 'legal_entity_type', 'PT',
+        'business_registration_number', 'reg.imp/0001', 'vendor_category', 'warehousing'
+      )
+    ),
+    v_admin1, 'admin'
+  );
+
+  select array_agg(id order by row_number) into v_ids from app.import_staging_rows where job_id = v_job.job_id;
+  perform app.validate_vendor_import_row(v_ids[1], v_admin1, 'admin');
+  perform app.validate_vendor_import_row(v_ids[2], v_admin1, 'admin');
+  perform app.validate_vendor_import_row(v_ids[3], v_admin1, 'admin');
+
+  -- staff holds PRC Create/Edit/View but is NOT tenant_admin: the bulk path requires BOTH
+  -- is_support_grant_authority AND PRC:Import, so it must be refused even though staff can
+  -- create vendors one at a time.
+  begin
+    perform app.commit_vendor_import_job(v_job.job_id, true, v_staff, 'staff');
+    raise exception 'assertion failed: expected insufficient_authority -- staff must not be able to bulk-create vendors';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  v_updated := app.commit_vendor_import_job(v_job.job_id, true, v_admin1, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected the job to complete (partial commit, 1 invalid row accepted), got %', v_updated.status;
+  end if;
+
+  select * into v_first from app.vendor_profiles where tenant_id = v_tenant1 and source_import_staging_row_id = v_ids[1];
+  if not found then
+    raise exception 'assertion failed: expected staged row 1 to have produced a vendor profile stamped with its own staging row id';
+  end if;
+  select * into v_second from app.vendor_profiles where tenant_id = v_tenant1 and source_import_staging_row_id = v_ids[3];
+  if not found then
+    raise exception 'assertion failed: expected staged row 3 to have produced a vendor profile stamped with its own staging row id';
+  end if;
+
+  -- Provenance is recorded by the adapter, never claimed by the file.
+  if v_first.intake_source <> 'bulk_import' or v_second.intake_source <> 'bulk_import' then
+    raise exception 'assertion failed: expected both imported vendors to record intake_source=bulk_import, got % and %', v_first.intake_source, v_second.intake_source;
+  end if;
+  -- Import creates DRAFTS. It never submits, approves or activates.
+  if v_first.lifecycle_status <> 'draft' or v_second.lifecycle_status <> 'draft' then
+    raise exception 'assertion failed: expected both imported vendors to be drafts, got % and %', v_first.lifecycle_status, v_second.lifecycle_status;
+  end if;
+  if v_first.legal_name <> 'PT Zenith Kargo Impor' or v_first.trade_name <> 'Zenith Kargo' or v_first.payment_term_days <> 30 then
+    raise exception 'assertion failed: expected row 1''s own field values to survive the import intact';
+  end if;
+  -- A real vendor master record was minted through the canonical path, not a direct insert.
+  if not exists (
+    select 1 from app.master_records
+    where id = v_first.master_record_id and tenant_id = v_tenant1 and master_type_code = 'vendor'
+  ) then
+    raise exception 'assertion failed: expected the imported vendor to carry a real vendor-typed master record';
+  end if;
+
+  -- The invalid row created nothing whatsoever.
+  if exists (select 1 from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = '@SUM(1+1)*cmd') then
+    raise exception 'assertion failed: expected the invalid row to have created no vendor profile at all';
+  end if;
+  if exists (select 1 from app.vendor_profiles where tenant_id = v_tenant1 and source_import_staging_row_id = v_ids[2]) then
+    raise exception 'assertion failed: expected no vendor profile stamped with the invalid staging row';
+  end if;
+
+  -- The registration-number sweep flagged row 3 against row 1, within the same batch.
+  if not exists (
+    select 1 from app.vendor_duplicate_candidates
+    where source_master_record_id = v_second.master_record_id
+      and candidate_master_record_id = v_first.master_record_id
+      and decision = 'pending'
+      and similarity_basis like '%identical business registration number%'
+  ) then
+    raise exception 'assertion failed: expected an identical (punctuation/case-normalized) business registration number to be flagged as a pending duplicate candidate';
+  end if;
+
+  -- ...and that flag genuinely blocks the vendor advancing, which is the whole point of
+  -- flagging rather than hard-failing the import: the row lands, a human decides.
+  perform app.add_vendor_contact(v_second.master_record_id, 'Budi Duplikat', 'Ops', 'budi@sumber-makmur.test', '0811-000-777', true, v_admin1, 'admin');
+  perform app.add_vendor_address(v_second.master_record_id, 'legal', 'Jl. Gatot Subroto 7', 'Jakarta', 'DKI Jakarta', '12930', 'Indonesia', v_admin1, 'admin');
+  perform app.add_vendor_service(v_second.master_record_id, 'warehousing', v_admin1, 'admin');
+  select * into v_second from app.vendor_profiles where master_record_id = v_second.master_record_id;
+  begin
+    perform app.submit_vendor_profile_for_review(v_second.master_record_id, v_second.record_version, v_admin1, 'admin');
+    raise exception 'assertion failed: expected unresolved_duplicate_candidates to block submitting an imported vendor flagged as a duplicate';
+  exception
+    when others then
+      if sqlerrm not like 'unresolved_duplicate_candidates%' then raise; end if;
+  end;
+
+  -- Replay: the job is already completed, so a second commit is refused outright by the
+  -- framework's own standing contract -- and crucially creates zero additional vendors.
+  select count(*) into v_count from app.vendor_profiles where tenant_id = v_tenant1 and intake_source = 'bulk_import';
+  begin
+    perform app.commit_vendor_import_job(v_job.job_id, true, v_admin1, 'admin');
+    raise exception 'assertion failed: expected import_export_job_not_committable on a replayed commit of an already-completed job';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm not like 'import_export_job_not_committable%' then raise; end if;
+  end;
+  if (select count(*) from app.vendor_profiles where tenant_id = v_tenant1 and intake_source = 'bulk_import') <> v_count then
+    raise exception 'assertion failed: expected the replayed commit attempt to create zero additional vendors';
+  end if;
+end $$;
+
+\echo '>> vendor_import commit: a job with invalid rows and no p_allow_partial is refused outright (never silently drops them)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000025101';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_row_id uuid;
+begin
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'vendor_import_source', 'import_source', gen_random_uuid(),
+    'vendors-strict.csv', 'text/csv', 512, 'internal', false, null, null, null,
+    'idem-vndimp-source-strict', v_admin1, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin1, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'vendor_import', v_source_file.id, '{}'::jsonb, 'idem-vndimp-job-strict', v_admin1, 'admin');
+
+  perform app.stage_import_rows(
+    v_job.job_id,
+    jsonb_build_array(jsonb_build_object('legal_name', '+SUM(A1:A9)', 'vendor_category', 'trucking')),
+    v_admin1, 'admin'
+  );
+  select id into v_row_id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1;
+  perform app.validate_vendor_import_row(v_row_id, v_admin1, 'admin');
+
+  begin
+    perform app.commit_vendor_import_job(v_job.job_id, false, v_admin1, 'admin');
+    raise exception 'assertion failed: expected import_export_job_has_invalid_rows without p_allow_partial';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm not like 'import_export_job_has_invalid_rows%' then raise; end if;
+  end;
+end $$;
+
+\echo '>> vendor_import: the commit adapter refuses a job registered under a different schema code'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
+  v_admin1 uuid := '00000000-0000-0000-0000-000000025101';
+  v_supreme uuid := '00000000-0000-0000-0000-000000025999';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_other_draft app.config_versions;
+begin
+  perform app.register_import_export_schema('vndreg_other_import', 'Other Import', 'PRC', v_supreme, 'supreme');
+  v_other_draft := app.create_config_draft('import_export:vndreg_other_import', v_tenant1, 'tenant', null, v_admin1, 'admin');
+  perform app.set_config_items(
+    v_other_draft.id,
+    jsonb_build_array(jsonb_build_object('key', 'columns', 'value', jsonb_build_array(
+      jsonb_build_object('key', 'legal_name', 'label', 'Legal name', 'required', true, 'data_type', 'text')
+    ), 'canonical_ref', null)),
+    v_admin1, 'admin'
+  );
+  perform app.publish_import_export_schema(v_other_draft.id, v_admin1, now(), 'admin');
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'vendor_import_source', 'import_source', gen_random_uuid(),
+    'other.csv', 'text/csv', 256, 'internal', false, null, null, null,
+    'idem-vndimp-source-other', v_admin1, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin1, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'vndreg_other_import', v_source_file.id, '{}'::jsonb, 'idem-vndimp-job-other', v_admin1, 'admin');
+
+  begin
+    perform app.commit_vendor_import_job(v_job.job_id, true, v_admin1, 'admin');
+    raise exception 'assertion failed: expected import_export_wrong_schema for a non-vendor_import job';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm not like 'import_export_wrong_schema%' then raise; end if;
+  end;
+end $$;
+
+\echo '>> vendor_import: neither anon nor authenticated holds EXECUTE on the adapter (service_role-mediated, matching every other import commit adapter)'
+do $$
+declare
+  v_has boolean;
+begin
+  select has_function_privilege('authenticated', 'app.commit_vendor_import_job(uuid, boolean, uuid, text, text)', 'EXECUTE') into v_has;
+  if v_has then raise exception 'assertion failed: authenticated must not hold EXECUTE on app.commit_vendor_import_job'; end if;
+  select has_function_privilege('anon', 'app.commit_vendor_import_job(uuid, boolean, uuid, text, text)', 'EXECUTE') into v_has;
+  if v_has then raise exception 'assertion failed: anon must not hold EXECUTE on app.commit_vendor_import_job'; end if;
+  select has_function_privilege('authenticated', 'public.commit_vendor_import_job(uuid, boolean, uuid, text, text)', 'EXECUTE') into v_has;
+  if v_has then raise exception 'assertion failed: authenticated must not hold EXECUTE on the public wrapper either'; end if;
+  select has_function_privilege('service_role', 'app.commit_vendor_import_job(uuid, boolean, uuid, text, text)', 'EXECUTE') into v_has;
+  if not v_has then raise exception 'assertion failed: service_role must hold EXECUTE on app.commit_vendor_import_job'; end if;
+end $$;

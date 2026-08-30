@@ -172,13 +172,90 @@ Discovered `2026-08-09` during `CG-S11-PRC-019` (Prompt 268), by a live performa
 
 **Resolved 2026-08-09 (`CG-S11-PRC-020`, Prompt 269 Hardening, `supabase/migrations/20260730820000_harden_procurement_c05_tenant_disclosure_sweep_batch5.sql`):** `create index vendor_contracts_tenant_created_idx on app.vendor_contracts (tenant_id, created_at desc);` — plain `CREATE INDEX`, mirroring the three sibling tables' naming exactly (no `CONCURRENTLY` anywhere in this repository's own migrations, confirmed by grep). Verified live against a seeded, skewed dataset mirroring this entry's own reproduction (7,497 total rows, one tenant holding 5,100 = 68.0%): `EXPLAIN (ANALYZE, BUFFERS)` against `app.list_vendor_contracts`'s own exact query shape went from `Seq Scan on vendor_contracts` (203 buffer hits, 3.03ms) with the index absent to `Index Scan using vendor_contracts_tenant_created_idx` (3 buffer hits, 0.09ms) with it present — confirmed via a throwaway database, never wired into the permanent `db:test` suite (a multi-thousand-row seed does not belong in the standing regression gate).
 
-### ISS-2026-057 — PRC-251 "Bulk-import staged vendors" (§22) — undisclosed C-23 gap (OPEN, Medium)
+### ISS-2026-057 — PRC-251 "Bulk-import staged vendors" (§22) — undisclosed C-23 gap (RESOLVED, Medium)
 
 Discovered `2026-08-09` during `CG-S11-PRC-019` (Prompt 268), by a spec-anchor-completeness sweep diffing each capability's own source-prompt §22 against its build log's own itemized disclosures, independently re-confirmed by the Prompt 268 synthesis three ways: (1) `251_VENDOR_REGISTRATION_ONBOARDING_PROMPT.md:100` names "Bulk-import staged vendors" as a required alternative flow; (2) the only trace in the codebase is the `bulk_import` value in the `intake_source` CHECK constraint and TypeScript enum (`supabase/migrations/20260730580000_create_procurement_vendor_registration.sql:279,583`; `server/contracts/vendor-profile/vendor-profile.ts:22,444`) — i.e. a caller can tag ONE vendor draft as `bulk_import`-sourced via the ordinary single-vendor RPC, with no batch/CSV ingestion RPC, no staged-multiple-rows table, no commit/review-staged-rows workflow, and no PLT-131-style import adapter anywhere (`grep -rln "bulk_import|bulkImport" app/ server/ src/ lib/` returns only the one contract-file enum definition); (3) `docs/build-log/phase-06/PRC-251.md` §8 ("Residual disclosures / not built") itemizes nine other real gaps in meticulous, precedent-citing detail and never names bulk-import. Contrast with PRC-255 (Vendor Rate & Pricelist), which built a real import adapter and precisely disclosed its own import-scope boundaries — PRC-251 does neither. Same undisclosed-named-requirement (C-23) shape the taxonomy already tracks for `ISS-2026-046`/`047` (PRC-260) and `ISS-2026-050` (PRC-261) — a further instance, in a different capability.
 
 **Handling:** Not fixed by Prompt 268 (docs-only checkpoint; also, per `BUILD_EXECUTION_PROTOCOL.md` §5.6, building a real batch-import pipeline is itself an architectural decision, not a hardening-sized fix). **Status `OPEN`**, Medium severity (no live production exposure — a caller cannot currently reach a broken bulk-import path since none exists; the gap is a missing named capability, not an insecure one) — owner: PRC-251, a future Procurement task with an explicit schema/import-adapter mandate (mirroring PLT-131/PRC-255's own precedent).
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `grep -rln "bulk_import|bulkImport"` across `app/`/`server/` still returns only the vendor-profile status enum (`server/contracts/vendor-profile/vendor-profile.ts:22,444`) and an unrelated employee-import enum (`server/contracts/employee/employee.ts:25`); no batch/CSV import RPC exists. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A (owner-authorized remediation scope —
+this entry is exactly the "the eventual fix is a future task with an explicit
+schema/import-adapter mandate" case that ADR now authorizes to be worked directly).
+Re-verified live before any code was written: `grep -rln "bulk_import\|bulkImport" app/
+server/ src/ lib/` still returned only the two contract-file enum definitions, and no
+`commit_*_import_job` adapter existed for vendors. The gap was real and unchanged.
+
+Closed by `supabase/migrations/20260830100000_create_vendor_import_adapter.sql`, at the
+fidelity of this entry's own cited precedent (PRC-255's `vendor_rate_import`), with all
+three pieces PLT-131 requires:
+
+* schema kind `vendor_import` + its `import_export:vendor_import` config type registered
+  (the tenant still publishes its own column definition through the ordinary
+  Configuration Engine — the migration registers the kind, never a tenant's columns);
+* `app.validate_vendor_import_row`, which calls the generic `app.validate_staging_row`
+  UNCHANGED for the structural pass and adds only what it cannot do: formula/
+  spreadsheet-injection prefixes (rejected with a reason, raw payload preserved
+  verbatim), a whitespace-only `legal_name`, a negative or fractional
+  `payment_term_days` (the generic pattern `-?[0-9]+(\.[0-9]+)?` accepts both, and both
+  would otherwise abort a whole batch mid-commit), and any attempt by the file to supply
+  `intake_source` or a lifecycle/approval/blacklist field;
+* `app.commit_vendor_import_job(p_job_id, p_allow_partial, p_actor_auth_user_id,
+  p_actor_label, p_client_ip default null)`, which writes only through the canonical
+  `app.create_vendor_profile_draft` — never a direct INSERT (Prompt 131 §24).
+
+Four properties worth naming, because each is a defect this repository has already paid
+for once:
+
+1. **Authority is strictly additive, never a bypass.** The adapter requires BOTH
+   `app.is_support_grant_authority` AND `PRC:Import` (mirroring
+   `app.commit_vendor_rate_import_job`), and `create_vendor_profile_draft` then enforces
+   its own unchanged `PRC:Create` per row. Live-proved in the regression that these are
+   genuinely independent: holding `tenant_admin` does **not** confer `PRC:Import`, which
+   still requires a granting role.
+2. **`unique_violation` is discriminated by constraint name, never caught blanket** —
+   the `HDN-385`/`ISS-2026-269`/`ISS-2026-279` defect class. The shape here differs from
+   both precedents and is documented in the migration so nobody "restores symmetry"
+   later: **no** `unique_violation` escaping `create_vendor_profile_draft` is ever a safe
+   replay (its idempotency-key path *returns* the existing row rather than raising), so
+   it is deliberately left unhandled there; the single handler sits on the
+   provenance-stamping UPDATE and accepts exactly one constraint name
+   (`vendor_profiles_source_import_row_unique`).
+3. **No silent no-op path.** The provenance stamp checks the returned profile's existing
+   `source_import_staging_row_id` explicitly and raises a named error if it is bound to a
+   *different* staged row, rather than a `where ... is null` clause that would update zero
+   rows and report success — the exact failure mode that hid the employee-adapter defect
+   for two checkpoints.
+4. **Duplicate detection is wired in before the defect, not after it.** PRC-251 already
+   built both the detector (`app.search_vendor_duplicate_candidates`) and the gate
+   (`app.submit_vendor_profile_for_review` refuses while a `pending` candidate remains) —
+   the detector simply had no bulk caller. After each row commits, two sweeps run: trigram
+   name/trade-name similarity, and an exact punctuation-and-case-normalized
+   `business_registration_number` match (an NPWP/NIB collision is a far stronger signal
+   than any name score, and nothing in the schema constrains that column). Matches are
+   flagged, never hard-blocked — the import lands and the flagged vendor simply cannot be
+   submitted for review until a human decides.
+
+IP-allowlist gating (`ISS-2026-278`'s trailing `p_client_ip` shape) is carried at birth,
+so this adapter never becomes a sixth entry in that remediation.
+
+Evidence: `scripts/db-tests/procurement-vendor-registration.sql` gained six regression
+blocks (no new file; the existing one widened) covering validator behaviour on all eight
+row shapes, the staff-refused authority case, a real partial commit producing
+`bulk_import` **draft** vendors with intact field values and a real vendor-typed master
+record, invalid rows creating nothing at all, a *within-batch* registration-number
+duplicate flagged and then genuinely blocking submit-for-review, replay creating zero
+duplicates, `p_allow_partial` refusal, wrong-schema-code refusal, and the
+anon/authenticated/service_role grant matrix on both the `app.*` function and its `public.*`
+wrapper. Full `pnpm run db:test` re-run clean (`ALL PASSED`) before commit.
+
+One defect in this fix was caught by an existing gate rather than by me, and is recorded
+rather than quietly corrected: the first version's `public.validate_vendor_import_row`
+wrapper was `security definer` over an `invoker` `app.*` function — an RLS-bypass-class
+mismatch — and `scripts/db-tests/public-api-wrapper-regression.sql`'s exhaustive
+mode-parity check failed the run. Fixed to `invoker` before commit; the reason is now a
+comment at that wrapper's own definition.
 
 ### ISS-2026-058 — PRC-262 "manual confirmation with evidence" (§22) — undisclosed C-23 gap (OPEN, Medium)
 

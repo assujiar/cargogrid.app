@@ -24,9 +24,16 @@
  * charter. A freeze that forbade its own evidence trail would be unusable.
  *
  * This is a local/CI gate over repository content. It cannot police a direct
- * push to an unprotected `main`, nor the Vercel `main` -> production
- * auto-deploy — see RGL-393.md §3 for the ingress paths that remain open, and
- * RGL-BLK-001. Do not read a pass here as "the candidate is sealed".
+ * push to an unprotected `main` — see RGL-393.md §3 for the ingress paths that
+ * remain open. Do not read a pass here as "the candidate is sealed".
+ *
+ * CORRECTED 2026-08-30: this comment, and the console line below, previously
+ * also named the Vercel `main` -> production auto-deploy as an open ingress.
+ * That was true when written and is no longer: `RGL-BLK-001` was closed by
+ * mechanism (`vercel.json` sets `git.deploymentEnabled.main = false` and routes
+ * every build through `scripts/release/check-go-decision.ts`, which fails
+ * closed unless a recorded go decision matches the exact commit SHA). Branch
+ * protection remains genuinely open, so that half of the caveat stands.
  *
  * CLI: node --experimental-strip-types scripts/release/check-release-freeze.ts
  */
@@ -1276,6 +1283,59 @@ import { readFileSync } from "node:fs";
  * application, no live-only leak this time (the platform default-
  * privilege bootstrap revoke was baked into the new migration from the
  * start, per the precedent Batch 7 established).
+ *
+ * AMENDED 2026-08-30 (twenty-ninth pass), migrationSetSha256 and
+ * dbTestSetSha256. Ruling: docs/adr/ADR-0027-owner-authorized-remediation-and-
+ * launch.md Part A (owner-authorized remediation scope), which lifts the
+ * per-task size cap and inverts AGENTS.md's "fix only task-caused failures"
+ * for declared remediation tasks until the backlog reaches zero. This is the
+ * first schema-touching item worked under that ruling; subsequent amendments
+ * in this remediation phase share it rather than each minting a new one.
+ *
+ * `ISS-2026-057` (PRC-251 §22 "Bulk-import staged vendors" -- a named
+ * alternative flow in the source prompt that was never built; the only trace
+ * of it in the repository was the `bulk_import` value in the
+ * `vendor_profiles_intake_source_check` constraint and the matching
+ * TypeScript enum). Re-verified live as still-open before any code was
+ * written. Closed additively by one new migration (379 -> 380 files: +1,
+ * `20260830100000_create_vendor_import_adapter.sql`) -- no already-applied
+ * migration is edited. It registers the `vendor_import` PLT-131 schema kind
+ * and its config type, adds `app.vendor_profiles.source_import_staging_row_id`
+ * with a partial unique index as the adapter's own idempotency guard, and adds
+ * `app.validate_vendor_import_row` + `app.commit_vendor_import_job` (plus their
+ * two `public.*` wrappers), at the fidelity of the entry's own cited precedent,
+ * PRC-255's `vendor_rate_import`.
+ *
+ * Three properties worth naming here because each is a defect class this
+ * repository has already paid for: (1) authority is strictly additive --
+ * BOTH `app.is_support_grant_authority` AND `PRC:Import`, with
+ * `create_vendor_profile_draft`'s own unchanged `PRC:Create` still enforced per
+ * row (the regression live-proves these are independent: `tenant_admin` does
+ * not confer `PRC:Import`); (2) `unique_violation` is discriminated by
+ * constraint name, and the shape here deliberately differs from both
+ * precedents -- no `unique_violation` escaping `create_vendor_profile_draft` is
+ * ever a safe replay, so it is left unhandled there, and the single handler
+ * sits on the provenance-stamping UPDATE accepting exactly one constraint
+ * name; (3) the duplicate-candidate detector PRC-251 already built, which had
+ * no bulk caller, is wired in with two sweeps (trigram name similarity, and an
+ * exact punctuation/case-normalized `business_registration_number` match) that
+ * flag rather than block -- the import lands and the flagged vendor cannot be
+ * submitted for review until a human decides. `ISS-2026-278`'s trailing
+ * `p_client_ip` IP-allowlist shape is carried at birth.
+ *
+ * dbTestSetSha256 changed (235 files unchanged in count --
+ * `scripts/db-tests/procurement-vendor-registration.sql` widened with six new
+ * regression blocks, no file added or removed). One defect in this fix was
+ * caught by an existing gate rather than by its author and is recorded rather
+ * than quietly corrected: the first version's
+ * `public.validate_vendor_import_row` wrapper was `security definer` over an
+ * `invoker` `app.*` function -- an RLS-bypass-class mismatch --
+ * and `scripts/db-tests/public-api-wrapper-regression.sql`'s exhaustive
+ * mode-parity check failed the run; fixed to `invoker` before commit.
+ * Re-verified via a fresh full local db-test suite run (380 migrations, 235
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project -- live application is Part 5 of this phase's own
+ * plan, and this amendment does not claim it.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1438,9 +1498,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (377 files, twenty-seventh-pass amendment above). Superseded 2026-08-28
   // (twenty-eighth pass) by Track B Batch 8's ISS-2026-125/259 fixes (379
   // files: +2, 20260828193000_harden_customer_portal_last_account_admin_
-  // status_guard.sql, 20260828200000_create_raw_mutation_tripwire.sql). See
-  // the class-level doc comment above.
-  migrationSetSha256: "c2caf7cec32d7dc08535ee11f477e01f3c3ed7a2c0ec14b26a746a1ca4707d26",
+  // status_guard.sql, 20260828200000_create_raw_mutation_tripwire.sql).
+  // History: c2caf7cec32d7dc08535ee11f477e01f3c3ed7a2c0ec14b26a746a1ca4707d26
+  // (379 files, twenty-eighth-pass amendment above). Superseded 2026-08-30
+  // (twenty-ninth pass) by ISS-2026-057's vendor bulk-import adapter (380
+  // files: +1, 20260830100000_create_vendor_import_adapter.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "0430b50b46eadaaf5d0c45c28e68c2a15c79c1784d5e84c132d991050d36defd",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1610,9 +1674,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (twenty-eighth pass) by Track B Batch 8 (235 files: +1, scripts/db-
   // tests/raw-mutation-tripwire.sql, new -- ticketing-sla.sql, customer-
   // user-management.sql, customer-portal-dashboard.sql, and customer-
-  // shipment-alerts.sql all also widened). See the class-level doc comment
-  // above.
-  dbTestSetSha256: "e425cdf978802940d2c205edc44a566f641cb811fed7b1924c2d3994beba036b",
+  // shipment-alerts.sql all also widened).
+  // History: e425cdf978802940d2c205edc44a566f641cb811fed7b1924c2d3994beba036b
+  // (235 files, twenty-eighth-pass amendment above). Superseded 2026-08-30
+  // (twenty-ninth pass) by ISS-2026-057 (235 files unchanged in count --
+  // procurement-vendor-registration.sql widened with six new regression
+  // blocks, no file added or removed). See the class-level doc comment above.
+  dbTestSetSha256: "9d123c8162ed7342874245b03c757bed4c355ee7deb6239565b0c0904af32d0c",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
@@ -1693,7 +1761,7 @@ function main(): void {
 
   if (drift.length === 0) {
     console.log(`✔ release candidate ${FROZEN_CANDIDATE.id} matches its frozen migration, db-test and lockfile digests.`);
-    console.log("  (Content gate only — it does not seal direct pushes to main or the Vercel auto-deploy. See RGL-BLK-001.)");
+    console.log("  (Content gate only — it does not seal direct pushes to main. Production deploys are separately gated by vercel.json + scripts/release/check-go-decision.ts.)");
     return;
   }
 
