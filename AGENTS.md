@@ -82,6 +82,7 @@ Ratified by `docs/adr/ADR-0021-batched-review-and-fix-execution-cadence.md`. Ful
 - Default task size: one feature slice, one module boundary, 1–3 migrations, approximately 5–15 changed files.
 - Broad refactors, framework upgrades, shared-schema redesign, API version changes, or destructive migrations require dedicated prompts and ADR/change control.
 - Fix only task-caused failures. Log unrelated/pre-existing failures and create a separate recovery task.
+  **Inverted for a declared backlog-remediation task by `ADR-0027` Part A**: there, pre-existing failures *are* the task, and the per-task size cap above does not apply — the bound moves to one bounded change per backlog item, one commit each. The obligation to separate pre-existing from change-caused failures with baseline evidence is unchanged. Part A expires when the agent-fixable backlog reaches zero; every integrity rule named in `ADR-0027` Part C is untouched.
 - Preserve backward compatibility using additive or expand-and-contract changes where risk warrants it.
 
 ## Stack baseline

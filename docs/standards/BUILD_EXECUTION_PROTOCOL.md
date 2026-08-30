@@ -352,3 +352,12 @@ and the ratified CPD/RPD register stands unchanged. In particular:
 
 Batching changes **when** the adversarial review runs. It changes nothing about **whether** the
 code is correct, isolated, and evidenced before it is called `VERIFIED`.
+
+**`ADR-0027` (2026-08-30) does not change this section either, and says so explicitly.** Its
+Part A lifts `AGENTS.md`'s per-task size cap and inverts "fix only task-caused failures" for a
+declared backlog-remediation task — both *workflow* controls. Its Part C restates every rule in
+this section as untouched: no gate disabled or relabelled for a green result, no applied migration
+edited, no test skipped to close an item, pre-existing still separated from change-caused with
+baseline evidence, and **completion still requires evidence**. Its Part B records the human-only
+launch gates as owner-accepted risks — `ACCEPTED_RISK (OWNER_OVERRIDE)`, dated, never labelled
+passed — which is a disposition, not a claim of completion.
