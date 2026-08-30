@@ -53,7 +53,24 @@ Rollback procedure if any resolution fails: none of the above is destructive in 
 
 ## 5. Communication
 
-**No real, concrete DR communication mechanism exists anywhere in this repository — confirmed by reading every runbook, not inferred.** All 12 files in `docs/runbooks/` share the identical Communication-section shape: "notify DevOps/Security lead" or "notify DevOps/on-call," with no named individual, no channel (no Slack/PagerDuty/email/SMS integration), no notification order, and no customer-facing message template. `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.4 describes a designed-but-never-built incident/communication contract (6 support tiers, P1-P4 SLAs, an "Owner/Incident Commander" field, a defined Detect→Triage→Severity→Mitigation→Communication→Validation→Close→RCA flow) — this is architecture-planning prose, not an implemented mechanism; nothing in the actual codebase assigns an incident commander, tracks an SLA clock, or executes a communication step. **No customer-impact assessment tool exists at all** — a broad search (`customer_impact`, `status_page`, `service_status`, `maintenance_window`, `tenant_notification`, `broadcast_notice`, `system_status`) across `app/`, `server/`, and every migration returned zero matches. Registered as `ISS-2026-258` (see §6) — related to, but broader than, `ISS-2026-251` (HDN-382, no escalation/dispatch mechanism for `app.raise_observability_alert`'s own generated incidents); both trace to the identical underlying absence (no real Slack/email/PagerDuty dispatch integration exists anywhere in this codebase) and a future fix for one should account for the other rather than building the dispatch mechanism twice.
+**Corrected 2026-08-30 — the paragraph that stood here is no longer true, and is replaced
+rather than quietly deleted.** It read: *"No real, concrete DR communication mechanism exists
+anywhere in this repository."* That was accurate when written and is not now.
+`ISS-2026-258` is closed: `docs/runbooks/incident-communication.md` is the procedure, and it
+rests on real mechanism — `app.broadcast_incident_communication`, an ordered audience
+registry (`app.incident_communication_audiences`), a durable record of what was said to whom
+(`app.incident_communications` and its per-recipient child table), and message templates as
+ordinary published configuration. Dispatch composes `PLT-127`'s Notification Engine rather
+than being built a second time, which is the caution `ISS-2026-251` raises.
+
+**Use `docs/runbooks/incident-communication.md` for every DR communication.** Do not
+improvise from this section.
+
+**What remains genuinely absent, stated plainly rather than left to be discovered mid-DR:**
+there is **no public status page** for unauthenticated visitors (`ISS-2026-304`), and no SLA
+clock measuring the P1–P4 response targets `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.4
+describes. In a serious outage, customers who cannot sign in cannot be reached through
+CargoGrid at all — reach them by whatever channel you already have with them.
 
 **Backup-file handling** (inherited from `database-restore.md` §5, applies identically to any DR event that touches a backup): a backup file carries the same confidentiality risk as the live secrets it contains (`ISS-2026-257`) — never distribute one through an incident channel or attach it to a ticket accessible to anyone not already entitled to raw webhook/integration secrets.
 

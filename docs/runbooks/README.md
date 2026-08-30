@@ -8,6 +8,7 @@ Most files in this directory instantiate `docs/templates/SUPPORT_RUNBOOK_TEMPLAT
 
 | Runbook | Purpose | Produced/owned by |
 |---|---|---|
+| [`incident-communication.md`](./incident-communication.md) | How to communicate during any incident — the audience order, the message shape, the `app.broadcast_incident_communication` call, and the record it leaves. Every other runbook's §5 Communication section defers to this one | `ISS-2026-258` (2026-08-30) |
 | [`incident-response.md`](./incident-response.md) | General security-incident response — a compromised identity, session, role/membership, or IP-restriction bypass; the credential-leak-specific sub-case lives in `secret-leak-incident-response.md` instead | `HDN-378` (Prompt 378, Security Hardening) |
 | [`secret-leak-incident-response.md`](./secret-leak-incident-response.md) | Response procedure for an accidentally-committed credential | `CG-S5-PH0-015` (Prompt 94, Phase 0) |
 | [`key-rotation.md`](./key-rotation.md) | Scheduled and emergency key/secret rotation | `HDN-378` (Prompt 378, Security Hardening) |

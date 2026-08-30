@@ -3870,7 +3870,7 @@ Live-confirmed: this sandbox's disposable Postgres is reachable and a full backu
 
 **`RESOLVED`, 2026-08-25 (Step 16 historical-issue-backlog remediation), exactly the owner-scoped fix this entry named.** `supabase/migrations/20260826050000_harden_integration_secrets_encryption_at_rest.sql` extends the vendor-financial `pgp_sym_encrypt`/`pgp_sym_decrypt` pattern to all 3 columns: a fail-closed GUC-keyed shared symmetric key (`app.integration_secrets_encryption_key()`), 2 private encrypt/decrypt helpers, and each plaintext column renamed out for a `bytea` `_encrypted` column in the same migration (never a straddle). 6 writer functions and 11 reader functions across 5 other, already-applied migration files redefined via `CREATE OR REPLACE` on their identical existing signatures — zero call-site changes, zero `public.*` wrapper or TypeScript changes needed (confirmed no wrapper exposes any of the 3 raw column names; the writer RPCs' own one-time-reveal return shapes are unchanged). Self-caught before shipping: this domain's callers are a mix of `SECURITY DEFINER` and `SECURITY INVOKER` (unlike vendor-financial's uniformly-DEFINER callers), so the private helpers needed an explicit `service_role` grant, the same class of gap `HDN-373` self-caught for `app.has_active_tenant_membership`. Verified via a full local `db-tests` suite re-run, `ALL PASSED` (2 real regression tests updated to decrypt-and-compare instead of raw-column-compare: `advanced-tms-third-party-provider-adapter.sql`'s own confidentiality probe, `integration-hub.sql`'s own verbatim-storage checks). Applied to the live hosted project via `apply_migration` (all 3 tables held zero rows, confirmed live before applying, so the backfill was a no-op), live-reconfirmed via `information_schema.columns`. A second, independent, already-tracked defect (`ISS-2026-156`) was incidentally surfaced by this migration's own `ALTER TABLE` row rewrite and fixed in the same pass — see that entry's own resolution note.
 
-### ISS-2026-258 — no real DR communication mechanism exists anywhere in this repository: no channel, no template, no notification order, no customer-impact assessment tool (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `OPEN`, High, owner a dedicated future task)
+### ISS-2026-258 — no real DR communication mechanism exists anywhere in this repository: no channel, no template, no notification order, no customer-impact assessment tool (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `RESOLVED` 2026-08-30, High) — public status page carried forward as `ISS-2026-304`
 
 Read all 12 files in `docs/runbooks/`: every single one's Communication section is the identical shape — a bare instruction to "notify DevOps/Security lead" or "notify DevOps/on-call," with no named individual, no channel (no Slack/PagerDuty/email/SMS integration named or wired), no defined order of notification, and no customer-facing message template. `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.4 describes a real *designed* incident/communication contract — 6 support tiers, P1-P4 SLAs (P1 = 15-minute response), a defined incident flow (Detect→Triage→Severity→Mitigation→Communication→Validation→Close→RCA→Preventive), and 12 incident fields including an "Owner (Incident Commander)" — but this is early architecture-planning prose, explicitly prospective in its own framing, not a build log; nothing in the actual codebase implements or measures against any of it (no incident-commander assignment mechanism anywhere, no SLA clock, no communication-step tooling).
 
@@ -3889,6 +3889,95 @@ gap, since both trace to the identical missing integration (do not build it twic
 control until built**: `docs/runbooks/*.md`'s existing "notify DevOps/Security lead" instruction
 remains the operative (manual, human-judgment) process; this disclosure ensures no future
 checkpoint mistakes that manual instruction for automated tooling that does not exist.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A — with one named residual split out as
+`ISS-2026-304`, not folded in.
+
+**One load-bearing claim in this entry, repeated by its 2026-08-27 disposition, was stale,
+and it changes the whole shape of the fix.** Both state that "no real Slack/email/PagerDuty
+dispatch integration exists anywhere in this codebase" and conclude the fix requires an
+external product build. Re-verified directly against the migration set this checkpoint, that
+is no longer true: `PLT-127`'s Notification Engine is real and complete
+(`app.notification_types`, `notification_preferences`, `notifications`,
+`notification_delivery_attempts`, `app.queue_notification` — which renders a published
+template, honours per-recipient channel preference, and records delivery attempts),
+`IAE-034` added `app.notification_contact_addresses` on top of it, and `IAE-035`'s
+Integration Hub carries real email/WhatsApp/SMS adapters.
+
+So the *channel* existed. What genuinely did not exist was everything between an incident
+and that channel: nothing named who should hear about an incident, in what order, with what
+words, or kept a record of what was actually sent. That gap is bounded, code-shaped work —
+not the external product build the earlier disposition (correctly, on the information it
+had) declined.
+
+Closed by `supabase/migrations/20260830140000_create_incident_communication.sql` plus
+`docs/runbooks/incident-communication.md`, mapped to this entry's own four named absences:
+
+| This entry said | What now exists |
+| --- | --- |
+| no channel | composed from `app.queue_notification`. **No dispatch logic of its own** — the caution `ISS-2026-251` raises about building dispatch twice is taken literally |
+| no template | a registered `incident_communication` notification type, so a tenant's own wording is an ordinary published config version, editable without a code release |
+| no notification order | `app.incident_communication_audiences` — an ordered registry, **data rather than prose**, so the order cannot drift between twenty runbooks that each state it slightly differently, which is exactly what this entry found when it read all twelve |
+| no customer-impact tool | `app.incident_communications` + `app.incident_communication_recipients` — after an incident, "who did we tell, when, and what did we say" is a query rather than a memory. Prompt 384 §24 requires communication to match actual evidence; this is that evidence |
+
+Design points worth naming because each is a way this could have been built wrong:
+
+* **The exact words are stored, not a template reference.** A template that could be edited
+  afterwards would change what history says was said.
+* **Authority equals `app.acknowledge_incident`'s** — `MON:Edit` tenant-scoped, Supreme
+  Admin platform-scoped. Speaking on an incident's behalf is not a lesser act than
+  acknowledging it, so it does not get a lesser gate.
+* **A zero-recipient broadcast is recorded as zero, never reported as sent.** A broadcast
+  that silently reached nobody is worse than one that failed loudly.
+* **A per-recipient dispatch failure is recorded against that recipient and does not abort
+  the rest.** Telling nine people and failing on the tenth is not a reason to tell nobody —
+  and "who we failed to reach" is the number that matters afterwards.
+* **A tenant audience on a platform-scoped incident is refused outright** rather than
+  sending to an empty set that would read as done in the record.
+* **An idempotency key reused for different words is refused**, not silently re-sent — a
+  second, different update quietly discarded is the failure mode that matters here.
+
+Three runbooks carried claims this fix made false, and are **corrected in place rather than
+quietly deleted**, with the superseded text quoted: `disaster-recovery.md` §5 (which asserted
+no such mechanism existed anywhere), `data-migration-rehearsal.md` §5 (which repeated it),
+and `incident-response.md` §5 (now pointing at the real procedure).
+`docs/runbooks/README.md` indexes the new runbook.
+
+Evidence: `scripts/db-tests/enterprise-monitoring-observability.sql` gained four regression
+blocks — the dispatch order and its uniqueness constraint; the authority matrix (`MON:View`
+alone, no grant at all, and a *different tenant's* `tenant_admin` all refused); verbatim body
+storage; real resolved recipients matching the recorded count; the timeline event; idempotent
+retry and the different-words conflict; the read gate; platform-scoped Supreme-Admin-only
+and tenant-audience refusal; the zero-recipient case recorded as zero; and RLS plus the
+anon/authenticated table-grant matrix. Full `pnpm run db:test` `ALL PASSED`.
+
+**What this does not close.** No SLA clock: send times are recorded, which is a prerequisite
+for measuring the P1–P4 response targets `11_DEVOPS_WORKSTREAM.md` §8.4 describes, but
+nothing measures or alerts on a breach. And no public status page — carried forward as
+`ISS-2026-304`.
+
+### ISS-2026-304 — no public status page for unauthenticated visitors (OPEN, Medium)
+
+Split out of `ISS-2026-258` on 2026-08-30 when the rest of that entry was closed, so a real
+residual is not buried inside a `RESOLVED` annotation.
+
+`app.broadcast_incident_communication`'s `customer_portal` audience reaches **signed-in**
+portal users through the Notification Engine. There is no page an unauthenticated visitor can
+load to see whether CargoGrid is up.
+
+This is deliberately not built here, for a reason that is architectural rather than
+scheduling: a status page hosted inside the system it reports on is useless during exactly
+the outage it exists to report. A real one belongs on separate infrastructure — a third-party
+status service, or a static page on a different host — which makes it a hosting decision and
+an account, not a migration.
+
+**Status `OPEN`**, Medium. **Risk in plain terms:** during a serious outage, customers who
+cannot sign in cannot be told anything by CargoGrid at all. You would be reaching them by
+whatever channel you already have with them — email, WhatsApp, a phone call — and doing it by
+hand. For a small customer base that is workable and is what most companies do at launch; it
+stops being workable as the customer count grows, and it is the kind of gap enterprise
+buyers ask about directly. `docs/runbooks/incident-communication.md` §6 states this limit
+where a responder will actually meet it.
 
 ### ISS-2026-259 — `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
 

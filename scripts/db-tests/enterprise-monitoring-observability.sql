@@ -636,3 +636,204 @@ end;
 $$;
 
 \echo 'ALL IAE-030 (Enterprise Monitoring and Observability) ASSERTIONS PASSED'
+
+-- ===========================================================================
+-- ISS-2026-258 -- incident communication: who was told, in what order, what was
+-- said, and what is provably recorded afterwards.
+-- ===========================================================================
+
+\echo '>> ISS-2026-258: the notification order is data, ordered, and readable without authority (a responder needs it before they have looked anything up)'
+do $$
+declare
+  v_codes text[];
+begin
+  select array_agg(code order by dispatch_order) into v_codes from app.list_incident_communication_audiences();
+  if v_codes is distinct from array['internal', 'tenant_admins', 'customer_portal'] then
+    raise exception 'assertion failed: expected the dispatch order internal -> tenant_admins -> customer_portal, got %', v_codes;
+  end if;
+  -- The order must be enforced by the schema, not merely happen to be right today: two
+  -- audiences sharing a position would make "who is told first" ambiguous again.
+  begin
+    insert into app.incident_communication_audiences (code, name, dispatch_order, description)
+    values ('duplicate_order', 'Duplicate order probe', 1, 'probe');
+    raise exception 'assertion failed: expected a unique constraint to prevent two audiences claiming the same dispatch position';
+  exception when unique_violation then
+    null;
+  end;
+end $$;
+
+\echo '>> ISS-2026-258: broadcasting is MON:Edit-gated exactly like acknowledging; it records the exact words sent, the real resolved recipients, a timeline event on the incident itself, and is idempotent -- and a key reused for DIFFERENT words is refused rather than silently re-sending'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemon');
+  v_admin1 uuid := '00000000-0000-0000-0000-000033000001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000033000002';
+  v_rep1 uuid := '00000000-0000-0000-0000-000033000003';
+  v_admin2 uuid := '00000000-0000-0000-0000-000033000004';
+  v_incident app.incidents;
+  v_comm app.incident_communications;
+  v_replay app.incident_communications;
+  v_count integer;
+begin
+  v_incident := app.raise_observability_alert(v_tenant1, 'integration', 'error', 'Carrier API returning 500s', 'critical', 'error_rate=0.42');
+
+  -- MON:View alone cannot speak on an incident's behalf. Speaking is not a lesser act than
+  -- acknowledging, so it does not get a lesser gate.
+  begin
+    perform app.broadcast_incident_communication(v_incident.id, 'internal', 'Subject', 'Body', null, null, v_viewer1, 'viewer1');
+    raise exception 'assertion failed: expected insufficient_authority for a MON:View-only actor broadcasting';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform app.broadcast_incident_communication(v_incident.id, 'internal', 'Subject', 'Body', null, null, v_rep1, 'rep1');
+    raise exception 'assertion failed: expected insufficient_authority for an actor with no MON grant at all';
+  exception when insufficient_privilege then
+    null;
+  end;
+  -- A tenant_admin of a DIFFERENT tenant must not be able to speak on this tenant's incident.
+  begin
+    perform app.broadcast_incident_communication(v_incident.id, 'internal', 'Subject', 'Body', null, null, v_admin2, 'admin2');
+    raise exception 'assertion failed: expected cross-tenant broadcast to be refused';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  begin
+    perform app.broadcast_incident_communication(v_incident.id, 'internal', '   ', 'Body', null, null, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected an empty subject to be refused';
+  exception when check_violation then
+    null;
+  end;
+  begin
+    perform app.broadcast_incident_communication(v_incident.id, 'not_an_audience', 'Subject', 'Body', null, null, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected an unregistered audience to be refused';
+  exception when check_violation then
+    null;
+  end;
+
+  v_comm := app.broadcast_incident_communication(
+    v_incident.id, 'internal',
+    'Carrier API degraded -- investigating',
+    'We are seeing elevated errors from the carrier API since 09:12 UTC. Shipment booking may fail intermittently. Next update within 30 minutes.',
+    null, 'idem-iaemon-comm-1', v_admin1, 'admin1'
+  );
+  if v_comm.audience_code <> 'internal' or v_comm.severity <> 'critical' then
+    raise exception 'assertion failed: expected the communication to inherit the incident''s own severity, got %', v_comm;
+  end if;
+  -- The exact words are stored, not a template reference that could later be edited to
+  -- change what history says was said.
+  if v_comm.body not like '%since 09:12 UTC%' then
+    raise exception 'assertion failed: expected the body to be stored verbatim';
+  end if;
+  -- Real recipients, resolved from real membership rows: admin1 is an active tenant_admin.
+  if v_comm.recipient_count < 1 then
+    raise exception 'assertion failed: expected at least one resolved recipient (the tenant''s own admin), got %', v_comm.recipient_count;
+  end if;
+  select count(*) into v_count from app.incident_communication_recipients where communication_id = v_comm.id;
+  if v_count <> v_comm.recipient_count then
+    raise exception 'assertion failed: expected one recipient row per counted recipient -- the "to whom" record must match the count, got % rows for count %', v_count, v_comm.recipient_count;
+  end if;
+
+  -- The incident's own timeline carries it, so the whole story is in one place.
+  if not exists (
+    select 1 from app.incident_timeline_events
+    where incident_id = v_incident.id and event_type = 'communicated' and detail like '%Carrier API degraded%'
+  ) then
+    raise exception 'assertion failed: expected a communicated event on the incident''s own timeline';
+  end if;
+
+  -- Idempotent: a retry returns the original and sends nothing further.
+  v_replay := app.broadcast_incident_communication(
+    v_incident.id, 'internal',
+    'Carrier API degraded -- investigating',
+    'We are seeing elevated errors from the carrier API since 09:12 UTC. Shipment booking may fail intermittently. Next update within 30 minutes.',
+    null, 'idem-iaemon-comm-1', v_admin1, 'admin1'
+  );
+  if v_replay.id <> v_comm.id then
+    raise exception 'assertion failed: expected an idempotent retry to return the original communication';
+  end if;
+  select count(*) into v_count from app.incident_communications where incident_id = v_incident.id;
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected the retry to create no second communication, found %', v_count;
+  end if;
+
+  -- ...but the same key reused for DIFFERENT words is a conflict, not a quiet no-op. A
+  -- second, different update silently discarded is the failure mode that matters here.
+  begin
+    perform app.broadcast_incident_communication(
+      v_incident.id, 'internal', 'Carrier API degraded -- investigating',
+      'Actually everything is fine.', null, 'idem-iaemon-comm-1', v_admin1, 'admin1'
+    );
+    raise exception 'assertion failed: expected idempotency_key_conflict when the same key carries different words';
+  exception when unique_violation then
+    if sqlerrm not like 'idempotency_key_conflict%' then raise; end if;
+  end;
+
+  -- The record is readable, MON:View-gated, newest first.
+  select count(*) into v_count from app.list_incident_communications(v_incident.id, v_viewer1);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected MON:View to read the communication history, got % rows', v_count;
+  end if;
+  begin
+    perform app.list_incident_communications(v_incident.id, v_rep1);
+    raise exception 'assertion failed: expected an actor with no MON grant to be refused the communication history';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $$;
+
+\echo '>> ISS-2026-258: a platform-scoped incident is Supreme-Admin-only and cannot address a tenant audience that does not exist; a zero-recipient broadcast is recorded as zero rather than reported as sent'
+do $$
+declare
+  v_admin1 uuid := '00000000-0000-0000-0000-000033000001';
+  v_supreme uuid := '00000000-0000-0000-0000-000033000000';
+  v_incident app.incidents;
+  v_comm app.incident_communications;
+begin
+  v_incident := app.raise_observability_alert(null, 'api', 'latency_ms', 'Platform-wide API latency', 'high', 'p95=4200');
+
+  begin
+    perform app.broadcast_incident_communication(v_incident.id, 'internal', 'Subject', 'Body', null, null, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected a tenant_admin to be refused on a PLATFORM-scoped incident (Supreme Admin only)';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- Addressing "tenant administrators" on an incident with no tenant is refused outright.
+  -- Silently sending to nobody would read as done in the record, which is the whole failure
+  -- this table exists to prevent.
+  begin
+    perform app.broadcast_incident_communication(v_incident.id, 'tenant_admins', 'Subject', 'Body', null, null, v_supreme, 'supreme');
+    raise exception 'assertion failed: expected a tenant audience to be refused on a platform-scoped incident';
+  exception when check_violation then
+    null;
+  end;
+
+  -- A platform-scoped internal broadcast with no matching alert route resolves to zero
+  -- recipients. That is recorded as zero -- visible, not hidden.
+  v_comm := app.broadcast_incident_communication(v_incident.id, 'internal',
+    'Platform latency elevated', 'p95 latency is 4200ms across the API tier.', null, null, v_supreme, 'supreme');
+  if v_comm.recipient_count <> 0 then
+    raise exception 'assertion failed: expected a zero-recipient broadcast to be recorded with recipient_count = 0, got %', v_comm.recipient_count;
+  end if;
+  if not exists (select 1 from app.incident_communications where id = v_comm.id) then
+    raise exception 'assertion failed: a zero-recipient broadcast must still be recorded -- knowing nobody was reached is the point';
+  end if;
+end $$;
+
+\echo '>> ISS-2026-258: neither anon nor authenticated holds direct table access to the communication record'
+do $$
+declare
+  v_has boolean;
+  v_tbl text;
+begin
+  foreach v_tbl in array array['app.incident_communications', 'app.incident_communication_recipients', 'app.incident_communication_audiences'] loop
+    select has_table_privilege('anon', v_tbl, 'SELECT') into v_has;
+    if v_has then raise exception 'assertion failed: anon must hold no SELECT on %', v_tbl; end if;
+    select has_table_privilege('authenticated', v_tbl, 'SELECT') into v_has;
+    if v_has then raise exception 'assertion failed: authenticated must hold no direct SELECT on % -- the RPCs are the only sanctioned path', v_tbl; end if;
+    select relrowsecurity into v_has from pg_class where oid = v_tbl::regclass;
+    if not v_has then raise exception 'assertion failed: expected RLS enabled on %', v_tbl; end if;
+  end loop;
+end $$;

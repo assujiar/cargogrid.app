@@ -37,7 +37,7 @@ Depends entirely on what the compromised identity or channel could reach. Tenant
 
 ## 5. Communication
 
-Notify DevOps/Security lead immediately once §3 confirms compromise is real (not a false-positive anomalous-looking-but-explainable audit entry). Multi-tenant blast radius (an open support-access session, a Supreme Admin identity, or authority spanning more than the originally-reported tenant) escalates beyond this runbook to `AGENTS.md`'s "Stop and escalate when" tenant-isolation criteria — do not resolve a multi-tenant incident unilaterally. Customer-facing communication is warranted only if the confirmed blast radius reached tenant data, per the same escalation path.
+**Communicate through `docs/runbooks/incident-communication.md`** — it carries the audience order, the message shape, and the `app.broadcast_incident_communication` call that records what was sent to whom. Notify DevOps/Security lead immediately once §3 confirms compromise is real (not a false-positive anomalous-looking-but-explainable audit entry). Multi-tenant blast radius (an open support-access session, a Supreme Admin identity, or authority spanning more than the originally-reported tenant) escalates beyond this runbook to `AGENTS.md`'s "Stop and escalate when" tenant-isolation criteria — do not resolve a multi-tenant incident unilaterally. Customer-facing communication is warranted only if the confirmed blast radius reached tenant data, per the same escalation path.
 
 ## 6. Post-incident
 

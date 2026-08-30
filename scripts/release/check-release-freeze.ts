@@ -1484,6 +1484,55 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (383 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-third pass), migrationSetSha256 and
+ * dbTestSetSha256. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-258` (High) -- no DR/incident communication mechanism existed
+ * anywhere: no channel, no template, no notification order, no customer-impact
+ * record. All twenty runbooks' Communication sections were a bare "notify
+ * DevOps". One new migration (383 -> 384 files: +1,
+ * `20260830140000_create_incident_communication.sql`).
+ *
+ * A load-bearing claim in that entry was stale and changed the shape of the
+ * fix: it (and its 2026-08-27 disposition) stated no dispatch integration
+ * existed anywhere and concluded an external product build was required.
+ * PLT-127's Notification Engine is real and complete, IAE-034 added contact
+ * addresses on top of it, and IAE-035 carries email/WhatsApp/SMS adapters. The
+ * channel existed; what did not was everything between an incident and it. This
+ * migration adds an ordered audience registry (data, not runbook prose), a
+ * durable record of what was said to whom, a registered notification type so
+ * templates are ordinary config, and a broadcast action that COMPOSES
+ * app.queue_notification rather than building dispatch a second time -- the
+ * caution ISS-2026-251 raises, taken literally.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count --
+ * `scripts/db-tests/enterprise-monitoring-observability.sql` widened, no file
+ * added or removed): four regression blocks covering the dispatch order and its
+ * uniqueness constraint, the full authority matrix (including a DIFFERENT
+ * tenant's tenant_admin refused), verbatim body storage, recipient records
+ * matching the recorded count, the timeline event, idempotent retry and the
+ * different-words conflict, platform-scoped Supreme-Admin-only, tenant-audience
+ * refusal on a platform incident, the zero-recipient case recorded as zero
+ * rather than reported as sent, and RLS plus the anon/authenticated grant
+ * matrix.
+ *
+ * Also in this pass, outside the frozen sets: a new
+ * `docs/runbooks/incident-communication.md`, and three runbooks corrected in
+ * place because this fix made their text false -- disaster-recovery.md §5
+ * (which asserted no such mechanism existed anywhere),
+ * data-migration-rehearsal.md §5 (which repeated it), and
+ * incident-response.md §5. Superseded text is quoted rather than quietly
+ * deleted.
+ *
+ * The public status page is NOT built and is carried forward as `ISS-2026-304`
+ * (Medium): a status page hosted inside the system it reports on is useless
+ * during the outage it exists to report, which makes it a hosting decision
+ * rather than a migration.
+ *
+ * Re-verified via a fresh full local db-test suite run (384 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1663,8 +1712,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (382 files, thirty-first-pass amendment above). Superseded 2026-08-30
   // (thirty-second pass) by ISS-2026-273's opening-balance import and GL
   // posting (383 files: +1, 20260830130000_create_finance_opening_balance_
-  // import_and_gl_posting.sql). See the class-level doc comment above.
-  migrationSetSha256: "b5d845458ed0e16e687446511fa19132ee8f89ecf9a161e302face6769cd444c",
+  // import_and_gl_posting.sql).
+  // History: b5d845458ed0e16e687446511fa19132ee8f89ecf9a161e302face6769cd444c
+  // (383 files, thirty-second-pass amendment above). Superseded 2026-08-30
+  // (thirty-third pass) by ISS-2026-258's incident-communication capability
+  // (384 files: +1, 20260830140000_create_incident_communication.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "ef8fe38708c2d672934527015279bce7a065a5c3b90600a42b3d52326c441a21",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1852,9 +1906,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: 2c74593b6c4df816cc476824fd656e97bc153b3d0b5ac5b177d06c4a47ea6572
   // (236 files, thirty-first-pass amendment above). Superseded 2026-08-30
   // (thirty-second pass) by ISS-2026-273 (236 files unchanged in count --
-  // finance-subledger.sql widened, no file added or removed). See the
-  // class-level doc comment above.
-  dbTestSetSha256: "748ede7ef8b7a48e15084ea67a964610b1edaaa1aa5810ae43bbc2f402ab4c4b",
+  // finance-subledger.sql widened, no file added or removed).
+  // History: 748ede7ef8b7a48e15084ea67a964610b1edaaa1aa5810ae43bbc2f402ab4c4b
+  // (236 files, thirty-second-pass amendment above). Superseded 2026-08-30
+  // (thirty-third pass) by ISS-2026-258 (236 files unchanged in count --
+  // enterprise-monitoring-observability.sql widened). See the class-level doc
+  // comment above.
+  dbTestSetSha256: "80822f8742653226f49c39f1bb69150b4bf101b768a31205fffb732a6e99bbd1",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
