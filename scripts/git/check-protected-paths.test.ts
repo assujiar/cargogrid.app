@@ -1,6 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { checkProtectedPaths, STEP17_CORRECTABLE_PACKAGE_PATHS } from "./check-protected-paths.ts";
+import { existsSync } from "node:fs";
+import {
+  checkProtectedPaths,
+  REVISION_0_19_CORRECTABLE_PROMPT_PATHS,
+  REVISION_0_19_NEW_PROMPT_PATHS,
+  REVISION_0_19_VERSION_LINE_ONLY_PATHS,
+  STEP17_CORRECTABLE_PACKAGE_PATHS,
+} from "./check-protected-paths.ts";
 
 describe("checkProtectedPaths", () => {
   test("flags docs/blueprint/** as FORBIDDEN", () => {
@@ -10,7 +17,11 @@ describe("checkProtectedPaths", () => {
   });
 
   test("flags docs/ai-agent-build-prompt-package/** as FORBIDDEN", () => {
-    const findings = checkProtectedPaths(["docs/ai-agent-build-prompt-package/00-control/02_CONFIRMED_DECISION_REGISTER.md"]);
+    // Was `00-control/02_CONFIRMED_DECISION_REGISTER.md` until package revision 0.19.0, which
+    // unlocked that file for its `**Package version:**` header line alone (see the
+    // REVISION_0_19_VERSION_LINE_ONLY tests below). Re-pointed at a prompt file, which is the
+    // asset the blanket rule exists to protect and which no narrowing has ever touched.
+    const findings = checkProtectedPaths(["docs/ai-agent-build-prompt-package/07-phase-02-commercial/151_QUOTATION_BUILDER_PROMPT.md"]);
     assert.equal(findings.length, 1);
     assert.equal(findings[0]?.severity, "FORBIDDEN");
   });
@@ -74,13 +85,12 @@ describe("checkProtectedPaths", () => {
       "docs/ai-agent-build-prompt-package/17-final-validation/430_FINAL_PACKAGE_VALIDATION_CLOSURE_VERIFICATION_PROMPT.md",
       // A step README.
       "docs/ai-agent-build-prompt-package/17-final-validation/413_FINAL_PACKAGE_VALIDATION_README.md",
-      // Control files NOT in the exemption -- 02/03 stay decision-change-protocol-only.
-      "docs/ai-agent-build-prompt-package/00-control/00_PACKAGE_README.md",
-      "docs/ai-agent-build-prompt-package/00-control/02_CONFIRMED_DECISION_REGISTER.md",
-      "docs/ai-agent-build-prompt-package/00-control/03_ASSUMPTION_REGISTER.md",
-      "docs/ai-agent-build-prompt-package/00-control/01_SOURCE_OF_TRUTH_MATRIX.md",
       // A governance template.
       "docs/ai-agent-build-prompt-package/01-agent-governance/10_MASTER_AGENT_SYSTEM_PROMPT.md",
+      // Control files 00-03 used to be listed here, and CON-016 genuinely did leave all four
+      // FORBIDDEN. Package revision 0.19.0 unlocked them for one header line (FPV-F009); they
+      // are asserted CAUTION-with-the-narrow-reason below instead of being dropped, so the
+      // boundary is still pinned in both directions -- it has only moved.
     ];
     const findings = checkProtectedPaths(stillForbidden);
     assert.equal(findings.length, stillForbidden.length);
@@ -109,6 +119,63 @@ describe("checkProtectedPaths", () => {
     const findings = checkProtectedPaths(["docs/ai-agent-build-prompt-package/START_HERE.md"]);
     assert.equal(findings.length, 1);
     assert.equal(findings[0]?.severity, "CAUTION");
+  });
+
+  // --- CON-017 / ADR-0028: package revision 0.19.0's enumerated prompt-file unlocks ----------
+  // Same shape as CON-016's tests, plus one kind CON-016's set never needed: an existence
+  // check. These lists name individual files by exact path, so a list entry that matches no
+  // real file is not a harmless typo -- it means the file the revision actually wrote was
+  // never unlocked, and the file the list names does not exist. That happened: the new-prompt
+  // entry read `137_TENANT_MERGE_SPLIT_PROMPT.md` while the authored file was `431_…`, and
+  // nothing but a manual gate run caught it. These two tests are why it cannot recur.
+
+  test("CON-017: every enumerated unlock names a file that actually exists", () => {
+    const all = [
+      ...REVISION_0_19_CORRECTABLE_PROMPT_PATHS,
+      ...REVISION_0_19_NEW_PROMPT_PATHS,
+      ...REVISION_0_19_VERSION_LINE_ONLY_PATHS,
+      ...STEP17_CORRECTABLE_PACKAGE_PATHS,
+    ];
+    const missing = all.filter((p) => !existsSync(p));
+    assert.deepEqual(missing, [], "an unlock naming a non-existent file unlocks nothing and hides a real FORBIDDEN write");
+  });
+
+  test("CON-017: the unlocked prompt files are CAUTION, and cite ADR-0028 rather than CON-016", () => {
+    const findings = checkProtectedPaths([
+      ...REVISION_0_19_CORRECTABLE_PROMPT_PATHS,
+      ...REVISION_0_19_NEW_PROMPT_PATHS,
+    ]);
+    assert.equal(findings.length, REVISION_0_19_CORRECTABLE_PROMPT_PATHS.length + REVISION_0_19_NEW_PROMPT_PATHS.length);
+    assert.ok(findings.every((f) => f.severity === "CAUTION"));
+    assert.ok(findings.every((f) => f.reason.includes("CON-017") && f.reason.includes("ADR-0028")),
+      "a reader of the warning must be able to find the authority that permitted the write");
+  });
+
+  test("CON-017: the four version-line-only control files carry their own narrower reason", () => {
+    const findings = checkProtectedPaths([...REVISION_0_19_VERSION_LINE_ONLY_PATHS]);
+    assert.equal(findings.length, 4);
+    assert.ok(findings.every((f) => f.severity === "CAUTION"));
+    // The reason string is the only place the narrowness lives -- a path gate cannot tell a
+    // version-line edit from a decision-row edit in 02/03, so the warning has to say so.
+    assert.ok(findings.every((f) => f.reason.includes("Package version")),
+      "the reason must name the single line this unlock covers");
+    assert.ok(findings.every((f) => f.reason.includes("FPV-F009")));
+  });
+
+  test("CON-017 does not widen: a Phase 5 neighbour outside the enumerated cluster stays FORBIDDEN", () => {
+    // 10-phase-05-advanced-tms-wms is the directory most of the unlocks live in, so a
+    // directory-shaped mistake would show up here first. 244 was read by FPV-415 and is
+    // deliberately NOT on any list.
+    const findings = checkProtectedPaths([
+      "docs/ai-agent-build-prompt-package/10-phase-05-advanced-tms-wms/244_ADVANCED_CLAIM_INCIDENT_PROMPT.md",
+      // The new prompt's own neighbours in Platform Core.
+      "docs/ai-agent-build-prompt-package/06-phase-01-platform-core/105_TENANT_PROVISIONING_LIFECYCLE_PROMPT.md",
+      // And the number the new-prompt list wrongly named for a while: it does not exist, and
+      // if it ever does it must not be pre-authorized.
+      "docs/ai-agent-build-prompt-package/06-phase-01-platform-core/137_TENANT_MERGE_SPLIT_PROMPT.md",
+    ]);
+    assert.equal(findings.length, 3);
+    assert.ok(findings.every((f) => f.severity === "FORBIDDEN"));
   });
 
   test("does not flag ordinary source paths", () => {

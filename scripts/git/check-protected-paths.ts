@@ -110,7 +110,41 @@ export const REVISION_0_19_CORRECTABLE_PROMPT_PATHS: readonly string[] = [
  * repairing one.
  */
 export const REVISION_0_19_NEW_PROMPT_PATHS: readonly string[] = [
-  "docs/ai-agent-build-prompt-package/06-phase-01-platform-core/137_TENANT_MERGE_SPLIT_PROMPT.md",
+  // Numbered 431, not 137. The first draft of this list said `137_…`, from when the prompt was
+  // going to be inserted at its execution position; the number changed to 431 once it was clear
+  // that seating it at 137 meant renumbering 325 files and falsifying every committed citation
+  // to them (ISS-2026-306). The allowlist was not updated with it, so the gate correctly
+  // reported the real file as FORBIDDEN. That is the enumerate-literally design working: a glob
+  // would have silently accepted either number and told us nothing.
+  "docs/ai-agent-build-prompt-package/06-phase-01-platform-core/431_TENANT_MERGE_SPLIT_PROMPT.md",
+];
+
+/**
+ * `FPV-F009`: the four control files that carry no package-version line at all.
+ *
+ * These are listed separately, and the separation is the point. `ADR-0028` decision 1 originally
+ * described them as "the control files already correctable under `CON-016`". **That was wrong.**
+ * `CON-016` made exactly five paths correctable — `04`, `05`, `06`, `07` and `START_HERE.md` —
+ * and said in terms that `02_CONFIRMED_DECISION_REGISTER.md` and `03_ASSUMPTION_REGISTER.md`
+ * "remain reachable only through the §5 decision-change protocol". These four were never
+ * unlocked, and the gate blocked them on the revision's first real run, exactly as designed.
+ *
+ * So this is a **widening**, not an inheritance, and it is recorded as one. What it permits is a
+ * single header line — `**Package version:** …` — on a file whose own rows are untouched.
+ * Adding that line is not a decision change: no RPD, no assumption, no `Version:` lifecycle
+ * field moves.
+ *
+ * **Residual risk, stated plainly:** a path-based gate cannot tell a version-line edit from a
+ * decision-row edit inside `02` or `03`. The containment is not this rule — it is the `CAUTION`
+ * warning surfacing the write in every gate run, the PR diff, and `package:check`. Anyone
+ * reviewing a diff that touches these two files should read it as a decision change until the
+ * diff proves otherwise.
+ */
+export const REVISION_0_19_VERSION_LINE_ONLY_PATHS: readonly string[] = [
+  "docs/ai-agent-build-prompt-package/00-control/00_PACKAGE_README.md",
+  "docs/ai-agent-build-prompt-package/00-control/01_SOURCE_OF_TRUTH_MATRIX.md",
+  "docs/ai-agent-build-prompt-package/00-control/02_CONFIRMED_DECISION_REGISTER.md",
+  "docs/ai-agent-build-prompt-package/00-control/03_ASSUMPTION_REGISTER.md",
 ];
 
 /** Escapes a literal path so it can anchor an exact-match RegExp. */
@@ -124,6 +158,7 @@ const REVISION_0_19_PATTERN = exactPathPattern([
   ...REVISION_0_19_CORRECTABLE_PROMPT_PATHS,
   ...REVISION_0_19_NEW_PROMPT_PATHS,
 ]);
+const REVISION_0_19_VERSION_LINE_PATTERN = exactPathPattern(REVISION_0_19_VERSION_LINE_ONLY_PATHS);
 
 export const PROTECTED_PATH_RULES: readonly ProtectedPathRule[] = [
   { pattern: /^docs\/blueprint\//, severity: "FORBIDDEN", reason: "read-only authoritative source (decision-change protocol only)" },
@@ -131,6 +166,7 @@ export const PROTECTED_PATH_RULES: readonly ProtectedPathRule[] = [
   // (see the loop in checkProtectedPaths, which breaks on the first matching rule).
   { pattern: STEP17_CORRECTABLE_PATTERN, severity: "CAUTION", reason: "package metadata correctable by Step 17 only, mechanical/source-safe corrections with cited evidence (CON-016, ADR-0026) — re-verify with `pnpm run package:check`" },
   { pattern: REVISION_0_19_PATTERN, severity: "CAUTION", reason: "prompt file unlocked by package revision 0.19.0 for one named Step 17 finding only (CON-017, ADR-0028) — re-verify with `pnpm run package:check`" },
+  { pattern: REVISION_0_19_VERSION_LINE_PATTERN, severity: "CAUTION", reason: "control file unlocked by package revision 0.19.0 for the `**Package version:**` header line ONLY (FPV-F009, CON-017, ADR-0028) — any other change to 02/03 is a decision change needing the §5 protocol; re-verify with `pnpm run package:check`" },
   { pattern: /^docs\/ai-agent-build-prompt-package\//, severity: "FORBIDDEN", reason: "read-only execution plan — never edited by a runtime agent" },
   { pattern: MIGRATIONS_PATTERN, severity: "FORBIDDEN", reason: "applied migration — never edit, add a new migration instead (AGENTS.md)" },
   { pattern: /(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/, severity: "FORBIDDEN", reason: "real environment/secret file — must never be committed (.env.example/.sample/.template are the safe, allowed exception)" },

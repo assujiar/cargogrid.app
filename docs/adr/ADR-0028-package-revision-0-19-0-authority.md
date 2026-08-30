@@ -59,10 +59,34 @@ is **enumerated by finding**, not by glob:
 | `FPV-F007` | the 17 files declaring a `-multisource-gps` version | align the header version to the manifest |
 | `FPV-F002` | the 6 prompts covering `RPD-007/008/019/024/026/039` | add the RPD id to the existing §6 Source requirement line |
 | `FPV-F001` | one **new** file under `06-phase-01-platform-core/` | author the missing tenant merge/split capability prompt |
-| `FPV-F008`, `FPV-F009` | the control files already correctable under `CON-016` | version-scheme alignment |
+| `FPV-F008` | `06_PACKAGE_BUILD_STATUS.md`, `07_PROMPT_PACKAGE_MANIFEST.md` — already correctable under `CON-016` | state one version convention and apply it |
+| `FPV-F009` | `00_PACKAGE_README.md`, `01_SOURCE_OF_TRUTH_MATRIX.md`, `02_CONFIRMED_DECISION_REGISTER.md`, `03_ASSUMPTION_REGISTER.md` — **not** previously correctable | add the `**Package version:**` header line, and nothing else |
 
 Everything under `docs/ai-agent-build-prompt-package/` not named above stays `FORBIDDEN`.
 `docs/blueprint/**` is untouched and stays `FORBIDDEN` at every severity.
+
+> **Correction, 2026-08-30, before this revision was pushed.** The `FPV-F009` row above
+> originally read *"`FPV-F008`, `FPV-F009` | the control files already correctable under
+> `CON-016`"*. **That was false.** `CON-016` made exactly five paths correctable — `04`, `05`,
+> `06`, `07` and `START_HERE.md` — and said in terms that `02_CONFIRMED_DECISION_REGISTER.md` and
+> `03_ASSUMPTION_REGISTER.md` "remain reachable only through the §5 decision-change protocol".
+> The four files `FPV-F009` names were never unlocked, so this ADR was claiming an inheritance
+> that did not exist and would have described its own widening as a no-op.
+>
+> `git:check-paths` blocked all four on the revision's first real run, along with the new prompt
+> (the allowlist named `137_…` while the authored file was `431_…`). The gate caught what the
+> author did not, which is the entire reason it is enumerated literally instead of by glob: a
+> directory rule would have silently accepted every one of these.
+>
+> The row is corrected above rather than rewritten, the four files are unlocked as a **separate,
+> explicitly narrower rule** (`REVISION_0_19_VERSION_LINE_ONLY_PATHS`) covering one header line,
+> and a test now asserts that every enumerated unlock names a file that exists on disk.
+>
+> **Residual risk this widening carries, stated plainly:** a path-based gate cannot distinguish a
+> version-line edit from a decision-row edit inside `02` or `03`. Nothing in the tooling contains
+> that; the containment is the `CAUTION` warning surfacing the write in every gate run, the diff
+> itself, and a reviewer treating any change to those two files as a decision change until the
+> diff proves otherwise.
 
 ### 2. Mechanical changes must be provably mechanical
 
