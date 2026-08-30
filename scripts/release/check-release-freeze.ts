@@ -1391,6 +1391,42 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (381 migrations, 235
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied
  * to the live hosted project.
+ *
+ * AMENDED 2026-08-30 (thirty-first pass), migrationSetSha256 and
+ * dbTestSetSha256. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-274` (Medium) -- no master-data (customer/vendor/item) bulk-import
+ * mechanism existed anywhere. The vendor third was closed by the
+ * twenty-ninth pass; the customer and item thirds are closed here, so the
+ * entry retires rather than staying partially annotated. One new migration
+ * (381 -> 382 files: +1,
+ * `20260830120000_create_customer_and_item_import_adapters.sql`).
+ *
+ * That migration also fixes a prerequisite the issue's own text got wrong. It
+ * names `app.create_master_record` as the primitive a customer adapter should
+ * compose; a customer is not a `master_records` row (no `customer` master type
+ * is seeded anywhere) but an `app.accounts` row -- and
+ * `app.convert_quotation_to_account` was the ONLY function in the entire
+ * repository that had ever inserted into `app.accounts`. A tenant migrating an
+ * existing customer book at cutover therefore had no path that did not involve
+ * inventing a quotation. `app.create_customer_account_direct` is added as a
+ * real second creation path at the SAME COM:Approve authority, computing
+ * normalization and the duplicate fingerprint through the SAME functions the
+ * quotation path uses, so it cannot slip a duplicate past a control that path
+ * enforces.
+ *
+ * dbTestSetSha256 changed (235 -> 236 files: +1,
+ * `scripts/db-tests/master-data-import.sql`, new). `scripts/db-tests/
+ * advanced-tms-item-uom-master.sql` also changed but is a corrected comment,
+ * not a new file: it asserted the CRM pipeline was "the only real path to
+ * app.accounts -- no shortcut function exists anywhere in this repository",
+ * which was true when written and is no longer. That fixture deliberately
+ * keeps using the conversion pipeline, since exercising the original path is
+ * what makes it a regression guard for it.
+ *
+ * Re-verified via a fresh full local db-test suite run (382 migrations, 236
+ * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
+ * the live hosted project.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -1561,9 +1597,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: 0430b50b46eadaaf5d0c45c28e68c2a15c79c1784d5e84c132d991050d36defd
   // (380 files, twenty-ninth-pass amendment above). Superseded 2026-08-30
   // (thirtieth pass) by ISS-2026-236's step-up enforcement (381 files: +1,
-  // 20260830110000_harden_evaluate_permission_step_up_enforcement.sql). See
-  // the class-level doc comment above.
-  migrationSetSha256: "e626706010a913a8e59c0b7241e2434fada7ecd0d5f5915c83f362f3feeae09b",
+  // 20260830110000_harden_evaluate_permission_step_up_enforcement.sql).
+  // History: e626706010a913a8e59c0b7241e2434fada7ecd0d5f5915c83f362f3feeae09b
+  // (381 files, thirtieth-pass amendment above). Superseded 2026-08-30
+  // (thirty-first pass) by ISS-2026-274's customer/item import adapters (382
+  // files: +1, 20260830120000_create_customer_and_item_import_adapters.sql).
+  // See the class-level doc comment above.
+  migrationSetSha256: "eebd52b277bc7674ba8870c65949343319fe602eefc8d0071ea34eaf1ffa447e",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -1743,8 +1783,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (235 files, twenty-ninth-pass amendment above). Superseded 2026-08-30
   // (thirtieth pass) by ISS-2026-236 (235 files unchanged in count --
   // enterprise-mfa-session-controls.sql widened, no file added or removed).
-  // See the class-level doc comment above.
-  dbTestSetSha256: "312ceebcbdcb65023606c9e912b3475c9f77b58873f3967692b32aeb0a2e21b4",
+  // History: 312ceebcbdcb65023606c9e912b3475c9f77b58873f3967692b32aeb0a2e21b4
+  // (235 files, thirtieth-pass amendment above). Superseded 2026-08-30
+  // (thirty-first pass) by ISS-2026-274 (236 files: +1, scripts/db-tests/
+  // master-data-import.sql, new -- advanced-tms-item-uom-master.sql also
+  // changed, a corrected comment rather than a new file). See the class-level
+  // doc comment above.
+  dbTestSetSha256: "2c74593b6c4df816cc476824fd656e97bc153b3d0b5ac5b177d06c4a47ea6572",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

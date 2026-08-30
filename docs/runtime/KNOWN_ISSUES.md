@@ -4035,7 +4035,7 @@ built**: the single-record `post_finance_ar_open_item`/`app.post_finance_ap_open
 the only sanctioned path, and `FIN-202`'s own reconciliation function continues to correctly
 exclude `opening_balance`-sourced items rather than silently misreporting them as reconciled.
 
-### ISS-2026-274 — no master-data (customer/vendor/item) or tenant-setup bulk-import mechanism exists anywhere (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
+### ISS-2026-274 — no master-data (customer/vendor/item) or tenant-setup bulk-import mechanism exists anywhere (found at `HDN-385` Data Migration Rehearsal, live investigation, `RESOLVED` 2026-08-30, Medium)
 
 Confirmed by direct code inventory: no `customer_import`, `vendor_import` (master data, as distinct from `vendor_rate_import`'s own rate-only scope), or `item_import` schema exists anywhere in the Import/Export Job Framework's 4 real domain adapters. `vendor_rate_import` itself *requires* the referenced vendor to already exist as a `master_records` row and rejects unresolved vendor codes outright — it is not a master-data import path. Tenant-setup import was disclosed `NOT_RUN` at its own origin (`PLT-120.md`, Master Data Foundation: "Import hooks... are disclosed `NOT_RUN` — IMPEXP/JOB (`PLT-131`/`132`) do not exist yet") and was never retrofitted by any later checkpoint.
 
@@ -4055,6 +4055,80 @@ multi-file feature (a new import domain adapter, contract, and UI surface), not 
 repair. **Not fixed by this batch** — same reasoning as the original disposition. Owner
 and scope unchanged; the two reusable building blocks recorded here for whoever picks this
 up.
+
+**`RESOLVED`, 2026-08-30**, under `ADR-0027` Part A — all three named scopes, in two
+commits.
+
+The **vendor** third was closed earlier the same day by
+`20260830100000_create_vendor_import_adapter.sql` (see `ISS-2026-057`). The **customer** and
+**item** thirds are closed by
+`20260830120000_create_customer_and_item_import_adapters.sql`. Re-verified live before
+writing either: no `customer_import`/`item_import` schema existed anywhere in the migration
+set.
+
+**A finding that goes beyond this entry's own text, and changed what the fix had to be.**
+This entry names `app.create_master_record` as the primitive a customer adapter should
+compose. That is not correct for customers, and the reason matters: a customer identity in
+this repository is **not** a `master_records` row — no `customer` master type is seeded
+anywhere (the seeded set is `vendor_rate`, `vendor`, `fleet`, `vehicle`, `driver`,
+`employee`). A customer is an `app.accounts` row, and verified directly against the whole
+migration set, **`app.convert_quotation_to_account` was the only function in the entire
+repository that had ever inserted into `app.accounts`**. So before this fix a customer
+account could come into existence only by converting an accepted quotation — meaning a
+tenant migrating an existing customer book at cutover, where no quotation was ever raised in
+CargoGrid, had no path that did not involve inventing commercial history to satisfy a
+schema. That gap is a *prerequisite* of the import adapter, not a side-effect, and it is
+fixed first: `app.create_customer_account_direct` is a real second creation path at the
+**same** `COM:Approve` authority, computing normalization and the duplicate fingerprint
+through the **same** `app.normalize_prospect_identifier`/
+`app.compute_prospect_duplicate_fingerprint` functions, so it cannot slip a duplicate past a
+control the quotation path enforces. `source_prospect_id` is left null honestly rather than
+back-filled with a fabricated prospect.
+
+**One deliberate difference from the vendor adapter, recorded so it is not later
+"corrected" into a bug.** `app.commit_vendor_import_job` *raises* when a staged row resolves
+to a record already bound to a different staged row, because
+`create_vendor_profile_draft` has no create-or-link semantics. The customer and item
+adapters must not, and this is not laxity: both underlying primitives are deliberately
+create-or-link (`create_customer_account_direct` resolves a fingerprint collision to the
+existing account, exactly as COM-155's own race-recovery arm does;
+`app.create_item_master` is idempotent on `(tenant_id, owner_account_id, code)` and returns
+the existing row). Two staged rows naming the same legal identity, or the same item code
+under the same owner, is an entirely ordinary thing in a migration extract, and aborting a
+thousand-row cutover over it would be wrong. Such rows are counted and reported as
+`rows_linked_to_existing_account`/`rows_linked_to_existing_item` in the commit's own audit
+payload — never silently dropped, never miscounted as created — and are deliberately **not**
+stamped with import provenance, since the import did not create those records.
+
+Two domain-specific guards worth naming:
+
+* **`item_import` refuses an ambiguous owner rather than guessing.**
+  `app.item_masters.owner_account_id` is `NOT NULL` by design ("a 3PL item always belongs to
+  exactly one customer account"), and a spreadsheet cannot carry a uuid — so the file names
+  the owner by tax id (preferred) or legal name. A name matching more than one active
+  account is an **error**, not a silent pick: attaching one customer's items to another
+  customer's account is a data-confidentiality problem, not a tidiness one. The owner is
+  also re-resolved at commit time rather than carried from validation, because an account
+  can be merged or deactivated in between.
+* **`customer_import` refuses platform-derived columns**, `duplicate_fingerprint` above all
+  — supplying it from a file would be a way to steer, or defeat, the duplicate control.
+
+Evidence: new `scripts/db-tests/master-data-import.sql`. It covers the new primitive
+(authority gate, whitespace legal name, real normalization/fingerprint, honest null
+`source_prospect_id`, create-or-link on repeat, per-tenant scoping, cross-tenant parent
+refused) and both adapters (validator behaviour on every row shape, viewer refused, a real
+partial commit, link-not-duplicate for both a within-batch repeat and a record predating the
+job, provenance never rewritten on a linked record, linking never overwriting an existing
+item's name, invalid rows creating nothing, replay creating zero duplicates, an ambiguous
+owner refused, `p_allow_partial` refusal, cross-schema refusal both ways, and the full
+anon/authenticated grant matrix across all ten new `app.*`/`public.*` functions). Full
+`pnpm run db:test` `ALL PASSED`.
+
+`scripts/db-tests/advanced-tms-item-uom-master.sql` carried a comment asserting the CRM
+pipeline was "the only real path to `app.accounts` — no shortcut function exists anywhere in
+this repository". That was true when written and is no longer; it is corrected in place
+rather than left to mislead, and that fixture deliberately keeps using the conversion
+pipeline, since exercising the original path is what makes it a regression guard for it.
 
 ### ISS-2026-275 — `app.finance_journals_protect_posted` never fires on `INSERT`, only `UPDATE`/`DELETE`; a direct bulk insert of an already-posted, unbalanced, source-less journal is completely unguarded (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
 

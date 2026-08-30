@@ -3,7 +3,7 @@
 
 \set ON_ERROR_STOP on
 
-\echo '>> setup: two tenants. Tenant1 (itemuom1): a company org unit, a tenant_admin, an OPS:Create/Edit/View rep, an OPS:View-only viewer, and two customer accounts (Account A, Account B -- via the full lead->prospect->contact->opportunity->costing->rate->margin->quotation->account pipeline, the only path to a real app.accounts row) proving one tenant can hold the same SKU code under two different owners. Tenant2 (itemuom2): an isolated rep and its own single account, for cross-tenant leakage checks. A global Supreme Admin.'
+\echo '>> setup: two tenants. Tenant1 (itemuom1): a company org unit, a tenant_admin, an OPS:Create/Edit/View rep, an OPS:View-only viewer, and two customer accounts (Account A, Account B -- via the full lead->prospect->contact->opportunity->costing->rate->margin->quotation->account pipeline, which was the only path to a real app.accounts row when this file was written) proving one tenant can hold the same SKU code under two different owners. Tenant2 (itemuom2): an isolated rep and its own single account, for cross-tenant leakage checks. A global Supreme Admin.'
 do $$
 declare
   v_tenant1 uuid;
@@ -72,8 +72,12 @@ begin
   perform app.publish_role_version(v_viewer_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_viewer_role and status = 'published'), '00000000-0000-0000-0000-000000080103', '00000000-0000-0000-0000-000000080101', 'tester');
 
-  -- Account A, via the full CRM pipeline (the only real path to app.accounts -- no
-  -- shortcut function exists anywhere in this repository).
+  -- Account A, via the full CRM pipeline. That was the ONLY path to app.accounts when this
+  -- file was written; ISS-2026-274 has since added app.create_customer_account_direct (a
+  -- second real creation path at the same COM:Approve authority, for tenants migrating an
+  -- existing customer book at cutover with no quotation to convert). This fixture
+  -- deliberately keeps using the conversion pipeline: exercising the original path is
+  -- exactly what makes it a regression guard for it.
   perform app.capture_lead(v_tenant1, 'manual', null, 'Customer Alpha Co', 'Alice Alpha', 'alice@alpha011a.test', '0811',
     '00000000-0000-0000-0000-000000080102', v_company, '00000000-0000-0000-0000-000000080102', 'tester');
   select * into v_lead from app.leads where email = 'alice@alpha011a.test';
