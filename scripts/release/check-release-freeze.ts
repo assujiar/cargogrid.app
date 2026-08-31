@@ -2082,6 +2082,45 @@ import { readFileSync } from "node:fs";
  *
  * Re-verified via a fresh full local db-test run (394 migrations, 236 runner files,
  * ALL PASSED). 20260831040000 IS applied live.
+ *
+ * AMENDED 2026-08-31 (forty-fifth pass), dbTestSetSha256 ONLY -- no migration was
+ * added, and that is the finding. Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-170` (Low) -- app.initiate_file_upload's p_record_id was validated
+ * against the tenant at neither layer. The entry scoped the fix as "enumerate every
+ * record_type, verify each backing table, then write a tenant-ownership dispatch".
+ * The enumeration was done and produced the OPPOSITE conclusion: the dispatch must
+ * not be written.
+ *
+ * A BEFORE INSERT trigger on app.files was written and run against the full suite in
+ * three successive designs -- tenant-enforcing, existence-only, and
+ * existence-with-tenant-recorded. All three failed, always for the same reason: SEVEN
+ * db-tests deliberately construct a wrongly-scoped or cross-tenant file precisely to
+ * prove the CONSUMER's guard rejects it (hris-onboarding-offboarding:572,
+ * hris-training-talent:451, operations-document-requirement:326,
+ * procurement-vendor-assessment:797 and :946, procurement-vendor-compliance:343,
+ * procurement-vendor-financial-security:674). A trigger on app.files makes every one
+ * of those unconstructible -- it would remove seven real defence-in-depth assertions
+ * to add one redundant with them. Strictly worse, and it would have looked like a fix.
+ *
+ * Two other things the enumeration turned up: `shipment` has no backing table at all
+ * (there is no app.shipments; shipment_order is the entity, and production code passes
+ * `shipment` anyway), and `loyalty_reward`/`employee` look like foreign keys but are
+ * not -- the file is created first and the reward then stores THAT FILE's id, so
+ * record_type is a category label there. Registering them failed the suite at
+ * customer-loyalty-reward-catalogue.sql:819.
+ *
+ * What exists instead: 14 consumer-side record-scope guards. document-file.sql now
+ * PINS that set, so a consumer silently losing its check fails the suite -- the
+ * durable protection, since nothing on app.files backstops them.
+ *
+ * Residual registered separately as ISS-2026-312 rather than buried in a closed
+ * entry: 3 of the 14 (contract_evidence_file_mismatch, dispute_evidence_file_mismatch,
+ * document_checklist_record_mismatch) have no test proving they FIRE. Pinning proves
+ * they exist, not that they work.
+ *
+ * Re-verified via a fresh full local db-test run (394 migrations, 236 runner files,
+ * ALL PASSED).
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2552,7 +2591,10 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: 4250d75c426c64b364557b14a38a6ac8f85291c7866c8ac98aa9c8b361043e13
   // (236 files, forty-third-pass state). Superseded 2026-08-31 (forty-fourth pass) by
   // ISS-2026-172(b) (236 files unchanged -- document-file.sql gained the logged-listing proof).
-  dbTestSetSha256: "2acefedb71b9e0d083959408545dfc2381baf340cdef0a0489b3d4f335202a5a",
+  // History: 2acefedb71b9e0d083959408545dfc2381baf340cdef0a0489b3d4f335202a5a
+  // (236 files, forty-fourth-pass state). Superseded 2026-08-31 (forty-fifth pass) by
+  // ISS-2026-170 (236 files unchanged -- document-file.sql gained the 14-guard set pin).
+  dbTestSetSha256: "5f2aa52037f5c42d6b0cfd4f17219c64bc89ee1e305fa1bdbd3964fd1abd7b84",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

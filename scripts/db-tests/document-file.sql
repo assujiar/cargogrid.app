@@ -1054,3 +1054,54 @@ begin
   raise notice 'ISS-2026-172(b) closure: the listing RPC writes exactly one metadata_view log per returned row, skips unauthorized rows without raising, refuses a non-member outright, and leaves the RLS read path (and storage_path''s exclusion) intact';
 end;
 $$;
+
+
+\echo '>> ISS-2026-170 closure: the record-reference guard is per CONSUMER, not on app.files -- 14 functions refuse a file whose record_id is not scoped to the record they are attaching it to. This pins that set, so a consumer silently losing its check fails here.'
+do $$
+declare
+  -- Every guard that refuses a wrongly-scoped or cross-tenant record reference, enumerated from
+  -- the live catalog. This is the enumeration ISS-2026-170 asked for -- and the answer it
+  -- produced was that enforcement already exists, one layer ABOVE app.files.
+  --
+  -- Why the guard is not on app.files itself: a BEFORE INSERT trigger there was written and run
+  -- during this closure, in three successive designs (tenant-enforcing, existence-only, and
+  -- existence-with-tenant-recorded). Every one of them broke the suite, because SEVEN db-tests
+  -- deliberately CONSTRUCT a wrongly-scoped or cross-tenant file in order to prove the consumer
+  -- guard below rejects it -- hris-onboarding-offboarding:572, hris-training-talent:451,
+  -- operations-document-requirement:326, procurement-vendor-assessment:797 and :946,
+  -- procurement-vendor-compliance:343, procurement-vendor-financial-security:674. A trigger on
+  -- app.files makes every one of those scenarios unconstructible: it would have removed seven
+  -- real defence-in-depth assertions in order to add one redundant with them.
+  v_expected text[] := array[
+    'assessment_evidence_file_mismatch', 'claim_evidence_scope_mismatch',
+    'compliance_evidence_file_mismatch', 'contract_evidence_file_mismatch',
+    'dispute_evidence_file_mismatch', 'document_checklist_record_mismatch',
+    'epod_evidence_file_mismatch', 'finance_tax_rule_account_scope_mismatch',
+    'finance_tax_rule_scope_mismatch', 'financial_evidence_file_mismatch',
+    'installation_evidence_file_mismatch', 'po_line_scope_mismatch',
+    'rate_version_scope_mismatch', 'rfq_response_file_mismatch'
+  ];
+  v_missing text[];
+  v_guard text;
+  v_found boolean;
+begin
+  v_missing := '{}';
+  foreach v_guard in array v_expected loop
+    select exists (
+      select 1 from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'app'
+      where position(v_guard in p.prosrc) > 0
+    ) into v_found;
+    if not v_found then
+      v_missing := v_missing || v_guard;
+    end if;
+  end loop;
+
+  if array_length(v_missing, 1) > 0 then
+    raise exception 'assertion failed: % record-scope guard(s) no longer exist in any app.* function (%) -- a consumer has lost its check, and nothing on app.files backstops it (ISS-2026-170)',
+      array_length(v_missing, 1), array_to_string(v_missing, ', ');
+  end if;
+
+  raise notice 'ISS-2026-170 closure: all % consumer-side record-scope guards are present; enforcement lives with the consumers by design, because a trigger on app.files would make seven deliberate negative tests unconstructible', array_length(v_expected, 1);
+end;
+$$;

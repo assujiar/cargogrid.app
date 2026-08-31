@@ -45,8 +45,8 @@ written.
 |---|---|
 | `OPEN` | 83 — 5 High, 38 Medium, 40 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 178 |
-| **Total records** | **266** |
+| `RESOLVED` | 179 |
+| **Total records** | **267** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -105,6 +105,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload |
 | `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
 | `ISS-2026-310` | Medium | `OPEN` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
+| `ISS-2026-312` | Low | `OPEN` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -135,7 +136,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-146` | Low | `OPEN` | cross-tenant `tenant_id` disclosure via exception message text, confirmed repository-wide (2,087+ occurrences since Phase 6), reproduced live in Group |
 | `ISS-2026-147` | Low | `OPEN` | Batch 3's own two Tier C-disclosed findings (zero test coverage for the 9 `/api/v1` REST route handlers; `IAE-013`'s own per-connector execution-log f |
 | `ISS-2026-156` | Low | `OPEN` | `scripts/db-tests/n8n-integration.sql:204`'s own webhook-endpoint lookup has no `ORDER BY`, nondeterministic if enough other test files' own webhook-e |
-| `ISS-2026-170` | Low | `OPEN` | `app.initiate_file_upload`'s `p_record_id` is validated against the tenant at neither layer |
+| `ISS-2026-170` | Low | `RESOLVED` | `app.initiate_file_upload`'s `p_record_id` is validated against the tenant at neither layer |
 | `ISS-2026-189` | Low | `RESOLVED` | `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate |
 | `ISS-2026-197` | Low | `OPEN` | no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-t |
 | `ISS-2026-208` | Low | `OPEN` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
@@ -2193,7 +2194,7 @@ The file asserts `scripts/env/client-guard.ts`'s own bundle scan "enforces it ne
 
 **Tier C attack-surface adversarial testing lens found a minor residual timing signal, not practically exploitable.** The wire payload and rendered message are correctly unified for both paths, but `disabled` makes one extra `app.resolve_config()` call `not_found` never reaches. Live-timed 300 trials of each path directly against Postgres (best case, zero network jitter): `not_found` averaged 0.0532ms, `disabled` averaged 0.0577ms — a consistent ~8% difference in absolute terms, but only ~4.5 microseconds, far below anything a realistic HTTP/network-jitter timing attack could reliably detect over a real network. Disclosed for completeness; no further action warranted at Low severity.
 
-### ISS-2026-170 — `app.initiate_file_upload`'s `p_record_id` is validated against the tenant at neither layer (found at `CG-S15-HDN-004`, `OPEN`, Low, owner `HDN-377`)
+### ISS-2026-170 — `app.initiate_file_upload`'s `p_record_id` is validated against the tenant at neither layer (found at `CG-S15-HDN-004`, `RESOLVED` 2026-08-31, Low)
 
 Multiple file-upload call sites pass a correct `tenantId` but a client-controlled `recordId` over the service-role client; `app.initiate_file_upload` checks tenant-level file-action authority but never that `p_record_id` belongs to `p_tenant_id`. Impact is bounded to a dangling `record_id` reference, not disclosure — the created `app.files` row always carries the caller's own tenant, so RLS still prevents cross-tenant reads. **Owner: `HDN-377`** (Storage and Signed URL Audit).
 
@@ -2222,6 +2223,34 @@ tenant-ownership dispatch — the corrected scope assessment above is handed for
 point, not left to be re-discovered. **Compensating control**: none new: the pre-existing bounded
 impact (dangling reference only, not cross-tenant disclosure, per this entry's own original text)
 still holds unchanged.
+
+**`RESOLVED` 2026-08-31 — the enumeration this entry asked for was done, and it produced the opposite conclusion to the one the entry assumed.**
+
+This entry scoped the fix as "enumerate every real `record_type` this RPC must support, verify each one's backing table, then write a tenant-ownership dispatch". The enumeration was done. **The dispatch must not be written.**
+
+**The enumeration.** Production TypeScript passes `shipment_order`, `vendor_compliance`, `vendor_financial_verification`, `vendor_assessment`, `rfq_invitation`, `shipment`, `quote_request_attachment`, `customer_portal_quote_request`; db-tests add `import_job`, `import_source`, `export_job`, `ocr_probe`, `ticket`, `training_certificate`, `loyalty_reward`, `onboarding_case_task`, `employee`. Two findings from doing it properly:
+
+- **`shipment` has no backing table at all** — there is no `app.shipments` in this schema; `shipment_order` is the real entity. Production code passes `shipment` anyway.
+- **`loyalty_reward` and `employee` look like foreign keys and are not.** Every call for both passes `gen_random_uuid()` and none passes a real id, because the reference runs the *other way*: the file is created first, then `app.create_loyalty_reward_draft` stores **that file's** id on the reward. `record_type` is a category label there, not a pointer. A first draft of the fix registered both and failed immediately at `customer-loyalty-reward-catalogue.sql:819`.
+
+**Why the dispatch must not be written — measured, in three successive designs.** A `BEFORE INSERT` trigger on `app.files` was written and run against the full suite three times: tenant-enforcing, existence-only, and existence-with-tenant-recorded. **Every one failed**, and always for the same reason: **seven db-tests deliberately construct a wrongly-scoped or cross-tenant file** precisely so they can prove the *consumer's* guard rejects it —
+
+| Test | Line |
+|---|---|
+| `hris-onboarding-offboarding.sql` | 572 |
+| `hris-training-talent.sql` | 451 |
+| `operations-document-requirement.sql` | 326 |
+| `procurement-vendor-assessment.sql` | 797, 946 |
+| `procurement-vendor-compliance.sql` | 343 |
+| `procurement-vendor-financial-security.sql` | 674 |
+
+A trigger on `app.files` makes every one of those scenarios **unconstructible**. It would have removed seven real defence-in-depth assertions in order to add one redundant with them — a strictly worse security posture that would have looked like a fix.
+
+**What is actually there.** Enforcement lives with the consumers, and there are **14** such guards: `assessment_evidence_file_mismatch`, `claim_evidence_scope_mismatch`, `compliance_evidence_file_mismatch`, `contract_evidence_file_mismatch`, `dispute_evidence_file_mismatch`, `document_checklist_record_mismatch`, `epod_evidence_file_mismatch`, `finance_tax_rule_account_scope_mismatch`, `finance_tax_rule_scope_mismatch`, `financial_evidence_file_mismatch`, `installation_evidence_file_mismatch`, `po_line_scope_mismatch`, `rate_version_scope_mismatch`, `rfq_response_file_mismatch`.
+
+`scripts/db-tests/document-file.sql` now **pins that set**: if a consumer silently loses its check, the suite fails — which is the durable protection, since nothing on `app.files` backstops them.
+
+**One residual, stated precisely rather than folded into the closure.** Of the 14, **three have no db-test asserting them**: `contract_evidence_file_mismatch`, `dispute_evidence_file_mismatch`, `document_checklist_record_mismatch`. They exist in code and are now pinned as existing, but nothing proves they *fire*. That is a narrower, concrete gap than the one this entry opened with, and it is the honest remainder — registered as `ISS-2026-312` rather than left inside a closed entry.
 
 ### ISS-2026-171 — `app.notifications` RLS has no tenant-membership conjunct; a revoked user retains read access to their own past notifications (found at `CG-S15-HDN-004`, `RESOLVED` at `HDN-373` via `20260810500000_harden_own_row_rls_membership_gap.sql`, Medium, owner `HDN-373`)
 
@@ -6246,6 +6275,26 @@ side effect of a deploy.
 **Deliberately not attempted.** DNS and domain attachment are outside this session's access, and
 they would be the wrong thing to do unilaterally even with access. Carried into
 `docs/runtime/COMMERCIAL_LAUNCH_READINESS.md` as an owner action with its consequence stated.
+
+---
+
+### ISS-2026-312 — three of the 14 consumer-side record-scope guards exist in code but no test proves they fire (found 2026-08-31 while closing `ISS-2026-170`, `OPEN`, Low)
+
+`ISS-2026-170`'s enumeration established that a file's `record_id` is validated by the **consumer** that attaches it, not by `app.files` — 14 distinct guards, now pinned as a set in `scripts/db-tests/document-file.sql` so one silently disappearing fails the suite.
+
+Pinning proves they **exist**. It does not prove they **fire**. Eleven of the 14 are exercised by a db-test that constructs a wrongly-scoped or cross-tenant file and asserts the rejection. Three are not:
+
+| Guard | Owning surface |
+|---|---|
+| `contract_evidence_file_mismatch` | contract evidence attachment |
+| `dispute_evidence_file_mismatch` | dispute evidence attachment |
+| `document_checklist_record_mismatch` | document-checklist item completion |
+
+**Why this is Low and not higher.** Each is a real line of code in a real function — the finding is missing *evidence*, not a missing control, and the same pattern is proven to work in the eleven neighbouring cases. The failure mode is a future refactor breaking one of the three without anything noticing, which the set-pin partially covers (it catches deletion, not a logic error that stops it rejecting).
+
+**What closing it takes.** For each: build the wrongly-scoped file in that domain's own db-test fixture and assert the named error, exactly as `procurement-vendor-assessment.sql:797` already does for its own guard. Bounded and mechanical — three fixtures, three assertions — but it is genuine per-domain test authoring, not a sweep, and it was deliberately not rushed inside the `ISS-2026-170` closure that found it.
+
+**Owner:** whoever next touches contract evidence, dispute evidence, or document checklists.
 
 ## 5. Maintenance rules
 
