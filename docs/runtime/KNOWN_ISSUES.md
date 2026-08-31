@@ -45,8 +45,8 @@ written.
 |---|---|
 | `OPEN` | 63 — 4 High, 25 Medium, 34 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 200 |
-| **Total records** | **270** |
+| `RESOLVED` | 201 |
+| **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -109,6 +109,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-313` | Low | `RESOLVED` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
 | `ISS-2026-314` | Low | `OPEN` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
+| `ISS-2026-316` | Low | `OPEN` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -145,7 +146,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-208` | Low | `RESOLVED` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
 | `ISS-2026-223` | Low | `RESOLVED` | ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority`  |
 | `ISS-2026-239` | Low | `OPEN` | 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real p |
-| `ISS-2026-243` | Low | `OPEN` | switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun |
+| `ISS-2026-243` | Low | `RESOLVED` | switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun |
 | `ISS-2026-244` | Low | `OPEN` | Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emula |
 | `ISS-2026-245` | Low | `OPEN` | no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive  |
 | `ISS-2026-246` | Low | `OPEN` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
@@ -4826,7 +4827,7 @@ Independently re-derived directly against the source tree: 200 `.tsx` files unde
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — of the 200 files rendering `<form`, only 1 real file (`components/domain/approval-decision-panel.tsx`) imports `FormField`; `aria-invalid` still appears only inside the 5 primitive files themselves (`components/forms/{currency-input,textarea,combobox,input,select}.tsx`), never in a consuming page. Retrofitting ~199 hand-rolled forms is not a bounded/additive change. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-243 — switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun (found at `HDN-380` Tier C attack-surface adversarial testing lens, `OPEN`, Low, owner a dedicated future task)
+### ISS-2026-243 — switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun (found at `HDN-380` Tier C attack-surface adversarial testing lens, `RESOLVED` 2026-08-31, was Low)
 
 `playwright.config.ts`'s `webServer.reuseExistingServer: !process.env["CI"]` is pre-existing, unchanged by `HDN-380`'s own fix (confirmed via `git log -p`) — but `HDN-380`'s switch of `webServer.command` from `next dev` to `next build && next start` (`ISS-2026-160`'s own fix) materially raises this setting's risk. Under `next dev`, a reused stale server was harmless: dev mode recompiles and hot-reloads on every request, so a leftover process from a prior run always serves current source. Under `next start`, a reused stale server on port 3000 serves a **frozen, already-compiled bundle with no rebuild and no warning** — a local developer who edits source, then re-runs `pnpm run test:e2e` without first stopping a leftover server from an earlier run, silently tests against stale code. `CI=true` disables `reuseExistingServer` entirely (confirmed), so this is a local-development-only risk, not a CI risk — CI always gets a fresh build every run.
 
@@ -4834,11 +4835,33 @@ This was technically disclosed in `playwright.config.ts`'s own inline comment be
 
 **Status `OPEN`**, Low severity (a real but narrow local-development ergonomics gap — no CI exposure, no security/data-integrity exposure, and the failure mode is "a test passes against slightly stale code," not "a test silently reports a false negative on a real defect," since it would need BOTH a leftover server AND a code change to the exact route under test to actually matter). **Not fixed this checkpoint** — a proper fix (e.g. a build-freshness check comparing the running server's build id against the current source, or simply defaulting `reuseExistingServer` to `false` for this specific webServer entry) is a deliberate trade-off decision about local iteration speed vs. staleness risk, not a mechanical patch, and is outside `HDN-380`'s own bounded "5-15 files" charter. Owner: a dedicated future task, scoped to deciding whether `reuseExistingServer` should default to `false` for this project's own `webServer` entry now that it fronts a production build, or whether a lighter-weight staleness guard suffices.
 
+**`RESOLVED`, 2026-08-31, `playwright.config.ts`.** This entry framed the choice as a trade-off
+between local iteration speed and staleness risk. On inspection there is no trade-off left to
+make: **`reuseExistingServer`'s only value was skipping a slow start, and under a production
+command, skipping the rebuild IS the bug.** What remained was a footgun with no upside.
+
+So `reuseExistingServer` is now `false` unconditionally, not just under CI.
+
+Its one genuine cost was the reason the setting existed at all — a port clash. A developer with
+`pnpm dev` already on 3000 would have been unable to run e2e at all. **The e2e server therefore
+moves to its own port, 3100**, and the two never meet. That is what makes `false` free rather than
+a compromise: the local run is now correct by construction, instead of depending on someone
+remembering to stop a leftover server. No spec hard-codes a port (grep-confirmed); `baseURL`,
+`webServer.command` and `webServer.url` move together.
+
+**Evidence, and its limits, stated plainly.** The change was verified where it can be: a real
+`next build` compiled clean, `next start --port 3100` served `/login` with **HTTP 200**, and port
+3000 was confirmed free at the same instant (`HTTP 000`) — the collision this port move exists to
+prevent. **The full Playwright suite was NOT run**, and could not be: see `ISS-2026-316`,
+registered from this same attempt — the sandbox no longer carries the Chromium build the pinned
+Playwright requires, so every spec fails at browser launch before any application code executes.
+That is an environment fact, not a verdict on this change, and it is recorded rather than glossed.
+
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — `playwright.config.ts`'s `webServer.command` is still `next build && next start`, `reuseExistingServer: !process.env["CI"]`, and its own comment at line 106 already names this entry (`ISS-2026-243`) explicitly, confirmed by direct read. Changing the default is a deliberate local-dev-ergonomics trade-off (real developers rely on `reuseExistingServer` to avoid rebuilding on every local test run), not a mechanical patch. Disposition unchanged, still `OPEN`.
 
 ### ISS-2026-244 — Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emulation are reachable (found at `HDN-381` Browser and Device Compatibility, environment feasibility lens, `OPEN`, Low, `TRACKED_GAP`)
 
-Confirmed directly: `/opt/pw-browsers` (this sandbox's `PLAYWRIGHT_BROWSERS_PATH`) contains only `chromium`, `chromium-1194`, `chromium-1228`, `chromium_headless_shell-*`, and `ffmpeg-1011` — no `webkit-*` or `firefox-*` directory exists, and this environment's own setup instructions explicitly say not to run `playwright install` to fetch more (it is pre-configured deliberately). This is the same class of firm, documented sandbox constraint `HDN-380` found for the Supabase auth backend (`RLIMIT_NOFILE`/`runc`) — a real infrastructure boundary, not a configuration oversight this checkpoint could fix.
+Confirmed directly: `/opt/pw-browsers` (this sandbox's `PLAYWRIGHT_BROWSERS_PATH`) contains only `chromium`, `chromium-1194`, `chromium-1228`, `chromium_headless_shell-*`, and `ffmpeg-1011` **[corrected 2026-08-31: `chromium-1228` is no longer present — see `ISS-2026-316`. The directory today holds only `chromium`, `chromium-1194`, `chromium_headless_shell-1194` and `ffmpeg-1011`, so no Chromium e2e run is possible here either, not merely no WebKit/Firefox one. The WebKit/Firefox absence this entry reports remains accurate.]** — no `webkit-*` or `firefox-*` directory exists, and this environment's own setup instructions explicitly say not to run `playwright install` to fetch more (it is pre-configured deliberately). This is the same class of firm, documented sandbox constraint `HDN-380` found for the Supabase auth backend (`RLIMIT_NOFILE`/`runc`) — a real infrastructure boundary, not a configuration oversight this checkpoint could fix.
 
 **Mobile/tablet viewport and touch emulation, by contrast, are fully reachable** on the single pre-installed Chromium binary — Playwright's `devices[...]` presets (e.g. `Pixel 5`, `iPad Pro 11`) set viewport/UA/touch-support on a Chromium browser context, no separate binary needed; live-verified before adopting this pattern into `playwright.config.ts`'s new `mobile-chrome`/`tablet-chrome` projects and `e2e/browser-device-compat.spec.ts` (this checkpoint's own fix, see `HDN-381.md`). One caveat found and fixed while wiring this up: `devices["iPad Pro 11"]`'s own `defaultBrowserType` field is `webkit` (a real iPad runs Safari) — spreading the preset into a project's `use` block without overriding `defaultBrowserType: "chromium"` explicitly would have made Playwright try to launch the absent WebKit binary; caught by a real Tier A gate failure before this ever reached Tier C, not assumed correct.
 
@@ -7006,3 +7029,37 @@ that sits *on* the SQL/TypeScript join rather than inside either half. Plus thre
 pinning the failure direction: a row missing `unpaid_break_minutes` must be **rejected** (loudly,
 in the suite) while a row missing `notes` must degrade to `null` (a missing note must never break
 a listing). Live-verified after apply: all four functions project both columns, 0 anon grants.
+
+### ISS-2026-316 — the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all (found 2026-08-31 while closing `ISS-2026-243`, `OPEN`, Low)
+
+Found by running `pnpm test:e2e` to verify an unrelated `playwright.config.ts` change. All 34
+specs fail identically in 3–5ms, before any application code executes:
+
+> `browserType.launch: Executable doesn't exist at /opt/pw-browsers/chromium_headless_shell-1228/chrome-headless-shell-linux64/chrome-headless-shell`
+
+`@playwright/test` is pinned at `1.61.1`, which resolves Chromium to build **1228**.
+`/opt/pw-browsers` today holds `chromium`, `chromium-1194`, `chromium_headless_shell-1194` and
+`ffmpeg-1011` — **no 1228 of either kind**. The environment's own instructions say not to run
+`playwright install`, so the binary cannot simply be fetched.
+
+**`ISS-2026-244` asserts `chromium-1228` is present**, and was accurate when written. The sandbox
+image has changed under it. That entry has been corrected in place rather than left to mislead the
+next reader, and its WebKit/Firefox finding is unaffected — but the practical scope is now wider
+than that entry implies: it is not that *some* browsers are unreachable here, it is that **no e2e
+run is possible in this sandbox at all**.
+
+**CI is unaffected**, verified rather than assumed: `.github/workflows/ci.yml:232` runs
+`pnpm exec playwright install --with-deps chromium` before the e2e job, so CI fetches the matching
+build every run. Nothing about the application, the config or the specs is broken.
+
+**Status `OPEN`**, Low severity — a sandbox capability gap, not a product defect, and the same
+class as `ISS-2026-244`'s own `TRACKED_GAP`. Its real cost is evidentiary: **no work done in this
+sandbox can cite an e2e run as evidence**, so any change to `playwright.config.ts`, to a guarded
+route's fail-safe behaviour, or to the accessibility specs has to be verified some other way and
+must say so. `ISS-2026-243`'s own closure does exactly that.
+
+**What would close it:** the environment carrying a Chromium build matching the pinned Playwright
+version (owner/infrastructure), or a deliberate decision to pin `@playwright/test` to a version
+whose Chromium build the sandbox does have — the latter is a real dependency change with its own
+CI implications and should not be made merely to suit one sandbox. Neither is a code fix available
+here.

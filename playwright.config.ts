@@ -30,7 +30,7 @@ export default defineConfig({
   use: {
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: "http://127.0.0.1:3100",
   },
   projects: [
     {
@@ -103,17 +103,23 @@ export default defineConfig({
   // the same direction. `timeout` raised from 60s to accommodate the build step (a cold
   // `next build` in this sandbox takes roughly a minute).
   //
-  // KNOWN FOOTGUN (ISS-2026-243, registered not fixed, HDN-380 Tier C): `reuseExistingServer`
-  // (below) is pre-existing, unchanged by this edit -- but switching `command` from `next dev`
-  // to `next build && next start` materially raises its risk. Under `next dev` a reused stale
-  // server was harmless (dev mode self-refreshes on every request); under `next start` a reused
-  // stale server on port 3000 serves a FROZEN, un-rebuilt bundle with no warning if you edit
-  // source and re-run `pnpm run test:e2e` without first stopping it. `CI=true` disables
-  // `reuseExistingServer` entirely, so this is a local-dev-only risk, not a CI risk.
+  // ISS-2026-243, RESOLVED here. `reuseExistingServer: !CI` was pre-existing and harmless under
+  // `next dev`, where a reused server self-refreshes on every request. Under `next start` it is
+  // the opposite: a leftover server serves a FROZEN, un-rebuilt bundle, so a developer who edits
+  // source and re-runs `pnpm run test:e2e` without first killing it silently tests old code.
+  //
+  // The resolution is `reuseExistingServer: false`, and the reasoning is that the setting no
+  // longer buys anything. Its only value was skipping a slow start -- but under a production
+  // command, skipping the rebuild IS the bug. What remained was a footgun with no upside.
+  //
+  // Its one real cost was a port clash: a developer with `pnpm dev` already on 3000 could no
+  // longer run e2e at all. So the e2e server moves to its own port, 3100, and the two never meet.
+  // That is what makes `false` free rather than a trade-off -- the local run is now correct by
+  // construction instead of relying on someone remembering to stop a server.
   webServer: {
-    command: "pnpm exec next build && pnpm exec next start --port 3000",
-    url: "http://127.0.0.1:3000/login",
-    reuseExistingServer: !process.env["CI"],
+    command: "pnpm exec next build && pnpm exec next start --port 3100",
+    url: "http://127.0.0.1:3100/login",
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
       NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
