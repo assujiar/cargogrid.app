@@ -3128,7 +3128,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // procurement-vendor-capacity.sql gained the Prompt 262 §22 manual-confirmation-with-evidence
   // block: the six refusal modes, the legitimate path, the in-system accept's own
   // system_accept stamp, and the raw-UPDATE case only the CHECK constraint can police).
-  dbTestSetSha256: "e47ee3cb537cb0b0d74c7a93e3896cfe323910d319dbaeeb6845144f6d23361a",
+  // History: e47ee3cb537cb0b0d74c7a93e3896cfe323910d319dbaeeb6845144f6d23361a
+  // (238 files, fifty-fifth-pass state). Superseded 2026-08-31 (fifty-sixth pass) by
+  // ISS-2026-061 / ADR-0029 (238 files unchanged in count --
+  // procurement-vendor-invoice-matching.sql gained the block that makes ADR-0029's ruling
+  // executable: the canonical on-ramp's own conditionality, the domain path's
+  // unconditionality with no policy or routing definition configured, and the no-FK pin that
+  // stops the two approval mechanisms drifting into a half-bound hybrid).
+  dbTestSetSha256: "52bda850cb9c8921fdf4ad24af45bff4ace36a0a60b4609ef202f5f38d701e7e",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

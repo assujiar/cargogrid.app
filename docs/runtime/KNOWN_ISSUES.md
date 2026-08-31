@@ -43,8 +43,8 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 69 — 4 High, 27 Medium, 38 Low |
-| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
+| `OPEN` | 68 — 4 High, 26 Medium, 38 Low |
+| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
 | `RESOLVED` | 194 |
 | **Total records** | **269** |
 
@@ -61,7 +61,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-289` | High | `OPEN` | GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repos |
 | `ISS-2026-058` | Medium | `RESOLVED` | PRC-262 "manual confirmation with evidence" (§22) — undisclosed C-23 gap |
 | `ISS-2026-060` | Medium | `OPEN` | Vendor rate engine (PRC-255) has no `zone`/`distance` pricing dimension |
-| `ISS-2026-061` | Medium | `OPEN` | Vendor invoice match-exception approval bypasses the canonical Platform approval engine |
+| `ISS-2026-061` | Medium | `ACCEPTED_EXCEPTION` | Vendor invoice match-exception approval bypasses the canonical Platform approval engine |
 | `ISS-2026-062` | Medium | `OPEN` | Vendor assignment (PRC-263) has no shipment-leg/task granularity |
 | `ISS-2026-068` | Medium | `RESOLVED` | Recruitment, Job Portal and ATS (HRT-276): hiring managers have no self-scoped "assigned slice" read surface, unlike interviewers |
 | `ISS-2026-069` | Medium | `OPEN` | Job-offer approval (HRT-276) is the fourth domain forced to share PLT-121's single tenant-wide `config_type_code='approval'` singleton, undisclosed as |
@@ -654,13 +654,75 @@ Discovered `2026-08-09` during `CG-S11-PRC-022` (Prompt 271, Closure Verificatio
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `zone`/`distance` still return zero real matches in `20260724150000_create_commercial_rate_cost_lookup.sql` and `20260730620000_extend_commercial_vendor_rate_for_procurement.sql`. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-061 — Vendor invoice match-exception approval bypasses the canonical Platform approval engine (OPEN, Medium)
+### ISS-2026-061 — Vendor invoice match-exception approval bypasses the canonical Platform approval engine (ACCEPTED_EXCEPTION, Medium)
 
 Discovered `2026-08-09` during `CG-S11-PRC-022` (Prompt 271, Closure Verification), by the Finance-boundary verification lens plus an independent synthesis-pass re-check. `259_PROCUREMENT_APPROVAL_PROMPT.md` (line 91) names "activation/rate/selection/PO/contract/match/exception" as the 7 entity types the canonical Platform approval engine (`app.approval_requests`/`app.request_approval`/`app.decide_approval_step`, `PLT-123`) must govern. Independently confirmed this checkpoint: `supabase/migrations/20260730660000_create_procurement_approval.sql:190`'s `entity_type` enum carries exactly 6 values (`vendor_activation`, `rate_version`, `vendor_selection`, `purchase_order`, `vendor_contract`, `exception_override`) — no 7th value for vendor invoice match. `app.request_vendor_bill_match_exception_approval`/`app.decide_vendor_bill_match_exception_approval` (`supabase/migrations/20260730750000_create_procurement_vendor_invoice_matching.sql:1739,1786`) is a wholly separate, self-built maker-checker mechanism with zero reference to `app.approval_requests`/`request_approval`/`decide_approval_step` anywhere in that migration (`grep`-confirmed, zero hits) and no `p_reauth_confirmed_at` parameter — meaning it also carries none of the canonical engine's delegation/escalation/stale-source-invalidation apparatus, not only its MFA gate. The MFA-absence sub-point is already correctly disclosed at `docs/build-log/phase-06/PRC-265.md` §5 item 11 as "a deliberate reading of this prompt's own spec text, which never names MFA anywhere"; the broader canonical-engine bypass itself is not disclosed anywhere (`PRC-259.md`, `PRC-265.md`, `KNOWN_ISSUES.md`, `PROCUREMENT_VENDOR_RUNBOOKS.md` §8 all checked, none names it).
 
 **Handling:** Not fixed by this checkpoint (read-only verification). The mechanism is functionally real and live-proven (`FINTEST-016`, item 19) — this is a governance-consistency gap (a structurally weaker parallel approval path for one of 7 named entity types), not a broken or insecure one. **Status `OPEN`**, Medium severity — owner: PRC-259 or PRC-265, a future task with an explicit mandate to either migrate match-exception approval onto the canonical engine or to formally, explicitly disclose the divergence as an accepted design variant.
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — the `entity_type` CHECK on `app.approval_requests` (`20260730660000_create_procurement_approval.sql:190`) still carries exactly 6 values with no vendor-invoice-match-exception 7th, and `app.request_vendor_bill_match_exception_approval`/`decide_...` (`20260730750000:1739,1786`) still have zero reference to `app.request_approval`/`app.decide_approval_step`. Disposition unchanged, still `OPEN`.
+
+**`ACCEPTED_EXCEPTION`, 2026-08-31, ruled by `ADR-0029`** — taking the second of the two outcomes
+this entry itself named ("*either migrate match-exception approval onto the canonical engine or to
+formally, explicitly disclose the divergence as an accepted design variant*"). The full reasoning
+is in `docs/adr/ADR-0029-vendor-bill-match-exception-approval-design-variant.md`; what follows is
+the substance, including two corrections to this entry's own evidence.
+
+**Correction 1 — the six-value CHECK is not on `app.approval_requests`.** Both this entry and its
+2026-08-27 re-verification place it there. `app.approval_requests.entity_type` is
+`text not null default 'generic'` (`20260719090000:180`) — free text, polymorphic,
+application-validated, exactly as `app.workflow_instances` already established. The six-value
+CHECK is on `app.procurement_approval_policies.entity_type` (`20260730660000:189`), which is
+`PRC-259`'s **threshold-policy** table, not the engine. The engine would accept this entity type
+with no migration at all. So the schema obstacle this entry implies does not exist, and the
+decision could not rest on it.
+
+**Correction 2 — the canonical engine is not a superset of what exists here.** The entry describes
+the domain path as "structurally weaker". In one respect it is strictly stronger:
+`app.decide_vendor_bill_match_exception_approval` re-verifies **at the point of commitment** that
+the case is still in `exception` and the underlying vendor bill is still not `void`
+(`20260730750000:1835,1841`). `app.decide_approval_step` knows nothing about match cases or bills
+and cannot; `PRC-259`'s canonical wrappers sync their source entity *after* the engine decides.
+Migrating would require re-implementing that guarantee in a wrapper regardless.
+
+**Why the ruling went against migrating — the deciding fact.**
+`app.evaluate_procurement_approval_requirement` (`20260730660000:380`) looks up a **published**
+policy for `(tenant, entity_type)` and, finding none, returns `required = false`; its caller then
+short-circuits to `not_required` and opens no request at all (`20260730660000:469`). Applied here,
+a tenant with no published policy row would have its match exceptions clear **with no approval and
+no approver**. Today that is impossible — a decided exception approval by a distinct
+`PRC:Approve`-holder is the only route from `exception` to `matched`.
+
+So migrating is not a neutral consistency change on this path: it converts an unconditional
+accounts-payable control into a tenant-configurable one whose default, in an unconfigured tenant,
+is **off**. Two further costs compound it: `approval_definition_not_configured` becomes a new way
+for a tenant to be unable to clear exceptions at all (proven live in the Commercial domain at
+`commercial-hardening.sql:157` and `commercial-quotation-approval.sql:194`); and invoice matching
+would become the **fifth** domain sharing the single tenant-wide approval routing definition that
+`ISS-2026-069` — still open, needing its own ADR — already identifies as overloaded, meaning the
+approver chain a tenant designs for HR job offers would govern their AP variance approvals.
+
+**What is genuinely given up, named rather than glossed:** no unified approver inbox (a pending
+match exception does not appear in `app.list_pending_approval_steps_for_actor`) — the real
+operational cost; no delegation; no escalation; no multi-step/threshold patterns; no MFA step-up
+parameter (already disclosed at `PRC-265.md` §5 item 11, unchanged).
+
+**Evidence — the ruling is executable, not prose.**
+`scripts/db-tests/procurement-vendor-invoice-matching.sql` gains a block proving live that
+`evaluate_procurement_approval_requirement` rejects `vendor_bill_match_exception` outright today
+(so a half-migration cannot happen silently); that the same function answers `required = false`
+for a governed entity type with no published policy (the conditionality the ruling refuses to
+import); that the domain path is genuinely unconditional — in a tenant asserted to have **no**
+procurement approval policy and **no** published routing definition, a re-evaluated exception case
+still opens a real pending approval, still sits in `exception` until decided, and still refuses
+self-approval; and that neither invoice-matching table carries a foreign key into
+`app.approval_requests`, pinning the two mechanisms as distinct rather than half-bound. Full
+`pnpm db:test` green.
+
+**This disposition is conditional, not permanent.** It should be reopened when `ISS-2026-069` is
+resolved such that per-domain routing definitions exist and the on-ramp can express "always
+required" without depending on a published policy row. At that point migration becomes strictly
+additive and the trade that produced `ADR-0029` no longer holds.
 
 ### ISS-2026-062 — Vendor assignment (PRC-263) has no shipment-leg/task granularity (OPEN, Medium)
 

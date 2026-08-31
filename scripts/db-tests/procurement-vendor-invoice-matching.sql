@@ -1287,4 +1287,137 @@ begin
   raise notice 'duplicate-fingerprint concurrent race proof: exactly one of the two racing near-duplicate cases was correctly flagged as the other''s duplicate -- see RACE_OUT_A/RACE_OUT_B captured above';
 end $$;
 
+-- ===========================================================================
+-- ISS-2026-061 / ADR-0029: the match-exception approval divergence, pinned.
+--
+-- 259_PROCUREMENT_APPROVAL_PROMPT.md line 91 names seven entity types the canonical
+-- PLT-123 engine must govern; six route through app._request_procurement_entity_approval and
+-- "match" does not. ADR-0029 rules that divergence an ACCEPTED design variant rather than
+-- migrating it, and the reason is not preference -- it is that the canonical on-ramp would make
+-- an unconditional financial control conditional on a tenant having published a policy row.
+--
+-- These assertions exist so that claim is EXECUTABLE rather than prose, and so that a future
+-- half-migration cannot happen silently: if anyone routes this path onto the engine, or binds the
+-- two mechanisms together, these fail and ADR-0029 has to be revisited deliberately.
+-- ===========================================================================
+
+\echo '>> ISS-2026-061 / ADR-0029: the canonical procurement on-ramp does not govern vendor-bill match exceptions today, and would make approval CONDITIONAL if it did -- while the domain path requires it unconditionally, in a tenant with no approval policy and no published routing definition at all'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vim1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000265102';
+  v_approver1 uuid := '00000000-0000-0000-0000-000000265103';
+  v_bill3_id uuid;
+  v_line3 app.finance_vendor_bill_lines;
+  v_po_id uuid;
+  v_case app.vendor_bill_match_cases;
+  v_approval app.vendor_bill_match_exception_approvals;
+  v_required boolean;
+  v_failed boolean;
+  v_count integer;
+begin
+  -- Fixture precondition, asserted rather than assumed: this tenant has published NEITHER a
+  -- procurement approval policy NOR a PLT-121 approval routing definition. Every claim below
+  -- depends on that being true, so it is checked instead of trusted.
+  if exists (select 1 from app.procurement_approval_policies where tenant_id = v_tenant1 and status = 'published') then
+    raise exception 'assertion failed: fixture precondition broken -- tenant vim1 was expected to have NO published procurement approval policy';
+  end if;
+  if exists (
+    select 1 from app.config_versions cv join app.config_objects co on co.id = cv.config_object_id
+    where co.config_type_code = 'approval' and co.tenant_id = v_tenant1 and co.scope_level = 'tenant' and cv.status = 'published'
+  ) then
+    raise exception 'assertion failed: fixture precondition broken -- tenant vim1 was expected to have NO published approval routing definition';
+  end if;
+
+  -- (a) The divergence itself: the procurement policy catalogue does not know this entity type.
+  -- Pinned so a half-migration (adding the entity type without moving the mechanism, or the
+  -- reverse) is visible immediately rather than discovered later.
+  begin
+    perform app.evaluate_procurement_approval_requirement('vendor_bill_match_exception', v_tenant1, null, v_staff1);
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'invalid_entity_type%' then
+      raise exception 'assertion failed: expected invalid_entity_type for vendor_bill_match_exception, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then
+    raise exception 'assertion failed: vendor_bill_match_exception is now a governed procurement approval entity type -- if the mechanism moved onto the canonical engine too, ADR-0029 must be revisited; if only the catalogue changed, this path is now half-migrated';
+  end if;
+
+  -- (b) The reason ADR-0029 refuses the migration, made executable: for an entity type the
+  -- catalogue DOES govern, with no published policy, the canonical on-ramp answers "not
+  -- required" -- and its caller then opens no approval request at all. Importing that behaviour
+  -- onto invoice matching would let a match exception clear with no approver in any tenant that
+  -- had not configured a policy. An unconditional control would become an opt-in one.
+  select e.required into v_required
+  from app.evaluate_procurement_approval_requirement('vendor_activation', v_tenant1, null, v_staff1) e;
+  if v_required then
+    raise exception 'assertion failed: expected the canonical on-ramp to answer required=false with no published policy -- ADR-0029''s central premise no longer holds and the ruling must be re-derived';
+  end if;
+
+  -- (c) The domain path, by contrast, is unconditional. Same tenant, same absence of any policy
+  -- or routing definition: a case in exception still demands a real approval request, and still
+  -- sits in exception until a DISTINCT approver decides it.
+  select id into v_bill3_id from app.finance_vendor_bills where tenant_id = v_tenant1 and vendor_reference = 'VIM-BILL-003';
+  select * into v_line3 from app.finance_vendor_bill_lines where bill_id = v_bill3_id order by line_number asc limit 1;
+  select id into v_po_id from app.purchase_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-vim-po-1';
+
+  -- bill3 already carries a current (matched) case from the earlier block, so this re-evaluates
+  -- it rather than creating a second one -- the same route the false-positive-duplicate block
+  -- above uses, and the one create_vendor_bill_match_case itself points at.
+  select * into v_case from app.vendor_bill_match_cases where bill_id = v_bill3_id and is_current;
+  v_case := app.re_evaluate_vendor_bill_match_case(
+    v_case.id, v_case.record_version, v_po_id,
+    jsonb_build_array(jsonb_build_object('billLineId', v_line3.id, 'vendorStatedQuantity', 10, 'vendorStatedUom', 'ton', 'vendorStatedRate', 1200000, 'vendorStatedAmount', 12000000)),
+    v_staff1, 'staff'
+  );
+  if v_case.overall_status <> 'exception' then
+    raise exception 'assertion failed: fixture precondition broken -- expected a re-evaluated 20%% variance case to land in exception, got %', v_case.overall_status;
+  end if;
+
+  v_approval := app.request_vendor_bill_match_exception_approval(v_case.id, v_case.record_version, 'ADR-0029 pin: unconditional even with no approval policy configured', v_staff1, 'staff');
+  if v_approval.status <> 'pending' then
+    raise exception 'assertion failed: expected a real pending exception approval to be opened with no approval policy configured, got %', v_approval.status;
+  end if;
+
+  select * into v_case from app.vendor_bill_match_cases where id = v_case.id;
+  if v_case.overall_status <> 'exception' then
+    raise exception 'assertion failed: expected the case to REMAIN in exception until the approval is decided, got %', v_case.overall_status;
+  end if;
+
+  -- and it takes a second person, always -- the property that would become optional under a
+  -- policy-driven on-ramp.
+  begin
+    perform app.decide_vendor_bill_match_exception_approval(v_approval.id, v_approval.record_version, 'approved', 'ADR-0029 pin: self-decide attempt', v_staff1, 'staff');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'self_approval_not_allowed%' then
+      raise exception 'assertion failed: expected self_approval_not_allowed, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected the requester to be barred from deciding their own exception approval'; end if;
+
+  v_approval := app.decide_vendor_bill_match_exception_approval(v_approval.id, v_approval.record_version, 'approved', 'ADR-0029 pin: decided by a distinct PRC:Approve holder', v_approver1, 'approver');
+  if v_approval.status <> 'approved' then
+    raise exception 'assertion failed: expected the distinct approver''s decision to stand, got %', v_approval.status;
+  end if;
+
+  -- (d) The two mechanisms stay distinct. A foreign key from either match table into
+  -- app.approval_requests would mean this path had been half-bound to the engine -- one decision
+  -- recorded in two places, with no single source of truth. That is worse than either mechanism
+  -- alone, so it is pinned as forbidden rather than merely absent.
+  select count(*) into v_count
+  from pg_constraint c
+  join pg_class src on src.oid = c.conrelid
+  join pg_class tgt on tgt.oid = c.confrelid
+  where c.contype = 'f'
+    and src.relname in ('vendor_bill_match_exception_approvals', 'vendor_bill_match_cases')
+    and tgt.relname = 'approval_requests';
+  if v_count <> 0 then
+    raise exception 'assertion failed: the invoice-matching tables now reference app.approval_requests (% FK(s)) -- the domain path and the canonical engine must not be half-bound; see ADR-0029', v_count;
+  end if;
+end $$;
+
 \echo 'ALL PRC-265 db-test assertions passed.'
