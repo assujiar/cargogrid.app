@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { resolveCustomerPortalAccessForRequest } from "../../../../lib/portal/resolve-customer-portal-access.server.ts";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
 import { listCustomerPortalInvoices, CustomerPortalInvoiceQueryError } from "../../../../server/queries/customer-portal-invoice.ts";
+import { getCustomerPortalScopeContext, CustomerPortalScopeQueryError } from "../../../../server/queries/customer-portal-scope.ts";
 import { CUSTOMER_PORTAL_INVOICE_STATUSES, CustomerPortalInvoiceStatusSchema } from "../../../../server/contracts/customer-portal-invoice/customer-portal-invoice.ts";
 import { PermissionState } from "../../../../components/ui/permission-state.tsx";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
@@ -63,11 +64,17 @@ export default async function CustomerInvoicesPage({
   const generatedAt = new Date().toISOString();
   let loadFailed = false;
   let invoices: Awaited<ReturnType<typeof listCustomerPortalInvoices>> = [];
+  // ISS-2026-124: the reader's own account scope, so each invoice row can name the account it
+  // belongs to. Same read, and same panel-side name lookup, CPL-309/310 already use.
+  let accounts: Awaited<ReturnType<typeof getCustomerPortalScopeContext>> = [];
 
   try {
-    invoices = await listCustomerPortalInvoices(supabase, access.tenant.id, access.authUserId, { statusFilter, limit: 50 });
+    [invoices, accounts] = await Promise.all([
+      listCustomerPortalInvoices(supabase, access.tenant.id, access.authUserId, { statusFilter, limit: 50 }),
+      getCustomerPortalScopeContext(supabase, access.authUserId, access.tenant.id),
+    ]);
   } catch (error) {
-    if (!(error instanceof CustomerPortalInvoiceQueryError)) throw error;
+    if (!(error instanceof CustomerPortalInvoiceQueryError) && !(error instanceof CustomerPortalScopeQueryError)) throw error;
     loadFailed = true;
   }
 
@@ -92,7 +99,7 @@ export default async function CustomerInvoicesPage({
         </p>
       </div>
 
-      <CustomerInvoicesPanel tenantSlug={tenantSlug} invoices={invoices} statusFilter={statusFilter ?? ""} statuses={CUSTOMER_PORTAL_INVOICE_STATUSES} generatedAt={generatedAt} />
+      <CustomerInvoicesPanel tenantSlug={tenantSlug} invoices={invoices} accounts={accounts} statusFilter={statusFilter ?? ""} statuses={CUSTOMER_PORTAL_INVOICE_STATUSES} generatedAt={generatedAt} />
     </div>
   );
 }

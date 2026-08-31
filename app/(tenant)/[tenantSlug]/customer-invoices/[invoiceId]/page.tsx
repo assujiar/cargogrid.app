@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { resolveCustomerPortalAccessForRequest } from "../../../../../lib/portal/resolve-customer-portal-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { getCustomerPortalInvoice, getCustomerPortalInvoiceLines, CustomerPortalInvoiceQueryError } from "../../../../../server/queries/customer-portal-invoice.ts";
+import { getCustomerPortalScopeContext, CustomerPortalScopeQueryError } from "../../../../../server/queries/customer-portal-scope.ts";
 import { getCustomerPortalPaymentStatus, CustomerPortalPaymentQueryError } from "../../../../../server/queries/customer-portal-payment.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { CustomerInvoiceDetailPanel } from "./customer-invoice-detail-panel.tsx";
@@ -62,15 +63,21 @@ export default async function CustomerInvoiceDetailPage({ params }: { params: Pr
   let invoice: Awaited<ReturnType<typeof getCustomerPortalInvoice>> | null = null;
   let lines: Awaited<ReturnType<typeof getCustomerPortalInvoiceLines>> = [];
   let paymentDetail: Awaited<ReturnType<typeof getCustomerPortalPaymentStatus>> | null = null;
+  // ISS-2026-124: the reader's own account scope, so a multi-account customer can see WHOSE
+  // invoice this is before they read a single figure on it.
+  let accounts: Awaited<ReturnType<typeof getCustomerPortalScopeContext>> = [];
 
   try {
     invoice = await getCustomerPortalInvoice(supabase, access.tenant.id, access.authUserId, invoiceId);
-    [lines, paymentDetail] = await Promise.all([
+    [lines, paymentDetail, accounts] = await Promise.all([
       getCustomerPortalInvoiceLines(supabase, access.tenant.id, access.authUserId, invoiceId),
       getCustomerPortalPaymentStatus(supabase, access.tenant.id, access.authUserId, invoiceId),
+      getCustomerPortalScopeContext(supabase, access.authUserId, access.tenant.id),
     ]);
   } catch (error) {
-    if (error instanceof CustomerPortalInvoiceQueryError || error instanceof CustomerPortalPaymentQueryError) {
+    if (error instanceof CustomerPortalScopeQueryError) {
+      loadFailed = true;
+    } else if (error instanceof CustomerPortalInvoiceQueryError || error instanceof CustomerPortalPaymentQueryError) {
       if (error.code === "record_not_found") {
         notFoundResult = true;
       } else {
@@ -92,5 +99,12 @@ export default async function CustomerInvoiceDetailPage({ params }: { params: Pr
   // payment-status shape (paymentStatus/originalAmount/openAmount/isHeld) --
   // reused for both props rather than fetched a second time (see this
   // file's own header, Tier C review fix).
-  return <CustomerInvoiceDetailPanel tenantSlug={tenantSlug} invoice={invoice} lines={lines} payment={paymentDetail} paymentDetail={paymentDetail} />;
+  // Only named when there is more than one account it could be -- a single-account reader already
+  // knows, and repeating it would be noise rather than a cue.
+  const accountName =
+    accounts.length > 1 && invoice.customerAccountId
+      ? (accounts.find((a) => a.accountId === invoice.customerAccountId)?.accountName ?? null)
+      : null;
+
+  return <CustomerInvoiceDetailPanel tenantSlug={tenantSlug} invoice={invoice} accountName={accountName} lines={lines} payment={paymentDetail} paymentDetail={paymentDetail} />;
 }

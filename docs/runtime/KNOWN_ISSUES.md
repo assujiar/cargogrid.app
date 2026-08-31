@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 67 — 4 High, 25 Medium, 38 Low |
+| `OPEN` | 66 — 4 High, 25 Medium, 37 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 196 |
+| `RESOLVED` | 197 |
 | **Total records** | **270** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -126,7 +126,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-121` | Low | `OPEN` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
 | `ISS-2026-122` | Low | `OPEN` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
 | `ISS-2026-123` | Low | `OPEN` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
-| `ISS-2026-124` | Low | `OPEN` | `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capab |
+| `ISS-2026-124` | Low | `RESOLVED` | `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capab |
 | `ISS-2026-126` | Low | `OPEN` | Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_fo |
 | `ISS-2026-127` | Low | `OPEN` | Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting,  |
 | `ISS-2026-128` | Low | `OPEN` | Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied par |
@@ -1661,7 +1661,7 @@ Discovered `2026-08-17` at `CG-S13-CPL-016` (Prompt 314, Customer Profile) — t
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `customer_portal_profile_change_requests`'s own `cppcr_field_name_check` constraint still admits only `('trade_name', 'billing_address')`, excluding `legal_name`/`tax_id`; no contact-change-request write path exists anywhere in the repository. A KYC-aware legal-identity workflow and a new contact-change-request table are both genuine new capabilities. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-124 — `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capability's equivalent RPC (Phase 8, Batch 3 Tier C review, correctness/concurrency lens, OPEN — partial, DB layer RESOLVED Track B Batch 4, Low)
+### ISS-2026-124 — `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capability's equivalent RPC (Phase 8, Batch 3 Tier C review, correctness/concurrency lens, RESOLVED, Low)
 
 Discovered `2026-08-17` at Batch 3's own Tier C review close (`CG-S13-CPL-012..016`, Prompts 310-314), correctness/concurrency lens.
 
@@ -1672,6 +1672,36 @@ Discovered `2026-08-17` at Batch 3's own Tier C review close (`CG-S13-CPL-012..0
 **Not fixed at this Tier C review pass** — adding the column to both `RETURNS TABLE` shapes is itself a safe `CREATE OR REPLACE FUNCTION` (both are new-this-batch functions, no already-applied-migration constraint), but a complete, verifiable fix also requires updating `server/contracts/customer-portal-invoice/customer-portal-invoice.ts` (the Zod row schema and its `parseCustomerPortalInvoice`-shaped parser), `server/queries/customer-portal-invoice.ts` (the raw-row mapping), and at least one of the two customer-invoice UI routes (`app/(tenant)/[tenantSlug]/customer-invoices/`) to actually surface the new field — otherwise the fix is present in the database but invisible and unverified at the layer a reviewer or a customer would actually see. This four-file, cross-layer shape did not meet this bounded Tier C fix pass's own "fix Low findings only if trivial, otherwise disclose" bar (`docs/standards/BUILD_EXECUTION_PROTOCOL.md` governing instruction for this exact pass), and is not a Critical/High/Medium defect this pass is unconditionally required to fix regardless of size. **Status `OPEN`**, Low severity (no data fabricated or leaked; every field this RPC currently returns remains correct and customer-safe; only a multi-account customer loses a "which account" cue from this one RPC). Recommended fix for whichever future checkpoint picks this up: add `customer_account_id uuid` to both `RETURNS TABLE` shapes (`v_invoice.customer_account_id`/`i.customer_account_id` respectively — the column already exists on `app.finance_invoices`, already used internally by the gate, just never projected outward), add the matching Zod field + parser update, and surface it in the invoice list/detail UI (e.g. the account's own trade name, resolved client-side from the account-switcher context CPL-300's own UI already carries) — mirroring CPL-310's own `owner_account_id` precedent exactly.
 
 **Update (`2026-08-28`, Track B Batch 4):** partial — the DB layer closed. `supabase/migrations/20260827140000_harden_customer_portal_invoice_account_id_projection_iss2026124.sql` — `DROP`+`CREATE` on both `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` (required, not `CREATE OR REPLACE`, since PostgreSQL cannot change a `RETURNS TABLE` column list) adding `customer_account_id` to the projection; a dependency this entry's own text (written 2026-08-17) could not have anticipated was also found and fixed: the `public.*` PostgREST pass-through wrappers (`20260826000000`, RGL-394 Option 2, added 2026-08-26 after this entry was written) were widened in lockstep, since their own independently-declared `returns TABLE(...)` would otherwise mismatch and break every call. **Not fixed** — the entry's own "Not fixed" section requires, for a complete fix, `server/contracts/customer-portal-invoice/customer-portal-invoice.ts` (add `customerAccountId` to the Zod schema/parser) and `app/(tenant)/[tenantSlug]/customer-invoices/` (surface the field); both are TS/UI-layer work outside this batch's DB-migration mandate. **Status `OPEN`**, narrowed to the TS/UI sub-item only, Low severity — owner: a near-term follow-up prompt to close the client-layer half.
+
+**`RESOLVED`, 2026-08-31 — the client-layer half, exactly as this entry's own "Recommended fix"
+specified.** The DB half (`20260827140000`) had been live since 2026-08-28 but was invisible at
+the layer a customer actually looks at, which is what kept the entry open. Confirmed live before
+touching anything: all four functions (`app.*` and their `public.*` PostgREST wrappers) already
+project `customer_account_id`.
+
+- `server/contracts/customer-portal-invoice/customer-portal-invoice.ts` — `customerAccountId`
+  added to `CustomerPortalInvoiceSchema` and to `parseCustomerPortalInvoice`. **Nullable, not
+  required**, so a row from an older projection degrades to "unknown account" instead of throwing.
+  That choice is deliberate and informed by `ISS-2026-315`, found four issues earlier in this same
+  session: a required field the RPC does not return does not fail loudly at the boundary — it
+  throws a `ZodError` past the page's own error handling and takes the whole listing down. A
+  missing account cue is worth a dash; it is not worth a broken page.
+- `app/(tenant)/[tenantSlug]/customer-invoices/` — the list gains an **Account** column and the
+  detail page names the account directly under the invoice number, where someone opening a
+  disputed invoice sees it before reading a single figure. Names resolve through
+  `getCustomerPortalScopeContext`, the same read and the same panel-side `accountNameById` lookup
+  CPL-309/310 already established, rather than a new mechanism.
+- **Both surfaces show it only when the reader holds more than one account.** A single-account
+  customer already knows whose invoice it is; a column repeating one name on every row is noise,
+  not information. This is the same judgement CPL-310's own owner-account column makes, and it is
+  why the fix is a cue for the people who need one rather than a field added everywhere.
+
+**Evidence:** two new unit tests in `server/queries/customer-portal-invoice.test.ts` — the id
+reaches the parsed row, and a row lacking it degrades to `null` rather than rejecting the listing.
+The shared `INVOICE_ROW` fixture was also realigned to the RPC's real post-`20260827140000` column
+set, for the reason `ISS-2026-315` makes concrete: a fixture that drifts from the RPC it stands in
+for proves nothing. `pnpm typecheck`, 5698 unit tests, and `next build` (both invoice routes
+compiled) all green.
 
 ### ISS-2026-125 — Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), plus a real, unfixed "last active account_admin" gap remains open in CPL-300's own already-`VERIFIED` `set_customer_portal_account_membership_status` (Phase 8, Batch 4, `CG-S13-CPL-017`, Medium for item 3 / Low for items 1-2, OPEN)
 

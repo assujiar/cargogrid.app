@@ -90,12 +90,15 @@ function CustomerInvoiceDownloadButton({ tenantSlug, invoiceId }: { tenantSlug: 
 export function CustomerInvoiceDetailPanel({
   tenantSlug,
   invoice,
+  accountName,
   lines,
   payment,
   paymentDetail,
 }: {
   tenantSlug: string;
   invoice: CustomerPortalInvoice;
+  /** ISS-2026-124: the owning account's name, or null when there is only one account to be. */
+  accountName: string | null;
   lines: readonly CustomerPortalInvoiceLine[];
   payment: CustomerPortalInvoicePayment;
   paymentDetail: CustomerPortalPaymentStatus;
@@ -106,6 +109,13 @@ export function CustomerInvoiceDetailPanel({
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-semibold text-neutral-900">{invoice.invoiceNumber ?? "Unnumbered invoice"}</h1>
+        {/*
+          ISS-2026-124: named right under the invoice number rather than buried in the field grid.
+          A customer holding several accounts opening a disputed invoice needs to know whose it is
+          before reading anything else on the page. Shown only when there is more than one account
+          to distinguish -- otherwise it restates what the reader already knows.
+        */}
+        {accountName ? <p className="text-sm text-neutral-700">{accountName}</p> : null}
         <p className="text-xs text-neutral-500">
           This is a read-only projection of Finance-owned billing data -- Finance remains the source of truth; you cannot edit, approve, or post this invoice from here.
         </p>

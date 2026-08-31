@@ -31,6 +31,17 @@ export const CUSTOMER_PORTAL_INVOICE_STATUS_LABELS: Record<CustomerPortalInvoice
 
 export const CustomerPortalInvoiceSchema = z.object({
   id: z.string().uuid(),
+  /**
+   * `ISS-2026-124`: which of the customer's OWN accounts this invoice belongs to. A
+   * `customer_user` whose Layer 4 membership resolves to more than one account — a supported
+   * shape since CPL-300 widened `app.resolve_customer_account_scope` — saw every one of their
+   * invoices correctly but had nothing in the row telling them WHICH account it was for.
+   *
+   * The DB half landed at `20260827140000`; this is the client half. Nullable so a row from an
+   * older projection degrades to "unknown account" rather than throwing — a listing must never
+   * fail because one field is absent.
+   */
+  customerAccountId: z.string().uuid().nullable(),
   invoiceNumber: z.string().nullable(),
   currency: z.string(),
   status: CustomerPortalInvoiceStatusSchema,
@@ -53,6 +64,7 @@ function coerceAmount(value: unknown): number | null {
 export function parseCustomerPortalInvoice(row: Record<string, unknown>): CustomerPortalInvoice {
   return CustomerPortalInvoiceSchema.parse({
     id: row.id,
+    customerAccountId: row.customer_account_id ?? null,
     invoiceNumber: row.invoice_number ?? null,
     currency: row.currency,
     status: row.status,

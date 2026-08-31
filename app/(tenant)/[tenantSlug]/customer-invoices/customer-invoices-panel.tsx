@@ -2,6 +2,7 @@ import { Link } from "../../../../components/ui/link.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import { CUSTOMER_PORTAL_INVOICE_STATUS_LABELS, type CustomerPortalInvoice, type CustomerPortalInvoiceStatus } from "../../../../server/contracts/customer-portal-invoice/customer-portal-invoice.ts";
+import type { CustomerPortalScopeContextRow } from "../../../../server/contracts/customer-portal-scope/customer-portal-scope.ts";
 
 const INVOICE_STATUS_TONE: Record<CustomerPortalInvoiceStatus, StatusTone> = {
   issued: "success",
@@ -49,16 +50,24 @@ function formatMoney(amount: number, currency: string): string {
 export function CustomerInvoicesPanel({
   tenantSlug,
   invoices,
+  accounts,
   statusFilter,
   statuses,
   generatedAt,
 }: {
   tenantSlug: string;
   invoices: readonly CustomerPortalInvoice[];
+  /** ISS-2026-124: the reader's own accounts, so an invoice row can name the one it belongs to. */
+  accounts: readonly CustomerPortalScopeContextRow[];
   statusFilter: string;
   statuses: readonly CustomerPortalInvoiceStatus[];
   generatedAt: string;
 }) {
+  const accountNameById = new Map(accounts.map((a) => [a.accountId, a.accountName]));
+  // ISS-2026-124: a single-account customer already knows whose invoice it is, and a column
+  // repeating one name on every row is noise. The cue is only shown to the readers who need it --
+  // the same judgement CPL-310's own owner-account column makes.
+  const showAccountColumn = accounts.length > 1;
   return (
     <div className="flex flex-col gap-4">
       {/* Freshness banner: every RPC below reads app.finance_invoices live, on
@@ -100,6 +109,7 @@ export function CustomerInvoicesPanel({
               <thead>
                 <tr className="text-left text-xs font-medium text-neutral-500">
                   <th className="p-2">Invoice</th>
+                  {showAccountColumn ? <th className="p-2">Account</th> : null}
                   <th className="p-2">Status</th>
                   <th className="p-2 text-right">Amount</th>
                   <th className="p-2">Due date</th>
@@ -113,6 +123,11 @@ export function CustomerInvoicesPanel({
                     <td className="p-2 text-sm">
                       <Link href={`/${tenantSlug}/customer-invoices/${invoice.id}`}>{invoice.invoiceNumber ?? "Unnumbered"}</Link>
                     </td>
+                    {showAccountColumn ? (
+                      <td className="p-2 text-xs text-neutral-500">
+                        {invoice.customerAccountId ? (accountNameById.get(invoice.customerAccountId) ?? "—") : "—"}
+                      </td>
+                    ) : null}
                     <td className="p-2 text-sm">
                       <StatusBadge tone={INVOICE_STATUS_TONE[invoice.status] ?? "neutral"} label={CUSTOMER_PORTAL_INVOICE_STATUS_LABELS[invoice.status] ?? invoice.status} />
                     </td>

@@ -27,8 +27,16 @@ function fakeRpcClient(response: { data: unknown; error: { message: string } | n
   return { client, calls };
 }
 
+/**
+ * Kept aligned with what `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices`
+ * actually return after `20260827140000` added `customer_account_id` to both projections
+ * (`ISS-2026-124`). A fixture that drifts from the RPC's real output column set is worth nothing —
+ * `ISS-2026-315` is what that costs when the field is required rather than nullable.
+ */
+const ACCOUNT_ID = "523e4567-e89b-12d3-a456-426614174000";
 const INVOICE_ROW = {
   id: INVOICE_ID,
+  customer_account_id: ACCOUNT_ID,
   invoice_number: "INV-2026-000123",
   currency: "USD",
   status: "issued",
@@ -52,6 +60,25 @@ describe("getCustomerPortalInvoice", () => {
       fn: "get_customer_portal_invoice",
       args: { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_invoice_id: INVOICE_ID },
     });
+  });
+
+  /**
+   * `ISS-2026-124`: a multi-account customer saw every one of their invoices correctly but had
+   * nothing in the row saying WHICH of their accounts it was for. This proves the id now reaches
+   * the client — the DB half alone was invisible at the layer a customer actually looks at.
+   */
+  test("customerAccountId reaches the parsed row, so a multi-account reader can tell whose invoice it is", async () => {
+    const { client } = fakeRpcClient({ data: [INVOICE_ROW], error: null });
+    const result = await getCustomerPortalInvoice(client, TENANT_ID, ACTOR_ID, INVOICE_ID);
+    assert.equal(result.customerAccountId, ACCOUNT_ID);
+  });
+
+  /** And it degrades to null rather than throwing: a listing must never fail over one absent field. */
+  test("a row without customer_account_id degrades to null rather than rejecting the whole listing", async () => {
+    const { customer_account_id: _dropped, ...withoutAccount } = INVOICE_ROW;
+    const { client } = fakeRpcClient({ data: [withoutAccount], error: null });
+    const result = await getCustomerPortalInvoice(client, TENANT_ID, ACTOR_ID, INVOICE_ID);
+    assert.equal(result.customerAccountId, null);
   });
 
   test("propagates record_not_found with .code set", async () => {
