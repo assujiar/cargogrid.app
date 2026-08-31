@@ -136,7 +136,7 @@ open item still does.
 | Field | Value |
 |---|---|
 | Severity (proposed) | **High** |
-| Status | `OPEN` |
+| Status | **`RESOLVED`, 2026-08-25** (`RGL-BLK-002-OPTION2-REMEDIATION.md`) — *this summary row read `OPEN` until 2026-08-31, contradicting its own resolution record below; corrected then, original value preserved in this sentence* |
 | Found at | `RGL-391`, 2026-08-25 |
 | Owner | `RGL-399` (root-cause the environment configuration); `RGL-406` (validate the fix) |
 | Gate defeated | Prompt 412 required-verification items 13/14 (post-deployment validation, monitoring); `390_*_README.md` "monitoring and runbooks must be available before production release" |
@@ -520,7 +520,7 @@ later checkpoint.
 | Field | Value |
 |---|---|
 | Severity (proposed) | **High** |
-| Status | `OPEN` |
+| Status | **`RESOLVED`, 2026-08-25** (`RGL-394`, Defect Triage) — *this summary row read `OPEN` until 2026-08-31, contradicting its own resolution record below; corrected then, original value preserved in this sentence* |
 | Found at | `RGL-391`, 2026-08-25, by this checkpoint's own Tier A baseline run — **a live failure, not a code read** |
 | Owner | `RGL-394` (triage + binding severity); fix lands at `RGL-394` or `RGL-395` |
 | Gate defeated | Execution index §8.1 gate "Migrations apply cleanly" / Step 15 §8.1 gate 10 "No fake pass, hidden failure"; Prompt 412 required-verification item 4 |
