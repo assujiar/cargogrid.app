@@ -2921,7 +2921,26 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // type had to be added in four places, not one: the CHECK constraint, app.generic_job_types(),
   // GENERIC_JOB_TYPES and IMPORT_EXPORT_JOB_TYPES -- each guarded by its own parity assertion,
   // each of which fired in turn.
-  migrationSetSha256: "797fc4af0660d4d5d64c0cffbde908480faca60efcd01ca6b933f9534f6c2ddb",
+  // History: 797fc4af0660d4d5d64c0cffbde908480faca60efcd01ca6b933f9534f6c2ddb
+  // (412 files, sixty-seventh-pass amendment above). Superseded 2026-08-31 (sixty-eighth pass)
+  // by ISS-2026-134 item 4 (413 files: +1,
+  // 20260831240000_allow_one_schedule_per_parameter_set_and_add_liability_reconciliation_task.sql).
+  // Ruling: ADR-0027 Part A.
+  //
+  // Adding a currency-scoped liability reconciliation task surfaced a real defect in the
+  // scheduler shipped four migrations earlier: tenant_scheduled_tasks was keyed
+  // (tenant_id, task_code), which silently capped every PARAMETERISED task at one schedule per
+  // tenant. Already wrong for tasks live since 20260831090000 -- a tenant with three leave types
+  // could accrue exactly one, and configuring the second overwrote the first with no warning,
+  // the worst shape of all because nothing told anybody. The key is now
+  // (tenant_id, task_code, params): unchanged for the twelve parameterless tasks, correct for
+  // the rest. The ON CONFLICT target moves in lockstep, because a target that no longer matches
+  // a unique index raises at runtime rather than degrading.
+  //
+  // configure_tenant_scheduled_task was rebuilt from pg_get_functiondef against the live
+  // database, not from the migration that created it -- the trap the previous pass's own
+  // dispatcher near-miss had just demonstrated. Exactly one line differs.
+  migrationSetSha256: "c18be343209111874d4dac49a6a2149ff3ebb238e49994d10b0bdcf88edef6e5",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3303,7 +3322,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // made because it was hiding evidence: audit-trail.sql line 498's \echo carried an unescaped
   // apostrophe, so psql reported "unterminated quoted string" and truncated the description of
   // what that block proves. The assertions themselves always ran; only their label was lost.
-  dbTestSetSha256: "913c0bd799b47ae2d8be903cc9e6e0536b90ffcafe8a5383ee3d736940cdace4",
+  // History: 913c0bd799b47ae2d8be903cc9e6e0536b90ffcafe8a5383ee3d736940cdace4
+  // (239 files, sixty-seventh-pass state). Superseded 2026-08-31 (sixty-eighth pass) by
+  // ISS-2026-134 item 4 and ISS-2026-133 (239 files unchanged in count -- two files widened).
+  // task-scheduler.sql gains the assertion that two currencies coexist as two schedules while
+  // the same parameter set still updates in place and a parameterless task still holds exactly
+  // one -- the three properties the widened key has to satisfy at once, since getting any one
+  // of them wrong is a different silent bug. customer-loyalty-expiry-fraud-prevention.sql gains
+  // the pin under ISS-2026-133 item 2's ruling: that entry was ruled acceptable ON THE BASIS
+  // that CPL-319's entitlement-hold primitives are already independently staff-callable, which
+  // was only ever prose -- if somebody revoked those grants the ruling would silently become
+  // false and nobody would find out until a fraud investigation needed the lever.
+  dbTestSetSha256: "2bd1a5091da4a72ed80bd71d8d3593502b38fd896c71a1fab959fbfd4f5a6f65",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

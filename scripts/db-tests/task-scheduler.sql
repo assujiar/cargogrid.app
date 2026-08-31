@@ -44,7 +44,7 @@ begin
 end;
 $$;
 
-\echo '>> the catalogue is real and Supreme-Admin-owned: nineteen active tasks, each with an interval floor, and the delegation switch genuinely splits them'
+\echo '>> the catalogue is real and Supreme-Admin-owned: twenty active tasks, each with an interval floor, and the delegation switch genuinely splits them'
 do $$
 declare
   v_total integer;
@@ -54,8 +54,8 @@ begin
   select count(*) into v_total from app.scheduled_task_definitions where status = 'active';
   -- 11 seeded by 20260831090000, plus 5 added by 20260831100000 (the ISS-2026-249 authority
   -- denial sweep and ISS-2026-313's four).
-  if v_total <> 19 then
-    raise exception 'assertion failed: expected 19 active catalogue tasks, got %', v_total;
+  if v_total <> 20 then
+    raise exception 'assertion failed: expected 20 active catalogue tasks, got %', v_total;
   end if;
 
   select count(*) into v_delegable from app.scheduled_task_definitions where status = 'active' and tenant_admin_configurable;
@@ -208,8 +208,8 @@ declare
   v_not_configurable integer;
 begin
   select count(*) into v_rows from app.list_tenant_scheduled_tasks(v_tenant1, v_admin);
-  if v_rows <> 19 then
-    raise exception 'assertion failed: expected all 19 active catalogue tasks listed, configured or not, got %', v_rows;
+  if v_rows <> 20 then
+    raise exception 'assertion failed: expected all 20 active catalogue tasks listed, configured or not, got %', v_rows;
   end if;
 
   select count(*) filter (where configurable_by_actor), count(*) filter (where not configurable_by_actor)
@@ -425,6 +425,100 @@ begin
 end;
 $$;
 
+
+\echo '>> ISS-2026-134: a parameterised task can carry MORE THAN ONE schedule per tenant -- before this, configuring a second leave type silently OVERWROTE the first, which is the worst shape of all because nothing told anybody'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'sched1');
+  v_supreme uuid := '00000000-0000-0000-0000-000000439001';
+  v_usd app.tenant_scheduled_tasks;
+  v_idr app.tenant_scheduled_tasks;
+  v_usd_again app.tenant_scheduled_tasks;
+  v_count integer;
+  v_parameterless_count integer;
+begin
+  -- Two currencies, one task. ISS-2026-134 item 1's own documented workflow is one
+  -- reconciliation run PER CURRENCY, so a multi-currency tenant needs both by construction.
+  v_usd := app.configure_tenant_scheduled_task(v_tenant1, 'loyalty_liability_reconciliation', true, 1440, '{"currency": "USD"}'::jsonb, v_supreme, 'supreme');
+  v_idr := app.configure_tenant_scheduled_task(v_tenant1, 'loyalty_liability_reconciliation', true, 1440, '{"currency": "IDR"}'::jsonb, v_supreme, 'supreme');
+
+  if v_usd.id = v_idr.id then
+    raise exception 'assertion failed: two different currencies must be two different schedules, got the same row -- the second silently overwrote the first';
+  end if;
+
+  select count(*) into v_count from app.tenant_scheduled_tasks
+  where tenant_id = v_tenant1 and task_code = 'loyalty_liability_reconciliation';
+  if v_count <> 2 then
+    raise exception 'assertion failed: expected 2 reconciliation schedules (USD and IDR), got %', v_count;
+  end if;
+
+  -- And the same parameter set still UPDATES in place rather than piling up duplicates --
+  -- otherwise changing an interval would leave the old schedule running forever.
+  v_usd_again := app.configure_tenant_scheduled_task(v_tenant1, 'loyalty_liability_reconciliation', true, 2880, '{"currency": "USD"}'::jsonb, v_supreme, 'supreme');
+  if v_usd_again.id <> v_usd.id then
+    raise exception 'assertion failed: the same parameter set must update the SAME schedule, got a new row';
+  end if;
+  if v_usd_again.interval_minutes <> 2880 then
+    raise exception 'assertion failed: reconfiguring must actually change the interval, got %', v_usd_again.interval_minutes;
+  end if;
+  select count(*) into v_count from app.tenant_scheduled_tasks
+  where tenant_id = v_tenant1 and task_code = 'loyalty_liability_reconciliation';
+  if v_count <> 2 then
+    raise exception 'assertion failed: reconfiguring an existing parameter set must not create a third row, got %', v_count;
+  end if;
+
+  -- A parameterless task is unaffected: params is always {} so the key is still effectively
+  -- (tenant, task_code), and reconfiguring one must never fork into two.
+  perform app.configure_tenant_scheduled_task(v_tenant1, 'loyalty_expiry_sweep', true, 1440, '{}'::jsonb, v_supreme, 'supreme');
+  perform app.configure_tenant_scheduled_task(v_tenant1, 'loyalty_expiry_sweep', true, 2880, '{}'::jsonb, v_supreme, 'supreme');
+  select count(*) into v_parameterless_count from app.tenant_scheduled_tasks
+  where tenant_id = v_tenant1 and task_code = 'loyalty_expiry_sweep';
+  if v_parameterless_count <> 1 then
+    raise exception 'assertion failed: a parameterless task must still hold exactly one schedule per tenant, got %', v_parameterless_count;
+  end if;
+
+  -- The required parameter is still enforced -- the multi-schedule key must not become a way
+  -- to smuggle in an unconfigured run that would fail at 03:00 instead.
+  begin
+    perform app.configure_tenant_scheduled_task(v_tenant1, 'loyalty_liability_reconciliation', true, 1440, '{}'::jsonb, v_supreme, 'supreme');
+    raise exception 'assertion failed: expected scheduled_task_missing_param without a currency';
+  exception
+    when others then
+      if sqlerrm not like 'scheduled_task_missing_param%' then raise; end if;
+  end;
+
+  raise notice 'PASS: one schedule per (tenant, task, params) -- USD and IDR coexist, the same params updates in place, and a parameterless task is unchanged';
+end $$;
+
+\echo '>> ISS-2026-134: the reconciliation task is Supreme-Admin-only and carries a real dispatch branch whose idempotency key names the currency -- two currencies on one day must be two runs, not one that silently loses the other'
+do $$
+declare
+  v_delegable boolean;
+  v_src text;
+begin
+  select tenant_admin_configurable into v_delegable from app.scheduled_task_definitions
+  where task_code = 'loyalty_liability_reconciliation';
+  if v_delegable is null then
+    raise exception 'assertion failed: loyalty_liability_reconciliation is not in the catalogue';
+  end if;
+  if v_delegable then
+    raise exception 'assertion failed: liability reconciliation produces the evidence a certification decision rests on -- it starts Supreme-Admin-only, not tenant-delegable';
+  end if;
+
+  select p.prosrc into v_src from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app' and p.proname = '_run_scheduled_task_once';
+  if v_src not like '%loyalty_liability_reconciliation%' then
+    raise exception 'assertion failed: the reconciliation task has no dispatch branch';
+  end if;
+  -- An idempotency key naming only the period would collapse USD and IDR on the same day
+  -- into a single run, and one currency's liability statement would simply never exist.
+  if v_src not like '%params ->> ''currency''%v_period%' then
+    raise exception 'assertion failed: the reconciliation dispatch key must name the currency as well as the period';
+  end if;
+
+  raise notice 'PASS: reconciliation is catalogued Supreme-Admin-only, dispatches for real, and keys per currency and period';
+end $$;
+
 \echo '>> every catalogue task has a real dispatch branch -- a row added without one fails loudly rather than silently doing nothing on a schedule somebody trusts'
 do $$
 declare
@@ -448,6 +542,8 @@ begin
       v_params := jsonb_build_object('max_rows', 100);
     elsif v_code = 'vendor_compliance_status_refresh' then
       v_params := jsonb_build_object('max_vendors', 100);
+    elsif v_code = 'loyalty_liability_reconciliation' then
+      v_params := jsonb_build_object('currency', 'USD');
     end if;
 
     select * into v_schedule from app.configure_tenant_scheduled_task(
@@ -468,11 +564,11 @@ begin
     v_checked := v_checked + 1;
   end loop;
 
-  if v_checked <> 19 then
-    raise exception 'assertion failed: expected to exercise all 19 catalogue tasks, exercised %', v_checked;
+  if v_checked <> 20 then
+    raise exception 'assertion failed: expected to exercise all 20 catalogue tasks, exercised %', v_checked;
   end if;
 
-  raise notice 'PASS: all 19 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
+  raise notice 'PASS: all 20 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
 end;
 $$;
 

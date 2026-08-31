@@ -964,4 +964,43 @@ begin
   end;
 end $$;
 
+\echo '>> ISS-2026-133 item 2, ruled an accepted variant: the account-level hold is sufficient BECAUSE the entitlement-level primitives are already independently staff-callable. That is a claim about the schema, so it is pinned here rather than left as prose that can quietly stop being true'
+do $$
+declare
+  v_fn text;
+  v_oid oid;
+  v_auth boolean;
+  v_anon boolean;
+begin
+  -- The entry declined to build a second, entitlement-scoped case-and-decide review workflow,
+  -- and gave three reasons. Two of them are assertions about this schema rather than opinions:
+  --   (b) CPL-319's entitlement-hold primitives already exist and are already independently
+  --       staff-callable, so holding ONE suspicious voucher needs no new code;
+  --   (a) an account-level hold already blocks every redemption for that account.
+  -- (a) is already proven live elsewhere in this file, against a real redemption attempt.
+  -- (b) was only ever prose. If somebody later revoked those grants, the ruling would silently
+  -- become false and nobody would find out until a fraud investigation needed the lever.
+  foreach v_fn in array array['hold_loyalty_benefit_entitlement', 'release_loyalty_benefit_entitlement_hold'] loop
+    -- Resolved by oid rather than by a written-out argument list: the two primitives do not
+    -- share a signature (the hold takes a reason, the release does not), and a hardcoded one
+    -- would make this assertion fail for the wrong reason the first time either changes shape.
+    select p.oid into v_oid from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.proname = v_fn limit 1;
+    if v_oid is null then
+      raise exception 'assertion failed: app.% no longer exists -- ISS-2026-133 item 2 was ruled acceptable ON THE BASIS that this primitive gives staff a direct entitlement-level lever. Without it the ruling is void and the entry must be reopened, not quietly left closed', v_fn;
+    end if;
+
+    select has_function_privilege('authenticated', v_oid, 'EXECUTE') into v_auth;
+    select has_function_privilege('anon', v_oid, 'EXECUTE') into v_anon;
+    if not v_auth then
+      raise exception 'assertion failed: app.% is no longer callable by staff -- the entitlement-level lever ISS-2026-133 item 2 rests on is gone', v_fn;
+    end if;
+    if v_anon then
+      raise exception 'assertion failed: anon must never hold EXECUTE on app.%', v_fn;
+    end if;
+  end loop;
+
+  raise notice 'PASS: both entitlement-hold primitives exist and remain staff-callable, so ISS-2026-133 item 2''s ruling still stands on something real';
+end $$;
+
 \echo '>> ALL PASSED: CPL-322 Expiry and Fraud Prevention'

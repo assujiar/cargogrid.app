@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 53 — 4 High, 24 Medium, 25 Low |
+| `OPEN` | 52 — 4 High, 24 Medium, 24 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 210 |
+| `RESOLVED` | 211 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -134,7 +134,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-129` | Low | `OPEN` | Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expir |
 | `ISS-2026-131` | Low | `OPEN` | Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race |
 | `ISS-2026-132` | Low | `OPEN` | Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardle |
-| `ISS-2026-133` | Low | `OPEN` | Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level |
+| `ISS-2026-133` | Low | `RESOLVED` | Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level |
 | `ISS-2026-134` | Low | `OPEN` | Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects c |
 | `ISS-2026-136` | Low | `OPEN` | Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, caus |
 | `ISS-2026-146` | Low | `OPEN` | cross-tenant `tenant_id` disclosure via exception message text, confirmed repository-wide (2,087+ occurrences since Phase 6), reproduced live in Group |
@@ -2365,6 +2365,27 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-021` (Prompt 319, Cashback Disc
 A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
 
 **Which of this entry's items that covers: the expiry half of item 2, only.** `app.expire_loyalty_benefit_entitlements` and `app.run_loyalty_expiry_sweep` are both catalogue tasks now, so voucher/entitlement **expiry** genuinely runs on a timer. **Issuance** is not a sweep — it is triggered by a real commercial event — and no tenant-wide issuance batch exists to schedule. The Finance liability-handoff mechanism (item 1) and the percentage-based voucher model (item 3) are untouched. `OPEN`.
+
+**Update (`2026-08-31`) — item 2's expiry half is closed; its issuance half is not, for a reason
+worth stating rather than leaving as "not yet scheduled".**
+
+`app.expire_loyalty_benefit_entitlements` is catalogue task `loyalty_benefit_entitlement_expiry`
+(`20260831090000`), tenant-delegable, running as the real person who authorised it. That half of
+item 2 is satisfied on the entry's own terms.
+
+`app.issue_loyalty_benefit_entitlement` is **not schedulable, and not because nobody has got to it
+yet.** Everything closed under `ISS-2026-126`/`127`/`128` was a backlog: a set of records visibly
+waiting for work that had not happened, which a sweep can find. Issuance has no such set. Nothing
+in the database says "this customer is owed a voucher and has not been given one" — issuing is a
+*decision*, driven by a business event (a paid invoice, a completed shipment, a campaign rule), and
+the entry itself names that: *"an automatic issuance trigger off a real business event."* Wiring
+one means choosing which events entitle whom to what, which is a rules engine, not a schedule.
+Item 2 therefore stays open for issuance, narrowed and stated precisely.
+
+Items 1 and 3 are untouched. Item 1 (Finance liability handoff) is cross-referenced with
+`ISS-2026-134` item 5, which records that no Finance-side handoff contract exists anywhere for
+Loyalty to hand off to; item 3 (percentage-based voucher model) is genuine new capability.
+
 ### ISS-2026-130 — no Supreme-Admin-exception override mechanism (RPD-022) exists yet for any of the four Loyalty ledger tables (Phase 8, Batch 4 Tier C review, `CG-S13-CPL-018/019/020/021`, `RESOLVED` 2026-08-20 at CPL-325, was Medium)
 
 Discovered/disclosed `2026-08-17` at the Batch 4 (`CPL-315..319`) Tier C review, cross-prompt-integration lens: `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §4 names `point_ledger`/`cashback_ledger` inside the repository's `append_only_ledger` policy family, §8 (RPD-022) requires a distinct Supreme-Admin-exception RLS policy granting `UPDATE`/`DELETE` on every such table (the disclosed, never-tamper-proof audit trail is the accountability mechanism substituting for true immutability), and §13 calls that per-table policy a Phase-8 release-blocker gate. None of `app.loyalty_earning_events` (CPL-316), `app.loyalty_account_tier_movements` (CPL-317), `app.loyalty_point_ledger_entries` (CPL-318), or `app.loyalty_benefit_entitlement_events` (CPL-319) implements it — each grants, at most, `select`/`insert` to `service_role` only, with zero `UPDATE`/`DELETE` grant to any role, staff or Supreme Admin alike.
@@ -2421,7 +2442,7 @@ Discovered/disclosed `2026-08-18` at `CG-S13-CPL-023` (Prompt 321, Redemption Ap
 A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
 
 **Which of this entry's items that covers: none.** Its three items are a synchronous auto-approval rule, a `discount_voucher` value-sourcing decision, and a notification/retry/DLQ mechanism. None is a scheduling gap — the notification/DLQ item needs a delivery mechanism, and `app.jobs` already provides the retry machinery it would build on. `OPEN`, unchanged.
-### ISS-2026-133 — Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level fraud hold not built; expiry sweep is on-demand/staff-triggered only (Phase 8, Batch 5, `CG-S13-CPL-024`, OPEN — items 2-3 only, item 1 `RESOLVED` Track B Batch 4, Low)
+### ISS-2026-133 — Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level fraud hold not built; expiry sweep is on-demand/staff-triggered only (Phase 8, Batch 5, `CG-S13-CPL-024`, `RESOLVED` in full 2026-08-31 — item 1 Track B Batch 4, item 3 satisfied by the scheduler, item 2 ruled an accepted variant with an executable pin, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-024` (Prompt 322, Expiry and Fraud Prevention, the third prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801240000_create_customer_portal_loyalty_expiry_fraud_prevention.sql`, not defects found afterward.
 
@@ -2435,7 +2456,42 @@ Discovered/disclosed `2026-08-18` at `CG-S13-CPL-024` (Prompt 322, Expiry and Fr
 
 **Update (`2026-08-28`, Track B Batch 4):** item 1 closed. Independently re-verified before drafting: neither `app.open_loyalty_fraud_review_case` nor `app.decide_loyalty_fraud_review_case` compared the opening actor's identity against the deciding actor's identity anywhere — `opened_by` was a plain `text` label, never an `auth_user_id`, so no such comparison was even possible. `supabase/migrations/20260828050000_harden_customer_portal_loyalty_fraud_review_case_self_approval.sql` — adds a nullable `opened_by_auth_user_id` column (captured going forward only; a case opened before this migration is NOT retroactively covered, a disclosed limitation mirroring `ISS-2026-130`'s own precedent) and the identical `self_approval_not_allowed` convention already established repository-wide (`app.decide_loyalty_point_adjustment`, `app.decide_vendor_assessment_review`, `app.decide_claim_responsibility`). New regression in `scripts/db-tests/customer-loyalty-expiry-fraud-prevention.sql`; two pre-existing "lifecycle A/B" tests updated to use a second manager identity (previously the same actor opened and decided); full suite `ALL PASSED`; applied live. Items 2 (entitlement-level fraud hold) and 3 (on-demand sweep, the same job-scheduler class as `ISS-2026-126`) remain genuinely open, unchanged. **Status `OPEN`**, narrowed to items 2-3 — owner unchanged.
 
-### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, OPEN — items 1,2,4,5 only, item 3 `RESOLVED` Track B Batch 4, Low)
+**`RESOLVED` in full, 2026-08-31 — item 3 by the scheduler, item 2 by a ruling with an executable
+pin.**
+
+**Item 3 needed nothing built.** Its own recommended fix was *"none required beyond a future
+scheduler wiring a periodic call to the already-real `app.run_loyalty_expiry_sweep`."*
+`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql` shipped that
+scheduler on 2026-08-31, and `loyalty_expiry_sweep` is the first row in its catalogue —
+Supreme-Admin-owned, tenant-delegable, running as the real person who authorised it. The entry's
+condition is met exactly as written; nothing in this pass touched that RPC. (Attaching a trigger
+to `app.run_due_scheduled_tasks` remains the operator's one infrastructure decision, disclosed
+under `ISS-2026-066`; that is the platform-wide gap, not this entry's.)
+
+**Item 2 is ruled an accepted variant, and the ruling is now executable rather than prose.** The
+entry declined to build a second, entitlement-scoped case-and-decide review workflow, and gave
+three reasons. On re-reading, they hold: an account-level hold already blocks every redemption for
+the account, so any investigation broad enough to warrant halting activity is already covered;
+CPL-319's `app.hold_loyalty_benefit_entitlement`/`app.release_loyalty_benefit_entitlement_hold`
+already let staff hold ONE suspicious entitlement directly with zero new code; and building a
+parallel governed workflow scoped to individual entitlements has no disclosed business need
+calling for it.
+
+What was wrong with leaving it there is that **two of those three reasons are claims about the
+schema, not opinions** — and only one of them was tested. The first is already proven live in this
+file against a real redemption attempt. The second was prose: if somebody later revoked those
+grants, the ruling would silently become false, and nobody would find out until a fraud
+investigation reached for a lever that was no longer there. `scripts/db-tests/
+customer-loyalty-expiry-fraud-prevention.sql` now asserts both primitives exist and remain
+staff-callable (and that `anon` never holds either), with a failure message that says the ruling
+is void and the entry must be reopened rather than quietly left closed. Resolved by oid rather
+than a written-out argument list, since the two do not share a signature.
+
+**Evidence.** `db:test ALL PASSED`; `pnpm typecheck`, `pnpm lint` (0 errors), 5753 unit tests and
+`npx next build` green. Both primitives and their grants verified live against the hosted project
+before the ruling was written. Freeze db-test digest amended (sixty-eighth pass).
+
+### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, OPEN — items 1, 2 and 5 only; item 4's schedulable half RESOLVED 2026-08-31, item 3 `RESOLVED` Track B Batch 4, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-025` (Prompt 323, Liability Reconciliation Analytics, the fourth and final prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801250000_create_customer_portal_loyalty_liability_reconciliation_analytics.sql`, not defects found afterward.
 
@@ -2463,6 +2519,55 @@ Encountered `2026-08-18` (a Tuesday) while the Batch 5 Tier C review (`CPL-320..
 
 
 **RESOLVED 2026-08-23 at `CG-S15-HDN-002` (Prompt 370, Step 15 Full Regression).** Also misclassified: this is **not** a day-of-week defect and has no wall-clock coupling at all. `scripts/db-tests/hris-shift-roster-scheduling.sql` contains exactly one date-relative expression and it is already pinned to a literal; `git log --follow` confirms the file has not been touched since Prompt 295, i.e. before this issue was even registered, so no intervening fix could explain it either. The real mechanism: emp3 is given `bulk_generated` roster assignments on the **hardcoded literal dates** `2026-08-17` and `2026-08-18`, and the negative control then asserts `schedule_assignment_id IS NULL` for the real wall-clock work day. Swept across 30 candidate dates against live fixture state: the old assertion would fail on **exactly one — `2026-08-18`, a Tuesday**. It is a time bomb, not a flake, and "those dates are in the past" is not a fix: it re-arms the moment anyone refreshes the fixture's literal dates forward, which is ordinary maintenance. **Fixed** by deriving the expectation from real state and asserting in both directions — no published assignment for the session's work day means the link must be null; one that does exist means the session must link to exactly it. The property genuinely under test (decision 9: a clock-in never fabricates a roster link and never errors without one) is now strictly stronger and true on every calendar date. Evidence: `docs/build-log/full-system-hardening/HDN-370.md` §5.3/§8.
+
+**Update (`2026-08-31`) — item 4's reconciliation half is closed; its engagement-metrics half is
+deliberately NOT, and that distinction is the substance of this note.**
+
+`app.execute_loyalty_liability_reconciliation_run` is now catalogue task
+`loyalty_liability_reconciliation`
+(`supabase/migrations/20260831240000_allow_one_schedule_per_parameter_set_and_add_liability_reconciliation_task.sql`),
+with `currency` as a **required** parameter rather than a defaulted one — precisely because item 1
+of this same entry documents the workflow as one run per currency. A default would have hidden
+that behind a single silent USD run. It starts Supreme-Admin-only, unlike its loyalty siblings:
+the other loyalty tasks tune a tenant's own commercial rhythm, while this one produces the
+financial-liability evidence a certification decision rests on. The floor is a day, because a
+reconciliation run is a point-in-time liability statement and running it hourly would produce a
+pile of near-identical runs to certify — which makes the artefact harder to trust, not fresher.
+
+**`app.get_loyalty_engagement_metrics` is not scheduled, and scheduling it would be theatre.** It
+is a read that returns metrics to its caller. A scheduled read has nowhere to put its answer —
+there is no engagement-metrics snapshot table — so a nightly run would compute numbers and discard
+them, while the catalogue would claim engagement metrics were "automated". Giving it somewhere to
+land is a real, separate addition (a snapshot table, a retention policy, a read surface over the
+history), not a scheduler entry. Item 4 therefore stays open for that half, narrowed and stated
+precisely rather than closed on a technicality.
+
+**A real defect in the scheduler, found because of this task and fixed in the same migration.**
+`app.tenant_scheduled_tasks` was keyed `(tenant_id, task_code)` — one schedule per catalogue task
+per tenant. Correct for the twelve parameterless tasks; a silent cap of one for every parameterised
+one, and already wrong for tasks live since 2026-08-31: a tenant with annual, sick and long-service
+leave could automate exactly one `leave_accrual_batch`, and configuring the second **overwrote the
+first with no warning** — the worst possible shape, because nothing told anybody. A currency-scoped
+reconciliation is what made it impossible to miss, since a multi-currency tenant needs several
+schedules of the same task by construction.
+
+The key is now `(tenant_id, task_code, params)`: unchanged for parameterless tasks, correct for the
+rest, with the `ON CONFLICT` target moved in lockstep because a target that no longer matches its
+unique index raises at runtime rather than degrading. `app.configure_tenant_scheduled_task` keeps
+its exact signature and every behaviour — authority, interval floor, required-parameter validation,
+identity re-stamping, failure-counter reset — and was rebuilt from `pg_get_functiondef` against the
+live database rather than from the migration that created it, the trap the previous pass's own
+dispatcher near-miss had just demonstrated. Exactly one line differs.
+
+**Evidence.** `scripts/db-tests/task-scheduler.sql` asserts the three properties the widened key
+must satisfy at once, since getting any one wrong is a different silent bug: two currencies coexist
+as two schedules; the same parameter set still updates in place rather than piling up duplicates;
+and a parameterless task still holds exactly one. Plus the required parameter still being enforced,
+so the multi-schedule key cannot become a way to smuggle in an unconfigured run that would fail at
+03:00 instead. The catalogue count moves 19 → 20 and every task still reaches a real dispatch
+branch. `db:test ALL PASSED`; typecheck, lint (0 errors), 5753 unit tests and `next build` green.
+Applied live; the rewritten constraint verified against the hosted project. Freeze migration +
+db-test digests amended (sixty-eighth pass).
 
 ### ISS-2026-136 — Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, causing silent double-counting if a multi-currency tenant's per-currency reconciliation runs are summed as the migration's own design decision 6 instructs (Phase 8, CPL-324 Integrated Verification, `CG-S13-CPL-026`, `OPEN` 2026-08-20 — item 1 only, item 2 remains `OPEN`, Low)
 
