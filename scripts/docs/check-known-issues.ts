@@ -234,7 +234,14 @@ function checkForBuriedClosures(text: string, records: readonly IssueRecord[]): 
     if (!body) continue;
 
     // Skip the heading line: its own status is what we are checking against.
-    const rest = body.slice(body.indexOf("\n") + 1);
+    // Then stop at the next top-level section. Splitting on `### ISS-...` alone gives the LAST
+    // record everything that follows it in the file -- including §5's own maintenance rule
+    // "Do not delete resolved issues; mark `RESOLVED`/`SUPERSEDED`", which read as a buried
+    // closure belonging to whichever record happened to be last. It stayed invisible only
+    // because the last record was closed (and so skipped) until ISS-2026-311 was appended.
+    const afterHeading = body.slice(body.indexOf("\n") + 1);
+    const nextSection = afterHeading.search(/^## /m);
+    const rest = nextSection === -1 ? afterHeading : afterHeading.slice(0, nextSection);
     let lastClosure = -1;
     let lastOpen = -1;
     // Scan for the status WORDS rather than for bold delimiters. Bold-span matching looks

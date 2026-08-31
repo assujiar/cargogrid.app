@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 88 — 4 High, 41 Medium, 43 Low |
+| `OPEN` | 90 — 5 High, 42 Medium, 43 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
 | `RESOLVED` | 171 |
-| **Total records** | **264** |
+| **Total records** | **266** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -104,6 +104,8 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
 | `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload |
 | `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
+| `ISS-2026-310` | Medium | `OPEN` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
+| `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
 | `ISS-2026-064` | Low | `OPEN` | Employee Master (HRT-274): manager-team UI route, client-side document upload, and browser/accessibility E2E are disclosed, not built |
@@ -5673,6 +5675,29 @@ above first, or have an operator apply it proactively). Compensating control unt
 entry, plus `docs/build-log/release-go-live/RGL-404.md` §12, document the exact drift and fix so no
 future session discovers it as a fresh mystery.
 
+**SCALE CORRECTED 2026-08-31 (Bagian 5, `RGL-413.md` §5) — this entry was understated by an order of magnitude, and the correction is this entry's own.** Measured directly against the complete ledger and the complete migration set, rather than against the 9 rows this entry happened to sample:
+
+| Measure | Value |
+|---|---|
+| Ledger rows in `supabase_migrations.schema_migrations` | 399 |
+| Repository files in `supabase/migrations/*.sql` | 390 |
+| **Repository versions absent from the ledger** | **84** |
+| Ledger rows with no matching repository file | 93 |
+
+So the number of migrations a `supabase db push` would attempt to re-run is **84, not 9**. Every one of them is non-idempotent DDL against an already-migrated schema. This session also *added 11 more drift rows* by applying its own migrations through the same MCP tool — the mechanism that causes this is still in use, and this entry did not previously say so.
+
+**Reconciliation prepared, fully verified, and deliberately NOT executed.** `scripts/release/reconcile-migration-ledger.sql` carries 84 `update` statements. Three properties were verified before it was generated, each of which would have invalidated it:
+
+1. every drift row maps to **exactly one** repository file — zero ambiguous, zero unmapped;
+2. **no target version collides** with any row already in the ledger;
+3. the set of 84 targets **equals exactly** the set of 84 repository versions missing from the ledger — the arithmetic closes with nothing left over in either direction.
+
+An earlier pass of that third check was itself wrong: it compared against the 93 drift rows instead of the full 399-row ledger and reported "390 missing". Re-run against the full ledger it closes at 84. Recorded because a verification that is wrong in the safe direction is still wrong.
+
+Nine rows are deliberately left as orphans. The live project applied three migrations in parts (`finance_authority_chain_security_definer` p1–p6, its tier-C completeness p1–p3, and two settlement-reversal follow-ups) which the repository carries consolidated into single files. The first part of each group is remapped to the consolidated file; the rest stay. `supabase db push` ignores ledger rows with no matching repository file, and deleting them would be a larger and less reversible action than the problem warrants.
+
+**Still `OPEN`, and still not executed by an agent.** This entry's own recorded position — that this write "should require an explicit human decision, not agent judgment alone" — is a decision already made in this repository, and a prepared, verified, reversible script plus an explicit ask is how it is honoured, not overridden. Every statement's `where` clause states the exact pre-change `(version, name)`, so the change is reversible row by row.
+
 **Re-verified, disposition confirmed accurate and unchanged (2026-08-28, Track B Batch 8) — live-reconfirmed via direct `list_migrations` query.** Queried `supabase_migrations.schema_migrations` on the live hosted project: all 9 wall-clock-versioned rows this entry's own table names are still present, byte-identical, unreconciled — none of the corresponding correct filename-versions appear anywhere in the ledger, confirming the drift is unchanged since discovery. No write attempted against this system catalog, per this batch's own explicit no-live-mutation scope — matching this entry's own already-correct deferral (its prior attempt was itself denied by the session's own write-safety classifier, correctly not worked around). **Not fixed by this batch.** The exact reconciliation SQL this entry already provides remains valid and unexecuted, pending an operator with Supabase Dashboard SQL-editor access or a session with this specific write pre-approved. Owner unchanged.
 
 ### ISS-2026-301 — `RPD-020` (tenant merge/split is an admin-run migration) is carried by no prompt anywhere in the 430-file build prompt package, found by Step 17's Requirement Coverage Audit (`CG-S17-FPV-002`, Prompt 415, 2026-08-29) (`RESOLVED` 2026-08-30, High)
@@ -6004,6 +6029,67 @@ externally callable. Registered here rather than silently normalised.
 it as a stray fifth column. `scripts/docs/check-known-issues.ts` passed anyway because it reads
 cells by index and never checked row shape. Both rows are repaired and the gate now asserts
 column count.
+
+---
+
+### ISS-2026-310 — CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime (found 2026-08-31 during Bagian 5 live verification, `OPEN`, Medium)
+
+**Severity: Medium. Status: `OPEN`. Owner: DevEx / whoever owns the Vercel project settings.**
+
+`package.json` declares `"engines": { "node": "22.x" }`, and `.github/workflows/ci.yml` resolves
+its Node version via `node-version-file: package.json` at both job definitions (lines 76 and
+215). So every green CI run — typecheck, lint, the 5,646-test unit suite, `db:test` — is
+evidence about **Node 22**.
+
+The Vercel project `cargogrid-app` (`prj_9ND1BsfbppHiqeKrSEldYh8xbC68`) is configured
+`nodeVersion: 24.x`. Builds and server-side execution therefore happen on **Node 24**.
+
+**Not breaking today, and said plainly:** the 20 most recent preview deployments all reached
+`READY` on Node 24, so nothing is currently failing. The finding is about evidence, not a live
+fault — the runtime that will serve users is not the runtime the test suite exercises, so a
+Node-24-specific regression (a changed default, a removed API, a different `Intl`/`Temporal`
+surface) would reach production without any gate having had a chance to see it.
+
+**Two honest ways to close it**, and the choice is the owner's because it is a settings decision
+with a cost either way: set the Vercel project to 22.x so the shipped runtime matches the tested
+one, or raise `engines.node` to 24.x and let CI re-prove the whole suite there. The second is
+the better long-term answer and the more expensive one — it is a full re-verification, not a
+one-line edit. Neither was done unilaterally.
+
+---
+
+### ISS-2026-311 — `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; "deploy" and "publish" are two different actions and only one of them is a deploy (found 2026-08-31 during Bagian 5 live verification, `OPEN`, High)
+
+**Severity: High — not because anything is broken, but because it is a launch prerequisite that
+the release record did not previously state, and it is the kind of gap that is discovered at the
+worst possible moment. Status: `OPEN`. Owner: the project owner (DNS + domain attachment are
+outside any agent's access).**
+
+Established live, three independent ways:
+
+1. The Vercel project's attached domains are exactly `cargogrid-app.vercel.app`,
+   `cargogrid-app-saiki-tech.vercel.app`, `cargogrid-app-git-main-saiki-tech.vercel.app`.
+   **No custom domain.**
+2. `https://cargogrid.app/` returns `200` with `server: cloudflare`, rendering a site built with
+   a website builder (`/__l5e/assets-v1/…` asset paths) — not this Next.js application.
+3. `https://cargogrid.app/api/health` returns `404`. The application's own health endpoint is
+   not there, because the application is not there.
+
+The project also reports `"live": false`, and of the 20 most recent deployments **none** has
+`target: production` — all are previews from `claude/step-17-implementation-0fbul7`. That part
+is correct and expected: it is `RGL-BLK-001`'s closure working as designed (`vercel.json`
+disables `main` auto-deploy; `scripts/release/check-go-decision.ts` gates production).
+
+**Why this matters for the launch, in plain terms.** Promoting a Vercel production build makes
+the application live at a `*.vercel.app` URL. It does **not** put CargoGrid on `cargogrid.app`.
+Doing that additionally requires attaching the domain in Vercel and repointing DNS at
+Cloudflare — and **that replaces the site currently live on that domain**. It is a cutover with
+a visible external consequence, not a deployment step, and it must never happen as a silent
+side effect of a deploy.
+
+**Deliberately not attempted.** DNS and domain attachment are outside this session's access, and
+they would be the wrong thing to do unilaterally even with access. Carried into
+`docs/runtime/COMMERCIAL_LAUNCH_READINESS.md` as an owner action with its consequence stated.
 
 ## 5. Maintenance rules
 

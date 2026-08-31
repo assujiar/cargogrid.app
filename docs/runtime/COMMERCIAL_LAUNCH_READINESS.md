@@ -49,6 +49,38 @@ someone owns, a person's signature, or a company's invoice.
 `docs/runbooks/human-execution-pack.md` has the exact steps for each. Below is what each one
 is and what it costs you to skip it.
 
+### 3.0 Point `cargogrid.app` at CargoGrid — and know what it replaces
+
+**Read this one first.** It was found on 2026-08-31 during live verification and it changes what
+"launch" means in practice.
+
+**What is true today.** `cargogrid.app` does not show CargoGrid. Typing it into a browser returns
+a working page — but it is a *different site*, served by Cloudflare, built with a website
+builder. CargoGrid's own health check at `cargogrid.app/api/health` returns "not found", because
+CargoGrid is not there. On the hosting side, the domain has never been attached to the CargoGrid
+project at all.
+
+**So "deploy" and "publish" are two separate actions, and only one of them is a deploy.**
+
+1. *Deploy* — put the current build live on the hosting platform. It becomes reachable at a
+   long `…vercel.app` address. This is the step this session can do, once you say go.
+2. *Publish* — make `cargogrid.app` show CargoGrid. This means attaching the domain and changing
+   DNS at Cloudflare. **It replaces the site that is on that address right now.** Anyone who
+   visits `cargogrid.app` after that change sees CargoGrid instead of the current page.
+
+**Why it is not done.** Step 2 needs access to your Cloudflare DNS and your Vercel domain
+settings, neither of which this session has. But access is not really the point: replacing a
+live public page is your decision to make, not something that should happen quietly as a
+side-effect of clicking deploy.
+
+**Risk if you skip it.** Nothing breaks — you simply have CargoGrid running at an address nobody
+knows. The real risk is the opposite one: doing it *without* meaning to. If the current
+`cargogrid.app` page is collecting enquiries, running ads, or is what customers have been given,
+switching it over without warning takes that away in the same instant. Decide deliberately, and
+if the current page matters, keep it somewhere first.
+
+**Tracked as** `ISS-2026-311`.
+
 ### 3.1 Turn on branch protection in GitHub — 10 minutes
 
 **What it is.** Right now anyone with write access to the repository can push straight to the

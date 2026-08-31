@@ -293,6 +293,30 @@ describe("buried closures (the ISS-2026-065 failure)", () => {
   });
 });
 
+describe("buried-closure scan stops at the next top-level section", () => {
+  test("the last record does not absorb §5's own maintenance rules", () => {
+    // Regression: splitting on `### ISS-...` gives the final record everything after it,
+    // including the maintenance rule "mark `RESOLVED`/`SUPERSEDED`". That read as a buried
+    // closure on whichever open record happened to be last in the file.
+    const text = `${build(
+      ["| `ISS-2026-001` | High | `OPEN` | a |"],
+      ["### ISS-2026-001 — a (OPEN, High)\n\nGenuinely still open, nothing closed here."],
+    )}\n## 5. Maintenance rules\n\n1. Do not delete resolved issues; mark \`RESOLVED\`/\`SUPERSEDED\`.\n`;
+    const warns = checkKnownIssues(text).filter((f) => f.code === "POSSIBLE_BURIED_CLOSURE");
+    assert.deepEqual(warns, [], "text after the records section must not be read as a record's body");
+  });
+
+  test("still catches a closure genuinely inside the last record's own body", () => {
+    // Guard-the-guard: the truncation must not blind the check to a real buried closure.
+    const text = `${build(
+      ["| `ISS-2026-001` | High | `OPEN` | a |"],
+      ["### ISS-2026-001 — a (OPEN, High)\n\nRe-confirmed still open.\n\n**Update: `RESOLVED` 2026-08-31.**"],
+    )}\n## 5. Maintenance rules\n\n1. Do not delete resolved issues; mark \`RESOLVED\`/\`SUPERSEDED\`.\n`;
+    const warns = checkKnownIssues(text).filter((f) => f.code === "POSSIBLE_BURIED_CLOSURE");
+    assert.equal(warns.length, 1, "a real buried closure in the last record must still warn");
+  });
+});
+
 describe("MALFORMED_INDEX_ROW (ISS-2026-309)", () => {
   // Both fixtures are the exact shapes that were sitting in the live ledger while this gate
   // reported the table clean: the gate read cells 1-3 by index, so a row could lose its title
