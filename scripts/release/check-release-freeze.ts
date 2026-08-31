@@ -1834,6 +1834,76 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test suite run (389 migrations, 236
  * runner files, ALL PASSED) before this digest was changed. NOT yet applied to
  * the live hosted project.
+ *
+ * AMENDED 2026-08-31 (fortieth pass), migrationSetSha256 ONLY. Same ruling:
+ * ADR-0027 Part A.
+ *
+ * FIRST: the ten migrations of the thirty-first through thirty-ninth passes ARE
+ * NOW APPLIED to the live hosted project (awdlicmwzdxquopwtcfd), in timestamp
+ * order, each verified by querying pg_proc/information_schema for the objects it
+ * creates rather than by trusting the migration ledger's own names -- deliberate,
+ * because ISS-2026-300 is precisely about that ledger's naming drift. All 37
+ * expected objects present.
+ *
+ * `ISS-2026-309` (High, CHANGE-CAUSED, mine) -- and this pass exists because
+ * applying them is what exposed it. The post-apply get_advisors(security) sweep
+ * returned anon_security_definer_function_executable for two functions this
+ * session had just created: public.evaluate_ip_access (20260830170000) and the
+ * 7-arg public.raise_observability_alert (20260830180000). Both SECURITY
+ * DEFINER, both live-reachable by the anon role. One new migration
+ * (389 -> 390 files: +1,
+ * 20260830200000_correct_public_wrapper_grant_parity.sql).
+ *
+ * The cause is one line, repeated in two files:
+ * `revoke execute on function public.<f>(...) from public`. `public` there is
+ * the PUBLIC pseudo-role, NOT the anon and authenticated roles. Supabase ships
+ * an ALTER DEFAULT PRIVILEGES rule granting EXECUTE on new public-schema
+ * functions to both, explicitly, at CREATE time; the revoke never touched it.
+ * Every other wrapper added this session wrote
+ * `revoke ... from anon, authenticated, service_role, public` and is unaffected.
+ *
+ * These two were genuinely exploitable where most would not have been: they
+ * carry no actor parameter and no app.assert_actor_is_session_identity guard, by
+ * design, so the grant IS their access control. An unauthenticated caller could
+ * probe any tenant's IP allowlist and forge incidents at any severity.
+ *
+ * The gate was not at fault, and this is the part worth remembering.
+ * public-api-wrapper-regression.sql already asserts exhaustive, zero-tolerance
+ * grant parity between every public.* wrapper and its app.* counterpart. It
+ * passed because the ENVIRONMENT it runs in could not host the defect:
+ * setup-disposable-db.sh created the three Supabase roles but never installed
+ * Supabase's ALTER DEFAULT PRIVILEGES rule, so locally a new public.* function
+ * received no anon/authenticated grant at all and parity genuinely held. A green
+ * suite was telling the truth about the database it ran against, and nothing at
+ * all about the one that mattered.
+ *
+ * setup-disposable-db.sh now mirrors the live pg_default_acl rows verbatim
+ * (functions, tables and sequences on schema public, granted by postgres).
+ * Guard-the-guards, run rather than asserted: with that in place and
+ * 20260830200000 held aside, the suite FAILS with "7 public.* wrapper(s) have a
+ * grant set that does not exactly match their app.* counterpart" -- naming
+ * exactly the seven the live advisor found. Restoring the migration returns it
+ * to green.
+ *
+ * Four of those seven are PRE-EXISTING anon widenings (the two customer-portal
+ * invoice reads, the two loyalty expiry-config functions), kept separate from
+ * the two change-caused ones. All four do call
+ * app.assert_actor_is_session_identity, so no data was reachable; they are
+ * defence-in-depth gaps, corrected in the same migration because the fix is
+ * identical. The seventh is a missing service_role grant, not a wide one.
+ *
+ * dbTestSetSha256 deliberately UNCHANGED, and that is itself a finding worth
+ * recording: scripts/db-tests/lib/setup-disposable-db.sh is not covered by that
+ * digest, which spans the runner's *.sql files only. The harness that decides
+ * what the frozen db-test set can even observe therefore sits outside the
+ * freeze. Not widened here -- changing what the digest spans is a release-
+ * authority decision, not a side effect of a security fix -- but disclosed.
+ *
+ * Re-verified via a fresh full local db-test suite run (390 migrations, 236
+ * runner files, ALL PASSED), plus typecheck, lint and the 5,646-test unit suite,
+ * before this digest was changed. 20260830200000 IS applied to the live hosted
+ * project, and the live query that found the defect now returns zero wrappers
+ * wider than their app.* counterpart.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2042,7 +2112,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (thirty-ninth pass) by ISS-2026-053/ISS-2026-308 (389 files: +1,
   // 20260830190000_harden_enqueue_job_idempotency_payload_tuple.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "f4f470c48da0be14c4209b69cfad8d1ed86aaf4011b410819f48de96751df4f9",
+  // History: f4f470c48da0be14c4209b69cfad8d1ed86aaf4011b410819f48de96751df4f9
+  // (389 files, thirty-ninth-pass amendment above). Superseded 2026-08-31
+  // (fortieth pass) by ISS-2026-309, a change-caused security defect found by
+  // the live advisor sweep (390 files: +1,
+  // 20260830200000_correct_public_wrapper_grant_parity.sql). See the
+  // class-level doc comment above.
+  migrationSetSha256: "fe1ca6c9607ec26a16acb2141d0ba4b4e1447c469a372fa35ee453684c173218",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,

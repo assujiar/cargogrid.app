@@ -47,6 +47,9 @@ export const VALID_STATUSES = [
 
 export type IssueStatus = (typeof VALID_STATUSES)[number];
 
+/** The §3 index is `| ID | Severity | Status | Title |`. See `IndexRow.cellCount`. */
+export const INDEX_ROW_CELLS = 4;
+
 /** Statuses that mean "no further work is tracked here". */
 export const CLOSED_STATUSES: readonly string[] = ["RESOLVED", "VERIFIED", "SUPERSEDED"];
 
@@ -65,6 +68,14 @@ export interface IndexRow {
   readonly severity: string;
   readonly status: string;
   readonly line: number;
+  /**
+   * How many content cells the row actually has. The §3 index is a four-column table
+   * (ID | Severity | Status | Title), and this gate used to read cells 1-3 by index and never
+   * look at the shape — so a row could lose or gain a cell and still pass. It did: the rows for
+   * `ISS-2026-307` and `ISS-2026-308` were column-shifted, 307's title missing entirely and 308
+   * carrying it as a stray fifth cell, and this gate reported the table clean.
+   */
+  readonly cellCount: number;
 }
 
 export interface Finding {
@@ -138,7 +149,19 @@ export function parseKnownIssues(text: string): {
     if (!inIndex) continue;
     const row = line.match(/^\|\s*`(ISS-\d{4}-\d+)`\s*\|\s*([^|]*?)\s*\|\s*`?([A-Z_]+)`?\s*\|/);
     if (row) {
-      indexRows.push({ id: row[1] as string, severity: (row[2] as string).trim(), status: row[3] as string, line: i + 1 });
+      // A markdown row `| a | b | c | d |` splits into ['', ' a ', ' b ', ' c ', ' d ', ''] --
+      // the leading and trailing empties are the outer pipes, not cells. A row missing its
+      // trailing pipe has one fewer empty, so trim only the empties that are actually there.
+      const parts = line.split("|");
+      if (parts[0]?.trim() === "") parts.shift();
+      if (parts[parts.length - 1]?.trim() === "") parts.pop();
+      indexRows.push({
+        id: row[1] as string,
+        severity: (row[2] as string).trim(),
+        status: row[3] as string,
+        line: i + 1,
+        cellCount: parts.length,
+      });
     }
   }
 
@@ -266,6 +289,15 @@ export function checkKnownIssues(text: string): readonly Finding[] {
     rowSeen.add(row.id);
     if (!(VALID_STATUSES as readonly string[]).includes(row.status)) {
       findings.push({ code: "UNKNOWN_STATUS", message: `${row.id} (line ${row.line}): status ${row.status} is not in the §1 vocabulary` });
+    }
+    // ISS-2026-309: shape, not just contents. Reading cells 1-3 by index cannot notice a row
+    // that lost its title or gained a stray cell, and two rows had done exactly that while this
+    // gate reported the table clean.
+    if (row.cellCount !== INDEX_ROW_CELLS) {
+      findings.push({
+        code: "MALFORMED_INDEX_ROW",
+        message: `${row.id} (line ${row.line}): §3 row has ${row.cellCount} cell(s), expected ${INDEX_ROW_CELLS} (ID | Severity | Status | Title)`,
+      });
     }
   }
 

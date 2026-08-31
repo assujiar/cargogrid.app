@@ -77,6 +77,32 @@ end
 \$\$;
 "
 
+  # ISS-2026-309: creating the three roles is NOT enough to mirror a real Supabase project.
+  # Supabase also ships an ALTER DEFAULT PRIVILEGES rule, granted BY postgres on schema
+  # public, that gives anon/authenticated/service_role EXECUTE on every newly created
+  # function (and the table/sequence equivalents). Read verbatim from the live project's
+  # pg_default_acl:
+  #
+  #   f (function) public postgres=X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres
+  #   r (table)    public postgres=arwdDxtm/postgres | anon=arwdDxtm/... | authenticated=... | service_role=...
+  #   S (sequence) public postgres=rwU/postgres | anon=rwU/... | authenticated=... | service_role=...
+  #
+  # Without this, a `revoke execute on function public.f() from public` -- which revokes the
+  # PUBLIC pseudo-role and NOT the anon/authenticated roles -- looks correct locally and
+  # leaves the function anon-executable on the hosted project. That is exactly how two
+  # SECURITY DEFINER wrappers (public.evaluate_ip_access, the 7-arg
+  # public.raise_observability_alert) shipped anon-reachable while
+  # scripts/db-tests/public-api-wrapper-regression.sql -- which DOES assert exhaustive grant
+  # parity, and is not at fault -- passed green. The gate was correct; the environment it ran
+  # in did not reproduce the condition. Mirroring the rule here makes that whole class visible
+  # to the existing gate before it reaches a real project.
+  echo "==> setup-disposable-db: mirroring Supabase's ALTER DEFAULT PRIVILEGES on schema public (ISS-2026-309)"
+  psql "$CARGOGRID_TEST_DB_URL" -v ON_ERROR_STOP=1 -c "
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+"
+
   shopt -s nullglob
   local fixtures=("$fixtures_dir"/*.sql)
   if [ ${#fixtures[@]} -gt 0 ]; then

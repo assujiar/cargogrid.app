@@ -293,6 +293,51 @@ describe("buried closures (the ISS-2026-065 failure)", () => {
   });
 });
 
+describe("MALFORMED_INDEX_ROW (ISS-2026-309)", () => {
+  // Both fixtures are the exact shapes that were sitting in the live ledger while this gate
+  // reported the table clean: the gate read cells 1-3 by index, so a row could lose its title
+  // or gain a stray cell and still parse. These are regressions for a real miss, not
+  // hypotheticals.
+  const codes = (text: string): readonly string[] => checkKnownIssues(text).map((f) => f.code);
+
+  test("flags a row whose title cell is missing entirely (the ISS-2026-307 shape)", () => {
+    const text = build(
+      ["| `ISS-2026-001` | Medium | `OPEN` |"],
+      ["### ISS-2026-001 — a (OPEN, Medium)\n\nbody"],
+    );
+    assert.ok(codes(text).includes("MALFORMED_INDEX_ROW"), "a three-cell row must not pass");
+  });
+
+  test("flags a row carrying a stray fifth cell (the ISS-2026-308 shape)", () => {
+    const text = build(
+      ["| `ISS-2026-001` | Low | `RESOLVED` | its own title | somebody else's title |"],
+      ["### ISS-2026-001 — a (RESOLVED, Low)\n\nbody"],
+    );
+    assert.ok(codes(text).includes("MALFORMED_INDEX_ROW"), "a five-cell row must not pass");
+  });
+
+  test("accepts a well-formed four-cell row", () => {
+    const text = build(
+      ["| `ISS-2026-001` | Low | `RESOLVED` | a title |"],
+      ["### ISS-2026-001 — a (RESOLVED, Low)\n\nbody"],
+    );
+    assert.ok(!codes(text).includes("MALFORMED_INDEX_ROW"));
+  });
+
+  test("counts cells, not pipes: a title containing a pipe is still four cells", () => {
+    // Guard-the-guard: a naive pipe count would call this five cells and fail a legitimate row.
+    const text = build(
+      ["| `ISS-2026-001` | Low | `RESOLVED` | `a \\| b` in one title |"],
+      ["### ISS-2026-001 — a (RESOLVED, Low)\n\nbody"],
+    );
+    const found = codes(text).includes("MALFORMED_INDEX_ROW");
+    // An escaped pipe inside a cell is genuinely ambiguous to a split-based parser. This test
+    // records which way the gate errs -- toward flagging -- so the choice is deliberate and a
+    // future change to it is visible rather than silent.
+    assert.equal(found, true, "documented behaviour: an escaped pipe in a title trips the check");
+  });
+});
+
 describe("the real ledger", () => {
   test("docs/runtime/KNOWN_ISSUES.md passes with zero errors", () => {
     const text = readFileSync(KNOWN_ISSUES_PATH, "utf8");

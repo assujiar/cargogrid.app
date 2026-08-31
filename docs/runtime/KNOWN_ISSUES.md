@@ -45,8 +45,8 @@ written.
 |---|---|
 | `OPEN` | 88 — 4 High, 41 Medium, 43 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 170 |
-| **Total records** | **263** |
+| `RESOLVED` | 171 |
+| **Total records** | **264** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -101,8 +101,9 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-303` | Medium | `OPEN` | Inventory and HRIS still have no bulk opening-balance import |
 | `ISS-2026-304` | Medium | `OPEN` | no public status page for unauthenticated visitors |
 | `ISS-2026-305` | Medium | `SUPERSEDED` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
-| `ISS-2026-307` | Medium | `OPEN` |
-| `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
+| `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
+| `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload |
+| `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
 | `ISS-2026-064` | Low | `OPEN` | Employee Master (HRT-274): manager-team UI route, client-side document upload, and browser/accessibility E2E are disclosed, not built |
@@ -5909,6 +5910,100 @@ Both bodies were then rebuilt from `pg_get_functiondef` against a database with 
 applied, with each edit asserted to apply exactly once and the security attributes asserted
 present afterwards. **The live catalog is the source of truth for a function body, not the newest
 file a grep happens to find** — a rule this repository has now paid for more than once.
+
+---
+
+### ISS-2026-309 — two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the `anon`/`authenticated` roles (found 2026-08-31 by the live advisor sweep, RESOLVED, High)
+
+**Severity: High — change-caused, and live-exploitable for the ~20 minutes between applying
+`20260830170000`/`20260830180000` and applying `20260830200000`. Status: `RESOLVED` 2026-08-31,
+verified live. Owner: this session; the defect was mine, not inherited.**
+
+**What was true on the live project.** `get_advisors(security)` returned
+`anon_security_definer_function_executable` for 19 functions. Two were created earlier the same
+day by this session's own migrations, and their live ACLs sat beside the pre-existing wrapper of
+the same pair:
+
+| Wrapper | Live ACL before the fix |
+|---|---|
+| `public.assert_ip_allowed/4` (pre-existing) | `postgres=X` \| `service_role=X` |
+| `public.evaluate_ip_access/4` (**added 20260830170000**) | `postgres=X` \| **`anon=X`** \| **`authenticated=X`** \| `service_role=X` |
+| `public.raise_observability_alert/6` (pre-existing) | `postgres=X` \| `service_role=X` |
+| `public.raise_observability_alert/7` (**added 20260830180000**) | `postgres=X` \| **`anon=X`** \| **`authenticated=X`** \| `service_role=X` |
+
+**Root cause — one line, repeated in two files.** Both migrations wrote
+`revoke execute on function public.<f>(…) from public;`. In Postgres, `public` there is the
+PUBLIC pseudo-role. It is **not** the `anon` and `authenticated` roles. Supabase ships an
+`ALTER DEFAULT PRIVILEGES … GRANT EXECUTE ON FUNCTIONS` rule on schema `public`, granted by
+`postgres`, which had already given both roles an explicit EXECUTE grant at `CREATE FUNCTION`
+time. The revoke never touched it. Every other wrapper added this session
+(`20260830100000`/`120000`/`130000`/`140000`/`150000`) wrote
+`revoke … from anon, authenticated, service_role, public` and is unaffected — which is what makes
+this a slip in two files rather than a misunderstanding of the convention.
+
+**Why these two were genuinely exploitable and most others would not have been.** Almost every
+`app.*` RPC opens with `app.assert_actor_is_session_identity(p_actor_auth_user_id)`, which an
+anonymous caller cannot pass — there is no JWT subject to match. These two have no actor
+parameter and no such guard, *deliberately*: `app.evaluate_ip_access` decides on a raw
+(IP, scope) pair and must stay reachable from an API-key caller with no `auth_user_id` at all,
+and `app.raise_observability_alert` is system-to-system telemetry. **Their entire access control
+is the grant.** So an unauthenticated caller could reach both over PostgREST and probe any
+tenant's IP allowlist (the return value states `allowed`/`denied`) while writing unbounded rows
+into `app.ip_access_evaluations`, or forge incidents at any severity for any tenant — including
+burying a real incident in noise.
+
+**Four pre-existing widenings, kept separate from the two above.** The same query found four
+wrappers predating this session that are also `anon`-executable while their `app.*` counterpart
+is `authenticated`+`service_role`: `public.get_customer_portal_invoice/3`,
+`public.list_customer_portal_invoices/6`, `public.get_loyalty_point_program_expiry_config/3`,
+`public.set_loyalty_point_program_expiry_config/5`. All four **do** call
+`app.assert_actor_is_session_identity`, so an anon caller is refused inside the body and no data
+was reachable. They are defence-in-depth gaps and **baseline, not change-caused** — stated
+separately so the two classes are not merged. They were corrected in the same migration because
+the fix is identical and leaving a known-wrong grant in place to preserve a tidy boundary would
+be the wrong call.
+
+**Why the gate did not catch it, and what was actually wrong.**
+`scripts/db-tests/public-api-wrapper-regression.sql` already asserts, exhaustively and with zero
+tolerance, that every `public.*` wrapper's grant set matches its `app.*` counterpart. **The gate
+was correct and is not at fault.** The fault was in the environment it runs in:
+`scripts/db-tests/lib/setup-disposable-db.sh` created the three Supabase roles but never
+installed Supabase's `ALTER DEFAULT PRIVILEGES` rule. Locally, therefore, a new `public.*`
+function received no `anon`/`authenticated` grant at all, `revoke … from public` looked
+sufficient, and parity genuinely held. The defect could not exist in the test environment, so a
+green suite was truthful about the database it ran against and silent about the one that
+mattered.
+
+**Fix.** `20260830200000_correct_public_wrapper_grant_parity.sql` (corrective migration — both
+offending migrations were already applied, and ADR-0027 Part C forbids editing an applied
+migration) revokes `anon`/`authenticated` from the two, revokes `anon` from the four, and grants
+the one missing `service_role` on `public.has_active_tenant_membership/2`. Applied live and
+verified with the same query that found the defect: **zero wider-than-`app` wrappers remain.**
+
+`setup-disposable-db.sh` now mirrors the hosted `pg_default_acl` rows verbatim (functions,
+tables, sequences on schema `public`, granted by `postgres`), so this whole class is visible to
+the existing gate before it can reach a real project.
+
+**Guard-the-guards, run rather than asserted.** With the environment fix in place and
+`20260830200000` held aside, `pnpm run db:test` fails with
+`assertion failed: 7 public.* wrapper(s) have a grant set that does not exactly match their app.*
+counterpart` — naming exactly the seven the live advisor found, both of mine included. Restoring
+the migration returns the suite to green. The gate now demonstrably catches what it previously
+could not see.
+
+**One residual, disclosed rather than fixed.** `public.check_finance_journal_authority/3` is
+*narrower* than its `app.*` counterpart (`service_role` only, versus
+`authenticated`+`service_role`) and is SECURITY INVOKER where the `app.*` function is definer. It
+is a functionality gap, not a security one, and widening a finance authority helper on inference
+rather than a recorded decision would be the wrong trade. It is left as-is; the exhaustive
+equality assertion passes because that wrapper is not granted to `authenticated` and so is not
+externally callable. Registered here rather than silently normalised.
+
+**A second, smaller finding this record produced.** The §3 summary rows for `ISS-2026-307` and
+`ISS-2026-308` were column-shifted — 307's title cell was missing entirely and 308's row carried
+it as a stray fifth column. `scripts/docs/check-known-issues.ts` passed anyway because it reads
+cells by index and never checked row shape. Both rows are repaired and the gate now asserts
+column count.
 
 ## 5. Maintenance rules
 
