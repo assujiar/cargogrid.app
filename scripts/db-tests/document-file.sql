@@ -368,6 +368,11 @@ begin
   -- in this session at this point), re-flagging an already-'clean' file. Confirmed
   -- NOT blocked -- app.record_file_scan_result's own RPC-level check (the primary,
   -- documented control) already refused this above; this is the schema-level path.
+  -- ISS-2026-231: this raw re-flag IS the disclosed RPD-022 out-of-band correction path,
+  -- and since 20260831130000 that path has to say so. The declaration is not ceremony: it
+  -- is what distinguishes this deliberate simulation from an accidental or hostile write,
+  -- which were previously byte-identical. It also lands a row in app.file_scan_corrections.
+  perform set_config('app.scan_correction_reason', 'db-test: simulating the disclosed RPD-022 out-of-band re-flag of an already-clean file', true);
   update app.files set malware_scan_status = 'infected' where id = v_file_id;
 
   select count(*) into v_audit_count from app.audit_logs
@@ -1103,5 +1108,66 @@ begin
   end if;
 
   raise notice 'ISS-2026-170 closure: all % consumer-side record-scope guards are present; enforcement lives with the consumers by design, because a trigger on app.files would make seven deliberate negative tests unconstructible', array_length(v_expected, 1);
+end;
+$$;
+
+\echo '>> ISS-2026-231: the schema-level backstop for the malware-scan resolution invariant. An UNDECLARED raw UPDATE of an already-resolved status is refused even as service_role; a DECLARED out-of-band RPD-022 correction is allowed and leaves a permanent record of itself'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmedoc');
+  v_file app.files;
+  v_corrections_before integer;
+  v_corrections_after integer;
+  v_correction app.file_scan_corrections;
+begin
+  select * into v_file from app.files where tenant_id = v_tenant1 and malware_scan_status = 'clean' limit 1;
+  if v_file.id is null then
+    raise exception 'assertion failed: this block needs a real resolved file from the fixtures above';
+  end if;
+  select count(*) into v_corrections_before from app.file_scan_corrections;
+
+  -- The gap this closes, asserted directly: before 20260831130000 this UPDATE succeeded
+  -- unimpeded as service_role, silently un-quarantining a file.
+  begin
+    update app.files set malware_scan_status = 'infected' where id = v_file.id;
+    raise exception 'assertion failed: an UNDECLARED raw update of an already-resolved scan status must be refused';
+  exception when check_violation then
+    if sqlerrm not like 'document_scan_already_resolved%' then raise; end if;
+  end;
+
+  if (select malware_scan_status from app.files where id = v_file.id) <> 'clean' then
+    raise exception 'assertion failed: the refused update must have changed nothing';
+  end if;
+
+  -- A no-op update of the SAME value is not a change and must not be caught by the guard --
+  -- otherwise ordinary writes touching this column would start failing.
+  update app.files set malware_scan_status = 'clean' where id = v_file.id;
+
+  -- Declared: allowed, and recorded.
+  perform set_config('app.scan_correction_reason', 'RPD-022: re-flagged after an out-of-band vendor re-scan', true);
+  update app.files set malware_scan_status = 'infected' where id = v_file.id;
+  if (select malware_scan_status from app.files where id = v_file.id) <> 'infected' then
+    raise exception 'assertion failed: a declared correction must be allowed through';
+  end if;
+
+  select count(*) into v_corrections_after from app.file_scan_corrections;
+  if v_corrections_after <> v_corrections_before + 1 then
+    raise exception 'assertion failed: a declared correction must leave exactly one ledger row, got %', v_corrections_after - v_corrections_before;
+  end if;
+
+  select * into v_correction from app.file_scan_corrections where file_id = v_file.id order by occurred_at desc limit 1;
+  if v_correction.from_status <> 'clean' or v_correction.to_status <> 'infected' then
+    raise exception 'assertion failed: the ledger row must record both statuses, got % -> %', v_correction.from_status, v_correction.to_status;
+  end if;
+  if v_correction.reason not like 'RPD-022%' then
+    raise exception 'assertion failed: the ledger row must carry the declared reason, got %', v_correction.reason;
+  end if;
+
+  -- Put it back, declared again, so a later reader of this fixture is not surprised by an
+  -- infected file the earlier assertions treated as clean.
+  perform set_config('app.scan_correction_reason', 'db-test cleanup: restoring the fixture', true);
+  update app.files set malware_scan_status = 'clean' where id = v_file.id;
+
+  raise notice 'PASS: ISS-2026-231 -- an undeclared raw update is refused and changes nothing, a declared RPD-022 correction is allowed and permanently recorded';
 end;
 $$;

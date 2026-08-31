@@ -670,6 +670,11 @@ begin
   -- (scripts/db-tests/customer-epod-access.sql) -- direct table correction,
   -- the only way this state is reachable today, matching that migration's
   -- own disclosed RPD-022 residual-risk reasoning.
+  -- ISS-2026-231: this raw re-flag IS the disclosed RPD-022 out-of-band correction path,
+  -- and since 20260831130000 that path has to say so. The declaration is not ceremony: it
+  -- is what distinguishes this deliberate simulation from an accidental or hostile write,
+  -- which were previously byte-identical. It also lands a row in app.file_scan_corrections.
+  perform set_config('app.scan_correction_reason', 'db-test: simulating the disclosed RPD-022 out-of-band re-flag of an already-clean file', true);
   update app.files set malware_scan_status = 'infected' where id = v_file_clean;
 
   select * into v_customer_row from app.list_customer_ticket_messages(v_ticket_id, '00000000-0000-0000-0000-000000287010', 100, null) m where m.id = v_msg.id;

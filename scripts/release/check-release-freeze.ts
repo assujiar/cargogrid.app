@@ -2493,6 +2493,40 @@ import { readFileSync } from "node:fs";
  * ALL PASSED). 20260831120000 IS applied live and verified: 112 tables classified (23
  * HR/payroll-family, 12 Loyalty-ledger) of 618, 0 confirmed, 0 anon EXECUTE.
  *
+ * AMENDED 2026-08-31 (fifty-third pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. ISS-2026-231.
+ * 20260831130000_backstop_malware_scan_resolution_invariant.sql.
+ *
+ * app.record_file_scan_result enforces document_scan_already_resolved; nothing else did, so a
+ * raw service_role UPDATE could silently un-quarantine an infected file. A BEFORE UPDATE trigger
+ * with an is_supreme_admin(auth.uid()) bypass had been drafted and correctly abandoned: it broke
+ * five deliberately-designed tests whose raw re-flags run with NO session actor at all.
+ *
+ * The entry concluded this needed "reconciling two incompatible models of who may perform an
+ * out-of-band RPD-022 correction". That framing is what kept it stuck. They do not need
+ * reconciling -- they need DISTINGUISHING, and no actor inspection can do it, because at the
+ * moment of the UPDATE a legitimate service-level correction and a hostile raw write are
+ * byte-identical: the legitimate one has no actor by definition, and so does an attacker who has
+ * reached service_role.
+ *
+ * So intent is DECLARED, not inferred: `set local app.scan_correction_reason = '<why>'`.
+ * Undeclared, the transition is refused. Declared, it is allowed AND recorded in
+ * app.file_scan_corrections by the trigger itself -- which turns the honest-but-invisible thing
+ * RPD-022 already permitted into an honest and visible one. A transaction-scoped GUC is the right
+ * carrier: an ordinary authenticated session cannot set one through PostgREST, and `set local`
+ * cannot leak past its own transaction to bless a later, unrelated write.
+ *
+ * The five tests were not broken, they were made to say what they already meant -- their intent
+ * was documented in prose at every call site and was indistinguishable TO THE DATABASE from an
+ * unauthorized write. (The entry names four; there are five. document-file.sql was not listed.)
+ *
+ * Two cases deliberately left alone, because widening the guard would turn a security fix into
+ * an outage: pending -> resolved (the normal path) and a no-op same-value update. Both are
+ * asserted, so a later tightening cannot break ordinary writes unnoticed.
+ *
+ * Re-verified via a fresh full local db-test run (402 migrations, 238 runner files,
+ * ALL PASSED). 20260831130000 IS applied live: trigger and ledger table both confirmed present.
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2762,7 +2796,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (400 files, fifty-first-pass amendment above). Superseded 2026-08-31 (fifty-second pass) by
   // ISS-2026-091 + ISS-2026-142 (401 files: +1,
   // 20260831120000_create_data_retention_and_legal_hold_registry.sql).
-  migrationSetSha256: "e9c37fd7c4bf21bccd704d62a51bd7b1e0d2e74f414f49333c476e6144247f46",
+  // History: e9c37fd7c4bf21bccd704d62a51bd7b1e0d2e74f414f49333c476e6144247f46
+  // (401 files, fifty-second-pass amendment above). Superseded 2026-08-31 (fifty-third pass)
+  // by ISS-2026-231 (402 files: +1,
+  // 20260831130000_backstop_malware_scan_resolution_invariant.sql).
+  migrationSetSha256: "8b7d0585b8b415d905ebedf923f2985232f6f60e829a9732318ac0d53350a26a",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3034,7 +3072,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: 9e26bcb23ea399ec040ce3e0487be2c625ddcab134bc3df5e1415f336a94c7e0
   // (237 files, fifty-first-pass state). Superseded 2026-08-31 (fifty-second pass) by
   // ISS-2026-091 + ISS-2026-142 (238 files: +1, data-retention-legal-hold.sql).
-  dbTestSetSha256: "c16d4c44787b61fcaab715381fbfb855a78bccacffd34dc40c137db968ac06eb",
+  // History: c16d4c44787b61fcaab715381fbfb855a78bccacffd34dc40c137db968ac06eb
+  // (238 files, fifty-second-pass state). Superseded 2026-08-31 (fifty-third pass) by
+  // ISS-2026-231 (238 files unchanged in count -- document-file.sql gained the backstop proof,
+  // and five files' own raw RPD-022 re-flags now declare themselves).
+  dbTestSetSha256: "b8a19b3c014bbb1452cd7b4b1b5e725f912225461d5aeac5c5a48b0854decd77",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

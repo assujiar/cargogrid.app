@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 72 — 4 High, 30 Medium, 38 Low |
+| `OPEN` | 71 — 4 High, 29 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
-| `RESOLVED` | 191 |
+| `RESOLVED` | 192 |
 | **Total records** | **269** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -87,7 +87,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-186` | Medium | `RESOLVED` | roughly 14 shared `SECURITY DEFINER` primitives from `HDN-BLK-014`'s original ~30-candidate sweep are genuinely shared across first-party and third-pa |
 | `ISS-2026-206` | Medium | `OPEN` | the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up th |
 | `ISS-2026-207` | Medium | `RESOLVED` | `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests |
-| `ISS-2026-231` | Medium | `OPEN` | a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered befo |
+| `ISS-2026-231` | Medium | `RESOLVED` | a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered befo |
 | `ISS-2026-234` | Medium | `OPEN` | `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR,  |
 | `ISS-2026-238` | Medium | `OPEN` | 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity si |
 | `ISS-2026-242` | Medium | `OPEN` | the repository's own dedicated accessible form primitives (`components/forms/form-field.tsx`, `components/forms/validation-message.tsx`) are adopted i |
@@ -4081,7 +4081,7 @@ than `ISS-2026-229`'s audit-log instance, but the failure mode (a tenant termina
 mid-hold) was severe when it occurred. See `HDN-BLK-021` in `BLOCKER_LEDGER.md` for the
 full disposition.
 
-### ISS-2026-231 — a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered before commit to conflict with an established, deliberate, already-tested repository pattern of a raw, session-context-free correction UPDATE (the disclosed RPD-022 residual-risk path), used in 4 other domains' own test suites (found at `CG-S15-HDN-009`'s own Tier C review, `OPEN`, Medium, owner `HDN-386`)
+### ISS-2026-231 — a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered before commit to conflict with an established, deliberate, already-tested repository pattern of a raw, session-context-free correction UPDATE (the disclosed RPD-022 residual-risk path), used in 4 other domains' own test suites (found at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED` 2026-08-31, was Medium)
 
 Found by the Tier C completeness-sweep lens (the schema-backstop gap itself) and
 self-corrected by the orchestrating session before commit (the drafted fix's own
@@ -4147,6 +4147,26 @@ repository's own test suite deliberately exercises alongside genuinely-unset. Re
 genuinely unresolved; only the narrower visibility gap is closed. Owner unchanged
 (`HDN-386`).
 
+
+**`RESOLVED`, 2026-08-31 (`supabase/migrations/20260831130000_backstop_malware_scan_resolution_invariant.sql`), under ADR-0027 Part A — by answering the design question, not by re-attempting the abandoned fix.**
+
+**The framing above is what kept this stuck.** The entry concludes that closing it needs "reconciling two currently-incompatible models of who may perform an out-of-band RPD-022 correction". They do not need reconciling. They need **distinguishing** — and no amount of actor inspection can do it, because at the moment of the `UPDATE` a legitimate service-level correction and a hostile raw write are **byte-identical**: the legitimate one has no actor by definition, and so does an attacker who has reached `service_role`. That is why the drafted `is_supreme_admin(auth.uid())` bypass could not work, and discarding it was right.
+
+**So intent is declared rather than inferred.** A correction must announce itself before it writes:
+
+```sql
+set local app.scan_correction_reason = 'RPD-022: re-flagged after an out-of-band vendor re-scan';
+```
+
+Undeclared, the transition is refused by `files_enforce_scan_resolution_invariant`. Declared, it is allowed **and recorded**: the trigger itself writes an `app.file_scan_corrections` row carrying the reason, both statuses, the DB role, and whatever identity exists (null for the no-session path — recorded as null rather than a placeholder, because "no accountable actor" is the true and important fact about that path). This turns the honest-but-invisible thing RPD-022 already permitted into an honest and *visible* one: the residual risk was always accepted; what it never had was a trace distinguishable from an accident.
+
+A transaction-scoped GUC is the right carrier specifically because an ordinary authenticated session cannot set one through PostgREST, and `set local` cannot leak past its own transaction to silently bless a later, unrelated write.
+
+**The five tests were not broken — they were made to say what they already meant.** The entry names four; there are five (`document-file.sql` was the one not listed). Each gained one `set_config` line above its raw re-flag. Their intent was already documented in prose at every call site; until now it was indistinguishable *to the database* from an unauthorized write, and declaring it is an improvement to those tests rather than damage.
+
+**Two things deliberately left alone**, because widening the guard would have turned a security fix into an outage: a `pending → resolved` transition (the normal path `app.record_file_scan_result` owns) and a no-op update of the same value. Both are asserted in the regression, so a later tightening cannot break ordinary writes unnoticed.
+
+New regression in `scripts/db-tests/document-file.sql`: an undeclared raw `UPDATE` as `service_role` is refused with `document_scan_already_resolved` **and changes nothing**; a same-value update still succeeds; a declared correction goes through and leaves exactly one ledger row carrying both statuses and the reason. Full `db:test` `ALL PASSED` (402 migrations, 238 runner files); applied live, trigger and ledger table both confirmed present.
 ### ISS-2026-232 — 3 more `token_hash` columns exposed via a blanket table-level grant, contradicting each table's own "mirrors `app.quotation_acceptance_tokens`" design claim, the same class as this checkpoint's own headline `ISS-2026-216` fix (found at `CG-S15-HDN-009`'s own Tier C review, `RESOLVED` at `HDN-378`, Medium, owner `HDN-378`)
 
 Found by the Tier C completeness-sweep lens while sweeping for more instances of the

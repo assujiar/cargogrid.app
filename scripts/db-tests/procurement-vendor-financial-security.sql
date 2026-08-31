@@ -741,6 +741,11 @@ begin
   -- contract asserted for the authority-denial branch above. Live-forced via the
   -- content-gate branch (infected file), the same shape the compliance-evidence
   -- sibling's own existing regression exercises.
+  -- ISS-2026-231: this raw re-flag IS the disclosed RPD-022 out-of-band correction path,
+  -- and since 20260831130000 that path has to say so. The declaration is not ceremony: it
+  -- is what distinguishes this deliberate simulation from an accidental or hostile write,
+  -- which were previously byte-identical. It also lands a row in app.file_scan_corrections.
+  perform set_config('app.scan_correction_reason', 'db-test: simulating the disclosed RPD-022 out-of-band re-flag of an already-clean file', true);
   update app.files set malware_scan_status = 'infected' where id = v_clean_file.id;
   select * into v_access from app.access_vendor_bank_account_evidence(v_account.id, 'download', v_staff, 'staff');
   if v_access.access_result <> 'denied' or v_access.file_id is not null then

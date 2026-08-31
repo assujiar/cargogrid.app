@@ -619,6 +619,11 @@ begin
 
   -- denied, not raised, once the underlying file is later flagged infected -- every
   -- file-identifying field is nulled out, never leaked to a denied requester.
+  -- ISS-2026-231: this raw re-flag IS the disclosed RPD-022 out-of-band correction path,
+  -- and since 20260831130000 that path has to say so. The declaration is not ceremony: it
+  -- is what distinguishes this deliberate simulation from an accidental or hostile write,
+  -- which were previously byte-identical. It also lands a row in app.file_scan_corrections.
+  perform set_config('app.scan_correction_reason', 'db-test: simulating the disclosed RPD-022 out-of-band re-flag of an already-clean file', true);
   update app.files set malware_scan_status = 'infected' where id = v_doc.file_id;
   select * into v_result from app.access_vendor_compliance_document_evidence(v_doc.id, 'download', v_staff, 'staff', null);
   if v_result.access_result <> 'denied' or v_result.original_filename is not null or v_result.access_reason is null then
