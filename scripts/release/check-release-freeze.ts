@@ -3075,7 +3075,36 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // legitimate receipt allocation in production. The guard's final branch raises rather than
   // passing, so widening the CHECK again without widening the guard fails loudly instead of
   // silently reopening the gap.
-  migrationSetSha256: "85d71d60438e96758362d2746071afec0babf27a33344080a27f701a584df103",
+  //
+  // SEVENTY-FOURTH PASS (2026-08-31, ISS-2026-307): 421 files (+1,
+  // 20260831320000_make_ip_denials_durable_outside_the_transaction.sql).
+  //
+  // The residual 20260830170000 left open: a denial raised from INSIDE a business transaction
+  // loses its app.ip_access_evaluations row when that transaction aborts. ISS-2026-302 widened
+  // the control from 5 functions to 70, which made the hole wider rather than narrower.
+  //
+  // Three obvious fixes were rejected for concrete reasons, recorded in the migration header:
+  // an autonomous transaction (dblink/pg_background) works but adds an extension and an
+  // outbound connection path on the one code path whose job is refusing untrusted callers;
+  // having the 70 functions RETURN a denial instead of raising is a breaking contract change
+  // that turns a refusal into something a caller can ignore by forgetting to check; an
+  // application-layer pre-check costs a round trip on every finance approval and every HR
+  // decision, and cannot see the tenant id at many call sites.
+  //
+  // Two things survive a rollback in Postgres and this uses both. A SEQUENCE -- nextval() is
+  // non-transactional, which is exactly why sequences cannot give gap-free numbering and
+  // exactly what is wanted here. And the SERVER LOG -- RAISE LOG writes through the logging
+  // collector outside transaction control; verified against the live project rather than
+  // assumed (log_min_messages is `warning`, and LOG outranks WARNING in the logging severity
+  // order, so the lines are captured).
+  //
+  // So the evidence moves from a table to the log, and the sequence makes the move VERIFIABLE:
+  // app.get_ip_denial_evidence_gap() reports denials-that-happened against denials-that-left-a-
+  // row, and each log line carries its own serial, so a responder can tell when they have found
+  // them all rather than hoping.
+  migrationSetSha256: "6f5d8cd8f7055d7f8fbc6877818192a56d46fedf36600685cecd00ca1790e24b",
+  // History: 85d71d60438e96758362d2746071afec0babf27a33344080a27f701a584df103
+  // (420 files, ISS-2026-259's tripwire extension and ISS-2026-206's subledger lineage guard).
   // History: 9fad7f42034da525b75bb9f23e261701048c6d8f15e487c75008a946e7077260
   // (418 files, ISS-2026-318's security-definer drift repair).
   // History: 6564319224c288a622775d1dc56fac4f02872dfc08c2701c5b07be5f134ccbb3
@@ -3548,7 +3577,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // One assertion got stronger as a side effect: the source_type filter test now checks a type
   // with rows, a type with none (the exclusion half it never tested), and that the unfiltered
   // list is at least as large.
-  dbTestSetSha256: "e7fc51569f99ecea41489afbbe3b74f5cc108b8bb2357c638d7fc812055ff3c0",
+  //
+  // SEVENTY-FOURTH PASS (2026-08-31): 239 files, unchanged in count -- one extended.
+  // ip-restriction-network-access.sql proves the mechanism on a REAL one of ISS-2026-302's 65
+  // gated functions rather than a synthetic probe: the row is still lost (asserted as a
+  // property, with its own failure message saying that if it ever starts persisting the
+  // assertion must be INVERTED, not deleted), the non-transactional counter advanced anyway
+  // across the aborted subtransaction, an evaluator-path denial is counted AND keeps its row,
+  // an allowed evaluation is NOT counted -- a counter that ticked on success would make the
+  // gap meaningless -- and the gap report is service_role-only on both sides of the wrapper
+  // pair with the sequence itself unreachable from anon/authenticated.
+  dbTestSetSha256: "48724bb1ceb67b9f46c05a1c71d36078a5ef5afc4a7826f4835127a258361a57",
+  // History: e7fc51569f99ecea41489afbbe3b74f5cc108b8bb2357c638d7fc812055ff3c0
+  // (239 files, ISS-2026-206's real-settlement fixture rework).
   // History: 4e8b11a879ff2062677c309978b019b428cd15f08134ca3c3915e1ab90422eec
   // (239 files, ISS-2026-302's IP-allowlist regression blocks).
   // History: be44b6f0ed4f20b40a7a8d337f4ea41cd0c0575a502fdc49a59c8e53cca94d8d

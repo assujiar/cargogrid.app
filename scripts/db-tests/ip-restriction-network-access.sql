@@ -603,4 +603,109 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-307: a denial raised INSIDE a business transaction still loses its app.ip_access_evaluations row -- and now leaves a counted, greppable trace anyway, because a sequence advance and a RAISE LOG line are the two things Postgres does not roll back'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeip');
+  v_admin1 uuid := '00000000-0000-0000-0000-000032000001';
+  v_admin3 uuid := '00000000-0000-0000-0000-000032000004';
+  v_serial_before bigint;
+  v_serial_after bigint;
+  v_rows_before integer;
+  v_rows_after integer;
+  v_gap record;
+begin
+  -- Re-arm enforcement. admin1 holds the approved bypass from the block above, so it can still
+  -- reconfigure from anywhere; admin3 does not, which is what makes it the probe.
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant1, 'enforced', v_admin1, 'admin1');
+
+  v_serial_before := coalesce(pg_sequence_last_value('app.ip_denial_serial'::regclass), 0);
+  select count(*) into v_rows_before from app.ip_access_evaluations where tenant_id = v_tenant1 and decision = 'denied';
+
+  -- A REAL denial from inside a real business RPC, caught here exactly as a caller's own
+  -- transaction boundary would discard it. app.add_ip_allowlist_entry is one of the 65
+  -- functions ISS-2026-302 wired, so this is the production shape, not a synthetic probe.
+  begin
+    perform app.add_ip_allowlist_entry(v_tenant1, '192.51.100.0/24', 'from an unlisted address', 'admin', v_admin3, 'admin3', '172.16.0.5');
+    raise exception 'assertion failed: fixture precondition -- expected ip_not_allowed for an out-of-allowlist caller';
+  exception when insufficient_privilege then
+    if sqlerrm not like 'ip_not_allowed%' then raise; end if;
+  end;
+
+  v_serial_after := coalesce(pg_sequence_last_value('app.ip_denial_serial'::regclass), 0);
+  select count(*) into v_rows_after from app.ip_access_evaluations where tenant_id = v_tenant1 and decision = 'denied';
+
+  -- The row is still lost. Asserted as a PROPERTY, not tolerated as an accident: if this ever
+  -- starts persisting, this assertion must be INVERTED, not deleted -- it would mean the
+  -- underlying rollback behaviour changed and the whole mechanism below needs rethinking.
+  if v_rows_after <> v_rows_before then
+    raise exception 'assertion failed: a denial raised inside a business transaction is expected to lose its app.ip_access_evaluations row (% -> %); it now persists, so this assertion should be INVERTED, not removed', v_rows_before, v_rows_after;
+  end if;
+
+  -- ...and the durable counter advanced anyway, through the same aborted subtransaction.
+  if v_serial_after <> v_serial_before + 1 then
+    raise exception 'assertion failed: expected the non-transactional denial counter to advance by exactly 1 across the aborted call (% -> %) -- a sequence advance is never rolled back, which is the entire reason one is used here', v_serial_before, v_serial_after;
+  end if;
+
+  -- And the gap is reported rather than left for someone to notice.
+  select * into v_gap from app.get_ip_denial_evidence_gap();
+  if v_gap.total_denials < v_serial_after then
+    raise exception 'assertion failed: expected total_denials to reflect the sequence (>= %), got %', v_serial_after, v_gap.total_denials;
+  end if;
+  if v_gap.unrecorded_denials < 1 then
+    raise exception 'assertion failed: expected at least one unrecorded denial to be reported, got % (total=% recorded=%)', v_gap.unrecorded_denials, v_gap.total_denials, v_gap.recorded_denials;
+  end if;
+
+  -- The counter counts EVERY denial, not only the lost ones: a denial through the evaluator,
+  -- which does not raise and so keeps its row, must advance it too -- otherwise total_denials
+  -- would undercount and the gap arithmetic would be wrong in the safe direction, which is
+  -- still wrong.
+  v_serial_before := v_serial_after;
+  v_rows_before := v_rows_after;
+  perform app.evaluate_ip_access(v_tenant1, '172.16.0.6', 'admin', 'iss307-evaluator-denial');
+  select count(*) into v_rows_after from app.ip_access_evaluations where tenant_id = v_tenant1 and decision = 'denied';
+  v_serial_after := coalesce(pg_sequence_last_value('app.ip_denial_serial'::regclass), 0);
+  if v_serial_after <> v_serial_before + 1 or v_rows_after <> v_rows_before + 1 then
+    raise exception 'assertion failed: a denial through the evaluator must advance the counter AND keep its row (serial % -> %, rows % -> %)', v_serial_before, v_serial_after, v_rows_before, v_rows_after;
+  end if;
+
+  -- An ALLOWED evaluation must not advance it -- a counter that ticks on success would make
+  -- the gap meaningless.
+  v_serial_before := v_serial_after;
+  perform app.evaluate_ip_access(v_tenant1, '10.1.2.3', 'admin', 'iss307-evaluator-allow');
+  if coalesce(pg_sequence_last_value('app.ip_denial_serial'::regclass), 0) <> v_serial_before then
+    raise exception 'assertion failed: an allowed evaluation must not advance the denial counter';
+  end if;
+
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant1, 'disabled', v_admin1, 'admin1');
+  raise notice 'ISS-2026-307 proof: an in-transaction denial still loses its row, and is still counted; the evaluator path is counted and keeps its row; an allow is not counted; and app.get_ip_denial_evidence_gap reports the difference';
+end;
+$$;
+
+\echo '>> ISS-2026-307 privilege regression: the denial counter and the gap report are operator/forensics tooling -- service_role only on both app.* and public.*, and no anon/authenticated reach to the sequence itself'
+do $$
+begin
+  if has_function_privilege('anon', 'app.get_ip_denial_evidence_gap()', 'EXECUTE')
+     or has_function_privilege('authenticated', 'app.get_ip_denial_evidence_gap()', 'EXECUTE')
+     or has_function_privilege('anon', 'public.get_ip_denial_evidence_gap()', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.get_ip_denial_evidence_gap()', 'EXECUTE') then
+    raise exception 'assertion failed: app./public.get_ip_denial_evidence_gap must be service_role-only (the ISS-2026-298 platform-default-grant leak class)';
+  end if;
+  if not has_function_privilege('service_role', 'app.get_ip_denial_evidence_gap()', 'EXECUTE')
+     or not has_function_privilege('service_role', 'public.get_ip_denial_evidence_gap()', 'EXECUTE') then
+    raise exception 'assertion failed: service_role must retain EXECUTE on both sides of the wrapper pair';
+  end if;
+
+  -- The sequence itself: a tenant session must not be able to read or advance the count of
+  -- how many times the platform has blocked someone.
+  if has_sequence_privilege('anon', 'app.ip_denial_serial', 'USAGE')
+     or has_sequence_privilege('anon', 'app.ip_denial_serial', 'SELECT')
+     or has_sequence_privilege('authenticated', 'app.ip_denial_serial', 'USAGE')
+     or has_sequence_privilege('authenticated', 'app.ip_denial_serial', 'SELECT') then
+    raise exception 'assertion failed: app.ip_denial_serial must carry no anon/authenticated privilege';
+  end if;
+
+  raise notice 'ISS-2026-307 privilege proof: the gap report is service_role-only on both sides and the counter sequence is unreachable from anon/authenticated';
+end $$;
+
 \echo 'ALL IAE-028 (IP Restriction and Network Access) ASSERTIONS PASSED'
