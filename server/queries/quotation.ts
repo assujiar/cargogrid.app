@@ -6,6 +6,7 @@
  * direct column grant on those columns on the base tables.
  */
 
+import { boundedRange, toBoundedList, type BoundedList } from "./bounded-list.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   parseQuotation,
@@ -65,16 +66,18 @@ export async function listQuotationsForOpportunity(client: QuotationQueryTableCl
 }
 
 /** Field-masked quotations for one tenant (any opportunity), most recently created first -- backs the tenant-wide Quotations list page. */
-export async function listQuotationsForTenant(client: QuotationQueryTableClient, tenantId: string): Promise<Quotation[]> {
+export async function listQuotationsForTenant(client: QuotationQueryTableClient, tenantId: string): Promise<BoundedList<Quotation>> {
+  const range = boundedRange();
   const { data, error } = await client
     .from("quotations_directory")
     .select("*")
     .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(range.from, range.to);
   if (error) {
     throw new QuotationQueryError(error.message);
   }
-  return (data ?? []).map((row: Record<string, unknown>) => parseQuotation(row));
+  return toBoundedList((data ?? []).map((row: Record<string, unknown>) => parseQuotation(row)));
 }
 
 /** Field-masked lines for one quotation, ordered by line_no. */

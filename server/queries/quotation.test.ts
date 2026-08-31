@@ -66,7 +66,17 @@ function fakeTableClient(response: { data: unknown; error: { message: string } |
       order(column: string, opts: { ascending: boolean }) {
         capture.calls.orderColumn = column;
         capture.calls.ascending = opts.ascending;
-        return response;
+        // ISS-2026-238: the result of order() is BOTH the response (for the reads that end
+        // there) and chainable into .range() (for the bounded ones). Making order() chainable
+        // unconditionally would have broken every unbounded caller's own test in this file, so
+        // it carries both shapes rather than forcing a choice.
+        return {
+          ...response,
+          range(from: number, to: number) {
+            capture.calls.range = { from, to };
+            return response;
+          },
+        };
       },
       async maybeSingle() {
         const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
@@ -134,9 +144,13 @@ describe("listQuotationsForTenant", () => {
   test("filters by tenant_id", async () => {
     const capture = { calls: {} as Record<string, unknown> };
     const client = fakeTableClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
-    await listQuotationsForTenant(client, TENANT_ID);
+    const quotations = await listQuotationsForTenant(client, TENANT_ID);
     const eqCalls = capture.calls.eqCalls as { column: string; value: unknown }[];
     assert.deepEqual(eqCalls, [{ column: "tenant_id", value: TENANT_ID }]);
+    assert.equal(quotations.truncated, false);
+    // ISS-2026-238: the cap is asserted, not assumed -- this read used to fetch every quotation
+    // for the tenant on every page load, and nothing in the suite would have noticed.
+    assert.deepEqual(capture.calls.range, { from: 0, to: 200 });
   });
 });
 

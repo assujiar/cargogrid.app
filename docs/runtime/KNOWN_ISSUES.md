@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 71 — 4 High, 29 Medium, 38 Low |
+| `OPEN` | 70 — 4 High, 28 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
-| `RESOLVED` | 192 |
+| `RESOLVED` | 193 |
 | **Total records** | **269** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -89,7 +89,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-207` | Medium | `RESOLVED` | `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests |
 | `ISS-2026-231` | Medium | `RESOLVED` | a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered befo |
 | `ISS-2026-234` | Medium | `OPEN` | `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR,  |
-| `ISS-2026-238` | Medium | `OPEN` | 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity si |
+| `ISS-2026-238` | Medium | `RESOLVED` | 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity si |
 | `ISS-2026-242` | Medium | `OPEN` | the repository's own dedicated accessible form primitives (`components/forms/form-field.tsx`, `components/forms/validation-message.tsx`) are adopted i |
 | `ISS-2026-256` | Medium | `OPEN` | this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real  |
 | `ISS-2026-259` | Medium | `OPEN` | `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario |
@@ -4367,7 +4367,7 @@ This is the same defect shape as `ISS-2026-232`'s own second regression (a `sele
 
 **`RESOLVED` (2026-08-28, Track B Batch 7, `server/queries/automation-rule.ts`, TypeScript-only, no migration).** Took the design decision this entry's own text left open: `getLatestAutomationRulePublishApprovalRequest` now uses an explicit 14-column `select(...)` list (matching exactly what `app.approval_requests` grants to `authenticated`, re-verified against `20260731210000`'s own revoke+column-grant statement) instead of `select("*")`, and synthesizes `ended_reason: null` before parsing — `ApprovalRequestSchema` genuinely expects the field, but this specific caller (the Automation Rule detail page's approval panel) never renders it, so a hardcoded `null` satisfies the schema without a narrower duplicate type or a service-role detour. New regression test in `server/queries/automation-rule.test.ts` proving the query succeeds as `authenticated` and `endedReason` comes back `null` rather than throwing. `pnpm run typecheck`/`lint`/`test` re-verified green. Owner: closed.
 
-### ISS-2026-238 — 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity siblings share the same code pattern (found at `HDN-379` Performance and Scalability, load/performance-evidence lens + Tier C completeness sweep + attack-surface testing, `OPEN`, Medium, owner a dedicated future task)
+### ISS-2026-238 — 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity siblings share the same code pattern (found at `HDN-379` Performance and Scalability, load/performance-evidence lens + Tier C completeness sweep + attack-surface testing, `RESOLVED` 2026-08-31, was Medium)
 
 Live-verified via real `EXPLAIN (ANALYZE, BUFFERS)` against a seeded disposable database (25,000 `accounts`, 10,000 `customer_contracts` rows, one tenant): `listAccounts` (`server/queries/account.ts:29`) and `listCustomerContracts` (`server/queries/contract.ts:31`) each do `client.from(table).select("*").eq("tenant_id", tenantId).order(...)` with **no `.range()`/`.limit()` at all** — every row for the tenant is fetched and returned to the browser on every page load, confirmed by a `quicksort` over the full row set in the query plan (9.9ms/455 buffers and 3.9ms/194 buffers respectively at this seeded volume — fast today, but cost and payload size scale linearly with tenant data volume with no cap). `listQuotationsForTenant` (`server/queries/quotation.ts:68`) shares the identical shape, confirmed by direct code read. All 3 are real, live-reachable via `app/(tenant)/[tenantSlug]/commercial/{accounts,quotations,contracts}/page.tsx`.
 
@@ -4399,6 +4399,22 @@ the original disposition. Owner and scope unchanged; sibling count corrected to 
 instances (plus the 3 originally-confirmed Medium-severity routes and the fleet-assets
 page) for the next reader.
 
+
+**`RESOLVED`, 2026-08-31, under ADR-0027 Part A. All four Medium routes are capped; the ~10 lower-severity siblings are not, and that is stated rather than implied.**
+
+`server/queries/bounded-list.ts` is the convention in one place: cap 200, deliberately the same number the RPC layer already uses for its own transactional lists (`list_finance_invoices`, `list_rfqs`, `query_audit_logs`), because two different caps in one product is a difference a reader has to learn for no benefit.
+
+**The functions return a `BoundedList`, not an array, and that type change is the point.** A silently capped list is *worse* than an unbounded one: unbounded is slow, silently capped is **wrong** — the reader believes they are looking at all their accounts while looking at the newest 200. Changing the return type is what forced every caller to decide what to say, and `components/ui/truncation-notice.tsx` is what they say: how many are shown, that there are more, and what to do about it.
+
+**A correctness bug this nearly introduced, caught and fixed.** `accounts/[accountId]/page.tsx` used `listAccounts` and then `.find()`/`.filter()` over the whole tenant to resolve an account's parent and subsidiaries. Capping that list would have made the page silently **wrong** rather than merely truncated — a parent outside the newest 200 renders as "no parent", subsidiaries under-report, and nothing on the page says so. That call site now uses `getAccountById` plus a new `listSubsidiaryAccounts`, resolved by the database. It was always the right shape; the cap is what made that obvious.
+
+**A second design distinction, for the route this entry's own Tier C sweep reclassified.** `listFilesForTenant` is RPC-backed since `ISS-2026-172(b)`, and that RPC writes an `app.file_access_logs` row **per row it returns**. Unbounded, one page load does not merely read a lot — it *writes* a lot, burying the real audit entries under its own listing. So the cap matters more here, and the usual truncation detector does not work: fetching one row past the cap and discarding it would leave a log entry claiming somebody viewed a file they were never shown. `toBoundedListByCapReached` infers truncation from reaching the cap instead — conservative by one row (a tenant with exactly 200 files sees an unnecessary warning) and never dishonest about who saw what. Over-warning costs a reader a sentence; under-warning costs them the belief that they have seen everything.
+
+`supabase/migrations/20260831140000_bound_logged_file_listing.sql` caps the RPC itself, clamping rather than rejecting an over-large request — a caller asking for 100,000 rows has made a mistake, and failing their page is a worse answer than serving 200, especially when the alternative is writing 100,000 audit rows. The limit counts rows **returned** and exits before the next authorize call, so a skipped unauthorized row costs nothing. `DROP` + `CREATE`, never `CREATE OR REPLACE` across a changed argument list (`ISS-2026-260`).
+
+**The ~10 lower-severity siblings are deliberately not changed.** Each reads a config/rule/rate/directory-shaped table naturally bounded by business cardinality, and this entry says so itself. Capping them would add a truncation notice to lists that never truncate — a warning nobody can act on, which teaches people to ignore warnings. The helper is there when one of them stops being naturally bounded.
+
+Every cap is asserted, not assumed: the fake clients now record `.range()`/`p_limit` and the tests check the exact values, so dropping a cap fails the suite rather than silently restoring the unbounded read. `typecheck`, `lint`, 5,693 unit tests, full `db:test` `ALL PASSED` (403 migrations, 238 runner files); applied live and object-verified.
 ### ISS-2026-239 — 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real production query telemetry that does not yet exist anywhere in this system (found at `HDN-379` Performance and Scalability, unindexed-FK triage lens, `OPEN`, Low, owner: re-open once real production query traffic exists — re-ruled at `HDN-387` per `BLOCKER_LEDGER.md`'s `HDN-BLK-006`, correcting `HDN-379`'s own procedurally-invalid self-acceptance caught at `HDN-386`)
 
 Reproduced the advisory class directly against a live schema (`pg_constraint`/`pg_index`/`pg_attribute`, matching the Supabase advisor's own rule — a FK constraint whose column(s) are not the leading prefix of any index on that table): **892 confirmed unindexed**, spanning 424 distinct tables, out of 1,766 total FK constraints across ~570 distinct tables in `app` — unchanged from the matrix's own seeded count, no drift since `HDN-378`.

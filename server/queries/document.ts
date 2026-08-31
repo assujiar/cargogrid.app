@@ -19,6 +19,7 @@
  */
 
 import { parseFileSummary, parseDocumentType, type FileSummary, type DocumentType } from "../contracts/document/document.ts";
+import { BOUNDED_LIST_LIMIT, toBoundedListByCapReached, type BoundedList } from "./bounded-list.ts";
 
 export interface FileLookupClient {
   rpc(
@@ -53,11 +54,17 @@ export async function listFilesForTenant(
   tenantId: string,
   actorAuthUserId: string,
   correlationId: string | null = null,
-): Promise<FileSummary[]> {
+): Promise<BoundedList<FileSummary>> {
+  // ISS-2026-238. This one does NOT use the usual fetch-one-past-the-cap truncation detector,
+  // and the difference matters: this path WRITES an app.file_access_logs row per row it returns,
+  // so the discarded extra row would leave an audit entry claiming somebody viewed a file they
+  // were never shown. Truncation is inferred from reaching the cap instead -- conservative by
+  // one row, and never dishonest about who saw what.
   const { data, error } = await client.rpc("list_files_for_tenant", {
     p_tenant_id: tenantId,
     p_actor_auth_user_id: actorAuthUserId,
     p_correlation_id: correlationId,
+    p_limit: BOUNDED_LIST_LIMIT,
   });
 
   if (error) {
@@ -66,7 +73,7 @@ export async function listFilesForTenant(
   if (data !== null && data !== undefined && !Array.isArray(data)) {
     throw new FileLookupError("list_files_for_tenant returned a non-array result");
   }
-  return ((data as unknown[] | null) ?? []).map((row) => parseFileSummary(row as Record<string, unknown>));
+  return toBoundedListByCapReached(((data as unknown[] | null) ?? []).map((row) => parseFileSummary(row as Record<string, unknown>)));
 }
 
 export interface DocumentTypeLookupClient {

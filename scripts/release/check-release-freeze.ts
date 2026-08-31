@@ -2527,6 +2527,44 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test run (402 migrations, 238 runner files,
  * ALL PASSED). 20260831130000 IS applied live: trigger and ledger table both confirmed present.
  *
+ * AMENDED 2026-08-31 (fifty-fourth pass), migrationSetSha256 only -- dbTestSetSha256 is
+ * unchanged, because ISS-2026-238's evidence is TypeScript-side (the caps are asserted in unit
+ * tests against recorded .range()/p_limit values, where a dropped cap actually shows up).
+ * Same ruling: ADR-0027 Part A. 20260831140000_bound_logged_file_listing.sql.
+ *
+ * Four production routes fetched an entire tenant-wide dataset into the browser with no cap.
+ * server/queries/bounded-list.ts is the convention in one place, at 200 -- the same number the
+ * RPC layer already uses, because two caps in one product is a difference a reader must learn
+ * for no benefit.
+ *
+ * The functions return a BoundedList rather than an array, and that type change IS the fix. A
+ * silently capped list is worse than an unbounded one: unbounded is slow, silently capped is
+ * WRONG, because the reader believes they are seeing everything. Changing the type forced every
+ * caller to decide what to say about it.
+ *
+ * A correctness bug this nearly introduced, caught before it shipped: the account DETAIL page
+ * resolved an account's parent and subsidiaries by filtering the full tenant list in memory.
+ * Capping that would have made the page silently wrong rather than truncated -- a parent outside
+ * the newest 200 rendering as "no parent". It now uses two targeted queries, which was always
+ * the right shape; the cap is what made that obvious.
+ *
+ * The fourth route needed a different truncation detector, and the reason is worth recording.
+ * app.list_files_for_tenant writes an app.file_access_logs row PER ROW RETURNED, so the usual
+ * fetch-one-past-the-cap trick would leave a log entry claiming somebody viewed a file they were
+ * never shown. toBoundedListByCapReached infers truncation from reaching the cap instead --
+ * conservative by one row, never dishonest about who saw what. The migration clamps rather than
+ * rejects an over-large limit (failing a page is a worse answer than serving 200, especially
+ * when the alternative is writing 100,000 audit rows) and counts rows RETURNED, exiting before
+ * the next authorize call so a skipped unauthorized row costs nothing.
+ *
+ * The ~10 lower-severity siblings are deliberately NOT capped: each reads a config/rule/rate/
+ * directory-shaped table naturally bounded by business cardinality, as the entry itself says.
+ * Capping them would add a truncation notice to lists that never truncate, and a warning nobody
+ * can act on teaches people to ignore warnings.
+ *
+ * Re-verified via a fresh full local db-test run (403 migrations, 238 runner files,
+ * ALL PASSED). 20260831140000 IS applied live: 2 functions, zero anon EXECUTE.
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2800,7 +2838,10 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (401 files, fifty-second-pass amendment above). Superseded 2026-08-31 (fifty-third pass)
   // by ISS-2026-231 (402 files: +1,
   // 20260831130000_backstop_malware_scan_resolution_invariant.sql).
-  migrationSetSha256: "8b7d0585b8b415d905ebedf923f2985232f6f60e829a9732318ac0d53350a26a",
+  // History: 8b7d0585b8b415d905ebedf923f2985232f6f60e829a9732318ac0d53350a26a
+  // (402 files, fifty-third-pass amendment above). Superseded 2026-08-31 (fifty-fourth pass) by
+  // ISS-2026-238 (403 files: +1, 20260831140000_bound_logged_file_listing.sql).
+  migrationSetSha256: "2819e35ab8fe49aebfc65d7e1cbe628ceaa4da84dd9f5f6752362ec78765a005",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,

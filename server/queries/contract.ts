@@ -6,6 +6,7 @@
  * already established on the vendor-cost side.
  */
 
+import { boundedRange, toBoundedList, type BoundedList } from "./bounded-list.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   GetEffectiveCustomerPriceInputSchema,
@@ -28,12 +29,18 @@ export class ContractQueryError extends Error {
 }
 
 /** Every version of every contract for one tenant, most recently created first -- tenant-wide reference data, RLS-scoped by tenant membership only (not record-scoped). */
-export async function listCustomerContracts(client: ContractQueryClient, tenantId: string): Promise<CustomerContract[]> {
-  const { data, error } = await client.from("customer_contracts").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+export async function listCustomerContracts(client: ContractQueryClient, tenantId: string): Promise<BoundedList<CustomerContract>> {
+  const range = boundedRange();
+  const { data, error } = await client
+    .from("customer_contracts")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .range(range.from, range.to);
   if (error) {
     throw new ContractQueryError(error.message);
   }
-  return (data ?? []).map((row: Record<string, unknown>) => parseCustomerContract(row));
+  return toBoundedList((data ?? []).map((row: Record<string, unknown>) => parseCustomerContract(row)));
 }
 
 /** Every version sharing one root_contract_id, oldest first -- the full version history of one contract. */

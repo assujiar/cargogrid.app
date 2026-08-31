@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
-import { getAccountById, listAccounts, AccountQueryError } from "../../../../../../server/queries/account.ts";
+import { getAccountById, listSubsidiaryAccounts, AccountQueryError } from "../../../../../../server/queries/account.ts";
 import { getCreditProfileForAccount, getCreditProfileApprovalOverview } from "../../../../../../server/queries/credit.ts";
 import { CreditPanel } from "./credit-panel.tsx";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
@@ -38,9 +38,16 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  const allAccounts = await listAccounts(supabase, access.tenant.id);
-  const parent = account.parentAccountId ? (allAccounts.find((candidate) => candidate.id === account.parentAccountId) ?? null) : null;
-  const subsidiaries = allAccounts.filter((candidate) => candidate.parentAccountId === account.id);
+  // ISS-2026-238: was `listAccounts` + `.find()`/`.filter()` over the whole tenant. Once that
+  // list is capped, filtering it in memory stops being merely truncated and becomes WRONG -- a
+  // parent outside the newest 200 would render as "no parent", and subsidiaries would be
+  // under-reported with nothing on the page indicating it. Two targeted queries are correct at
+  // any tenant size and cheaper besides; this was always the right shape, and the cap is what
+  // made that obvious.
+  const [parent, subsidiaries] = await Promise.all([
+    account.parentAccountId ? getAccountById(supabase, account.parentAccountId) : Promise.resolve(null),
+    listSubsidiaryAccounts(supabase, account.id),
+  ]);
 
   const creditProfile = await getCreditProfileForAccount(supabase, account.id);
   const creditApprovalOverview = creditProfile ? await getCreditProfileApprovalOverview(supabase, creditProfile, access.authUserId) : null;

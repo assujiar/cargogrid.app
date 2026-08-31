@@ -1,3 +1,4 @@
+import { TruncationNotice } from "../../../../../components/ui/truncation-notice.tsx";
 import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
@@ -23,10 +24,13 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
 
   const supabase = await createSupabaseServerClient();
 
-  let accounts: Account[];
+  let accounts: readonly Account[];
+  let truncated = false;
   let loadFailed = false;
   try {
-    accounts = await listAccounts(supabase, access.tenant.id);
+    const page = await listAccounts(supabase, access.tenant.id);
+    accounts = page.rows;
+    truncated = page.truncated;
   } catch (error) {
     if (!(error instanceof AccountQueryError)) {
       throw error;
@@ -71,13 +75,16 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
       {loadFailed ? (
         <ErrorState description="Something went wrong loading accounts. Please try again." />
       ) : (
-        <DataTable
-          caption="Accounts"
-          columns={columns}
-          rows={accounts}
-          rowKey={(account) => account.id}
-          emptyMessage="No accounts yet. Converting an accepted quotation creates the first one."
-        />
+        <>
+          {truncated ? <TruncationNotice shown={accounts.length} noun="accounts" hint="search for an account by name to find one that is not listed here" /> : null}
+          <DataTable
+            caption="Accounts"
+            columns={columns}
+            rows={accounts}
+            rowKey={(account) => account.id}
+            emptyMessage="No accounts yet. Converting an accepted quotation creates the first one."
+          />
+        </>
       )}
     </div>
   );

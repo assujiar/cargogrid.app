@@ -1,3 +1,4 @@
+import { TruncationNotice } from "../../../../../components/ui/truncation-notice.tsx";
 import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
@@ -22,10 +23,13 @@ export default async function ContractsPage({ params }: { params: Promise<{ tena
 
   const supabase = await createSupabaseServerClient();
 
-  let contracts: CustomerContract[];
+  let contracts: readonly CustomerContract[];
+  let truncated = false;
   let loadFailed = false;
   try {
-    contracts = await listCustomerContracts(supabase, access.tenant.id);
+    const page = await listCustomerContracts(supabase, access.tenant.id);
+    contracts = page.rows;
+    truncated = page.truncated;
   } catch (error) {
     if (!(error instanceof ContractQueryError)) {
       throw error;
@@ -63,13 +67,16 @@ export default async function ContractsPage({ params }: { params: Promise<{ tena
       {loadFailed ? (
         <ErrorState description="Something went wrong loading contracts. Please try again." />
       ) : (
-        <DataTable
-          caption="Contracts"
-          columns={columns}
-          rows={contracts}
-          rowKey={(contract) => contract.id}
-          emptyMessage="No contracts yet. Creating one from an accepted, converted quotation starts the first version."
-        />
+        <>
+          {truncated ? <TruncationNotice shown={contracts.length} noun="contracts" hint="search for a contract to find one that is not listed here" /> : null}
+          <DataTable
+            caption="Contracts"
+            columns={columns}
+            rows={contracts}
+            rowKey={(contract) => contract.id}
+            emptyMessage="No contracts yet. Creating one from an accepted, converted quotation starts the first version."
+          />
+        </>
       )}
     </div>
   );

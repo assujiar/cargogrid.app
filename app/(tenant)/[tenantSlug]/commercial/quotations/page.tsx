@@ -1,3 +1,4 @@
+import { TruncationNotice } from "../../../../../components/ui/truncation-notice.tsx";
 import { notFound } from "next/navigation";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
@@ -24,10 +25,13 @@ export default async function QuotationsPage({ params }: { params: Promise<{ ten
 
   const supabase = await createSupabaseServerClient();
 
-  let quotations: Quotation[];
+  let quotations: readonly Quotation[];
+  let truncated = false;
   let loadFailed = false;
   try {
-    quotations = await listQuotationsForTenant(supabase, access.tenant.id);
+    const page = await listQuotationsForTenant(supabase, access.tenant.id);
+    quotations = page.rows;
+    truncated = page.truncated;
   } catch (error) {
     if (!(error instanceof QuotationQueryError)) {
       throw error;
@@ -70,13 +74,16 @@ export default async function QuotationsPage({ params }: { params: Promise<{ ten
       {loadFailed ? (
         <ErrorState description="Something went wrong loading quotations. Please try again." />
       ) : (
-        <DataTable
-          caption="Quotations"
-          columns={columns}
-          rows={quotations}
-          rowKey={(quotation) => quotation.id}
-          emptyMessage={<>No quotations yet. Create one from an opportunity&apos;s detail page.</>}
-        />
+        <>
+          {truncated ? <TruncationNotice shown={quotations.length} noun="quotations" hint="narrow by status or search for a quotation reference" /> : null}
+          <DataTable
+            caption="Quotations"
+            columns={columns}
+            rows={quotations}
+            rowKey={(quotation) => quotation.id}
+            emptyMessage={<>No quotations yet. Create one from an opportunity&apos;s detail page.</>}
+          />
+        </>
       )}
     </div>
   );

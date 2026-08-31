@@ -31,8 +31,13 @@ const ACCOUNT_ROW = {
 function fakeClient(opts: {
   tableResponse?: { data: unknown; error: { message: string } | null };
   rpcResponse?: { data: unknown; error: { message: string } | null };
-}): AccountQueryClient & { calls: { table: string[]; rpc: { fn: string; args: Record<string, unknown> }[]; eqCalls: { column: string; value: unknown }[] } } {
-  const calls = { table: [] as string[], rpc: [] as { fn: string; args: Record<string, unknown> }[], eqCalls: [] as { column: string; value: unknown }[] };
+}): AccountQueryClient & { calls: { table: string[]; rpc: { fn: string; args: Record<string, unknown> }[]; eqCalls: { column: string; value: unknown }[]; range: { from: number; to: number }[] } } {
+  const calls = {
+    table: [] as string[],
+    rpc: [] as { fn: string; args: Record<string, unknown> }[],
+    eqCalls: [] as { column: string; value: unknown }[],
+    range: [] as { from: number; to: number }[],
+  };
   const fake = {
     calls,
     from(table: string) {
@@ -43,7 +48,14 @@ function fakeClient(opts: {
           calls.eqCalls.push({ column, value });
           return chain;
         },
-        order: () => response,
+        // ISS-2026-238: order() is now chainable because the bounded reads call .range() after
+        // it. The fake records the range so a test can assert the cap is actually applied --
+        // silently dropping it would let the unbounded read come back unnoticed.
+        order: () => chain,
+        range(from: number, to: number) {
+          calls.range.push({ from, to });
+          return response;
+        },
         maybeSingle: async () => ({ data: Array.isArray(response.data) ? (response.data[0] ?? null) : response.data, error: response.error }),
       };
       return { select: () => chain };
@@ -62,7 +74,12 @@ describe("listAccounts", () => {
     const accounts = await listAccounts(client, TENANT_ID);
     assert.equal(client.calls.table[0], "accounts");
     assert.deepEqual(client.calls.eqCalls, [{ column: "tenant_id", value: TENANT_ID }]);
-    assert.equal(accounts[0]?.legalName, "Contoso Ltd");
+    assert.equal(accounts.rows[0]?.legalName, "Contoso Ltd");
+    assert.equal(accounts.truncated, false);
+    // ISS-2026-238: the cap is asserted, not assumed. This read used to fetch every account for
+    // the tenant on every page load; without this assertion, dropping the .range() would be
+    // invisible to the suite.
+    assert.deepEqual(client.calls.range, [{ from: 0, to: 200 }]);
   });
 });
 

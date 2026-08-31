@@ -76,11 +76,13 @@ describe("listFilesForTenant", () => {
       error: null,
     });
     const files = await listFilesForTenant(client, TENANT_ID, ACTOR_ID);
-    assert.equal(files.length, 1);
-    assert.equal(files[0]?.malwareScanStatus, "clean");
+    assert.equal(files.rows.length, 1);
+    assert.equal(files.rows[0]?.malwareScanStatus, "clean");
+    // ISS-2026-238: one row is nowhere near the cap, so no truncation warning.
+    assert.equal(files.truncated, false);
     // HDN-377 (Storage and Signed URL Audit) regression: storagePath must never appear
     // on a FileSummary, even if the underlying row somehow carried it.
-    assert.equal("storagePath" in (files[0] ?? {}), false);
+    assert.equal("storagePath" in (files.rows[0] ?? {}), false);
   });
 
   test("passes the tenant, the actor and the correlation id through to the logged RPC", () => {
@@ -96,6 +98,10 @@ describe("listFilesForTenant", () => {
         p_tenant_id: TENANT_ID,
         p_actor_auth_user_id: ACTOR_ID,
         p_correlation_id: RECORD_ID,
+        // ISS-2026-238: the cap is part of the call shape now. Asserted rather than assumed --
+        // this listing writes an app.file_access_logs row per row it returns, so an
+        // accidentally-dropped limit would flood the audit trail, not just the payload.
+        p_limit: 200,
       });
     });
   });
@@ -123,7 +129,8 @@ describe("listFilesForTenant", () => {
   test("returns an empty array rather than throwing when there is nothing to see", async () => {
     const client = fakeFileClient({ data: [], error: null });
     const files = await listFilesForTenant(client, TENANT_ID, ACTOR_ID);
-    assert.deepEqual(files, []);
+    assert.deepEqual(files.rows, []);
+    assert.equal(files.truncated, false);
   });
 });
 

@@ -5,6 +5,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { boundedRange, toBoundedList, type BoundedList } from "./bounded-list.ts";
 import {
   FindDuplicateAccountsInputSchema,
   GetAccountConversionReadinessInputSchema,
@@ -25,9 +26,43 @@ export class AccountQueryError extends Error {
   }
 }
 
-/** Every account for one tenant (any status), most recently created first -- tenant-wide reference data, RLS-scoped by tenant membership only (not record-scoped). */
-export async function listAccounts(client: AccountQueryClient, tenantId: string): Promise<Account[]> {
-  const { data, error } = await client.from("accounts").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+/**
+ * Accounts for one tenant (any status), most recently created first -- tenant-wide reference data,
+ * RLS-scoped by tenant membership only (not record-scoped).
+ *
+ * ISS-2026-238: bounded. This previously fetched EVERY account for the tenant on every page load,
+ * live-verified by EXPLAIN as a quicksort over the full row set. It returns a BoundedList rather
+ * than an array on purpose -- a silently capped list is worse than an unbounded one, because the
+ * reader believes they are looking at all their accounts when they are looking at the newest 200.
+ * The type change is what forces every caller to decide what to say about that.
+ */
+export async function listAccounts(client: AccountQueryClient, tenantId: string): Promise<BoundedList<Account>> {
+  const range = boundedRange();
+  const { data, error } = await client
+    .from("accounts")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .range(range.from, range.to);
+  if (error) {
+    throw new AccountQueryError(error.message);
+  }
+  return toBoundedList((data ?? []).map((row: Record<string, unknown>) => parseAccount(row)));
+}
+
+/**
+ * The subsidiaries of one account, resolved by the database rather than by filtering a capped
+ * list in memory.
+ *
+ * ISS-2026-238 nearly introduced a correctness bug here. The account detail page used to call
+ * `listAccounts` and then `.find()`/`.filter()` over the whole tenant to resolve a parent and its
+ * subsidiaries. Capping that list would have made the page silently WRONG rather than merely
+ * truncated: a parent outside the newest 200 would render as "no parent", and subsidiaries would
+ * be under-reported with nothing indicating it. A targeted query is both correct and cheaper --
+ * it was always the right shape, and the cap is what made that obvious.
+ */
+export async function listSubsidiaryAccounts(client: AccountQueryClient, parentAccountId: string): Promise<Account[]> {
+  const { data, error } = await client.from("accounts").select("*").eq("parent_account_id", parentAccountId).order("created_at", { ascending: false });
   if (error) {
     throw new AccountQueryError(error.message);
   }
