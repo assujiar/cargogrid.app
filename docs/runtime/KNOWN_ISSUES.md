@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 50 — 4 High, 21 Medium, 25 Low |
+| `OPEN` | 49 — 4 High, 20 Medium, 25 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 215 |
+| `RESOLVED` | 216 |
 | **Total records** | **273** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -111,7 +111,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
 | `ISS-2026-316` | Low | `OPEN` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
 | `ISS-2026-317` | Low | `OPEN` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
-| `ISS-2026-318` | Medium | `OPEN` | 111 `public.*` finance wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
+| `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -8199,7 +8199,7 @@ runs the migration) settles the three questions above, since the adapter has to 
 answer to each. That makes this owner-input work, not purely engineering work, which is why
 it is filed rather than built.
 
-### ISS-2026-318 — 111 `public.*` finance wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it (found and live-reproduced 2026-08-31 while closing `ISS-2026-302`, `OPEN`, Medium)
+### ISS-2026-318 — 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it (found and live-reproduced 2026-08-31 while closing `ISS-2026-302`, `RESOLVED` 2026-08-31, Medium)
 
 **How it surfaced, which is the interesting part.** `ISS-2026-302`'s migration rebuilds 65
 `public.*` wrappers from their **live** `pg_get_functiondef` output. The first `pnpm run
@@ -8247,3 +8247,54 @@ belongs in its own change with its own evidence. **Separately worth doing, and l
 live-versus-migrations drift check. The parity gate cannot become that check — CI has no live
 database credentials and should not — so it would be a separate operator-run reconciliation,
 which is a real design question rather than a script.
+
+**`RESOLVED`, 2026-08-31**, in the same session it was filed, under `ADR-0027` Part A. Both
+halves: the repair, and the check that would have caught it.
+
+**Two corrections to this entry as originally written, both found while verifying it.**
+
+1. *"Every one is a finance wrapper"* is wrong. 107 are (106 finance-named plus
+   `public.get_numbering_allocation_status`, which finance numbering uses); **four are not** —
+   `public.enqueue_job`, `public.list_n8n_action_allowlist`,
+   `public.validate_automation_rule_definition` and `public.validate_custom_field_values`. The
+   shape of the finding is unchanged — one event, not gradual decay — but "all finance" was
+   generalised from the first twenty-five names in an alphabetical list, and generalising from
+   the visible prefix of a sorted list is how you get a wrong number that sounds specific.
+2. **The definer flag was not the only thing that had drifted.**
+   `public.check_finance_journal_authority` had *also* lost its `authenticated` grant live,
+   while the migration set grants it. That mattered immediately: the first generated repair
+   took its grants from the live grantee sets and therefore carried the loss into the
+   migration set. The wrapper-parity gate rejected it on the first `db:test` run, naming that
+   one function. **The general lesson, recorded because this repository keeps relearning it in
+   new forms: when a live definition is the input to a migration, every attribute of it is an
+   input, not just the one being repaired.** Body, volatility, `search_path`, return type and
+   grants were each compared against a migration-built reference before anything was emitted.
+
+**The repair** (`20260831290000_restore_security_definer_on_drifted_finance_wrappers.sql`,
+applied live and recorded): all 111 wrappers dropped and recreated with the mode
+`20260826000000` declares, `DROP` + `CREATE` rather than `CREATE OR REPLACE` because replacing
+a function does not reliably reset its security attribute, and grants emitted from a disposable
+database built from the migration set alone rather than from the live project. Verified before
+generating: all 111 live definitions are byte-identical to their migration-built counterparts
+once the `SECURITY DEFINER` token is set aside — same body, same volatility, same
+`search_path`, same return type. Verified after applying: a live query returns **0** definer
+mismatches and **0** grant mismatches across every `app.`/`public.` pair on the project, down
+from 111 and 1.
+
+**The check** (`scripts/db/check-live-schema-drift.ts`, `pnpm run db:check-live-drift`, 8 unit
+tests on the pure decision core). This entry called a live-versus-migrations reconciliation "a
+real design question rather than a script". The design question turned out to be narrower than
+that: the two properties that drifted are single facts per function, comparable without
+shipping a schema snapshot anywhere, so the check asks the live project the same two questions
+the local gate asks a migration-built one — definer versus invoker, and which of
+anon/authenticated/service_role hold `EXECUTE`. It runs where the credentials already are, an
+operator's session, **not in CI**: a pipeline that can read production's schema is a pipeline
+whose compromise reads production. With no credentials it prints the query and says it did not
+run, rather than printing a tick nobody earned. Run live against `awdlicmwzdxquopwtcfd` at
+closure: **2,430 function pairs, zero findings.**
+
+It deliberately does not diff function bodies. That needs a migration-built database to compare
+against — a heavier tool than this one — and every drift instance this repository has actually
+found was an attribute, not a body. If a body drift is ever suspected, the method used here
+works: build the disposable database, dump both sides, compare.
+

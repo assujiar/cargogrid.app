@@ -3027,7 +3027,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // it. Recreated here as declared, which repairs those 29 live. 111 more remain, all finance,
   // and the parity gate cannot see any of them -- it runs against a migration-built database,
   // so it compares what the migrations say to what the migrations say.
-  migrationSetSha256: "6564319224c288a622775d1dc56fac4f02872dfc08c2701c5b07be5f134ccbb3",
+  //
+  // SEVENTY-SECOND PASS (2026-08-31, ISS-2026-318): 418 files (+1,
+  // 20260831290000_restore_security_definer_on_drifted_finance_wrappers.sql). Repairs live
+  // drift found while closing ISS-2026-302: 111 public.* wrappers had lost their security
+  // definer flag on the hosted project while the migration set declares it, and one had also
+  // lost its `authenticated` grant.
+  //
+  // Not an exposure -- an invoker wrapper is the MORE restrictive of the two, and the app.*
+  // function it wraps is definer regardless. What was wrong is that the functions did not
+  // behave the way the code said they behaved, so a later, perfectly ordinary tightening of an
+  // app.* grant would have broken finance in production for reasons unfindable by reading the
+  // repository.
+  //
+  // The generation discipline is the part worth carrying forward. The first attempt took its
+  // grants from the LIVE grantee sets and so carried the lost grant into the migration set;
+  // the wrapper-parity gate rejected it immediately, naming the one function. Grants below
+  // therefore come from a disposable database built from the migration set alone. Bodies come
+  // from live, after verifying all 111 are byte-identical to their migration-built
+  // counterparts once the SECURITY DEFINER token is set aside. When a live definition is the
+  // input to a migration, EVERY attribute of it is an input, not just the one being repaired.
+  //
+  // DROP + CREATE rather than CREATE OR REPLACE: replacing a function does not reliably reset
+  // its security attribute. Verified after applying: 0 definer mismatches and 0 grant
+  // mismatches live, down from 111 and 1, across 2,430 app./public. pairs.
+  migrationSetSha256: "9fad7f42034da525b75bb9f23e261701048c6d8f15e487c75008a946e7077260",
+  // History: 6564319224c288a622775d1dc56fac4f02872dfc08c2701c5b07be5f134ccbb3
+  // (417 files, ISS-2026-302's IP-allowlist wiring plus its corrective documentation migration).
   // History: 18baf889de6b445d8dd0afa39843d3b4e8a11b92b1947f1b61a7ee2f31955ad3
   // (415 files, ISS-2026-303's inventory and leave opening-balance import adapters).
   // History: 6a9c6b9e8988a7724ace83a9bd5fa39e8e3d3deb438aebf6d1939a235eba9604

@@ -28,7 +28,8 @@
     "data-classification:check": "node --experimental-strip-types scripts/data-classification/check-registry.ts",
     "threat-model:check": "node --experimental-strip-types scripts/security/threat-model.ts",
     "release:check-freeze": "node --experimental-strip-types scripts/release/check-release-freeze.ts",
-    "db:test": "bash scripts/db-tests/run.sh"
+    "db:test": "bash scripts/db-tests/run.sh",
+    "db:check-live-drift": "node --experimental-strip-types scripts/db/check-live-schema-drift.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.3",
