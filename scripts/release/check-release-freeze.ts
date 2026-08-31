@@ -1904,6 +1904,60 @@ import { readFileSync } from "node:fs";
  * before this digest was changed. 20260830200000 IS applied to the live hosted
  * project, and the live query that found the defect now returns zero wrappers
  * wider than their app.* counterpart.
+ *
+ * AMENDED 2026-08-31 (forty-first pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-186` (Medium) -- the last 6 of the RBAC boolean-oracle family, carried
+ * open across three prior checkpoints. Six SECURITY DEFINER primitives granted to
+ * `authenticated` (`is_supreme_admin`, `has_active_tenant_membership`,
+ * `actor_holds_customer_user_layer`, `has_active_support_grant`,
+ * `can_access_record`, `resolve_locale_context`) would answer a question about ANY
+ * claimed identity, not just the caller's own. One new migration (390 -> 391
+ * files: +1, 20260831010000_close_rbac_oracle_on_public_wrappers.sql). Closing it
+ * also closed `ISS-2026-179` and `HDN-BLK-014`.
+ *
+ * The reason it stayed open for three checkpoints, and the reason it can be closed
+ * now, are the same fact seen from opposite ends.
+ *
+ * Those entries concluded that the blind `assert_actor_is_session_identity`
+ * pattern -- which closed the other 19 members of this family -- could not be used
+ * here, because these functions ARE called with genuinely third-party actor
+ * arguments (`p_owner_user_id`, `p_recipient_auth_user_id`,
+ * `p_assignee_auth_user_id`) inside other definer functions. That conclusion was
+ * correct, and two further facts establish it harder than the entries did:
+ *
+ *   1. `auth.uid()` reads the session's JWT claim and SECURITY DEFINER changes only
+ *      the ROLE, so it does not go null in a nested definer call -- the assert
+ *      really would fire on those legitimate uses.
+ *   2. These are RLS PREDICATES. Live counts: 304 policies reference
+ *      app.is_supreme_admin, 276 actor_holds_customer_user_layer, 266
+ *      has_active_tenant_membership, 72 can_access_record. A policy is evaluated as
+ *      the querying role, so revoking `authenticated` -- the other obvious fix --
+ *      breaks ~918 policy evaluations, i.e. every protected read in the product. And
+ *      a `raise` inside a policy aborts the statement rather than filtering rows.
+ *
+ * What all three passes missed is that none of those call sites is the attack
+ * surface. Every one of them invokes the `app.*` function directly -- verified
+ * exhaustively, 266 of 266 and 304 of 304 policy expressions are `app.`-prefixed,
+ * zero bare references -- and `app` is not exposed to PostgREST. The oracle is
+ * reachable from a browser only through the thin `public.*` wrapper. Guarding the
+ * wrapper closes it and touches nothing else.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count): rbac-enforcement.sql
+ * gained a four-property proof -- each wrapper refuses a forged actor; own-identity
+ * calls still answer; anonymous pre-login locale resolution still works; and, the
+ * one that matters most, the `app.*` layer must STILL answer about a third party.
+ * That last assertion fails if anyone ever "tidies up" by pushing the assert down
+ * into `app.*`, which would silently convert row-level denials into aborted queries
+ * across the product. Guard-the-guards run rather than argued: with the migration
+ * held aside the suite fails on the first property.
+ *
+ * Re-verified via a fresh full local db-test suite run (391 migrations, 236 runner
+ * files, ALL PASSED), plus typecheck and lint, before these digests were changed.
+ * 20260831010000 IS applied to the live hosted project; re-verified there that all
+ * six wrappers carry the guard, the app.* layer carries none, and grants are
+ * byte-identical to before.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2118,7 +2172,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // the live advisor sweep (390 files: +1,
   // 20260830200000_correct_public_wrapper_grant_parity.sql). See the
   // class-level doc comment above.
-  migrationSetSha256: "fe1ca6c9607ec26a16acb2141d0ba4b4e1447c469a372fa35ee453684c173218",
+  // History: fe1ca6c9607ec26a16acb2141d0ba4b4e1447c469a372fa35ee453684c173218
+  // (390 files, fortieth-pass amendment above). Superseded 2026-08-31 (forty-first
+  // pass) by ISS-2026-186/ISS-2026-179/HDN-BLK-014 (391 files: +1,
+  // 20260831010000_close_rbac_oracle_on_public_wrappers.sql). See the class-level doc
+  // comment above.
+  migrationSetSha256: "b5386269e2d4c9e802f0e013ad24d2a6f3dcd926515cad5653f7db8eaab63660",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2342,7 +2401,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // background-job.sql widened with the request-tuple proof, and
   // data-retention-archival.sql's global job count scoped to its own tenant).
   // See the class-level doc comment above.
-  dbTestSetSha256: "32857b68d97f5ccef86af1a1645699260cbd3218f7281178deeff6f33fdd2306",
+  // History: 32857b68d97f5ccef86af1a1645699260cbd3218f7281178deeff6f33fdd2306
+  // (236 files, fortieth-pass state). Superseded 2026-08-31 (forty-first pass) by
+  // ISS-2026-186 (236 files unchanged in count -- rbac-enforcement.sql widened with the
+  // four-property wrapper-oracle proof). See the class-level doc comment above.
+  dbTestSetSha256: "d8b60f1c4516d63b1cd3d5e972b8b72b86e5703d0f10bcf10ea457af20a57ff4",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

@@ -48,10 +48,37 @@ describe("checkWorktreeCollision — against this repository's real state", () =
       t.skip(`current branch "${branch}" is not an agent/*/claude/* candidate branch -- checkWorktreeCollision() never considers it, so it cannot be "diverged"`);
       return;
     }
+    // 2026-08-31: this test used to assert flatly that the session branch IS diverged. That
+    // encoded a workflow assumption -- "a claude/* branch is always ahead of origin/main" --
+    // which held only while session work was never merged until the very end. Once the owner
+    // authorised merging this branch to `main`, the branch became legitimately level with
+    // origin/main, and the test failed on a repository that was in a perfectly healthy state.
+    //
+    // The real property under test is checkWorktreeCollision()'s divergence LOGIC, so the
+    // expectation is now derived from git itself rather than assumed. This is a stricter guard
+    // than before: it checks agreement in BOTH directions, so a bug that under-reports OR
+    // over-reports divergence fails, where the old assertion could only catch under-reporting.
+    const actualAhead = Number(
+      execFileSync("git", ["rev-list", "--count", `origin/main..${branch}`], { encoding: "utf8" }).trim(),
+    );
     const result = checkWorktreeCollision();
     const current = result.divergedBranches.find((b) => b.branch === branch);
-    assert.ok(current, `expected ${branch} to have commits ahead of origin/main`);
-    assert.ok(current!.commitsAheadOfMain > 0);
+
+    if (actualAhead === 0) {
+      assert.equal(
+        current,
+        undefined,
+        `${branch} is fully contained in origin/main (merged), so it must NOT be reported as diverged`,
+      );
+      return;
+    }
+
+    assert.ok(current, `git says ${branch} is ${actualAhead} commit(s) ahead of origin/main, but it was not reported as diverged`);
+    assert.equal(
+      current!.commitsAheadOfMain,
+      actualAhead,
+      `divergence count disagrees with git for ${branch}`,
+    );
   });
 
   test("no genuine collision is currently present (regression guard for the origin/main-vs-stale-local-main bug)", () => {

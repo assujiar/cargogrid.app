@@ -1448,4 +1448,133 @@ begin
 end;
 $$;
 
+
+\echo '>> ISS-2026-186 closure: the six remaining RBAC boolean-oracle primitives are closed AT THE public.* WRAPPER, which is the only layer PostgREST can reach -- and the app.* functions they delegate to are deliberately left unguarded, because they are RLS predicates in ~918 policies and are called with genuinely third-party actor arguments inside other definer functions.'
+do $$
+declare
+  v_self uuid := '00000000-0000-0000-0000-000000000401';
+  v_victim uuid := '00000000-0000-0000-0000-000000000402';
+  v_fake_tenant uuid := gen_random_uuid();
+  v_raised boolean;
+  v_ok boolean;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text, 'role', 'authenticated')::text, true);
+
+  -- PROPERTY 1 -- the oracle is closed. Each public.* wrapper must refuse to answer a
+  -- question about an identity that is not the calling session's own.
+  v_raised := false;
+  begin
+    perform public.is_supreme_admin(v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: public.is_supreme_admin answered about another identity -- ISS-2026-186 has regressed and the platform authority graph is a boolean oracle again';
+  end if;
+
+  v_raised := false;
+  begin
+    perform public.has_active_tenant_membership(v_fake_tenant, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: public.has_active_tenant_membership answered about another identity -- ISS-2026-186 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform public.actor_holds_customer_user_layer(v_fake_tenant, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: public.actor_holds_customer_user_layer answered about another identity -- ISS-2026-186 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform public.has_active_support_grant(v_fake_tenant, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: public.has_active_support_grant answered about another identity -- ISS-2026-186 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform public.can_access_record(v_victim, v_fake_tenant, v_victim, '{}'::uuid[], null);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: public.can_access_record answered for a forged actor -- ISS-2026-186 has regressed';
+  end if;
+
+  v_raised := false;
+  begin
+    perform public.resolve_locale_context(v_fake_tenant, v_victim);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'actor_identity_mismatch' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: public.resolve_locale_context answered about another identity -- ISS-2026-186 has regressed';
+  end if;
+
+  -- PROPERTY 2 -- the guard is not a blanket denial. Asking about YOURSELF still works, or
+  -- the "fix" would simply have broken the customer-portal guard and the API request pipeline,
+  -- both of which pass the session's own id.
+  v_ok := public.is_supreme_admin(v_self);
+  if v_ok is null then
+    raise exception 'assertion failed: public.is_supreme_admin returned null for an own-identity call -- the guard is denying the legitimate self case';
+  end if;
+  v_ok := public.has_active_tenant_membership(v_fake_tenant, v_self);
+  if v_ok is null then
+    raise exception 'assertion failed: public.has_active_tenant_membership returned null for an own-identity call';
+  end if;
+
+  -- PROPERTY 3 -- GUARD THE GUARD, and the single most important assertion in this block.
+  -- The app.* functions must STILL answer about a third party, because that is exactly what
+  -- ~918 RLS policies and every internal third-party-actor call site depend on. If a future
+  -- change "tidies up" by pushing the assert down into app.*, this fails -- which is the whole
+  -- point: it would silently convert row-level denials into aborted queries across the product.
+  v_ok := app.is_supreme_admin(v_victim);
+  if v_ok is null then
+    raise exception 'assertion failed: app.is_supreme_admin no longer answers about a third party -- the assert was pushed down into the app.* layer, which breaks 304 RLS policies and every internal third-party call site';
+  end if;
+  v_ok := app.has_active_tenant_membership(v_fake_tenant, v_victim);
+  if v_ok is null then
+    raise exception 'assertion failed: app.has_active_tenant_membership no longer answers about a third party -- this backs 266 RLS policies and app.evaluate_permission''s own not_active_tenant_member denial, which would become a query error';
+  end if;
+  v_ok := app.actor_holds_customer_user_layer(v_fake_tenant, v_victim);
+  if v_ok is null then
+    raise exception 'assertion failed: app.actor_holds_customer_user_layer no longer answers about a third party -- 276 RLS policies depend on it';
+  end if;
+
+  perform set_config('request.jwt.claims', '', true);
+
+  -- PROPERTY 4 -- anonymous, pre-login locale resolution must still work. resolve_locale_context
+  -- is the one wrapper of the six granted to anon, because a tenant's login page has to render
+  -- in the right language before any session exists. With no session, auth.uid() is null and the
+  -- assert is a no-op by construction -- asserted here rather than reasoned about.
+  perform public.resolve_locale_context(v_fake_tenant);
+  perform public.resolve_locale_context(v_fake_tenant, null);
+
+  raise notice 'ISS-2026-186 closure: all six public.* wrappers refuse a forged actor; own-identity calls still answer; the app.* layer still answers about third parties (RLS and internal callers intact); anonymous pre-login locale resolution still works';
+end;
+$$;
+
 \echo 'ALL PLT-112 db-test assertions passed.'
