@@ -2450,6 +2450,49 @@ import { readFileSync } from "node:fs";
  * ALL PASSED). 20260831110000 IS applied live and verified: v1 -> ok, unknown -> gone, zero
  * anon or authenticated EXECUTE on either schema.
  *
+ * AMENDED 2026-08-31 (fifty-second pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. ISS-2026-091 and ISS-2026-142 together.
+ * 20260831120000_create_data_retention_and_legal_hold_registry.sql, plus a new runner file
+ * (data-retention-legal-hold.sql, 237 -> 238).
+ *
+ * Both entries say RPD-025 retention/legal-hold classification is unbuilt, and both propose
+ * retention_class/legal_hold columns on every affected table. That was MEASURED and rejected:
+ * the live schema carries 615 tables in app. A column-per-table fix would leave ~500 silently
+ * ungoverned, make adding a table to governance a migration rather than a policy decision, and
+ * -- decisively -- be structurally unable to express the most common real hold, since a per-row
+ * boolean can only speak about a row that already exists while a hold usually arrives as
+ * "preserve everything about this customer" before anybody knows which rows that means.
+ *
+ * So classification is a registry keyed by table, and a hold is a RECORD WITH A SCOPE whose
+ * nulls widen it: a record, a table, a tenant, the platform. app.is_record_under_legal_hold is
+ * the predicate any future purge must consult, and it answers correctly for a record that did
+ * not exist when the hold was placed.
+ *
+ * review_status is the load-bearing field and exists because of ISS-2026-091's own warning
+ * against a copy-paste default. No migration can answer that warning -- the mapping is a legal
+ * judgement about a particular business in a particular jurisdiction -- so all 112 seeded rows
+ * are provisional, and a table CHECK constraint makes a confirmed row impossible without a named
+ * reviewer, so not even a service_role UPDATE can manufacture the assurance. Changing a class
+ * resets the review.
+ *
+ * It deliberately deletes nothing. A generic sweeper deleting across 615 tables driven by a
+ * config table would be the most dangerous thing in this repository. Classification, holds, the
+ * predicate and a coverage report ship; destruction stays a human-reviewed act per table.
+ *
+ * The coverage report keeps provisional and confirmed apart rather than reporting one
+ * "classified" number, because collapsing them would let a wall of unreviewed defaults read as
+ * compliance -- the precise failure both entries warn about.
+ *
+ * Wrapper parity caught two functions with no public.* wrapper, resolved differently on purpose:
+ * the unclassified-table lister is an internal helper of the coverage report and was renamed
+ * app._list_unclassified_tables (the underscore exempts it, correctly -- it should not become a
+ * REST endpoint), while the hold predicate is a real API any purge must call and got a
+ * service_role-only wrapper instead.
+ *
+ * Re-verified via a fresh full local db-test run (401 migrations, 238 runner files,
+ * ALL PASSED). 20260831120000 IS applied live and verified: 112 tables classified (23
+ * HR/payroll-family, 12 Loyalty-ledger) of 618, 0 confirmed, 0 anon EXECUTE.
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2715,7 +2758,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (399 files, fiftieth-pass amendment above). Superseded 2026-08-31 (fifty-first pass) by
   // ISS-2026-207 (400 files: +1,
   // 20260831110000_give_api_version_registry_live_effect.sql).
-  migrationSetSha256: "84203764b0d28bd824209e2b5725963ad8f81e56a0f9a03e6dddb4afd3976ffd",
+  // History: 84203764b0d28bd824209e2b5725963ad8f81e56a0f9a03e6dddb4afd3976ffd
+  // (400 files, fifty-first-pass amendment above). Superseded 2026-08-31 (fifty-second pass) by
+  // ISS-2026-091 + ISS-2026-142 (401 files: +1,
+  // 20260831120000_create_data_retention_and_legal_hold_registry.sql).
+  migrationSetSha256: "e9c37fd7c4bf21bccd704d62a51bd7b1e0d2e74f414f49333c476e6144247f46",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2984,7 +3031,10 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (237 files, fiftieth-pass state). Superseded 2026-08-31 (fifty-first pass) by ISS-2026-207
   // (237 files unchanged in count -- public-api-platform.sql gained the five-state registry
   // decision proof and a service_role-only grant pin).
-  dbTestSetSha256: "9e26bcb23ea399ec040ce3e0487be2c625ddcab134bc3df5e1415f336a94c7e0",
+  // History: 9e26bcb23ea399ec040ce3e0487be2c625ddcab134bc3df5e1415f336a94c7e0
+  // (237 files, fifty-first-pass state). Superseded 2026-08-31 (fifty-second pass) by
+  // ISS-2026-091 + ISS-2026-142 (238 files: +1, data-retention-legal-hold.sql).
+  dbTestSetSha256: "c16d4c44787b61fcaab715381fbfb855a78bccacffd34dc40c137db968ac06eb",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
