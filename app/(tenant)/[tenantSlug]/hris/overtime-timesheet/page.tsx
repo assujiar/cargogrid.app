@@ -26,7 +26,9 @@ import {
   updateTimesheetEntryDraftAction,
   reconcileOvertimeRequestActualAction,
   generatePayrollTimeInputAction,
+  exportTimesheetEntriesAction,
 } from "./actions.ts";
+import { HrisExportForm } from "../../../../../components/domain/hris-export-form.tsx";
 
 /**
  * HR/manager overtime and timesheet review workspace (HRT-281,
@@ -79,32 +81,39 @@ export default async function OvertimeTimesheetAdminPage({ params }: { params: P
   }
 
   return (
-    <OvertimeTimesheetAdminPanel
-      overtimeRequests={overtimeRequests}
-      timesheetEntries={timesheetEntries}
-      draftEntries={draftEntries}
-      reconcilableRequests={reconcilableRequests}
-      employees={employees}
-      periods={periods}
-      summaries={summaries}
-      decideOvertimeRequestAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") =>
-        decideOvertimeRequestAction.bind(null, tenantSlug, requestId, expectedVersion, decision)
-      }
-      decideTimesheetEntryAction={(entryId: string, expectedVersion: number, decision: "approve" | "reject") =>
-        decideTimesheetEntryAction.bind(null, tenantSlug, entryId, expectedVersion, decision)
-      }
-      createOvertimeRequestForEmployeeAction={createOvertimeRequestForEmployeeAction.bind(null, tenantSlug)}
-      createTimesheetEntryForEmployeeAction={createTimesheetEntryForEmployeeAction.bind(null, tenantSlug)}
-      updateTimesheetEntryDraftAction={(entryId: string, expectedVersion: number) => updateTimesheetEntryDraftAction.bind(null, tenantSlug, entryId, expectedVersion)}
-      reconcileOvertimeRequestActualAction={(requestId: string) => reconcileOvertimeRequestActualAction.bind(null, tenantSlug, requestId)}
-      generatePayrollTimeInputAction={(periodId: string) => generatePayrollTimeInputAction.bind(null, tenantSlug, periodId)}
-      createTimesheetPeriodAction={createTimesheetPeriodAction.bind(null, tenantSlug)}
-      lockTimesheetPeriodAction={(periodId: string, expectedVersion: number) => lockTimesheetPeriodAction.bind(null, tenantSlug, periodId, expectedVersion)}
-      reopenTimesheetPeriodAction={(periodId: string, expectedVersion: number) => reopenTimesheetPeriodAction.bind(null, tenantSlug, periodId, expectedVersion)}
-      approveTimesheetPeriodSummaryAction={(summaryId: string, expectedVersion: number) => approveTimesheetPeriodSummaryAction.bind(null, tenantSlug, summaryId, expectedVersion)}
-      rejectTimesheetPeriodSummaryAction={(summaryId: string, expectedVersion: number) => rejectTimesheetPeriodSummaryAction.bind(null, tenantSlug, summaryId, expectedVersion)}
-      reopenTimesheetPeriodSummaryAction={(summaryId: string, expectedVersion: number) => reopenTimesheetPeriodSummaryAction.bind(null, tenantSlug, summaryId, expectedVersion)}
-      generatePayrollTimeInputsForPeriodAction={(periodId: string) => generatePayrollTimeInputsForPeriodAction.bind(null, tenantSlug, periodId)}
-    />
+    <div className="flex flex-col gap-4">
+      <OvertimeTimesheetAdminPanel
+        overtimeRequests={overtimeRequests}
+        timesheetEntries={timesheetEntries}
+        draftEntries={draftEntries}
+        reconcilableRequests={reconcilableRequests}
+        employees={employees}
+        periods={periods}
+        summaries={summaries}
+        decideOvertimeRequestAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") =>
+          decideOvertimeRequestAction.bind(null, tenantSlug, requestId, expectedVersion, decision)
+        }
+        decideTimesheetEntryAction={(entryId: string, expectedVersion: number, decision: "approve" | "reject") =>
+          decideTimesheetEntryAction.bind(null, tenantSlug, entryId, expectedVersion, decision)
+        }
+        createOvertimeRequestForEmployeeAction={createOvertimeRequestForEmployeeAction.bind(null, tenantSlug)}
+        createTimesheetEntryForEmployeeAction={createTimesheetEntryForEmployeeAction.bind(null, tenantSlug)}
+        updateTimesheetEntryDraftAction={(entryId: string, expectedVersion: number) => updateTimesheetEntryDraftAction.bind(null, tenantSlug, entryId, expectedVersion)}
+        reconcileOvertimeRequestActualAction={(requestId: string) => reconcileOvertimeRequestActualAction.bind(null, tenantSlug, requestId)}
+        generatePayrollTimeInputAction={(periodId: string) => generatePayrollTimeInputAction.bind(null, tenantSlug, periodId)}
+        createTimesheetPeriodAction={createTimesheetPeriodAction.bind(null, tenantSlug)}
+        lockTimesheetPeriodAction={(periodId: string, expectedVersion: number) => lockTimesheetPeriodAction.bind(null, tenantSlug, periodId, expectedVersion)}
+        reopenTimesheetPeriodAction={(periodId: string, expectedVersion: number) => reopenTimesheetPeriodAction.bind(null, tenantSlug, periodId, expectedVersion)}
+        approveTimesheetPeriodSummaryAction={(summaryId: string, expectedVersion: number) => approveTimesheetPeriodSummaryAction.bind(null, tenantSlug, summaryId, expectedVersion)}
+        rejectTimesheetPeriodSummaryAction={(summaryId: string, expectedVersion: number) => rejectTimesheetPeriodSummaryAction.bind(null, tenantSlug, summaryId, expectedVersion)}
+        reopenTimesheetPeriodSummaryAction={(summaryId: string, expectedVersion: number) => reopenTimesheetPeriodSummaryAction.bind(null, tenantSlug, summaryId, expectedVersion)}
+        generatePayrollTimeInputsForPeriodAction={(periodId: string) => generatePayrollTimeInputsForPeriodAction.bind(null, tenantSlug, periodId)}
+      />
+      <HrisExportForm
+        label="Export timesheet entries"
+        description="Timesheet entries in a date range, as a CSV: employee, work date, job and shipment, entry/eligible/approved minutes and status. Requires the HR export permission."
+        action={exportTimesheetEntriesAction.bind(null, tenantSlug)}
+      />
+    </div>
   );
 }

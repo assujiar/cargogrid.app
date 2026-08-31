@@ -10,6 +10,10 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-hris-access.server.ts";
+import type { HrisExportActionState } from "../../../../../components/domain/hris-export-form.tsx";
+import { buildHrisExport } from "../../../../../lib/hris/hris-export-action.ts";
+import { exportAttendanceSessions } from "../../../../../server/queries/hris-export.ts";
+import { ATTENDANCE_SESSION_EXPORT_HEADER, attendanceSessionExportCells } from "../../../../../server/contracts/hris-export/hris-export.ts";
 import {
   recordManualAttendanceEvent,
   decideAttendanceCorrection,
@@ -162,4 +166,37 @@ export async function recalculateExceptionsAction(tenantSlug: string, _prevState
 
   revalidatePath(path(tenantSlug));
   return OK;
+}
+
+// ---------------------------------------------------------------------------
+// Bulk export (ISS-2026-075). `app.export_attendance_sessions` has been real, `HRS:Export`-gated
+// and SQL-tested since HRT-278; until now nothing in the application called it.
+// The entry's own disposition asked for all four HRIS exports to be wired in one
+// pass rather than piecemeal, which is what this and its three siblings do.
+//
+// The authority check lives in `server/queries/hris-export.ts`, not here: the RPC
+// answers an unauthorised caller with an empty result rather than an error, which
+// through a UI reads as "there was nothing to export". This action never sees that
+// ambiguity -- it gets a thrown `insufficient_authority` instead.
+// ---------------------------------------------------------------------------
+
+export async function exportAttendanceSessionsAction(
+  tenantSlug: string,
+  _prevState: HrisExportActionState,
+  formData: FormData,
+): Promise<HrisExportActionState> {
+  const access = await resolveHrisAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's HRIS workspace.", csv: null, filename: null, rowCount: 0, token: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  return buildHrisExport({
+    fromDate: String(formData.get("fromDate") ?? ""),
+    toDate: String(formData.get("toDate") ?? ""),
+    filenameStem: "attendance-sessions",
+    header: ATTENDANCE_SESSION_EXPORT_HEADER,
+    fetchRows: (range) => exportAttendanceSessions(supabase, access.tenant.id, access.authUserId, range),
+    toCells: attendanceSessionExportCells,
+  });
 }

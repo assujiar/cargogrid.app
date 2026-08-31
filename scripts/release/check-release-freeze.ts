@@ -3238,7 +3238,25 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ordered AFTER the existing revocation block on purpose, which lets it prove the inbound list
   // reads live eligibility rather than a snapshot -- the revoked-warehouse order must already be
   // gone by the time it counts.).
-  dbTestSetSha256: "b7980d9c7091d563b2acd20aed5312d0f476c3484dcdef3f122e95bc192bd7be",
+  // History: b7980d9c7091d563b2acd20aed5312d0f476c3484dcdef3f122e95bc192bd7be
+  // (238 files, sixty-fifth-pass state). Superseded 2026-08-31 (sixty-sixth pass) by
+  // ISS-2026-075 (239 files: +1, hris-export-projection.sql -- the migration set is
+  // UNCHANGED, because this pass adds no migration: all four export RPCs have been live
+  // and SQL-tested since HRT-278..281; what was missing was any TypeScript caller).
+  // Ruling: ADR-0027 Part A.
+  //
+  // The new file deliberately asserts SHAPES rather than rows. Re-running the four
+  // capabilities' own row-level assertions would prove nothing new; what just started
+  // existing is a TypeScript parser reading specific column names and types out of these
+  // projections, and that join is exactly where ISS-2026-315 was found -- both halves
+  // internally consistent, only the contract between them wrong, invisible to either
+  // half's own tests. It pins app.* and public.* alike, since PostgREST is what the
+  // application actually calls (the ISS-2026-124 lesson), freezes the one real
+  // inconsistency in the set (export_leave_requests says employee_code/employee_name
+  // where its three siblings say employee_number/employee_full_name, absorbed in one
+  // place in TypeScript), pins the audit capture, and pins the leave export's
+  // reason/destination/evidence minimisation against a future column addition.
+  dbTestSetSha256: "2be50cd62631c33667f8f9ea463f201d90eece88cb6c4fd568eddf9890c7a4d1",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

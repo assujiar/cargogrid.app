@@ -4,7 +4,8 @@ import { createSupabaseServerClient } from "../../../../../lib/supabase/server.t
 import { listLeaveRequests, listLeaveApprovalInboxForActor, LeaveQueryError } from "../../../../../server/queries/leave.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { LeaveAdminPanel } from "./leave-admin-panel.tsx";
-import { decideLeaveRequestAction, adjustLeaveBalanceAction, syncLeaveLifecycleAction, cancelConflictingScheduleAction } from "./actions.ts";
+import { decideLeaveRequestAction, adjustLeaveBalanceAction, syncLeaveLifecycleAction, cancelConflictingScheduleAction, exportLeaveRequestsAction } from "./actions.ts";
+import { HrisExportForm } from "../../../../../components/domain/hris-export-form.tsx";
 
 /**
  * HR/manager leave/permit/business-trip review workspace (HRT-280,
@@ -38,13 +39,20 @@ export default async function LeaveAdminPage({ params }: { params: Promise<{ ten
   }
 
   return (
-    <LeaveAdminPanel
-      requests={requests}
-      inbox={inbox}
-      decideLeaveRequestAction={(requestStepId: string, decision: "approved" | "rejected") => decideLeaveRequestAction.bind(null, tenantSlug, requestStepId, decision)}
-      adjustLeaveBalanceAction={adjustLeaveBalanceAction.bind(null, tenantSlug)}
-      syncLeaveLifecycleAction={syncLeaveLifecycleAction.bind(null, tenantSlug)}
-      cancelConflictingScheduleAction={cancelConflictingScheduleAction.bind(null, tenantSlug)}
-    />
+    <div className="flex flex-col gap-4">
+      <LeaveAdminPanel
+        requests={requests}
+        inbox={inbox}
+        decideLeaveRequestAction={(requestStepId: string, decision: "approved" | "rejected") => decideLeaveRequestAction.bind(null, tenantSlug, requestStepId, decision)}
+        adjustLeaveBalanceAction={adjustLeaveBalanceAction.bind(null, tenantSlug)}
+        syncLeaveLifecycleAction={syncLeaveLifecycleAction.bind(null, tenantSlug)}
+        cancelConflictingScheduleAction={cancelConflictingScheduleAction.bind(null, tenantSlug)}
+      />
+      <HrisExportForm
+        label="Export leave requests"
+        description="Leave, permit and business-trip requests overlapping a date range, as a CSV. Reason, destination and evidence are deliberately never included, whatever your own permissions. Requires the HR export permission."
+        action={exportLeaveRequestsAction.bind(null, tenantSlug)}
+      />
+    </div>
   );
 }

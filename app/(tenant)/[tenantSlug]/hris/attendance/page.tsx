@@ -4,7 +4,8 @@ import { createSupabaseServerClient } from "../../../../../lib/supabase/server.t
 import { listAttendanceSessions, listAttendanceExceptions, listAttendanceCorrectionRequests, AttendanceQueryError } from "../../../../../server/queries/attendance.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { AttendanceAdminPanel } from "./attendance-admin-panel.tsx";
-import { recordManualEntryAction, decideCorrectionAction, acknowledgeExceptionAction, waiveExceptionAction, approvePayrollInputAction, recalculateExceptionsAction } from "./actions.ts";
+import { recordManualEntryAction, decideCorrectionAction, acknowledgeExceptionAction, waiveExceptionAction, approvePayrollInputAction, recalculateExceptionsAction, exportAttendanceSessionsAction } from "./actions.ts";
+import { HrisExportForm } from "../../../../../components/domain/hris-export-form.tsx";
 
 /**
  * HR/manager attendance review workspace (HRT-278, section 15's "exception
@@ -41,16 +42,23 @@ export default async function AttendanceAdminPage({ params }: { params: Promise<
   }
 
   return (
-    <AttendanceAdminPanel
-      sessions={sessions}
-      exceptions={exceptions}
-      corrections={corrections}
-      recordManualEntryAction={recordManualEntryAction.bind(null, tenantSlug)}
-      decideCorrectionAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") => decideCorrectionAction.bind(null, tenantSlug, requestId, expectedVersion, decision)}
-      acknowledgeExceptionAction={(exceptionId: string, expectedVersion: number) => acknowledgeExceptionAction.bind(null, tenantSlug, exceptionId, expectedVersion)}
-      waiveExceptionAction={(exceptionId: string, expectedVersion: number) => waiveExceptionAction.bind(null, tenantSlug, exceptionId, expectedVersion)}
-      approvePayrollInputAction={approvePayrollInputAction.bind(null, tenantSlug)}
-      recalculateExceptionsAction={recalculateExceptionsAction.bind(null, tenantSlug)}
-    />
+    <div className="flex flex-col gap-4">
+      <AttendanceAdminPanel
+        sessions={sessions}
+        exceptions={exceptions}
+        corrections={corrections}
+        recordManualEntryAction={recordManualEntryAction.bind(null, tenantSlug)}
+        decideCorrectionAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") => decideCorrectionAction.bind(null, tenantSlug, requestId, expectedVersion, decision)}
+        acknowledgeExceptionAction={(exceptionId: string, expectedVersion: number) => acknowledgeExceptionAction.bind(null, tenantSlug, exceptionId, expectedVersion)}
+        waiveExceptionAction={(exceptionId: string, expectedVersion: number) => waiveExceptionAction.bind(null, tenantSlug, exceptionId, expectedVersion)}
+        approvePayrollInputAction={approvePayrollInputAction.bind(null, tenantSlug)}
+        recalculateExceptionsAction={recalculateExceptionsAction.bind(null, tenantSlug)}
+      />
+      <HrisExportForm
+        label="Export attendance sessions"
+        description="Attendance sessions in a date range, as a CSV: employee, work date, status, effective clock in/out, payroll input status and exceptions. Requires the HR export permission."
+        action={exportAttendanceSessionsAction.bind(null, tenantSlug)}
+      />
+    </div>
   );
 }

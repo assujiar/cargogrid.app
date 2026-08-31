@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 57 — 4 High, 24 Medium, 29 Low |
+| `OPEN` | 56 — 4 High, 24 Medium, 28 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 206 |
+| `RESOLVED` | 207 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -117,7 +117,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-066` | Low | `OPEN` | Organization and Position Linkage (HRT-275): no bulk/multi-employee reorganization wizard, no live scheduler for future-dated assignment activation, n |
 | `ISS-2026-067` | Low | `OPEN` | Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalo |
 | `ISS-2026-070` | Low | `OPEN` | Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/tra |
-| `ISS-2026-075` | Low | `OPEN` | Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern |
+| `ISS-2026-075` | Low | `RESOLVED` | Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern |
 | `ISS-2026-083` | Low | `RESOLVED` | Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `trai |
 | `ISS-2026-084` | Low | `OPEN` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
 | `ISS-2026-087` | Low | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
@@ -912,13 +912,78 @@ Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-H
 
 **Resolution (HRT-282, `2026-08-13`): option (a), implemented and live-proven, not merely documented.** `app._resolve_payroll_time_inputs_for_period` (`supabase/migrations/20260731000000_create_hris_payroll_foundation.sql`) reads BOTH sources for one (tenant, employee, payroll period date range) with an explicit, per-work-date precedence: (1) every `app.payroll_time_inputs` row with `status='active'` whose own `app.timesheet_periods` window falls inside the payroll period contributes its own `regular_minutes`/`overtime_*_minutes` as-is, and its `source_entry_ids` (joined back to `app.timesheet_entries`) mark exactly which work_dates are already covered; (2) for every OTHER work_date in the payroll period's range NOT covered by step 1, an `app.attendance_sessions` row for that SAME work_date with `payroll_input_status='approved'` contributes its own session length to REGULAR minutes ONLY, never overtime (overtime classification structurally requires HRT-281's own governed overtime-request approval). A work_date therefore contributes through exactly one source, never both — structurally, not merely by convention, since step 2's own query excludes every work_date step 1 already covered. **Live-proven** in `scripts/db-tests/hris-payroll.sql`: an employee with ZERO `app.timesheet_entries` rows, only a real, HR-approved `app.attendance_sessions` clock-in/out (8 hours), correctly produced `regular_minutes=480` in the frozen input snapshot, which then correctly fed an `hourly_rate` payroll component's gross-pay calculation end to end. Status `RESOLVED` — see `docs/build-log/phase-07/HRT-282.md` for the full decision record (this migration's own header carries the identical proof, decision 2).
 
-### ISS-2026-075 — Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern already present in every sibling HRIS capability, not a unique HRT-281 regression (OPEN, Low)
+### ISS-2026-075 — Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern already present in every sibling HRIS capability, not a unique HRT-281 regression (RESOLVED 2026-08-31, Low)
 
 Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-HRT-009` (Prompt 281). The spec-compliance lens's own citation characterized this as a HIGH, undisclosed, HRT-281-specific gap ("built, granted to authenticated, live-tested at the SQL layer, zero TypeScript wrapper, zero caller anywhere"); independent re-verification confirms the underlying fact (grep-confirmed: `app.export_timesheet_entries`, granted to `authenticated, service_role`, has no wrapper in `server/queries/overtime-timesheet.ts`, the only one of 14 read RPCs left unwrapped) but corrects the severity/scope: `app.export_attendance_sessions` (HRT-278), `app.export_schedule_assignments` (HRT-279), and `app.export_leave_requests` (HRT-280) — all three already `COMPLETED`/`VERIFIED` sibling capabilities' own equally `authenticated`-granted export RPCs — have IDENTICALLY zero TS wrapper anywhere in `server/` (grep-confirmed against the whole `server/` tree). This is a consistent, repository-wide pattern across every HRIS capability built so far, not something HRT-281 introduced or shipped worse than precedent. The lens's companion finding that `app.validate_timesheet_import_row`/`app.commit_timesheet_import_job` also have no TS wrapper is likewise not anomalous: `app.validate_timesheet_import_row` is granted `service_role` ONLY (never `authenticated`), matching HRT-278's own identical `app.validate_attendance_device_import_row` grant exactly — by design, not oversight, staged-import row validation runs as a service-role/job-runner step in this repository's established architecture. `app.commit_attendance_device_import_job` (HRT-278, `authenticated`-granted) is ALSO unwrapped in `server/`, confirming the "real, tested, SQL-layer-only staged-import commit, no TS/UI wiring yet" shape spans the whole HRIS domain, not just this checkpoint.
 
 **Handling:** Not fixed in this batch's review-round fix pass — building a TS wrapper for `export_timesheet_entries` alone (while its three sibling capabilities' identical gaps remain unfixed) would create a new, arbitrary inconsistency across this phase rather than resolve one; fixing all four export RPCs' TS-wrapper gap, plus the whole domain's "no staged-import commit UI anywhere in HRIS" gap, is a cross-capability sweep outside this single-prompt batch's allowed-files scope. **Status `OPEN`**, Low severity (no security exposure — every one of these RPCs enforces its own `HRS:Export`/`HRS:Import`-equivalent authority server-side regardless of caller; this is a missing UI/service-layer convenience feature, not a control gap) — owner: a dedicated near-term Phase 7 follow-up prompt scoped to "wire bulk export and staged-import commit into the TS/UI layer across Attendance, Shift-Roster, Leave, and Overtime-Timesheet uniformly," so the fix lands once, consistently, rather than piecemeal per capability.
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 8).** Grep-confirmed zero references to `export_timesheet_entries`/`export_attendance_sessions`/`export_schedule_assignments`/`export_leave_requests` anywhere under `server/` — all 4 sibling export RPCs remain unwrapped, no drift since filing. Unlike `ISS-2026-080`/`101` (a single RPC, real wrapper, missing only a UI caller — genuinely bounded), wiring this one RPC alone would create a new, arbitrary inconsistency rather than resolve the cross-capability pattern this entry's own prior disposition already correctly identified. **Not fixed by this batch** — same reasoning as the original disposition. Owner and scope unchanged.
+
+**`RESOLVED`, 2026-08-31 — all four wired in one pass, which is what this entry asked for
+rather than what it was filed about.**
+
+This entry is unusual in the backlog: it corrected its own severity on the way in. A review lens
+called the timesheet export a HIGH, HRT-281-specific gap; the re-verification found the other
+three sibling exports identically unwrapped and rewrote the finding as a repository-wide pattern.
+Everything that followed — twice declining to fix it, in the original disposition and again at
+Track B Batch 8 — followed from that correction, and correctly: *"wiring this one RPC alone would
+create a new, arbitrary inconsistency rather than resolve the cross-capability pattern."* The
+condition for closing it was never a smaller fix; it was a wider one. That is what this is.
+
+**What now exists.** `server/queries/hris-export.ts` wraps all four — `export_attendance_sessions`
+(HRT-278), `export_schedule_assignments` (HRT-279), `export_leave_requests` (HRT-280) and
+`export_timesheet_entries` (HRT-281) — over one shared contract module,
+`server/contracts/hris-export/hris-export.ts`. One module rather than four, because the four RPCs
+take the same four parameters, enforce the same `HRS:Export` gate, cap at the same 366 days and
+write the same audit event; four copies of that would be four places for it to drift. Each keeps
+its own row schema, because the columns genuinely differ.
+
+`components/domain/hris-export-form.tsx` is the shared date-range form, rendered on all four HRIS
+admin pages (`hris/attendance`, `hris/roster`, `hris/leave`, `hris/overtime-timesheet`), with one
+Server Action each over shared plumbing in `lib/hris/hris-export-action.ts`. The CSV is assembled
+server-side by `rowsToSafeCsv` (`server/policies/csv-export-sanitize.ts`) — the OWASP
+formula-injection guard this repository already owned but, by its own header's admission, had no
+live pipeline calling end to end. It does now.
+
+**The one thing the wrappers do that the RPCs do not, and why it is not a gate change.** Every one
+of the four answers a caller lacking `HRS:Export` with a bare `return;` — an empty result, not an
+error. At the SQL layer that is a defensible deny-by-default. Through a UI it is actively
+misleading: the button appears to work, a file downloads, it is empty, and the reader concludes
+there was nothing to export rather than that they were not allowed to. `assertHrisExportAuthority`
+evaluates `HRS:Export` explicitly and first, and throws, so the two cases can be told apart in
+what the person actually reads. The RPC's own gate is untouched and remains the real boundary —
+this check can only refuse earlier, never permit anything the RPC would refuse. An empty export
+now means exactly one thing, and the form says so instead of handing over an empty spreadsheet.
+
+**Evidence.** `scripts/db-tests/hris-export-projection.sql` (new) pins the SQL/TypeScript contract
+itself rather than re-proving rows the four capability db-tests already cover: each RPC's exact
+`pg_get_function_result` shape, for `app.*` and `public.*` alike, since PostgREST is what the
+application really calls (the `ISS-2026-124` lesson). That join is precisely where `ISS-2026-315`
+was found — both halves internally consistent, only the contract between them wrong, invisible to
+either half's own tests. It also freezes the one real inconsistency in the set
+(`export_leave_requests` says `employee_code`/`employee_name` where its three siblings say
+`employee_number`/`employee_full_name`, absorbed in a single place in TypeScript), the `HRS:Export`
+evaluation, the 366-day cap the client mirrors, the audit capture on every export of personal HR
+data, and the leave export's deliberate omission of reason/destination/evidence against a future
+column addition quietly undoing it.
+
+23 new TypeScript tests, including the one that matters most — an unauthorised caller is refused
+*before* the export RPC runs, asserted by the recorded call list, so the silent-empty path cannot
+come back unnoticed — plus formula-injection neutralisation through the real assembly path, the
+empty-range case producing no file at all, and a filename stem that is constrained rather than
+trusted. `db:test ALL PASSED`, `pnpm typecheck`, `pnpm lint` (0 errors), 5745 unit tests and
+`npx next build` all green. **No migration in this pass, and none was needed** — all four RPCs
+have been live since HRT-278..281; live-verified all eight functions' result shapes and grants
+against the hosted project before closing. Freeze db-test digest amended (sixty-sixth pass).
+
+**What this does not close, said precisely rather than implied.** This entry's own text makes a
+second observation — that staged-import commit (`commit_*_import_job`) has no TS/UI wiring
+anywhere in HRIS either. That is untouched here and remains genuinely open, tracked where it
+already is: `ISS-2026-064`'s own disclosure that the employee staged-import path gained its
+TypeScript wrapper but still has no Server Action or UI trigger. It is a different capability
+(a write path with its own validation and review surface), not the second half of this one, and
+folding it in would have made a bounded export sweep unbounded.
 
 ### ISS-2026-076 — Overtime and Timesheet (HRT-281): five mutation wrappers (HR-on-behalf create ×2, draft edit, explicit reconcile, per-employee payroll generate) exist in the TS service layer with zero caller from any Server Action, page, or panel (RESOLVED, Medium)
 

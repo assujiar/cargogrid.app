@@ -11,7 +11,8 @@ import {
 } from "../../../../../server/queries/shift-roster.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { RosterAdminPanel } from "./roster-admin-panel.tsx";
-import { assignEmployeeScheduleAction, publishScheduleAssignmentsAction, decideSwapAction, setRosterHolidayAction, setCoverageRequirementAction } from "./actions.ts";
+import { assignEmployeeScheduleAction, publishScheduleAssignmentsAction, decideSwapAction, setRosterHolidayAction, setCoverageRequirementAction, exportScheduleAssignmentsAction } from "./actions.ts";
+import { HrisExportForm } from "../../../../../components/domain/hris-export-form.tsx";
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -60,17 +61,24 @@ export default async function RosterAdminPage({ params }: { params: Promise<{ te
   }
 
   return (
-    <RosterAdminPanel
-      assignments={assignments}
-      shiftTemplates={shiftTemplates}
-      pendingSwaps={pendingSwaps}
-      holidays={holidays}
-      coveragePreview={coveragePreview}
-      assignEmployeeScheduleAction={assignEmployeeScheduleAction.bind(null, tenantSlug)}
-      publishScheduleAssignmentsAction={publishScheduleAssignmentsAction.bind(null, tenantSlug)}
-      decideSwapAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") => decideSwapAction.bind(null, tenantSlug, requestId, expectedVersion, decision)}
-      setRosterHolidayAction={setRosterHolidayAction.bind(null, tenantSlug)}
-      setCoverageRequirementAction={setCoverageRequirementAction.bind(null, tenantSlug)}
-    />
+    <div className="flex flex-col gap-4">
+      <RosterAdminPanel
+        assignments={assignments}
+        shiftTemplates={shiftTemplates}
+        pendingSwaps={pendingSwaps}
+        holidays={holidays}
+        coveragePreview={coveragePreview}
+        assignEmployeeScheduleAction={assignEmployeeScheduleAction.bind(null, tenantSlug)}
+        publishScheduleAssignmentsAction={publishScheduleAssignmentsAction.bind(null, tenantSlug)}
+        decideSwapAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") => decideSwapAction.bind(null, tenantSlug, requestId, expectedVersion, decision)}
+        setRosterHolidayAction={setRosterHolidayAction.bind(null, tenantSlug)}
+        setCoverageRequirementAction={setCoverageRequirementAction.bind(null, tenantSlug)}
+      />
+      <HrisExportForm
+        label="Export roster assignments"
+        description="Published and draft shift assignments in a date range, as a CSV: employee, work date, shift template and status. Requires the HR export permission."
+        action={exportScheduleAssignmentsAction.bind(null, tenantSlug)}
+      />
+    </div>
   );
 }
