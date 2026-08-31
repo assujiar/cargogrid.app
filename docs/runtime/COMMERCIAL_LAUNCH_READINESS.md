@@ -81,6 +81,27 @@ if the current page matters, keep it somewhere first.
 
 **Tracked as** `ISS-2026-311`.
 
+### 3.0b You have exactly one administrator account — consider a second
+
+**Status: not urgent, and not a defect.** You confirmed you know the password for
+`service@cargogrid.net`, so the platform has a reachable administrator. That closes the
+launch-blocking question (`ISS-2026-294`).
+
+**What is still true.** That is the *only* administrator identity that exists. No second Supreme
+Admin, no other user account at all, and no recovery path anyone has tested. Note also that the
+address is on `cargogrid.net` while your product domain is `cargogrid.app` — if that was a typo
+when the account was created, the mailbox may not exist, and a password reset would have nowhere
+to go.
+
+**Risk if you skip it.** Ordinary bad luck: a forgotten password, a lost password manager, a
+laptop that dies. With one account and possibly no working reset mailbox, that is not an
+inconvenience — it is the end of your access to your own platform, with no way back in.
+
+**What to do.** Either confirm you can actually receive mail at `service@cargogrid.net` (send
+yourself a test), or ask me to create a second Supreme Admin account on an address you control.
+It is a single command. I have deliberately not done it on my own: minting a second
+top-privilege identity is the kind of thing that should be asked for, never assumed.
+
 ### 3.1 Turn on branch protection in GitHub — 10 minutes
 
 **What it is.** Right now anyone with write access to the repository can push straight to the

@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 84 — 6 High, 38 Medium, 40 Low |
+| `OPEN` | 83 — 5 High, 38 Medium, 40 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 177 |
+| `RESOLVED` | 178 |
 | **Total records** | **266** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -148,7 +148,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-248` | Low | `OPEN` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
 | `ISS-2026-277` | Low | `OPEN` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
 | `ISS-2026-278` | Low | `OPEN` | no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk c |
-| `ISS-2026-294` | High | `OPEN` | the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into |
+| `ISS-2026-294` | High | `RESOLVED` | the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into |
 | `ISS-2026-306` | Low | `OPEN` | Per-directory prompt numbering contiguity is deliberately broken: `431_TENANT_MERGE_SPLIT_PROMPT.md` executes in Phase 1 but is numbered after the who |
 | `ISS-2026-111` | Medium | `ACCEPTED_RISK` | HRIS/Ticketing Integrated Verification (HRT-294): ticket free-text fields (escalation reason, and by construction subject/body/notes) are gated only b |
 | `ISS-2026-006` | Low | `ACCEPTED_RISK` | Broken historical citations of deleted plural `docs/build-logs/` files |
@@ -5499,7 +5499,7 @@ drift" gap `ISS-2026-290` already registered — this finding is further, strong
 not a separate root cause. Owner for a durable fix remains `RGL-395`/`RGL-404` per that entry;
 not attempted here, out of this checkpoint's own bounded scope.
 
-### ISS-2026-294 — the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into (finding corrected 2026-08-31 after two passes re-confirmed the wrong thing; original finding `RGL-398`, 2026-08-25) (OPEN, High)
+### ISS-2026-294 — the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it had never been signed into (finding corrected 2026-08-31 after two passes re-confirmed the wrong thing; original finding `RGL-398`, 2026-08-25) (`RESOLVED` 2026-08-31, High)
 
 Found by `RGL-398`'s own charter — verifying no tenant-real data exists anywhere, including live
 production itself, not only source control. `select count(*) from auth.users` on
@@ -5586,6 +5586,15 @@ destructive action against the platform's sole admin account, and the underlying
 is unresolved going into launch. **Status `OPEN`** pending owner confirmation of sign-in.
 **No mutation was performed** — establishing what the row actually is was the whole finding, and
 deleting it was exactly the wrong move.
+
+**`RESOLVED` 2026-08-31 — the access question is answered by the owner.** Asked directly whether they can sign in as `service@cargogrid.net`, the owner confirmed: **"ya saya tau passwordnya"**. The platform therefore has a reachable administrator, which was the launch-blocking half of this entry.
+
+Both grounds for the High re-rule are now discharged:
+
+1. **The destructive instruction is gone.** This entry's original text directed a `delete from auth.users` against what is in fact the platform's only Supreme Admin. That text is corrected above and the row was never touched.
+2. **The access path is confirmed.** The account is usable by its owner.
+
+**One residual, recorded rather than closed silently, because it is a resilience fact and not a defect.** The platform still has exactly **one** administrator identity. There is no second Supreme Admin, no other `auth.users` row, and no rehearsed recovery path. If that single credential is lost and the `service@cargogrid.net` mailbox is not reachable — note the domain is `.net`, while the product's own domain is `.app` — there is no way back in. Creating a second Supreme Admin before launch is a one-command operation and is the owner's call; it is deliberately **not** done unilaterally, because minting a second top-privilege identity is exactly the kind of action that should be asked for rather than assumed. Carried into `docs/runtime/COMMERCIAL_LAUNCH_READINESS.md` §3.0 as an owner decision.
 
 ### ISS-2026-295 — Every `app/api/v1/**` route returned an uncaught `500` in live production for any invalid/unrecognized Bearer key instead of a clean `401` (found and fixed at `RGL-401`, Smoke Test, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
 
