@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 90 — 5 High, 42 Medium, 43 Low |
+| `OPEN` | 89 — 5 High, 41 Medium, 43 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 171 |
+| `RESOLVED` | 172 |
 | **Total records** | **266** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -96,7 +96,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-281` | Medium | `OPEN` | the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documente |
 | `ISS-2026-284` | Medium | `OPEN` | A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpo |
 | `ISS-2026-288` | Medium | `OPEN` | `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the p |
-| `ISS-2026-300` | Medium | `OPEN` | `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations un |
+| `ISS-2026-300` | Medium | `RESOLVED` | `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations un |
 | `ISS-2026-302` | Medium | `OPEN` | the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring |
 | `ISS-2026-303` | Medium | `OPEN` | Inventory and HRIS still have no bulk opening-balance import |
 | `ISS-2026-304` | Medium | `OPEN` | no public status page for unauthenticated visitors |
@@ -5618,7 +5618,7 @@ Immediately after applying `20260826080000_harden_restore_security_state_reconci
 
 **Status `RESOLVED`, High severity** (a real, live, unauthenticated read-and-write path into security-relevant data — worse in kind than `ISS-2026-298`'s function-only exposure — caught and closed the same day it was introduced, before any external party is known to have accessed it). Mitigation widened going forward: the `ISS-2026-298` live-verification practice now explicitly covers both functions (`has_function_privilege`) and tables (`has_table_privilege`/`pg_class.relrowsecurity`) for anything new an `apply_migration` call creates — and any future table placed outside `app` schema (a rare, deliberate choice, so far made exactly once) requires this same RLS-plus-explicit-revoke treatment from the moment it is written, not discovered after the fact. Owner: closed; the mitigation practice above is the durable follow-up.
 
-### ISS-2026-300 — `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations under Supabase's auto-generated wall-clock version instead of the repository's filename-embedded version, found during Track A release-readiness review of the historical-issue-backlog remediation pass (2026-08-27, live investigation) (OPEN, Medium)
+### ISS-2026-300 — `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations under Supabase's auto-generated wall-clock version instead of the repository's filename-embedded version, found during Track A release-readiness review of the historical-issue-backlog remediation pass (2026-08-27, live investigation) (`RESOLVED` 2026-08-31, Medium)
 
 Every migration in this pass (items 11–18 of the historical-issue-backlog remediation) was applied
 live to the hosted project via the Supabase MCP `apply_migration` tool, which auto-generates its
@@ -5696,7 +5696,20 @@ An earlier pass of that third check was itself wrong: it compared against the 93
 
 Nine rows are deliberately left as orphans. The live project applied three migrations in parts (`finance_authority_chain_security_definer` p1–p6, its tier-C completeness p1–p3, and two settlement-reversal follow-ups) which the repository carries consolidated into single files. The first part of each group is remapped to the consolidated file; the rest stay. `supabase db push` ignores ledger rows with no matching repository file, and deleting them would be a larger and less reversible action than the problem warrants.
 
-**Still `OPEN`, and still not executed by an agent.** This entry's own recorded position — that this write "should require an explicit human decision, not agent judgment alone" — is a decision already made in this repository, and a prepared, verified, reversible script plus an explicit ask is how it is honoured, not overridden. Every statement's `where` clause states the exact pre-change `(version, name)`, so the change is reversible row by row.
+**`RESOLVED` 2026-08-31 — executed on the owner's explicit instruction, and verified.** The prepared script was put to the owner as a decision (this entry's own recorded position is that the write "should require an explicit human decision, not agent judgment alone"), and they instructed "Jalankan sekarang". It was then executed as a **single transaction** carrying its own in-transaction assertion: a `do $$ … $$` block counting the remapped rows and raising — rolling the whole thing back, ledger untouched — if the count were anything other than 84. A `where`-clause that matched nothing would have aborted the transaction rather than silently half-applying.
+
+Verified afterwards, independently of that assertion:
+
+| Check | Before | After |
+|---|---|---|
+| Ledger rows | 399 | 399 (no row created or destroyed) |
+| Ledger fingerprint (`md5` over `version\|name`) | `b71ff0d77b7f66afa71817f265ecf7c7` | `9b92aceeb47307e305aae1d0638d0561` |
+| Rows whose version matches a repo filename shape | 306 | **399** |
+| **Repository migrations present in the ledger under their own version** | **306 of 390** | **390 of 390** |
+
+The decisive line is the last one. Every one of the 390 files in `supabase/migrations/` is now recorded under its own filename version, so `supabase db push` would correctly consider the entire set applied and re-run nothing. The 84 non-idempotent re-applies this entry warned about can no longer happen.
+
+The nine orphan part-rows remain by design, as described above, and are ignored by `db push` because no repository file matches them.
 
 **Re-verified, disposition confirmed accurate and unchanged (2026-08-28, Track B Batch 8) — live-reconfirmed via direct `list_migrations` query.** Queried `supabase_migrations.schema_migrations` on the live hosted project: all 9 wall-clock-versioned rows this entry's own table names are still present, byte-identical, unreconciled — none of the corresponding correct filename-versions appear anywhere in the ledger, confirming the drift is unchanged since discovery. No write attempted against this system catalog, per this batch's own explicit no-live-mutation scope — matching this entry's own already-correct deferral (its prior attempt was itself denied by the session's own write-safety classifier, correctly not worked around). **Not fixed by this batch.** The exact reconciliation SQL this entry already provides remains valid and unexecuted, pending an operator with Supabase Dashboard SQL-editor access or a session with this specific write pre-approved. Owner unchanged.
 
