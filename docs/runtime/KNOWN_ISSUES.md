@@ -43,7 +43,7 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 89 — 5 High, 41 Medium, 43 Low |
+| `OPEN` | 89 — 6 High, 41 Medium, 42 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
 | `RESOLVED` | 172 |
 | **Total records** | **266** |
@@ -148,7 +148,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-248` | Low | `OPEN` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
 | `ISS-2026-277` | Low | `OPEN` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
 | `ISS-2026-278` | Low | `OPEN` | no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk c |
-| `ISS-2026-294` | Low | `OPEN` | One orphaned, unlinked `auth.users` row exists on the live hosted Supabase project — synthetic (not real customer PII), no tenant membership, no acces |
+| `ISS-2026-294` | High | `OPEN` | the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into |
 | `ISS-2026-306` | Low | `OPEN` | Per-directory prompt numbering contiguity is deliberately broken: `431_TENANT_MERGE_SPLIT_PROMPT.md` executes in Phase 1 but is numbered after the who |
 | `ISS-2026-111` | Medium | `ACCEPTED_RISK` | HRIS/Ticketing Integrated Verification (HRT-294): ticket free-text fields (escalation reason, and by construction subject/body/notes) are gated only b |
 | `ISS-2026-006` | Low | `ACCEPTED_RISK` | Broken historical citations of deleted plural `docs/build-logs/` files |
@@ -5419,7 +5419,7 @@ drift" gap `ISS-2026-290` already registered — this finding is further, strong
 not a separate root cause. Owner for a durable fix remains `RGL-395`/`RGL-404` per that entry;
 not attempted here, out of this checkpoint's own bounded scope.
 
-### ISS-2026-294 — One orphaned, unlinked `auth.users` row exists on the live hosted Supabase project — synthetic (not real customer PII), no tenant membership, no access path, but a stray artifact that does not belong in production (found at `RGL-398`, Seed Validation, 2026-08-25, Low) (OPEN, Low)
+### ISS-2026-294 — the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into (finding corrected 2026-08-31 after two passes re-confirmed the wrong thing; original finding `RGL-398`, 2026-08-25) (OPEN, High)
 
 Found by `RGL-398`'s own charter — verifying no tenant-real data exists anywhere, including live
 production itself, not only source control. `select count(*) from auth.users` on
@@ -5452,6 +5452,60 @@ taken here under a prompt that forbids it.
 only real content is that production's `auth.users` table is not perfectly empty, which is a
 hygiene finding, not a defect. Owner: whichever checkpoint next has authorized production-mutation
 scope (`RGL-015` or later, at operator discretion).
+
+---
+
+**EVERYTHING ABOVE THIS LINE IS WRONG ON ITS CENTRAL CLAIM. Corrected 2026-08-31, live.**
+
+The row is not an orphan and has never been one. It is the platform's **only active Supreme
+Admin** — the highest privilege the system has. Queried directly against `awdlicmwzdxquopwtcfd`:
+
+| Query | Result |
+|---|---|
+| `app.principal_memberships` for this `auth_user_id` | **1 row — `layer = 'supreme_admin'`, `tenant_id = null`, `status = 'active'`** |
+| `app.is_supreme_admin('2d0b7791-…')` — the platform's own function | **`true`** |
+| active Supreme Admins on the whole platform | **1** (this one) |
+| `auth.users` total | 1 |
+| `app.tenants` / `app.users` | 0 / 0 |
+| `last_sign_in_at` | **`null` — never signed in** |
+| `email_confirmed_at` / `encrypted_password` | confirmed / set |
+
+**How two passes got it wrong, precisely.** Both the original finding and the 2026-08-28
+re-verification established "no access path" by checking **`app.tenant_user_identities`**, which
+genuinely holds 0 rows for this identity. That query was accurate. It was also the wrong question:
+Supreme Admin is deliberately **tenant-agnostic** (`RPD-022`), so it is recorded in
+`app.principal_memberships` with a `null` `tenant_id` and never appears in a tenant-scoped
+identity table at all. `app.evaluate_permission`'s own Supreme Admin branch reads
+`app.principal_memberships`. Checking the tenant table to rule out a tenant-agnostic role could
+only ever return zero — the check was structurally incapable of finding what it claimed to
+exclude, and running it twice produced two confident confirmations of a false conclusion.
+
+**What this entry would have caused.** It stated the fix as *"a one-line, low-risk cleanup
+(`delete from auth.users where id = '2d0b7791-…'`, cascades to nothing)"* and assigned it to
+whichever checkpoint next held production-mutation authority. Executing it as written would have
+**deleted the only administrator account on the platform**, with no second Supreme Admin, no
+tenant admin, and no other `auth.users` row to recover through. That is not a hygiene cleanup; it
+is a lockout. **Do not delete this row.**
+
+**The real finding, which is a launch matter and not hygiene.** The platform has exactly one
+administrator identity; it is usable in principle (email confirmed, password set) but
+**`last_sign_in_at` is `null`** — nobody has ever signed in with it. Its address is
+`service@cargogrid.net`, on a *different domain* from the product's own `cargogrid.app`. So two
+things need to be true before launch, and neither is established:
+
+1. someone must know that password; and
+2. if not, someone must control the `service@cargogrid.net` mailbox, because a password reset is
+   the only other way in.
+
+If neither holds, the platform ships with no reachable administrator — no tenant can be created
+and nothing can be configured — and the failure appears only at the moment someone first tries to
+use it.
+
+**Severity re-ruled Low → High**, on two independent grounds: the entry as written directed a
+destructive action against the platform's sole admin account, and the underlying access question
+is unresolved going into launch. **Status `OPEN`** pending owner confirmation of sign-in.
+**No mutation was performed** — establishing what the row actually is was the whole finding, and
+deleting it was exactly the wrong move.
 
 ### ISS-2026-295 — Every `app/api/v1/**` route returned an uncaught `500` in live production for any invalid/unrecognized Bearer key instead of a clean `401` (found and fixed at `RGL-401`, Smoke Test, 2026-08-25, High — `RESOLVED` in code, `NOT YET DEPLOYED`)
 
