@@ -2041,3 +2041,66 @@ begin
   raise notice 'PASS: app.commit_employee_import_job (ISS-2026-278) denies an out-of-range p_client_ip under enforced mode, allows an in-range one, and allows an omitted p_client_ip regardless of enforcement';
 end;
 $$;
+
+\echo '>> ISS-2026-189 closure: the authenticated directory column grant on app.employees is PINNED to an exact reviewed set -- it cannot silently grow, and the two HR-fact columns removed from it cannot come back.'
+do $$
+declare
+  -- The ruling's own column list, written out. Adding a column to app.employees that arrives
+  -- with a grant fails here; so does probation_end_date or employment_end_date returning.
+  v_expected text[] := array[
+    'master_record_id', 'tenant_id', 'user_id', 'full_name', 'employment_type',
+    'lifecycle_status', 'intake_source', 'work_email', 'work_phone', 'hire_date',
+    'company_org_unit_id', 'branch_org_unit_id', 'department_org_unit_id', 'position_title',
+    'manager_employee_id', 'source_import_staging_row_id', 'source_config_version_id',
+    'idempotency_key', 'record_version', 'created_by', 'created_at', 'updated_at'
+  ];
+  v_actual text[];
+  v_unexpected text[];
+  v_missing text[];
+begin
+  select coalesce(array_agg(a.attname order by a.attname), '{}')
+  into v_actual
+  from pg_attribute a
+  join pg_class c on c.oid = a.attrelid
+  join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'app'
+  where c.relname = 'employees'
+    and a.attnum > 0 and not a.attisdropped
+    and has_column_privilege('authenticated', c.oid, a.attnum, 'SELECT');
+
+  select coalesce(array_agg(x order by x), '{}') into v_unexpected
+  from unnest(v_actual) x where x <> all (v_expected);
+  select coalesce(array_agg(x order by x), '{}') into v_missing
+  from unnest(v_expected) x where x <> all (v_actual);
+
+  if array_length(v_unexpected, 1) > 0 then
+    raise exception 'assertion failed: authenticated can read % column(s) on app.employees that the ISS-2026-189 ruling did not admit (%) -- the directory grant has grown without review',
+      array_length(v_unexpected, 1), array_to_string(v_unexpected, ', ');
+  end if;
+  if array_length(v_missing, 1) > 0 then
+    raise exception 'assertion failed: % directory column(s) lost their grant (%) -- the org-directory read path is degrading',
+      array_length(v_missing, 1), array_to_string(v_missing, ', ');
+  end if;
+
+  -- The two the ruling removed, named individually so a regression reads unmistakably.
+  if has_column_privilege('authenticated', 'app.employees', 'probation_end_date', 'SELECT') then
+    raise exception 'assertion failed: authenticated can read app.employees.probation_end_date -- a colleague''s probation status is not directory data (ISS-2026-189)';
+  end if;
+  if has_column_privilege('authenticated', 'app.employees', 'employment_end_date', 'SELECT') then
+    raise exception 'assertion failed: authenticated can read app.employees.employment_end_date -- an unannounced departure is not directory data (ISS-2026-189)';
+  end if;
+
+  -- Guard the guard, both directions. The real PII must still be withheld, and service_role must
+  -- still have access -- a "fix" that revoked from everyone would satisfy every check above while
+  -- breaking every employee RPC in the product.
+  if has_column_privilege('authenticated', 'app.employees', 'national_id_number', 'SELECT')
+     or has_column_privilege('authenticated', 'app.employees', 'date_of_birth', 'SELECT')
+     or has_column_privilege('authenticated', 'app.employees', 'personal_phone', 'SELECT') then
+    raise exception 'assertion failed: real PII on app.employees became readable by authenticated';
+  end if;
+  if not has_table_privilege('service_role', 'app.employees', 'SELECT') then
+    raise exception 'assertion failed: service_role lost SELECT on app.employees -- every employee RPC is now broken';
+  end if;
+
+  raise notice 'ISS-2026-189 closure: the directory grant is pinned at % reviewed columns; probation_end_date and employment_end_date are withheld; PII still withheld; service_role intact', array_length(v_expected, 1);
+end;
+$$;

@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 86 — 6 High, 39 Medium, 41 Low |
+| `OPEN` | 85 — 6 High, 39 Medium, 40 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 175 |
+| `RESOLVED` | 176 |
 | **Total records** | **266** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -136,7 +136,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-147` | Low | `OPEN` | Batch 3's own two Tier C-disclosed findings (zero test coverage for the 9 `/api/v1` REST route handlers; `IAE-013`'s own per-connector execution-log f |
 | `ISS-2026-156` | Low | `OPEN` | `scripts/db-tests/n8n-integration.sql:204`'s own webhook-endpoint lookup has no `ORDER BY`, nondeterministic if enough other test files' own webhook-e |
 | `ISS-2026-170` | Low | `OPEN` | `app.initiate_file_upload`'s `p_record_id` is validated against the tenant at neither layer |
-| `ISS-2026-189` | Low | `OPEN` | `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate |
+| `ISS-2026-189` | Low | `RESOLVED` | `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate |
 | `ISS-2026-197` | Low | `OPEN` | no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-t |
 | `ISS-2026-208` | Low | `OPEN` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
 | `ISS-2026-223` | Low | `RESOLVED` | ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority`  |
@@ -2411,7 +2411,7 @@ A support engineer (or the system, on session timeout) calling `end_support_sess
 
 **`RESOLVED` (2026-08-28, Track B Batch 6) — closed by the same `20260828110000` fix as `ISS-2026-187`.** See that entry's own updated text for the full root-cause/fix/verification detail. Ending a session now closes access immediately (`has_active_support_grant` requires a live open session), without touching the grant — composing cleanly with the multiple-sequential-sessions model this schema already committed to. Owner: closed.
 
-### ISS-2026-189 — `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate (found at `CG-S15-HDN-005`, `OPEN`, Low, owner `HDN-373` triage / `HDN-378` fix if not accepted)
+### ISS-2026-189 — `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate (found at `CG-S15-HDN-005`, `RESOLVED` 2026-08-31, Low)
 
 A column-level grant (not the full row) admits any `authenticated`, tenant-member session to read 24 directory-style columns (name, title, org unit, work email, etc. — confirmed non-PII by column list) without any `HRS:View` check, unlike full-record employee reads which correctly route through RBAC-gated RPCs. Plausibly an intentional "org directory" feature rather than a defect. **Not fixed here** — needs an explicit design ruling (accept as a documented directory feature, or narrow to a dedicated `list_employee_directory`-style RPC) before either closing or fixing. **Owner:** `HDN-373` to make the ruling; `HDN-378` to implement whichever the ruling picks.
 
@@ -2435,6 +2435,27 @@ established for the identical situation). **Compensating control**: unchanged fr
 own original text — the exposure is non-PII directory-style data only (name, title, org unit,
 work email), gated by tenant membership; sensitive PII columns are separately, correctly
 column-grant-restricted regardless of this ruling.
+
+**`RESOLVED` 2026-08-31 (`supabase/migrations/20260831030000_revoke_unused_employee_directory_column_grant.sql`) — the ruling this entry asked for, made, with its boundary corrected.**
+
+**The ruling: it IS a directory feature, and two of the 24 columns did not belong in it.** A work-facing staff directory readable by colleagues inside the same tenant is normal product behaviour, so the grant is kept for full_name, work_email, work_phone, position_title, the three org-unit ids, employment_type, lifecycle_status, hire_date, manager_employee_id and the plumbing columns needed to join them. Two are removed, because they are not directory data under any reading:
+
+| Column | Why it does not belong |
+|---|---|
+| `probation_end_date` | discloses that a colleague is on probation |
+| `employment_end_date` | discloses that someone is leaving, before it is announced |
+
+Both are ordinary HR facts to an HR user and gossip to everyone else. Taking this entry's own "accept as a documented directory feature" option **as written** would have accepted these two along with it — which is exactly what a blanket ruling buries.
+
+**The full revoke was written, run, and deliberately not taken — measured rather than estimated.** A complete revoke fails the suite: **49 lines across 5 db-test files** read `app.employees` directly while the role is `authenticated` (hris-attendance 12, hris-overtime-timesheet 13, hris-shift-roster-scheduling 16, hris-employee-master 6, hris-payroll 2). Every one is scaffolding — resolving a fixture's `master_record_id` from a `work_email` so the real assertion can run — not a product path. It was not taken because the exposure does not justify rewriting 43 assertions' scaffolding, which carries a real chance of quietly changing what they assert:
+
+- **No product code reads it.** There is not one raw `.from("employees")` read anywhere in the TypeScript codebase; every reference is an RPC parameter or a contract parser for an RPC's own return shape.
+- **It is not reachable from a browser.** `app` is not exposed to PostgREST — the entire reason this repository carries `public.*` wrappers (RGL-394 Option 2) — and there is no `public.employees` counterpart (verified live: 0 such objects). The grant has effect only over a direct Postgres connection, which no end user holds.
+- **The real PII was never granted and still is not:** `personal_email`, `personal_phone`, `national_id_number`, `date_of_birth`, `gender`, the five `personal_address_*` columns, and the free-text `revision`/`suspend`/`terminate`/`archive`/`leave` reasons.
+
+The measurement is recorded so a future pass that wants the full revoke can act on it without re-deriving it.
+
+**What makes the ruling durable, and what the accept-as-written option would never have produced.** `scripts/db-tests/hris-employee-master.sql` now pins the **exact** 22-column granted set. A column added to `app.employees` that quietly arrives with a grant fails the suite; so does either removed column returning. The guard also checks both directions — that real PII is still withheld, and that `service_role` still has access, since a "fix" that revoked from everyone would satisfy every other assertion while breaking every employee RPC in the product.
 
 ### ISS-2026-190 — `app.performance_calibration_adjustments_select_scoped`'s own RLS policy embeds a bare `SECURITY INVOKER` `app.evaluate_permission` call directly, sharing `ISS-2026-184`'s exact broken shape (found at `CG-S15-HDN-005`, `RESOLVED`, Medium, owner `HDN-387`)
 

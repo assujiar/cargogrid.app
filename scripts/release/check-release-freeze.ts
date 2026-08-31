@@ -2004,6 +2004,41 @@ import { readFileSync } from "node:fs";
  * The wrapper-parity gate caught the first draft naming its two helpers without the
  * app._* internal prefix. Re-verified via a fresh full local db-test run (392
  * migrations, 236 runner files, ALL PASSED). 20260831020000 IS applied live.
+ *
+ * AMENDED 2026-08-31 (forty-third pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-189` (Low) -- app.employees carried a 24-column SELECT grant to
+ * `authenticated`, readable with no HRS:View check. Two prior passes left it open
+ * because whether that is a deliberate org-directory feature or a defect is a
+ * design question neither had the mandate to settle. One new migration (392 -> 393
+ * files: +1, 20260831030000_revoke_unused_employee_directory_column_grant.sql).
+ *
+ * Ruled: it IS a directory feature and is kept -- but two of the 24 columns were
+ * never directory data. probation_end_date discloses that a colleague is on
+ * probation; employment_end_date discloses an unannounced departure. Taking the
+ * entry's own "accept as a documented feature" option as written would have
+ * accepted both along with it, which is what a blanket ruling buries.
+ *
+ * The full revoke was written, run against the suite, and deliberately not taken.
+ * It fails on 49 lines across 5 db-test files that read app.employees while the
+ * role is authenticated -- every one scaffolding that resolves a fixture id, none a
+ * product path. Not taken because no product code reads the grant (zero raw
+ * .from("employees") reads exist anywhere in the TypeScript), and it is not
+ * browser-reachable at all: app is not exposed to PostgREST and no public.employees
+ * counterpart exists. Rewriting 43 assertions' scaffolding risks quietly changing
+ * what they assert, against an exposure with no browser-reachable path. The
+ * measurement is recorded in the entry so a later pass can act on it without
+ * re-deriving it.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count): hris-employee-master.sql
+ * now PINS the exact 22-column granted set in both directions, plus a
+ * guard-the-guard that service_role retains access -- a revoke-from-everyone "fix"
+ * would otherwise satisfy every other assertion while breaking every employee RPC.
+ * That guard is the part the accept-as-written option would never have produced.
+ *
+ * Re-verified via a fresh full local db-test run (393 migrations, 236 runner files,
+ * ALL PASSED). 20260831030000 IS applied live.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2227,7 +2262,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (391 files, forty-first-pass amendment above). Superseded 2026-08-31 (forty-second
   // pass) by ISS-2026-223 (392 files: +1,
   // 20260831020000_harden_file_legal_hold_provenance.sql). See the class-level doc comment.
-  migrationSetSha256: "fc88d7f379d609c70b1221b570253cc68c809e8474ddb8398823932594d7e478",
+  // History: fc88d7f379d609c70b1221b570253cc68c809e8474ddb8398823932594d7e478
+  // (392 files, forty-second-pass amendment above). Superseded 2026-08-31 (forty-third
+  // pass) by ISS-2026-189 (393 files: +1,
+  // 20260831030000_revoke_unused_employee_directory_column_grant.sql).
+  migrationSetSha256: "e07f4ff308432f3c5077ad3ed4e396a65011a0a9e0363f9f1becff03eb870232",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2459,7 +2498,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (236 files, forty-first-pass state). Superseded 2026-08-31 (forty-second pass) by
   // ISS-2026-223 (236 files unchanged in count -- document-file.sql widened with the
   // six-property legal-hold provenance proof). See the class-level doc comment.
-  dbTestSetSha256: "c2f1876cfab99546cf288a67262971440ddf4e8df9a91f3813d612c42f1cf535",
+  // History: c2f1876cfab99546cf288a67262971440ddf4e8df9a91f3813d612c42f1cf535
+  // (236 files, forty-second-pass state). Superseded 2026-08-31 (forty-third pass) by
+  // ISS-2026-189 (236 files unchanged in count -- hris-employee-master.sql gained the
+  // column-set pinning guard).
+  dbTestSetSha256: "4250d75c426c64b364557b14a38a6ac8f85291c7866c8ac98aa9c8b361043e13",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
