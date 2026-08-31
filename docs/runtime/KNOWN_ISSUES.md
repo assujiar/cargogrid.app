@@ -3397,6 +3397,79 @@ new trigger functions, no existing function body touched); no `public.*` wrapper
 stays `OPEN`, Medium** — 2 of 4 tables remain genuinely unfixed for the reasons already on
 record. Owner unchanged (`HDN-387`), scope narrowed to the 2 finance tables named above.
 
+**Third table closed, 2026-08-31,
+`supabase/migrations/20260831170000_harden_finance_bank_transaction_match_source_lineage.sql`
+(applied live, project `awdlicmwzdxquopwtcfd`). `app.finance_bank_transactions.matched_source_id`
+is now guarded. 3 of 4 done; 1 remains.**
+
+This entry set that table aside because "its own real callers live in the application/API layer
+(TypeScript), not SQL migrations, so verifying them is a separate, wider audit this SQL-focused
+checkpoint did not do." **That audit is now done, and it was small.** The complete set of callers:
+`server/mutations/cash-bank.ts` forwards its argument unchanged and is the only TypeScript caller;
+`app/(tenant)/[tenantSlug]/finance/cash-bank/cash-bank-forms.tsx:128` is the only UI, presenting
+the field as "Source ID (optional)"; `MatchFinanceBankTransactionInputSchema` types it
+`.uuid().nullable()`. **No caller fabricates an id**, so the guard is safe to add.
+
+**Why this table was worth prioritising over the remaining one.** A statement line matched to a
+receipt that never existed does not read as broken — it reads as **settled**. An unmatched line is
+visibly incomplete and somebody chases it; a falsely matched one is chased by nobody. That makes a
+fabricated `matched_source_id` a worse failure than a missing one, not a tidier version of it.
+
+`app.validate_finance_bank_transaction_match_source()` resolves `receipt` against
+`app.finance_receipts` and `settlement` against `app.finance_settlements`; `manual` carries no
+source document, mirroring `app.validate_inventory_movement_source`'s own
+`manual`/`opening_balance` exemption.
+
+**A null id stays legal, deliberately.** `matched_source_id` is nullable by design, the UI offers
+it as optional, and the table's own CHECK requires only `matched_source_type` on a matched row. A
+null id makes **no claim** about which document the line is — incomplete. A non-resolving id makes
+a **false** one. `ISS-2026-202`'s subject is the false claim, and that is what this closes;
+requiring a non-null id would be a separate behaviour change that breaks a supported UI flow, and
+it was not smuggled in here. The regression asserts that boundary explicitly, in both directions.
+
+**Fixture corrected rather than worked around**, exactly as this entry prescribes:
+`scripts/db-tests/finance-cash-bank.sql` matched against `gen_random_uuid()` — precisely the
+orphan the new guard rejects, so leaving it would have been testing the bug. It now captures a
+**real** receipt via the same `app.capture_finance_receipt` call the file already makes 60 lines
+further down, against the customer account the fixture already has. New assertions prove the guard
+fires on a **direct** `INSERT` **and** a direct `UPDATE` — the RPC is not the threat model, which
+is exactly why `ISS-2026-202` put its guard on the table rather than in the function.
+
+**The remaining table, and a fully-specified fix plan instead of another vague deferral.**
+`app.finance_subledger_batches.source_id` stays open. Two things were established first-hand this
+checkpoint that were not on record before:
+
+1. **The complete call-site audit, which nobody had done.** All 8 legitimate callers of
+   `app.post_finance_subledger_batch` were read directly (`20260729160000:569,680,787,876`;
+   `20260730480000:979,1523,1629`; `20260810700000:344`) and the mapping is unanimous:
+   `invoice` → `app.finance_invoices`, `receipt_allocation` →
+   `app.finance_receipt_allocation_batches` (the **batch**, not the receipt or the allocation),
+   `vendor_bill` → `app.finance_vendor_bills`, `settlement` → `app.finance_settlements`. A future
+   owner can write the trigger from this without repeating the audit.
+2. **The real reason the fixtures are expensive, which is structural rather than a matter of
+   effort.** Of the four target tables, only `app.finance_settlements` is cheap (tenant + a
+   `master_records` vendor + currency + date + idempotency key). The other three each sit behind a
+   9-table Commercial → Operations chain: `finance_invoices` needs `accounts` + `job_orders` +
+   `billing_readiness_handoffs`, and `job_orders` needs `quotations`, which needs
+   `opportunities` → `prospects`; `finance_vendor_bills` needs `shipment_actual_costs`, which
+   needs a shipment order, which needs a job order — the same chain. **Four Finance-primitive test
+   files (`finance-subledger`, `finance-journal`, `finance-reconciliation`,
+   `finance-reversal-adjustment`) would each have to construct that chain**, none of which builds
+   one today (grep-confirmed: zero references to `billing_readiness_handoffs` or
+   `finance_invoices` in any of the four).
+
+   That is not merely a lot of work — it would couple four Finance tests to the entire Commercial
+   and Operations domains, so an unrelated change to quotation shape would break the subledger
+   suite. The alternative worth weighing when this is owned is to re-point those isolated-primitive
+   blocks at `source_type = 'settlement'` with a real settlement row, and rewrite the
+   source-type-filter assertion (`finance-subledger.sql:453`) to prove "returns only matching, and
+   returns nothing for a type with no batches" rather than comparing `invoice` against
+   `vendor_bill`. That is a legitimate, arguably stronger test — but it is a deliberate rewrite of
+   an existing test's design and belongs to an owner with that mandate, not to a passing fix.
+
+**Status stays `OPEN`, Medium** — 1 of 4 tables remains. Owner unchanged (`HDN-387`), scope now
+narrowed to `app.finance_subledger_batches.source_id` alone.
+
 ### ISS-2026-207 — `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests (found at `CG-S15-HDN-008`, `RESOLVED` 2026-08-31, was Medium)
 
 Found by this checkpoint's own public/customer/vendor API lens, live-forced. `app.api_

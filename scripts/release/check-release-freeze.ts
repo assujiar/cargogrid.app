@@ -2850,7 +2850,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-315 (405 files: +1,
   // 20260831160000_expose_timesheet_entry_break_and_notes_in_list.sql). The fifty-sixth pass,
   // ISS-2026-061 / ADR-0029, touched no migration, which is why this history skips a number.
-  migrationSetSha256: "d01233074429077c68e6d9196764132cc353d9576fd7c0d16615a9aabe47868b",
+  // History: d01233074429077c68e6d9196764132cc353d9576fd7c0d16615a9aabe47868b
+  // (405 files, fifty-seventh-pass amendment above). Superseded 2026-08-31 (fifty-eighth pass) by
+  // ISS-2026-206's third table (406 files: +1,
+  // 20260831170000_harden_finance_bank_transaction_match_source_lineage.sql).
+  migrationSetSha256: "9008a90551ddc9d091db33518412a879630d9d2371b91ab1964357fc6d2ca581",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3146,7 +3150,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pg_get_function_result pin that sits ON the SQL/TypeScript join, the one place from which
   // the defect was visible: both halves were internally consistent, only the contract between
   // them was wrong).
-  dbTestSetSha256: "fd7e7747deedfe9f26fde33078f6b2a39e2a1cd146957fdaaf231e5f9d3ddbd9",
+  // History: fd7e7747deedfe9f26fde33078f6b2a39e2a1cd146957fdaaf231e5f9d3ddbd9
+  // (238 files, fifty-seventh-pass state). Superseded 2026-08-31 (fifty-eighth pass) by
+  // ISS-2026-206's third table (238 files unchanged in count -- finance-cash-bank.sql swapped a
+  // gen_random_uuid() match for a REAL captured receipt, which was testing the very orphan the
+  // new guard rejects, and gained direct-INSERT/direct-UPDATE proofs plus the null-id boundary).
+  dbTestSetSha256: "2c4cd1f6fa5864b48d93faab4e7b6916f0ab25efe8003f394cca81f760db4f64",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

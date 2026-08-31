@@ -157,9 +157,21 @@ declare
   v_retry app.finance_bank_statement_batches;
   v_second_batch app.finance_bank_statement_batches;
   v_transaction app.finance_bank_transactions;
+  v_real_receipt app.finance_receipts;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmecasha');
   v_cash_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'CASH-BANK');
+
+  -- ISS-2026-206: a REAL receipt, because the successful match below now has to resolve. This
+  -- fixture previously matched against gen_random_uuid() -- which is precisely the orphan the
+  -- new guard exists to reject, so leaving it would have been testing the bug. Captured with
+  -- the same app.capture_finance_receipt call this file already uses further down, against the
+  -- customer account the fixture already has: a real id, not a workaround for the guard.
+  select * into v_real_receipt from app.capture_finance_receipt(
+    v_tenant_a, null, (select id from app.accounts where tenant_id = v_tenant_a), 'BANKREF-MATCH-1',
+    '2026-08-01'::date, 'Acme Cash Customer Pte Ltd', 'Main Operating', 'USD', 500, 'receipt-bankmatch-1',
+    '00000000-0000-0000-0000-000000036002', 'financemanagera'
+  );
 
   select * into v_account from app.create_finance_bank_account(v_tenant_a, null, 'Main Operating', 'Acme Bank', '1234', 'USD', v_cash_id, '00000000-0000-0000-0000-000000036002', 'financemanagera');
 
@@ -200,10 +212,25 @@ begin
       null;
   end;
 
-  perform app.match_finance_bank_transaction(v_transaction.id, v_transaction.record_version, 'receipt', gen_random_uuid(), '00000000-0000-0000-0000-000000036002', 'financemanagera');
+  -- ISS-2026-206: the orphan is now refused. A statement line matched to a receipt that never
+  -- existed reads as SETTLED, so unlike an unmatched line nobody ever goes looking for it --
+  -- which is why this is worse than a missing link, not a tidier version of one.
+  begin
+    perform app.match_finance_bank_transaction(v_transaction.id, v_transaction.record_version, 'receipt', gen_random_uuid(), '00000000-0000-0000-0000-000000036002', 'financemanagera');
+    raise exception 'assertion failed: expected finance_bank_transaction_orphan_match_source for a receipt id matching no real app.finance_receipts row';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_bank_transaction_orphan_match_source' then
+        raise exception 'assertion failed: expected finance_bank_transaction_orphan_match_source, got %', sqlerrm;
+      end if;
+  end;
+
+  -- and a real one still matches cleanly -- the guard rejects fabrication, never legitimate use
   select * into v_transaction from app.finance_bank_transactions where id = v_transaction.id;
-  if v_transaction.match_status <> 'matched' then
-    raise exception 'assertion failed: expected the transaction to be matched';
+  perform app.match_finance_bank_transaction(v_transaction.id, v_transaction.record_version, 'receipt', v_real_receipt.id, '00000000-0000-0000-0000-000000036002', 'financemanagera');
+  select * into v_transaction from app.finance_bank_transactions where id = v_transaction.id;
+  if v_transaction.match_status <> 'matched' or v_transaction.matched_source_id <> v_real_receipt.id then
+    raise exception 'assertion failed: expected the transaction to be matched to the real receipt, got status=% source=%', v_transaction.match_status, v_transaction.matched_source_id;
   end if;
 
   begin
@@ -342,6 +369,67 @@ begin
   if v_count = 0 then
     raise exception 'assertion failed: expected at least one FIN-211 audit event for tenant A';
   end if;
+end;
+$$;
+
+\echo '>> ISS-2026-206: the match-source lineage guard holds against a DIRECT insert/update, not merely through the RPC -- and a null id stays legal, because absent is incomplete while fabricated is false'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmecasha');
+  v_account app.finance_bank_accounts;
+  v_batch_id uuid;
+  v_txn app.finance_bank_transactions;
+  v_failed boolean;
+begin
+  select * into v_account from app.finance_bank_accounts where tenant_id = v_tenant_a limit 1;
+  -- A real batch id, so the ONLY thing either write below can fail on is the lineage guard.
+  select id into v_batch_id from app.finance_bank_statement_batches where bank_account_id = v_account.id limit 1;
+
+  -- The RPC is not the threat model. app.match_finance_bank_transaction could be made to check
+  -- this and the gap would still be open one layer down, which is the whole reason ISS-2026-202
+  -- put its guard on the table rather than in the function. So this asserts against the raw write.
+  begin
+    insert into app.finance_bank_transactions (tenant_id, batch_id, bank_account_id, transaction_date, direction, amount, reference, line_hash, match_status, matched_source_type, matched_source_id)
+    values (v_tenant_a, v_batch_id, v_account.id, '2026-09-01'::date, 'credit', 42, 'REF-ORPHAN', 'hash-iss206-orphan', 'matched', 'receipt', gen_random_uuid());
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm !~ 'finance_bank_transaction_orphan_match_source' then
+      raise exception 'assertion failed: expected finance_bank_transaction_orphan_match_source on a direct insert, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then
+    raise exception 'assertion failed: a direct insert claiming a receipt that does not exist was accepted -- the ISS-2026-206 guard is not on the table';
+  end if;
+
+  -- Same for a settlement claim, and same for an UPDATE: a row can be poisoned after the fact
+  -- just as easily as at insert, so the trigger has to cover both.
+  insert into app.finance_bank_transactions (tenant_id, batch_id, bank_account_id, transaction_date, direction, amount, reference, line_hash, match_status)
+  values (v_tenant_a, v_batch_id, v_account.id, '2026-09-02'::date, 'credit', 43, 'REF-UNMATCHED', 'hash-iss206-unmatched', 'unmatched')
+  returning * into v_txn;
+
+  begin
+    update app.finance_bank_transactions set match_status = 'matched', matched_source_type = 'settlement', matched_source_id = gen_random_uuid() where id = v_txn.id;
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm !~ 'finance_bank_transaction_orphan_match_source' then
+      raise exception 'assertion failed: expected finance_bank_transaction_orphan_match_source on a direct update, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then
+    raise exception 'assertion failed: a direct UPDATE claiming a settlement that does not exist was accepted';
+  end if;
+
+  -- The deliberate boundary. A matched row with no id names no document -- incomplete, and
+  -- already supported by the UI, which offers the field as optional. Tightening that would be a
+  -- separate behaviour change, and this proves it was NOT smuggled in with the lineage fix.
+  update app.finance_bank_transactions set match_status = 'matched', matched_source_type = 'manual', matched_source_id = null where id = v_txn.id;
+  if (select matched_source_type from app.finance_bank_transactions where id = v_txn.id) <> 'manual' then
+    raise exception 'assertion failed: expected a manual match with a null source id to remain legal';
+  end if;
+
+  raise notice 'PASS: ISS-2026-206 match-source guard rejects a fabricated receipt/settlement id on direct insert AND update, while leaving a null id legal';
 end;
 $$;
 
