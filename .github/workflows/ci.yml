@@ -163,6 +163,18 @@ jobs:
         if: github.event_name == 'pull_request'
         run: node --experimental-strip-types scripts/git/check-protected-paths.ts "origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }}"
 
+      # ISS-2026-288. Deliberately NOT status-based, unlike the check above: a branch that
+      # predates the base branch's own copy of a migration shows that file as ADDED on both
+      # sides, which every status rule waves through. This compares content against the base
+      # branch's current tree instead. The explicit fetch is required -- actions/checkout is
+      # shallow by default, and the check fails loudly rather than passing when it cannot see
+      # the base branch, since a green tick that never looked at anything is worse than none.
+      - name: Applied-migration collision check (content vs base branch)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          node --experimental-strip-types scripts/git/check-applied-migration-collision.ts FETCH_HEAD
+
       - name: Evidence summary
         if: always()
         run: |

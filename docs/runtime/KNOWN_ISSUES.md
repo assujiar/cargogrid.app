@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 52 — 4 High, 24 Medium, 24 Low |
+| `OPEN` | 51 — 4 High, 23 Medium, 24 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 211 |
+| `RESOLVED` | 212 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -81,7 +81,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-148` | Medium | `OPEN` | zero load/performance-test evidence exists for any Phase 9 route or RPC at a declared target volume, undisclosed until now |
 | `ISS-2026-153` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 9's own ~9 new admin/reporting/automation/integration UI routes |
 | `ISS-2026-155` | Medium | `RESOLVED` | a genuine breach of two different `job`-mapped workload types (e.g. `analytics` + `reports`) for the same tenant within the dedup window collapses int |
-| `ISS-2026-160` | Medium | `OPEN` | the `e2e` CI job provides no environment, so every guarded route returns 500 and the portal-guard specs fail; the specs also encode a fail-safe intent |
+| `ISS-2026-160` | Medium | `RESOLVED` | the `e2e` CI job provides no environment, so every guarded route returns 500 and the portal-guard specs fail; the specs also encode a fail-safe intent |
 | `ISS-2026-172` | Medium | `RESOLVED` | `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold i |
 | `ISS-2026-179` | Medium | `RESOLVED` | roughly 24 further `SECURITY DEFINER` boolean-oracle / narrow-scope functions share `ISS-2026-164`'s shape, candidate-swept but not individually live- |
 | `ISS-2026-186` | Medium | `RESOLVED` | roughly 14 shared `SECURITY DEFINER` primitives from `HDN-BLK-014`'s original ~30-candidate sweep are genuinely shared across first-party and third-pa |
@@ -2991,7 +2991,7 @@ Because `run.sh` uses `set -euo pipefail`, the suite aborts at that file and **e
 
 **`RESOLVED` — stale duplicate, already fixed at `ISS-2026-286`/`RGL-395` (2026-08-28, Track B Batch 8, no new code).** This entry was never updated to reflect that `ISS-2026-286` (found and root-caused at `RGL-394`, 2026-08-25) is the exact same defect, reclassified High and fixed the next day at `RGL-395`. Independent re-verification: `grep -rn "pg_read_file(" scripts/db-tests/*.sql` returns **zero live function-call occurrences** — every remaining string match in the 6 files this entry itself names is now inside an explanatory comment documenting the historical bug and its fix (e.g. `advanced-tms-wms-outbound.sql:804`, tagged "RGL-BLK-005 fix"). All 6 now capture each race-helper's output client-side via psql's `` \set var `cat ...` `` backtick-subshell form (running on the same host that wrote the file) instead of asking the Postgres service container to read a client-local path — exactly the remediation approach this entry's own "Note for whoever takes it" already recommended. `ISS-2026-286` documents the full chain, including CI-verified green (GitHub Actions run `32818026784`, commit `b60dccf`, PR #68 — all 3 jobs `quality`/`db`/`e2e` `success`, the first CI-green run for this repository since at least 2026-08-10). No new fix needed. Owner: closed — duplicate, cross-referenced to `ISS-2026-286`.
 
-### ISS-2026-160 — the `e2e` CI job provides no environment, so every guarded route returns 500 and the portal-guard specs fail; the specs also encode a fail-safe intent the code does not implement (Phase 1 portal guards / Phase 0 CI, found at `CG-S15-HDN-002`, Prompt 370 Full Regression, `OPEN at HDN-380`, was Medium)
+### ISS-2026-160 — the `e2e` CI job provides no environment, so every guarded route returns 500 and the portal-guard specs fail; the specs also encode a fail-safe intent the code does not implement (Phase 1 portal guards / Phase 0 CI, found at `CG-S15-HDN-002`, Prompt 370 Full Regression, harness half `RESOLVED at HDN-380`, product question `RESOLVED` 2026-08-31, was Medium)
 
 Found by `HDN-370`, reproduced locally and confirmed against the CI job definition. `.github/workflows/ci.yml`'s `e2e` job has no `env:` block and no secrets, so `NEXT_PUBLIC_SUPABASE_URL` is unset. `lib/supabase/server.ts:27`'s `requireEnv` throws during guard construction, before any guard logic runs, and the route returns **500**. The specs assert `expect(response?.status()).toBeLessThan(500)` plus a redirect to `/login`. Reproduced locally with no `.env` present: `Error: NEXT_PUBLIC_SUPABASE_URL is not set -- see .env.example` at `buildSupremeAdminGuardDeps`, then `GET /supreme 500`.
 
@@ -3006,6 +3006,45 @@ A full `pnpm run test:e2e` run against the harness as found (still `webServer.co
 **Fixed this checkpoint**: `playwright.config.ts`'s `webServer.command` changed from `pnpm exec next dev --port 3000` to `pnpm exec next build && pnpm exec next start --port 3000` (`webServer.timeout` raised 60s → 180s to accommodate the added build step) — directly serves `docs/build-log/full-system-hardening/HARDENING_MATRIX.md` §11's own instruction ("`next build` is required from this lane onward"), and eliminates the dev-mode-only hang entirely rather than merely working around it. **Status `RESOLVED at HDN-380`** — this entry's headline claim ("every guarded route returns 500") no longer reproduces, and the harness itself is now fully green end to end.
 
 The underlying **product question this entry originally raised is still open and still real** (does the guard truly fail safe with a redirect when Supabase is unreachable at the network level, vs. merely when env vars are unset — not re-tested here, since this sandbox still cannot run a live Supabase auth backend at all, see `ISS-2026-140`'s own widened tracked-gap note above) — only the CI-wiring/harness-hang symptoms this entry tracked are resolved. `HDN-BLK-009`'s disposition updated to `RESOLVED at HDN-380` in `BLOCKER_LEDGER.md`.
+
+**`RESOLVED` in full, 2026-08-31 — the product question this entry kept open was answered by
+measurement, and the answer is that the specs were right.**
+
+The entry phrased it sharply and correctly: several e2e specs are named for failing safe *"when
+the backend itself is unreachable"*, and either the guard genuinely degrades to a redirect, *"or
+those spec names describe an intent the implementation never had. That must be decided, not
+papered over."* It was never decided because the sandbox cannot run a live Supabase auth backend.
+But that framing hid something: **you do not need a working backend to test an unreachable one.**
+
+Probed against a real unroutable address (`127.0.0.1:1` — connection refused instantly, no
+external network, works behind a proxy):
+
+| Call | Result |
+|---|---|
+| `auth.getUser(<jwt>)` — the path a request WITH a session cookie takes | resolves with `AuthRetryableFetchError`, `user: null`. Does not throw. |
+| `.rpc('resolve_access_context', …)` | resolves with `TypeError: fetch failed`, `data: null`. Does not throw. |
+
+Every one of this repository's ten guard-deps modules maps that to `null`
+(`if (error || !data.user) return null` — four distinct wirings, the other six delegate to
+`buildTenantAdminGuardDeps`), and `null` is `unauthenticated`, which every portal page turns into
+`redirect("/login")`. **The guard already fails safe. The spec names were accurate all along**, and
+what this entry actually found was that nobody had ever checked.
+
+**The separate configuration-absent case still throws, and that is a decision, not a remnant.**
+A deployment with no `NEXT_PUBLIC_SUPABASE_URL` crashes during client construction, before any
+guard logic. Turning that into a silent redirect would make a misconfigured production look
+exactly like *"every user is logged out"* — far harder to diagnose than a loud failure at startup,
+and it would hide a broken deployment behind a login page. Failing safe means denying access when
+the answer is unknown; it does not mean concealing that the system is not configured. The two
+cases are different and are now treated differently, on purpose.
+
+**Evidence.** `lib/portal/guard-fail-safe.test.ts` (new, 4 tests) makes the real network calls
+rather than mocking the failure — mocking would prove only that the mock was written correctly,
+and the claim is about what the client actually does. It pins that neither call throws, that the
+composed guard returns `unauthenticated`, and the property that matters most: with the identity
+check succeeding and only the authority lookup unreachable, the result is `forbidden` with layer
+`"none"` — a missing answer denies rather than defaults, and no fabricated layer is reported.
+`pnpm typecheck`, `pnpm lint` (0 errors), 5763 unit tests and `npx next build` green.
 
 ### ISS-2026-161 — `cargogrid_setup_disposable_db()` silently returns success on a Postgres connection failure unless its caller independently sets `set -euo pipefail` first (`scripts/db-tests/lib/setup-disposable-db.sh`, found at `CG-S15-HDN-002`, Prompt 370 Tier C correctness lens, `RESOLVED`, Low)
 
@@ -6703,6 +6742,52 @@ So the branch holds a **divergent copy of an already-applied migration under an 
 **Status `OPEN`**, Medium — a dormant risk, not an active defect. Nothing has entered `RC-2026.08.25-1`: the freeze digests verified green by `pnpm run release:check-freeze` at `RGL-393` prove the candidate's migration and db-test sets are unchanged. **Deliberately not remediated at `RGL-393`**: the obvious fix is deleting the remote branch, and `AGENTS.md` forbids destructive Git operations on shared history without explicit authorization, which this lane does not hold. Not escalated to Prompt 393 §23's exception flow either — §23 names "unauthorized scope change", and an unmerged branch is a risk, not a change that crossed into the candidate. On the freeze watch list; must be re-checked at `RGL-410`. Owner: `RGL-404`, which holds the release-decision authority that could justify requesting branch deletion before promotion.
 
 **Re-verified, disposition confirmed accurate and unchanged (2026-08-28, Track B Batch 8).** `git ls-remote --heads origin` confirms `refs/heads/claude/prompt-206-210-dpxtmu` still exists at head `f364c15` — unchanged since `RGL-393`. Re-derived the diff independently: reproduces the identical 7-file, 939-insertion non-docs delta this entry reports, same merge-base. Confirmed the collision shape directly: `main`'s current copy of `20260729270000_create_finance_dashboard.sql` is genuinely different, incompatible content from the branch's own copy under the identical filename — a merge would either conflict or silently replace an already-applied migration's content, reproducing the exact `ERR-2026-001..003` parallel-lineage collision class. **No git branch deletion attempted** (a destructive shared-history operation requiring explicit authorization this batch does not hold, matching `AGENTS.md`'s own prohibition). **Not fixed by this batch.** Safe remediation, unchanged from this entry's own recommendation: an operator with repository admin access deletes the remote branch directly (its content is 100% already merged/superseded on `main`), or, as a durable structural control rather than a one-time cleanup, configures GitHub branch protection / a pre-merge collision check on `main` (which would also close part of `ISS-2026-289`'s own still-`OPEN` unprotected-`main` finding). Must stay on the freeze watch list and be re-checked at `RGL-410`. Owner unchanged.
+
+**Update (`2026-08-31`) — the durable structural control this entry names as its own preferred
+remediation is now built. The branch itself still needs you; merging it can no longer succeed
+quietly.**
+
+This entry offered two remediations: delete the remote branch (a destructive operation on shared
+history, which `AGENTS.md` forbids without explicit authorization and which nobody has given), or
+*"as a durable structural control rather than a one-time cleanup, configure... a pre-merge
+collision check on `main`."* The second needs nobody's permission, outlives the one branch that
+prompted it, and is what was built.
+
+**Why the existing protected-path check does not already cover this — the part that makes the new
+one necessary.** `check-protected-paths.ts` forbids MODIFYING a migration and exempts a brand-new
+one, *"a migration path is exempt only when its git status is exactly added."* Git status is
+computed against the merge base. A branch that cut from `main` before a migration existed, then
+created its own file under that same timestamped name while a different version landed on `main`,
+shows the file as **added** on both sides — and every status-based rule waves it through. That is
+precisely this entry's shape, and precisely the `ERR-2026-001..003` lineage.
+
+`scripts/git/check-applied-migration-collision.ts` therefore ignores status entirely and compares
+each migration's **content** against the base branch's current tree, failing when the same filename
+exists there with different bytes. Byte-exact rather than normalised: a whitespace-only difference
+in an applied migration is still a different file under a name the database has already recorded
+as run, and normalising would mean deciding which differences are harmless — the judgement this
+check exists to remove. When it cannot see the base branch (a shallow checkout) it fails rather
+than passing, because a green tick that never looked at anything is worse than no check.
+
+**Live-reproduced against the real branch, not a fixture.** Fetching
+`origin/claude/prompt-206-210-dpxtmu` and running the checker with it as the base fails and names
+`supabase/migrations/20260729270000_create_finance_dashboard.sql` — the exact file this entry
+tracks. Its divergence re-measured independently in the same pass: 236 insertions / 113 deletions
+against `main`'s applied copy. Also worth recording, because it sharpens the original finding: in
+this container git could not even compute a three-dot diff for that branch (`no merge base`), so
+the status-based route was not merely blind here, it was unavailable.
+
+Wired into CI as its own step with an explicit base-branch fetch, and available locally as
+`pnpm run git:check-migration-collision`. 6 unit tests on the pure decision core, including the
+`ISS-2026-288` shape itself and the multi-file case (a stale branch usually carries several).
+
+**Status `OPEN`**, Medium, unchanged in severity but materially narrowed in risk: the dormant
+collision can no longer reach `main` through a pull request without a red gate naming the file.
+**What still needs you:** deleting the stale remote branch is a destructive operation on shared
+history and remains an owner decision — its content is 100% already merged and superseded, so
+nothing is lost by deleting it, but that is your call to make, not mine to take. A direct push
+that bypasses pull requests would also bypass this check, which is `ISS-2026-289`'s
+branch-protection gap, not this one's.
 
 ### ISS-2026-289 — GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repository's own "pull request is mandatory" policy has never been enforceable (found at `RGL-393`, High) (OPEN, High)
 
