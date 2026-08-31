@@ -387,6 +387,8 @@ declare
   v_cash_id uuid;
   v_rev_id uuid;
   v_batch app.finance_subledger_batches;
+  v_iss206_vendor_id uuid;
+  v_iss206_source_id uuid;
   v_system_journal app.finance_journals;
   v_correction app.finance_journal_corrections;
 begin
@@ -394,7 +396,21 @@ begin
   v_cash_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'CASH-REV');
   v_rev_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'REV-REV');
 
-  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', gen_random_uuid(), '2026-04-11'::date, 'USD',
+  -- ISS-2026-206: a REAL source document rather than a gen_random_uuid().
+  -- app.finance_subledger_batches.source_id is now resolved against the table its own
+  -- source_type names, so a fabricated id is refused. A settlement is used because it is the
+  -- one source type a finance fixture can make real cheaply -- a real app.finance_invoices row
+  -- would need the whole quotation -> handoff -> job order -> billing-readiness chain -- and
+  -- because this block's assertions are about reversing the system journal a posted batch produces,
+  -- never about which kind of document the batch came from.
+  insert into app.master_records (master_type_code, tenant_id, code, name)
+  values ('vendor', v_tenant_a, 'ISS206-REV-VEND', 'ISS-2026-206 fixture vendor')
+  returning id into v_iss206_vendor_id;
+  insert into app.finance_settlements (tenant_id, vendor_master_id, currency, settlement_date, idempotency_key)
+  values (v_tenant_a, v_iss206_vendor_id, 'USD', '2026-04-11'::date, 'iss206-rev-settlement-1')
+  returning id into v_iss206_source_id;
+
+  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'settlement', v_iss206_source_id, '2026-04-11'::date, 'USD',
     jsonb_build_array(
       jsonb_build_object('accountId', v_cash_id, 'direction', 'debit', 'amount', 75),
       jsonb_build_object('accountId', v_rev_id, 'direction', 'credit', 'amount', 75)

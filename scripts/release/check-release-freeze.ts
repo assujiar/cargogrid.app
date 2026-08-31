@@ -3051,7 +3051,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // DROP + CREATE rather than CREATE OR REPLACE: replacing a function does not reliably reset
   // its security attribute. Verified after applying: 0 definer mismatches and 0 grant
   // mismatches live, down from 111 and 1, across 2,430 app./public. pairs.
-  migrationSetSha256: "9fad7f42034da525b75bb9f23e261701048c6d8f15e487c75008a946e7077260",
+  //
+  // SEVENTY-THIRD PASS (2026-08-31, ISS-2026-259 + ISS-2026-206): 420 files (+2).
+  //
+  // 20260831300000 extends the raw-mutation tripwire from 2 tables to 11 -- the 9 that carry a
+  // security or integrity row-level trigger which TRUNCATE silently defeats (legal hold,
+  // posted-journal immutability, the five append-only loyalty ledgers, append-only lineage).
+  // Mechanical, exactly as ISS-2026-259 predicted: the trigger function, log table, xact_id
+  // correlation and read RPC are all unchanged; only the watched set grows.
+  //
+  // 20260831310000 closes the LAST of the four tables ISS-2026-206 named,
+  // app.finance_subledger_batches.source_id. That entry deferred it twice for a real reason --
+  // a naive trigger broke finance-subledger.sql's deliberate synthetic-id design -- and named
+  // the right remedy: make the fixtures real rather than exempt them. Done that way: guard
+  // written first, suite run, every fixture it broke made real.
+  //
+  // FIVE source types, not the four the entry and the original CHECK constraint name:
+  // 'opening_balance' was added later and resolves against AR *or* AP open items. Each was
+  // derived from what the real caller passes in the live pg_proc definition, which mattered --
+  // 'receipt_allocation' resolves against finance_receipt_allocation_BATCHES, because
+  // allocate_finance_receipt passes the batch id, not a row from the plural-sounding
+  // finance_receipt_allocations. A guard pointed at the obvious table would have rejected every
+  // legitimate receipt allocation in production. The guard's final branch raises rather than
+  // passing, so widening the CHECK again without widening the guard fails loudly instead of
+  // silently reopening the gap.
+  migrationSetSha256: "85d71d60438e96758362d2746071afec0babf27a33344080a27f701a584df103",
+  // History: 9fad7f42034da525b75bb9f23e261701048c6d8f15e487c75008a946e7077260
+  // (418 files, ISS-2026-318's security-definer drift repair).
   // History: 6564319224c288a622775d1dc56fac4f02872dfc08c2701c5b07be5f134ccbb3
   // (417 files, ISS-2026-302's IP-allowlist wiring plus its corrective documentation migration).
   // History: 18baf889de6b445d8dd0afa39843d3b4e8a11b92b1947f1b61a7ee2f31955ad3
@@ -3499,7 +3525,32 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // finance-settlement.sql and finance-subledger.sql have three pinned function signatures
   // updated for the added parameter -- those assertions name an exact signature, and the
   // signature changed.
-  dbTestSetSha256: "4e8b11a879ff2062677c309978b019b428cd15f08134ca3c3915e1ab90422eec",
+  //
+  // SEVENTY-THIRD PASS (2026-08-31): 239 files, unchanged in count -- five extended.
+  //
+  // raw-mutation-tripwire.sql gains a pg_trigger-driven coverage sweep over all 11 watched
+  // tables (so a twelfth protected table added without a tripwire fails, which is how the gap
+  // opened), plus a TRUNCATE case asserting a NULL affected_row_count -- deliberately null,
+  // because Postgres gives TRUNCATE no transition table and writing a zero would put a
+  // fabricated number in a forensic log.
+  //
+  // finance-subledger.sql, finance-journal.sql, finance-reconciliation.sql and
+  // finance-reversal-adjustment.sql now create real app.finance_settlements rows and post
+  // against them instead of gen_random_uuid(). Settlement rather than invoice because a real
+  // finance_invoices row needs the whole quotation -> handoff -> job order ->
+  // billing-readiness chain, while a settlement needs a tenant and a vendor; no affected
+  // assertion reads the batch's source_type. Where a synthetic id is deliberately KEPT, the
+  // boundary is exact rather than assumed: the batch row is inserted only after the
+  // source-type, membership, FIN:Edit, empty-batch, period, direction, amount and balance
+  // checks and before account resolution, so those negative paths keep their fabricated id --
+  // which is what proves they still fire first rather than being masked by the new guard.
+  //
+  // One assertion got stronger as a side effect: the source_type filter test now checks a type
+  // with rows, a type with none (the exclusion half it never tested), and that the unfiltered
+  // list is at least as large.
+  dbTestSetSha256: "e7fc51569f99ecea41489afbbe3b74f5cc108b8bb2357c638d7fc812055ff3c0",
+  // History: 4e8b11a879ff2062677c309978b019b428cd15f08134ca3c3915e1ab90422eec
+  // (239 files, ISS-2026-302's IP-allowlist regression blocks).
   // History: be44b6f0ed4f20b40a7a8d337f4ea41cd0c0575a502fdc49a59c8e53cca94d8d
   // (239 files, ISS-2026-303's inventory and leave opening-balance import regression blocks).
   // History: 55a5e1b2c54be399c7768a9a7b66ff3187c968fb891146654423b6f409a79184

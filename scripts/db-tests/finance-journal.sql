@@ -357,7 +357,8 @@ $$;
 do $$
 declare
   v_tenant_a uuid;
-  v_source_id uuid := gen_random_uuid();
+  v_vendor_id uuid;
+  v_source_id uuid;
   v_batch app.finance_subledger_batches;
   v_retry_batch app.finance_subledger_batches;
   v_journal app.finance_journals;
@@ -366,7 +367,26 @@ declare
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmejrnla');
 
-  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', v_source_id, '2026-03-08'::date, 'USD',
+  -- ISS-2026-206: a REAL source document, not a gen_random_uuid(). app.finance_subledger_
+  -- batches.source_id is now resolved against the table its own source_type names, so a
+  -- fabricated id is refused -- which is the point of that guard, and this fixture was one of
+  -- the places relying on the absence of it.
+  --
+  -- A settlement rather than an invoice: this block's assertions are entirely about the
+  -- journal a posted batch produces (one journal, mirrored lines, gl_journal_id set, retry
+  -- idempotent) and never about which kind of document the batch came from, while a real
+  -- app.finance_invoices row would need the whole quotation -> handoff -> job order ->
+  -- billing-readiness chain behind it. A settlement is a first-class source type here and
+  -- needs only a tenant and a vendor, so the fixture becomes MORE real, not less: it now
+  -- posts accounting for a document that exists.
+  insert into app.master_records (master_type_code, tenant_id, code, name)
+  values ('vendor', v_tenant_a, 'ISS206-JRNL-VEND', 'ISS-2026-206 fixture vendor')
+  returning id into v_vendor_id;
+  insert into app.finance_settlements (tenant_id, vendor_master_id, currency, settlement_date, idempotency_key)
+  values (v_tenant_a, v_vendor_id, 'USD', '2026-03-08'::date, 'iss206-jrnl-settlement-1')
+  returning id into v_source_id;
+
+  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'settlement', v_source_id, '2026-03-08'::date, 'USD',
     jsonb_build_array(
       jsonb_build_object('postingMapKey', 'ar_control', 'direction', 'debit', 'amount', 1200),
       jsonb_build_object('postingMapKey', 'revenue_default', 'direction', 'credit', 'amount', 1200)
@@ -390,7 +410,7 @@ begin
 
   -- A retried subledger post (same tenant/source_type/source_id) is
   -- idempotent at the batch layer and must never create a second journal.
-  select * into v_retry_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', v_source_id, '2026-03-08'::date, 'USD',
+  select * into v_retry_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'settlement', v_source_id, '2026-03-08'::date, 'USD',
     jsonb_build_array(jsonb_build_object('postingMapKey', 'ar_control', 'direction', 'debit', 'amount', 9999)),
     '00000000-0000-0000-0000-000000029802', 'financemanagera');
   if v_retry_batch.id <> v_batch.id or v_retry_batch.gl_journal_id <> v_batch.gl_journal_id then

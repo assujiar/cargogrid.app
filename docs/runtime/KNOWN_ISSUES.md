@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 49 — 4 High, 20 Medium, 25 Low |
+| `OPEN` | 48 — 4 High, 18 Medium, 26 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 216 |
-| **Total records** | **273** |
+| `RESOLVED` | 218 |
+| **Total records** | **274** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -85,14 +85,14 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-172` | Medium | `RESOLVED` | `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold i |
 | `ISS-2026-179` | Medium | `RESOLVED` | roughly 24 further `SECURITY DEFINER` boolean-oracle / narrow-scope functions share `ISS-2026-164`'s shape, candidate-swept but not individually live- |
 | `ISS-2026-186` | Medium | `RESOLVED` | roughly 14 shared `SECURITY DEFINER` primitives from `HDN-BLK-014`'s original ~30-candidate sweep are genuinely shared across first-party and third-pa |
-| `ISS-2026-206` | Medium | `OPEN` | the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up th |
+| `ISS-2026-206` | Medium | `RESOLVED` | the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up th |
 | `ISS-2026-207` | Medium | `RESOLVED` | `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests |
 | `ISS-2026-231` | Medium | `RESOLVED` | a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered befo |
 | `ISS-2026-234` | Medium | `OPEN` | `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR,  |
 | `ISS-2026-238` | Medium | `RESOLVED` | 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity si |
 | `ISS-2026-242` | Medium | `OPEN` | the repository's own dedicated accessible form primitives (`components/forms/form-field.tsx`, `components/forms/validation-message.tsx`) are adopted i |
 | `ISS-2026-256` | Medium | `OPEN` | this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real  |
-| `ISS-2026-259` | Medium | `OPEN` | `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario |
+| `ISS-2026-259` | Medium | `RESOLVED` | `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario |
 | `ISS-2026-281` | Medium | `OPEN` | the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documente |
 | `ISS-2026-284` | Medium | `OPEN` | A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpo |
 | `ISS-2026-288` | Medium | `OPEN` | `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the p |
@@ -112,6 +112,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-316` | Low | `OPEN` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
 | `ISS-2026-317` | Low | `OPEN` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
 | `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
+| `ISS-2026-319` | Low | `OPEN` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -4137,7 +4138,7 @@ Ledger: `HDN-BLK-018`.
 5-condition test — see `BLOCKER_LEDGER.md`'s `HDN-BLK-040` for the complete ruling. Real owner:
 `Step 16`.
 
-### ISS-2026-206 — the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up the same lineage chains (found at `CG-S15-HDN-007`'s own Tier C review, `OPEN`, Medium, owner `HDN-387`)
+### ISS-2026-206 — the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up the same lineage chains (found at `CG-S15-HDN-007`'s own Tier C review, `RESOLVED` 2026-08-31, Medium, owner `HDN-387`)
 
 Found independently by two of this checkpoint's own four Tier C lenses (correctness
 re-derivation and completeness sweep), converging on the same gap by different methods.
@@ -4206,6 +4207,77 @@ new trigger functions, no existing function body touched); no `public.*` wrapper
 `search_path` pinned, `service_role`-only. Full `db-tests` suite re-run clean. **Status
 stays `OPEN`, Medium** — 2 of 4 tables remain genuinely unfixed for the reasons already on
 record. Owner unchanged (`HDN-387`), scope narrowed to the 2 finance tables named above.
+
+**`RESOLVED`, 2026-08-31**, under `ADR-0027` Part A. All four tables are now closed.
+`app.finance_bank_transactions.matched_source_id` closed at `20260831170000`; this closes
+`app.finance_subledger_batches.source_id`, by
+`20260831310000_harden_finance_subledger_batch_source_lineage.sql`, applied live and recorded.
+
+**The deferral was honest and the remedy it named was the right one.** This entry did not say
+the fix was impossible; it said a naive trigger would break
+`scripts/db-tests/finance-subledger.sql`'s deliberate synthetic-id design, and that the correct
+remedy was "updating any test fixture that currently relies on a synthetic non-resolving id to
+use a real one, rather than working around the new guard." That is exactly what was done — the
+guard was written first, the suite was run, and every fixture it broke was made real rather
+than exempted.
+
+**FIVE source types, not four.** The entry and the table's own original CHECK constraint name
+four. A live read of the constraint returns five: `'opening_balance'` was added later by
+`app.post_finance_opening_balance_batch` (the `ISS-2026-273` finance opening-balance import),
+and it resolves against `app.finance_ar_open_items` **or** `app.finance_ap_open_items` rather
+than one table. Each of the five was derived by reading what the real caller actually passes,
+out of the live `pg_proc` definition, not inferred from the column name — which mattered:
+`'receipt_allocation'` resolves against **`app.finance_receipt_allocation_batches`**, because
+`app.allocate_finance_receipt` passes the allocation *batch* id, not a row from the
+plural-sounding `app.finance_receipt_allocations`. A guard pointed at the obvious table would
+have rejected every legitimate receipt allocation in production. The regression test pins that
+specific choice rather than leaving it to a reader's assumption.
+
+**The guard has no permissive `else`.** An unrecognised `source_type` cannot occur while the
+CHECK constraint holds, so the final branch raises rather than passing. If the CHECK is ever
+widened again without widening the guard — exactly how `'opening_balance'` slipped in
+unvalidated — the new type fails loudly at its first insert instead of silently reopening this
+gap.
+
+**The fixture rework, and why it makes the tests better rather than merely different.**
+`finance-subledger.sql`, `finance-journal.sql`, `finance-reconciliation.sql` and
+`finance-reversal-adjustment.sql` now create real `app.finance_settlements` rows and post
+against them. Settlement rather than invoice because a real `app.finance_invoices` row needs
+the whole quotation → handoff → job order → billing-readiness chain behind it, while a
+settlement needs a tenant and a vendor; settlement is a first-class source type here, and none
+of the affected assertions read the batch's `source_type` — they are about posting-map
+resolution, balance, period eligibility, idempotency and a real two-process concurrency race.
+Those tests now post accounting for documents that exist.
+
+**Where the synthetic id is deliberately kept, the boundary is exact rather than assumed.**
+Reading `app.post_finance_subledger_batch`'s live definition, the batch row is inserted only
+*after* the source-type, membership, `FIN:Edit`, empty-batch, period, direction, line-amount and
+balance checks, and *before* account resolution. The negative paths for the former keep their
+`gen_random_uuid()` — which is what proves those checks still fire first rather than being
+masked by the new guard — and the account-resolution negative paths, which do reach the insert,
+use a real settlement.
+
+**One assertion got stronger as a side effect.** The `list_finance_subledger_batches`
+source-type filter previously ran two inclusive filters (`invoice`, `vendor_bill`) and checked
+only that every returned row matched. It now checks a type that has rows, a type that has none
+(the exclusion half, which the previous shape never tested), and that the unfiltered list is at
+least as large — so a filter that silently returned everything, or nothing, would now fail.
+
+**Evidence.** A new block in `scripts/db-tests/finance-subledger.sql` forces the original
+attack shape — a **direct owner insert**, not a call through the RPC, since a guard living
+only inside `app.post_finance_subledger_batch` would leave the table itself able to hold a
+lineage-less row — for all five source types, and asserts the same refusal on `UPDATE` as on
+`INSERT`, because moving an existing batch onto a fabricated source is the same lie by a
+different route. A real settlement still inserts, so the guard is not a blanket refusal. Full
+`db:test` green.
+
+**Found while doing this, filed rather than folded in: `ISS-2026-319`.**
+`app.finance_ar_open_items.source_document_id` and `app.finance_ap_open_items.source_document_id`
+carry the identical unresolved-polymorphic-id shape one hop further out — this file's own
+fixture passes `gen_random_uuid()` to `app.post_finance_ar_open_item` and nothing refuses it.
+That is a fifth instance of this class, outside the four tables this entry named, and it gets
+its own entry rather than being quietly absorbed into a closure whose scope it was never part
+of.
 
 **Third table closed, 2026-08-31,
 `supabase/migrations/20260831170000_harden_finance_bank_transaction_match_source_lineage.sql`
@@ -6262,7 +6334,7 @@ stops being workable as the customer count grows, and it is the kind of gap ente
 buyers ask about directly. `docs/runbooks/incident-communication.md` §6 states this limit
 where a responder will actually meet it.
 
-### ISS-2026-259 — `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `OPEN`, Medium, owner a dedicated future task)
+### ISS-2026-259 — `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `RESOLVED` 2026-08-31, Medium, owner a dedicated future task)
 
 Live-proved during `HDN-384`'s own DR drill: a direct `DELETE FROM app.leads;` (no `WHERE` clause) against a seeded disposable database left **zero matching rows** in `app.audit_logs`. `app.capture_audit_event` only fires from inside RPC functions — a raw SQL statement (a botched migration, or a support engineer's direct psql intervention during an incident) bypasses the audit trail entirely. This is a real, disclosed limitation of this repository's own audit-logging design, not a security bypass in itself (raw table access already requires elevated database credentials no ordinary tenant role holds), but it directly undermines `docs/runbooks/database-restore.md` §3 item 2's own reliance on `app.audit_logs` as "the one real evidence source" for post-restore security-state auditing — that reliance is sound for anything that went through an RPC, and blind to anything that didn't.
 
@@ -6272,6 +6344,45 @@ Live-proved during `HDN-384`'s own DR drill: a direct `DELETE FROM app.leads;` (
 
 **`PARTIALLY RESOLVED` — a real, bounded, live-tested detection mechanism added, not a closure of the underlying blindness (2026-08-28, Track B Batch 8,
 `supabase/migrations/20260828200000_create_raw_mutation_tripwire.sql`).** Investigated whether a genuinely bounded detection mechanism exists in scope for a single migration — found one: a statement-level `AFTER DELETE`/`AFTER UPDATE`/`AFTER TRUNCATE` trigger, attached directly to the protected table (not routed through any application code path a raw statement could bypass), recording every mutation into a new durable log (`public.raw_mutation_tripwire_log`, deliberately in `public` schema, mirroring `ISS-2026-254`'s own established restore-survival technique), correlated against `app.audit_logs` via Postgres's own `txid_current()` (a new nullable `xact_id` column on `app.audit_logs`, populated automatically via column default — zero change to `app.capture_audit_event`'s body, signature, or behavior) rather than a fragile session flag or time-window heuristic. New read RPC `app.list_untracked_table_mutations()` (`service_role`-only, Option 2 wrapper included) reports exactly which recorded mutations have no corresponding same-transaction audit entry. **Deliberately bounded scope, honestly disclosed**: attached to exactly 2 tables — `app.leads` (the identical table this entry's own live reproduction used) and `app.audit_logs` itself (protects the audit trail's own integrity; safe because the repository's one legitimate raw-mutation path against it, `app.supreme_admin_delete_audit_log`/`app.supreme_admin_mutate_audit_log`, is proven by this migration's own regression to be correctly recognized as tracked, not a false positive). The 9 tables `ISS-2026-265` separately named remain uncovered — extending the mechanism to them is mechanical follow-up (2-3 `CREATE TRIGGER` statements per table), deliberately left to a future task. Known, disclosed limitation: the `txid_current()` correlation is transaction-granular, not statement-granular — a multi-statement raw transaction auditing one mutation but not a second sharing the same transaction would miss the second; the realistic single-autocommit-statement threat model this migration targets is unaffected. Self-caught mid-authoring: Postgres rejects a transition table on a trigger covering more than one event ("transition tables cannot be specified for triggers with more than one event") — fixed by splitting DELETE/UPDATE into 2 single-event triggers per table. Live-verified: `SECURITY DEFINER`, `search_path` pinned on all new functions, grants `service_role`-only on both `app.*` and `public.*` (no live leak, confirmed post-apply). Full `db-tests` suite re-run clean (this fix's own regression caught a real, separate `enqueue_job` payload-comparison regression — see `ISS-2026-053`'s own withdrawal note — before it reached this migration). **Status stays `OPEN`, Medium** — the general repo-wide audit blindness remains genuinely open, exactly as this entry's own text discloses; this migration narrows, and does not claim to close, that gap. Owner: a dedicated future task, now narrowly scoped to extending the same mechanism to `ISS-2026-265`'s 9 named tables and, eventually, more broadly.
+
+**`RESOLVED`, 2026-08-31**, under `ADR-0027` Part A, by
+`20260831300000_extend_raw_mutation_tripwire_to_the_nine_protected_tables.sql`, applied live
+and recorded. This is the follow-up the paragraph above scoped, and it was as mechanical as
+that paragraph predicted: the trigger function, the log table, the `xact_id` correlation column
+and the read RPC are all unchanged. Only the watched set grows, from 2 tables to 11.
+
+**The 9, and why exactly these.** Each carries a security or integrity row-level trigger that
+`ISS-2026-265` live-proved is silently defeated by the `TRUNCATE` step in this repository's own
+sanctioned in-place restore procedure — `TRUNCATE` never fires a `FOR EACH ROW` trigger at all,
+which is documented Postgres behaviour and independent of `pg_restore --disable-triggers`:
+`app.files` (legal-hold delete protection), `app.finance_journals` and
+`app.finance_journal_lines` (posted-journal immutability), the five append-only loyalty ledgers
+(`loyalty_earning_events`, `loyalty_point_ledger_entries`,
+`loyalty_benefit_entitlement_events`, `loyalty_reward_stock_reservations`,
+`loyalty_redemption_events`), and `app.transaction_lineage_edges` (append-only lineage). These
+are the guarantees this product treats as load-bearing. A statement-level trigger fires where a
+row-level one does not, so covering exactly the tables whose row-level protection `TRUNCATE`
+defeats is the point — watching every table would bury these under noise from ordinary bulk
+operations against tables nobody promised anything about.
+
+**What this does and does not claim.** It does not stop anything. A tripwire records; the
+row-level guards still do the refusing, and `TRUNCATE` still defeats them — that remains
+`ISS-2026-265`'s subject, not this one's. What changes is that an interrupted restore, a
+botched migration or a direct `psql` intervention against one of these 9 now leaves a durable
+trace in `public.raw_mutation_tripwire_log`, deliberately in `public` so it survives an `app`
+schema restore, correlated against `app.audit_logs` by `txid_current()`. The
+transaction-granular correlation limitation disclosed above is inherited unchanged.
+
+**Evidence.** `scripts/db-tests/raw-mutation-tripwire.sql` gains a coverage sweep asserting all
+**11** watched tables carry the tripwire on all three events — written against `pg_trigger` so
+it catches a twelfth protected table being added later without one, which is how this gap
+opened in the first place, and holding the single list of what is watched so the two migrations
+cannot drift into two lists. Plus two behavioural cases: a raw, unaudited `DELETE` against an
+append-only lineage table is flagged with a real row count; and `TRUNCATE` — the operation that
+defeats every row-level guard on these 9, and the whole reason the tripwire is statement-level
+— is recorded with a **NULL** `affected_row_count`. That null is asserted deliberately:
+Postgres provides no transition table for `TRUNCATE`, so the count is genuinely unknown, and
+writing a zero would put a fabricated number in a forensic log. Full `db:test` green.
 
 ### ISS-2026-260 — `app.record_dr_restore_test`'s `component_scope` enum has no slot for 3 of the 4 DR scenarios this repository's own DR rehearsal charter names (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `RESOLVED`, Medium, owner a dedicated future task)
 
@@ -8298,3 +8409,37 @@ against — a heavier tool than this one — and every drift instance this repos
 found was an attribute, not a body. If a body drift is ever suspected, the method used here
 works: build the disposable database, dump both sides, compare.
 
+
+### ISS-2026-319 — `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named (found 2026-08-31 while closing `ISS-2026-206`, `OPEN`, Low)
+
+`ISS-2026-206` named four tables and all four are now closed. While reworking
+`scripts/db-tests/finance-subledger.sql`'s fixtures to pass resolvable ids, a fifth instance of
+the same class surfaced: that file calls
+`app.post_finance_ar_open_item(..., 'invoice', gen_random_uuid(), ...)` and nothing refuses it.
+`app.finance_ar_open_items.source_document_id` and its AP sibling are polymorphic over
+`source_document_type` (`invoice`, `vendor_bill`, `opening_balance`), carry no foreign key, and
+have no validation trigger. An open item can therefore claim to be the receivable for an
+invoice that never existed.
+
+**Why it is Low and not Medium**, unlike `ISS-2026-206` itself. `ISS-2026-206`'s severity came
+from `app.finance_subledger_batches` sitting directly beneath `ISS-2026-202`'s own guard on
+`app.finance_journals`, so an unguarded batch measurably weakened a fix that had just shipped —
+a journal could pass the new guard while still being lineage-less at its root. Nothing sits
+beneath these two open-item tables in the same way; the defect is a false claim in one column,
+not a hole under an existing guarantee. And the reconciliation that matters commercially
+already works on `source_document_type` and `open_amount`, never on `source_document_id`.
+
+**Risk in plain terms:** a receivable or payable can record which document it came from
+incorrectly, and nothing catches it. No legitimate code path does this today — the real callers
+(`app.issue_finance_invoice`, `app.post_finance_vendor_bill`, and the opening-balance import)
+all pass real ids — so this is a structural absence rather than a live defect, exactly as
+`ISS-2026-206` was before it was live-forced.
+
+**Status `OPEN`**, Low. **What would close it:** the same `BEFORE INSERT OR UPDATE` guard
+pattern `20260831310000` uses, resolving `invoice` → `app.finance_invoices`, `vendor_bill` →
+`app.finance_vendor_bills`, and `opening_balance` → no document (it is the opening balance
+itself, so the id there is not a document reference and must be treated as its own case rather
+than forced into the pattern). **The real cost is the same one that deferred `ISS-2026-206` for
+two rounds:** several finance test fixtures pass `gen_random_uuid()` to
+`app.post_finance_ar_open_item` on purpose, and closing this means making those real first —
+bounded, mechanical, and genuinely a separate change with its own evidence.

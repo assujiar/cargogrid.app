@@ -125,6 +125,39 @@ begin
     jsonb_build_object('key', 'cash_default', 'value', jsonb_build_object('accountCodeRef', 'CASH-DEFAULT'))
   ), '00000000-0000-0000-0000-000000029702', 'financemanagera');
   perform app.publish_finance_config_version(v_pm_draft.id, '00000000-0000-0000-0000-000000029702', null, 'financemanagera');
+
+  -- ISS-2026-206 fixture: a vendor and a pool of REAL app.finance_settlements rows.
+  --
+  -- This file used to drive app.post_finance_subledger_batch with gen_random_uuid() source
+  -- ids on purpose, to exercise the posting primitive's own mechanics in isolation from real
+  -- document creation -- a legitimate test design, and the exact reason ISS-2026-206's guard
+  -- was deferred rather than forced when it was first drafted. That entry recorded the right
+  -- remedy: update the fixture to pass real ids, rather than work around the guard.
+  --
+  -- Settlements rather than invoices because a real app.finance_invoices row needs the whole
+  -- quotation -> handoff -> job order -> billing-readiness chain behind it, while a settlement
+  -- needs a tenant and a vendor. Settlement is a first-class source type for a subledger
+  -- batch, and none of this file's assertions read the batch's source_type -- they are about
+  -- posting-map resolution, balance, period eligibility, idempotency and concurrency. So the
+  -- fixture gets strictly more real: it now posts accounting for documents that exist.
+  insert into app.master_records (master_type_code, tenant_id, code, name)
+  values ('vendor', v_tenant_a, 'ISS206-SUBL-VEND', 'ISS-2026-206 fixture vendor');
+  insert into app.finance_settlements (id, tenant_id, vendor_master_id, currency, settlement_date, idempotency_key)
+  select coalesce(k.fixed_id, gen_random_uuid()), v_tenant_a,
+         (select id from app.master_records where tenant_id = v_tenant_a and code = 'ISS206-SUBL-VEND'),
+         'USD', '2026-03-10'::date, k.key
+  from (values
+    ('iss206-subl-1', null::uuid),
+    ('iss206-subl-2', null::uuid),
+    ('iss206-subl-3', null::uuid),
+    ('iss206-subl-4', null::uuid),
+    ('iss206-subl-5', null::uuid),
+    -- The two-process concurrency proof further down races a hardcoded source id through psql
+    -- \set interpolation, so that one settlement is created with that exact id rather than a
+    -- generated one -- the race must hit the SAME (tenant, source_type, source_id) from both
+    -- processes, which is the whole point of it.
+    ('iss206-subl-race', '00000000-0000-0000-0000-000000029799'::uuid)
+  ) as k(key, fixed_id);
 end;
 $$;
 
@@ -132,11 +165,20 @@ $$;
 do $$
 declare
   v_tenant_a uuid;
+  -- Deliberately still synthetic, and the boundary is exact rather than assumed: reading
+  -- app.post_finance_subledger_batch's live definition, the batch row is inserted only AFTER
+  -- the source_type, membership, FIN:Edit, empty-batch, period, direction, line-amount and
+  -- balance checks, and BEFORE account resolution. Every call using this id is one of the
+  -- former, so it never reaches ISS-2026-206's lineage guard -- which is what proves those
+  -- checks still fire first rather than being masked by the new one. The account-resolution
+  -- negative paths, which DO reach the insert, use a real settlement instead.
   v_source_id uuid := gen_random_uuid();
+  v_real_source_id uuid;
   v_batch app.finance_subledger_batches;
   v_retry app.finance_subledger_batches;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesubla');
+  v_real_source_id := (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-1');
 
   begin
     perform app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', v_source_id, '2026-03-10'::date, 'USD',
@@ -225,7 +267,10 @@ begin
   end;
 
   begin
-    perform app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', v_source_id, '2026-03-10'::date, 'USD',
+    -- Real source id, unlike the negative paths above: posting-map resolution happens AFTER
+    -- the batch row is inserted, so this call reaches ISS-2026-206's lineage guard first if
+    -- its source is fabricated. The row it inserts is discarded with the exception.
+    perform app.post_finance_subledger_batch(v_tenant_a, null, 'settlement', v_real_source_id, '2026-03-10'::date, 'USD',
       jsonb_build_array(
         jsonb_build_object('postingMapKey', 'ar_control', 'direction', 'debit', 'amount', 100),
         jsonb_build_object('postingMapKey', 'fee_expense_default', 'direction', 'credit', 'amount', 100)
@@ -243,7 +288,7 @@ begin
   -- (and the direct-accountId success case below does the same) so neither
   -- pollutes the ar_control/ap_control balances the dedicated reconciliation
   -- scenario group later checks against a clean, exactly-tied state.
-  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', v_source_id, '2026-03-10'::date, 'USD',
+  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'settlement', v_real_source_id, '2026-03-10'::date, 'USD',
     jsonb_build_array(
       jsonb_build_object('postingMapKey', 'cash_default', 'direction', 'debit', 'amount', 1000),
       jsonb_build_object('postingMapKey', 'revenue_default', 'direction', 'credit', 'amount', 1000)
@@ -253,7 +298,7 @@ begin
     raise exception 'assertion failed: expected a posted batch of total_amount 1000, got total=% status=%', v_batch.total_amount, v_batch.status;
   end if;
 
-  select * into v_retry from app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', v_source_id, '2026-03-10'::date, 'USD',
+  select * into v_retry from app.post_finance_subledger_batch(v_tenant_a, null, 'settlement', v_real_source_id, '2026-03-10'::date, 'USD',
     jsonb_build_array(jsonb_build_object('postingMapKey', 'ar_control', 'direction', 'debit', 'amount', 9999)),
     '00000000-0000-0000-0000-000000029702', 'financemanagera');
   if v_retry.id <> v_batch.id or v_retry.total_amount <> 1000 then
@@ -281,7 +326,10 @@ begin
   v_cash_account_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'CASH-DEFAULT');
 
   begin
-    perform app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', gen_random_uuid(), '2026-03-11'::date, 'USD',
+    -- Real source id: account resolution runs after the insert, so a fabricated source would
+    -- trip ISS-2026-206's guard before this block's own assertion could be reached.
+    perform app.post_finance_subledger_batch(v_tenant_a, null, 'settlement',
+      (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-5'), '2026-03-11'::date, 'USD',
       jsonb_build_array(
         jsonb_build_object('accountId', v_np_account_id, 'direction', 'debit', 'amount', 50),
         jsonb_build_object('postingMapKey', 'revenue_default', 'direction', 'credit', 'amount', 50)
@@ -296,7 +344,8 @@ begin
   end;
 
   begin
-    perform app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', gen_random_uuid(), '2026-03-11'::date, 'USD',
+    perform app.post_finance_subledger_batch(v_tenant_a, null, 'settlement',
+      (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-5'), '2026-03-11'::date, 'USD',
       jsonb_build_array(
         jsonb_build_object('accountId', v_draft_account_id, 'direction', 'debit', 'amount', 50),
         jsonb_build_object('postingMapKey', 'revenue_default', 'direction', 'credit', 'amount', 50)
@@ -310,7 +359,8 @@ begin
       end if;
   end;
 
-  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', gen_random_uuid(), '2026-03-11'::date, 'USD',
+  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'settlement',
+    (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-2'), '2026-03-11'::date, 'USD',
     jsonb_build_array(
       jsonb_build_object('accountId', v_cash_account_id, 'direction', 'debit', 'amount', 75),
       jsonb_build_object('postingMapKey', 'revenue_default', 'direction', 'credit', 'amount', 75)
@@ -382,7 +432,13 @@ begin
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
 
   v_ar_item := app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 500, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
-  perform app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', v_ar_item.source_document_id, '2026-03-12'::date, 'USD',
+  -- ISS-2026-206: v_ar_item.source_document_id is itself a gen_random_uuid() -- app.finance_
+  -- ar_open_items.source_document_id carries the same unresolved-polymorphic-id shape and is
+  -- registered separately as ISS-2026-319. A real settlement is used for the batch's own
+  -- source_id; the AR/AP totals this block actually asserts on come from the open items'
+  -- source_document_TYPE and open_amount, never from the batch's source_type.
+  perform app.post_finance_subledger_batch(v_tenant_a, null, 'settlement',
+    (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-3'), '2026-03-12'::date, 'USD',
     jsonb_build_array(
       jsonb_build_object('postingMapKey', 'ar_control', 'direction', 'debit', 'amount', 500),
       jsonb_build_object('postingMapKey', 'revenue_default', 'direction', 'credit', 'amount', 500)
@@ -391,7 +447,8 @@ begin
 
   select * into v_vendor from app.create_master_record('vendor', v_tenant_a, 'VEND-SUBL-1', 'Subledger Vendor', '[]'::jsonb, '{}'::jsonb, '00000000-0000-0000-0000-000000029702', 'financemanagera');
   v_ap_item := app.post_finance_ap_open_item(v_tenant_a, null, v_vendor.id, 'vendor_bill', gen_random_uuid(), 'USD', 300, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
-  perform app.post_finance_subledger_batch(v_tenant_a, null, 'vendor_bill', v_ap_item.source_document_id, '2026-03-12'::date, 'USD',
+  perform app.post_finance_subledger_batch(v_tenant_a, null, 'settlement',
+    (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-4'), '2026-03-12'::date, 'USD',
     jsonb_build_array(
       jsonb_build_object('postingMapKey', 'expense_default', 'direction', 'debit', 'amount', 300),
       jsonb_build_object('postingMapKey', 'ap_control', 'direction', 'credit', 'amount', 300)
@@ -442,21 +499,35 @@ do $$
 declare
   v_tenant_a uuid;
   v_tenant_b uuid;
+  v_settlement_batches app.finance_subledger_batches[];
   v_invoice_batches app.finance_subledger_batches[];
-  v_vendor_bill_batches app.finance_subledger_batches[];
+  v_unfiltered app.finance_subledger_batches[];
   v_cross_rows app.finance_subledger_batches[];
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesubla');
   v_tenant_b := (select id from app.tenants where slug = 'acmesublb');
 
-  select array_agg(r) into v_invoice_batches from app.list_finance_subledger_batches(v_tenant_a, null, 'invoice', '00000000-0000-0000-0000-000000029702') r;
-  if v_invoice_batches is null or exists (select 1 from unnest(v_invoice_batches) r where r.source_type <> 'invoice') then
-    raise exception 'assertion failed: expected list_finance_subledger_batches filtered by source_type=invoice to return only invoice batches, got %', v_invoice_batches;
+  -- ISS-2026-206 changed which source types this fixture can produce: a batch's source_id is
+  -- now resolved against the table its source_type names, and settlement is the one source
+  -- document this file makes real. So the filter is exercised in BOTH directions instead of
+  -- twice in one -- a type that has rows, and a type that has none.
+  select array_agg(r) into v_settlement_batches from app.list_finance_subledger_batches(v_tenant_a, null, 'settlement', '00000000-0000-0000-0000-000000029702') r;
+  if v_settlement_batches is null or exists (select 1 from unnest(v_settlement_batches) r where r.source_type <> 'settlement') then
+    raise exception 'assertion failed: expected list_finance_subledger_batches filtered by source_type=settlement to return a non-empty set of only settlement batches, got %', v_settlement_batches;
   end if;
 
-  select array_agg(r) into v_vendor_bill_batches from app.list_finance_subledger_batches(v_tenant_a, null, 'vendor_bill', '00000000-0000-0000-0000-000000029702') r;
-  if v_vendor_bill_batches is null or exists (select 1 from unnest(v_vendor_bill_batches) r where r.source_type <> 'vendor_bill') then
-    raise exception 'assertion failed: expected list_finance_subledger_batches filtered by source_type=vendor_bill to return only vendor_bill batches, got %', v_vendor_bill_batches;
+  -- The exclusion half, which the previous two-inclusive-filters shape never actually tested:
+  -- this tenant posts no invoice-sourced batch, so the filter must return nothing rather than
+  -- falling back to everything.
+  select array_agg(r) into v_invoice_batches from app.list_finance_subledger_batches(v_tenant_a, null, 'invoice', '00000000-0000-0000-0000-000000029702') r;
+  if v_invoice_batches is not null then
+    raise exception 'assertion failed: expected list_finance_subledger_batches filtered by source_type=invoice to return zero rows for a tenant with no invoice-sourced batch, got %', v_invoice_batches;
+  end if;
+
+  -- ...and the filter must genuinely be narrowing, not returning nothing for every value.
+  select array_agg(r) into v_unfiltered from app.list_finance_subledger_batches(v_tenant_a, null, null, '00000000-0000-0000-0000-000000029702') r;
+  if v_unfiltered is null or array_length(v_unfiltered, 1) < array_length(v_settlement_batches, 1) then
+    raise exception 'assertion failed: expected the unfiltered list to be at least as large as the settlement-filtered one';
   end if;
 
   select array_agg(r) into v_cross_rows from app.list_finance_subledger_batches(v_tenant_b, null, null, '00000000-0000-0000-0000-000000029705') r;
@@ -464,8 +535,18 @@ begin
     raise exception 'assertion failed: expected tenant B''s own list_finance_subledger_batches to never return a tenant A row';
   end if;
 
+  -- Tenant B needs a real source document too: the posting-map lookup this asserts on happens
+  -- after the batch row is inserted, so a fabricated id would trip ISS-2026-206's lineage
+  -- guard before the missing-map check could be reached.
+  insert into app.master_records (master_type_code, tenant_id, code, name)
+  values ('vendor', v_tenant_b, 'ISS206-SUBLB-VEND', 'ISS-2026-206 fixture vendor (tenant B)');
+  insert into app.finance_settlements (tenant_id, vendor_master_id, currency, settlement_date, idempotency_key)
+  values (v_tenant_b, (select id from app.master_records where tenant_id = v_tenant_b and code = 'ISS206-SUBLB-VEND'),
+          'USD', '2026-03-12'::date, 'iss206-sublb-1');
+
   begin
-    perform app.post_finance_subledger_batch(v_tenant_b, null, 'invoice', gen_random_uuid(), '2026-03-12'::date, 'USD',
+    perform app.post_finance_subledger_batch(v_tenant_b, null, 'settlement',
+      (select id from app.finance_settlements where tenant_id = v_tenant_b and idempotency_key = 'iss206-sublb-1'), '2026-03-12'::date, 'USD',
       jsonb_build_array(
         jsonb_build_object('postingMapKey', 'ar_control', 'direction', 'debit', 'amount', 10),
         jsonb_build_object('postingMapKey', 'revenue_default', 'direction', 'credit', 'amount', 10)
@@ -478,6 +559,60 @@ begin
         raise exception 'assertion failed: expected finance_subledger_missing_posting_map, got %', sqlerrm;
       end if;
   end;
+end;
+$$;
+
+\echo '>> ISS-2026-206: app.finance_subledger_batches.source_id is resolved against the table its own source_type names -- a fabricated id is refused for every one of the five types, INCLUDING through a direct service_role insert that bypasses the RPC entirely, which is how the gap was originally live-forced'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmesubla');
+  v_period_id uuid;
+  v_source_type text;
+  -- subl-5 rather than subl-1: subl-5 backs only the two account-resolution negative paths
+  -- above, both of which roll back, so no batch exists for it and the positive insert below
+  -- does not collide with the (tenant, source_type, source_id) uniqueness rule.
+  v_real_settlement uuid := (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-5');
+begin
+  v_period_id := (select id from app.finance_fiscal_periods where tenant_id = v_tenant_a limit 1);
+
+  -- The original live-forcing shape: a raw insert as the owner, not a call through the RPC.
+  -- A guard that only lives inside app.post_finance_subledger_batch would pass this and still
+  -- leave the table able to hold a lineage-less row.
+  foreach v_source_type in array array['invoice', 'receipt_allocation', 'vendor_bill', 'settlement', 'opening_balance'] loop
+    begin
+      insert into app.finance_subledger_batches (tenant_id, source_type, source_id, currency, total_amount, posting_period_id, posted_by)
+      values (v_tenant_a, v_source_type, gen_random_uuid(), 'USD', 1, v_period_id, 'iss206-prober');
+      raise exception 'assertion failed: a direct insert with a fabricated source_id for source_type % was accepted -- ISS-2026-206 has regressed', v_source_type;
+    exception
+      when foreign_key_violation then
+        if sqlerrm not like 'finance_subledger_orphan_source%' then raise; end if;
+    end;
+  end loop;
+
+  -- The guard must not have become a blanket refusal: a REAL settlement still inserts.
+  insert into app.finance_subledger_batches (tenant_id, source_type, source_id, currency, total_amount, posting_period_id, posted_by)
+  values (v_tenant_a, 'settlement', v_real_settlement, 'USD', 1, v_period_id, 'iss206-prober-positive');
+  delete from app.finance_subledger_batches where posted_by = 'iss206-prober-positive';
+
+  -- receipt_allocation resolves against the allocation BATCH, not app.finance_receipt_
+  -- allocations. Getting this backwards would have rejected every legitimate receipt
+  -- allocation in production, so it is pinned rather than left to a reader's assumption.
+  if position('finance_receipt_allocation_batches' in pg_get_functiondef('app.validate_finance_subledger_batch_source()'::regprocedure)) = 0 then
+    raise exception 'assertion failed: the receipt_allocation branch must resolve against app.finance_receipt_allocation_batches -- app.allocate_finance_receipt passes the allocation batch id, not an allocation row id';
+  end if;
+
+  -- An UPDATE is guarded too, not just an INSERT: moving an existing batch onto a fabricated
+  -- source is the same lie arriving by a different route.
+  begin
+    update app.finance_subledger_batches set source_id = gen_random_uuid()
+    where tenant_id = v_tenant_a and source_type = 'settlement';
+    raise exception 'assertion failed: an UPDATE onto a fabricated source_id was accepted -- the guard must cover UPDATE as well as INSERT';
+  exception
+    when foreign_key_violation then
+      if sqlerrm not like 'finance_subledger_orphan_source%' then raise; end if;
+  end;
+
+  raise notice 'ISS-2026-206 proof: all five source types resolve their source_id against the table their real caller reads; a fabricated id is refused on INSERT and on UPDATE, including through a direct owner insert; a real one still posts';
 end;
 $$;
 
@@ -527,8 +662,8 @@ select id as race_tenant_id from app.tenants where slug = 'acmesubla' \gset
 select current_database() as pg_test_db \gset
 select pg_backend_pid()::text as race_bpid \gset
 
-\set race_sql_a 'select app.post_finance_subledger_batch(''' :race_tenant_id ''', null, ''invoice'', ''00000000-0000-0000-0000-000000029799'', ''2026-03-10'', ''USD'', ''[{"postingMapKey": "cash_default", "direction": "debit", "amount": 750}, {"postingMapKey": "revenue_default", "direction": "credit", "amount": 750}]''::jsonb, ''00000000-0000-0000-0000-000000029702'', ''financemanagera'');'
-\set race_sql_b 'select app.post_finance_subledger_batch(''' :race_tenant_id ''', null, ''invoice'', ''00000000-0000-0000-0000-000000029799'', ''2026-03-10'', ''USD'', ''[{"postingMapKey": "cash_default", "direction": "debit", "amount": 750}, {"postingMapKey": "revenue_default", "direction": "credit", "amount": 750}]''::jsonb, ''00000000-0000-0000-0000-000000029702'', ''financemanagera'');'
+\set race_sql_a 'select app.post_finance_subledger_batch(''' :race_tenant_id ''', null, ''settlement'', ''00000000-0000-0000-0000-000000029799'', ''2026-03-10'', ''USD'', ''[{"postingMapKey": "cash_default", "direction": "debit", "amount": 750}, {"postingMapKey": "revenue_default", "direction": "credit", "amount": 750}]''::jsonb, ''00000000-0000-0000-0000-000000029702'', ''financemanagera'');'
+\set race_sql_b 'select app.post_finance_subledger_batch(''' :race_tenant_id ''', null, ''settlement'', ''00000000-0000-0000-0000-000000029799'', ''2026-03-10'', ''USD'', ''[{"postingMapKey": "cash_default", "direction": "debit", "amount": 750}, {"postingMapKey": "revenue_default", "direction": "credit", "amount": 750}]''::jsonb, ''00000000-0000-0000-0000-000000029702'', ''financemanagera'');'
 
 \setenv PG_TEST_DB :pg_test_db
 \setenv RACE_SQL_A :race_sql_a
@@ -547,13 +682,13 @@ declare
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesubla');
 
-  select count(*) into v_batch_count from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'invoice' and source_id = v_source_id;
+  select count(*) into v_batch_count from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'settlement' and source_id = v_source_id;
   if v_batch_count <> 1 then
     raise exception 'assertion failed: HDN-374 finding 3 regressed -- expected exactly ONE subledger batch row to survive the concurrent race (never two, never zero -- a raw unique_violation reaching a caller means this fix is not applied), got % -- see the RACE_OUT_A/RACE_OUT_B process output captured above', v_batch_count;
   end if;
 
   select count(*) into v_journal_count from app.finance_journals where tenant_id = v_tenant_a and source_type = 'subledger'
-    and source_id = (select id from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'invoice' and source_id = v_source_id);
+    and source_id = (select id from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'settlement' and source_id = v_source_id);
   if v_journal_count <> 1 then
     raise exception 'assertion failed: expected the race-surviving subledger batch to have posted exactly ONE backing system journal (never a double GL posting), got %', v_journal_count;
   end if;

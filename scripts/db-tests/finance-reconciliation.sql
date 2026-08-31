@@ -147,6 +147,8 @@ declare
   v_rev_id uuid;
   v_customer_id uuid;
   v_batch app.finance_subledger_batches;
+  v_iss206_vendor_id uuid;
+  v_iss206_source_id uuid;
   v_run app.finance_reconciliation_runs;
   v_exception_count integer;
 begin
@@ -155,7 +157,21 @@ begin
   v_rev_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'REV-RECON');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
 
-  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'invoice', gen_random_uuid(), '2026-06-15'::date, 'USD',
+  -- ISS-2026-206: a REAL source document rather than a gen_random_uuid().
+  -- app.finance_subledger_batches.source_id is now resolved against the table its own
+  -- source_type names, so a fabricated id is refused. A settlement is used because it is the
+  -- one source type a finance fixture can make real cheaply -- a real app.finance_invoices row
+  -- would need the whole quotation -> handoff -> job order -> billing-readiness chain -- and
+  -- because this block's assertions are about control-vs-source reconciliation totals, which read the
+  -- GL lines' own accounts and the AR open items, never the batch's source_type.
+  insert into app.master_records (master_type_code, tenant_id, code, name)
+  values ('vendor', v_tenant_a, 'ISS206-RECON-VEND', 'ISS-2026-206 fixture vendor')
+  returning id into v_iss206_vendor_id;
+  insert into app.finance_settlements (tenant_id, vendor_master_id, currency, settlement_date, idempotency_key)
+  values (v_tenant_a, v_iss206_vendor_id, 'USD', '2026-06-15'::date, 'iss206-recon-settlement-1')
+  returning id into v_iss206_source_id;
+
+  select * into v_batch from app.post_finance_subledger_batch(v_tenant_a, null, 'settlement', v_iss206_source_id, '2026-06-15'::date, 'USD',
     jsonb_build_array(
       jsonb_build_object('accountId', v_ar_id, 'direction', 'debit', 'amount', 500, 'openItemType', 'ar_open_item', 'openItemId', gen_random_uuid()),
       jsonb_build_object('accountId', v_rev_id, 'direction', 'credit', 'amount', 500)

@@ -212,4 +212,127 @@ begin
   raise notice 'ISS-2026-259 privilege proof: public.raw_mutation_tripwire_log is RLS-enabled with zero anon/authenticated table privilege, and app.list_untracked_table_mutations / public.list_untracked_table_mutations are both service_role-only -- neither the ISS-2026-298 (function) nor ISS-2026-299 (table) platform-default-grant leak class reproduces here';
 end $$;
 
+\echo '>> ISS-2026-259 coverage sweep: all 9 tables ISS-2026-265 named as carrying a security/integrity row-level trigger that TRUNCATE silently defeats now carry the statement-level tripwire, on all three events -- this is the assertion that catches a tenth such table being added later without one'
+do $$
+declare
+  v_protected text[] := array[
+    'files',
+    'finance_journals',
+    'finance_journal_lines',
+    'loyalty_earning_events',
+    'loyalty_point_ledger_entries',
+    'loyalty_benefit_entitlement_events',
+    'loyalty_reward_stock_reservations',
+    'loyalty_redemption_events',
+    'transaction_lineage_edges',
+    -- The original two from 20260828200000, asserted here too so this sweep is the single
+    -- place that answers "what is watched", rather than one of two lists that can diverge.
+    'leads',
+    'audit_logs'
+  ];
+  v_table text;
+  v_events text[];
+  v_missing text[] := array[]::text[];
+begin
+  foreach v_table in array v_protected loop
+    select array_agg(distinct e order by e) into v_events
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    join pg_proc p on p.oid = t.tgfoid
+    cross join lateral (
+      -- tgtype bit 3 = DELETE, bit 4 = UPDATE, bit 5 = TRUNCATE (see pg_trigger's own layout).
+      select unnest(array_remove(array[
+        case when (t.tgtype & 8) <> 0 then 'DELETE' end,
+        case when (t.tgtype & 16) <> 0 then 'UPDATE' end,
+        case when (t.tgtype & 32) <> 0 then 'TRUNCATE' end
+      ], null)) as e
+    ) ev
+    where n.nspname = 'app' and c.relname = v_table
+      and p.proname = '_raw_mutation_tripwire'
+      and not t.tgisinternal;
+
+    if coalesce(v_events, array[]::text[]) <> array['DELETE', 'TRUNCATE', 'UPDATE'] then
+      v_missing := v_missing || (v_table || ' has ' || coalesce(array_to_string(v_events, '+'), 'none'));
+    end if;
+  end loop;
+
+  if array_length(v_missing, 1) is not null then
+    raise exception 'assertion failed: % protected table(s) do not carry the tripwire on all three events -- %',
+      array_length(v_missing, 1), array_to_string(v_missing, '; ');
+  end if;
+
+  raise notice 'ISS-2026-259 coverage proof: all 11 protected tables carry the statement-level tripwire on DELETE, UPDATE and TRUNCATE';
+end $$;
+
+\echo '>> ISS-2026-259 Case 6: a raw, unaudited DELETE against an append-only loyalty ledger is flagged -- one of the 9 tables whose own row-level protection this mechanism exists to compensate for'
+do $$
+declare
+  v_tenant_id uuid := current_setting('cargogrid.iss259_tenant_id')::uuid;
+  v_edge_id uuid;
+begin
+  -- app.transaction_lineage_edges is used rather than a loyalty ledger because it needs no
+  -- customer/account/programme fixture to hold a row: it is a bare polymorphic edge, which
+  -- makes the tripwire the only thing under test here.
+  insert into app.transaction_lineage_edges (tenant_id, relation_type, source_type, source_id, target_type, target_id, created_by_label)
+  values (v_tenant_id, 'quote_to_job', 'job_order_handoff', gen_random_uuid(), 'job_order', gen_random_uuid(), 'iss259-tester')
+  returning id into v_edge_id;
+
+  -- A raw DELETE. The table's own BEFORE DELETE guard refuses this from an ordinary path, so
+  -- the guard is disabled for exactly this statement -- which is the point: the scenario being
+  -- reproduced IS an intervention that has the privilege to get past the row-level guard, and
+  -- the question is whether it leaves a trace.
+  alter table app.transaction_lineage_edges disable trigger user;
+  -- Re-enabling only the tripwire triggers: `disable trigger user` turns off the row-level
+  -- guard AND the statement-level tripwire, and disabling the thing under test would make this
+  -- case prove nothing.
+  alter table app.transaction_lineage_edges enable trigger transaction_lineage_edges_raw_mutation_tripwire_delete;
+  delete from app.transaction_lineage_edges where id = v_edge_id;
+  alter table app.transaction_lineage_edges enable trigger user;
+
+  perform 1 from app.list_untracked_table_mutations(now() - interval '1 hour')
+    where table_name = 'app.transaction_lineage_edges' and operation = 'DELETE' and affected_row_count = 1
+      and detected_at >= now() - interval '1 minute';
+  if not found then
+    raise exception 'assertion failed: expected the raw, unaudited DELETE on app.transaction_lineage_edges to be reported by app.list_untracked_table_mutations';
+  end if;
+
+  raise notice 'ISS-2026-259 Case 6 proof: a raw, unaudited DELETE against an append-only lineage table is flagged, with affected_row_count = 1';
+end $$;
+
+\echo '>> ISS-2026-259 Case 7: TRUNCATE -- the operation ISS-2026-265 live-proved defeats every row-level guard on these 9 tables, and the reason the tripwire is statement-level rather than row-level'
+do $$
+declare
+  v_before integer;
+  v_after integer;
+begin
+  select count(*) into v_before from public.raw_mutation_tripwire_log
+  where table_name = 'app.transaction_lineage_edges' and operation = 'TRUNCATE';
+
+  -- No `disable trigger` needed and none used: TRUNCATE never fires a FOR EACH ROW trigger at
+  -- all, which is precisely the gap. The row-level guard is fully armed here and does not stop
+  -- this.
+  truncate app.transaction_lineage_edges;
+
+  select count(*) into v_after from public.raw_mutation_tripwire_log
+  where table_name = 'app.transaction_lineage_edges' and operation = 'TRUNCATE';
+
+  if v_after <> v_before + 1 then
+    raise exception 'assertion failed: expected TRUNCATE to record exactly one tripwire row (% -> %)', v_before, v_after;
+  end if;
+
+  -- affected_row_count is null on TRUNCATE and that is deliberate, not an oversight: Postgres
+  -- provides no transition table for it, so the count is genuinely unknown rather than zero.
+  -- Recording a zero here would be a fabricated number in a forensic log.
+  if exists (
+    select 1 from public.raw_mutation_tripwire_log
+    where table_name = 'app.transaction_lineage_edges' and operation = 'TRUNCATE'
+      and affected_row_count is not null
+  ) then
+    raise exception 'assertion failed: TRUNCATE must record a NULL affected_row_count -- an unknown count must never be written as a number';
+  end if;
+
+  raise notice 'ISS-2026-259 Case 7 proof: TRUNCATE, which defeats every row-level guard on these 9 tables, is recorded by the statement-level tripwire with a NULL (unknown, not zero) row count';
+end $$;
+
 \echo '>> ISS-2026-259 regression evidence complete'
