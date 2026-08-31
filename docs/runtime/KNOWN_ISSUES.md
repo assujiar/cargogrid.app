@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 62 — 4 High, 25 Medium, 33 Low |
+| `OPEN` | 61 — 4 High, 25 Medium, 32 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 202 |
+| `RESOLVED` | 203 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -107,7 +107,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-310` | Medium | `OPEN` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
 | `ISS-2026-312` | Low | `RESOLVED` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
 | `ISS-2026-313` | Low | `RESOLVED` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
-| `ISS-2026-314` | Low | `OPEN` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
+| `ISS-2026-314` | Medium | `RESOLVED` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
 | `ISS-2026-316` | Low | `OPEN` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
@@ -6997,7 +6997,7 @@ Registered by the same work that created the condition, rather than left for a l
 **`RESOLVED`, 2026-08-31, same day (`supabase/migrations/20260831100000_close_authority_denial_alerting_and_scheduler_catalogue_gap.sql`).** All four are now catalogue tasks — `employee_lifecycle_activation`, `kb_article_version_expiry`, `vendor_compliance_waiver_expiry`, `vendor_compliance_status_refresh` — with a dispatch branch each, taking the catalogue from 11 to 16 (the fifth addition is `ISS-2026-249`'s own authority-denial sweep). The two `p_max_*` arguments became `required_params`, so a tenant sets its own batch ceiling at configuration time rather than inheriting a hard-coded one. All five start `tenant_admin_configurable = false`: vendor compliance, knowledge-base expiry and the security sweep are platform-integrity machinery rather than a tenant's own business rhythm, and employee lifecycle activation moves real employment records, so it starts closed and a Supreme Admin can delegate it per tenant without a migration — which is what the delegation switch is for. `scripts/db-tests/task-scheduler.sql`'s own final block, which walks every catalogue task and fails if any lacks a dispatch branch, now exercises all 16.
 
 
-### ISS-2026-314 — `scripts/db-tests/scheduled-reports.sql`'s two-OS-process concurrency assertion fails intermittently, and its own failure message describes a real correctness bug rather than a test artefact (found 2026-08-31 during an unrelated full-suite run, `OPEN`, Low)
+### ISS-2026-314 — `scripts/db-tests/scheduled-reports.sql`'s two-OS-process concurrency assertion fails intermittently, and its own failure message describes a real correctness bug rather than a test artefact (found 2026-08-31 during an unrelated full-suite run, `RESOLVED` the same day, Medium — re-rated up from Low on root-cause: a real single-caller defect, not a concurrency artefact)
 
 **Severity: Low. Status: `OPEN`. Owner: the next pass that touches `app.claim_due_scheduled_report_run` or that file's concurrency block.**
 
@@ -7037,6 +7037,58 @@ one-off" as an explanation. It does **not** resolve the question this entry exis
 the evidence still cannot distinguish a real double-advance in the product from fragile
 synchronisation in the test. It does raise the priority of answering it, because a real
 double-advance would silently skip a due occurrence.
+
+**`RESOLVED`, 2026-08-31,
+`supabase/migrations/20260831200000_stop_early_scheduled_report_trigger_skipping_a_due_occurrence.sql`
+(applied live). The answer to this entry's own question is: neither. It was a real defect, and
+concurrency had almost nothing to do with it.**
+
+**Root cause.** `app.run_scheduled_report` advanced `next_run_at` by one step **on every call**,
+with no check that the occurrence it processed had actually arrived. `app.create_scheduled_report`
+computes `next_run_at` as the next **future** occurrence. So the very first manual "Run now" on a
+fresh schedule processed tomorrow's occurrence and moved the schedule past it — **that scheduled
+delivery then never happened.**
+
+One click silently ate one future delivery. Two concurrent clicks ate two, which is all the race
+test was ever detecting. **The race was the messenger, not the message** — and the reason nobody
+saw the single-caller case is that the test asserting it (`scheduled-reports.sql:205`) demanded
+`next_run_at` advance on an early trigger, so it was asserting the defect.
+
+**Why it looked like a flake.** The existing staleness guard compares an **unlocked** pre-read
+against the locked row. It catches a second caller only when that caller's unlocked read landed
+before the winner committed. A caller arriving a moment later reads the already-advanced value,
+finds nothing to object to, and processes the next occurrence. The failure window is exactly the
+width of that read-then-lock gap — narrow, timing-dependent, and entirely real.
+
+**No lock could have fixed it**, which is worth stating because that is where a "fix the race"
+attempt would have gone first: a caller arriving after the winner commits is *indistinguishable*
+from a legitimate second trigger. The fix had to be about which occurrences may move the schedule,
+not about who got there first.
+
+**The fix.** `next_run_at` now advances only when the occurrence processed had genuinely arrived
+(`<= now()`). "Run now" is otherwise untouched — the run row, the job, the recipient
+re-authorisation and the notifications all still happen. An early trigger **borrows** the
+occurrence instead of swallowing it. `last_run_at` is stamped either way, because the run really
+did occur. The audit event now records `occurrence_was_due`, so the distinction is visible after
+the fact.
+
+The concurrent case becomes deterministic rather than lucky: on a not-yet-due occurrence neither
+caller advances and both collapse onto the same run and job via the existing
+`(scheduled_report_id, occurrence_at)` unique index and occurrence-derived idempotency key; on a
+due occurrence one advances and the other either hits the staleness guard or finds the new value
+in the future and does not advance either. **Two steps is no longer reachable by any
+interleaving.**
+
+**Evidence.** Two assertions replace the one that encoded the defect: an early trigger must leave
+`next_run_at` **unchanged** (with `last_run_at` still stamped), and a due occurrence — forced by
+putting `next_run_at` in the past, the only difference between the two cases — must still advance
+by **exactly one real step**, so the schedule keeps moving. The race block now forces the
+occurrence due before racing, which is the property it always claimed to test ("the SAME due
+occurrence") and which it was never actually exercising. **Four consecutive full `pnpm db:test`
+runs, all green** — against a failure previously observed twice in roughly a dozen runs.
+
+**Re-rated Medium**, not Low: the original Low rating rested on this being a test-only concern. It
+was a live path that silently dropped a scheduled report delivery on a single ordinary click.
 
 ### ISS-2026-315 — `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable (found 2026-08-31 while closing `ISS-2026-076`, `RESOLVED` the same day, was Medium)
 

@@ -2863,7 +2863,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-083 (408 files: +1,
   // 20260831190000_add_training_provider_evidence_attachment.sql). The sixtieth pass,
   // ISS-2026-312, touched no migration, which is why this history skips a number.
-  migrationSetSha256: "6c63e9d375fa35962da5a27ef6c22acd31e342d50e2ff15bc917d2bb3b7e4010",
+  // History: 6c63e9d375fa35962da5a27ef6c22acd31e342d50e2ff15bc917d2bb3b7e4010
+  // (408 files, sixty-first-pass amendment above). Superseded 2026-08-31 (sixty-second pass) by
+  // ISS-2026-314 (409 files: +1,
+  // 20260831200000_stop_early_scheduled_report_trigger_skipping_a_due_occurrence.sql).
+  migrationSetSha256: "ce3f785b26728689c0e042efd4c5366053fc9e281f044dfd678d49590d9b94db",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3181,7 +3185,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (238 files unchanged in count -- hris-training-talent.sql gained the provider-evidence block,
   // proving the new path refuses infected, unscanned, wrong-scope, unauthorized and stale-version
   // attempts under the identical PLT-128 discipline the certificate path already established).
-  dbTestSetSha256: "46d6bf80aeaa996c56044dd16d5d7a3bfaa194cab4c9d537aae2f9d9a56da84e",
+  // History: 46d6bf80aeaa996c56044dd16d5d7a3bfaa194cab4c9d537aae2f9d9a56da84e
+  // (238 files, sixty-first-pass state). Superseded 2026-08-31 (sixty-second pass) by
+  // ISS-2026-314 (238 files unchanged in count -- scheduled-reports.sql's own assertion that an
+  // early trigger ADVANCES next_run_at was asserting the defect, and is replaced by the two
+  // assertions that actually separate the cases; the race block now forces the occurrence due
+  // before racing it, which is the property it always claimed to test).
+  dbTestSetSha256: "a665ddc29a51b89b85714dff3040e9cde3c6b8c2bf8bb347622d5f8ee490f076",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

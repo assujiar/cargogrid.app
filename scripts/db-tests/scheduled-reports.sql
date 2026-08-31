@@ -202,12 +202,18 @@ begin
   end if;
 
   select * into v_schedule_after from app.scheduled_reports where id = v_schedule_id;
-  if v_schedule_after.next_run_at <= v_schedule_before.next_run_at then
-    raise exception 'assertion failed: expected next_run_at to advance forward past the just-triggered occurrence';
+  -- ISS-2026-314: this assertion used to demand that next_run_at ADVANCE here, and that was
+  -- asserting the defect. app.create_scheduled_report computes next_run_at as the next FUTURE
+  -- occurrence, so this trigger is early -- and advancing past a future occurrence means that
+  -- scheduled delivery never happens. An early trigger borrows the occurrence; it must not
+  -- swallow it. last_run_at is still stamped, because the run genuinely did happen.
+  if v_schedule_after.next_run_at <> v_schedule_before.next_run_at then
+    raise exception 'assertion failed: an EARLY trigger moved next_run_at from % to % -- that silently skips a real scheduled delivery (ISS-2026-314)', v_schedule_before.next_run_at, v_schedule_after.next_run_at;
   end if;
   if v_schedule_after.last_run_at is null then
-    raise exception 'assertion failed: expected last_run_at to be stamped';
+    raise exception 'assertion failed: expected last_run_at to be stamped even for an early trigger -- the run really did happen';
   end if;
+
 
   select count(*) into v_notification_count from app.notifications
   where recipient_auth_user_id = '00000000-0000-0000-0000-000008000003' and notification_type_code = 'scheduled_report_ready';
@@ -264,6 +270,36 @@ begin
   if v_job_count <> 1 then
     raise exception 'assertion failed: expected exactly ONE app.report_runs row linked to this schedule''s own job_id (idempotent across both triggers), got %', v_job_count;
   end if;
+end;
+$$;
+
+\echo '>> ISS-2026-314: the other half -- an occurrence that HAS arrived still advances next_run_at by exactly one real step, so the schedule keeps moving; only an EARLY trigger leaves it alone'
+do $$
+declare
+  v_schedule_id uuid := (select id from app.scheduled_reports where tenant_id = (select id from app.tenants where slug = 'iaeschedco') and name = 'Daily Billing Summary');
+  v_before app.scheduled_reports;
+  v_after app.scheduled_reports;
+begin
+  -- Its own block, deliberately: it triggers a second real run, which would otherwise break the
+  -- earlier block's "exactly one notification" count. Forcing next_run_at into the past is the
+  -- ONLY difference from the early trigger above -- everything else about the call is identical,
+  -- so this isolates the due/not-due decision and nothing else.
+  update app.scheduled_reports set next_run_at = date_trunc('minute', now()) - interval '5 minutes' where id = v_schedule_id;
+  select * into v_before from app.scheduled_reports where id = v_schedule_id;
+
+  perform app.run_scheduled_report(v_schedule_id, '00000000-0000-0000-0000-000008000002', 'tester');
+  select * into v_after from app.scheduled_reports where id = v_schedule_id;
+
+  if v_after.next_run_at <= v_before.next_run_at then
+    raise exception 'assertion failed: a DUE occurrence must advance next_run_at forward, got %/% -- otherwise the schedule would never move at all', v_before.next_run_at, v_after.next_run_at;
+  end if;
+  if v_after.next_run_at <> app.compute_scheduled_report_next_run(
+    v_before.cron_minute, v_before.cron_hour, v_before.cron_day_of_month, v_before.cron_day_of_week, v_before.timezone, v_before.next_run_at
+  ) then
+    raise exception 'assertion failed: a due occurrence must advance by EXACTLY one real step, got %', v_after.next_run_at;
+  end if;
+
+  raise notice 'PASS: ISS-2026-314 -- a due occurrence advances by exactly one step, an early trigger advances not at all';
 end;
 $$;
 
@@ -354,6 +390,16 @@ end;
 $$;
 
 \echo '>> Tier C fix regression (finding 3, correctness-concurrency): real, genuinely concurrent OS-process run race for the SAME due occurrence -- exactly one occurrence is ever processed (never a silent double-advance that skips the real next due date, as a live two-session reproduction against the pre-fix function once showed)'
+
+-- ISS-2026-314: force the occurrence genuinely DUE before racing it. Previously this raced a
+-- FUTURE occurrence, where the old function advanced unconditionally and the outcome depended on
+-- whether the second caller's unlocked pre-read landed before the winner committed -- which is
+-- exactly why this assertion failed intermittently and read as a flake. Racing a due occurrence
+-- tests the property the block claims to test ("the SAME due occurrence"), and now does so
+-- deterministically.
+update app.scheduled_reports set next_run_at = date_trunc('minute', now()) - interval '5 minutes'
+where tenant_id = (select id from app.tenants where slug = 'iaeschedco') and name = 'Daily Billing Summary';
+
 select id as sched_race_schedule_id, next_run_at as sched_race_before_next_run_at
 from app.scheduled_reports
 where tenant_id = (select id from app.tenants where slug = 'iaeschedco') and name = 'Daily Billing Summary'
