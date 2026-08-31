@@ -1791,4 +1791,197 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-073: a direct_hire case now carries a real, HRS:Approve-gated "approved direct hire" precondition, and the constraint -- not the RPC -- is what blocks finalization, so it holds for every path including a raw UPDATE'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and unit_type = 'department' limit 1);
+  v_case app.onboarding_offboarding_cases;
+  v_other app.onboarding_offboarding_cases;
+  v_event_count integer;
+begin
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Direct Hire Approval Subject', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-iss073-a', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+
+  if v_case.direct_hire_approved_at is not null then
+    raise exception 'assertion failed: a freshly started direct_hire case must NOT arrive pre-approved';
+  end if;
+
+  -- HRS:Edit is deliberately not enough. This is the whole finding: starting and
+  -- approving a direct hire used to be the same permission (027702 holds
+  -- Create/Edit/Export/View, never Approve).
+  begin
+    perform app.record_direct_hire_approval(v_case.id, v_case.record_version, 'looks fine to me', '00000000-0000-0000-0000-000000027702', 'tester');
+    raise exception 'assertion failed: expected an HRS:Edit-only actor to be denied recording a direct-hire approval';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- A justification note is mandatory -- an approval with no stated reason is not
+  -- evidence of anything.
+  begin
+    perform app.record_direct_hire_approval(v_case.id, v_case.record_version, '   ', '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected approval_note_required for a blank justification note';
+  exception when check_violation then
+    if sqlerrm not like 'approval_note_required%' then raise; end if;
+  end;
+
+  select * into v_case from app.record_direct_hire_approval(v_case.id, v_case.record_version, 'headcount approved by the CFO out of band, ref DH-2026-001', '00000000-0000-0000-0000-000000027703', 'tester');
+  if v_case.direct_hire_approved_at is null
+     or v_case.direct_hire_approved_by_auth_user_id <> '00000000-0000-0000-0000-000000027703'
+     or v_case.direct_hire_approval_note <> 'headcount approved by the CFO out of band, ref DH-2026-001' then
+    raise exception 'assertion failed: expected the approval identity, instant and note all recorded on the case';
+  end if;
+
+  select count(*) into v_event_count from app.onboarding_case_events
+  where case_id = v_case.id and event_type = 'direct_hire_approved';
+  if v_event_count <> 1 then
+    raise exception 'assertion failed: expected exactly one direct_hire_approved lifecycle event, found %', v_event_count;
+  end if;
+
+  -- Once, not repeatedly.
+  begin
+    perform app.record_direct_hire_approval(v_case.id, v_case.record_version, 'again', '00000000-0000-0000-0000-000000027703', 'tester');
+    raise exception 'assertion failed: expected already_approved on a second direct-hire approval';
+  exception when check_violation then
+    if sqlerrm not like 'already_approved%' then raise; end if;
+  end;
+
+  -- The RPC refuses to pretend a non-direct_hire case has a direct-hire approval.
+  select * into v_other from app.onboarding_offboarding_cases
+  where tenant_id = v_tenant1 and source_type <> 'direct_hire' and status in ('draft', 'active') limit 1;
+  if v_other.id is not null then
+    begin
+      perform app.record_direct_hire_approval(v_other.id, v_other.record_version, 'n/a', '00000000-0000-0000-0000-000000027703', 'tester');
+      raise exception 'assertion failed: expected not_a_direct_hire_case for a non-direct_hire case';
+    exception when check_violation then
+      if sqlerrm not like 'not_a_direct_hire_case%' then raise; end if;
+    end;
+  end if;
+end;
+$$;
+
+\echo '>> ISS-2026-073: the gate is a table CHECK constraint, so it blocks an UNAPPROVED direct_hire case from reaching pending_finalize_approval/finalized even by a raw service_role UPDATE that bypasses every RPC -- and lets an approved one through'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and unit_type = 'department' limit 1);
+  v_case app.onboarding_offboarding_cases;
+begin
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Direct Hire Constraint Subject', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-iss073-b', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+
+  begin
+    update app.onboarding_offboarding_cases set status = 'pending_finalize_approval' where id = v_case.id;
+    raise exception 'assertion failed: an unapproved direct_hire case must not be able to reach pending_finalize_approval, even by raw UPDATE';
+  exception when check_violation then
+    if sqlerrm not like '%direct_hire_approval_check%' then raise; end if;
+  end;
+
+  begin
+    update app.onboarding_offboarding_cases set status = 'finalized' where id = v_case.id;
+    raise exception 'assertion failed: an unapproved direct_hire case must not be able to reach finalized, even by raw UPDATE';
+  exception when check_violation then
+    if sqlerrm not like '%direct_hire_approval_check%' then raise; end if;
+  end;
+
+  -- And the constraint is not a blanket ban: once the approval exists, the same
+  -- transition is allowed. Rolled back so this fixture leaves no half-finalized case
+  -- behind for a later assertion to trip over.
+  perform app.record_direct_hire_approval(v_case.id, v_case.record_version, 'approved for the constraint proof', '00000000-0000-0000-0000-000000027703', 'tester');
+  begin
+    update app.onboarding_offboarding_cases set status = 'pending_finalize_approval' where id = v_case.id;
+    update app.onboarding_offboarding_cases set status = 'active' where id = v_case.id;
+  exception when check_violation then
+    raise exception 'assertion failed: an APPROVED direct_hire case must be allowed to reach pending_finalize_approval';
+  end;
+end;
+$$;
+
+\echo '>> ISS-2026-071: a task''s own named owner_auth_user_id is now a real completion authority -- an owner holding NO HRS:Edit may complete their own task, a non-owner without HRS:Edit may not, an UNASSIGNED task confers nothing on anybody, and assign/reopen/waive keep their unchanged HRS gates'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and unit_type = 'department' limit 1);
+  v_case app.onboarding_offboarding_cases;
+  v_owned app.onboarding_case_tasks;
+  v_unowned app.onboarding_case_tasks;
+begin
+  -- 027704 is the fixture's plain viewer: HRS:View only, no Edit, no Approve,
+  -- no Override. If this identity can complete a task, it is because the row
+  -- names it -- there is no other credential it could be using.
+  if (app.evaluate_permission('00000000-0000-0000-0000-000000027704', v_tenant1, 'HRS', 'Edit')).allowed then
+    raise exception 'assertion failed: this test is only meaningful if 027704 genuinely lacks HRS:Edit';
+  end if;
+
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Task Owner Authority Subject', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-iss071', '00000000-0000-0000-0000-000000027702', 'tester'
+  );
+
+  select * into v_owned from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'welcome-doc';
+  select * into v_unowned from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'training';
+
+  -- Assigning is NOT part of the widened path: the viewer cannot route work,
+  -- only complete what has been routed to them.
+  begin
+    perform app.assign_onboarding_task(v_case.id, v_owned.id, v_owned.record_version, '00000000-0000-0000-0000-000000027704', '00000000-0000-0000-0000-000000027704', 'tester');
+    raise exception 'assertion failed: expected an HRS:Edit-less actor to be denied assigning a task -- only completion was widened';
+  exception when insufficient_privilege then null;
+  end;
+
+  select * into v_owned from app.assign_onboarding_task(v_case.id, v_owned.id, v_owned.record_version, '00000000-0000-0000-0000-000000027704', '00000000-0000-0000-0000-000000027702', 'tester');
+  if v_owned.owner_auth_user_id <> '00000000-0000-0000-0000-000000027704' then
+    raise exception 'assertion failed: expected the task to be owned by 027704 after assignment';
+  end if;
+
+  -- The unassigned task confers nothing: coalesce(null = actor, false) must be
+  -- false, never null-and-therefore-permissive.
+  if v_unowned.owner_auth_user_id is not null then
+    raise exception 'assertion failed: this test needs a genuinely UNASSIGNED task as its control';
+  end if;
+  begin
+    perform app.complete_onboarding_task(v_case.id, v_unowned.id, v_unowned.record_version, 'not mine', null, '00000000-0000-0000-0000-000000027704', 'tester');
+    raise exception 'assertion failed: an UNASSIGNED task must not be completable by an actor without HRS:Edit';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- The fix itself: the named owner completes their own task with no HRS:Edit.
+  select * into v_owned from app.complete_onboarding_task(v_case.id, v_owned.id, v_owned.record_version, 'welcome pack signed by the new hire', null, '00000000-0000-0000-0000-000000027704', 'tester');
+  if v_owned.status <> 'completed' then
+    raise exception 'assertion failed: expected the task''s own named owner to complete it without HRS:Edit, got %', v_owned.status;
+  end if;
+
+  -- Reopen is not widened either: ownership buys completion, nothing else.
+  begin
+    perform app.reopen_onboarding_task(v_case.id, v_owned.id, v_owned.record_version, 'changed my mind', '00000000-0000-0000-0000-000000027704', 'tester');
+    raise exception 'assertion failed: expected an HRS:Edit-less owner to be denied reopening their own completed task';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- And an HRS:Edit holder still completes anyone's task, unchanged -- the ruling
+  -- deliberately did not narrow the permission path.
+  select * into v_unowned from app.assign_onboarding_task(v_case.id, v_unowned.id, v_unowned.record_version, '00000000-0000-0000-0000-000000027704', '00000000-0000-0000-0000-000000027702', 'tester');
+  select * into v_unowned from app.complete_onboarding_task(v_case.id, v_unowned.id, v_unowned.record_version, 'completed by HR on the owner''s behalf', null, '00000000-0000-0000-0000-000000027702', 'tester');
+  if v_unowned.status <> 'completed' then
+    raise exception 'assertion failed: an HRS:Edit holder must still be able to complete a task owned by someone else';
+  end if;
+end;
+$$;
+
 \echo 'ALL HRT-277 db-test assertions passed.'

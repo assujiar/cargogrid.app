@@ -2121,6 +2121,90 @@ import { readFileSync } from "node:fs";
  *
  * Re-verified via a fresh full local db-test run (394 migrations, 236 runner files,
  * ALL PASSED).
+ *
+ * AMENDED 2026-08-31 (forty-sixth pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. One migration, three findings -- because they are the
+ * same defect in different clothes: the data model names an owner or an approver, and
+ * the authorization layer never reads it.
+ * 20260831060000_close_hris_authority_shape_rulings.sql.
+ *
+ * `ISS-2026-068` (Medium) -- app.job_vacancies.hiring_manager_employee_id was written
+ * and validated at draft time, never read back by any read RPC, so a hiring manager
+ * could only see their own vacancy by holding tenant-wide HRS:View, which also shows
+ * every other vacancy, candidate, application and offer. app.list_my_hiring_manager_
+ * vacancies is the §26 half that was missing, built to the shape §26's OTHER half
+ * already had (app.get_my_assigned_interviews): session-identity assert, explicit
+ * membership gate, employee resolution, silent empty return on either miss.
+ *
+ * app.list_job_vacancies is deliberately NOT narrowed. The entry frames the wide read
+ * as the defect; a genuine HRS:View recruiter is supposed to see the whole pipeline.
+ * What was missing was the narrow path, and adding it lets a tenant grant a hiring
+ * manager NO HRS permission at all instead of HRS:View -- a real reduction in what
+ * tenants are forced to grant, achieved additively.
+ *
+ * `ISS-2026-071` (Medium) -- app.onboarding_case_tasks.owner_auth_user_id was written,
+ * displayed, never checked. Two fixes pointed opposite ways. TIGHTEN (require an
+ * HRS:Edit holder to also match the owner) was rejected on evidence: HRS:Edit is a
+ * permission a tenant grants deliberately, an HR coordinator closing an IT-owned task
+ * is ordinary correct work, every act is already audited, and there is no cross-tenant
+ * or unauthenticated exposure to close. WIDEN was taken: the named owner may complete
+ * their own task without HRS:Edit -- which REDUCES what a tenant must grant, since
+ * today that owner needs blanket HRS:Edit to touch their own task.
+ *
+ * Scoped to completion alone. Not assign, reopen, waive, cancel, or the two access
+ * RPCs. The shared app.resolve_onboarding_case_task_for_write preamble is unmodified,
+ * so no other caller's authority moved.
+ *
+ * Two ways it could have gone wrong. owner_auth_user_id is nullable, so a bare
+ * equality yields null on an unassigned task and `not null` is null -- the guard would
+ * silently PASS. It is wrapped in coalesce(..., false), and the regression proves the
+ * unassigned case is rejected. And a path whose only credential is "this row names
+ * you" must prove the caller is that session: it does, because app.evaluate_permission
+ * itself calls app.assert_actor_is_session_identity (ATW-031) and runs unconditionally
+ * BEFORE the owner comparison. A duplicate call there would have looked more careful
+ * and been less true.
+ *
+ * `ISS-2026-073` (Medium) -- Prompt 277 §21/§25 name an "approved direct hire"
+ * precondition that no field, table or approval call implemented. §21 reads like a
+ * start-time gate; §25 is explicit -- "before completion/finalization" -- so the gate
+ * is at finalization, which also matches what job_offer-sourced cases already got
+ * implicitly from HRT-276's offer-approval routing.
+ *
+ * app.record_direct_hire_approval is gated on HRS:Approve, deliberately not HRS:Edit:
+ * the finding IS that starting and approving were the same permission, so an HRS:Edit
+ * gate would have closed the entry while changing nothing.
+ *
+ * Enforcement is a table CHECK constraint, not a branch in the finalize RPC. The
+ * constraint holds for every path into pending_finalize_approval/finalized -- a future
+ * RPC, a service_role script, a raw UPDATE -- not only the function someone remembered
+ * to edit, and it mirrors this table's own onboarding_offboarding_cases_exit_reason_
+ * check shape. Added NOT VALID then VALIDATEd separately, so validation reports
+ * honestly whether an already-finalized direct_hire case predates the rule instead of
+ * grandfathering one. It validated clean live.
+ *
+ * Not enforced and stated rather than implied: segregation of duties between initiator
+ * and approver. app.onboarding_offboarding_cases records its initiator as a text label,
+ * not an identity, so that check cannot be made reliably; the function comment says so.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count): hris-recruitment-ats.sql
+ * proves the assigned slice on the fixture's genuinely zero-permission hiring manager
+ * (asserted, not assumed), through a forged session, with cross-tenant silence and an
+ * identity-mismatch rejection. hris-onboarding-offboarding.sql proves the owner path
+ * end to end (denied assigning, allowed completing their own, denied on an UNASSIGNED
+ * task, denied reopening, HRS:Edit still completes anyone's) and proves the direct-hire
+ * constraint AROUND the RPC layer entirely, by raw UPDATE.
+ *
+ * Re-verified via a fresh full local db-test run (395 migrations, 236 runner files,
+ * ALL PASSED). 20260831060000 IS applied live; the constraint is convalidated.
+ *
+ * Also corrected in the same pass, outside the digests: the four migrations applied
+ * live on 2026-08-31 via apply_migration had been recorded in
+ * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
+ * (e.g. 20260831032450) rather than their repo filename version, silently
+ * re-introducing the ledger drift the 84-row reconciliation had just closed. All four,
+ * plus this pass's own, were remapped to their filename versions under an
+ * in-transaction assertion requiring exactly 5 remapped rows; ledger and repo now agree
+ * again, so `supabase db push` cannot re-run any of them.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2352,7 +2436,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (393 files, forty-third-pass amendment above). Superseded 2026-08-31 (forty-fourth
   // pass) by ISS-2026-172(b) (394 files: +1,
   // 20260831040000_create_logged_file_metadata_listing.sql).
-  migrationSetSha256: "29e80b0443bda98ddd95d0d61a49fc53fa34b156efdf37728503c1bdce50f4c8",
+  // History: 29e80b0443bda98ddd95d0d61a49fc53fa34b156efdf37728503c1bdce50f4c8
+  // (394 files, forty-fourth-pass amendment above). Superseded 2026-08-31 (forty-sixth
+  // pass) by ISS-2026-068/071/073 (395 files: +1,
+  // 20260831060000_close_hris_authority_shape_rulings.sql). The forty-fifth pass moved
+  // dbTestSetSha256 only -- ISS-2026-170's own enumeration concluded no migration should
+  // be written -- so this digest skips from the forty-fourth pass to the forty-sixth.
+  migrationSetSha256: "c10632fead489aa251ea5b2c2c01f6a522558961b9cc859e8514fcaf106c7bcd",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2594,7 +2684,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: 2acefedb71b9e0d083959408545dfc2381baf340cdef0a0489b3d4f335202a5a
   // (236 files, forty-fourth-pass state). Superseded 2026-08-31 (forty-fifth pass) by
   // ISS-2026-170 (236 files unchanged -- document-file.sql gained the 14-guard set pin).
-  dbTestSetSha256: "5f2aa52037f5c42d6b0cfd4f17219c64bc89ee1e305fa1bdbd3964fd1abd7b84",
+  // History: 5f2aa52037f5c42d6b0cfd4f17219c64bc89ee1e305fa1bdbd3964fd1abd7b84
+  // (236 files, forty-fifth-pass state). Superseded 2026-08-31 (forty-sixth pass) by
+  // ISS-2026-068/071/073 (236 files unchanged in count -- hris-recruitment-ats.sql gained
+  // the hiring-manager assigned-slice proof, hris-onboarding-offboarding.sql gained the
+  // task-owner authority proof and both direct-hire approval proofs).
+  dbTestSetSha256: "81eb9c86c069e4ed31105135a29326cd82947dfe4ff4b4e9b28db3e2bc0e41bc",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

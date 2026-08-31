@@ -1180,4 +1180,79 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-068: hiring managers finally have the self-scoped "assigned slice" read the interviewer half already had -- app.list_my_hiring_manager_vacancies returns only the caller''s own vacancies, requires ZERO HRS permission, and is silent (not an error) for a caller with no employee profile or no membership'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrrec1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'hrrec2');
+  v_position_id uuid := (select id from app.positions where tenant_id = (select id from app.tenants where slug = 'hrrec1') and code = 'POS-REC');
+  v_manager_employee_id uuid := (select master_record_id from app.employees where tenant_id = (select id from app.tenants where slug = 'hrrec1') and full_name = 'Hiring Manager');
+  v_mine app.job_vacancies;
+  v_theirs app.job_vacancies;
+  v_count integer;
+begin
+  -- 027608 is the fixture's hiring manager and holds NO HRS permission at all
+  -- (the same identity the authority tests above use as their no-permission
+  -- control). If this identity can read a vacancy, it is because the vacancy
+  -- names it -- there is no other credential in play.
+  if (app.evaluate_permission('00000000-0000-0000-0000-000000027608', v_tenant1, 'HRS', 'View')).allowed then
+    raise exception 'assertion failed: this test is only meaningful if 027608 genuinely lacks HRS:View';
+  end if;
+
+  select * into v_mine from app.create_job_vacancy_draft(
+    v_tenant1, v_position_id, 'Owned By Hiring Manager', 'full_time', 1, null, null, v_manager_employee_id,
+    'idem-hr1-iss068-mine', '00000000-0000-0000-0000-000000027602', 'tester'
+  );
+  select * into v_theirs from app.create_job_vacancy_draft(
+    v_tenant1, v_position_id, 'Owned By Nobody In Particular', 'full_time', 1, null, null, null,
+    'idem-hr1-iss068-theirs', '00000000-0000-0000-0000-000000027602', 'tester'
+  );
+
+  -- A real forged session, because the function asserts the claimed actor IS the
+  -- session identity -- exactly as app.get_my_assigned_interviews does.
+  perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027608", "role": "authenticated"}', true);
+
+  select count(*) into v_count from app.list_my_hiring_manager_vacancies(v_tenant1, '00000000-0000-0000-0000-000000027608');
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected the hiring manager to see exactly their own 1 vacancy, got %', v_count;
+  end if;
+  if not exists (select 1 from app.list_my_hiring_manager_vacancies(v_tenant1, '00000000-0000-0000-0000-000000027608') v where v.id = v_mine.id) then
+    raise exception 'assertion failed: expected the hiring manager''s own vacancy in their assigned slice';
+  end if;
+  if exists (select 1 from app.list_my_hiring_manager_vacancies(v_tenant1, '00000000-0000-0000-0000-000000027608') v where v.id = v_theirs.id) then
+    raise exception 'assertion failed: the assigned slice must NOT include a vacancy this manager does not own';
+  end if;
+
+  -- Cross-tenant: the same identity asking about a tenant it is not a member of
+  -- gets silence, not a row and not an error that would confirm the tenant exists.
+  select count(*) into v_count from app.list_my_hiring_manager_vacancies(v_tenant2, '00000000-0000-0000-0000-000000027608');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero rows for a tenant the caller is not a member of, got %', v_count;
+  end if;
+
+  -- Claiming to be someone else is rejected outright, not silently answered.
+  begin
+    perform app.list_my_hiring_manager_vacancies(v_tenant1, '00000000-0000-0000-0000-000000027602');
+    raise exception 'assertion failed: expected actor_identity_mismatch when the session claims another identity';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000027605", "role": "authenticated"}', true);
+  -- A tenant member with no employee profile at all (the customer-layer principal)
+  -- returns empty rather than raising -- it learns nothing about the tenant's hiring.
+  select count(*) into v_count from app.list_my_hiring_manager_vacancies(v_tenant1, '00000000-0000-0000-0000-000000027605');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero rows for a caller with no linked employee profile, got %', v_count;
+  end if;
+
+  perform set_config('request.jwt.claims', '', true);
+
+  -- Cleanup: both stay DRAFTS (never published, so they never consumed a posting or
+  -- the position's capacity) and are cancelled rather than closed -- app.close_job_vacancy
+  -- rejects a draft by design, which is the correct behaviour, not something to work around.
+  perform app.cancel_job_vacancy_draft(v_mine.id, (select record_version from app.job_vacancies where id = v_mine.id), 'test cleanup', '00000000-0000-0000-0000-000000027602', 'tester');
+  perform app.cancel_job_vacancy_draft(v_theirs.id, (select record_version from app.job_vacancies where id = v_theirs.id), 'test cleanup', '00000000-0000-0000-0000-000000027602', 'tester');
+end;
+$$;
+
 \echo 'ALL HRT-276 db-test assertions passed.'
