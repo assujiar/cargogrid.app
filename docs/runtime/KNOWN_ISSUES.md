@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 87 — 6 High, 39 Medium, 42 Low |
+| `OPEN` | 86 — 6 High, 39 Medium, 41 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 174 |
+| `RESOLVED` | 175 |
 | **Total records** | **266** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -139,7 +139,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-189` | Low | `OPEN` | `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate |
 | `ISS-2026-197` | Low | `OPEN` | no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-t |
 | `ISS-2026-208` | Low | `OPEN` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
-| `ISS-2026-223` | Low | `OPEN` | ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority`  |
+| `ISS-2026-223` | Low | `RESOLVED` | ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority`  |
 | `ISS-2026-239` | Low | `OPEN` | 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real p |
 | `ISS-2026-243` | Low | `OPEN` | switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun |
 | `ISS-2026-244` | Low | `OPEN` | Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emula |
@@ -3529,7 +3529,7 @@ while a Supreme Admin's own RPD-022 absolute-CRUD override still applied and pro
 correctly-attributed audit row. `supabase/migrations/20260819000000_harden_release_blocker_
 triage_remediation.sql` Part 3; regression: `scripts/db-tests/release-blocker-triage-remediation.sql`.
 
-### ISS-2026-223 — ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority` misused as "elevated override" rather than its own documented "may approve a grant" meaning, a repository-wide (~35 domain) convention question, not a file-specific bug (found at `CG-S15-HDN-009`, `OPEN`, Low, owner `HDN-378`)
+### ISS-2026-223 — ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority` misused as "elevated override" rather than its own documented "may approve a grant" meaning, a repository-wide (~35 domain) convention question, not a file-specific bug (found at `CG-S15-HDN-009`, `RESOLVED` 2026-08-31, Low)
 
 Found by the tenant-isolation/RLS lens. `app.authorize_file_access`, the `files_
 select_scoped` RLS policy, `app.create_file_version`, `app.request_file_deletion`,
@@ -3581,6 +3581,22 @@ deliberate test, exactly as this entry's own text already found). No new evidenc
 batch changes the shape of the decision needed — genuinely still a systemic RBAC-
 convention ruling, not a file-specific bug. **Not fixed by this batch.** Owner and scope
 unchanged (`HDN-378`).
+
+**`RESOLVED` 2026-08-31 (`supabase/migrations/20260831020000_harden_file_legal_hold_provenance.sql`).** Both prior passes were right to stop, and this one had the mandate they lacked (ADR-0027 Part A). The answer turned out to be *both* of the two options they framed, applied to different parts of the problem.
+
+**The ruling on the convention: the behaviour is right, the name is wrong — so ~35 call sites are not touched.** `tenant_admin` is the top authority inside its own tenant; support access (PLT-115) is a different axis, for CargoGrid staff reaching *into* a tenant. Narrowing all ~40 sites to `has_active_support_grant` would mean a customer's own administrator could not administer their own tenant's restricted files without CargoGrid opening a support session against them — plainly wrong product behaviour. `app.is_support_grant_authority` therefore keeps its behaviour and is **not** renamed across 35 migrations and several RLS policies for no security gain; its `comment on function` now states plainly that it reads as "holds a live support session" and actually means "is elevated authority over this tenant".
+
+**The one place that ruling does not cover, which is the real defect.** Legal hold is the exception, for a specific reason: it is the one control whose purpose can be *to constrain the tenant itself*. A hold placed by the platform — litigation, a regulator, a legal order — must not be liftable by the party it constrains. And `app.set_file_legal_hold` had **no ordinary path at all**: the override *was* the only gate, so a tenant's own admin could clear any hold, including one the platform placed.
+
+**Why it could not be fixed by swapping predicates.** The system never recorded *who* placed a hold, so it could not distinguish "the tenant lifting their own litigation hold" (legitimate, and exercised by a committed db-test) from "the tenant lifting the platform's hold on them" (the defect). That missing fact, not the predicate, was the structural gap.
+
+**Fix: record provenance, then require equal-or-higher authority to lift.** `app.files` gains `legal_hold_placed_authority` (`supreme_admin` / `support_session` / `tenant_admin`) and `legal_hold_placed_by_auth_user_id`. Placing a hold is unchanged and admits exactly who it admitted before — placing one is protective. Lifting requires a tier at least as high as the tier that placed it. Unrecorded provenance on a held row ranks as `supreme_admin`, deliberately: "someone forgot to stamp it" must not become the cheapest hold in the system to clear.
+
+Safe by inspection rather than assumption: `app.files` holds **0** rows and **0** held rows on the live project, so no existing hold changed meaning.
+
+**Six properties proven in `scripts/db-tests/document-file.sql`**, and the pre-existing block that asserts a tenant admin placing *and* lifting their own hold still passes unchanged, because that is equal rank: (1) placing records provenance; (2) a tenant_admin **cannot** lift a Supreme-Admin-placed hold; (3) the refused attempt leaves the hold genuinely in force, so the refusal is not cosmetic; (4) equal-or-higher authority still can lift it, so this is a narrowing and not a lockout; (5) the legitimate tenant flow still works end to end; (6) an actor with no authority is still refused outright, so the new branch did not become the only gate.
+
+The wrapper-parity gate caught the first draft naming its two helpers without the `app._*` internal prefix — fixed to `app._file_legal_hold_authority_rank` and `app._resolve_file_legal_hold_authority`, service_role-only.
 
 ### ISS-2026-224 — `app.can_access_record`'s record-scope gate denies an authorized-but-non-uploading Procurement evidence reviewer, defeating the "second reviewer verifies evidence" workflow the vendor evidence-access RPCs were built for (found at `CG-S15-HDN-009`, `RESOLVED`, Medium, owner `HDN-387`)
 

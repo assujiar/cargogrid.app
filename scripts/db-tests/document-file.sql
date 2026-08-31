@@ -908,4 +908,86 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-223 closure: a legal hold records WHO placed it, and lifting one requires authority at least as high -- so a tenant administrator can lift their own organisation''s hold but not one the platform placed on them.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_file app.files;
+  v_after app.files;
+  v_raised boolean;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+
+  -- PROPERTY 1 -- placing a hold is unchanged, and now records its provenance.
+  v_file := app.initiate_file_upload(v_tenant_id, 'contract', 'shipment', gen_random_uuid(), 'hold-prov.pdf', 'application/pdf', 1000, null, false, null, '{}', null, 'idem-hold-prov-1', '00000000-0000-0000-0000-000000002001', 'uploader');
+  v_after := app.set_file_legal_hold(v_file.id, true, 'platform litigation order', '00000000-0000-0000-0000-000000002005', 'supreme admin');
+  if v_after.legal_hold_placed_authority is distinct from 'supreme_admin' then
+    raise exception 'assertion failed: a Supreme-Admin-placed hold recorded authority % instead of supreme_admin', v_after.legal_hold_placed_authority;
+  end if;
+  if v_after.legal_hold_placed_by_auth_user_id is distinct from '00000000-0000-0000-0000-000000002005' then
+    raise exception 'assertion failed: the placing identity was not recorded on the held row';
+  end if;
+
+  -- PROPERTY 2 -- THE FIX. The tenant's own admin may NOT lift a hold the platform placed.
+  -- This is the exact bypass ISS-2026-223 live-forced: is_support_grant_authority admitted any
+  -- tenant_admin, so before this fix the call below succeeded.
+  v_raised := false;
+  begin
+    perform app.set_file_legal_hold(v_file.id, false, null, '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'document_legal_hold_clear_requires_higher_authority' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: a tenant_admin lifted a Supreme-Admin-placed legal hold -- ISS-2026-223 has regressed and the hold cannot constrain the party it exists to constrain';
+  end if;
+
+  -- PROPERTY 3 -- the hold really is still in force after the refused attempt, i.e. the refusal
+  -- is not merely cosmetic and left the row untouched.
+  select * into v_after from app.files where id = v_file.id;
+  if not v_after.legal_hold then
+    raise exception 'assertion failed: the refused lift still cleared the hold';
+  end if;
+
+  -- PROPERTY 4 -- equal-or-higher authority CAN lift it, so this is a narrowing and not a lockout.
+  v_after := app.set_file_legal_hold(v_file.id, false, null, '00000000-0000-0000-0000-000000002005', 'supreme admin');
+  if v_after.legal_hold then
+    raise exception 'assertion failed: Supreme Admin could not lift a Supreme-Admin-placed hold';
+  end if;
+  if v_after.legal_hold_placed_authority is not null or v_after.legal_hold_placed_by_auth_user_id is not null then
+    raise exception 'assertion failed: provenance was not cleared when the hold was lifted';
+  end if;
+
+  -- PROPERTY 5 -- the legitimate tenant flow is untouched: a tenant admin places a hold on their
+  -- own organisation's file and lifts it again. Equal rank, so it passes. This is the same shape
+  -- the pre-existing block above already relies on, asserted here explicitly so a future change
+  -- that over-tightens the rule fails loudly instead of quietly breaking a customer workflow.
+  v_after := app.set_file_legal_hold(v_file.id, true, 'our own counsel advised a hold', '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  if v_after.legal_hold_placed_authority is distinct from 'tenant_admin' then
+    raise exception 'assertion failed: a tenant_admin-placed hold recorded authority %', v_after.legal_hold_placed_authority;
+  end if;
+  v_after := app.set_file_legal_hold(v_file.id, false, null, '00000000-0000-0000-0000-000000002004', 'tenant admin');
+  if v_after.legal_hold then
+    raise exception 'assertion failed: a tenant_admin could not lift their OWN tenant_admin-placed hold -- the rule has over-tightened into a lockout';
+  end if;
+
+  -- PROPERTY 6 -- an actor with no authority at all is still refused outright, with the original
+  -- error, so the new branch did not accidentally become the only gate.
+  v_raised := false;
+  begin
+    perform app.set_file_legal_hold(v_file.id, true, 'nope', '00000000-0000-0000-0000-000000002001', 'uploader');
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'document_legal_hold_unauthorized' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: an ordinary org_user set a legal hold';
+  end if;
+
+  raise notice 'ISS-2026-223 closure: hold provenance is recorded; a tenant_admin cannot lift a platform-placed hold but can lift their own; equal-or-higher authority still can; an unauthorised actor still cannot place one';
+end;
+$$;
+
 \echo '>> PLT-128 (Document and File Engine) test suite passed'

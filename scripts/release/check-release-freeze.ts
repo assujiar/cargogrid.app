@@ -1958,6 +1958,52 @@ import { readFileSync } from "node:fs";
  * 20260831010000 IS applied to the live hosted project; re-verified there that all
  * six wrappers carry the guard, the app.* layer carries none, and grants are
  * byte-identical to before.
+ *
+ * AMENDED 2026-08-31 (forty-second pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-223` (Low by its own grading, and the grading undersold it) -- five
+ * file-domain call sites gated their "elevated override" on
+ * app.is_support_grant_authority, whose name says "holds a live support session"
+ * and whose body means "Supreme Admin OR this tenant's own tenant_admin". One new
+ * migration (391 -> 392 files: +1,
+ * 20260831020000_harden_file_legal_hold_provenance.sql).
+ *
+ * Two prior checkpoints declined to fix it, correctly: the same predicate is used
+ * the same way across ~35 other migrations, and a committed db-test deliberately
+ * asserts the tenant_admin-has-override behaviour. Fixing 5 of ~40 sites would have
+ * produced an inconsistent model rather than a safer one.
+ *
+ * The ruling made here is that BOTH framings were partly right, applied to
+ * different parts of the problem. The convention itself is correct and the NAME is
+ * the defect: tenant_admin is the top authority inside its own tenant, while
+ * support access is a separate axis for CargoGrid staff reaching into a tenant.
+ * Narrowing all ~40 sites would stop a customer's own administrator from
+ * administering their own files without CargoGrid opening a support session against
+ * them. So ~35 call sites are untouched and the function is re-documented, not
+ * renamed.
+ *
+ * Legal hold is the one genuine exception, because it is the one control whose
+ * purpose can be to constrain the tenant itself -- and set_file_legal_hold had no
+ * ordinary path at all, so the override WAS the only gate. It could not be fixed by
+ * swapping predicates because the system never recorded who placed a hold, and so
+ * could not tell "the tenant lifting their own litigation hold" (legitimate, and
+ * exercised by the committed test) from "the tenant lifting the platform's hold on
+ * them". app.files now records the placing tier and identity, and lifting requires
+ * equal-or-higher authority. Unrecorded provenance ranks as supreme_admin: "someone
+ * forgot to stamp it" must not become the cheapest hold to clear.
+ *
+ * Safe by inspection: app.files holds 0 rows and 0 held rows live, so no existing
+ * hold changed meaning.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count): document-file.sql gained a
+ * six-property proof, and the pre-existing block asserting a tenant admin placing
+ * AND lifting their own hold still passes untouched, because that is equal rank --
+ * which is exactly the evidence that this is a narrowing and not a lockout.
+ *
+ * The wrapper-parity gate caught the first draft naming its two helpers without the
+ * app._* internal prefix. Re-verified via a fresh full local db-test run (392
+ * migrations, 236 runner files, ALL PASSED). 20260831020000 IS applied live.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2177,7 +2223,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pass) by ISS-2026-186/ISS-2026-179/HDN-BLK-014 (391 files: +1,
   // 20260831010000_close_rbac_oracle_on_public_wrappers.sql). See the class-level doc
   // comment above.
-  migrationSetSha256: "b5386269e2d4c9e802f0e013ad24d2a6f3dcd926515cad5653f7db8eaab63660",
+  // History: b5386269e2d4c9e802f0e013ad24d2a6f3dcd926515cad5653f7db8eaab63660
+  // (391 files, forty-first-pass amendment above). Superseded 2026-08-31 (forty-second
+  // pass) by ISS-2026-223 (392 files: +1,
+  // 20260831020000_harden_file_legal_hold_provenance.sql). See the class-level doc comment.
+  migrationSetSha256: "fc88d7f379d609c70b1221b570253cc68c809e8474ddb8398823932594d7e478",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2405,7 +2455,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (236 files, fortieth-pass state). Superseded 2026-08-31 (forty-first pass) by
   // ISS-2026-186 (236 files unchanged in count -- rbac-enforcement.sql widened with the
   // four-property wrapper-oracle proof). See the class-level doc comment above.
-  dbTestSetSha256: "d8b60f1c4516d63b1cd3d5e972b8b72b86e5703d0f10bcf10ea457af20a57ff4",
+  // History: d8b60f1c4516d63b1cd3d5e972b8b72b86e5703d0f10bcf10ea457af20a57ff4
+  // (236 files, forty-first-pass state). Superseded 2026-08-31 (forty-second pass) by
+  // ISS-2026-223 (236 files unchanged in count -- document-file.sql widened with the
+  // six-property legal-hold provenance proof). See the class-level doc comment.
+  dbTestSetSha256: "c2f1876cfab99546cf288a67262971440ddf4e8df9a91f3813d612c42f1cf535",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
