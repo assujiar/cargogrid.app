@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 48 — 4 High, 18 Medium, 26 Low |
+| `OPEN` | 48 — 4 High, 17 Medium, 27 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 218 |
-| **Total records** | **274** |
+| `RESOLVED` | 219 |
+| **Total records** | **275** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -99,7 +99,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-300` | Medium | `RESOLVED` | `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations un |
 | `ISS-2026-302` | Medium | `RESOLVED` | the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring |
 | `ISS-2026-303` | Medium | `RESOLVED` | Inventory and HRIS still have no bulk opening-balance import |
-| `ISS-2026-304` | Medium | `OPEN` | no public status page for unauthenticated visitors |
+| `ISS-2026-304` | Medium | `RESOLVED` | no public status page for unauthenticated visitors |
 | `ISS-2026-305` | Medium | `SUPERSEDED` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
 | `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
 | `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload |
@@ -113,6 +113,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-317` | Low | `OPEN` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
 | `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
 | `ISS-2026-319` | Low | `OPEN` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
+| `ISS-2026-320` | Low | `OPEN` | the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -6311,7 +6312,7 @@ for measuring the P1–P4 response targets `11_DEVOPS_WORKSTREAM.md` §8.4 descr
 nothing measures or alerts on a breach. And no public status page — carried forward as
 `ISS-2026-304`.
 
-### ISS-2026-304 — no public status page for unauthenticated visitors (OPEN, Medium)
+### ISS-2026-304 — no public status page for unauthenticated visitors (`RESOLVED` 2026-08-31, Medium)
 
 Split out of `ISS-2026-258` on 2026-08-30 when the rest of that entry was closed, so a real
 residual is not buried inside a `RESOLVED` annotation.
@@ -6325,6 +6326,51 @@ scheduling: a status page hosted inside the system it reports on is useless duri
 the outage it exists to report. A real one belongs on separate infrastructure — a third-party
 status service, or a static page on a different host — which makes it a hosting decision and
 an account, not a migration.
+
+**`RESOLVED`, 2026-08-31**, under `ADR-0027` Part A. `/status`, unauthenticated and
+statically rendered, plus `lib/status/service-status.ts` and 12 unit tests.
+
+**This entry's architectural objection is right, and it is narrower than it reads.** "A status
+page hosted inside the system it reports on is useless during exactly the outage it exists to
+report" is true of the deployment being down. It is not true of the outage class this product
+is actually most exposed to. `ISS-2026-261` records that CargoGrid runs on exactly one managed
+backend vendor with no failover path, so **a Supabase outage is the realistic incident** — and
+it does not take the front end with it. A page that renders at build time and is served from
+the CDN loads and answers correctly while the database is unreachable. That case is now
+covered.
+
+**`export const dynamic = "force-static"` is the load-bearing line in the whole change.** The
+page must never server-render, or it becomes unavailable in the incident it describes. Every
+check happens in the visitor's browser, against the two unauthenticated probes this repository
+already shipped at `HDN-382`: `/api/health` (liveness, no dependency check) and `/api/ready`
+(readiness, which additionally proves the database is reachable). No session, no tenant
+context, no application data — the page reveals nothing an anonymous visitor could not learn
+by trying to load CargoGrid and watching it fail.
+
+**The interesting state is the disagreement between the two probes**, and getting it wrong
+would be worse than having no page: liveness answering while readiness fails is precisely
+"application serving, database unreachable", and rendering that as "operational" — or
+collapsing it into a bare "down" — tells an operator the opposite of what is happening. That
+decision lives in a pure function so it is tested without a browser, a server or a live
+backend, and its test is named for the case. Both probes are fired together rather than in
+sequence, so the page never reports a disagreement observed at two different moments.
+
+**Two smaller decisions worth recording.** A `200` carrying no recognisable body is treated as
+**unreachable**, not healthy — a proxy's own error page is a `200` surprisingly often. And a
+`503` that *arrived* is reported as degraded rather than down, because an answer is
+meaningfully different from no answer.
+
+**What the page says about itself.** It states in its own words that it cannot report an
+outage of the hosting platform itself — if that is down, the visitor never receives the page —
+and that it shows neither planned maintenance nor incident history. Signed-in users continue
+to receive incident notices through the Notification Engine, unchanged.
+
+**The residual, and it stays with the owner.** A status page on genuinely independent
+infrastructure — a third-party status service, or a static page on a different host — is the
+only thing that survives a platform-wide outage, and that remains an account and a hosting
+decision rather than a code change. It is filed as `ISS-2026-320` rather than left implied
+inside this closure. What has changed is that the gap is now narrow and stated, instead of
+total.
 
 **Status `OPEN`**, Medium. **Risk in plain terms:** during a serious outage, customers who
 cannot sign in cannot be told anything by CargoGrid at all. You would be reaching them by
@@ -8443,3 +8489,35 @@ than forced into the pattern). **The real cost is the same one that deferred `IS
 two rounds:** several finance test fixtures pass `gen_random_uuid()` to
 `app.post_finance_ar_open_item` on purpose, and closing this means making those real first —
 bounded, mechanical, and genuinely a separate change with its own evidence.
+
+### ISS-2026-320 — the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened (found 2026-08-31 while closing `ISS-2026-304`, `OPEN`, Low)
+
+`ISS-2026-304` is closed for the outage class that matters most here: `/status` is statically
+rendered and served from the CDN, so it loads and reports correctly while the application or
+its database is unreachable — which, given `ISS-2026-261`'s single-backend-vendor posture, is
+the realistic incident.
+
+One case remains genuinely uncovered, and it is the one `ISS-2026-304`'s original architectural
+objection was really about: **if the hosting platform itself is down, the visitor never
+receives the page at all.** No amount of static rendering fixes that, because the page and the
+application share a host.
+
+**Risk in plain terms:** during a platform-wide outage, customers have no CargoGrid-controlled
+place to look, and will be left guessing whether the problem is theirs or ours. The commercial
+cost of that is support load and lost trust during the worst hour, not data loss — nothing is
+incorrect, only unknowable.
+
+**Status `OPEN`**, Low severity. Low rather than Medium because the covered case is the far
+more likely one, because the page now states this limitation in its own words rather than
+implying a completeness it lacks, and because there is no correctness or security exposure
+here at all.
+
+**What would close it, and why it is not agent-work:** a status page on infrastructure that
+does not share fate with the application — a third-party status service (Statuspage,
+Instatus, BetterStack and similar all offer this), or a static page on a second host. Both
+mean opening an account, paying for it, and pointing DNS at it. That is a purchasing and
+hosting decision for the owner, in the same family as `ISS-2026-261`'s own second-vendor
+question, and it is deliberately not something to fake with more code inside the same
+deployment. **Owner: Platform/Infrastructure.** Whoever takes it should also decide whether the
+same service carries incident history and planned-maintenance notices, which `/status`
+deliberately does not attempt.
