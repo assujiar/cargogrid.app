@@ -76,6 +76,11 @@ export const ListWebhookDeliveriesForTenantInputSchema = z.object({
   actorAuthUserId: z.string().uuid(),
   status: WebhookDeliveryStatusSchema.nullable().default(null),
   limit: z.number().int().positive().max(200).default(50),
+  /**
+   * ISS-2026-147 item 2: the per-connector filter. One integration means one endpoint URL, so
+   * the endpoint is the connector discriminator on this half. Null keeps the tenant-wide list.
+   */
+  webhookEndpointId: z.string().uuid().nullable().default(null),
 });
 export type ListWebhookDeliveriesForTenantInput = z.input<typeof ListWebhookDeliveriesForTenantInputSchema>;
 

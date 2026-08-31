@@ -129,4 +129,16 @@ describe("ListApiLogsForTenantInputSchema", () => {
   test("rejects a limit above 100", () => {
     assert.throws(() => ListApiLogsForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: AUTH_USER_ID, limit: 101 }));
   });
+
+  // ISS-2026-147 item 2: the per-connector filter must default to null, so the tenant-wide
+  // list every pre-existing caller relies on is unchanged unless a caller opts in.
+  test("defaults apiKeyId to null so the unfiltered tenant-wide list stays the default", () => {
+    const parsed = ListApiLogsForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: AUTH_USER_ID });
+    assert.equal(parsed.apiKeyId, null);
+  });
+
+  test("accepts a uuid apiKeyId and rejects a non-uuid one", () => {
+    assert.equal(ListApiLogsForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: AUTH_USER_ID, apiKeyId: KEY_ID }).apiKeyId, KEY_ID);
+    assert.throws(() => ListApiLogsForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: AUTH_USER_ID, apiKeyId: "not-a-uuid" }));
+  });
 });

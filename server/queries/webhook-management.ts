@@ -26,6 +26,7 @@ export async function listWebhookDeliveriesForTenant(client: WebhookManagementQu
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_status: parsedInput.status,
     p_limit: parsedInput.limit,
+    p_webhook_endpoint_id: parsedInput.webhookEndpointId,
   });
   if (error) {
     throw new WebhookManagementQueryError(error.message);

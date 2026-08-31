@@ -97,5 +97,11 @@ export const ListApiLogsForTenantInputSchema = z.object({
   actorAuthUserId: z.string().uuid(),
   limit: z.number().int().positive().max(100).default(20),
   before: z.string().nullable().default(null),
+  /**
+   * ISS-2026-147 item 2: the per-connector filter. An integration authenticates with its own
+   * API key, so scoping to a key id is what "this connector's execution history" means here.
+   * Null keeps the tenant-wide list, which is what every pre-existing caller gets.
+   */
+  apiKeyId: z.string().uuid().nullable().default(null),
 });
 export type ListApiLogsForTenantInput = z.input<typeof ListApiLogsForTenantInputSchema>;

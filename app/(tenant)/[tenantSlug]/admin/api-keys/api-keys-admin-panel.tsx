@@ -7,6 +7,7 @@
  */
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
@@ -615,5 +616,68 @@ export function ApiLogList({ logs }: { logs: readonly ApiLog[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * ISS-2026-147 item 2: the per-connector execution-log filter. `IAE-013`'s own migration
+ * comment claimed this existed; it did not, at any layer — a tenant admin running several
+ * integrations saw every connector's history interleaved in one tenant-wide list, with no way
+ * to isolate one.
+ *
+ * Rendered as links rather than a `<select>` with client-side state on purpose: the filter is
+ * a server round trip either way (the predicate lives in the RPC, not in the browser), and a
+ * link keeps the filtered view addressable, shareable, and back-button-correct — which a
+ * client-only selection is not. `scroll={false}` keeps the reader where they are instead of
+ * throwing them to the top of a long console page.
+ */
+export function ConnectorFilterBar({
+  label,
+  basePath,
+  paramName,
+  options,
+  selectedId,
+}: {
+  label: string;
+  basePath: string;
+  paramName: string;
+  options: readonly { readonly id: string; readonly label: string }[];
+  selectedId: string | null;
+}) {
+  if (options.length === 0) {
+    return null;
+  }
+  const hrefFor = (id: string | null) => (id === null ? basePath : `${basePath}?${paramName}=${encodeURIComponent(id)}`);
+  return (
+    <nav aria-label={label} className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+      <span className="font-medium text-text-secondary">{label}:</span>
+      <Link
+        href={hrefFor(null)}
+        scroll={false}
+        aria-current={selectedId === null ? "true" : undefined}
+        className={
+          selectedId === null
+            ? "rounded-full border border-neutral-400 bg-neutral-100 px-2 py-0.5 font-medium text-text-primary"
+            : "rounded-full border border-neutral-200 px-2 py-0.5 text-text-secondary hover:border-neutral-400"
+        }
+      >
+        All
+      </Link>
+      {options.map((option) => (
+        <Link
+          key={option.id}
+          href={hrefFor(option.id)}
+          scroll={false}
+          aria-current={selectedId === option.id ? "true" : undefined}
+          className={
+            selectedId === option.id
+              ? "rounded-full border border-neutral-400 bg-neutral-100 px-2 py-0.5 font-medium text-text-primary"
+              : "rounded-full border border-neutral-200 px-2 py-0.5 text-text-secondary hover:border-neutral-400"
+          }
+        >
+          {option.label}
+        </Link>
+      ))}
+    </nav>
   );
 }

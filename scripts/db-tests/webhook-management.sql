@@ -334,6 +334,72 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-147 item 2 (webhook half): p_webhook_endpoint_id isolates one connector''s delivery history, composes with the status filter, leaves the unfiltered default unchanged, and refuses another tenant''s endpoint id indistinguishably from a nonexistent one'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaewebhook');
+  v_admin1 uuid := '00000000-0000-0000-0000-000014000001';
+  v_endpoint_a uuid := (select id from app.webhook_endpoints where tenant_id = v_tenant1 and url = 'https://a.iaewebhook.test/hook');
+  v_endpoint_b uuid := (select id from app.webhook_endpoints where tenant_id = v_tenant1 and url = 'https://b.iaewebhook.test/hook');
+  v_foreign_endpoint uuid;
+  v_total integer;
+  v_only_a integer;
+  v_only_b integer;
+  v_mismatched integer;
+begin
+  -- One fresh delivery per endpoint, so both connectors genuinely have history to separate.
+  perform app.send_test_webhook_delivery(v_endpoint_a, v_admin1, 'admin');
+  perform app.send_test_webhook_delivery(v_endpoint_b, v_admin1, 'admin');
+
+  select count(*) into v_total from app.list_webhook_deliveries_for_tenant(v_tenant1, v_admin1, null, 200);
+  select count(*) into v_only_a from app.list_webhook_deliveries_for_tenant(v_tenant1, v_admin1, null, 200, v_endpoint_a);
+  select count(*) into v_only_b from app.list_webhook_deliveries_for_tenant(v_tenant1, v_admin1, null, 200, v_endpoint_b);
+
+  if v_only_a = 0 or v_only_b = 0 then
+    raise exception 'assertion failed: both endpoints must have deliveries of their own (a=%, b=%)', v_only_a, v_only_b;
+  end if;
+  if v_only_a >= v_total or v_only_b >= v_total then
+    raise exception 'assertion failed: a per-endpoint slice must be strictly smaller than the tenant-wide list (total=%, a=%, b=%)', v_total, v_only_a, v_only_b;
+  end if;
+
+  -- The stronger claim than counting: not one returned row belongs to the other endpoint.
+  select count(*) into v_mismatched from app.list_webhook_deliveries_for_tenant(v_tenant1, v_admin1, null, 200, v_endpoint_a) d
+  where d.webhook_endpoint_id <> v_endpoint_a;
+  if v_mismatched <> 0 then
+    raise exception 'assertion failed: endpoint A''s filtered history contains % row(s) belonging to another endpoint', v_mismatched;
+  end if;
+
+  -- Composes with, rather than replaces, the pre-existing status filter.
+  select count(*) into v_mismatched from app.list_webhook_deliveries_for_tenant(v_tenant1, v_admin1, 'dead_letter', 200, v_endpoint_a) d
+  where d.webhook_endpoint_id <> v_endpoint_a or d.status <> 'dead_letter';
+  if v_mismatched <> 0 then
+    raise exception 'assertion failed: the endpoint and status filters must both apply, found % violating row(s)', v_mismatched;
+  end if;
+
+  -- Registered here rather than picked out of whatever another test file happened to leave in
+  -- the shared database: the control has to be a KNOWN foreign endpoint, not an incidental one.
+  v_foreign_endpoint := (app.register_webhook_endpoint(
+    (select id from app.tenants where slug = 'iaewebhook2'),
+    'https://foreign.iaewebhook2.test/hook', '["webhook.test"]'::jsonb,
+    '00000000-0000-0000-0000-000014000003', 'admin'
+  )).id;
+  begin
+    perform app.list_webhook_deliveries_for_tenant(v_tenant1, v_admin1, null, 50, v_foreign_endpoint);
+    raise exception 'assertion failed: expected webhook_endpoint_not_found for another tenant''s endpoint';
+  exception when no_data_found then
+    if sqlerrm not like 'webhook_endpoint_not_found%' then raise; end if;
+  end;
+  begin
+    perform app.list_webhook_deliveries_for_tenant(v_tenant1, v_admin1, null, 50, gen_random_uuid());
+    raise exception 'assertion failed: expected webhook_endpoint_not_found for an id that exists nowhere';
+  exception when no_data_found then
+    if sqlerrm not like 'webhook_endpoint_not_found%' then raise; end if;
+  end;
+
+  raise notice 'PASS: ISS-2026-147 item 2 (webhook half) -- per-endpoint delivery filtering isolates correctly (total=%, a=%, b=%), composes with the status filter, and refuses a foreign endpoint id indistinguishably from a nonexistent one', v_total, v_only_a, v_only_b;
+end;
+$$;
+
 \echo '>> real app.jobs <-> app.webhook_deliveries bridge proof: a full worker simulation (claim_next_job / record_webhook_delivery_attempt / complete_job) for a successful delivery, and (claim_next_job / record_webhook_delivery_attempt / record_job_failure, repeated) for one that exhausts max_attempts -- proving the two independent, deliberately-aligned retry state machines (design decision 2) actually stay aligned: BOTH the delivery and the job reach a terminal state together'
 do $$
 declare

@@ -72,6 +72,18 @@ describe("ListWebhookDeliveriesForTenantInputSchema", () => {
   test("rejects a limit above 200", () => {
     assert.throws(() => ListWebhookDeliveriesForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, limit: 201 }));
   });
+
+  // ISS-2026-147 item 2: the per-connector filter must default to null, so the tenant-wide
+  // list every pre-existing caller relies on is unchanged unless a caller opts in.
+  test("defaults webhookEndpointId to null so the unfiltered tenant-wide list stays the default", () => {
+    const parsed = ListWebhookDeliveriesForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID });
+    assert.equal(parsed.webhookEndpointId, null);
+  });
+
+  test("accepts a uuid webhookEndpointId and rejects a non-uuid one", () => {
+    assert.equal(ListWebhookDeliveriesForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, webhookEndpointId: ENDPOINT_ID }).webhookEndpointId, ENDPOINT_ID);
+    assert.throws(() => ListWebhookDeliveriesForTenantInputSchema.parse({ tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, webhookEndpointId: "not-a-uuid" }));
+  });
 });
 
 describe("SendTestWebhookDeliveryInputSchema", () => {

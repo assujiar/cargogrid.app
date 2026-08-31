@@ -53,6 +53,7 @@ export async function listApiLogsForTenant(client: PublicApiPlatformQueryRpcClie
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_limit: parsedInput.limit,
     p_before: parsedInput.before,
+    p_api_key_id: parsedInput.apiKeyId,
   });
   if (error) {
     throw new PublicApiPlatformQueryError(error.message);

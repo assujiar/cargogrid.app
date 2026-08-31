@@ -363,6 +363,93 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-147 item 2: the per-connector filter IAE-013 claimed and never built. A second real API key on the same tenant proves p_api_key_id isolates one connector''s history; a key id from ANOTHER tenant raises api_key_not_found rather than returning an empty list, so the filter is not an existence oracle'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaepubapi');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'iaepubapi2');
+  v_supreme uuid := '00000000-0000-0000-0000-000011000001';
+begin
+  perform app.create_api_key(v_tenant1, 'Second Connector Key', '["INTHUB:View"]'::jsonb, null, null, v_supreme, 'tester');
+  perform app.create_api_key(v_tenant2, 'Foreign Tenant Connector Key', '["INTHUB:View"]'::jsonb, null, null, v_supreme, 'tester');
+end;
+$$;
+
+select app.record_api_request(gen_random_uuid(), (select id from app.tenants where slug = 'iaepubapi'), null, 'api_key', (select id from app.api_keys where tenant_id = (select id from app.tenants where slug = 'iaepubapi') and name = 'Second Connector Key'), 'rest', 'test_op_connector_b', 'GET', '/api/v1/status', null, 200, 'success', null, null, 5);
+
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaepubapi');
+  v_admin uuid := '00000000-0000-0000-0000-000011000002';
+  v_key_a uuid := (select key_id from tmp_pubapi_key);
+  v_key_b uuid := (select id from app.api_keys where tenant_id = (select id from app.tenants where slug = 'iaepubapi') and name = 'Second Connector Key');
+  v_foreign_key uuid;
+  v_count integer;
+begin
+  -- Unfiltered still sees everything -- the filter is opt-in, and this proves the default
+  -- behaviour every pre-existing caller relies on did not change.
+  select count(*) into v_count from app.list_api_logs_for_tenant(v_tenant1, v_admin, 100, null)
+  where operation in ('test_op_1', 'test_op_2', 'test_op_connector_b');
+  if v_count <> 3 then
+    raise exception 'assertion failed: the unfiltered list must still return all 3 seeded rows, got %', v_count;
+  end if;
+
+  -- Key A's history is key A's alone. This is the whole finding: before this fix, a tenant
+  -- admin running two connectors could not separate them at all.
+  select count(*) into v_count from app.list_api_logs_for_tenant(v_tenant1, v_admin, 100, null, v_key_a)
+  where operation in ('test_op_1', 'test_op_2', 'test_op_connector_b');
+  if v_count <> 2 then
+    raise exception 'assertion failed: filtering to key A must return exactly its own 2 rows, got %', v_count;
+  end if;
+  if exists (
+    select 1 from app.list_api_logs_for_tenant(v_tenant1, v_admin, 100, null, v_key_a) l
+    where l.operation = 'test_op_connector_b'
+  ) then
+    raise exception 'assertion failed: key A''s filtered history must not contain key B''s request';
+  end if;
+
+  select count(*) into v_count from app.list_api_logs_for_tenant(v_tenant1, v_admin, 100, null, v_key_b)
+  where operation in ('test_op_1', 'test_op_2', 'test_op_connector_b');
+  if v_count <> 1 then
+    raise exception 'assertion failed: filtering to key B must return exactly its own 1 row, got %', v_count;
+  end if;
+
+  -- The filter composes with the existing cursor rather than replacing it.
+  select count(*) into v_count from app.list_api_logs_for_tenant(
+    v_tenant1, v_admin, 100,
+    (select created_at from app.api_logs where tenant_id = v_tenant1 and operation = 'test_op_2'),
+    v_key_a
+  ) where operation in ('test_op_1', 'test_op_2');
+  if v_count <> 1 then
+    raise exception 'assertion failed: p_api_key_id and p_before must compose (expected only test_op_1), got % rows', v_count;
+  end if;
+
+  -- Not an oracle: a real key belonging to the OTHER tenant raises, rather than returning an
+  -- empty list a caller could read as "no such key". A nonexistent id raises identically, so
+  -- the two cases are indistinguishable from outside.
+  -- The control is a KNOWN foreign key created by this block's own setup, never whichever key
+  -- another test file happened to leave in the shared database first.
+  select id into v_foreign_key from app.api_keys where tenant_id <> v_tenant1 and name = 'Foreign Tenant Connector Key';
+  if v_foreign_key is null then
+    raise exception 'assertion failed: the foreign-tenant API key this block created is missing';
+  end if;
+  begin
+    perform app.list_api_logs_for_tenant(v_tenant1, v_admin, 20, null, v_foreign_key);
+    raise exception 'assertion failed: expected api_key_not_found for another tenant''s API key';
+  exception when no_data_found then
+    if sqlerrm not like 'api_key_not_found%' then raise; end if;
+  end;
+  begin
+    perform app.list_api_logs_for_tenant(v_tenant1, v_admin, 20, null, gen_random_uuid());
+    raise exception 'assertion failed: expected api_key_not_found for an id that exists nowhere';
+  exception when no_data_found then
+    if sqlerrm not like 'api_key_not_found%' then raise; end if;
+  end;
+
+  raise notice 'PASS: ISS-2026-147 item 2 -- per-connector API-log filtering isolates correctly, composes with the cursor, leaves the unfiltered default unchanged, and refuses another tenant''s key id indistinguishably from a nonexistent one';
+end;
+$$;
+
 \echo '>> ATW-032 (ISS-2026-032) self-caught regression, live forged-session proof: a genuinely authenticated session may not claim to act as a DIFFERENT identity when calling app.list_api_logs_for_tenant, even one that genuinely holds admin authority for the target tenant'
 do $$
 declare

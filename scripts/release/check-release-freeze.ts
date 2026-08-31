@@ -2197,6 +2197,58 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test run (395 migrations, 236 runner files,
  * ALL PASSED). 20260831060000 IS applied live; the constraint is convalidated.
  *
+ * AMENDED 2026-08-31 (forty-seventh pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. `ISS-2026-147`, both items.
+ * 20260831070000_add_connector_scoped_execution_log_filters.sql.
+ *
+ * Item 1 ("zero test coverage for the 9 /api/v1 REST route handlers") is closed on
+ * re-derived evidence rather than on a claim: there are 9 handlers under app/api/v1/ and
+ * 9 matching files under tests/api/v1/, one per handler, each confirmed to correspond.
+ * Work that had already closed it never updated the entry.
+ *
+ * Item 2 was the real one. IAE-013's own migration comment claimed per-connector
+ * execution-log filtering; the 2026-08-28 re-verification sharpened the finding correctly
+ * -- this was never "under-evidenced", the capability did not exist at any layer. Neither
+ * app.list_api_logs_for_tenant nor app.list_webhook_deliveries_for_tenant accepted any
+ * connector-identifying filter, so a tenant admin running several integrations saw every
+ * connector's history interleaved with no way to isolate one.
+ *
+ * Each function gains one optional trailing filter -- p_api_key_id on the REST/GraphQL
+ * half (an integration authenticates with its own key) and p_webhook_endpoint_id on the
+ * webhook half (one integration, one endpoint URL). Both via DROP + CREATE, never
+ * CREATE OR REPLACE: appending even a defaulted parameter produces a SECOND overload and
+ * makes every existing call site ambiguous, the defect ISS-2026-260 found the hard way.
+ *
+ * The filter is validated, not silently ignored. A key or endpoint id belonging to another
+ * tenant would otherwise return an empty list -- a usable oracle, since "empty" would mean
+ * "not mine" and a caller could walk ids to learn what exists elsewhere. Both raise a
+ * not-found that is byte-identical for a foreign id and for one that exists nowhere.
+ *
+ * Caught during this pass and worth recording rather than quietly fixing: the first draft
+ * wrote `revoke execute ... from public` on the two new public.* wrappers and
+ * public-api-wrapper-regression.sql failed them as privilege-widening. `revoke ... from
+ * public` removes only the PUBLIC pseudo-role, while Supabase's ALTER DEFAULT PRIVILEGES
+ * grants `anon` EXECUTE explicitly at CREATE time -- an explicit grant a PUBLIC revoke does
+ * not touch. That is precisely how ISS-2026-309 shipped two anon-executable SECURITY
+ * DEFINER wrappers. The gate caught it here on the first run, which is the gate working.
+ *
+ * The UI half is wired too, so the capability is reachable rather than merely present:
+ * the api-keys admin console reads a UUID-shape-checked search param and renders a link
+ * filter bar per section. Links, not client-side selection, so a filtered view stays
+ * addressable and back-button-correct. Ownership is deliberately NOT re-checked in the
+ * page -- the RPC owns that rule, and a second copy would drift.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count): public-api-platform.sql proves
+ * a second real key's history is isolated, composes with the existing cursor, leaves the
+ * unfiltered default intact, and refuses a foreign key id; webhook-management.sql proves
+ * the same shape per endpoint, including that not one returned row belongs to the other
+ * endpoint (stronger than counting) and that the endpoint and status filters both apply.
+ * Both foreign-id controls are created by the block itself rather than picked out of
+ * whatever another test file left in the shared database first.
+ *
+ * Re-verified via a fresh full local db-test run (396 migrations, 236 runner files,
+ * ALL PASSED).
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2442,7 +2494,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // 20260831060000_close_hris_authority_shape_rulings.sql). The forty-fifth pass moved
   // dbTestSetSha256 only -- ISS-2026-170's own enumeration concluded no migration should
   // be written -- so this digest skips from the forty-fourth pass to the forty-sixth.
-  migrationSetSha256: "c10632fead489aa251ea5b2c2c01f6a522558961b9cc859e8514fcaf106c7bcd",
+  // History: c10632fead489aa251ea5b2c2c01f6a522558961b9cc859e8514fcaf106c7bcd
+  // (395 files, forty-sixth-pass amendment above). Superseded 2026-08-31 (forty-seventh
+  // pass) by ISS-2026-147 (396 files: +1,
+  // 20260831070000_add_connector_scoped_execution_log_filters.sql).
+  migrationSetSha256: "49e3ca8b14376b9b9a8569d1d4c6b620838b209f5c2dcb011b8b3e56f229be19",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2689,7 +2745,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-068/071/073 (236 files unchanged in count -- hris-recruitment-ats.sql gained
   // the hiring-manager assigned-slice proof, hris-onboarding-offboarding.sql gained the
   // task-owner authority proof and both direct-hire approval proofs).
-  dbTestSetSha256: "81eb9c86c069e4ed31105135a29326cd82947dfe4ff4b4e9b28db3e2bc0e41bc",
+  // History: 81eb9c86c069e4ed31105135a29326cd82947dfe4ff4b4e9b28db3e2bc0e41bc
+  // (236 files, forty-sixth-pass state). Superseded 2026-08-31 (forty-seventh pass) by
+  // ISS-2026-147 (236 files unchanged in count -- public-api-platform.sql and
+  // webhook-management.sql each gained a per-connector filter proof).
+  dbTestSetSha256: "24117ef8f4cc859bc79e452a36353e939c428efd9333d8e24e281c9943dd37fd",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
