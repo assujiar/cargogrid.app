@@ -2854,7 +2854,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (405 files, fifty-seventh-pass amendment above). Superseded 2026-08-31 (fifty-eighth pass) by
   // ISS-2026-206's third table (406 files: +1,
   // 20260831170000_harden_finance_bank_transaction_match_source_lineage.sql).
-  migrationSetSha256: "9008a90551ddc9d091db33518412a879630d9d2371b91ab1964357fc6d2ca581",
+  // History: 9008a90551ddc9d091db33518412a879630d9d2371b91ab1964357fc6d2ca581
+  // (406 files, fifty-eighth-pass amendment above). Superseded 2026-08-31 (fifty-ninth pass) by
+  // ISS-2026-208 (407 files: +1,
+  // 20260831180000_make_vendor_api_invitation_response_replay_safe.sql).
+  migrationSetSha256: "1690f2f36fb5d469880bedbc6651cea124e91c4298e872943a82a64404dff8b6",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3155,7 +3159,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-206's third table (238 files unchanged in count -- finance-cash-bank.sql swapped a
   // gen_random_uuid() match for a REAL captured receipt, which was testing the very orphan the
   // new guard rejects, and gained direct-INSERT/direct-UPDATE proofs plus the null-id boundary).
-  dbTestSetSha256: "2c4cd1f6fa5864b48d93faab4e7b6916f0ab25efe8003f394cca81f760db4f64",
+  // History: 2c4cd1f6fa5864b48d93faab4e7b6916f0ab25efe8003f394cca81f760db4f64
+  // (238 files, fifty-eighth-pass state). Superseded 2026-08-31 (fifty-ninth pass) by
+  // ISS-2026-208 (238 files unchanged in count -- vendor-api.sql gained the lost-response-retry
+  // proof and, more importantly, the two boundaries the narrow replay signature exists to hold:
+  // a decline retry with a DIFFERENT reason, and a client stale by more than their own write,
+  // both still refused).
+  dbTestSetSha256: "be5e42c586cd13e104dff131a0c5156038e3dda3283326363155bf0f2a524058",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

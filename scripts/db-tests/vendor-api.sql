@@ -533,4 +533,98 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-208: a lost-response retry of accept/decline replays to the row instead of a 409, and ONLY on an exact replay signature -- a genuinely stale client still gets stale_version'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaevendorapi');
+  v_vendor_alpha uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT IaeVendorApi Alpha');
+  v_base_ship uuid := (select shipment_order_id from app.vendor_assignment_invitations where id = '00000000-0000-0000-0000-000013000098');
+  v_accept_id uuid := '00000000-0000-0000-0000-000013000208';
+  v_decline_id uuid := '00000000-0000-0000-0000-000013000209';
+  v_stale_id uuid := '00000000-0000-0000-0000-000013000210';
+  v_ship_accept uuid := '00000000-0000-0000-0000-000013000308';
+  v_ship_decline uuid := '00000000-0000-0000-0000-000013000309';
+  v_ship_stale uuid := '00000000-0000-0000-0000-000013000310';
+  v_first app.vendor_assignment_invitations;
+  v_replay app.vendor_assignment_invitations;
+  v_audit_count integer;
+  v_failed boolean;
+begin
+  -- One shipment per invitation: vendor_assignment_invitations_one_live_per_shipment_unique
+  -- permits a single invited/accepted invitation per (tenant, shipment), and the fixture's own
+  -- shipment already holds one. Each new shipment is copied from that same real row rather than
+  -- invented, so nothing here depends on values this test made up.
+  insert into app.shipment_orders (id, tenant_id, job_order_id, shipment_number, idempotency_key, status, shipper_account_id, consignee_snapshot, cargo_service_snapshot, service_type, mode, origin, destination, owner_user_id, created_by)
+  select v.new_id, s.tenant_id, s.job_order_id, v.number, v.idem, s.status, s.shipper_account_id, s.consignee_snapshot, s.cargo_service_snapshot, s.service_type, s.mode, s.origin, s.destination, s.owner_user_id, 'tester'
+  from app.shipment_orders s
+  cross join (values
+    (v_ship_accept, 'SHP-IVA-0208A', 'idem-shp-iva-208a'),
+    (v_ship_decline, 'SHP-IVA-0208B', 'idem-shp-iva-208b'),
+    (v_ship_stale, 'SHP-IVA-0208C', 'idem-shp-iva-208c')
+  ) as v(new_id, number, idem)
+  where s.id = v_base_ship;
+
+  insert into app.vendor_assignment_invitations (id, tenant_id, shipment_order_id, vendor_master_id, status, created_by) values
+    (v_accept_id, v_tenant1, v_ship_accept, v_vendor_alpha, 'invited', 'tester'),
+    (v_decline_id, v_tenant1, v_ship_decline, v_vendor_alpha, 'invited', 'tester'),
+    (v_stale_id, v_tenant1, v_ship_stale, v_vendor_alpha, 'invited', 'tester');
+
+  -- The scenario the entry live-forced: accept once (1 -> 2), then replay the ORIGINAL
+  -- expected_version, exactly as a client would after losing the first response.
+  v_first := app.accept_vendor_assignment_invitation_via_vendor_api(v_tenant1, v_vendor_alpha, v_accept_id, 1);
+  if v_first.status <> 'accepted' or v_first.record_version <> 2 then
+    raise exception 'assertion failed: expected the first accept to land as accepted/version 2, got %/%', v_first.status, v_first.record_version;
+  end if;
+
+  v_replay := app.accept_vendor_assignment_invitation_via_vendor_api(v_tenant1, v_vendor_alpha, v_accept_id, 1);
+  if v_replay.id <> v_first.id or v_replay.status <> 'accepted' or v_replay.record_version <> v_first.record_version then
+    raise exception 'assertion failed: expected the retry to replay the SAME accepted row unchanged, got id=% status=% version=%', v_replay.id, v_replay.status, v_replay.record_version;
+  end if;
+
+  -- The replay must not claim a second acceptance. Nothing was accepted twice, and a trail
+  -- saying otherwise is worse than one saying nothing -- so it is recorded, and labelled.
+  select count(*) into v_audit_count from app.audit_logs
+  where action = 'accept_vendor_assignment_invitation_via_vendor_api' and resource_id = v_accept_id
+    and (after_value ->> 'idempotent_replay')::boolean is true;
+  if v_audit_count <> 1 then
+    raise exception 'assertion failed: expected exactly one audit event tagged idempotent_replay for the retried accept, found %', v_audit_count;
+  end if;
+
+  -- Decline replays on the same signature, plus the stored reason matching the retried one.
+  v_first := app.decline_vendor_assignment_invitation_via_vendor_api(v_tenant1, v_vendor_alpha, v_decline_id, 1, 'no capacity that week');
+  v_replay := app.decline_vendor_assignment_invitation_via_vendor_api(v_tenant1, v_vendor_alpha, v_decline_id, 1, 'no capacity that week');
+  if v_replay.status <> 'declined' or v_replay.record_version <> v_first.record_version or v_replay.decline_reason <> 'no capacity that week' then
+    raise exception 'assertion failed: expected the decline retry to replay the same declined row, got %/%/%', v_replay.status, v_replay.record_version, v_replay.decline_reason;
+  end if;
+
+  -- A DIFFERENT reason is a different request, not a retry of this one. Treating it as a replay
+  -- would silently discard what the caller actually said, so it must still be refused.
+  begin
+    perform app.decline_vendor_assignment_invitation_via_vendor_api(v_tenant1, v_vendor_alpha, v_decline_id, 1, 'actually, the price was wrong');
+    v_failed := false;
+  exception when serialization_failure then
+    v_failed := true;
+  end;
+  if not v_failed then
+    raise exception 'assertion failed: expected stale_version when a decline retry carries a DIFFERENT reason -- that is a different request, not a replay';
+  end if;
+
+  -- And the case the narrow signature exists to protect: a client whose view is stale by MORE
+  -- than their own write. "Already accepted" alone would wrongly tell them everything is fine.
+  perform app.accept_vendor_assignment_invitation_via_vendor_api(v_tenant1, v_vendor_alpha, v_stale_id, 1);
+  update app.vendor_assignment_invitations set decline_reason = null where id = v_stale_id;  -- a second, unrelated bump: version is now 3
+  begin
+    perform app.accept_vendor_assignment_invitation_via_vendor_api(v_tenant1, v_vendor_alpha, v_stale_id, 1);
+    v_failed := false;
+  exception when serialization_failure then
+    v_failed := true;
+  end;
+  if not v_failed then
+    raise exception 'assertion failed: expected stale_version for a client stale by more than their own write -- the replay signature must be exactly one version, never merely "already accepted"';
+  end if;
+
+  raise notice 'PASS: ISS-2026-208 -- accept/decline replay a lost-response retry to the row, and only on an exact signature; a different decline reason and a doubly-stale client both still get stale_version';
+end;
+$$;
+
 \echo '>> vendor-api.sql: ALL PASSED'

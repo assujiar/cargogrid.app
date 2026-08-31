@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 66 — 4 High, 25 Medium, 37 Low |
+| `OPEN` | 65 — 4 High, 25 Medium, 36 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 197 |
+| `RESOLVED` | 198 |
 | **Total records** | **270** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -142,7 +142,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-170` | Low | `RESOLVED` | `app.initiate_file_upload`'s `p_record_id` is validated against the tenant at neither layer |
 | `ISS-2026-189` | Low | `RESOLVED` | `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate |
 | `ISS-2026-197` | Low | `OPEN` | no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-t |
-| `ISS-2026-208` | Low | `OPEN` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
+| `ISS-2026-208` | Low | `RESOLVED` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
 | `ISS-2026-223` | Low | `RESOLVED` | ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority`  |
 | `ISS-2026-239` | Low | `OPEN` | 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real p |
 | `ISS-2026-243` | Low | `OPEN` | switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun |
@@ -3557,7 +3557,7 @@ as the original disposition, re-confirmed rather than assumed. Owner and scope u
 **Also fixed, and worth naming because it would have made the new tests lie:** the route-test harness 404s an unregistered RPC, and the new query fails open, so all nine existing route tests would have passed while silently exercising the failure path instead of the registry. `tests/api/v1/support/rpc-fetch-stub.ts` now defaults `evaluate_api_version_request` to an active `v1`, so they keep testing what they were written to test.
 
 Evidence: `scripts/db-tests/public-api-platform.sql` proves all five registry states drive the right decision and that the fixture never disturbs `v1`; `tests/api/v1/api-version-gate.test.ts` proves the 410 at the route with its log row, that a gone version never reaches the auth RPC, that a deprecated version is served **200** with `Deprecation: true` and a real HTTP-date `Sunset`, and that an unreadable registry serves rather than claiming permanence; `lib/api-gateway/api-version-headers.test.ts` covers header shaping including an unparseable stored date. Full `db:test` `ALL PASSED` (400 migrations, 237 runner files); applied live and verified (`v1` → `ok`, unknown → `gone`, zero over-grants).
-### ISS-2026-208 — `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every sibling Vendor API mutation (found at `CG-S15-HDN-008`, `OPEN`, Low, owner `HDN-387`)
+### ISS-2026-208 — `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every sibling Vendor API mutation (found at `CG-S15-HDN-008`, `RESOLVED` 2026-08-31, was Low)
 
 Found by this checkpoint's own schema/migration-compatibility lens, live-forced. Every
 other idempotent Vendor/Customer API mutation this checkpoint spot-checked
@@ -3595,6 +3595,49 @@ a retry-ergonomics gap — still holds under re-test (same accept-then-replay pr
 same `stale_version` 409 result). **Not fixed by this batch** — still requires the new
 column/index design this entry's own prior disposition already correctly scoped as a
 design decision, not a mechanical pattern copy. Owner and scope unchanged (`HDN-387`).
+
+**`RESOLVED`, 2026-08-31,
+`supabase/migrations/20260831180000_make_vendor_api_invitation_response_replay_safe.sql`
+(applied live, project `awdlicmwzdxquopwtcfd`). No new column, no new index, no new parameter.**
+
+**This entry's own blocker rested on an assumption worth naming, because it was wrong.** It was
+deferred twice on the grounds that a fix "needs a new parameter and its own column/index design
+... a design decision, not a bounded repair." That followed from assuming the answer had to be an
+idempotency key, because every sibling Vendor API mutation uses one.
+
+It does not. **An idempotency key exists to tell two *different* requests apart when the operation
+would otherwise happen twice** — a second booking created, a second RFQ response posted. Accepting
+an invitation is not that kind of operation: there is exactly one meaningful acceptance per
+invitation, the row already records whether it happened, and the vendor is the only party who can
+perform it. **The row IS the idempotency record.** A key would have been ceremony around a fact the
+table already holds — and the existing `idempotency_key` column's creation-time scoping, which
+this entry correctly identified as unusable, was never the obstacle it appeared to be.
+
+**The replay signature is narrow on purpose.** Returning the row whenever it is already accepted
+would be too generous: it would also tell a client who is stale by *several* changes that
+everything is fine, when `stale_version` is the honest answer for them. A genuine lost-response
+retry has an exact shape — the caller presents the version they held **before their own write**,
+the row now sits at **exactly one** version higher (`app.touch_vendor_assignment_invitations_row`
+bumps by 1 per write), and it is in **exactly the state that write would have produced**. All
+three, or it is not a replay. Decline adds a fourth: the stored `decline_reason` must be the one
+being retried, because a different reason is a different request and treating it as a replay would
+silently discard what the caller actually said.
+
+**The audit trail does not claim a second acceptance.** Nothing was accepted twice, and a trail
+saying otherwise is worse than one saying nothing. Nor is the replay silent — a retry is real
+information about an integration — so it captures the same action tagged `idempotent_replay`,
+leaving one true acceptance and one clearly-labelled retry on the record.
+
+**Evidence:** `scripts/db-tests/vendor-api.sql` gains a block reproducing this entry's own
+live-forced scenario (accept once, then replay the original `expectedVersion`) and proving all
+four boundaries: the retry replays the same row unchanged; exactly one `idempotent_replay` audit
+event exists; a decline retry carrying a **different** reason still gets `stale_version`; and a
+client stale by more than their own write still gets `stale_version` — the case the narrow
+signature exists to protect. Each invitation sits on its own shipment, because
+`vendor_assignment_invitations_one_live_per_shipment_unique` permits one live invitation per
+(tenant, shipment); the extra shipments are copied from the fixture's own real row rather than
+invented. Full `pnpm db:test` green. Live-verified: both functions carry the replay path, 0 anon
+grants.
 
 ### ISS-2026-209 — `app.verify_third_party_provider_webhook_signature` returned SQL NULL (not `false`) for a null signature, so `if not verify_...()` silently accepted a fully unsigned inbound GPS webhook as genuine (found and fixed at `CG-S15-HDN-008`, `RESOLVED` at `HDN-376`, Critical)
 
