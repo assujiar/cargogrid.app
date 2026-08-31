@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 56 — 4 High, 24 Medium, 28 Low |
+| `OPEN` | 55 — 4 High, 24 Medium, 27 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 207 |
+| `RESOLVED` | 208 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -119,7 +119,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-070` | Low | `OPEN` | Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/tra |
 | `ISS-2026-075` | Low | `RESOLVED` | Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern |
 | `ISS-2026-083` | Low | `RESOLVED` | Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `trai |
-| `ISS-2026-084` | Low | `OPEN` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
+| `ISS-2026-084` | Low | `RESOLVED` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
 | `ISS-2026-087` | Low | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
 | `ISS-2026-118` | Low | `RESOLVED` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
 | `ISS-2026-119` | Low | `ACCEPTED_EXCEPTION` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
@@ -1137,11 +1137,63 @@ independent observation** of that failure, recorded on that entry. A clean re-ru
 end-to-end with this block green in both runs, so the failure is separated from this change by
 evidence rather than by assertion.
 
-### ISS-2026-084 — Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composition reads with no "load more"/cursor-fetch UI, even after this batch's own Tier C fix added a visible truncation indicator (OPEN, Low)
+### ISS-2026-084 — Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composition reads with no "load more"/cursor-fetch UI, even after this batch's own Tier C fix added a visible truncation indicator (RESOLVED 2026-08-31, Low)
 
 Discovered `2026-08-14` during the Tier C batch adversarial review for `CG-S12-HRT-011/012/013` (Prompts 283-285), spec-compliance lens finding 3, CONFIRMED by direct code read: `server/queries/self-service.ts`'s `TEAM_LIST_BOUND` (50) and `TEAM_QUEUE_BOUND` (20) genuinely truncate `getMssTeamWorkspace`'s roster and each approval-queue category, and — before this batch's own Tier C fix — did so with NO caller-visible signal anywhere in `team-workspace-panel.tsx`, contradicting section 17's own "cursor team queues... no browser-loaded full dataset" framing (which implies the caller can tell when a boundary was hit, not merely that the server enforces one).
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 8).** `server/queries/self-service.ts:96-97` still hardcodes `TEAM_QUEUE_BOUND = 20`/`TEAM_LIST_BOUND = 50`; `getMssTeamWorkspace` (`:201-210`) fetches one row past `TEAM_LIST_BOUND` to compute `teamTruncated`, and `:311-320` computes `approvalQueueTruncated` from each queue category's own pre-slice length — both flags are real and live, and `team-workspace-panel.tsx:144,157` still renders a visible disclosure banner on both cards when either flag is true, confirming the batch's Tier C fix is intact. No "load more" UI exists (grep-confirmed: zero cursor state in either file) — `app.list_my_team_employees` already accepts a `p_after_employee_number` cursor parameter the UI never uses. This is genuine, non-trivial client-side pagination-state feature work for four heterogeneous approval-queue sources, not a bounded review-fix. **Not fixed by this batch.** Owner and scope unchanged.
+
+**`RESOLVED`, 2026-08-31.** The prior disposition described this as *"genuine, non-trivial
+client-side pagination-state feature work for four heterogeneous approval-queue sources"* — and
+that framing, not the work, is what kept it open. Reading the composition before starting showed
+the two halves of this entry are not the same problem at all, and only one of them was ever about
+fetching more data.
+
+**The roster half was a real paging gap, and it had its own cursor the whole time.**
+`app.list_my_team_employees` orders by employee number, accepts `p_after_employee_number`, and
+caps itself at 200. `getMssTeamWorkspace` passed `limit` and never the cursor. It now pages
+properly: the page history is a comma-joined stack of the employee numbers each page started
+after, carried in the URL, so Next pushes the current page's last row and Previous pops. That is
+what makes Previous a real Previous against a forward-only cursor, keeps the view shareable, and
+needs no client-side pagination state to keep in sync with a Server Action. Every page is still
+bounded, so section 17's *"bounded server composition"* contract is intact; what is gone is the
+part that was never in that contract — that the reader may only ever see page one.
+
+The banner that used to end *"contact HR to see the rest of your team"* is replaced by
+`Page N, X of your direct reports, ordered by employee number`. An honest disclosure of a
+boundary, together with an instruction to leave the product in order to cross it, is worse than
+it looks: the cursor to cross it already existed.
+
+**The approval-queue half was not a fetching problem.** Three of the four queues — overtime,
+timesheet, training — were already fetched in full (`limit: 200`, then filtered to the team) and
+*then* sliced to 20 for display. The bound bought nothing there except hiding rows the composition
+had already paid for. So the fix is a page size, not a cursor: `?queue=20|50|100`, applied
+uniformly, with the result carrying back the bound it was **actually** built with so the
+disclosure banner can never quote a size the fetch did not use.
+
+The leave queue is the one genuine exception and the reason the ceiling exists rather than being
+removed: it slices *before* resolving each step's own detail, so every extra item is a real extra
+RPC call. `TEAM_QUEUE_MAX = 100` is what stops a hand-edited URL turning one page load into
+hundreds of round trips — clamped in the query layer, not only in the page, so the URL cannot
+route around it.
+
+**A defect caught while building this, which the entry could not have anticipated.**
+`getMssTeamWorkspace` returns `isManager: false` when the roster comes back empty. Once paging
+exists, a manager who pages past their last direct report also gets an empty roster — and would
+have been told they manage nobody. The cursor is what distinguishes the two cases, and now does:
+an empty page with a cursor present is still `isManager: true`. Pinned by its own test, asserting
+both directions from the same fixture.
+
+**Evidence.** 9 new tests in `server/queries/self-service.test.ts` over a recording client that
+captures RPC arguments rather than assuming them: the first page sends no cursor; a truncated page
+hands back the **last shown** row (not the over-fetch probe) as the next cursor; a supplied cursor
+reaches the RPC verbatim; the last page offers no next cursor, so the UI cannot link to an empty
+page; the manager/empty-page distinction above; the queue default of 20 with its truncation flag;
+a larger size showing more and clearing the flag; the ceiling holding against a 10,000 request;
+and zero/negative/NaN/null all falling back to the default rather than showing nothing.
+`pnpm typecheck`, `pnpm lint` (0 errors), 5753 unit tests and `npx next build` green. No migration
+and no db-test change — this is entirely a composition-and-UI fix over RPCs that were already
+correct, so the freeze digests are untouched.
 
 ### ISS-2026-085 — Internal and Interdepartmental Ticket (HRT-286): "channel extensibility is a pure additive CHECK-widen, never a redesign" does not hold for Prompt 287 (customer) or 288 (helpdesk) — the requester/assignee identity shape is hard-wired to `app.employees` (`RESOLVED` IN FULL — BOTH the Prompt 287/customer half at `CG-S12-HRT-015` and the Prompt 288/helpdesk half at `CG-S12-HRT-016`, EACH independently Tier-C-adversarially-reviewed, with genuine findings surfaced and fixed at both reviews, not a rubber-stamp — see both resolution notes and both Tier C batch review addenda below, Medium)
 
@@ -5171,6 +5223,43 @@ Confirmed via direct search: no `manifest.json`/`manifest.webmanifest` file exis
 This matters because RPD-004 (cited as this checkpoint's own binding business rule, `380_ACCESSIBILITY_AUDIT_PROMPT.md`/`381_BROWSER_DEVICE_COMPATIBILITY_PROMPT.md` both reference it) is phrased as "online-first responsive PWA" — read literally, "PWA" (Progressive Web App) is a specific technical term implying installability (a manifest, an app icon, often a service worker for the app-shell/offline-first pattern), which this application genuinely does not have. The "never claim native or offline-sync behavior" half of RPD-004 is trivially satisfied (there is nothing here that could make an offline claim), but the "PWA" half of the phrase is not yet true in the strict technical sense — this application today is a responsive web app, full stop, not an installable PWA.
 
 **Status `OPEN`**, Low severity (a documentation-precision gap against a ratified business rule's own wording, not a live defect — no user-facing behavior is broken, and no false claim has been made anywhere in the product itself; this is about whether RPD-004's own language should be tightened or a real manifest should be built to match it). **Not fixed by this checkpoint** — building a genuine installable-PWA posture (real manifest.json, app icons at multiple sizes, theme-color, and a deliberate decision on whether any service-worker/offline behavior is ever wanted) is a real product feature addition, explicitly forbidden by this checkpoint's own "no new product features" charter boundary. Owner: a dedicated future task, scoped to either (a) building the real manifest/icon/service-worker scaffolding if product wants a genuinely installable app, or (b) formally amending RPD-004's own wording to say "responsive web app" rather than "PWA" if installability was never actually intended — either resolution closes this entry, but only a deliberate decision should, not a silent default.
+
+**Assessed 2026-08-31 during backlog remediation, and deliberately NOT closed: this one genuinely
+needs the project owner, and the entry itself says so.** Recorded here rather than forced, per the
+standing instruction not to push through an item that turns on somebody else's decision.
+
+The technical work is not the obstacle. `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §8
+is already specific about what was intended — *"A PWA manifest and service-worker provide app
+installability and a cached-shell offline state ... for field-facing routes (dispatch, warehouse
+task, ePOD) specifically"* — and a manifest, icons and `theme-color` are a few hours of additive,
+low-risk work. What cannot be settled without the owner is the service worker, and it is not a
+technical toss-up:
+
+- **A service worker is a durable install in every user's browser.** Once registered it persists
+  and updates on its own schedule, and a mistake in it can leave people on a stale or broken app
+  in a way an ordinary deploy cannot fix. That is a real operational commitment, not a file.
+- **Installability on Android specifically still wants one**, so a manifest alone gets desktop
+  install and "add to home screen" but not the full mobile install prompt. Planting a no-op
+  service worker purely to satisfy that heuristic would be a stub with a real cost and no honest
+  purpose — exactly the kind of thing this project has refused elsewhere.
+- **The cached-shell behaviour §8 describes is a genuine feature**, with its own correctness
+  questions (what is safe to serve stale, what must never be), and RPD-004's own *"online-first,
+  never claim offline"* framing means getting it wrong is a broken promise to a driver in a
+  warehouse, not a cosmetic bug.
+
+**Two paths, and the choice belongs to the owner.** (a) Build the installable posture — manifest,
+icons, theme-color, and a deliberate decision about the service worker and the field-route offline
+shell; the product then matches RPD-004 as ratified. (b) Amend RPD-004's own wording to
+*"responsive web app"*, which is what the product actually is and, for a desktop-first ERP whose
+field flows are online-anyway, may simply be the truer description. Neither is a default, and
+amending a **ratified** decision register entry is not something a remediation pass should do on
+its own initiative.
+
+**Risk while it stands, in plain terms:** none to correctness or security. Nobody is misled — the
+product makes no PWA or offline claim anywhere in its own UI. What is inaccurate is an internal
+architecture document describing the product as something it is not yet, which matters if a
+buyer, auditor or new engineer reads that document as a description of what shipped. **Status
+`OPEN`**, Low, unchanged. Owner: project owner, one decision between (a) and (b).
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — still no `manifest.json`/`manifest.webmanifest`, no `public/` directory, no `<link rel="manifest">`/`theme-color` in `app/layout.tsx`, no service-worker/`next-pwa` reference anywhere. A product/wording decision, not a code defect. Disposition unchanged, still `OPEN`.
 

@@ -242,3 +242,148 @@ describe("getMssTeamWorkspace", () => {
     assert.equal(workspace.approvalQueueTruncated, true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ISS-2026-084: the roster's cursor and the approval queue's page size.
+// ---------------------------------------------------------------------------
+
+/** Same shape as `fakeClient`, but records every RPC's arguments so the cursor can be asserted rather than assumed. */
+function recordingClient(
+  rpcResponses: Record<string, RpcResponse>,
+  calls: { fn: string; args: Record<string, unknown> }[],
+  approvalRequestRows: Record<string, unknown>[] = [],
+): SelfServiceQueryClient {
+  return {
+    async rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ fn, args });
+      return rpcResponses[fn] ?? { data: [], error: null };
+    },
+    from() {
+      return {
+        select() {
+          return { in: async () => ({ data: approvalRequestRows, error: null }) };
+        },
+      };
+    },
+  } as unknown as SelfServiceQueryClient;
+}
+
+function teamRows(count: number): Record<string, unknown>[] {
+  return Array.from({ length: count }, (_, i) => ({
+    master_record_id: `623e4567-e89b-12d3-a456-42661417${String(5100 + i)}`,
+    employee_number: `E${String(i).padStart(3, "0")}`,
+    full_name: `Member ${i}`,
+    employment_type: "full_time",
+    lifecycle_status: "active",
+    position_title: null,
+    hire_date: null,
+  }));
+}
+
+function pendingOvertimeRows(count: number, employeeId: string): Record<string, unknown>[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `a23e4567-e89b-12d3-a456-42661417${String(5200 + i)}`,
+    employee_id: employeeId,
+    employee_number: "E000",
+    employee_full_name: "Member 0",
+    work_date: "2026-08-01",
+    request_type: "planned",
+    status: "pending_approval",
+    requested_minutes: 60,
+    reconciliation_status: "not_reconciled",
+    eligible_minutes: null,
+    eligible_classification: null,
+    approved_minutes: null,
+    payroll_input_status: "pending",
+    record_version: 1,
+  }));
+}
+
+describe("getMssTeamWorkspace roster paging (ISS-2026-084)", () => {
+  test("the first page sends no cursor and, when truncated, hands back the last row's employee number as the next one", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = recordingClient({ list_my_team_employees: { data: teamRows(51), error: null } }, calls);
+    const workspace = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID);
+
+    const teamCall = calls.find((c) => c.fn === "list_my_team_employees");
+    assert.equal(teamCall?.args["p_after_employee_number"], null);
+    assert.equal(workspace.teamTruncated, true);
+    // The 51st row is the over-fetch probe and must not be shown; the cursor is the
+    // LAST SHOWN row, so the next page starts exactly where this one stopped.
+    assert.equal(workspace.team.length, 50);
+    assert.equal(workspace.nextTeamCursor, "E049");
+  });
+
+  test("a supplied cursor reaches the RPC verbatim", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = recordingClient({ list_my_team_employees: { data: teamRows(3), error: null } }, calls);
+    await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { teamAfterEmployeeNumber: "E049" });
+    assert.equal(calls.find((c) => c.fn === "list_my_team_employees")?.args["p_after_employee_number"], "E049");
+  });
+
+  test("the last page offers no next cursor, so the UI cannot link to an empty page", async () => {
+    const client = fakeClient({ list_my_team_employees: { data: teamRows(4), error: null } });
+    const workspace = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { teamAfterEmployeeNumber: "E049" });
+    assert.equal(workspace.teamTruncated, false);
+    assert.equal(workspace.nextTeamCursor, null);
+  });
+
+  test("a manager who paged past their last direct report is still a manager, not suddenly a non-manager", async () => {
+    const client = fakeClient({ list_my_team_employees: { data: [], error: null } });
+    const pagedPastEnd = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { teamAfterEmployeeNumber: "E999" });
+    // Without the cursor to tell them apart, an empty page and "you have no reports"
+    // are the same response, and a manager on page 3 would be told they manage nobody.
+    assert.equal(pagedPastEnd.isManager, true);
+    const genuinelyNotAManager = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID);
+    assert.equal(genuinelyNotAManager.isManager, false);
+  });
+});
+
+describe("getMssTeamWorkspace approval-queue page size (ISS-2026-084)", () => {
+  const TEAM_ONE = teamRows(1);
+  const MEMBER_ID = TEAM_ONE[0]?.["master_record_id"] as string;
+
+  test("defaults to 20 per category and reports the bound it actually used", async () => {
+    const client = fakeClient({
+      list_my_team_employees: { data: TEAM_ONE, error: null },
+      list_overtime_requests: { data: pendingOvertimeRows(30, MEMBER_ID), error: null },
+    });
+    const workspace = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID);
+    assert.equal(workspace.queueLimit, 20);
+    assert.equal(workspace.approvalQueue.length, 20);
+    assert.equal(workspace.approvalQueueTruncated, true);
+  });
+
+  test("a larger requested size shows more and clears the truncation flag once nothing is left over", async () => {
+    const client = fakeClient({
+      list_my_team_employees: { data: TEAM_ONE, error: null },
+      list_overtime_requests: { data: pendingOvertimeRows(30, MEMBER_ID), error: null },
+    });
+    const workspace = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { queueLimit: 50 });
+    assert.equal(workspace.queueLimit, 50);
+    assert.equal(workspace.approvalQueue.length, 30);
+    assert.equal(workspace.approvalQueueTruncated, false);
+  });
+
+  test("a hand-edited URL cannot ask for an unbounded queue -- the ceiling is enforced server-side", async () => {
+    const client = fakeClient({
+      list_my_team_employees: { data: TEAM_ONE, error: null },
+      list_overtime_requests: { data: pendingOvertimeRows(30, MEMBER_ID), error: null },
+    });
+    // The leave queue costs one extra RPC per item shown, which is what this ceiling
+    // protects; 10_000 would otherwise be hundreds of round trips on one page load.
+    const workspace = await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { queueLimit: 10_000 });
+    assert.equal(workspace.queueLimit, 100);
+  });
+
+  test("a below-default or nonsense size falls back to the default rather than showing nothing", async () => {
+    const client = fakeClient({
+      list_my_team_employees: { data: TEAM_ONE, error: null },
+      list_overtime_requests: { data: pendingOvertimeRows(30, MEMBER_ID), error: null },
+    });
+    assert.equal((await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { queueLimit: 0 })).queueLimit, 20);
+    assert.equal((await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { queueLimit: -5 })).queueLimit, 20);
+    assert.equal((await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { queueLimit: Number.NaN })).queueLimit, 20);
+    assert.equal((await getMssTeamWorkspace(client, TENANT_ID, ACTOR_ID, { queueLimit: null })).queueLimit, 20);
+  });
+});

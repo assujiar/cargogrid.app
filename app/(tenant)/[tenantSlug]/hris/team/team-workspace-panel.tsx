@@ -6,6 +6,7 @@ import { Stat } from "../../../../../components/ui/stat.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { Link } from "../../../../../components/ui/link.tsx";
 import type { MssTeamWorkspace, ManagerApprovalQueueItem } from "../../../../../server/contracts/self-service/self-service.ts";
 import type { MssActionState } from "./actions.ts";
 
@@ -121,9 +122,27 @@ const OUTCOME_STATUS_TONE: Record<string, StatusTone> = {
   draft: "neutral", published: "info", acknowledged: "success", appealed: "warning", reopened: "warning", closed: "success",
 };
 
+/**
+ * ISS-2026-084. The page history is a stack of the employee numbers each page started
+ * after, carried in the URL. Forward pushes the current page's last row; Back pops.
+ * Building the links here rather than in the page keeps the two halves of the same
+ * mechanism -- what the link says and what the reader sees -- in one file.
+ */
+function pageHref(basePath: string, cursors: readonly string[], queueLimit: number, defaultQueueLimit: number): string {
+  const params = new URLSearchParams();
+  if (cursors.length > 0) params.set("teamCursors", cursors.join(","));
+  if (queueLimit !== defaultQueueLimit) params.set("queue", String(queueLimit));
+  const query = params.toString();
+  return query ? `${basePath}?${query}` : basePath;
+}
+
 export function TeamWorkspacePanel({
   workspace,
   teamQueueBound,
+  teamPageSize,
+  queueSizes,
+  basePath,
+  teamCursors,
   decideLeaveAction,
   decideOvertimeAction,
   decideTimesheetAction,
@@ -131,18 +150,31 @@ export function TeamWorkspacePanel({
 }: {
   workspace: MssTeamWorkspace;
   teamQueueBound: number;
+  teamPageSize: number;
+  queueSizes: readonly number[];
+  basePath: string;
+  teamCursors: readonly string[];
   decideLeaveAction: (requestStepId: string) => BoundAction;
   decideOvertimeAction: (requestId: string, expectedVersion: number) => BoundAction;
   decideTimesheetAction: (entryId: string, expectedVersion: number) => BoundAction;
   decideTrainingAction: (enrollmentId: string, expectedVersion: number) => BoundAction;
 }) {
+  const pageNumber = teamCursors.length + 1;
+  const nextCursors = workspace.nextTeamCursor ? [...teamCursors, workspace.nextTeamCursor] : null;
+  const previousCursors = teamCursors.length > 0 ? teamCursors.slice(0, -1) : null;
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-text-primary">My team</h1>
 
       <Card title={`Team roster (${workspace.team.length})`}>
-        {workspace.teamTruncated ? (
-          <p className="mb-2 text-xs text-warning">Showing the first {workspace.team.length} direct reports. You have more than that — contact HR to see the rest of your team.</p>
+        {/* Before ISS-2026-084 this banner ended "contact HR to see the rest of your
+            team" -- an honest disclosure of a boundary, and an instruction to leave the
+            product to cross it. The cursor to cross it existed the whole time. */}
+        {workspace.teamTruncated || pageNumber > 1 ? (
+          <p className="mb-2 text-xs text-neutral-500">
+            Page {pageNumber}, {workspace.team.length} of your direct reports, ordered by employee number, {teamPageSize} per page.
+          </p>
         ) : null}
         <ul className="flex flex-wrap gap-2 text-sm">
           {workspace.team.map((t) => (
@@ -151,12 +183,51 @@ export function TeamWorkspacePanel({
             </li>
           ))}
         </ul>
+        {workspace.team.length === 0 ? <p className="text-sm text-neutral-500">No direct reports on this page.</p> : null}
+        {previousCursors || nextCursors ? (
+          <nav aria-label="Team roster pages" className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+            {previousCursors ? (
+              <Link href={pageHref(basePath, previousCursors, workspace.queueLimit, teamQueueBound)} className="underline">
+                ← Previous {teamPageSize}
+              </Link>
+            ) : null}
+            {nextCursors ? (
+              <Link href={pageHref(basePath, nextCursors, workspace.queueLimit, teamQueueBound)} className="underline">
+                Next {teamPageSize} →
+              </Link>
+            ) : null}
+            {pageNumber > 1 ? (
+              <Link href={pageHref(basePath, [], workspace.queueLimit, teamQueueBound)} className="text-neutral-500 underline">
+                Back to the first page
+              </Link>
+            ) : null}
+          </nav>
+        ) : null}
       </Card>
 
       <Card title={`Approvals (${workspace.approvalQueue.length})`}>
+        {/* The size control reports the bound this result was actually built with
+            (`workspace.queueLimit`), never the requested one -- the query layer clamps,
+            so a banner quoting the request could claim a page size that was not used. */}
         {workspace.approvalQueueTruncated ? (
-          <p className="mb-2 text-xs text-warning">Showing up to {teamQueueBound} pending items per category. More may be waiting — check each capability&apos;s own admin workspace for the full queue.</p>
+          <p className="mb-2 text-xs text-warning">
+            Showing up to {workspace.queueLimit} pending items per category, and at least one category has more.
+          </p>
         ) : null}
+        <p className="mb-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+          <span>Items per category:</span>
+          {queueSizes.map((size) =>
+            size === workspace.queueLimit ? (
+              <span key={size} aria-current="true" className="rounded bg-neutral-200 px-2 py-1 font-medium text-neutral-900">
+                {size}
+              </span>
+            ) : (
+              <Link key={size} href={pageHref(basePath, teamCursors, size, teamQueueBound)} className="rounded px-2 py-1 underline">
+                {size}
+              </Link>
+            ),
+          )}
+        </p>
         {workspace.approvalQueue.length === 0 ? (
           <EmptyState title="Nothing pending" description="No approvals are waiting for your effective team." />
         ) : (

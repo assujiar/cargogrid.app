@@ -96,6 +96,41 @@ function toSelfServiceError(error: unknown): SelfServiceQueryError {
 export const TEAM_QUEUE_BOUND = 20;
 const TEAM_LIST_BOUND = 50;
 
+/**
+ * ISS-2026-084. The page sizes a caller may ask for, and the ceiling they may not
+ * exceed -- both live here rather than in the page, so a URL cannot ask for an
+ * unbounded queue and the disclosure banner cannot drift from what was fetched.
+ *
+ * The ceiling is not the same kind of number for both lists, and the difference is
+ * worth stating because it is what kept this entry open twice:
+ *
+ *   - The team roster is genuinely server-paged. `app.list_my_team_employees` orders by
+ *     employee number, takes an `after` cursor and caps itself at 200, so paging it is
+ *     real cursor traversal, not a bigger fetch.
+ *   - Three of the four approval queues were ALREADY fetched in full (up to 200) and
+ *     then sliced to 20 for display -- the bound bought nothing there except hiding
+ *     rows the composition had already paid for. Raising it costs no extra round trip.
+ *   - The leave queue is the one exception, and the reason the ceiling is not simply
+ *     removed: it slices BEFORE resolving each step's own detail, so every additional
+ *     item is a real extra RPC call. `TEAM_QUEUE_MAX` is what stops a hand-edited URL
+ *     from turning one page load into hundreds of round trips.
+ */
+export const TEAM_QUEUE_SIZES = [20, 50, 100] as const;
+export const TEAM_QUEUE_MAX = 100;
+export const TEAM_PAGE_SIZE = TEAM_LIST_BOUND;
+
+export interface MssTeamWorkspaceOptions {
+  /** Employee number to page past, from a previous page's own `nextTeamCursor`. Null for the first page. */
+  readonly teamAfterEmployeeNumber?: string | null;
+  /** Items shown per approval-queue category. Clamped to TEAM_QUEUE_SIZES' own range; anything else falls back to the default. */
+  readonly queueLimit?: number | null;
+}
+
+function clampQueueLimit(requested: number | null | undefined): number {
+  if (requested === null || requested === undefined || !Number.isFinite(requested)) return TEAM_QUEUE_BOUND;
+  return Math.min(Math.max(Math.trunc(requested), TEAM_QUEUE_BOUND), TEAM_QUEUE_MAX);
+}
+
 // --- ESS home ---
 
 export async function getEssHomeSummary(client: SelfServiceQueryClient, tenantId: string, actorAuthUserId: string): Promise<EssHomeSummary> {
@@ -195,24 +230,42 @@ function pickCurrentCycle(cycles: readonly PerformanceCycleRow[]): PerformanceCy
   return [...pool].sort((a, b) => (a.periodEnd < b.periodEnd ? 1 : -1))[0] ?? null;
 }
 
-export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenantId: string, actorAuthUserId: string): Promise<MssTeamWorkspace> {
+export async function getMssTeamWorkspace(
+  client: SelfServiceQueryClient,
+  tenantId: string,
+  actorAuthUserId: string,
+  options?: MssTeamWorkspaceOptions,
+): Promise<MssTeamWorkspace> {
+  const queueLimit = clampQueueLimit(options?.queueLimit);
   try {
     // Batch 283-285 Tier C fix (spec-compliance lens finding 3): fetch one
     // row past the bound so a genuine "more than TEAM_LIST_BOUND direct
     // reports" case can be surfaced to the caller (`teamTruncated`) instead
     // of silently dropping members 51+ with no signal anywhere in the UI.
-    // `app.list_my_team_employees` already supports real cursor pagination
-    // (`afterEmployeeNumber`) -- this checkpoint still bounds to a single
-    // page (section 17's own "bounded server composition" contract) but no
-    // longer hides that a boundary was hit.
-    const teamPage = await listMyTeamEmployees(client, tenantId, actorAuthUserId, { limit: TEAM_LIST_BOUND + 1 });
+    // That fix's own closing sentence -- "this checkpoint still bounds to a single page
+    // but no longer hides that a boundary was hit" -- is what ISS-2026-084 was filed
+    // against, and is now out of date: the cursor `app.list_my_team_employees` has
+    // always accepted is finally used. The over-fetch-by-one is unchanged and still
+    // computes `teamTruncated`; what is new is that the boundary now carries a way
+    // across it, which keeps section 17's "bounded server composition" contract intact
+    // (every page is still bounded) while dropping the part that was never in that
+    // contract -- that the reader may only ever see page one.
+    const teamPage = await listMyTeamEmployees(client, tenantId, actorAuthUserId, {
+      limit: TEAM_LIST_BOUND + 1,
+      afterEmployeeNumber: options?.teamAfterEmployeeNumber ?? null,
+    });
     const teamTruncated = teamPage.length > TEAM_LIST_BOUND;
     const team = teamTruncated ? teamPage.slice(0, TEAM_LIST_BOUND) : teamPage;
     if (team.length === 0) {
+      // A manager paged past their own last direct report lands here. `isManager: false`
+      // would be a lie in that case -- they are a manager, they are simply off the end --
+      // so the cursor is what distinguishes "not a manager" from "empty page".
       return {
-        isManager: false,
+        isManager: (options?.teamAfterEmployeeNumber ?? null) !== null,
         team: [],
         teamTruncated: false,
+        nextTeamCursor: null,
+        queueLimit,
         approvalQueue: [],
         approvalQueueTruncated: false,
         teamScheduleUpcoming: [],
@@ -253,7 +306,7 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
       : [[], []];
 
     const leaveQueueItems: ManagerApprovalQueueItem[] = [];
-    for (const step of leaveInboxSteps.slice(0, TEAM_QUEUE_BOUND)) {
+    for (const step of leaveInboxSteps.slice(0, queueLimit)) {
       const detail = await getLeaveRequestDetail(client, step.leaveRequestId, actorAuthUserId);
       if (!detail || detail.status !== "pending_approval") continue;
       if (!teamIds.has(detail.employeeId)) continue; // defense in depth (business rule 26): the workflow inbox can carry a delegated approval outside the direct-report set -- this queue is scoped to the manager's own effective team only, per this checkpoint's own scope.
@@ -270,7 +323,7 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
 
     const overtimeTeamScoped = overtimePending.filter((r) => teamIds.has(r.employeeId));
     const overtimeQueueItems: ManagerApprovalQueueItem[] = overtimeTeamScoped
-      .slice(0, TEAM_QUEUE_BOUND)
+      .slice(0, queueLimit)
       .map((r) => ({
         kind: "overtime" as const,
         requestId: r.id,
@@ -282,7 +335,7 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
 
     const timesheetTeamScoped = timesheetPending.filter((r) => teamIds.has(r.employeeId));
     const timesheetQueueItems: ManagerApprovalQueueItem[] = timesheetTeamScoped
-      .slice(0, TEAM_QUEUE_BOUND)
+      .slice(0, queueLimit)
       .map((r) => ({
         kind: "timesheet_entry" as const,
         entryId: r.id,
@@ -294,7 +347,7 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
 
     const trainingTeamScoped = teamEnrollments.filter((e) => e.status === "pending_approval" && e.employeeId && teamIds.has(e.employeeId));
     const trainingQueueItems: ManagerApprovalQueueItem[] = trainingTeamScoped
-      .slice(0, TEAM_QUEUE_BOUND)
+      .slice(0, queueLimit)
       .map((e) => ({
         kind: "training_enrollment" as const,
         enrollmentId: e.id,
@@ -314,15 +367,19 @@ export async function getMssTeamWorkspace(client: SelfServiceQueryClient, tenant
     // own pre-existing fetch order. The other three queues compute the
     // precise team-scoped truncation signal directly.
     const approvalQueueTruncated =
-      leaveInboxSteps.length > TEAM_QUEUE_BOUND ||
-      overtimeTeamScoped.length > TEAM_QUEUE_BOUND ||
-      timesheetTeamScoped.length > TEAM_QUEUE_BOUND ||
-      trainingTeamScoped.length > TEAM_QUEUE_BOUND;
+      leaveInboxSteps.length > queueLimit ||
+      overtimeTeamScoped.length > queueLimit ||
+      timesheetTeamScoped.length > queueLimit ||
+      trainingTeamScoped.length > queueLimit;
 
     return {
       isManager: true,
       team,
       teamTruncated,
+      // Only meaningful when a further page exists; the last page must not offer a
+      // "next" that would return nothing.
+      nextTeamCursor: teamTruncated ? (team[team.length - 1]?.employeeNumber ?? null) : null,
+      queueLimit,
       approvalQueue: [...leaveQueueItems, ...overtimeQueueItems, ...timesheetQueueItems, ...trainingQueueItems],
       approvalQueueTruncated,
       teamScheduleUpcoming: teamSchedule.filter((a) => teamIds.has(a.employeeId)),

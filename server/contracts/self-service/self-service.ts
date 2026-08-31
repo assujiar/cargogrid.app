@@ -104,6 +104,18 @@ export interface MssTeamWorkspace {
   readonly approvalQueue: readonly ManagerApprovalQueueItem[];
   /** True when one or more of the underlying leave/overtime/timesheet/training queues had more team-scoped pending items than `TEAM_QUEUE_BOUND` and was truncated -- same disclosure rationale as `teamTruncated`. */
   readonly approvalQueueTruncated: boolean;
+  /**
+   * ISS-2026-084 paging state. `teamTruncated` said only THAT a boundary was hit; these
+   * say where it is, so the UI can offer to cross it instead of telling the reader to
+   * contact HR.
+   *
+   * `nextTeamCursor` is the last shown employee number, or null when this is the last
+   * page -- the cursor `app.list_my_team_employees` already accepted and nothing used.
+   * `queueLimit` is the per-category size this result was actually built with, so the
+   * disclosure banner can never claim a bound the fetch did not use.
+   */
+  readonly nextTeamCursor: string | null;
+  readonly queueLimit: number;
   readonly teamScheduleUpcoming: readonly ScheduleAssignmentListRow[];
   readonly currentPerformanceCycle: PerformanceCycleRow | null;
   readonly teamGoalAssignments: readonly PerformanceGoalAssignmentRow[];
