@@ -613,4 +613,221 @@ begin
   end if;
 end $$;
 
+-- ===========================================================================
+-- ISS-2026-058: Prompt 262 §22 "manual confirmation with evidence".
+--
+-- The gap this closes was not a bug but an omission: §22 names a second route to
+-- `accepted` -- somebody attests the vendor agreed OUT OF BAND and attaches the document
+-- that says so -- and 20260730710000 implemented only the in-system route. The capability's
+-- own Tier B self-check marked taxonomy class C-10 (file/evidence linking) "N/A" for this
+-- domain, which is how a named requirement went missing without anyone noticing.
+--
+-- What these assertions are actually for: proving the manual route records a WEAKER claim
+-- honestly rather than laundering it into looking like the system watched the vendor accept.
+-- Every one of them is a way the record could lie if the constraint or the RPC were absent.
+-- ===========================================================================
+
+\echo '>> ISS-2026-058 setup: a document type for manual confirmation evidence, published for tenant1'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vcap1');
+  v_doc_draft app.config_versions;
+begin
+  perform app.register_document_type('vendor_capacity_confirmation', 'Vendor Capacity Manual Confirmation Evidence', 'DOC', '00000000-0000-0000-0000-000000262999', 'supreme');
+  v_doc_draft := app.create_config_draft('document:vendor_capacity_confirmation', v_tenant1, 'tenant', null, '00000000-0000-0000-0000-000000262101', 'admin');
+  perform app.set_config_items(v_doc_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('application/pdf', 'image/jpeg')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', 5242880),
+    jsonb_build_object('key', 'retention_class', 'value', 'operational_contract_plus_90d'),
+    jsonb_build_object('key', 'default_classification', 'value', 'internal'),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', false)
+  ), '00000000-0000-0000-0000-000000262101', 'admin');
+  perform app.publish_document_type_definition(v_doc_draft.id, '00000000-0000-0000-0000-000000262101', now(), 'admin');
+end $$;
+
+\echo '>> ISS-2026-058: app.confirm_vendor_capacity_reservation_manually refuses a confirmation with no evidence, no note, evidence scoped to another record, an unscanned file, an infected file, and an actor without PRC:Edit'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vcap1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000262102';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000000262103';
+  v_vendor_master uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and legal_name = 'PT Vendor Capacity A');
+  v_offer app.vendor_capacity_offers;
+  v_res app.vendor_capacity_reservations;
+  v_other_res app.vendor_capacity_reservations;
+  v_clean_file app.files;
+  v_pending_file app.files;
+  v_infected_file app.files;
+  v_wrong_record_file app.files;
+  v_failed boolean;
+begin
+  v_offer := app.create_vendor_capacity_offer_draft(
+    v_tenant1, v_vendor_master, null, 'warehousing', null, null, null, 'warehouse', null, 400, 'sqm',
+    '2026-01-01'::timestamptz, '2026-12-31'::timestamptz, 'idem-vcap-offer-058', v_staff1, 'staff'
+  );
+  v_offer := app.publish_vendor_capacity_offer(v_offer.id, v_offer.record_version, v_staff1, 'staff');
+
+  v_res := app.reserve_vendor_capacity(v_offer.id, 50, '2026-05-01'::timestamptz, '2026-05-31'::timestamptz, 'manual', null, 'idem-vcap-res-058a', v_staff1, 'staff');
+  v_other_res := app.reserve_vendor_capacity(v_offer.id, 50, '2026-06-01'::timestamptz, '2026-06-30'::timestamptz, 'manual', null, 'idem-vcap-res-058b', v_staff1, 'staff');
+
+  -- no evidence at all: the whole point of §22 is the document, so a confirmation without
+  -- one is a bare status change wearing the word "confirmed".
+  begin
+    perform app.confirm_vendor_capacity_reservation_manually(v_res.id, v_res.record_version, null, 'vendor agreed by phone', v_staff1, 'staff');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'confirmation_evidence_required%' then
+      raise exception 'assertion failed: expected confirmation_evidence_required, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a manual confirmation with no evidence file to be refused'; end if;
+
+  -- a blank note is refused BEFORE the file is even looked up: a document with no account of
+  -- what was agreed and with whom leaves the next reader guessing at the very thing in dispute.
+  begin
+    perform app.confirm_vendor_capacity_reservation_manually(v_res.id, v_res.record_version, gen_random_uuid(), '   ', v_staff1, 'staff');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'confirmation_note_required%' then
+      raise exception 'assertion failed: expected confirmation_note_required, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a manual confirmation with a blank note to be refused'; end if;
+
+  select * into v_clean_file from app.initiate_file_upload(
+    v_tenant1, 'vendor_capacity_confirmation', 'vendor_capacity_reservation', v_res.id,
+    'vendor-confirmation.pdf', 'application/pdf', 20480, null, false, null, '{}'::uuid[], null,
+    'idem-vcap-file-058-clean', v_staff1, 'staff'
+  );
+  select * into v_pending_file from app.initiate_file_upload(
+    v_tenant1, 'vendor_capacity_confirmation', 'vendor_capacity_reservation', v_res.id,
+    'vendor-confirmation-unscanned.pdf', 'application/pdf', 20480, null, false, null, '{}'::uuid[], null,
+    'idem-vcap-file-058-pending', v_staff1, 'staff'
+  );
+  select * into v_infected_file from app.initiate_file_upload(
+    v_tenant1, 'vendor_capacity_confirmation', 'vendor_capacity_reservation', v_res.id,
+    'vendor-confirmation-bad.pdf', 'application/pdf', 20480, null, false, null, '{}'::uuid[], null,
+    'idem-vcap-file-058-infected', v_staff1, 'staff'
+  );
+  -- Uploaded against the OTHER reservation. Everything else about it is legitimate -- same
+  -- tenant, same document type, clean scan -- which is exactly why record scope has to be
+  -- re-checked here rather than assumed from a successful upload.
+  select * into v_wrong_record_file from app.initiate_file_upload(
+    v_tenant1, 'vendor_capacity_confirmation', 'vendor_capacity_reservation', v_other_res.id,
+    'other-reservation.pdf', 'application/pdf', 20480, null, false, null, '{}'::uuid[], null,
+    'idem-vcap-file-058-other', v_staff1, 'staff'
+  );
+  perform app.record_file_scan_result(v_clean_file.id, 'clean', 'test-scanner-058', v_staff1, 'staff');
+  perform app.record_file_scan_result(v_infected_file.id, 'infected', 'test-scanner-058', v_staff1, 'staff');
+  perform app.record_file_scan_result(v_wrong_record_file.id, 'clean', 'test-scanner-058', v_staff1, 'staff');
+
+  begin
+    perform app.confirm_vendor_capacity_reservation_manually(v_res.id, v_res.record_version, v_wrong_record_file.id, 'vendor agreed by phone', v_staff1, 'staff');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'evidence_file_not_found%' then
+      raise exception 'assertion failed: expected evidence_file_not_found for a file scoped to a different reservation, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected evidence uploaded against a DIFFERENT reservation to be refused'; end if;
+
+  begin
+    perform app.confirm_vendor_capacity_reservation_manually(v_res.id, v_res.record_version, v_pending_file.id, 'vendor agreed by phone', v_staff1, 'staff');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'evidence_file_not_scanned%' then
+      raise exception 'assertion failed: expected evidence_file_not_scanned, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected an unscanned evidence file to be refused'; end if;
+
+  begin
+    perform app.confirm_vendor_capacity_reservation_manually(v_res.id, v_res.record_version, v_infected_file.id, 'vendor agreed by phone', v_staff1, 'staff');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'evidence_file_infected%' then
+      raise exception 'assertion failed: expected evidence_file_infected, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected an infected evidence file to be refused'; end if;
+
+  -- the manual route is a real acceptance, so it carries the same PRC:Edit authority as the
+  -- in-system one -- attesting on the vendor's behalf is not a lesser act than watching them.
+  begin
+    perform app.confirm_vendor_capacity_reservation_manually(v_res.id, v_res.record_version, v_clean_file.id, 'vendor agreed by phone', v_viewer1, 'viewer');
+    v_failed := false;
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'insufficient_authority%' then
+      raise exception 'assertion failed: expected insufficient_authority for a PRC:View-only actor, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a PRC:View-only actor to be refused the manual confirmation'; end if;
+
+  -- the legitimate path
+  v_res := app.confirm_vendor_capacity_reservation_manually(
+    v_res.id, v_res.record_version, v_clean_file.id, '  Confirmed by phone with Pak Andi, vendor ops, 2026-04-28  ', v_staff1, 'staff'
+  );
+  if v_res.status <> 'accepted' then
+    raise exception 'assertion failed: expected the manual confirmation to reach accepted, got %', v_res.status;
+  end if;
+  if v_res.confirmation_method <> 'manual_with_evidence' then
+    raise exception 'assertion failed: expected confirmation_method=manual_with_evidence, got %', v_res.confirmation_method;
+  end if;
+  if v_res.confirmation_evidence_file_id <> v_clean_file.id then
+    raise exception 'assertion failed: expected the evidence file to be recorded on the reservation, got %', v_res.confirmation_evidence_file_id;
+  end if;
+  if v_res.confirmation_note <> 'Confirmed by phone with Pak Andi, vendor ops, 2026-04-28' then
+    raise exception 'assertion failed: expected the note to be stored trimmed, got [%]', v_res.confirmation_note;
+  end if;
+  if v_res.confirmed_by_auth_user_id <> v_staff1 or v_res.confirmed_at is null then
+    raise exception 'assertion failed: expected the confirming identity and timestamp to be recorded, got %/%', v_res.confirmed_by_auth_user_id, v_res.confirmed_at;
+  end if;
+
+  -- and the in-system route says what it always meant, rather than leaving it inferable from
+  -- a null evidence column. Without this, "no evidence file" would be ambiguous between
+  -- "the system watched it" and "somebody forgot to attach the document".
+  v_other_res := app.accept_vendor_capacity_reservation(v_other_res.id, v_other_res.record_version, v_staff1, 'staff');
+  if v_other_res.confirmation_method <> 'system_accept' or v_other_res.confirmation_evidence_file_id is not null then
+    raise exception 'assertion failed: expected the in-system accept to stamp system_accept with no evidence file, got %/%', v_other_res.confirmation_method, v_other_res.confirmation_evidence_file_id;
+  end if;
+
+  -- The constraint, not just the RPC. A raw UPDATE is the case the RPC cannot police, and it
+  -- is precisely the one worth policing: relabelling an in-system accept as an evidenced
+  -- manual confirmation, with no evidence, is how the record would come to overstate itself.
+  begin
+    update app.vendor_capacity_reservations
+    set confirmation_method = 'manual_with_evidence', confirmation_evidence_file_id = null
+    where id = v_other_res.id;
+    v_failed := false;
+  exception when check_violation then
+    v_failed := true;
+    if sqlerrm not like '%vendor_capacity_reservations_manual_evidence_check%' then
+      raise exception 'assertion failed: expected the manual-evidence CHECK to reject it, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected a raw UPDATE claiming manual_with_evidence without evidence to be rejected by the CHECK constraint'; end if;
+
+  -- and an unknown method is rejected outright rather than silently stored
+  begin
+    update app.vendor_capacity_reservations set confirmation_method = 'trust_me' where id = v_other_res.id;
+    v_failed := false;
+  exception when check_violation then
+    v_failed := true;
+  end;
+  if not v_failed then raise exception 'assertion failed: expected an unrecognised confirmation_method to be rejected'; end if;
+
+  if not exists (
+    select 1 from app.audit_logs
+    where action = 'confirm_vendor_capacity_reservation_manually' and resource_id = v_res.id and result = 'success'
+  ) then
+    raise exception 'assertion failed: expected the manual confirmation to leave a real audit event';
+  end if;
+end $$;
+
 \echo 'ALL PRC-262 db-test assertions passed.'

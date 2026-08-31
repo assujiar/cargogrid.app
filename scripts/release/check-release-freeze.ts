@@ -2841,7 +2841,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // History: 8b7d0585b8b415d905ebedf923f2985232f6f60e829a9732318ac0d53350a26a
   // (402 files, fifty-third-pass amendment above). Superseded 2026-08-31 (fifty-fourth pass) by
   // ISS-2026-238 (403 files: +1, 20260831140000_bound_logged_file_listing.sql).
-  migrationSetSha256: "2819e35ab8fe49aebfc65d7e1cbe628ceaa4da84dd9f5f6752362ec78765a005",
+  // History: 2819e35ab8fe49aebfc65d7e1cbe628ceaa4da84dd9f5f6752362ec78765a005
+  // (403 files, fifty-fourth-pass amendment above). Superseded 2026-08-31 (fifty-fifth pass) by
+  // ISS-2026-058 (404 files: +1,
+  // 20260831150000_add_vendor_capacity_manual_confirmation_evidence.sql).
+  migrationSetSha256: "0c97fd28555b491731a36af023748cc3b8084fad03d9c76d3a65f8a23189d6fc",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3117,7 +3121,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (238 files, fifty-second-pass state). Superseded 2026-08-31 (fifty-third pass) by
   // ISS-2026-231 (238 files unchanged in count -- document-file.sql gained the backstop proof,
   // and five files' own raw RPD-022 re-flags now declare themselves).
-  dbTestSetSha256: "b8a19b3c014bbb1452cd7b4b1b5e725f912225461d5aeac5c5a48b0854decd77",
+  // History: b8a19b3c014bbb1452cd7b4b1b5e725f912225461d5aeac5c5a48b0854decd77
+  // (238 files, fifty-third-pass state; the fifty-fourth pass, ISS-2026-238, touched no
+  // db-test file, which is why this history skips a number rather than losing one).
+  // Superseded 2026-08-31 (fifty-fifth pass) by ISS-2026-058 (238 files unchanged in count --
+  // procurement-vendor-capacity.sql gained the Prompt 262 §22 manual-confirmation-with-evidence
+  // block: the six refusal modes, the legitimate path, the in-system accept's own
+  // system_accept stamp, and the raw-UPDATE case only the CHECK constraint can police).
+  dbTestSetSha256: "e47ee3cb537cb0b0d74c7a93e3896cfe323910d319dbaeeb6845144f6d23361a",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

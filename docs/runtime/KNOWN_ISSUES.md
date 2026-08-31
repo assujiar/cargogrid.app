@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 70 — 4 High, 28 Medium, 38 Low |
+| `OPEN` | 69 — 4 High, 27 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
-| `RESOLVED` | 193 |
+| `RESOLVED` | 194 |
 | **Total records** | **269** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -59,7 +59,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-255` | High | `OPEN` | real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in thi |
 | `ISS-2026-261` | High | `OPEN` | CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path, only a wait-and-restore posture bounded by an unco |
 | `ISS-2026-289` | High | `OPEN` | GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repos |
-| `ISS-2026-058` | Medium | `OPEN` | PRC-262 "manual confirmation with evidence" (§22) — undisclosed C-23 gap |
+| `ISS-2026-058` | Medium | `RESOLVED` | PRC-262 "manual confirmation with evidence" (§22) — undisclosed C-23 gap |
 | `ISS-2026-060` | Medium | `OPEN` | Vendor rate engine (PRC-255) has no `zone`/`distance` pricing dimension |
 | `ISS-2026-061` | Medium | `OPEN` | Vendor invoice match-exception approval bypasses the canonical Platform approval engine |
 | `ISS-2026-062` | Medium | `OPEN` | Vendor assignment (PRC-263) has no shipment-leg/task granularity |
@@ -562,13 +562,75 @@ mismatch — and `scripts/db-tests/public-api-wrapper-regression.sql`'s exhausti
 mode-parity check failed the run. Fixed to `invoker` before commit; the reason is now a
 comment at that wrapper's own definition.
 
-### ISS-2026-058 — PRC-262 "manual confirmation with evidence" (§22) — undisclosed C-23 gap (OPEN, Medium)
+### ISS-2026-058 — PRC-262 "manual confirmation with evidence" (§22) — undisclosed C-23 gap (RESOLVED, Medium)
 
 Discovered `2026-08-09` during `CG-S11-PRC-019` (Prompt 268), by the same spec-anchor-completeness sweep as `ISS-2026-057`, independently re-confirmed by the Prompt 268 synthesis three ways: (1) `262_VENDOR_CAPACITY_AVAILABILITY_PROMPT.md:100` names "...or manual confirmation with evidence" as a required alternative flow; (2) `grep -n "evidence|file_id|attachment|initiate_file_upload" supabase/migrations/20260730710000_create_procurement_vendor_capacity.sql` returns zero matches, run directly this checkpoint — no evidence/file-linking mechanism exists on `app.vendor_capacity_offers`/`app.vendor_capacity_reservations` at all; (3) `docs/build-log/phase-06/PRC-262.md` §5 ("Residual, disclosed limitations") itemizes exactly four items (no recurring-availability declaration, no vendor-portal surface, no UI caller for the by-id reservation read, no UI picker for resource/contract linkage) — none names the missing evidence-attachment capability, matching the capability's own Tier B self-check which marked taxonomy class C-10 (file/evidence linking) "N/A (no file-linking in this capability)" without recognizing the named spec requirement behind that N/A. Same undisclosed-named-requirement (C-23) shape as `ISS-2026-046`/`047`/`050`/`052`/`057` — a further instance.
 
 **Handling:** Not fixed by Prompt 268 (docs-only checkpoint; building real evidence/file-linking on capacity offers/reservations is itself an architectural decision touching the Document/File Engine, not a hardening-sized fix). **Status `OPEN`**, Medium severity (no live production exposure — no evidence-linking path exists to be insecure; the gap is a missing named capability) — owner: PRC-262, a future Procurement task with an explicit schema/file-linking mandate.
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `grep -n "evidence|file_id|attachment|initiate_file_upload" supabase/migrations/20260730710000_create_procurement_vendor_capacity.sql` still returns zero matches. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-31, `supabase/migrations/20260831150000_add_vendor_capacity_manual_confirmation_evidence.sql` (applied live, project `awdlicmwzdxquopwtcfd`).**
+
+This entry's own handling note was wrong about the size of the work, and the correction is the
+reason it could be closed in one bounded migration rather than deferred a fourth time. The note
+called it "an architectural decision touching the Document/File Engine". It is not:
+`app.files.record_type` is **unconstrained polymorphic text** (`20260719140000:334`), not an
+enum. PLT-128 was built precisely so a domain could attach evidence without the file engine
+changing at all. No file-engine migration was needed, and no new vocabulary was registered
+platform-side — only the columns that record *which* confirmation happened, and an RPC that
+validates the evidence properly.
+
+**What was actually missing, stated precisely.** A reservation reaching `accepted` today means
+one thing: the vendor accepted it in the system, and the system watched that happen. §22's manual
+path means something materially weaker — somebody asserts the vendor agreed out of band, and
+attaches a document as evidence. Both are legitimate. They are not the same claim, and the record
+has to say which one it is holding.
+
+That is why this is not simply a nullable `evidence_file_id`. A null on that column would be
+ambiguous between "system accept" and "manual confirmation where somebody forgot the file", and
+the difference between those two is exactly what gets asked about when a reservation is disputed.
+So `confirmation_method` is `NOT NULL` with a default (`system_accept`), constrained to the two
+values, and a second CHECK
+(`vendor_capacity_reservations_manual_evidence_check`) makes a manual confirmation without
+evidence, a confirming identity and a timestamp **impossible** rather than merely discouraged.
+
+**What was built:**
+- `app.vendor_capacity_reservations` gains `confirmation_method`, `confirmation_evidence_file_id`
+  (FK to `app.files`), `confirmation_note`, `confirmed_by_auth_user_id`, `confirmed_at`.
+- `app.accept_vendor_capacity_reservation` now stamps `system_accept` explicitly, so the
+  in-system route states what it always meant instead of leaving it inferable from a null column.
+- `app.confirm_vendor_capacity_reservation_manually(p_reservation_id, p_expected_version,
+  p_evidence_file_id, p_confirmation_note, p_actor_auth_user_id, p_actor_label)` — the §22 route.
+  Same `PRC:Edit` authority and same optimistic-concurrency contract as the in-system accept
+  (attesting on the vendor's behalf is not a lesser act than watching them), plus a **mandatory**
+  note and a **mandatory** evidence file that is re-validated *here* — tenant match,
+  `record_type = 'vendor_capacity_reservation'`, `record_id` match, and clean malware scan — the
+  taxonomy C-10 discipline `app.complete_onboarding_task` already established. A caller's earlier
+  upload success is never trusted as still valid: a file clean at upload may not be clean now, and
+  one uploaded against a different reservation must never count as evidence for this one.
+- The `public.*` wrapper follows RGL-394 Option 2 with the `ISS-2026-309` revoke shape
+  (`from anon, authenticated, service_role, public`, then grant) — live-verified at 0 anon grants.
+
+**Evidence:** `scripts/db-tests/procurement-vendor-capacity.sql` gains a dedicated block proving
+each way the record could otherwise lie: no evidence → `confirmation_evidence_required`; blank
+note → `confirmation_note_required`; evidence scoped to a *different* reservation (same tenant,
+same document type, clean scan — everything else legitimate) → `evidence_file_not_found`;
+unscanned → `evidence_file_not_scanned`; infected → `evidence_file_infected`; a `PRC:View`-only
+actor → `insufficient_authority`; the legitimate path reaching `accepted` with the method,
+evidence, trimmed note, confirming identity and timestamp all recorded; the in-system accept
+stamping `system_accept` with no evidence file; and — the case the RPC cannot police — a **raw
+`UPDATE`** relabelling an in-system accept as an evidenced manual confirmation with no evidence,
+rejected by the CHECK constraint. Full `pnpm db:test` green (`==> db-tests: ALL PASSED`),
+including the `public.*` wrapper-parity and `ISS-2026-033` authority sweeps.
+
+**Live verification:** 5 new columns, 2 new constraints, 2 functions (`app.*` + `public.*`), 0
+anon EXECUTE grants, migration ledger row `20260831150000` recorded.
+
+**What is still not built, and is not claimed:** there is no UI caller for the manual
+confirmation yet — the same disclosed shape as PRC-262's existing "no UI picker" residuals. The
+mechanism, its authority gate and its evidence validation are real and tested; the screen that
+invokes it is a separate, bounded front-end task.
 
 ### ISS-2026-059 — `app._calc_vendor_kpi_rate_validity` (PRC-264) fails `procurement-vendor-performance.sql` deterministically when run between ~00:00–03:59 UTC (RESOLVED, Low)
 
