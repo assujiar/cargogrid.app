@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 77 — 5 High, 34 Medium, 38 Low |
+| `OPEN` | 76 — 4 High, 34 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
-| `RESOLVED` | 185 |
-| **Total records** | **268** |
+| `RESOLVED` | 187 |
+| **Total records** | **269** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -54,7 +54,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 |---|---|---|---|
 | `ISS-2026-065` | High | `RESOLVED` | Employee Master (HRT-274): no effective-dated employee identity/lifecycle mechanism, despite a binding, repeated Prompt 274 requirement |
 | `ISS-2026-151` | Medium | `RESOLVED` | the mandatory RPD-023 step-up-authorization ruling: `app.assert_current_step_up_authorization` (IAE-027) is real and correct but has zero live callers |
-| `ISS-2026-249` | High | `OPEN` | IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's o |
+| `ISS-2026-249` | High | `RESOLVED` | IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's o |
 | `ISS-2026-254` | Medium | `OPEN` | a database restore to a point predating an active security/compliance decision silently reverts that decision, with no compensating control |
 | `ISS-2026-255` | High | `OPEN` | real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in thi |
 | `ISS-2026-261` | High | `OPEN` | CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path, only a wait-and-restore posture bounded by an unco |
@@ -106,7 +106,8 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
 | `ISS-2026-310` | Medium | `OPEN` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
 | `ISS-2026-312` | Low | `OPEN` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
-| `ISS-2026-313` | Low | `OPEN` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
+| `ISS-2026-313` | Low | `RESOLVED` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
+| `ISS-2026-314` | Low | `OPEN` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -4484,7 +4485,7 @@ The source-sweep lens found 23 of 95 tables (24%) with zero overflow handling; t
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — read `eslint.config.js`'s existing `no-restricted-syntax` precedent (`bannedPatterns`, `chartGovernancePatterns`) and confirmed this entry's own diagnosis: "table with no wrapper in the same file" is a file-level absence-of-pattern check, which `no-restricted-syntax`'s per-node selectors cannot express without a custom rule; a sub-44px touch-target selector is similarly false-positive-prone (cannot distinguish a decorative small element from an interactive one via AST alone). Left undone rather than landing a guard that cannot be validated against false positives in this pass. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-249 — IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's own job-dead-letter fix — webhook delivery failure, AI governed-action failure, and security/auth denials still produce zero incident (found at `HDN-382` Observability Audit, live/simulated failure testing lens + source sweep lens, `OPEN at HDN-387`, High, owner a dedicated future task)
+### ISS-2026-249 — IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's own job-dead-letter fix — webhook delivery failure, AI governed-action failure, and security/auth denials still produce zero incident (found at `HDN-382` Observability Audit, live/simulated failure testing lens + source sweep lens, `RESOLVED` 2026-08-31, was High, owner a dedicated future task)
 
 Live-reproduced directly (not assumed): a job driven through the real DLQ path (`app.enqueue_job` → `app.claim_next_job` → `app.record_job_failure`) reaching its own terminal `dead_letter` status produced **zero incident, zero alert, zero owner notification** before this checkpoint's own fix — only an `app.audit_logs` row a human would have to go looking for. This checkpoint's own migration (`20260816000000_harden_observability_audit_findings.sql`) wires the single highest-value, most common failure path — `app.record_job_failure`'s own dead-letter transition — into `app.raise_observability_alert`, live-verified via a real regression db-test (`scripts/db-tests/background-job.sql`).
 
@@ -4589,6 +4590,24 @@ folded in here, because it is a different defect that happened to live in the sa
 `app.assert_current_step_up_authorization` (no durable evidence today, and `stable`, so it needs
 a new log table plus a volatility change). Both remain genuinely architectural, not one-line
 mirrors. This entry stays `OPEN` for those two.
+
+**`RESOLVED`, 2026-08-31 (`supabase/migrations/20260831100000_close_authority_denial_alerting_and_scheduler_catalogue_gap.sql`), under ADR-0027 Part A — both remaining producers, via one mechanism.**
+
+**The diagnosis above was right and understated the obstacle by one step, which is why three passes could not close it.** The blocker for the step-up producer is not volatility. It is that **a database function which raises cannot durably record the denial it raises on** — the `INSERT` and the `RAISE` share a transaction, so the raise rolls the record back. Making `app.assert_current_step_up_authorization` volatile would have let it insert and still recorded nothing. That is the same constraint `20260827000000` was already working around when it placed every alert call "immediately before that branch's own normal `return`, never before a `raise exception`"; this entry just never named it.
+
+**Two problems, two answers.**
+
+*Durability.* `app.authority_denials` is written from **outside** the refused transaction, by the application boundary that catches the error — `server/policies/authority-denial-recorder.ts`, in a fresh statement after the rollback. That is not a workaround; it is the only point in the stack where "this call was refused" both exists and can be written down. `app.record_authority_denial` is `service_role`-only and performs no authority check on the acting identity, deliberately: the identity in question is by definition the one that just failed an authority check, so requiring its authority would be circular. It does reject an unknown `tenant_id`, so a bug cannot fill the table with orphans.
+
+*The false-positive flood, which is the half that actually mattered.* `app.run_authority_denial_anomaly_sweep` does **not** alert per denial — a denial is the authorization layer working, and one alert each would be noise, exactly as this entry said. It alerts per **burst**: an identity accumulating `threshold` or more refusals inside a window raises exactly one incident, deduplicated on that identity, so a second person probing concurrently gets their own and the same person continuing does not open a second. Severity rises to `high` when the refusals span more than two modules, because breadth reads as probing while a burst confined to one module usually means a role that needs granting.
+
+**The step-up producer closes as a consequence rather than needing its own machinery**, which is a better outcome than the new log table plus volatility change proposed above. `app.evaluate_permission` already **returns** `reason = 'mfa_step_up_required'` rather than raising (`ISS-2026-236`, `20260830110000`), so a step-up refusal reaches the boundary as an ordinary `insufficient_authority` error carrying that reason, is classified apart by `classifyDenial`, and flows through the same recorder. The unit tests pin that classification specifically, so a future change that folded step-up into plain `rbac` would fail rather than silently re-open this producer.
+
+**The recorder never throws.** A failed observability write must not turn a clean "you may not do that" into a 500 — the user's outcome is already decided, and losing one evidence row is strictly better than losing the correct refusal. It also stays silent for `stale_version` and other non-refusal failures, so ordinary optimistic-concurrency retries never reach the burst detector.
+
+**Wired to run**: `authority_denial_anomaly_sweep` is a catalogue task on the scheduler built the same day (`20260831090000`), Supreme-Admin-only, minimum 15 minutes, default hourly, with `window_minutes` and `threshold` as tenant-set parameters. As with every other task, nothing runs until an operator attaches a trigger.
+
+Regressions in `scripts/db-tests/task-scheduler.sql`: one refusal raises **nothing**; twelve raise exactly one incident at `medium`; a second identity bursting across four modules raises its own at `high`; a repeated sweep does not open a second incident; a window containing no denials raises nothing; a step-up refusal records under its own kind; an unknown tenant is refused; and the ledger is `service_role`-write, RLS-read, closed to `anon`. Plus 13 unit tests on the boundary recorder. Full `db:test` `ALL PASSED` (399 migrations, 237 runner files); applied live and object-verified.
 
 ### ISS-2026-250 — no monitoring/incident dashboard UI exists anywhere in the application — IAE-030's own real, well-built alerting backend has zero consumer (found at `HDN-382` Observability Audit, coverage-mapping lens + runbook/dashboard review lens, `RESOLVED`, High, owner a dedicated future task)
 
@@ -6410,7 +6429,7 @@ Pinning proves they **exist**. It does not prove they **fire**. Eleven of the 14
 **Owner:** whoever next touches contract evidence, dispute evidence, or document checklists.
 
 
-### ISS-2026-313 — four existing, already-working tenant-wide sweeps are absent from the scheduler catalogue, so the capability that could automate them does not reach them (found 2026-08-31 while building the task scheduler, `OPEN`, Low)
+### ISS-2026-313 — four existing, already-working tenant-wide sweeps are absent from the scheduler catalogue, so the capability that could automate them does not reach them (found 2026-08-31 while building the task scheduler, `RESOLVED` the same day, was Low)
 
 **Severity: Low. Status: `OPEN`. Owner: the next pass that touches `app.scheduled_task_definitions`.**
 
@@ -6428,6 +6447,33 @@ Registered by the same work that created the condition, rather than left for a l
 **Recommended fix**, small and well-understood: one additive migration inserting four `app.scheduled_task_definitions` rows and extending `app._run_scheduled_task_once`'s `CASE` with four branches, plus the matching assertions in `scripts/db-tests/task-scheduler.sql` (that file's own final block already walks every catalogue task and fails if any lacks a dispatch branch, so the guard is in place — only the rows and branches are missing). The two `p_max_*` parameters would become `required_params`, so a tenant sets its own batch ceiling at configuration time.
 
 **Not fixed in the same pass deliberately.** The scheduler migration was already applied live and verified; adding four dispatch branches to it would mean either editing an applied migration (forbidden) or a second migration written under time pressure at the end of a long batch. Registering it is the honest alternative to quietly extending scope.
+
+**`RESOLVED`, 2026-08-31, same day (`supabase/migrations/20260831100000_close_authority_denial_alerting_and_scheduler_catalogue_gap.sql`).** All four are now catalogue tasks — `employee_lifecycle_activation`, `kb_article_version_expiry`, `vendor_compliance_waiver_expiry`, `vendor_compliance_status_refresh` — with a dispatch branch each, taking the catalogue from 11 to 16 (the fifth addition is `ISS-2026-249`'s own authority-denial sweep). The two `p_max_*` arguments became `required_params`, so a tenant sets its own batch ceiling at configuration time rather than inheriting a hard-coded one. All five start `tenant_admin_configurable = false`: vendor compliance, knowledge-base expiry and the security sweep are platform-integrity machinery rather than a tenant's own business rhythm, and employee lifecycle activation moves real employment records, so it starts closed and a Supreme Admin can delegate it per tenant without a migration — which is what the delegation switch is for. `scripts/db-tests/task-scheduler.sql`'s own final block, which walks every catalogue task and fails if any lacks a dispatch branch, now exercises all 16.
+
+
+### ISS-2026-314 — `scripts/db-tests/scheduled-reports.sql`'s two-OS-process concurrency assertion fails intermittently, and its own failure message describes a real correctness bug rather than a test artefact (found 2026-08-31 during an unrelated full-suite run, `OPEN`, Low)
+
+**Severity: Low. Status: `OPEN`. Owner: the next pass that touches `app.claim_due_scheduled_report_run` or that file's concurrency block.**
+
+Observed, not theorised: during a routine full-suite run for `ISS-2026-249`/`ISS-2026-313`, the suite failed at `scripts/db-tests/scheduled-reports.sql:415` with
+
+    CRITICAL: two genuinely concurrent OS psql processes racing to run the SAME due occurrence
+    (2026-09-04 02:30:00+00) advanced next_run_at to 2026-09-06 02:30:00+00 instead of exactly
+    one real step forward (2026-09-05 02:30:00+00) -- a silent double-advance would skip a real
+    due occurrence entirely
+
+The **immediately preceding and immediately following** full-suite runs, against freshly recreated databases with no code change in between, both reported `ALL PASSED`. So the failure is real and intermittent, and it was not caused by the change under test: nothing in `20260831090000`/`20260831100000` touches scheduled reports, and the two runs bracketing it were clean.
+
+**Why this is registered rather than dismissed as a flake.** The assertion is a genuine two-OS-process race, and its own message names a real correctness property — a double-advance skips a due occurrence, so a report a customer expects silently never runs. There are two possible explanations and **the evidence available today does not distinguish them**:
+
+1. **The product is wrong.** The claim/advance is not fully serialised, and the race the test is designed to catch does occasionally happen. That would be a real defect in `app.claim_due_scheduled_report_run` and is the more serious reading.
+2. **The test is wrong.** The two processes are synchronised by wall-clock timing rather than by a barrier, so under load one can begin its claim before the other's fixture is settled, and the assertion reports a divergence that the product would not produce in practice.
+
+Calling it a flake would be assuming (2) without evidence, which is exactly the reasoning `AGENTS.md` forbids — "a failing test is never an infra flake" until it is shown to be one. Calling it a defect would be assuming (1) equally baselessly.
+
+**Recommended next step**, in order: run that one file in a tight loop (50+ iterations) against a fresh database to establish a real failure rate; if it reproduces, add a `pg_advisory_lock`-based barrier to the test's own process synchronisation and re-measure, which distinguishes (2) from (1) cleanly — a failure that survives a real barrier is the product's. Only then fix the half that is actually wrong.
+
+**Not attempted in the pass that found it.** Diagnosing a race needs a repetition harness and a measured failure rate, not a guess appended to an unrelated batch — and guessing wrong here means either shipping a real double-advance or quietly weakening a genuine concurrency guard. The suite is green on the committed state, and that is stated rather than implied: this entry exists precisely because "it passed on the re-run" is not the same as "it is fine".
 
 ## 5. Maintenance rules
 

@@ -52,8 +52,10 @@ declare
   v_platform_only integer;
 begin
   select count(*) into v_total from app.scheduled_task_definitions where status = 'active';
-  if v_total <> 11 then
-    raise exception 'assertion failed: expected 11 active catalogue tasks, got %', v_total;
+  -- 11 seeded by 20260831090000, plus 5 added by 20260831100000 (the ISS-2026-249 authority
+  -- denial sweep and ISS-2026-313's four).
+  if v_total <> 16 then
+    raise exception 'assertion failed: expected 16 active catalogue tasks, got %', v_total;
   end if;
 
   select count(*) into v_delegable from app.scheduled_task_definitions where status = 'active' and tenant_admin_configurable;
@@ -206,8 +208,8 @@ declare
   v_not_configurable integer;
 begin
   select count(*) into v_rows from app.list_tenant_scheduled_tasks(v_tenant1, v_admin);
-  if v_rows <> 11 then
-    raise exception 'assertion failed: expected all 11 active catalogue tasks listed, configured or not, got %', v_rows;
+  if v_rows <> 16 then
+    raise exception 'assertion failed: expected all 16 active catalogue tasks listed, configured or not, got %', v_rows;
   end if;
 
   select count(*) filter (where configurable_by_actor), count(*) filter (where not configurable_by_actor)
@@ -440,6 +442,12 @@ begin
       v_params := jsonb_build_object('leave_type_id', gen_random_uuid()::text);
     elsif v_code = 'training_certificate_expiry_reminder' then
       v_params := jsonb_build_object('lookahead_days', 30);
+    elsif v_code = 'authority_denial_anomaly_sweep' then
+      v_params := jsonb_build_object('window_minutes', 60, 'threshold', 10);
+    elsif v_code = 'vendor_compliance_waiver_expiry' then
+      v_params := jsonb_build_object('max_rows', 100);
+    elsif v_code = 'vendor_compliance_status_refresh' then
+      v_params := jsonb_build_object('max_vendors', 100);
     end if;
 
     select * into v_schedule from app.configure_tenant_scheduled_task(
@@ -460,11 +468,132 @@ begin
     v_checked := v_checked + 1;
   end loop;
 
-  if v_checked <> 11 then
-    raise exception 'assertion failed: expected to exercise all 11 catalogue tasks, exercised %', v_checked;
+  if v_checked <> 16 then
+    raise exception 'assertion failed: expected to exercise all 16 catalogue tasks, exercised %', v_checked;
   end if;
 
-  raise notice 'PASS: all 11 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
+  raise notice 'PASS: all 16 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
+end;
+$$;
+
+\echo '>> ISS-2026-249: the authority-denial burst detector. A single refusal produces NOTHING -- that is the false-positive flood the finding said made this producer unfixable. A burst above the threshold produces exactly ONE incident per identity, and severity rises when the refusals span several modules'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'sched1');
+  v_supreme uuid := '00000000-0000-0000-0000-000000439001';
+  v_member uuid := '00000000-0000-0000-0000-000000439003';
+  v_admin2 uuid := '00000000-0000-0000-0000-000000439004';
+  v_raised integer;
+  v_incidents_before integer;
+  v_incidents_after integer;
+  v_i integer;
+  v_incident app.incidents;
+begin
+  select count(*) into v_incidents_before from app.incidents where tenant_id = v_tenant1 and signal_type = 'authority_denial_burst';
+
+  -- One refusal. This is the authorization layer working, and it must alert on nothing.
+  perform app.record_authority_denial(v_tenant1, v_member, 'rbac', 'FIN', 'Approve', 'insufficient_authority: identity lacks FIN:Approve');
+  v_raised := app.run_authority_denial_anomaly_sweep(v_tenant1, now(), 60, 10, v_supreme, 'supreme');
+  if v_raised <> 0 then
+    raise exception 'assertion failed: a single refusal must raise nothing, raised %', v_raised;
+  end if;
+
+  -- A burst from ONE identity across ONE module: alerts, at the lower severity.
+  for v_i in 1..12 loop
+    perform app.record_authority_denial(v_tenant1, v_member, 'rbac', 'FIN', 'Approve', 'insufficient_authority: identity lacks FIN:Approve');
+  end loop;
+  v_raised := app.run_authority_denial_anomaly_sweep(v_tenant1, now(), 60, 10, v_supreme, 'supreme');
+  if v_raised <> 1 then
+    raise exception 'assertion failed: expected exactly one incident for one bursting identity, got %', v_raised;
+  end if;
+
+  select * into v_incident from app.incidents
+  where tenant_id = v_tenant1 and signal_type = 'authority_denial_burst' and dedupe_discriminator = v_member::text
+  order by opened_at desc limit 1;
+  if v_incident.id is null then
+    raise exception 'assertion failed: the incident must be deduplicated on the bursting identity, not on the tenant';
+  end if;
+  if v_incident.severity <> 'medium' then
+    raise exception 'assertion failed: a burst inside a single module should be medium (a role that needs granting), got %', v_incident.severity;
+  end if;
+
+  -- A SECOND identity bursting at the same time must get its own incident, not be swallowed by
+  -- the first one's dedupe window -- and spanning several modules reads as probing, so it is high.
+  for v_i in 1..12 loop
+    perform app.record_authority_denial(v_tenant1, v_admin2, 'rbac', 'MOD' || (v_i % 4)::text, 'Edit', 'insufficient_authority');
+  end loop;
+  v_raised := app.run_authority_denial_anomaly_sweep(v_tenant1, now(), 60, 10, v_supreme, 'supreme');
+  if v_raised <> 2 then
+    raise exception 'assertion failed: two bursting identities must produce two incidents, got %', v_raised;
+  end if;
+
+  select * into v_incident from app.incidents
+  where tenant_id = v_tenant1 and signal_type = 'authority_denial_burst' and dedupe_discriminator = v_admin2::text
+  order by opened_at desc limit 1;
+  if v_incident.severity <> 'high' then
+    raise exception 'assertion failed: refusals spanning more than two modules should escalate to high, got %', v_incident.severity;
+  end if;
+
+  select count(*) into v_incidents_after from app.incidents where tenant_id = v_tenant1 and signal_type = 'authority_denial_burst';
+  if v_incidents_after - v_incidents_before <> 2 then
+    raise exception 'assertion failed: repeated sweeps must not open a new incident per pass -- expected 2 distinct incidents, got %', v_incidents_after - v_incidents_before;
+  end if;
+
+  -- Outside the window, nothing is in scope any more.
+  v_raised := app.run_authority_denial_anomaly_sweep(v_tenant1, now() - interval '2 days', 60, 10, v_supreme, 'supreme');
+  if v_raised <> 0 then
+    raise exception 'assertion failed: a window containing no denials must raise nothing, raised %', v_raised;
+  end if;
+
+  raise notice 'PASS: ISS-2026-249 -- one refusal alerts on nothing, a burst alerts once per identity, breadth escalates severity, and repeated sweeps do not reopen an incident';
+end;
+$$;
+
+\echo '>> ISS-2026-249: a step-up refusal is recorded through the SAME path, because app.evaluate_permission returns mfa_step_up_required as a reason rather than raising -- and the recorder refuses an unknown tenant so a bug cannot fill the table with orphans'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'sched1');
+  v_member uuid := '00000000-0000-0000-0000-000000439003';
+  v_denial app.authority_denials;
+begin
+  select * into v_denial from app.record_authority_denial(
+    v_tenant1, v_member, 'step_up', 'FIN', 'Approve', 'insufficient_authority: … (mfa_step_up_required) …');
+  if v_denial.denial_kind <> 'step_up' then
+    raise exception 'assertion failed: a step-up refusal must be recorded as its own kind, got %', v_denial.denial_kind;
+  end if;
+
+  begin
+    perform app.record_authority_denial(gen_random_uuid(), v_member, 'rbac', null, null, null);
+    raise exception 'assertion failed: expected tenant_not_found for a denial against a nonexistent tenant';
+  exception when no_data_found then
+    if sqlerrm not like 'tenant_not_found%' then raise; end if;
+  end;
+
+  raise notice 'PASS: step-up refusals flow through the same recorder, and an unknown tenant is refused';
+end;
+$$;
+
+\echo '>> defence in depth on the denial ledger: it is service_role-only to write, readable only through RLS by a tenant admin, and anon holds nothing'
+do $$
+begin
+  if has_table_privilege('authenticated', 'app.authority_denials', 'INSERT')
+     or has_table_privilege('authenticated', 'app.authority_denials', 'UPDATE')
+     or has_table_privilege('authenticated', 'app.authority_denials', 'DELETE')
+  then
+    raise exception 'assertion failed: authenticated must never write or delete authority-denial evidence';
+  end if;
+  if has_function_privilege('anon', 'app.record_authority_denial(uuid, uuid, text, text, text, text, text, uuid, uuid)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'app.record_authority_denial(uuid, uuid, text, text, text, text, text, uuid, uuid)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.record_authority_denial(uuid, uuid, text, text, text, text, text, uuid, uuid)', 'EXECUTE')
+     or has_function_privilege('anon', 'app.run_authority_denial_anomaly_sweep(uuid, timestamp with time zone, integer, integer, uuid, text)', 'EXECUTE')
+  then
+    raise exception 'assertion failed: the denial recorder is service_role-only and anon must hold nothing on either function';
+  end if;
+  if (select count(*) from pg_policies where schemaname = 'app' and tablename = 'authority_denials') <> 1 then
+    raise exception 'assertion failed: expected exactly one RLS policy on app.authority_denials';
+  end if;
+
+  raise notice 'PASS: the denial ledger is service_role-write, RLS-read, and closed to anon';
 end;
 $$;
 

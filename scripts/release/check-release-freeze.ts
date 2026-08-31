@@ -2350,6 +2350,56 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test run (398 migrations, 237 runner files,
  * ALL PASSED). 20260831090000 IS applied live and object-verified.
  *
+ * AMENDED 2026-08-31 (fiftieth pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. ISS-2026-249 (High, both remaining producers) and
+ * ISS-2026-313, in one migration:
+ * 20260831100000_close_authority_denial_alerting_and_scheduler_catalogue_gap.sql.
+ *
+ * ISS-2026-249's own diagnosis was right and understated the obstacle by one step, which is
+ * why three passes could not close it. The blocker was never volatility: a database function
+ * that RAISES cannot durably record the denial it raises on, because the INSERT and the RAISE
+ * share a transaction. Making app.assert_current_step_up_authorization volatile would have let
+ * it insert and still recorded nothing. 20260827000000 was already working around exactly this
+ * when it placed every alert call "before that branch's own normal return, never before a raise
+ * exception" -- the entry just never named it.
+ *
+ * Two problems, two answers. DURABILITY: app.authority_denials is written from OUTSIDE the
+ * refused transaction, by the boundary that catches the error (server/policies/
+ * authority-denial-recorder.ts), in a fresh statement after the rollback -- the only point in
+ * the stack where "this call was refused" both exists and can be written down. THE FLOOD, which
+ * is the half that actually mattered: app.run_authority_denial_anomaly_sweep alerts on a BURST,
+ * not per denial. One refusal raises nothing; an identity crossing the threshold inside a window
+ * raises exactly one incident, deduplicated on that identity, escalating to high when the
+ * refusals span more than two modules (breadth reads as probing; one module usually means a role
+ * that needs granting).
+ *
+ * The step-up producer closes as a consequence rather than needing its own machinery -- a better
+ * outcome than the new log table plus volatility change the entry proposed. app.evaluate_
+ * permission RETURNS mfa_step_up_required as a reason rather than raising (ISS-2026-236), so a
+ * step-up refusal arrives as an ordinary insufficient_authority error carrying that reason and is
+ * classified apart by classifyDenial. The unit tests pin that classification, so a change folding
+ * step-up back into plain rbac fails rather than silently re-opening the producer.
+ *
+ * The recorder never throws: a failed observability write must not turn a clean "you may not do
+ * that" into a 500. It also stays silent for stale_version and other non-refusals, so ordinary
+ * optimistic-concurrency retries never reach the burst detector.
+ *
+ * ISS-2026-313 closes in the same migration: the four sweeps the scheduler catalogue was seeded
+ * without, plus this pass's own denial sweep, take it from 11 tasks to 16, each with an explicit
+ * dispatch branch. task-scheduler.sql's catalogue walk exercises all 16 and fails on any row
+ * without a branch.
+ *
+ * ISS-2026-314 registered by this pass rather than dismissed: scheduled-reports.sql's two-OS-
+ * process concurrency assertion failed once mid-batch and passed on the runs either side of it,
+ * with no related change. Its message names a real correctness property (a double-advance skips a
+ * due occurrence), and the evidence available cannot distinguish "the product races" from "the
+ * test's process synchronisation is fragile". Calling it a flake would assume the second without
+ * evidence. The suite is green on the committed state, and that is stated rather than implied.
+ *
+ * Re-verified via a fresh full local db-test run (399 migrations, 237 runner files,
+ * ALL PASSED). 20260831100000 IS applied live and object-verified: 16 catalogue tasks, the
+ * denial ledger present with one RLS policy, zero anon EXECUTE on either new function.
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2607,7 +2657,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (397 files, forty-eighth-pass amendment above). Superseded 2026-08-31 (forty-ninth
   // pass) by the task scheduler (398 files: +1,
   // 20260831090000_create_tenant_configurable_task_scheduler.sql).
-  migrationSetSha256: "42161bc6d1fe31e12a6f7fd25f890ae7ea865653a67b9fc82ad4ff5f07d619de",
+  // History: 42161bc6d1fe31e12a6f7fd25f890ae7ea865653a67b9fc82ad4ff5f07d619de
+  // (398 files, forty-ninth-pass amendment above). Superseded 2026-08-31 (fiftieth pass) by
+  // ISS-2026-249 + ISS-2026-313 (399 files: +1,
+  // 20260831100000_close_authority_denial_alerting_and_scheduler_catalogue_gap.sql).
+  migrationSetSha256: "04367e3b842f68f719216c613f55046857e1cd3b05b8bbf12aa46af94c719802",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2867,7 +2921,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (236 files, forty-eighth-pass state). Superseded 2026-08-31 (forty-ninth pass) by the
   // task scheduler (237 files: +1, task-scheduler.sql -- the first NEW runner file in this
   // freeze's history, every prior amendment having only widened existing ones).
-  dbTestSetSha256: "d7a3a3184533bf28d6e4584eeb23c2477de6ebcc032d3a0f5686dfb4641dc4b4",
+  // History: d7a3a3184533bf28d6e4584eeb23c2477de6ebcc032d3a0f5686dfb4641dc4b4
+  // (237 files, forty-ninth-pass state). Superseded 2026-08-31 (fiftieth pass) by
+  // ISS-2026-249 + ISS-2026-313 (237 files unchanged in count -- task-scheduler.sql gained the
+  // burst-detector, step-up-recorder and denial-ledger-privilege proofs, and its catalogue
+  // walk went from 11 tasks to 16).
+  dbTestSetSha256: "dc64811eb99224c485871cf2e282caa51a9945dcafec1823a1f768516efdfb1b",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
