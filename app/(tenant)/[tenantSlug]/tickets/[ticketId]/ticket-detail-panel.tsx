@@ -25,6 +25,8 @@ import type {
   TicketEscalationEventRow,
   TicketEscalationSuppressionRow,
   TicketLinkRow,
+  TicketLinkEventRow,
+  TicketLinkEventType,
   TicketLinkEntityType,
   TicketLinkRelationship,
 } from "../../../../../server/contracts/ticketing/ticketing.ts";
@@ -39,6 +41,31 @@ const TICKET_LINK_ENTITY_TYPE_LABELS: Record<TicketLinkEntityType, string> = {
   vendor: "Vendor",
   customer: "Customer account",
   user: "User",
+};
+
+/**
+ * ISS-2026-100: the link ledger records DENIALS as well as successes, and the wording matters.
+ * "Link denied" and "Search denied" are the ledger's own evidence that authorization held --
+ * somebody reached for a record they may not see and did not get it. Rendering those as raw
+ * `link_denied` would read like an error the viewer should fix; naming them plainly makes the
+ * timeline legible as what it is, an access record.
+ */
+const TICKET_LINK_EVENT_TYPE_LABELS: Record<TicketLinkEventType, string> = {
+  linked: "Linked",
+  unlinked: "Unlinked",
+  link_denied: "Link denied",
+  search_denied: "Search denied",
+  summary_accessed: "Summary viewed",
+  deep_link_accessed: "Record opened",
+};
+
+const TICKET_LINK_EVENT_TONE: Record<TicketLinkEventType, StatusTone> = {
+  linked: "success",
+  unlinked: "neutral",
+  link_denied: "warning",
+  search_denied: "warning",
+  summary_accessed: "info",
+  deep_link_accessed: "info",
 };
 
 const TICKET_LINK_RELATIONSHIP_LABELS: Record<TicketLinkRelationship, string> = {
@@ -910,6 +937,53 @@ function RevokeSuppressionForm({ suppressionId, expectedVersion, revokeSuppressi
 // snapshot might still carry. canManage mirrors WatcherList's own
 // established staff-or-requester rule (add_ticket_watcher's shape) --
 // plain watchers may still SEE links, never add/remove one.
+/**
+ * ISS-2026-100: the link-history ledger, which existed end to end -- RPC, TypeScript wrapper,
+ * unit test -- with no caller anywhere in `app/`. Its escalation-domain sibling
+ * (`app.list_ticket_escalation_events`) was already wired into this same page, so the omission
+ * was inconsistent rather than structural.
+ *
+ * Staff-only, because the RPC is: `app.list_ticket_link_events` re-authorizes the caller itself,
+ * and the page does not fetch it for a requester-side viewer at all. The ledger records who
+ * looked at which linked record and when, including refusals — that is exactly the kind of
+ * access trail a requester should not be able to read about the staff handling their ticket.
+ */
+function LinkHistorySection({ events }: { events: readonly TicketLinkEventRow[] }) {
+  return (
+    <section aria-label="Link history" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Link history</h2>
+      <p className="text-xs text-neutral-500">
+        Every link, unlink, and access to a linked record on this ticket — including attempts that were refused. Refusals
+        are recorded on purpose: they are the evidence that access control held.
+      </p>
+      {events.length === 0 ? (
+        <p className="text-xs text-neutral-500">No link activity recorded yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1 text-xs text-neutral-500">
+          {events.map((e) => (
+            <li key={e.id} className="flex flex-wrap items-center gap-2">
+              {/* Falls back to the raw code rather than rendering blank. A ledger row whose
+                  event type this UI has not been taught about is still evidence, and showing
+                  "linked_by_system" is more useful to a reader than an empty badge. */}
+              <StatusBadge
+                tone={TICKET_LINK_EVENT_TONE[e.eventType] ?? "neutral"}
+                label={TICKET_LINK_EVENT_TYPE_LABELS[e.eventType] ?? e.eventType.replace(/_/g, " ")}
+              />
+              <span>{new Date(e.occurredAt).toLocaleString()}</span>
+              {/* entityType is nullable on a search_denied row -- there is no single record a
+                  refused SEARCH was about, so rendering a blank label would be a lie. */}
+              {e.entityType ? <span className="text-neutral-700">{TICKET_LINK_ENTITY_TYPE_LABELS[e.entityType] ?? e.entityType}</span> : null}
+              {e.relationship ? <span>({TICKET_LINK_RELATIONSHIP_LABELS[e.relationship] ?? e.relationship})</span> : null}
+              {e.actorLabel ? <span>— {e.actorLabel}</span> : null}
+              {e.reason ? <span className="text-neutral-500">: {e.reason}</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function LinkedRecordsSection({
   canManage,
   entityTypeOptions,
@@ -1129,6 +1203,7 @@ export function TicketDetailPanel({
   suppressEscalationAction,
   revokeEscalationSuppressionAction,
   ticketLinks,
+  ticketLinkEvents,
   searchTicketLinksAction,
   linkTicketRecordAction,
   unlinkTicketRecordAction,
@@ -1175,6 +1250,8 @@ export function TicketDetailPanel({
   suppressEscalationAction: BoundAction;
   revokeEscalationSuppressionAction: (suppressionId: string, expectedVersion: number) => BoundAction;
   ticketLinks: readonly TicketLinkRow[];
+  /** ISS-2026-100: staff-only. Empty for a requester-side viewer, because the page does not fetch it for them. */
+  ticketLinkEvents: readonly TicketLinkEventRow[];
   searchTicketLinksAction: (prevState: TicketLinkSearchActionState, formData: FormData) => Promise<TicketLinkSearchActionState>;
   linkTicketRecordAction: (entityType: TicketLinkEntityType, entityId: string, relationship: TicketLinkRelationship) => BoundAction;
   unlinkTicketRecordAction: (linkId: string, expectedVersion: number) => BoundAction;
@@ -1316,6 +1393,8 @@ export function TicketDetailPanel({
         unlinkAction={unlinkTicketRecordAction}
         markViewedAction={markTicketLinkViewedAction}
       />
+
+      {detail.isStaffViewer ? <LinkHistorySection events={ticketLinkEvents} /> : null}
 
       <section aria-label="History" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">History</h2>

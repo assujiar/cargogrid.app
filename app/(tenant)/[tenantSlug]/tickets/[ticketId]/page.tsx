@@ -16,6 +16,7 @@ import {
   getTicketEscalation,
   getTicketEscalationStatusForRequester,
   listTicketEscalationEvents,
+  listTicketLinkEvents,
   listTicketEscalationSuppressions,
   listTicketLinks,
   TicketQueryError,
@@ -91,6 +92,12 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
   let escalationEvents: Awaited<ReturnType<typeof listTicketEscalationEvents>> = [];
   let suppressions: Awaited<ReturnType<typeof listTicketEscalationSuppressions>> = [];
   let ticketLinks: Awaited<ReturnType<typeof listTicketLinks>> = [];
+  // ISS-2026-100: staff-only, and left empty for everyone else rather than fetched and hidden.
+  // app.list_ticket_link_events re-authorizes its caller, so a requester fetch would simply be
+  // refused -- but not asking at all is the honest shape: the link ledger records who looked at
+  // which linked record, which is a staff access trail, not something a requester should read
+  // about the people handling their ticket.
+  let ticketLinkEvents: Awaited<ReturnType<typeof listTicketLinkEvents>> = [];
 
   try {
     detail = await getTicket(supabase, ticketId, access.authUserId);
@@ -124,6 +131,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
         // the migration's own decision 2 rather than rendering a control
         // that would only ever error.
         if (detail.channel !== "helpdesk") {
+          ticketLinkEvents = await listTicketLinkEvents(supabase, ticketId, access.authUserId);
           [assignmentCandidates, assignmentEvents] = await Promise.all([
             listTicketAssignmentCandidates(supabase, ticketId, access.authUserId),
             listTicketAssignmentEvents(supabase, ticketId, access.authUserId),
@@ -183,6 +191,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       assignmentEvents={assignmentEvents}
       escalation={escalation}
       escalationStatusForRequester={escalationStatusForRequester}
+      ticketLinkEvents={ticketLinkEvents}
       escalationEvents={escalationEvents}
       suppressions={suppressions}
       replyAction={replyToTicketAction.bind(null, tenantSlug, ticketId)}

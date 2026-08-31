@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 75 — 4 High, 33 Medium, 38 Low |
+| `OPEN` | 74 — 4 High, 32 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
-| `RESOLVED` | 188 |
+| `RESOLVED` | 189 |
 | **Total records** | **269** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -72,7 +72,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-086` | Medium | `RESOLVED` | Internal and Interdepartmental Ticket (HRT-286): `TKT:Edit` grants blanket, tenant-wide, non-queue-scoped ticket-content staff status via `app.is_tick |
 | `ISS-2026-091` | Medium | `OPEN` | Sensitive Personal and Payroll Data Controls (HRT-293): RPD-025 retention/legal-hold classification is unbuilt for every Phase 7 HR/payroll structured |
 | `ISS-2026-092` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant membe |
-| `ISS-2026-100` | Medium | `OPEN` | Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the re |
+| `ISS-2026-100` | Medium | `RESOLVED` | Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the re |
 | `ISS-2026-125` | Medium | `OPEN` | Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), p |
 | `ISS-2026-138` | Medium | `OPEN` | RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud rele |
 | `ISS-2026-140` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 8's ~30 Customer Portal routes or 9 admin Loyalty routes |
@@ -1175,13 +1175,23 @@ Discovered `2026-08-14` by HRT-293 itself as `ISS-2026-092` (Medium, disclosed n
 
 **Disposition:** **RESOLVED.** Fixed in `20260731210000` (Finding 6): the raw-table grant now also excludes `reason`/`decided_reason`; a new masked RPC, `app.get_employee_change_requests` (self-or-`HRS:View personal data`, mirroring `app.get_employee_profile`'s own `v_unmasked` convention — also nulls `current_value_snapshot`/`requested_value` as defense in depth, even though those were already correctly excluded from the raw grant), is now the only legitimate read path. `app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/page.tsx` updated in the same commit to call the new RPC instead of the raw table (its own prior direct `.select("*")` read is removed); `server/contracts/employee/employee.ts`/`server/queries/employee.ts`/`employee-detail-panel.tsx` updated to match (`requestedValue` is now nullable). **Side discovery, noted for completeness:** the page's OLD raw `.select("*")` call would already have failed with `permission denied` for every real user before this fix too, since Postgres's wildcard select requires privilege on every column and `current_value_snapshot`/`requested_value` were never granted — meaning the page's change-requests section was likely already functionally broken (a pre-existing, unrelated availability bug, not something this review introduced or needed to separately fix, since the RPC-based replacement resolves both issues at once). The underlying database-level privilege excess on `reason`/`decided_reason` was independently exploitable via any direct PostgREST/Supabase request selecting a column subset that excludes the two blocked columns, regardless of what the shipped page's own query happened to do — consistent with this repository's own doctrine that database boundaries must not rely on UI-only enforcement. **Status `RESOLVED`** — owner: closed. `ISS-2026-092`'s own text remains unchanged (append-only); this entry supersedes its disposition.
 
-### ISS-2026-100 — Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the repository (OPEN, Medium — C-20, disclosed not fixed)
+### ISS-2026-100 — Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the repository (RESOLVED 2026-08-31, was Medium — C-20)
 
 Discovered `2026-08-15` during the Tier C batch review (spec-compliance lens), confirmed by repo-wide grep: `app.list_ticket_link_events` (the staff-only ledger reader RPC), its TS wrapper `listTicketLinkEvents` (`server/queries/ticketing.ts`), and its own unit test all exist, but no route, page, or server action anywhere in `app/` calls it. Its escalation-domain sibling, `app.list_ticket_escalation_events`, IS correctly wired into `tickets/[ticketId]/page.tsx` — this is an inconsistent, not structurally-forced, omission. `docs/build-log/phase-07/HRT-292.md`'s own C-20 Tier B row discusses `record_ticket_link_summary_access`/`record_ticket_link_access_denial` and the `source='system'` extension point in detail but never mentions this function at all.
 
 **Disposition:** Real, not previously disclosed. Not fixed by this review — closing it properly means adding a real ledger-timeline UI section (data fetching in `page.tsx`, a new panel section, likely a bound server action), a genuine UI feature addition comparable in scope to `EscalationSection`'s own timeline, not a bounded migration-only fix. Outside this review's own additive-migration-plus-narrow-TS-edit mandate. **Status `OPEN`**, Medium severity (no security exposure — the underlying data is correctly access-controlled when read via the RPC directly; this is a completeness/UI-coverage gap) — owner: a near-term Ticketing follow-up prompt scoped to "add a link-history ledger section to the ticket detail panel, mirroring the escalation timeline."
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `listTicketLinkEvents` (`server/queries/ticketing.ts:724`) still has callers only in its own test file (`ticketing.test.ts`), zero occurrences anywhere under `app/`. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-31, under ADR-0027 Part A.** `LinkHistorySection` added to `app/(tenant)/[tenantSlug]/tickets/[ticketId]/ticket-detail-panel.tsx`, fed by a `listTicketLinkEvents` call in that route's own `page.tsx` — mirroring `EscalationSection`'s timeline, which is what this entry asked for and what made the omission inconsistent rather than structural in the first place.
+
+**Staff-only, and not fetched at all for anyone else.** The call sits inside the same `detail.isStaffViewer` branch the escalation and assignment reads use, so a requester-side viewer never triggers it. `app.list_ticket_link_events` re-authorizes its own caller, so a requester fetch would simply be refused — but not asking is the honest shape rather than fetching-and-hiding: this ledger records **who looked at which linked record and when**, which is a staff access trail, not something a requester should be able to read about the people handling their ticket.
+
+**Two details that needed a decision rather than a default.** The ledger records refusals (`link_denied`, `search_denied`) alongside successes, and rendering those as raw enum values would read like errors the viewer should fix; they are labelled "Link denied" / "Search denied" and toned `warning`, with a line of copy saying plainly that refusals are recorded on purpose because they are the evidence access control held. And `entityType`/`relationship` are nullable on a `search_denied` row — there is no single record a refused *search* was about — so those spans are omitted for such rows instead of rendering a blank label that would imply one.
+
+An unrecognised event type falls back to its raw code rather than an empty badge: a ledger row this UI has not been taught about is still evidence, and `linked_by_system` tells a reader more than a blank does.
+
+`typecheck`, `lint`, 5,683 unit tests, `issues:check`, `git:check-paths` all green. No migration — the RPC, its wrapper and its unit test already existed; only the caller was missing.
 
 ### ISS-2026-101 — Batch review (Prompt 291, Ticket Escalation): `app.get_ticket_escalation_status_for_requester` has no real UI caller reachable by the actual `customer_user` principal it was built to serve (RESOLVED, Medium — C-20, disclosed not fixed)
 
