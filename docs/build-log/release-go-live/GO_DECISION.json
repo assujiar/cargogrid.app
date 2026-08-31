@@ -1,0 +1,8 @@
+{
+  "decision": "GO",
+  "authorizedCommitSha": "d48b589018321bba1c1fbb12f8befd7664b4fc34",
+  "releaseCandidate": "RC-2026.08.25-1",
+  "decidedBy": "as.sujiar@gmail.com (project owner)",
+  "decidedAt": "2026-08-31T00:55:00Z",
+  "recordPath": "docs/build-log/release-go-live/RGL-414.md"
+}
