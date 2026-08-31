@@ -582,7 +582,8 @@ declare
     'training_certificate_expiry_reminder', 'ticket_sla_evaluation', 'kb_article_expiry',
     'ticket_escalation_evaluation', 'loyalty_expiry_sweep', 'automation_action_execution',
     'logistics_partner_sync', 'finance_bank_feed_sync', 'external_sync', 'audit_export', 'retention_archive',
-    'incident_escalation_sweep'
+    'incident_escalation_sweep',
+    'loyalty_earning_evaluation_sweep', 'loyalty_tier_recalculation_sweep', 'loyalty_points_posting_sweep'
   ];
   v_missing text[];
   v_extra text[];

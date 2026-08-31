@@ -44,7 +44,7 @@ begin
 end;
 $$;
 
-\echo '>> the catalogue is real and Supreme-Admin-owned: eleven active tasks, each with an interval floor, and the delegation switch genuinely splits them'
+\echo '>> the catalogue is real and Supreme-Admin-owned: nineteen active tasks, each with an interval floor, and the delegation switch genuinely splits them'
 do $$
 declare
   v_total integer;
@@ -54,8 +54,8 @@ begin
   select count(*) into v_total from app.scheduled_task_definitions where status = 'active';
   -- 11 seeded by 20260831090000, plus 5 added by 20260831100000 (the ISS-2026-249 authority
   -- denial sweep and ISS-2026-313's four).
-  if v_total <> 16 then
-    raise exception 'assertion failed: expected 16 active catalogue tasks, got %', v_total;
+  if v_total <> 19 then
+    raise exception 'assertion failed: expected 19 active catalogue tasks, got %', v_total;
   end if;
 
   select count(*) into v_delegable from app.scheduled_task_definitions where status = 'active' and tenant_admin_configurable;
@@ -208,8 +208,8 @@ declare
   v_not_configurable integer;
 begin
   select count(*) into v_rows from app.list_tenant_scheduled_tasks(v_tenant1, v_admin);
-  if v_rows <> 16 then
-    raise exception 'assertion failed: expected all 16 active catalogue tasks listed, configured or not, got %', v_rows;
+  if v_rows <> 19 then
+    raise exception 'assertion failed: expected all 19 active catalogue tasks listed, configured or not, got %', v_rows;
   end if;
 
   select count(*) filter (where configurable_by_actor), count(*) filter (where not configurable_by_actor)
@@ -468,11 +468,11 @@ begin
     v_checked := v_checked + 1;
   end loop;
 
-  if v_checked <> 16 then
-    raise exception 'assertion failed: expected to exercise all 16 catalogue tasks, exercised %', v_checked;
+  if v_checked <> 19 then
+    raise exception 'assertion failed: expected to exercise all 19 catalogue tasks, exercised %', v_checked;
   end if;
 
-  raise notice 'PASS: all 16 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
+  raise notice 'PASS: all 19 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
 end;
 $$;
 

@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 55 — 4 High, 24 Medium, 27 Low |
+| `OPEN` | 53 — 4 High, 24 Medium, 25 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 208 |
+| `RESOLVED` | 210 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -128,9 +128,9 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-122` | Low | `OPEN` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
 | `ISS-2026-123` | Low | `OPEN` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
 | `ISS-2026-124` | Low | `RESOLVED` | `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capab |
-| `ISS-2026-126` | Low | `OPEN` | Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_fo |
+| `ISS-2026-126` | Low | `RESOLVED` | Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_fo |
 | `ISS-2026-127` | Low | `OPEN` | Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting,  |
-| `ISS-2026-128` | Low | `OPEN` | Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied par |
+| `ISS-2026-128` | Low | `RESOLVED` | Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied par |
 | `ISS-2026-129` | Low | `OPEN` | Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expir |
 | `ISS-2026-131` | Low | `OPEN` | Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race |
 | `ISS-2026-132` | Low | `OPEN` | Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardle |
@@ -2070,7 +2070,7 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-017` (Prompt 315, Customer User
 **`RESOLVED` (item 3 only, 2026-08-28, Track B Batch 8,
 `supabase/migrations/20260828193000_harden_customer_portal_last_account_admin_status_guard.sql`).** Re-verified against the function's true latest body (`20260828030000_harden_customer_portal_membership_anti_enumeration.sql`, itself a same-day, unrelated Track B Batch 4 anti-enumeration fix — confirmed the last-admin gap survived that fix untouched) before drafting. Applied the exact fix this entry's own text already prescribed: `app.set_customer_portal_account_membership_status` now row-locks the account's full active-`account_admin` set before deciding, and rejects a suspend/revoke that would leave zero — the IDENTICAL guard shape `app.update_customer_portal_account_membership_role` already applies to its own account_admin→member transition (design decision 3, `20260801170000`). Scoped narrowly: fires only when the CURRENT row is an active `account_admin` transitioning to `suspended`/`revoked`; a plain member, an already-non-active row, or a reactivation is never blocked. `CREATE OR REPLACE`, byte-identical signature — ACL carries forward, no new grants. Two pre-existing, unrelated test fixtures (`customer-portal-dashboard.sql` test 4, `customer-shipment-alerts.sql`'s own "LIVE rescoping" test) broke as a direct, correct consequence of the fix (each had incidentally self-revoked/self-suspended its own fixture's sole admin as a means to a different end) — both repaired by giving each account a second admin immediately before the self-mutation, preserving each test's own actual intent. New regression in `scripts/db-tests/customer-user-management.sql`: the sole admin (`Beta`, already fixture-established) cannot self-suspend/self-revoke; a fresh, dedicated 2-admin account (`Gamma`) proves the full shape — a non-last admin is suspended (allowed), the true last is then rejected on both suspend and revoke, a plain member is unaffected. Live-verified: `SECURITY DEFINER`, `search_path` pinned, grants unchanged (`authenticated, service_role`). Full `db-tests` suite re-run clean. **Items 1-2 stay `OPEN`, Low** — standing, repository-wide infrastructure gaps, re-confirmed zero `revoke_session`/`invalidate_session`/MFA primitives anywhere, unchanged. Owner: item 3 closed; items 1-2 unchanged.
 
-### ISS-2026-126 — Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_for_paid_invoice` to a real payment event yet (Phase 8, Batch 4, CPL-316, `CG-S13-CPL-018`, OPEN, Low)
+### ISS-2026-126 — Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_for_paid_invoice` to a real payment event yet (Phase 8, Batch 4, CPL-316, `CG-S13-CPL-018`, RESOLVED 2026-08-31, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-018` (Prompt 316, Loyalty Program and Earning) — the FIRST-EVER Loyalty domain capability in this repository (ADR-0024 Part D), a deliberate scope decision made while authoring `supabase/migrations/20260801180000_create_customer_portal_loyalty_program_earning.sql`, not a defect found afterward.
 
@@ -2090,7 +2090,80 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-018` (Prompt 316, Loyalty Progr
 A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
 
 **Which of this entry's items that covers: none.** This entry asks for `app.evaluate_customer_loyalty_earning_for_paid_invoice` to fire when an invoice is actually paid. That is an **event trigger**, not a schedule: the function takes a `p_ar_open_item_id`, one specific invoice. Putting it on a timer would mean inventing a "find invoices paid since last time" sweep, which is a different and worse design than calling it from the payment path where the event already happens. The right fix remains a Finance-side call at the point of payment. `OPEN`, unchanged.
-### ISS-2026-127 — Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting, and `tier_definition_version_id` is structurally identical to `to_tier_id` in this checkpoint's own flattened design (Phase 8, Batch 4, `CG-S13-CPL-019`, OPEN, Low)
+
+**`RESOLVED`, 2026-08-31 — closed together with `ISS-2026-127` item 1 and `ISS-2026-128` item 1,
+which were always the same gap.** Each of the three said the same thing in almost the same words:
+the RPC is real, complete and idempotent, and scheduled-job wiring is *"a genuinely new,
+capability-sized addition beyond this prompt's own bounded scope."* That was true, and it stopped
+being true on 2026-08-31, when
+`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql` shipped the
+Supreme-Admin-owned catalogue, the per-tenant schedule with a real accountable identity, and the
+dispatcher these three were each waiting on.
+
+**What was still missing was not a catalogue entry.** `app.expire_loyalty_point_lots` could be
+registered directly because it already takes a tenant and sweeps it. These three take an AR open
+item, a loyalty account and an earning event respectively — and a schedule has no record. So the
+gap was never scheduling; it was the sweep that finds the work.
+
+`supabase/migrations/20260831230000_add_loyalty_earning_tier_and_points_posting_sweeps.sql` adds
+exactly that and nothing more: `app.run_loyalty_earning_evaluation_sweep`,
+`app.run_loyalty_tier_recalculation_sweep` and `app.run_loyalty_points_posting_sweep`, each a
+query that finds the records still waiting and a loop calling the existing per-record RPC on each,
+plus their `public.*` wrappers, three catalogue rows and three dispatch branches. Not one line of
+earning computation, tier evaluation or lot posting is reimplemented — if any of that is wrong it
+is wrong in one place, as it was before.
+
+**The design decision that matters: a skipped record is not a failed sweep.** Every one of these
+RPCs raises on an ineligible record, and raising is right for them — a staff member clicking
+"evaluate this invoice" on an invoice below the programme minimum deserves to be told why. A
+sweep meets those conditions constantly and legitimately, and if one raise aborted the run, a
+single ineligible record would stop every eligible one behind it and the nightly sweep would do
+nothing until somebody noticed. So each call runs in its own subtransaction: a raise rolls back
+that record alone and is counted as a skip with its own reason. Skips are recorded, not swallowed
+— the first twenty reasons land on the job row (capped, because an unbounded list on a tenant with
+ten thousand ineligible invoices is a payload nobody reads), and only the bare error **code** is
+stored, never the interpolated message, several of which contain a tenant id (`ISS-2026-146`
+class).
+
+**Authority is unchanged and deliberately not centralised.** Each sweep checks `LYL:Edit` for its
+own caller, and then every inner RPC re-checks the same permission for the same identity on every
+record. Redundant on purpose: the outer gate stops an unauthorised run starting; the inner gates
+make it impossible for a sweep to become a way to do something its caller could not do one record
+at a time. Under the scheduler the identity is the real person who authorised the schedule, whose
+authority is re-checked on every run — nothing runs as "the system".
+
+**Two near-misses, both caught by this repository's own gates rather than by care.** The
+`create or replace` of the dispatcher was first drafted from the migration that *created* it
+(eleven branches) when a later migration had already extended it to sixteen — replacing from the
+creating migration would have silently deleted five live branches and broken every schedule using
+them. `scripts/db-tests/task-scheduler.sql`'s assertion that every active catalogue task reaches a
+real dispatch branch failed loudly on the first full run. Separately, a new job type turned out to
+live in **four** places, not one — the `app.jobs` CHECK constraint, `app.generic_job_types()`,
+`GENERIC_JOB_TYPES` and `IMPORT_EXPORT_JOB_TYPES` — each with its own parity assertion, each
+firing in turn until all four agreed.
+
+**Evidence.** Three new db-test blocks, each placed where that capability's fixtures already live
+rather than in one new file, because a sweep is only meaningfully testable against real eligible
+*and* ineligible records. Each asserts what makes a sweep trustworthy: every candidate accounted
+for as processed or skipped; the run completing rather than aborting on the first ineligible
+record; nothing eligible left behind; the tenant boundary holding; `LYL:View` alone and a
+cross-tenant manager both refused; and re-running under the same label being the same job. The
+points block additionally creates its own guaranteed-postable candidate rather than relying on
+fixture leftovers — the first draft did rely on them and failed for a reason that had nothing to
+do with the sweep — and pins that the sweep passes no expiry-days override, so the per-programme
+window `ISS-2026-128` item 2 introduced still resolves. `db:test ALL PASSED`; `pnpm typecheck`,
+`pnpm lint` (0 errors), 5753 unit tests and `npx next build` green. Applied live; all six
+functions, their grants, and the 19-row catalogue verified against the hosted project. Freeze
+migration + db-test digests amended (sixty-seventh pass).
+
+**Still true, and not claimed otherwise: nothing is scheduled on the live project yet.** The
+mechanism, catalogue, authority model and dispatcher are real; attaching a trigger to
+`app.run_due_scheduled_tasks` (`pg_cron`, or an external scheduler) remains the one infrastructure
+decision for the operator, exactly as `ISS-2026-066`'s own scheduler note discloses. What changed
+here is that these three tasks are now *schedulable* — before, no schedule could have expressed
+them at all.
+
+### ISS-2026-127 — Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting, and `tier_definition_version_id` is structurally identical to `to_tier_id` in this checkpoint's own flattened design (Phase 8, Batch 4, `CG-S13-CPL-019`, OPEN — items 2-3 only, item 1 RESOLVED 2026-08-31, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-019` (Prompt 317, Membership Tier) — deliberate scope decisions made while authoring `supabase/migrations/20260801190000_create_customer_portal_loyalty_membership_tier.sql`, not defects found afterward.
 
@@ -2110,7 +2183,83 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-019` (Prompt 317, Membership Ti
 A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
 
 **Which of this entry's items that covers: none, and the reason is a real finding rather than an omission.** `app.recalculate_customer_loyalty_tier` takes a `p_loyalty_account_id` — it recalculates **one account**, not a tenant. A scheduler can only run sweeps that exist, and there is no tenant-wide tier-recalculation batch to put in the catalogue. Closing this item needs a new `app.*` batch function that walks the tenant's loyalty accounts, which is capability work with its own correctness and cost questions (how many accounts per pass, what happens to an account mid-redemption), not a scheduling change. The base-tier-default and `tier_definition_version_id` items are likewise untouched. `OPEN`.
-### ISS-2026-128 — Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied parameter rather than a persisted per-program config; the FIFO consumption primitive has no customer-facing redemption trigger yet (Phase 8, Batch 4, `CG-S13-CPL-020`, OPEN — item 1 only, item 2 `RESOLVED` Track B Batch 4, item 3 `RESOLVED` 2026-08-20 at CPL-324, Low)
+
+**Item 1 `RESOLVED`, 2026-08-31 — closed together with `ISS-2026-126` and `ISS-2026-128` item 1,
+which were always the same gap. Items 2 and 3 are untouched and stay `OPEN`: a programme without
+a base tier raising rather than defaulting is a deliberate design choice, and the
+`tier_definition_version_id`/`to_tier_id` structural identity is a modelling observation, not a
+scheduling one.** Each of the three said the same thing in almost the same words:
+the RPC is real, complete and idempotent, and scheduled-job wiring is *"a genuinely new,
+capability-sized addition beyond this prompt's own bounded scope."* That was true, and it stopped
+being true on 2026-08-31, when
+`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql` shipped the
+Supreme-Admin-owned catalogue, the per-tenant schedule with a real accountable identity, and the
+dispatcher these three were each waiting on.
+
+**What was still missing was not a catalogue entry.** `app.expire_loyalty_point_lots` could be
+registered directly because it already takes a tenant and sweeps it. These three take an AR open
+item, a loyalty account and an earning event respectively — and a schedule has no record. So the
+gap was never scheduling; it was the sweep that finds the work.
+
+`supabase/migrations/20260831230000_add_loyalty_earning_tier_and_points_posting_sweeps.sql` adds
+exactly that and nothing more: `app.run_loyalty_earning_evaluation_sweep`,
+`app.run_loyalty_tier_recalculation_sweep` and `app.run_loyalty_points_posting_sweep`, each a
+query that finds the records still waiting and a loop calling the existing per-record RPC on each,
+plus their `public.*` wrappers, three catalogue rows and three dispatch branches. Not one line of
+earning computation, tier evaluation or lot posting is reimplemented — if any of that is wrong it
+is wrong in one place, as it was before.
+
+**The design decision that matters: a skipped record is not a failed sweep.** Every one of these
+RPCs raises on an ineligible record, and raising is right for them — a staff member clicking
+"evaluate this invoice" on an invoice below the programme minimum deserves to be told why. A
+sweep meets those conditions constantly and legitimately, and if one raise aborted the run, a
+single ineligible record would stop every eligible one behind it and the nightly sweep would do
+nothing until somebody noticed. So each call runs in its own subtransaction: a raise rolls back
+that record alone and is counted as a skip with its own reason. Skips are recorded, not swallowed
+— the first twenty reasons land on the job row (capped, because an unbounded list on a tenant with
+ten thousand ineligible invoices is a payload nobody reads), and only the bare error **code** is
+stored, never the interpolated message, several of which contain a tenant id (`ISS-2026-146`
+class).
+
+**Authority is unchanged and deliberately not centralised.** Each sweep checks `LYL:Edit` for its
+own caller, and then every inner RPC re-checks the same permission for the same identity on every
+record. Redundant on purpose: the outer gate stops an unauthorised run starting; the inner gates
+make it impossible for a sweep to become a way to do something its caller could not do one record
+at a time. Under the scheduler the identity is the real person who authorised the schedule, whose
+authority is re-checked on every run — nothing runs as "the system".
+
+**Two near-misses, both caught by this repository's own gates rather than by care.** The
+`create or replace` of the dispatcher was first drafted from the migration that *created* it
+(eleven branches) when a later migration had already extended it to sixteen — replacing from the
+creating migration would have silently deleted five live branches and broken every schedule using
+them. `scripts/db-tests/task-scheduler.sql`'s assertion that every active catalogue task reaches a
+real dispatch branch failed loudly on the first full run. Separately, a new job type turned out to
+live in **four** places, not one — the `app.jobs` CHECK constraint, `app.generic_job_types()`,
+`GENERIC_JOB_TYPES` and `IMPORT_EXPORT_JOB_TYPES` — each with its own parity assertion, each
+firing in turn until all four agreed.
+
+**Evidence.** Three new db-test blocks, each placed where that capability's fixtures already live
+rather than in one new file, because a sweep is only meaningfully testable against real eligible
+*and* ineligible records. Each asserts what makes a sweep trustworthy: every candidate accounted
+for as processed or skipped; the run completing rather than aborting on the first ineligible
+record; nothing eligible left behind; the tenant boundary holding; `LYL:View` alone and a
+cross-tenant manager both refused; and re-running under the same label being the same job. The
+points block additionally creates its own guaranteed-postable candidate rather than relying on
+fixture leftovers — the first draft did rely on them and failed for a reason that had nothing to
+do with the sweep — and pins that the sweep passes no expiry-days override, so the per-programme
+window `ISS-2026-128` item 2 introduced still resolves. `db:test ALL PASSED`; `pnpm typecheck`,
+`pnpm lint` (0 errors), 5753 unit tests and `npx next build` green. Applied live; all six
+functions, their grants, and the 19-row catalogue verified against the hosted project. Freeze
+migration + db-test digests amended (sixty-seventh pass).
+
+**Still true, and not claimed otherwise: nothing is scheduled on the live project yet.** The
+mechanism, catalogue, authority model and dispatcher are real; attaching a trigger to
+`app.run_due_scheduled_tasks` (`pg_cron`, or an external scheduler) remains the one infrastructure
+decision for the operator, exactly as `ISS-2026-066`'s own scheduler note discloses. What changed
+here is that these three tasks are now *schedulable* — before, no schedule could have expressed
+them at all.
+
+### ISS-2026-128 — Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied parameter rather than a persisted per-program config; the FIFO consumption primitive has no customer-facing redemption trigger yet (Phase 8, Batch 4, `CG-S13-CPL-020`, `RESOLVED` 2026-08-31 — item 1 closed last, item 2 `RESOLVED` Track B Batch 4, item 3 `RESOLVED` 2026-08-20 at CPL-324, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-020` (Prompt 318, Points Ledger) — deliberate scope decisions made while authoring `supabase/migrations/20260801200000_create_customer_portal_loyalty_points_ledger.sql`, not defects found afterward.
 
@@ -2123,6 +2272,78 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-020` (Prompt 318, Points Ledger
 **Not fixed here** — items 1 and 2 mirror already-accepted, repository-wide-shaped precedent from this same Loyalty domain's own two prior checkpoints (`ISS-2026-126`, `ISS-2026-127`); neither is a silent gap. Item 3 is `RESOLVED` (see above). **Status `OPEN`** (items 1-2), Low severity for all three items (no data fabricated or leaked; every RPC this checkpoint ships is real, complete, and correctly gated — including live-proven negative-balance prevention under a genuine concurrent race; no existing caller or test is affected). Recommended fix for whichever future checkpoint picks this up: item 1, a dedicated additive migration registering new job types plus workers plus enqueue call sites (mirroring `ISS-2026-126`'s own recommended fix shape), ideally chained directly off `app.evaluate_customer_loyalty_earning_for_paid_invoice`'s own success path for item 1's earning half; item 2, an additive `app.loyalty_point_program_configs` table (tenant_id, program_id, points_expiry_days) this checkpoint's own migration deliberately did not build, mirroring CPL-317's own `review_period_days` precedent; item 3, whichever future capability builds a reward/voucher catalog (CPL-319+) should call `app.consume_loyalty_points_fifo` directly rather than reinventing FIFO consumption.
 
 **Update (`2026-08-28`, Track B Batch 4):** item 2 closed. `supabase/migrations/20260828000000_create_loyalty_point_program_expiry_config.sql` — new additive `app.loyalty_point_program_configs` table (one row per tenant/program, bounded 1-3650 days) plus `app.set_/get_loyalty_point_program_expiry_config` RPCs (`LYL:Configure`/`View`), and `app.post_loyalty_points_earned` widened via `CREATE OR REPLACE` with an IDENTICAL signature (only `p_expiry_days`'s default changes from literal `365` to `NULL`) — every existing call site (grep-confirmed) always passes it explicitly, so this is a no-op for every caller today; an explicit override still always wins over a persisted config. Self-caught during drafting: an early version validated `p_expiry_days` bounds only inside the idempotency-short-circuit loop, silently skipping validation on any replay call — regressed a pre-existing test (`scripts/db-tests/customer-loyalty-points-ledger.sql`'s own "expected invalid_expiry_days for 0 days" replay assertion), caught by the local `db-tests` suite and fixed by validating an explicit override unconditionally before the idempotency check, matching the original body's own behavior. Also self-caught: `scripts/db-tests/public-api-wrapper-regression.sql` flagged the two new RPCs missing their `public.*` PostgREST wrappers (RGL-394 Option 2) — added before finalizing. `public.*` wrappers added for both new RPCs; new regression block in `customer-loyalty-points-ledger.sql`; full suite `ALL PASSED`; applied live. Item 1 (on-demand conversion/expiry) remains the same job-scheduler class as `ISS-2026-126` — `app.run_loyalty_expiry_sweep` (CPL-322) does compose `app.expire_loyalty_point_lots`, but is still staff/on-demand-triggered only (confirmed by `ISS-2026-133` item 3's own text, still `OPEN`), not a closure. **Status `OPEN`**, narrowed to item 1 only — owner unchanged.
+
+**Item 1 `RESOLVED`, 2026-08-31 — and with it this entry closes in full, its last open item,
+alongside `ISS-2026-126` and `ISS-2026-127` item 1, which were always the same gap.** Each of the three said the same thing in almost the same words:
+the RPC is real, complete and idempotent, and scheduled-job wiring is *"a genuinely new,
+capability-sized addition beyond this prompt's own bounded scope."* That was true, and it stopped
+being true on 2026-08-31, when
+`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql` shipped the
+Supreme-Admin-owned catalogue, the per-tenant schedule with a real accountable identity, and the
+dispatcher these three were each waiting on.
+
+**What was still missing was not a catalogue entry.** `app.expire_loyalty_point_lots` could be
+registered directly because it already takes a tenant and sweeps it. These three take an AR open
+item, a loyalty account and an earning event respectively — and a schedule has no record. So the
+gap was never scheduling; it was the sweep that finds the work.
+
+`supabase/migrations/20260831230000_add_loyalty_earning_tier_and_points_posting_sweeps.sql` adds
+exactly that and nothing more: `app.run_loyalty_earning_evaluation_sweep`,
+`app.run_loyalty_tier_recalculation_sweep` and `app.run_loyalty_points_posting_sweep`, each a
+query that finds the records still waiting and a loop calling the existing per-record RPC on each,
+plus their `public.*` wrappers, three catalogue rows and three dispatch branches. Not one line of
+earning computation, tier evaluation or lot posting is reimplemented — if any of that is wrong it
+is wrong in one place, as it was before.
+
+**The design decision that matters: a skipped record is not a failed sweep.** Every one of these
+RPCs raises on an ineligible record, and raising is right for them — a staff member clicking
+"evaluate this invoice" on an invoice below the programme minimum deserves to be told why. A
+sweep meets those conditions constantly and legitimately, and if one raise aborted the run, a
+single ineligible record would stop every eligible one behind it and the nightly sweep would do
+nothing until somebody noticed. So each call runs in its own subtransaction: a raise rolls back
+that record alone and is counted as a skip with its own reason. Skips are recorded, not swallowed
+— the first twenty reasons land on the job row (capped, because an unbounded list on a tenant with
+ten thousand ineligible invoices is a payload nobody reads), and only the bare error **code** is
+stored, never the interpolated message, several of which contain a tenant id (`ISS-2026-146`
+class).
+
+**Authority is unchanged and deliberately not centralised.** Each sweep checks `LYL:Edit` for its
+own caller, and then every inner RPC re-checks the same permission for the same identity on every
+record. Redundant on purpose: the outer gate stops an unauthorised run starting; the inner gates
+make it impossible for a sweep to become a way to do something its caller could not do one record
+at a time. Under the scheduler the identity is the real person who authorised the schedule, whose
+authority is re-checked on every run — nothing runs as "the system".
+
+**Two near-misses, both caught by this repository's own gates rather than by care.** The
+`create or replace` of the dispatcher was first drafted from the migration that *created* it
+(eleven branches) when a later migration had already extended it to sixteen — replacing from the
+creating migration would have silently deleted five live branches and broken every schedule using
+them. `scripts/db-tests/task-scheduler.sql`'s assertion that every active catalogue task reaches a
+real dispatch branch failed loudly on the first full run. Separately, a new job type turned out to
+live in **four** places, not one — the `app.jobs` CHECK constraint, `app.generic_job_types()`,
+`GENERIC_JOB_TYPES` and `IMPORT_EXPORT_JOB_TYPES` — each with its own parity assertion, each
+firing in turn until all four agreed.
+
+**Evidence.** Three new db-test blocks, each placed where that capability's fixtures already live
+rather than in one new file, because a sweep is only meaningfully testable against real eligible
+*and* ineligible records. Each asserts what makes a sweep trustworthy: every candidate accounted
+for as processed or skipped; the run completing rather than aborting on the first ineligible
+record; nothing eligible left behind; the tenant boundary holding; `LYL:View` alone and a
+cross-tenant manager both refused; and re-running under the same label being the same job. The
+points block additionally creates its own guaranteed-postable candidate rather than relying on
+fixture leftovers — the first draft did rely on them and failed for a reason that had nothing to
+do with the sweep — and pins that the sweep passes no expiry-days override, so the per-programme
+window `ISS-2026-128` item 2 introduced still resolves. `db:test ALL PASSED`; `pnpm typecheck`,
+`pnpm lint` (0 errors), 5753 unit tests and `npx next build` green. Applied live; all six
+functions, their grants, and the 19-row catalogue verified against the hosted project. Freeze
+migration + db-test digests amended (sixty-seventh pass).
+
+**Still true, and not claimed otherwise: nothing is scheduled on the live project yet.** The
+mechanism, catalogue, authority model and dispatcher are real; attaching a trigger to
+`app.run_due_scheduled_tasks` (`pg_cron`, or an external scheduler) remains the one infrastructure
+decision for the operator, exactly as `ISS-2026-066`'s own scheduler note discloses. What changed
+here is that these three tasks are now *schedulable* — before, no schedule could have expressed
+them at all.
 
 ### ISS-2026-129 — Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expiry are on-demand/staff-triggered only; entitlement value is a currency amount only, no percentage-based voucher model (Phase 8, Batch 4, `CG-S13-CPL-021`, OPEN, Low)
 

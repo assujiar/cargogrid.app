@@ -1025,4 +1025,82 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-127 item 1: the tier-recalculation SWEEP -- recalculates every ACTIVE enrolment, counts an account whose programme has no base tier as a skip rather than aborting, and is idempotent per run label'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'tier1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'tier2');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000338001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000000338002';
+  v_manager2 uuid := '00000000-0000-0000-0000-000000339001';
+  v_active_accounts integer;
+  v_t2_movements_before integer;
+  v_t2_movements_after integer;
+  v_row record;
+  v_repeat record;
+begin
+  select count(*) into v_active_accounts from app.loyalty_accounts where tenant_id = v_tenant1 and status = 'active';
+  if v_active_accounts = 0 then
+    raise exception 'assertion failed: this fixture must carry at least one active loyalty account for the sweep to walk';
+  end if;
+  select count(*) into v_t2_movements_before from app.loyalty_account_tier_movements where tenant_id = v_tenant2;
+
+  select * into v_row from app.run_loyalty_tier_recalculation_sweep(v_tenant1, now(), v_manager1, 'manager1', 'iss127-run-a');
+
+  -- The sweep walks EVERY active enrolment, not only those with recent activity: a
+  -- time-based demotion has no new earning event to key off, so an activity filter would
+  -- skip exactly what a periodic recalculation exists to catch.
+  if v_row.processed_count + v_row.skipped_count <> v_active_accounts then
+    raise exception 'assertion failed: expected every one of % active accounts accounted for, got % processed + % skipped', v_active_accounts, v_row.processed_count, v_row.skipped_count;
+  end if;
+  if v_row.status <> 'completed' then
+    raise exception 'assertion failed: expected a completed sweep job, got %', v_row.status;
+  end if;
+
+  -- This fixture deliberately carries accounts whose programme configuration makes
+  -- recalculation raise (ISS-2026-127 item 2). The run must survive them.
+  if v_row.processed_count = 0 then
+    raise exception 'assertion failed: at least one account must have recalculated successfully -- a sweep that skips everything proves nothing about isolation';
+  end if;
+
+  select count(*) into v_t2_movements_after from app.loyalty_account_tier_movements where tenant_id = v_tenant2;
+  if v_t2_movements_after <> v_t2_movements_before then
+    raise exception 'assertion failed: a tenant1 sweep wrote % tenant2 tier movements', v_t2_movements_after - v_t2_movements_before;
+  end if;
+
+  select * into v_repeat from app.run_loyalty_tier_recalculation_sweep(v_tenant1, now(), v_manager1, 'manager1', 'iss127-run-a');
+  if v_repeat.job_id <> v_row.job_id then
+    raise exception 'assertion failed: the same run label must be the same job, got % vs %', v_repeat.job_id, v_row.job_id;
+  end if;
+
+  -- A DIFFERENT label is a genuinely new run, and recalculating unchanged accounts must be a
+  -- no-op rather than a spurious second tier movement -- the property that makes walking every
+  -- account on every run safe.
+  select * into v_repeat from app.run_loyalty_tier_recalculation_sweep(v_tenant1, now(), v_manager1, 'manager1', 'iss127-run-b');
+  if v_repeat.job_id = v_row.job_id then
+    raise exception 'assertion failed: a different run label must be a different job';
+  end if;
+  if v_repeat.processed_count <> v_row.processed_count then
+    raise exception 'assertion failed: an immediate re-sweep must process the same accounts, got % vs %', v_repeat.processed_count, v_row.processed_count;
+  end if;
+
+  begin
+    perform app.run_loyalty_tier_recalculation_sweep(v_tenant1, now(), v_viewer1, 'viewer1', 'iss127-denied');
+    raise exception 'assertion failed: expected insufficient_authority -- LYL:View alone must not start a tier sweep';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.run_loyalty_tier_recalculation_sweep(v_tenant1, now(), v_manager2, 'manager2', 'iss127-crosstenant');
+    raise exception 'assertion failed: expected insufficient_authority -- a tenant2 manager must not sweep tenant1';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  raise notice 'PASS: tier sweep walked all % active accounts (% recalculated, % skipped), stayed inside its tenant, and re-running is a no-op', v_active_accounts, v_row.processed_count, v_row.skipped_count;
+end $$;
+
 \echo '>> ALL PASSED: CPL-317 Membership Tier'

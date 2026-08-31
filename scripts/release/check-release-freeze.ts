@@ -2893,7 +2893,35 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // the thing that creates that path, so it is the migration that owes the matching denial. One
   // added conjunct per policy, the rest byte-identical; it can only remove rows, and only for
   // actors whose sanctioned read path is the SECURITY DEFINER layer.
-  migrationSetSha256: "e6d734bfb302d7c77f96881d72464a2464b8d50f33d3224a19f13453bcb0a805",
+  // History: e6d734bfb302d7c77f96881d72464a2464b8d50f33d3224a19f13453bcb0a805
+  // (411 files, sixty-fifth-pass amendment above). Superseded 2026-08-31 (sixty-seventh pass)
+  // by ISS-2026-126 / ISS-2026-127 item 1 / ISS-2026-128 item 1 (412 files: +1,
+  // 20260831230000_add_loyalty_earning_tier_and_points_posting_sweeps.sql). The sixty-sixth
+  // pass, ISS-2026-075, touched no migration, which is why this history skips a number.
+  // Ruling: ADR-0027 Part A.
+  //
+  // Three entries filed separately that were always one gap: loyalty earning evaluation, tier
+  // recalculation and points posting are each a real, correct, idempotent RPC reachable only by
+  // a staff member clicking a button one record at a time. Each disclosed the same reason --
+  // scheduled-job wiring was capability-sized work beyond its own prompt -- and that stopped
+  // being true when 20260831090000 shipped the scheduler.
+  //
+  // What was still missing was not a catalogue entry. All three RPCs are PER-RECORD, and a
+  // schedule has no record: this migration adds the sweeps that find the work, and nothing
+  // else. No earning computation, tier evaluation or lot posting is reimplemented.
+  //
+  // The design decision that matters: a skipped record is not a failed sweep. Each per-record
+  // call runs in its own subtransaction, so an ineligible record is a counted skip with its own
+  // reason rather than a raise that would stop every eligible record behind it.
+  //
+  // Two near-misses, both caught by this repository's own gates rather than by care. The
+  // dispatcher replacement was first drafted from the migration that CREATED it (eleven
+  // branches) when a later migration had already extended it to sixteen -- task-scheduler.sql's
+  // "every catalogue task reaches a real dispatch branch" assertion failed loudly. And the job
+  // type had to be added in four places, not one: the CHECK constraint, app.generic_job_types(),
+  // GENERIC_JOB_TYPES and IMPORT_EXPORT_JOB_TYPES -- each guarded by its own parity assertion,
+  // each of which fired in turn.
+  migrationSetSha256: "797fc4af0660d4d5d64c0cffbde908480faca60efcd01ca6b933f9534f6c2ddb",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3256,7 +3284,26 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // where its three siblings say employee_number/employee_full_name, absorbed in one
   // place in TypeScript), pins the audit capture, and pins the leave export's
   // reason/destination/evidence minimisation against a future column addition.
-  dbTestSetSha256: "2be50cd62631c33667f8f9ea463f201d90eece88cb6c4fd568eddf9890c7a4d1",
+  // History: 2be50cd62631c33667f8f9ea463f201d90eece88cb6c4fd568eddf9890c7a4d1
+  // (239 files, sixty-sixth-pass state). Superseded 2026-08-31 (sixty-seventh pass) by
+  // ISS-2026-126 / 127 / 128 (239 files unchanged in count -- five existing files widened).
+  // customer-loyalty-program-earning.sql, customer-loyalty-membership-tier.sql and
+  // customer-loyalty-points-ledger.sql each gained their own sweep block, deliberately placed
+  // where that capability's fixtures already live rather than in one new file: a sweep is only
+  // meaningfully testable against real eligible AND ineligible records, and those fixtures
+  // already exist there. Each block asserts the property that makes a sweep trustworthy -- every
+  // candidate is accounted for as processed or skipped, the run completes rather than aborting
+  // on the first ineligible record, nothing eligible is left behind, the tenant boundary holds,
+  // and re-running under the same label is the same job. The earning block also pins that skip
+  // reasons carry the bare error code and never the interpolated message, which for several of
+  // these RPCs contains a tenant id (ISS-2026-146 class).
+  //
+  // task-scheduler.sql's catalogue counts move 16 -> 19, and background-job.sql's job-type
+  // mirror gains the three new sweep types. One correction outside this change's own scope,
+  // made because it was hiding evidence: audit-trail.sql line 498's \echo carried an unescaped
+  // apostrophe, so psql reported "unterminated quoted string" and truncated the description of
+  // what that block proves. The assertions themselves always ran; only their label was lost.
+  dbTestSetSha256: "913c0bd799b47ae2d8be903cc9e6e0536b90ffcafe8a5383ee3d736940cdace4",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

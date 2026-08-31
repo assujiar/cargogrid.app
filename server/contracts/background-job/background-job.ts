@@ -73,6 +73,11 @@ export const GENERIC_JOB_TYPES = [
   "audit_export",
   "retention_archive",
   "incident_escalation_sweep",
+  // ISS-2026-126 / 127 / 128: the three loyalty sweeps that made those entries
+  // schedulable -- earning evaluation, tier recalculation, points posting.
+  "loyalty_earning_evaluation_sweep",
+  "loyalty_tier_recalculation_sweep",
+  "loyalty_points_posting_sweep",
 ] as const;
 export const GenericJobTypeSchema = z.enum(GENERIC_JOB_TYPES);
 export type GenericJobType = z.infer<typeof GenericJobTypeSchema>;

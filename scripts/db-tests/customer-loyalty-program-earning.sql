@@ -1152,4 +1152,129 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-126: the earning-evaluation SWEEP -- finds every paid, unheld, not-yet-evaluated invoice and evaluates it; one ineligible record is a counted skip, never an aborted run; idempotent per run label'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'loy1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'loy2');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000336001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000000336002';
+  v_manager2 uuid := '00000000-0000-0000-0000-000000337001';
+  v_candidates integer;
+  v_row record;
+  v_repeat record;
+  v_remaining integer;
+  v_t2_events_before integer;
+  v_t2_events_after integer;
+begin
+  -- What the sweep should find: every paid, unheld invoice with no earning event yet. Counted
+  -- from the same predicate the sweep uses, BEFORE running it, so the assertion below is
+  -- against a number derived independently of the sweep's own report.
+  select count(*) into v_candidates
+  from app.finance_ar_open_items ar
+  where ar.tenant_id = v_tenant1 and ar.status = 'paid' and not ar.is_held
+    and not exists (select 1 from app.loyalty_earning_events e where e.tenant_id = v_tenant1 and e.idempotency_key = 'ar-open-item:' || ar.id::text);
+  if v_candidates = 0 then
+    raise exception 'assertion failed: this fixture must leave at least one unevaluated paid invoice for the sweep to find';
+  end if;
+
+  select count(*) into v_t2_events_before from app.loyalty_earning_events where tenant_id = v_tenant2;
+
+  select * into v_row from app.run_loyalty_earning_evaluation_sweep(v_tenant1, now(), v_manager1, 'manager1', 'iss126-run-a');
+
+  -- Every candidate is accounted for: processed or skipped, never silently dropped, and the
+  -- run completed rather than aborting on the first ineligible record.
+  if v_row.processed_count + v_row.skipped_count <> v_candidates then
+    raise exception 'assertion failed: sweep must account for every candidate -- % processed + % skipped <> % candidates', v_row.processed_count, v_row.skipped_count, v_candidates;
+  end if;
+  if v_row.status <> 'completed' then
+    raise exception 'assertion failed: expected a completed sweep job, got %', v_row.status;
+  end if;
+  if v_row.processed_count = 0 then
+    raise exception 'assertion failed: at least one genuinely eligible invoice must have been evaluated by the sweep';
+  end if;
+
+  -- Nothing eligible is left behind: a second look finds only records the sweep already
+  -- attempted, so the candidate set is genuinely drained of everything that could succeed.
+  select count(*) into v_remaining
+  from app.finance_ar_open_items ar
+  where ar.tenant_id = v_tenant1 and ar.status = 'paid' and not ar.is_held
+    and not exists (select 1 from app.loyalty_earning_events e where e.tenant_id = v_tenant1 and e.idempotency_key = 'ar-open-item:' || ar.id::text);
+  if v_remaining <> v_row.skipped_count then
+    raise exception 'assertion failed: what remains unevaluated (%) must be exactly what the sweep skipped (%)', v_remaining, v_row.skipped_count;
+  end if;
+
+  -- Tenant isolation: a tenant1 sweep never touches tenant2's own loyalty data.
+  select count(*) into v_t2_events_after from app.loyalty_earning_events where tenant_id = v_tenant2;
+  if v_t2_events_after <> v_t2_events_before then
+    raise exception 'assertion failed: a tenant1 sweep created % tenant2 earning events', v_t2_events_after - v_t2_events_before;
+  end if;
+
+  -- Idempotent per (tenant, run_label): the same label is the same run, reporting the
+  -- ORIGINAL run's own counts rather than re-doing the work.
+  select * into v_repeat from app.run_loyalty_earning_evaluation_sweep(v_tenant1, now(), v_manager1, 'manager1', 'iss126-run-a');
+  if v_repeat.job_id <> v_row.job_id or v_repeat.processed_count <> v_row.processed_count then
+    raise exception 'assertion failed: re-running the same run label must be the same job with the same counts (job % vs %, processed % vs %)', v_repeat.job_id, v_row.job_id, v_repeat.processed_count, v_row.processed_count;
+  end if;
+
+  -- The outer gate: LYL:Edit is required to start a run at all, independently of the
+  -- per-record gate inside the RPC the sweep calls.
+  begin
+    perform app.run_loyalty_earning_evaluation_sweep(v_tenant1, now(), v_viewer1, 'viewer1', 'iss126-denied');
+    raise exception 'assertion failed: expected insufficient_authority -- LYL:View alone must not start an earning sweep';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- Cross-tenant: tenant2's own manager holds LYL:Edit in tenant2, never in tenant1.
+  begin
+    perform app.run_loyalty_earning_evaluation_sweep(v_tenant1, now(), v_manager2, 'manager2', 'iss126-crosstenant');
+    raise exception 'assertion failed: expected insufficient_authority -- a tenant2 manager must not sweep tenant1';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  raise notice 'PASS: earning sweep evaluated %, skipped % of % candidates, drained everything eligible, stayed inside its tenant, and is idempotent per run label', v_row.processed_count, v_row.skipped_count, v_candidates;
+end $$;
+
+\echo '>> ISS-2026-126: the sweep records WHY it skipped, without leaking a tenant id into the reason -- an operator reading a zero-processed run must be able to tell "nothing was due" from "everything failed"'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'loy1');
+  v_payload jsonb;
+  v_skips jsonb;
+  v_reason text;
+begin
+  select payload into v_payload from app.jobs
+  where tenant_id = v_tenant1 and job_type = 'loyalty_earning_evaluation_sweep' and idempotency_key like '%iss126-run-a'
+  order by created_at desc limit 1;
+
+  if v_payload is null then
+    raise exception 'assertion failed: the sweep job row must exist and carry its own result payload';
+  end if;
+  if not (v_payload ? 'processed_count' and v_payload ? 'skipped_count' and v_payload ? 'skips') then
+    raise exception 'assertion failed: the job payload must record processed/skipped counts and the skip reasons, got %', v_payload;
+  end if;
+
+  v_skips := v_payload -> 'skips';
+  if jsonb_array_length(v_skips) > 20 then
+    raise exception 'assertion failed: the skip list must be capped at 20 entries, got %', jsonb_array_length(v_skips);
+  end if;
+
+  -- ISS-2026-146 class: only the error CODE is recorded, never the full message, which for
+  -- several of these RPCs interpolates a tenant id.
+  for v_reason in select value ->> 'reason' from jsonb_array_elements(v_skips) loop
+    if v_reason like '%' || v_tenant1::text || '%' then
+      raise exception 'assertion failed: a skip reason leaked the tenant id: %', v_reason;
+    end if;
+    if position(':' in v_reason) > 0 then
+      raise exception 'assertion failed: a skip reason must be the bare error code, not the interpolated message: %', v_reason;
+    end if;
+  end loop;
+
+  raise notice 'PASS: the sweep job row carries real counts and % capped, tenant-id-free skip reasons', jsonb_array_length(v_skips);
+end $$;
+
 \echo '>> ALL PASSED: CPL-316 Loyalty Program and Earning'

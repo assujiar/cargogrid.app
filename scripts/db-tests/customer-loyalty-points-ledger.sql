@@ -1493,4 +1493,103 @@ begin
   end;
 end $$;
 
+\echo '>> ISS-2026-128 item 1: the points-posting SWEEP -- converts every points-type earning event with no lot yet, reads "already posted" from the lot link posting itself creates, and never overrides the per-programme expiry window item 2 introduced'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pts1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'pts2');
+  v_manager1a uuid := '00000000-0000-0000-0000-000000340001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000000340003';
+  v_manager2 uuid := '00000000-0000-0000-0000-000000341001';
+  v_account_alpha uuid := (select customer_account_id from app.finance_ar_open_items where id = '00000000-0000-0000-0000-000000340101');
+  v_candidates integer;
+  v_remaining integer;
+  v_t2_lots_before integer;
+  v_t2_lots_after integer;
+  v_row record;
+  v_repeat record;
+begin
+  -- A guaranteed-postable candidate, created here rather than relied on from whatever the
+  -- earlier blocks happened to leave behind. A sweep test whose "did it post anything?"
+  -- assertion depends on fixture leftovers passes or fails for reasons that have nothing to
+  -- do with the sweep -- which is exactly how the first draft of this block failed.
+  insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
+    ('00000000-0000-0000-0000-000000340108', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000340208', 'USD', 55, 55, 'paid', false, '2026-08-08', '2026-09-07', 'tester');
+  perform app.evaluate_customer_loyalty_earning_for_paid_invoice(v_tenant1, '00000000-0000-0000-0000-000000340108', v_manager1a, 'manager1a');
+
+  select count(*) into v_candidates
+  from app.loyalty_earning_events e
+  where e.tenant_id = v_tenant1 and e.reward_type = 'points'
+    and not exists (select 1 from app.loyalty_point_lots l where l.tenant_id = v_tenant1 and l.source_earning_event_id = e.id);
+  if v_candidates = 0 then
+    raise exception 'assertion failed: the earning event just created must be an unposted candidate for the sweep to find';
+  end if;
+  select count(*) into v_t2_lots_before from app.loyalty_point_lots where tenant_id = v_tenant2;
+
+  select * into v_row from app.run_loyalty_points_posting_sweep(v_tenant1, now(), v_manager1a, 'manager1a', 'iss128-run-a');
+
+  if v_row.processed_count + v_row.skipped_count <> v_candidates then
+    raise exception 'assertion failed: expected every one of % candidates accounted for, got % processed + % skipped', v_candidates, v_row.processed_count, v_row.skipped_count;
+  end if;
+  if v_row.status <> 'completed' or v_row.processed_count = 0 then
+    raise exception 'assertion failed: expected a completed sweep that posted at least one lot, got status % / processed %', v_row.status, v_row.processed_count;
+  end if;
+
+  select count(*) into v_remaining
+  from app.loyalty_earning_events e
+  where e.tenant_id = v_tenant1 and e.reward_type = 'points'
+    and not exists (select 1 from app.loyalty_point_lots l where l.tenant_id = v_tenant1 and l.source_earning_event_id = e.id);
+  if v_remaining <> v_row.skipped_count then
+    raise exception 'assertion failed: what remains unposted (%) must be exactly what the sweep skipped (%)', v_remaining, v_row.skipped_count;
+  end if;
+
+  select count(*) into v_t2_lots_after from app.loyalty_point_lots where tenant_id = v_tenant2;
+  if v_t2_lots_after <> v_t2_lots_before then
+    raise exception 'assertion failed: a tenant1 sweep created % tenant2 point lots', v_t2_lots_after - v_t2_lots_before;
+  end if;
+
+  -- A second sweep under a NEW label must find nothing left: proof that "already posted" is
+  -- genuinely read from the lot link rather than from anything that could drift from it.
+  select * into v_repeat from app.run_loyalty_points_posting_sweep(v_tenant1, now(), v_manager1a, 'manager1a', 'iss128-run-b');
+  if v_repeat.processed_count <> 0 then
+    raise exception 'assertion failed: a second sweep must find nothing left to post, got % processed -- the already-posted filter is not holding', v_repeat.processed_count;
+  end if;
+
+  begin
+    perform app.run_loyalty_points_posting_sweep(v_tenant1, now(), v_viewer1, 'viewer1', 'iss128-denied');
+    raise exception 'assertion failed: expected insufficient_authority -- LYL:View alone must not start a points-posting sweep';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.run_loyalty_points_posting_sweep(v_tenant1, now(), v_manager2, 'manager2', 'iss128-crosstenant');
+    raise exception 'assertion failed: expected insufficient_authority -- a tenant2 manager must not sweep tenant1';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  raise notice 'PASS: points sweep posted % of % candidates, left nothing eligible behind, stayed inside its tenant, and a second run is a genuine no-op', v_row.processed_count, v_candidates;
+end $$;
+
+\echo '>> ISS-2026-128: the sweep passes NO expiry-days override, so every lot it creates carries the per-programme window item 2 introduced -- a scheduler default here would quietly undo that fix'
+do $$
+declare
+  v_src text;
+begin
+  select p.prosrc into v_src from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app' and p.proname = 'run_loyalty_points_posting_sweep';
+  if v_src is null then
+    raise exception 'assertion failed: app.run_loyalty_points_posting_sweep not found';
+  end if;
+  -- Four arguments, not five: p_expiry_days is deliberately left to the RPC's own
+  -- per-programme resolution (20260828000000).
+  if v_src not like '%post_loyalty_points_earned(p_tenant_id, v_candidate.id, p_actor_auth_user_id, p_actor_label)%' then
+    raise exception 'assertion failed: the sweep must call post_loyalty_points_earned WITHOUT an expiry-days argument, so the per-programme window resolves; body was %', v_src;
+  end if;
+  raise notice 'PASS: the points sweep defers the expiry window to per-programme configuration';
+end $$;
+
 \echo 'ALL PASSED: CPL-318 Points Ledger (+ ISS-2026-128 item 2 draft fix regression block)'

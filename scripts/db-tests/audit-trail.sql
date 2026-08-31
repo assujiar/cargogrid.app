@@ -495,7 +495,7 @@ begin
 end;
 $$;
 
-\echo '>> HDN-386 Tier C regression, closing the attack-surface lens' own live-reproduced gap: a raw UPDATE of a held app.audit_logs row (clearing legal_hold itself, or nulling before_value/after_value/reason) is now blocked at the schema level, not just the physical DELETE path -- the exact UPDATE-then-DELETE bypass the first round''s own DELETE-only trigger missed'
+\echo '>> HDN-386 Tier C regression, closing the attack-surface lens own live-reproduced gap: a raw UPDATE of a held app.audit_logs row (clearing legal_hold itself, or nulling before_value/after_value/reason) is now blocked at the schema level, not just the physical DELETE path -- the exact UPDATE-then-DELETE bypass the first round''s own DELETE-only trigger missed'
 do $$
 declare
   v_tenant_id uuid;
