@@ -5,6 +5,10 @@ import {
   parseAccountsCardSummary,
   parseWarehouseInventoryCardSummary,
   parseTicketsCardSummary,
+  parseBookingsCardSummary,
+  parseShipmentsCardSummary,
+  parseInvoicesCardSummary,
+  parsePaymentsCardSummary,
   DASHBOARD_CARD_KEYS,
   REAL_DASHBOARD_CARD_KEYS,
 } from "./customer-portal-dashboard.ts";
@@ -107,6 +111,34 @@ describe("per-card typed summary parsers", () => {
     });
     assert.equal(summary.openOutboundOrderCount, 200);
     assert.equal(summary.openOutboundOrderCountCapped, true);
+  });
+
+  /**
+   * `ISS-2026-118`: the four cards that stopped being stubs. Each parser is pinned so a card body
+   * cannot silently render `undefined` if the RPC's summary shape drifts.
+   */
+  test("the four newly-composed card summaries parse their own bounded shape", () => {
+    assert.equal(parseBookingsCardSummary({ openBookingRequestCount: 3, openBookingRequestCountCapped: false }).openBookingRequestCount, 3);
+    assert.equal(parseShipmentsCardSummary({ activeShipmentCount: 0, activeShipmentCountCapped: true }).activeShipmentCountCapped, true);
+    assert.equal(parseInvoicesCardSummary({ issuedInvoiceCount: 12, issuedInvoiceCountCapped: false }).issuedInvoiceCount, 12);
+    assert.equal(parsePaymentsCardSummary({ unallocatedPaymentCount: 2, unallocatedPaymentCountCapped: false }).unallocatedPaymentCount, 2);
+  });
+
+  test("a missing Capped flag is rejected rather than defaulted — an unflagged capped count would understate silently", () => {
+    assert.throws(() => parseBookingsCardSummary({ openBookingRequestCount: 3 }));
+    assert.throws(() => parseShipmentsCardSummary({ activeShipmentCount: 3 }));
+    assert.throws(() => parseInvoicesCardSummary({ issuedInvoiceCount: 3 }));
+    assert.throws(() => parsePaymentsCardSummary({ unallocatedPaymentCount: 3 }));
+  });
+
+  /**
+   * The payments card counts receipts; it must never carry a money total. Receipts hold per-row
+   * currencies, so a summed figure would be true in none of them — `ISS-2026-136`'s own trap.
+   * Zod strips unknown keys rather than rejecting, so this pins the parsed shape itself.
+   */
+  test("the payments summary exposes a count and no summed amount", () => {
+    const parsed = parsePaymentsCardSummary({ unallocatedPaymentCount: 2, unallocatedPaymentCountCapped: false, unallocatedPaymentAmount: 4500 });
+    assert.deepEqual(Object.keys(parsed).sort(), ["unallocatedPaymentCount", "unallocatedPaymentCountCapped"]);
   });
 
   test("parseTicketsCardSummary rejects a negative count", () => {

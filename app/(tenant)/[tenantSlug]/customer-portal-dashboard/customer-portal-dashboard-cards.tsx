@@ -7,6 +7,10 @@ import {
   parseTicketsCardSummary,
   type CustomerPortalDashboardCard,
   type DashboardCardKey,
+  parseBookingsCardSummary,
+  parseShipmentsCardSummary,
+  parseInvoicesCardSummary,
+  parsePaymentsCardSummary,
 } from "../../../../server/contracts/customer-portal-dashboard/customer-portal-dashboard.ts";
 
 /**
@@ -96,10 +100,68 @@ function TicketsCardBody({ card }: { readonly card: CustomerPortalDashboardCard 
   );
 }
 
+/**
+ * `ISS-2026-118`: the four cards the database stopped stubbing. Without a body here each would
+ * have rendered as a titled card with a link and nothing in it — the database half fixed and
+ * invisible at the layer a customer actually looks at, which is exactly the shape `ISS-2026-124`
+ * was. Checked before shipping, not after.
+ */
+function BookingsCardBody({ card }: { readonly card: CustomerPortalDashboardCard }) {
+  const summary = parseBookingsCardSummary(card.summary);
+  const one = summary.openBookingRequestCount === 1 && !summary.openBookingRequestCountCapped;
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-2xl font-semibold text-text-primary">{formatCount(summary.openBookingRequestCount, summary.openBookingRequestCountCapped)}</p>
+      <p className="text-xs text-text-secondary">open booking request{one ? "" : "s"}</p>
+    </div>
+  );
+}
+
+function ShipmentsCardBody({ card }: { readonly card: CustomerPortalDashboardCard }) {
+  const summary = parseShipmentsCardSummary(card.summary);
+  const one = summary.activeShipmentCount === 1 && !summary.activeShipmentCountCapped;
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-2xl font-semibold text-text-primary">{formatCount(summary.activeShipmentCount, summary.activeShipmentCountCapped)}</p>
+      <p className="text-xs text-text-secondary">active shipment{one ? "" : "s"}</p>
+    </div>
+  );
+}
+
+function InvoicesCardBody({ card }: { readonly card: CustomerPortalDashboardCard }) {
+  const summary = parseInvoicesCardSummary(card.summary);
+  const one = summary.issuedInvoiceCount === 1 && !summary.issuedInvoiceCountCapped;
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-2xl font-semibold text-text-primary">{formatCount(summary.issuedInvoiceCount, summary.issuedInvoiceCountCapped)}</p>
+      {/* "issued", not "outstanding": the composed RPC carries no payment status, so a label
+          claiming these are unpaid would be saying more than the number knows. */}
+      <p className="text-xs text-text-secondary">issued invoice{one ? "" : "s"}</p>
+    </div>
+  );
+}
+
+function PaymentsCardBody({ card }: { readonly card: CustomerPortalDashboardCard }) {
+  const summary = parsePaymentsCardSummary(card.summary);
+  const one = summary.unallocatedPaymentCount === 1 && !summary.unallocatedPaymentCountCapped;
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-2xl font-semibold text-text-primary">{formatCount(summary.unallocatedPaymentCount, summary.unallocatedPaymentCountCapped)}</p>
+      {/* A count of payments, never a money total: receipts carry their own currencies and a
+          summed figure would be true in none of them (ISS-2026-136). */}
+      <p className="text-xs text-text-secondary">payment{one ? "" : "s"} awaiting allocation</p>
+    </div>
+  );
+}
+
 const REAL_CARD_BODIES: Partial<Record<DashboardCardKey, (props: { card: CustomerPortalDashboardCard }) => React.JSX.Element>> = {
   accounts: AccountsCardBody,
   warehouse_inventory: WarehouseInventoryCardBody,
   tickets: TicketsCardBody,
+  bookings: BookingsCardBody,
+  shipments: ShipmentsCardBody,
+  invoices: InvoicesCardBody,
+  payments: PaymentsCardBody,
 };
 
 function DashboardCardTile({ tenantSlug, card }: { readonly tenantSlug: string; readonly card: CustomerPortalDashboardCard }) {

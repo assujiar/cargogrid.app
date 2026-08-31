@@ -70,6 +70,51 @@ export function parseWarehouseInventoryCardSummary(summary: Record<string, unkno
   return WarehouseInventoryCardSummarySchema.parse(summary);
 }
 
+/**
+ * `ISS-2026-118`: the four cards that stopped being stubs. Each mirrors the bounded-count shape
+ * the three original cards already use — a count plus its own `*Capped` flag, true when the
+ * underlying 200-row page came back full and the real number may be higher.
+ */
+export const BookingsCardSummarySchema = z.object({
+  openBookingRequestCount: z.number().int().nonnegative(),
+  openBookingRequestCountCapped: z.boolean(),
+});
+export type BookingsCardSummary = z.infer<typeof BookingsCardSummarySchema>;
+export function parseBookingsCardSummary(summary: Record<string, unknown>): BookingsCardSummary {
+  return BookingsCardSummarySchema.parse(summary);
+}
+
+export const ShipmentsCardSummarySchema = z.object({
+  activeShipmentCount: z.number().int().nonnegative(),
+  activeShipmentCountCapped: z.boolean(),
+});
+export type ShipmentsCardSummary = z.infer<typeof ShipmentsCardSummarySchema>;
+export function parseShipmentsCardSummary(summary: Record<string, unknown>): ShipmentsCardSummary {
+  return ShipmentsCardSummarySchema.parse(summary);
+}
+
+export const InvoicesCardSummarySchema = z.object({
+  issuedInvoiceCount: z.number().int().nonnegative(),
+  issuedInvoiceCountCapped: z.boolean(),
+});
+export type InvoicesCardSummary = z.infer<typeof InvoicesCardSummarySchema>;
+export function parseInvoicesCardSummary(summary: Record<string, unknown>): InvoicesCardSummary {
+  return InvoicesCardSummarySchema.parse(summary);
+}
+
+/**
+ * A COUNT, deliberately, and there is no amount field to add later without thought: receipts carry
+ * per-row currencies, so a summed total would be true in none of them (`ISS-2026-136`'s own trap).
+ */
+export const PaymentsCardSummarySchema = z.object({
+  unallocatedPaymentCount: z.number().int().nonnegative(),
+  unallocatedPaymentCountCapped: z.boolean(),
+});
+export type PaymentsCardSummary = z.infer<typeof PaymentsCardSummarySchema>;
+export function parsePaymentsCardSummary(summary: Record<string, unknown>): PaymentsCardSummary {
+  return PaymentsCardSummarySchema.parse(summary);
+}
+
 export const TicketsCardSummarySchema = z.object({
   openTicketCount: z.number().int().nonnegative(),
   openTicketCountCapped: z.boolean(),

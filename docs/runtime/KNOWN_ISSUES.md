@@ -1685,6 +1685,23 @@ summary, while `loyalty`/`alerts` must still be blank — plus a dedicated block
 route and summary key, and asserting the payments card carries **no** summed-amount key. Full
 `pnpm db:test` green. Live-verified: composed cards and routes present, 0 anon grants.
 
+**The client half, checked before shipping rather than after.** `REAL_CARD_BODIES` in
+`customer-portal-dashboard-cards.tsx` mapped only the three original cards. With the database half
+alone, each newly-available card would have rendered as a **titled card with a link and nothing
+inside it** — the fix present in the database and invisible where a customer looks, which is
+exactly the shape `ISS-2026-124` had. Four card bodies and their four Zod summary parsers are
+added, mirroring the bounded `count` + `*Capped` shape the three original cards already use.
+
+Two label decisions worth keeping: the invoices card says **"issued invoices"**, not
+"outstanding" — the composed RPC carries no payment status, so the stronger word would claim more
+than the number knows; and the payments card says **"payments awaiting allocation"**, a count,
+with no money figure anywhere in the schema to be added later without thought.
+
+Contract tests pin all four parsers, reject a **missing `*Capped` flag** rather than defaulting it
+(an unflagged capped count understates silently), and assert the payments summary parses to a
+count with **no** summed-amount key. `pnpm typecheck`, `pnpm lint` (0 errors), 5715 unit tests,
+`next build` (dashboard route compiled) and `pnpm ui:check` all green.
+
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `app.get_customer_portal_dashboard_summary` is still never `CREATE OR REPLACE`'d after its original migration; direct read of the live body confirms `bookings`/`shipments` are still hardcoded `available=false` stub rows. Not boundable: a real fix requires deciding which statuses count as "open" for each card, a product judgment call this batch has no mandate to make. Disposition unchanged, still `OPEN`.
 
 ### ISS-2026-119 — movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver (Phase 8, CPL-309 deliberate scope decision, OPEN, Low)
