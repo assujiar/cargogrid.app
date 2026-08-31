@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 59 — 4 High, 25 Medium, 30 Low |
+| `OPEN` | 58 — 4 High, 24 Medium, 30 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 204 |
+| `RESOLVED` | 205 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -104,7 +104,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
 | `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload |
 | `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
-| `ISS-2026-310` | Medium | `OPEN` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
+| `ISS-2026-310` | Medium | `RESOLVED` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
 | `ISS-2026-312` | Low | `RESOLVED` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
 | `ISS-2026-313` | Low | `RESOLVED` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
 | `ISS-2026-314` | Medium | `RESOLVED` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
@@ -6976,7 +6976,7 @@ column count.
 
 ---
 
-### ISS-2026-310 — CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime (found 2026-08-31 during Bagian 5 live verification, `OPEN`, Medium)
+### ISS-2026-310 — CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime (found 2026-08-31 during Bagian 5 live verification, `RESOLVED` the same day, was Medium)
 
 **Severity: Medium. Status: `OPEN`. Owner: DevEx / whoever owns the Vercel project settings.**
 
@@ -6999,6 +6999,43 @@ with a cost either way: set the Vercel project to 22.x so the shipped runtime ma
 one, or raise `engines.node` to 24.x and let CI re-prove the whole suite there. The second is
 the better long-term answer and the more expensive one — it is a full re-verification, not a
 one-line edit. Neither was done unilaterally.
+
+**`RESOLVED`, 2026-08-31. The expensive option was taken, because the re-verification it required
+is work rather than a decision — so it could be done rather than asked about.**
+
+`package.json` `engines.node` is now `24.x`, so CI's `node-version-file: package.json` resolves to
+the runtime Vercel actually serves. **This was not changed on the assumption that the suite would
+pass; the whole suite was run on Node 24 first**, in this container, on a real `nvm install 24`:
+
+| Gate | Node 24.20.0 |
+|---|---|
+| `pnpm typecheck` | clean |
+| `pnpm lint` | 0 errors (337 pre-existing warnings, unchanged) |
+| `pnpm test` | **5715 / 5715 pass**, 0 fail |
+| `pnpm db:test` | `ALL PASSED`, full suite |
+| `npx next build` | compiled successfully |
+| `pnpm ui:check`, `pnpm issues:check` | green |
+
+**The other side of the choice was checked too, not waved away.** The reason "set Vercel to 22.x"
+was the cheaper option is that it is a settings edit — but it would have pinned production to a
+runtime that is one major behind, to preserve a test signal that turns out to be equally valid on
+24. With the suite green on the newer runtime, matching CI to production is strictly better: there
+is now exactly one runtime in play, and no gap for a Node-24-specific regression to arrive
+through.
+
+**Vercel's configuration was re-verified live rather than inherited from this entry's own text**:
+project `cargogrid-app` (`prj_9ND1BsfbppHiqeKrSEldYh8xbC68`, team `saiki-tech`) reports
+`nodeVersion: "24.x"` and `latestDeployment.readyState: READY`. The claim this fix rests on is
+current, not remembered.
+
+**Nothing was broken for local development.** There is no `.npmrc`, no `engine-strict`, no
+`.nvmrc`, and no preflight check that enforces `engines` — grep-confirmed. `pnpm typecheck` was
+re-run on the container's own Node 22 **after** the bump and still passes, so a contributor on 22
+sees at most an advisory, never a blocked install.
+
+**What this does not claim:** the e2e suite is still unrunnable in this sandbox (`ISS-2026-316`),
+so its Node-24 behaviour is unproven here. CI runs it on the same `node-version-file` and will be
+the first to exercise that.
 
 ---
 
