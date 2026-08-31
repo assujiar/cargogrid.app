@@ -67,9 +67,20 @@ describe("listMyOvertimeRequests / listOvertimeRequests / getOvertimeRequestDeta
   });
 });
 
+/**
+ * `ISS-2026-315`: this fixture is the exact column set `app.list_my_timesheet_entries` and
+ * `app.list_timesheet_entries` declare in their `RETURNS TABLE`, after
+ * `20260831160000_expose_timesheet_entry_break_and_notes_in_list.sql`.
+ *
+ * It has to be. Its previous version carried an `unpaid_break_minutes` that the HR listing had
+ * **never** returned, so this suite went green while the real admin workspace would have thrown a
+ * `ZodError` on its first row. A fake more generous than the thing it stands in for proves
+ * nothing about the thing — which is why the pin below asserts the failure direction directly,
+ * rather than trusting a future editor to keep this object honest.
+ */
 const ENTRY_ROW = {
   id: ID_1, work_date: "2026-08-10", entry_minutes: 480, unpaid_break_minutes: 30, job_order_id: null, job_number: null,
-  shipment_order_id: null, shipment_number: null, status: "approved", reconciliation_status: "matched",
+  shipment_order_id: null, shipment_number: null, notes: "reworked the manifest", status: "approved", reconciliation_status: "matched",
   eligible_minutes: 450, approved_minutes: 450, payroll_input_status: "pending", record_version: 2,
 };
 
@@ -90,6 +101,33 @@ describe("listMyTimesheetEntries / listTimesheetEntries / getTimesheetEntryDetai
   test("getTimesheetEntryDetail returns null on empty result", async () => {
     const { client } = fakeClient({ data: [], error: null });
     assert.equal(await getTimesheetEntryDetail(client, ID_1, ACTOR_ID), null);
+  });
+
+  /**
+   * `ISS-2026-315` regression, stated as the failure it actually was. `unpaidBreakMinutes` is
+   * required and NOT defaulted, so a listing that stops returning the column breaks loudly here
+   * instead of breaking quietly in the browser — where it surfaced as an uncaught `ZodError`
+   * rather than the `OvertimeTimesheetQueryError` the page knows how to render.
+   */
+  test("a listing row missing unpaid_break_minutes is rejected, not silently coerced", async () => {
+    const { unpaid_break_minutes: _dropped, ...withoutBreak } = ENTRY_ROW;
+    const { client } = fakeClient({ data: [{ ...withoutBreak, employee_id: ID_1, employee_number: "EMP-2026-000001", employee_full_name: "Jane Doe" }], error: null });
+    await assert.rejects(() => listTimesheetEntries(client, TENANT_ID, ACTOR_ID));
+  });
+
+  /** `notes`, by contrast, degrades to null — a missing note must never break a listing. */
+  test("a listing row missing notes degrades to null rather than throwing", async () => {
+    const { notes: _dropped, ...withoutNotes } = ENTRY_ROW;
+    const { client } = fakeClient({ data: [{ ...withoutNotes, employee_id: ID_1, employee_number: "EMP-2026-000001", employee_full_name: "Jane Doe" }], error: null });
+    const rows = await listTimesheetEntries(client, TENANT_ID, ACTOR_ID);
+    assert.equal(rows[0]?.notes, null);
+  });
+
+  test("notes reaches the parsed row when the RPC returns it", async () => {
+    const { client } = fakeClient({ data: [{ ...ENTRY_ROW, employee_id: ID_1, employee_number: "EMP-2026-000001", employee_full_name: "Jane Doe" }], error: null });
+    const rows = await listTimesheetEntries(client, TENANT_ID, ACTOR_ID);
+    assert.equal(rows[0]?.notes, "reworked the manifest");
+    assert.equal(rows[0]?.unpaidBreakMinutes, 30);
   });
 });
 

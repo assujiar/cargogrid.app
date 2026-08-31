@@ -2845,7 +2845,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (403 files, fifty-fourth-pass amendment above). Superseded 2026-08-31 (fifty-fifth pass) by
   // ISS-2026-058 (404 files: +1,
   // 20260831150000_add_vendor_capacity_manual_confirmation_evidence.sql).
-  migrationSetSha256: "0c97fd28555b491731a36af023748cc3b8084fad03d9c76d3a65f8a23189d6fc",
+  // History: 0c97fd28555b491731a36af023748cc3b8084fad03d9c76d3a65f8a23189d6fc
+  // (404 files, fifty-fifth-pass amendment above). Superseded 2026-08-31 (fifty-seventh pass) by
+  // ISS-2026-315 (405 files: +1,
+  // 20260831160000_expose_timesheet_entry_break_and_notes_in_list.sql). The fifty-sixth pass,
+  // ISS-2026-061 / ADR-0029, touched no migration, which is why this history skips a number.
+  migrationSetSha256: "d01233074429077c68e6d9196764132cc353d9576fd7c0d16615a9aabe47868b",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3135,7 +3140,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // executable: the canonical on-ramp's own conditionality, the domain path's
   // unconditionality with no policy or routing definition configured, and the no-FK pin that
   // stops the two approval mechanisms drifting into a half-bound hybrid).
-  dbTestSetSha256: "52bda850cb9c8921fdf4ad24af45bff4ace36a0a60b4609ef202f5f38d701e7e",
+  // History: 52bda850cb9c8921fdf4ad24af45bff4ace36a0a60b4609ef202f5f38d701e7e
+  // (238 files, fifty-sixth-pass state). Superseded 2026-08-31 (fifty-seventh pass) by
+  // ISS-2026-315 (238 files unchanged in count -- hris-overtime-timesheet.sql gained the
+  // pg_get_function_result pin that sits ON the SQL/TypeScript join, the one place from which
+  // the defect was visible: both halves were internally consistent, only the contract between
+  // them was wrong).
+  dbTestSetSha256: "fd7e7747deedfe9f26fde33078f6b2a39e2a1cd146957fdaaf231e5f9d3ddbd9",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

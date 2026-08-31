@@ -1257,4 +1257,61 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-315: both timesheet-entry listings project every column their TypeScript reader requires -- the omission that made the HR workspace throw a ZodError on its first real row'
+do $$
+declare
+  v_missing text[];
+  v_result text;
+begin
+  -- The defect this pins was invisible from either side alone. The SQL was internally
+  -- consistent; the TypeScript was internally consistent; only the JOIN between them was wrong,
+  -- and the unit-test fixture was built from the schema rather than from this function's actual
+  -- output, so it agreed with the half that was already right.
+  --
+  -- Asserting on pg_get_function_result is the one check that sits ON that join: it reads what
+  -- the database will really hand back, not what anyone believes it hands back.
+  select pg_get_function_result(p.oid) into v_result
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app' and p.proname = 'list_timesheet_entries';
+
+  v_missing := array(
+    select c from unnest(array[
+      'id', 'employee_id', 'employee_number', 'employee_full_name', 'work_date', 'entry_minutes',
+      'unpaid_break_minutes', 'job_order_id', 'job_number', 'shipment_order_id', 'shipment_number',
+      'notes', 'status', 'reconciliation_status', 'eligible_minutes', 'approved_minutes',
+      'payroll_input_status', 'record_version'
+    ]) c where v_result not like '%' || c || '%'
+  );
+  if array_length(v_missing, 1) is not null then
+    raise exception 'assertion failed: app.list_timesheet_entries no longer returns %, which server/contracts/overtime-timesheet parses -- a dropped column here does not fail here, it throws a ZodError in the HR workspace on the first real row (ISS-2026-315). Full result type: %', v_missing, v_result;
+  end if;
+
+  select pg_get_function_result(p.oid) into v_result
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app' and p.proname = 'list_my_timesheet_entries';
+
+  v_missing := array(
+    select c from unnest(array[
+      'id', 'work_date', 'entry_minutes', 'unpaid_break_minutes', 'job_order_id', 'job_number',
+      'shipment_order_id', 'shipment_number', 'notes', 'status', 'reconciliation_status',
+      'eligible_minutes', 'approved_minutes', 'payroll_input_status', 'record_version'
+    ]) c where v_result not like '%' || c || '%'
+  );
+  if array_length(v_missing, 1) is not null then
+    raise exception 'assertion failed: app.list_my_timesheet_entries no longer returns % (ISS-2026-315). Full result type: %', v_missing, v_result;
+  end if;
+
+  -- And the public.* wrappers must project the same widened shape, or a PostgREST caller sees a
+  -- narrower row than a direct caller does -- the wrapper would have stopped being a pass-through.
+  foreach v_result in array array['list_timesheet_entries', 'list_my_timesheet_entries'] loop
+    if (select pg_get_function_result(p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = v_result) not like '%notes%' then
+      raise exception 'assertion failed: public.% does not project notes -- the RGL-394 wrapper must mirror its app.* target exactly, never a narrower row', v_result;
+    end if;
+  end loop;
+
+  raise notice 'PASS: both timesheet-entry listings, and their public.* wrappers, project every column their TypeScript reader requires (ISS-2026-315)';
+end;
+$$;
+
 \echo '>> HRT-281 OVERTIME AND TIMESHEET TEST SUITE COMPLETE'

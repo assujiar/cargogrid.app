@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 68 — 4 High, 26 Medium, 38 Low |
+| `OPEN` | 67 — 4 High, 25 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 194 |
-| **Total records** | **269** |
+| `RESOLVED` | 196 |
+| **Total records** | **270** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -67,7 +67,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-069` | Medium | `OPEN` | Job-offer approval (HRT-276) is the fourth domain forced to share PLT-121's single tenant-wide `config_type_code='approval'` singleton, undisclosed as |
 | `ISS-2026-071` | Medium | `RESOLVED` | Onboarding and Offboarding (HRT-277): Finance/Operations/IT task-owner completion authority is uniformly `HRS:Edit`-gated, not task-owner-identity-gat |
 | `ISS-2026-073` | Medium | `RESOLVED` | Onboarding and Offboarding (HRT-277): a direct-hire onboarding case has no "approved direct hire" precondition anywhere in the implementation, despite |
-| `ISS-2026-076` | Medium | `OPEN` | Overtime and Timesheet (HRT-281): five mutation wrappers (HR-on-behalf create ×2, draft edit, explicit reconcile, per-employee payroll generate) exist |
+| `ISS-2026-076` | Medium | `RESOLVED` | Overtime and Timesheet (HRT-281): five mutation wrappers (HR-on-behalf create ×2, draft edit, explicit reconcile, per-employee payroll generate) exist |
 | `ISS-2026-079` | Medium | `OPEN` | Payroll Foundation (HRT-282): `app.calculate_payroll_run`'s claimed multi-transaction crash-resumability (`app.claim_next_job`/`app.record_job_failure |
 | `ISS-2026-086` | Medium | `RESOLVED` | Internal and Interdepartmental Ticket (HRT-286): `TKT:Edit` grants blanket, tenant-wide, non-queue-scoped ticket-content staff status via `app.is_tick |
 | `ISS-2026-091` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): RPD-025 retention/legal-hold classification is unbuilt for every Phase 7 HR/payroll structured |
@@ -108,6 +108,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-312` | Low | `OPEN` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
 | `ISS-2026-313` | Low | `RESOLVED` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
 | `ISS-2026-314` | Low | `OPEN` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
+| `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -918,13 +919,57 @@ Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-H
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 8).** Grep-confirmed zero references to `export_timesheet_entries`/`export_attendance_sessions`/`export_schedule_assignments`/`export_leave_requests` anywhere under `server/` — all 4 sibling export RPCs remain unwrapped, no drift since filing. Unlike `ISS-2026-080`/`101` (a single RPC, real wrapper, missing only a UI caller — genuinely bounded), wiring this one RPC alone would create a new, arbitrary inconsistency rather than resolve the cross-capability pattern this entry's own prior disposition already correctly identified. **Not fixed by this batch** — same reasoning as the original disposition. Owner and scope unchanged.
 
-### ISS-2026-076 — Overtime and Timesheet (HRT-281): five mutation wrappers (HR-on-behalf create ×2, draft edit, explicit reconcile, per-employee payroll generate) exist in the TS service layer with zero caller from any Server Action, page, or panel (OPEN, Medium)
+### ISS-2026-076 — Overtime and Timesheet (HRT-281): five mutation wrappers (HR-on-behalf create ×2, draft edit, explicit reconcile, per-employee payroll generate) exist in the TS service layer with zero caller from any Server Action, page, or panel (RESOLVED, Medium)
 
 Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-HRT-009` (Prompt 281), CONFIRMED by direct code read: `createOvertimeRequestForEmployee`, `createTimesheetEntryForEmployee`, `updateTimesheetEntryDraft`, `reconcileOvertimeRequestActual`, and the singular, per-employee `generatePayrollTimeInput` (distinct from the plural `generatePayrollTimeInputsForPeriod`, which IS wired into the admin panel) all exist as real, typed, tested wrapper functions in `server/mutations/overtime-timesheet.ts`, but grep-confirmed zero occurrences of any of the five names across `app/(tenant)/[tenantSlug]/hris/overtime-timesheet*` or `.../hris/my/overtime-timesheet*` (every `actions.ts` and `*panel.tsx` file). Direct read of `overtime-timesheet-admin-panel.tsx` confirms the admin workspace offers decide/lock/reopen/approve/reject/reopen-summary/generate-bulk-payroll-inputs only — no "create on behalf of employee" form or "edit a draft entry" form exists anywhere; HR's only lever over an employee's own draft data today is to approve/reject a row the employee themselves already created, or cancel-and-recreate rather than in-place-correct a fixable data-entry mistake.
 
 **Handling:** Not fixed by this review-round fix pass — this is the identical shape as `HRT-280`'s own disclosed, accepted residual gap (six leave-domain mutation wrappers with zero UI caller: `createLeaveRequestForEmployee`, `updateLeaveRequestDraft`, `loadOpeningLeaveBalance`, `runLeaveAccrualBatch`, `runLeaveCarryForwardBatch`, `approveLeaveForPayrollInput`), which this repository's own established convention treats as a legitimate disclosed gap rather than a defect requiring an in-pass UI build-out (a real UI form for HR-on-behalf entry and draft-correction is a genuine, non-trivial UI feature, not a bounded review-fix). **Status `OPEN`**, Medium severity (no security exposure — every wrapper correctly enforces server-side authority via its underlying RPC regardless of whether a UI caller exists yet; the gap is that HR has no in-app lever for on-behalf entry or draft correction beyond what already exists) — owner: whichever near-term Phase 7 follow-up prompt builds out the admin workspace's remaining HR-on-behalf/draft-correction forms, most naturally paired with `ISS-2026-075`'s own bulk-export/import UI work since both land in the same `overtime-timesheet-admin-panel.tsx` surface.
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — all 5 named wrapper functions (`createOvertimeRequestForEmployee`, `createTimesheetEntryForEmployee`, `updateTimesheetEntryDraft`, `reconcileOvertimeRequestActual`, `generatePayrollTimeInput`; `server/mutations/overtime-timesheet.ts:152,189,255,277,447`) still have zero occurrences anywhere under `app/`; only the distinct plural `generatePayrollTimeInputsForPeriod` is wired into `overtime-timesheet-admin-panel.tsx`/`actions.ts`. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-31.** All five wrappers now have real UI callers in the HR/manager
+workspace. The entry's own handling note deferred this on the grounds that "a real UI form for
+HR-on-behalf entry and draft-correction is a genuine, non-trivial UI feature, not a bounded
+review-fix" — true of the checkpoint that filed it, and no longer a reason to leave it open once
+the work is authorized in its own right.
+
+**What was actually missing, in the terms the people using it would use.** HR's only lever over
+an employee's own row was approve or reject. A typo in someone's timesheet had to be bounced back
+and re-entered *by that person*; overtime for field crew without an account could not be filed at
+all; approved overtime could not be reconciled against attendance from any screen; and correcting
+one person's figures after a period was locked meant regenerating **everyone's** payroll inputs,
+because only the bulk generator was reachable.
+
+**What was built** — `app/(tenant)/[tenantSlug]/hris/overtime-timesheet/`:
+- **Record on behalf of an employee** — two forms (overtime request, timesheet entry) over an
+  employee picker sourced from `listEmployees` (`active` only, server-filtered, capped at 200).
+  The picker's value is `masterRecordId`, which is what every HRIS RPC means by `p_employee_id`
+  (verified at `20260730980000:1084`, not assumed).
+- **Draft entries you can correct** — in-place correction of a draft, over a `status: "draft"`
+  listing. Fixing a mistake instead of rejecting it and asking for a re-entry.
+- **Approved overtime awaiting attendance reconciliation** — narrowed to
+  `reconciliationStatus === "not_reconciled"`, because offering the button on an already-matched
+  row invites a no-op nobody can interpret.
+- **Regenerate for one employee** — the singular `generate_payroll_time_input`, on a locked
+  period, beside the existing bulk button.
+
+Five Server Actions forward to the five wrappers and **re-check nothing**: `HRS:Edit` (both
+on-behalf creates, draft update, reconcile) and `HRS:Approve` (payroll input) are enforced in the
+database regardless. No control is hidden to simulate a permission either — a viewer who submits
+gets the RPC's own refusal rendered as an error, which is truthful, where a browser-side guess
+would not be.
+
+**One defect found while wiring it, registered separately and fixed in the same change:**
+`ISS-2026-315` — `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own
+parser requires as non-nullable. The admin workspace would have thrown a `ZodError` on its first
+real row. It had to be fixed here regardless, because this issue's draft-correction form reads
+that listing.
+
+**Evidence:** `pnpm typecheck`, `pnpm lint` (0 errors), `next build` (all routes compiled),
+`pnpm db:test` green, 5695 unit tests green.
+
+**Not claimed:** `ISS-2026-075`'s bulk export/import UI, which this entry names as the natural
+pairing, is still open — it is a different surface with its own file-handling questions.
 
 ### ISS-2026-077 — `scripts/db-tests/hris-leave-permit-business-trip.sql` (HRT-280) fails on the repository's own current wall-clock date, aborting the entire `pnpm run db:test` suite before it ever reaches any test file sorted after it alphabetically (`RESOLVED` 2026-08-23 at `CG-S15-HDN-002`, was Medium — blocked the shared db:test gate for every future capability, not just HRT-282)
 
@@ -6700,3 +6745,51 @@ Calling it a flake would be assuming (2) without evidence, which is exactly the 
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
 4. Reconcile release blockers with build status and go/no-go reports.
 5. An ownerless or targetless non-low issue cannot be considered safely triaged.
+
+### ISS-2026-315 — `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable (found 2026-08-31 while closing `ISS-2026-076`, `RESOLVED` the same day, was Medium)
+
+Found `2026-08-31` while wiring `ISS-2026-076`'s HR draft-correction form, which needed to read
+this listing. **Live-verified, not reasoned about:** feeding `parseTimesheetEntryAdminRow`
+(`server/contracts/overtime-timesheet/overtime-timesheet.ts:230`) exactly the column set
+`app.list_timesheet_entries` declares in its `RETURNS TABLE`
+(`20260730990000_harden_hris_overtime_timesheet_review_fixes.sql:829`) produces
+`ZodError: Invalid input: expected number, received undefined` at path `unpaidBreakMinutes`.
+
+**Consequence.** `app/(tenant)/[tenantSlug]/hris/overtime-timesheet/page.tsx` calls
+`listTimesheetEntries` on every load. The moment a tenant had **one** timesheet entry, the HR
+workspace would have failed — and failed in the worst available way: a `ZodError` is not the
+`OvertimeTimesheetQueryError` the page catches, so it would have escaped the page's own
+`ErrorState` and become an unhandled server error rather than a rendered message. Never observed
+in production only because the live tenant count is still zero.
+
+**Why nothing caught it, which is the part worth keeping.** The SQL was internally consistent. The
+TypeScript was internally consistent. Only the contract *between* them was wrong, and no test sat
+on that join. The unit test at `server/queries/overtime-timesheet.test.ts:71` built its fake row
+from the **schema** rather than from the RPC's actual output columns, so its fixture carried an
+`unpaid_break_minutes` the real function had never returned — the suite went green while agreeing
+with the half that was already right. A fake more generous than the thing it stands in for proves
+nothing about the thing.
+
+`app.list_my_timesheet_entries` (the employee's own listing) always returned the column, which is
+why only the HR/manager surface carried the defect and why the asymmetry was easy to miss.
+
+**Fixed** by `supabase/migrations/20260831160000_expose_timesheet_entry_break_and_notes_in_list.sql`
+(applied live, project `awdlicmwzdxquopwtcfd`): `DROP` + `CREATE` on both listings and both
+`public.*` wrappers — PostgreSQL cannot change a `RETURNS TABLE` shape in place — adding
+`unpaid_break_minutes` to the HR listing and `notes` to **both**. Function bodies, manager-scope
+predicates, keyset pagination and the 200-row clamp are reproduced byte-for-byte; this was an
+output-column omission, not an occasion to revisit who may read what.
+
+**`notes` was added in the same migration deliberately, not opportunistically.**
+`app.update_timesheet_entry_draft` writes `p_notes` unconditionally. Neither listing returned
+`notes`, so `ISS-2026-076`'s new correction form could only have submitted a blank field —
+**silently erasing a note the person editing was never shown**. Fixing the minutes bug while
+leaving that trap in place would have been fixing only the half that was already visible.
+
+**Evidence, placed where the defect actually lived.**
+`scripts/db-tests/hris-overtime-timesheet.sql` gains an assertion over
+`pg_get_function_result` for both `app.*` listings and both `public.*` wrappers — the one check
+that sits *on* the SQL/TypeScript join rather than inside either half. Plus three unit tests
+pinning the failure direction: a row missing `unpaid_break_minutes` must be **rejected** (loudly,
+in the suite) while a row missing `notes` must degrade to `null` (a missing note must never break
+a listing). Live-verified after apply: all four functions project both columns, 0 anon grants.

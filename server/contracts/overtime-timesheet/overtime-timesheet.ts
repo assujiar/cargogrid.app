@@ -218,6 +218,13 @@ export const TimesheetEntryRowSchema = z.object({
   jobNumber: z.string().nullable(),
   shipmentOrderId: z.string().uuid().nullable(),
   shipmentNumber: z.string().nullable(),
+  /**
+   * `ISS-2026-315`: added alongside the RPC change that started returning it. Nullable and
+   * defaulted here rather than required, because a listing that omits it must degrade to "no
+   * note shown" -- never to a thrown parse error, which is exactly the failure
+   * `unpaidBreakMinutes` produced on the HR listing for as long as the RPC did not return it.
+   */
+  notes: z.string().nullable(),
   status: TimesheetEntryStatusSchema,
   reconciliationStatus: ReconciliationStatusSchema,
   eligibleMinutes: z.number().int().nonnegative().nullable(),
@@ -237,6 +244,7 @@ export function parseTimesheetEntryRow(row: Record<string, unknown>): TimesheetE
     jobNumber: row.job_number ?? null,
     shipmentOrderId: row.shipment_order_id ?? null,
     shipmentNumber: row.shipment_number ?? null,
+    notes: row.notes ?? null,
     status: row.status,
     reconciliationStatus: row.reconciliation_status,
     eligibleMinutes: row.eligible_minutes ?? null,

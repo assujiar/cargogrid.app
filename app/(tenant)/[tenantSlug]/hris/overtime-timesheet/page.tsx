@@ -8,6 +8,7 @@ import {
   listTimesheetPeriodSummaries,
   OvertimeTimesheetQueryError,
 } from "../../../../../server/queries/overtime-timesheet.ts";
+import { listEmployees, EmployeeQueryError } from "../../../../../server/queries/employee.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { OvertimeTimesheetAdminPanel } from "./overtime-timesheet-admin-panel.tsx";
 import {
@@ -20,6 +21,11 @@ import {
   rejectTimesheetPeriodSummaryAction,
   reopenTimesheetPeriodSummaryAction,
   generatePayrollTimeInputsForPeriodAction,
+  createOvertimeRequestForEmployeeAction,
+  createTimesheetEntryForEmployeeAction,
+  updateTimesheetEntryDraftAction,
+  reconcileOvertimeRequestActualAction,
+  generatePayrollTimeInputAction,
 } from "./actions.ts";
 
 /**
@@ -42,17 +48,31 @@ export default async function OvertimeTimesheetAdminPage({ params }: { params: P
   let timesheetEntries: Awaited<ReturnType<typeof listTimesheetEntries>> = [];
   let periods: Awaited<ReturnType<typeof listTimesheetPeriods>> = [];
   let summaries: Awaited<ReturnType<typeof listTimesheetPeriodSummaries>> = [];
+  // ISS-2026-076: the three extra reads the HR-on-behalf / correction / reconcile surfaces need.
+  // Each is server-filtered and capped rather than filtered in the browser -- the same discipline
+  // the two lists above already follow.
+  let draftEntries: Awaited<ReturnType<typeof listTimesheetEntries>> = [];
+  let approvedRequests: Awaited<ReturnType<typeof listOvertimeRequests>> = [];
+  let employees: Awaited<ReturnType<typeof listEmployees>> = [];
   try {
-    [overtimeRequests, timesheetEntries, periods, summaries] = await Promise.all([
+    [overtimeRequests, timesheetEntries, draftEntries, approvedRequests, periods, summaries, employees] = await Promise.all([
       listOvertimeRequests(supabase, access.tenant.id, access.authUserId, { status: "pending_approval", limit: 50 }),
       listTimesheetEntries(supabase, access.tenant.id, access.authUserId, { status: "pending_approval", limit: 50 }),
+      listTimesheetEntries(supabase, access.tenant.id, access.authUserId, { status: "draft", limit: 50 }),
+      listOvertimeRequests(supabase, access.tenant.id, access.authUserId, { status: "approved", limit: 50 }),
       listTimesheetPeriods(supabase, access.tenant.id, access.authUserId),
       listTimesheetPeriodSummaries(supabase, access.tenant.id, access.authUserId, { status: "submitted" }),
+      listEmployees(supabase, access.tenant.id, access.authUserId, { statusFilter: "active", limit: 200 }),
     ]);
   } catch (error) {
-    if (!(error instanceof OvertimeTimesheetQueryError)) throw error;
+    if (!(error instanceof OvertimeTimesheetQueryError) && !(error instanceof EmployeeQueryError)) throw error;
     loadFailed = true;
   }
+
+  // Reconciliation is only meaningful once a request is approved AND has not been matched yet --
+  // offering the button on an already-matched row would invite a no-op nobody could interpret.
+  // There is no status filter for this on the RPC, so it is narrowed here, from a capped read.
+  const reconcilableRequests = approvedRequests.filter((r) => r.reconciliationStatus === "not_reconciled");
 
   if (loadFailed) {
     return <ErrorState description="Something went wrong loading the overtime and timesheet workspace. Please try again." />;
@@ -62,6 +82,9 @@ export default async function OvertimeTimesheetAdminPage({ params }: { params: P
     <OvertimeTimesheetAdminPanel
       overtimeRequests={overtimeRequests}
       timesheetEntries={timesheetEntries}
+      draftEntries={draftEntries}
+      reconcilableRequests={reconcilableRequests}
+      employees={employees}
       periods={periods}
       summaries={summaries}
       decideOvertimeRequestAction={(requestId: string, expectedVersion: number, decision: "approve" | "reject") =>
@@ -70,6 +93,11 @@ export default async function OvertimeTimesheetAdminPage({ params }: { params: P
       decideTimesheetEntryAction={(entryId: string, expectedVersion: number, decision: "approve" | "reject") =>
         decideTimesheetEntryAction.bind(null, tenantSlug, entryId, expectedVersion, decision)
       }
+      createOvertimeRequestForEmployeeAction={createOvertimeRequestForEmployeeAction.bind(null, tenantSlug)}
+      createTimesheetEntryForEmployeeAction={createTimesheetEntryForEmployeeAction.bind(null, tenantSlug)}
+      updateTimesheetEntryDraftAction={(entryId: string, expectedVersion: number) => updateTimesheetEntryDraftAction.bind(null, tenantSlug, entryId, expectedVersion)}
+      reconcileOvertimeRequestActualAction={(requestId: string) => reconcileOvertimeRequestActualAction.bind(null, tenantSlug, requestId)}
+      generatePayrollTimeInputAction={(periodId: string) => generatePayrollTimeInputAction.bind(null, tenantSlug, periodId)}
       createTimesheetPeriodAction={createTimesheetPeriodAction.bind(null, tenantSlug)}
       lockTimesheetPeriodAction={(periodId: string, expectedVersion: number) => lockTimesheetPeriodAction.bind(null, tenantSlug, periodId, expectedVersion)}
       reopenTimesheetPeriodAction={(periodId: string, expectedVersion: number) => reopenTimesheetPeriodAction.bind(null, tenantSlug, periodId, expectedVersion)}
