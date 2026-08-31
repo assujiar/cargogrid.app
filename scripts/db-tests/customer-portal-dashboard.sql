@@ -186,7 +186,19 @@ begin
       if v_row.source_updated_at is null then
         raise exception 'tickets card: expected a non-null source_updated_at';
       end if;
-    elsif v_row.card_key in ('bookings', 'shipments', 'invoices', 'payments', 'loyalty', 'alerts') then
+    -- ISS-2026-118: these four stopped being stubs. They are real composed cards now, and each
+    -- must carry a real detail_path -- the whole defect was a dashboard saying "launching soon"
+    -- about a page reachable from the same screen's own nav.
+    elsif v_row.card_key in ('bookings', 'shipments', 'invoices', 'payments') then
+      if v_row.available <> true or v_row.degraded <> false then
+        raise exception 'composed card %: expected available=true degraded=false, got available=% degraded=%', v_row.card_key, v_row.available, v_row.degraded;
+      end if;
+      if v_row.detail_path is null or v_row.summary = '{}'::jsonb then
+        raise exception 'composed card %: expected a real detail_path and a real summary, got detail_path=% summary=%', v_row.card_key, v_row.detail_path, v_row.summary;
+      end if;
+    -- And these two are still honestly blank -- loyalty has no single summary number that is a
+    -- settled product question, and no customer-facing alerts source exists at all.
+    elsif v_row.card_key in ('loyalty', 'alerts') then
       if v_row.available <> false or v_row.degraded <> false or v_row.summary <> '{}'::jsonb or v_row.detail_path is not null or v_row.source_updated_at is not null then
         raise exception 'stub card %: expected available=false degraded=false summary={} detail_path=null source_updated_at=null, got available=% degraded=% summary=% detail_path=% source_updated_at=%',
           v_row.card_key, v_row.available, v_row.degraded, v_row.summary, v_row.detail_path, v_row.source_updated_at;
@@ -413,3 +425,48 @@ begin
   end loop;
 end $$;
 \echo 'PASS: per-card resilience -- one source''s genuine failure degrades only its own card; every sibling card, and the same card once restored, remain fully correct'
+
+\echo '>> ISS-2026-118: the four newly-composed cards carry real counts scoped to the reader own accounts, and each names the route it links to'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug = 'cpd1');
+  v_actor uuid := '00000000-0000-0000-0000-000000301010';
+  v_row record;
+  v_seen text[] := array[]::text[];
+begin
+
+  for v_row in select * from app.get_customer_portal_dashboard_summary(v_actor, v_tenant) loop
+    if v_row.card_key = 'bookings' then
+      v_seen := array_append(v_seen, 'bookings');
+      if v_row.detail_path <> 'customer-bookings' or not (v_row.summary ? 'openBookingRequestCount') then
+        raise exception 'bookings card: expected detail_path=customer-bookings and an openBookingRequestCount, got %/%', v_row.detail_path, v_row.summary;
+      end if;
+    elsif v_row.card_key = 'shipments' then
+      v_seen := array_append(v_seen, 'shipments');
+      if v_row.detail_path <> 'customer-shipments' or not (v_row.summary ? 'activeShipmentCount') then
+        raise exception 'shipments card: expected detail_path=customer-shipments and an activeShipmentCount, got %/%', v_row.detail_path, v_row.summary;
+      end if;
+    elsif v_row.card_key = 'invoices' then
+      v_seen := array_append(v_seen, 'invoices');
+      if v_row.detail_path <> 'customer-invoices' or not (v_row.summary ? 'issuedInvoiceCount') then
+        raise exception 'invoices card: expected detail_path=customer-invoices and an issuedInvoiceCount, got %/%', v_row.detail_path, v_row.summary;
+      end if;
+    elsif v_row.card_key = 'payments' then
+      v_seen := array_append(v_seen, 'payments');
+      -- A COUNT, never a summed amount: receipts carry per-row currencies and a cross-currency
+      -- total would be true in none of them (ISS-2026-136's own trap, not repeated here).
+      if v_row.detail_path <> 'customer-payments' or not (v_row.summary ? 'unallocatedPaymentCount') then
+        raise exception 'payments card: expected detail_path=customer-payments and an unallocatedPaymentCount, got %/%', v_row.detail_path, v_row.summary;
+      end if;
+      if v_row.summary ? 'unallocatedPaymentAmount' then
+        raise exception 'payments card must not report a summed amount across currencies -- see ISS-2026-136';
+      end if;
+    end if;
+  end loop;
+
+  if array_length(v_seen, 1) is distinct from 4 then
+    raise exception 'expected all four newly-composed cards to be present, saw %', v_seen;
+  end if;
+
+  raise notice 'PASS: ISS-2026-118 -- bookings/shipments/invoices/payments are real composed cards with real routes; loyalty/alerts stay honestly blank';
+end $$;

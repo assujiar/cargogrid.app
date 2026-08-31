@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 61 — 4 High, 25 Medium, 32 Low |
+| `OPEN` | 60 — 4 High, 25 Medium, 31 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 203 |
+| `RESOLVED` | 204 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -121,7 +121,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-083` | Low | `RESOLVED` | Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `trai |
 | `ISS-2026-084` | Low | `OPEN` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
 | `ISS-2026-087` | Low | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
-| `ISS-2026-118` | Low | `OPEN` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
+| `ISS-2026-118` | Low | `RESOLVED` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
 | `ISS-2026-119` | Low | `OPEN` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
 | `ISS-2026-120` | Low | `OPEN` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
 | `ISS-2026-121` | Low | `OPEN` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
@@ -1631,7 +1631,7 @@ Discovered `2026-08-16` at `CG-S13-CPL-003` (Prompt 301, Customer Portal Dashboa
 
 **Update (`2026-08-28`, Track B Batch 4):** **materially more severe than this entry's own original text discloses.** `supabase/migrations/20260826000000_create_public_api_data_wrappers.sql` (RGL-394, landed 2026-08-26, after this entry was written) added `public.*` PostgREST wrappers granting `EXECUTE` to `authenticated` for all ten of this migration's own actor-taking functions — the actor-identity gap became directly reachable by any authenticated session, not merely a theoretical internal-composition risk. **Status `RESOLVED`.** `supabase/migrations/20260828040000_harden_advanced_tms_customer_inventory_access_actor_identity.sql` — `CREATE OR REPLACE FUNCTION` on all ten externally-reachable functions (the two title-named plus the eight sibling functions this entry's own "Recommended fix" already named as sharing the identical gap): `app.get_customer_inventory_balance`, `app.list_customer_inventory_balances`, `app.list_customer_lot_identities`, `app.list_customer_serial_identities`, `app.get_customer_outbound_order`, `app.list_customer_outbound_order_lines`, `app.list_customer_outbound_orders`, `app.list_customer_inventory_movement_summary`, `app.export_customer_inventory_snapshot`, `app.list_customer_warehouse_eligibility` — each now calls `app.assert_actor_is_session_identity(p_actor_auth_user_id)` as its first statement. Same signatures, no grant changes needed. New forged-actor regression for all ten in `scripts/db-tests/advanced-tms-customer-inventory-access.sql`; live-verified `has_function_privilege` unaffected; full suite `ALL PASSED`; applied live — owner: closed.
 
-### ISS-2026-118 — dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch (Phase 8, Batch 1 integration-completeness, OPEN, Low)
+### ISS-2026-118 — dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch (Phase 8, Batch 1 integration-completeness, RESOLVED, Low)
 
 Discovered `2026-08-16` at Batch 1's own Tier C cross-prompt-integration review (Prompts 301-304, `CG-S13-CPL-003..006`).
 
@@ -1640,6 +1640,50 @@ Discovered `2026-08-16` at Batch 1's own Tier C cross-prompt-integration review 
 **Live user-visible effect:** a customer viewing `/customer-portal-dashboard` today, after all of Batch 1 lands, still sees "This area is launching soon" on two capabilities that fully exist and are one click away by direct URL or the shared nav (`components/domain/customer-portal-nav.tsx`). Not a security issue (no fabricated data, no broken link — `detail_path=null` correctly renders no link at all) and not a defect in any of 301/303/304 individually (each is correct and fully tested on its own terms) — a real, live, purely cosmetic integration-completeness gap between three capabilities that were each individually right.
 
 **Not fixed here** — wiring the two stub cards to real data is a genuine, additive `CREATE OR REPLACE FUNCTION` change requiring a real design decision this Tier C fix pass (scoped to closing live-reproduced Critical/High/Medium correctness and security defects) has no mandate to make on its own per `BUILD_EXECUTION_PROTOCOL.md` §5.6: composing `app.list_customer_booking_requests`/`app.list_customer_shipment_orders` into the dashboard summary, deriving each card's own `openCount`/summary shape, and deciding exactly which statuses count as "open" for each card (e.g. does a `cancel_requested` booking count toward `bookings`' own open count?). **Status `OPEN`**, Low severity (cosmetic/completeness only, no data or security exposure). Recommended fix for whichever future checkpoint picks it up: an additive migration replacing the two stub `VALUES` rows with real composed cards, reusing 301's own already-proven per-card `BEGIN...EXCEPTION WHEN OTHERS` independent-degradation pattern (§8/§11 of `docs/build-log/phase-08/CPL-301.md`) for the two newly-wired cards, plus a live db-test assertion mirroring `scripts/db-tests/customer-portal-dashboard.sql`'s own existing per-card checks. Should be closed by a near-term follow-up migration before more Batch 2+ capabilities land and this staleness widens further (dashboard cards for capabilities built in later batches would compound the same gap).
+
+**`RESOLVED`, 2026-08-31,
+`supabase/migrations/20260831210000_wire_customer_dashboard_bookings_shipments_invoices_payments.sql`
+(applied live).**
+
+**The entry's own warning had come true, so the fix is wider than the two cards it names.** It
+predicted that "dashboard cards for capabilities built in later batches would compound the same
+gap". They did: `invoices` (CPL-311) and `payments` (CPL-312) landed afterwards and were stubbed
+for exactly the same reason. Fixing only `bookings` and `shipments` would have repeated the
+mistake the entry was warning about, so all four are wired.
+
+**`loyalty` and `alerts` stay stubbed, deliberately.** Loyalty is not one list to compose but a
+programme/points/tier/entitlement surface whose single summary number is a real product question;
+no customer-facing alerts source exists at all. A card that is honestly blank beats one that
+invents a number — which is design decision 2 of the original migration, still holding.
+
+**The design decision this entry left open — what "open" means per card — resolved and recorded:**
+
+| Card | Counted | Reasoning |
+|---|---|---|
+| `bookings` | not `cancelled`/`converted` | a `cancel_requested` booking **still counts**: somebody has to act on it, and excluding it would make the card quieter than the customer's real situation — the entry raised this exact question |
+| `shipments` | not `cancelled` | matches the outbound-order card directly above it in the same function, rather than inventing a second convention for the same idea |
+| `invoices` | `issued` only | `void` is not an obligation. Deliberately does **not** claim to mean "unpaid" — the composed RPC carries no payment status, and a count that quietly meant something other than its label would be worse than a plainer one |
+| `payments` | **count** of receipts with money unallocated | never a summed amount: receipts carry per-row currencies, and a cross-currency total is true in none of them — the same trap `ISS-2026-136` recorded on the liability totals. "3 payments awaiting allocation" is true whatever the currencies are |
+
+Each new card reuses the function's own established shape exactly: one `begin ... exception when
+others` block per source so a single failing RPC degrades only its own card (design decision 5),
+the account-scope array as a real per-row filter (decision 3), and the 200-row cap with its own
+`*Capped` flag (decision 6). `app.resolve_customer_account_scope` remains the scope source —
+notably **not** re-derived from the scope-context read beside it, which would quietly make a
+presentation query the source of an authorization decision.
+
+**One thing caught before it shipped:** the first draft of the `CREATE OR REPLACE` declared the
+parameters as `(p_tenant_id, p_auth_user_id)`. The real signature is `(p_auth_user_id,
+p_tenant_id)` — reversed. That would have silently created a **second overload** rather than
+replacing the function, leaving every existing caller on the old stubbed body while the tests
+exercised the new one. Found by reading a caller's argument order rather than trusting the
+parameter names, which is the only way this class of mistake is visible.
+
+**Evidence:** `scripts/db-tests/customer-portal-dashboard.sql`'s stub-card assertion is split —
+the four composed cards must now be `available=true` with a real `detail_path` and a non-empty
+summary, while `loyalty`/`alerts` must still be blank — plus a dedicated block pinning each card's
+route and summary key, and asserting the payments card carries **no** summed-amount key. Full
+`pnpm db:test` green. Live-verified: composed cards and routes present, 0 anon grants.
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `app.get_customer_portal_dashboard_summary` is still never `CREATE OR REPLACE`'d after its original migration; direct read of the live body confirms `bookings`/`shipments` are still hardcoded `available=false` stub rows. Not boundable: a real fix requires deciding which statuses count as "open" for each card, a product judgment call this batch has no mandate to make. Disposition unchanged, still `OPEN`.
 

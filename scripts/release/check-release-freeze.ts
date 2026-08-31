@@ -2867,7 +2867,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (408 files, sixty-first-pass amendment above). Superseded 2026-08-31 (sixty-second pass) by
   // ISS-2026-314 (409 files: +1,
   // 20260831200000_stop_early_scheduled_report_trigger_skipping_a_due_occurrence.sql).
-  migrationSetSha256: "ce3f785b26728689c0e042efd4c5366053fc9e281f044dfd678d49590d9b94db",
+  // History: ce3f785b26728689c0e042efd4c5366053fc9e281f044dfd678d49590d9b94db
+  // (409 files, sixty-second-pass amendment above). Superseded 2026-08-31 (sixty-third pass) by
+  // ISS-2026-118 (410 files: +1,
+  // 20260831210000_wire_customer_dashboard_bookings_shipments_invoices_payments.sql).
+  migrationSetSha256: "5b403a1c326197650266a23bc955f8b2a62be46d4615eddf6cdab7eb211e7f99",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3191,7 +3195,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // early trigger ADVANCES next_run_at was asserting the defect, and is replaced by the two
   // assertions that actually separate the cases; the race block now forces the occurrence due
   // before racing it, which is the property it always claimed to test).
-  dbTestSetSha256: "a665ddc29a51b89b85714dff3040e9cde3c6b8c2bf8bb347622d5f8ee490f076",
+  // History: a665ddc29a51b89b85714dff3040e9cde3c6b8c2bf8bb347622d5f8ee490f076
+  // (238 files, sixty-second-pass state). Superseded 2026-08-31 (sixty-third pass) by
+  // ISS-2026-118 (238 files unchanged in count -- customer-portal-dashboard.sql's stub-card
+  // assertion is split, since four of the six stopped being stubs, and a new block pins each
+  // composed card's route and summary key plus the absence of a cross-currency summed amount).
+  dbTestSetSha256: "655cc713cbfb922a36cf665edd5589554904f33484a982ecde6a1bad7cd5c7df",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
