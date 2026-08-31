@@ -39,6 +39,7 @@ import {
   issueTrainingCertificateAction,
   importHistoricalTrainingCertificateAction,
   attachTrainingCertificateEvidenceAction,
+  attachTrainingProviderEvidenceAction,
   verifyTrainingCertificateAction,
   revokeTrainingCertificateAction,
   runTrainingCertificateExpiryBatchAction,
@@ -193,6 +194,7 @@ export default async function TrainingTalentAdminPage({ params }: { params: Prom
       issueCertificateAction={issueTrainingCertificateAction.bind(null, tenantSlug)}
       importCertificateAction={importHistoricalTrainingCertificateAction.bind(null, tenantSlug)}
       attachCertificateEvidenceAction={(certificateId: string, expectedVersion: number) => attachTrainingCertificateEvidenceAction.bind(null, tenantSlug, certificateId, expectedVersion)}
+      attachProviderEvidenceAction={(providerId: string, expectedVersion: number) => attachTrainingProviderEvidenceAction.bind(null, tenantSlug, providerId, expectedVersion)}
       verifyCertificateAction={(certificateId: string, expectedVersion: number) => verifyTrainingCertificateAction.bind(null, tenantSlug, certificateId, expectedVersion)}
       revokeCertificateAction={(certificateId: string, expectedVersion: number) => revokeTrainingCertificateAction.bind(null, tenantSlug, certificateId, expectedVersion)}
       runExpiryBatchAction={runTrainingCertificateExpiryBatchAction.bind(null, tenantSlug)}

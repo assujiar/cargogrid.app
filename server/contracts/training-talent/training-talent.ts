@@ -208,6 +208,13 @@ export const TrainingProviderRowSchema = z.object({
   contactEmail: z.string().nullable(),
   contactPhone: z.string().nullable(),
   status: TrainingProviderStatusSchema,
+  /**
+   * `ISS-2026-083`: the provider's own accreditation document — the thing an auditor asks for
+   * when they want to know whether a certificate this provider issued means anything. Nullable
+   * and defaulted, so a row from a projection that omits it degrades to "none attached" rather
+   * than throwing (`ISS-2026-315` is what a required-but-unreturned field costs).
+   */
+  evidenceFileId: z.string().uuid().nullable(),
   recordVersion: z.number().int().positive(),
 });
 export type TrainingProviderRow = z.infer<typeof TrainingProviderRowSchema>;
@@ -215,7 +222,8 @@ export type TrainingProviderRow = z.infer<typeof TrainingProviderRowSchema>;
 export function parseTrainingProviderRow(row: Record<string, unknown>): TrainingProviderRow {
   return TrainingProviderRowSchema.parse({
     id: row.id, name: row.name, providerType: row.provider_type, contactName: row.contact_name ?? null,
-    contactEmail: row.contact_email ?? null, contactPhone: row.contact_phone ?? null, status: row.status, recordVersion: row.record_version,
+    contactEmail: row.contact_email ?? null, contactPhone: row.contact_phone ?? null, status: row.status,
+    evidenceFileId: row.evidence_file_id ?? null, recordVersion: row.record_version,
   });
 }
 

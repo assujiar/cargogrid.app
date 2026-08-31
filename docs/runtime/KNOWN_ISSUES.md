@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 63 — 4 High, 25 Medium, 34 Low |
+| `OPEN` | 62 — 4 High, 25 Medium, 33 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 201 |
+| `RESOLVED` | 202 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -118,7 +118,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-067` | Low | `OPEN` | Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalo |
 | `ISS-2026-070` | Low | `OPEN` | Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/tra |
 | `ISS-2026-075` | Low | `OPEN` | Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern |
-| `ISS-2026-083` | Low | `OPEN` | Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `trai |
+| `ISS-2026-083` | Low | `RESOLVED` | Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `trai |
 | `ISS-2026-084` | Low | `OPEN` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
 | `ISS-2026-087` | Low | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
 | `ISS-2026-118` | Low | `OPEN` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
@@ -1017,13 +1017,60 @@ Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-H
 
 Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-HRT-010` (Prompt 282), spec-compliance lens Finding 2, CONFIRMED by direct code read: `const money = z.union([z.string(), z.number()]).transform((v) => String(v))` (`server/contracts/payroll/payroll.ts:74`) explicitly accepts a raw JS `number` as valid input; the file's own header comment claimed money fields are "a decimal string on the wire... never coerced to a JS `number`," which reads as an input-side guarantee the schema does not enforce (it IS a genuine output-side guarantee — every parsed value is unconditionally `String()`-normalized, so a caller can never observe a raw JS `number` from a parsed payroll row). No live precision failure found or reproduced — typical payroll amounts round-trip exactly through a JS double, and this schema is in fact stricter than the repository-wide convention elsewhere (`server/contracts/invoice/invoice.ts`, `vendor-bill.ts`, `journal.ts` all use plain `z.number()` for money fields, unmasked by any string-coercion step at all). **Resolution:** corrected the header comment to distinguish the output-side guarantee (real, enforced) from the input-side leniency (deliberate, defensive) — see `server/contracts/payroll/payroll.ts`'s updated header. Status `RESOLVED`, documentation-accuracy only, no code-behavior change.
 
-### ISS-2026-083 — Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `training_providers` carries no evidence-file column or attach RPC at all (OPEN, Low)
+### ISS-2026-083 — Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `training_providers` carries no evidence-file column or attach RPC at all (RESOLVED, Low)
 
 Discovered `2026-08-14` during the Tier C batch adversarial review for `CG-S12-HRT-011/012/013` (Prompts 283-285), spec-compliance lens finding 5, CONFIRMED by direct schema read: `app.training_providers` (`supabase/migrations/20260731040000_create_hris_training_talent.sql:326-342`) has no `evidence_file_id` column and no `attach_training_provider_evidence`-shaped RPC anywhere in the migration (grep-confirmed). Only `app.training_certificates.evidence_file_id` + `app.attach_training_certificate_evidence` (reusing PLT-128's malware-scan/tenant/record-type re-validation pattern) exist, and that half is now genuinely reachable end-to-end (see the batch's own Tier C fix pass, which wired a UI "Attach evidence" form for certificates and corrected the Certificates section's own description text to stop claiming provider evidence exists). §16's own phrasing names both nouns ("provider/certificate files"); the migration's header comment ("certificate/provider evidence reuses... PLT-128") likewise overstated what was actually built.
 
 **Handling:** Not fixed by this batch — adding a genuinely new provider-evidence-file capability (a new column, a new PLT-128-reusing RPC, RLS/grant wiring, a TS wrapper, and a UI form, mirroring the certificate half exactly) is a real, bounded feature addition, not a defect repair; §13's own database-impact list never separately named a persisted provider-evidence record, so this may be reading more into §16's phrasing than the section intended. The narrower, immediately actionable half of this finding — the UI/migration-comment text overclaiming provider coverage — IS corrected in this same batch (Certificates section description, `training-talent-panel.tsx`). **Status `OPEN`**, Low severity (no security exposure — there is simply no provider-evidence-file feature to exploit or fail; the product now accurately describes only what it does) — owner: a near-term Training/Talent follow-up prompt scoped to "add provider evidence-file attach, mirroring the certificate PLT-128 pattern exactly," if this is confirmed to be in scope for a future checkpoint.
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 8).** Grep-confirmed `app.training_providers` still has no `evidence_file_id` column and no `attach_training_provider_evidence`-shaped RPC anywhere in the migration set — no drift since filing. Genuinely a new feature, not a defect: no schema exists to attach evidence to, so there is nothing narrower to fix without first making the scope decision the entry's own prior disposition already correctly deferred. **Not fixed by this batch.** Owner and scope unchanged.
+
+**`RESOLVED`, 2026-08-31,
+`supabase/migrations/20260831190000_add_training_provider_evidence_attachment.sql` (applied live,
+project `awdlicmwzdxquopwtcfd`), plus the TS wrapper, Server Action and UI form this entry's own
+"Recommended fix" specified.**
+
+**The entry left the scope question genuinely open**, doubting its own finding: "§13's own
+database-impact list never separately named a persisted provider-evidence record, so this may be
+reading more into §16's phrasing than the section intended." That doubt is fair, and it is settled
+by asking what the evidence is *for* rather than by parsing the sentence again.
+
+A training provider is an external party a tenant pays to certify its people. The document that
+matters is the provider's own accreditation — the thing an auditor asks for when they want to know
+whether a certificate means anything. **Certificate evidence proves an employee attended; provider
+evidence proves the body that issued it was entitled to.** Dropping the second leaves the first
+resting on an unverifiable claim, which is exactly the gap §16's phrasing guards against. So the
+spec was right and the implementation was short — built, not narrowed.
+
+**Mirrors the certificate half exactly, on purpose.** Same column shape, same `HRS:Edit` gate via
+`app.check_training_authority`, same optimistic concurrency, same PLT-128 re-validation at the
+attaching RPC (tenant, record scope, malware-scan status), same audit event, same grant set and
+`public.*` wrapper with the `ISS-2026-309` revoke shape. Two evidence paths in one capability that
+behaved differently would be a difference a reader has to learn for no benefit — and since the
+certificate path is already proven, any divergence could only be a regression.
+
+Both listing RPCs return `setof app.training_providers`, so the new column reaches clients with no
+projection change — the `ISS-2026-124`/`ISS-2026-315` trap (a widened row that an explicitly
+declared `RETURNS TABLE` wrapper does not carry) does not arise here, checked rather than assumed.
+The contract field is nullable and defaulted for the same reason `ISS-2026-124`'s was.
+
+**Evidence:** `scripts/db-tests/hris-training-talent.sql` gains a block proving the new path
+refuses an **infected** file, an **unscanned** file, a clean file scoped to a **different
+provider**, an actor **without `HRS:Edit`** (the directory itself is broadly readable catalogue
+metadata; the accreditation document is not), and a **stale expected_version** — then accepts the
+legitimate attach, records exactly one audit event, and holds zero `anon` grants. Full
+`pnpm db:test` green on a clean re-run; `pnpm typecheck`, 5712 unit tests and `pnpm ui:check`
+green. Live-verified: column present, both functions present, 0 anon grants.
+
+**One stale claim corrected in the same change:** `training-talent-panel.tsx`'s Certificates
+section still told the reader "provider evidence is not yet a built capability." It is now, and
+the text says so rather than being left to contradict the product.
+
+**Note on the suite run.** The first full `db:test` failed in `scheduled-reports.sql` — that is
+`ISS-2026-314`, the known intermittent two-process concurrency assertion, and it is a **second
+independent observation** of that failure, recorded on that entry. A clean re-run passed
+end-to-end with this block green in both runs, so the failure is separated from this change by
+evidence rather than by assertion.
 
 ### ISS-2026-084 — Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composition reads with no "load more"/cursor-fetch UI, even after this batch's own Tier C fix added a visible truncation indicator (OPEN, Low)
 
@@ -6981,6 +7028,15 @@ Calling it a flake would be assuming (2) without evidence, which is exactly the 
 3. Re-triage severity when scope/exploitability/data impact/contracts change.
 4. Reconcile release blockers with build status and go/no-go reports.
 5. An ownerless or targetless non-low issue cannot be considered safely triaged.
+
+**Second independent observation, 2026-08-31** (during an unrelated `ISS-2026-083` suite run):
+failed again with the identical message — two concurrent processes advanced `next_run_at` by two
+steps instead of one — and passed on the immediately following clean re-run. That is now two
+observations of the same failure on different days and different changes, which removes "a
+one-off" as an explanation. It does **not** resolve the question this entry exists to hold open:
+the evidence still cannot distinguish a real double-advance in the product from fragile
+synchronisation in the test. It does raise the priority of answering it, because a real
+double-advance would silently skip a due occurrence.
 
 ### ISS-2026-315 — `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable (found 2026-08-31 while closing `ISS-2026-076`, `RESOLVED` the same day, was Medium)
 

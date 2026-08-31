@@ -981,4 +981,100 @@ begin
   raise notice 'OK: zero write to app.employees.lifecycle_status / app.payroll_* / app.performance_* / role-permission tables across every HRT-284 write function (structural proof)';
 end $$;
 
+\echo '>> ISS-2026-083: provider evidence (Prompt 284 §16''s other half) attaches under the same PLT-128 discipline as certificate evidence -- infected, unscanned, wrong-scope and unauthorized are each refused'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug = 'trn1');
+  v_hr uuid := '00000000-0000-0000-0000-000000028402';
+  v_admin uuid := '00000000-0000-0000-0000-000000028401';
+  v_supreme uuid := '00000000-0000-0000-0000-000000028499';
+  v_viewer uuid := '00000000-0000-0000-0000-000000028403';
+  v_provider app.training_providers;
+  v_cfg_version app.config_versions;
+  v_file_clean uuid;
+  v_file_pending uuid;
+  v_file_infected uuid;
+  v_file_wrong_scope uuid;
+  v_failed boolean;
+begin
+  select * into v_provider from app.training_providers where tenant_id = v_tenant and name = 'Internal L&D';
+
+  perform app.register_document_type('training_provider', 'Training Provider Accreditation', 'DOC', v_supreme, 'supreme');
+  select * into v_cfg_version from app.create_config_draft('document:training_provider', v_tenant, 'tenant', null, v_admin, 'admin');
+  perform app.set_config_items(v_cfg_version.id, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('application/pdf')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', 5000000),
+    jsonb_build_object('key', 'retention_class', 'value', 'operational_contract_plus_90d'),
+    jsonb_build_object('key', 'default_classification', 'value', 'internal'),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', false)
+  ), v_admin, 'admin');
+  perform app.publish_document_type_definition(v_cfg_version.id, v_admin, null, 'admin');
+
+  v_file_infected := (app.initiate_file_upload(v_tenant, 'training_provider', 'training_provider', v_provider.id, 'accreditation-infected.pdf', 'application/pdf', 1000, null, false, null, '{}'::uuid[], null, 'idem-tt-prov-infected', v_hr, 'hr')).id;
+  perform app.record_file_scan_result(v_file_infected, 'infected', 'scanner-prov-1', v_hr, 'hr');
+  v_file_pending := (app.initiate_file_upload(v_tenant, 'training_provider', 'training_provider', v_provider.id, 'accreditation-pending.pdf', 'application/pdf', 1000, null, false, null, '{}'::uuid[], null, 'idem-tt-prov-pending', v_hr, 'hr')).id;
+  v_file_clean := (app.initiate_file_upload(v_tenant, 'training_provider', 'training_provider', v_provider.id, 'accreditation-clean.pdf', 'application/pdf', 1000, null, false, null, '{}'::uuid[], null, 'idem-tt-prov-clean', v_hr, 'hr')).id;
+  perform app.record_file_scan_result(v_file_clean, 'clean', 'scanner-prov-2', v_hr, 'hr');
+  -- Real, clean, right tenant, right document type -- scoped to a DIFFERENT provider. The case a
+  -- tenant check waves through, and the only one that exercises the record-scope guard.
+  v_file_wrong_scope := (app.initiate_file_upload(v_tenant, 'training_provider', 'training_provider', gen_random_uuid(), 'accreditation-wrong.pdf', 'application/pdf', 1000, null, false, null, '{}'::uuid[], null, 'idem-tt-prov-wrong', v_hr, 'hr')).id;
+  perform app.record_file_scan_result(v_file_wrong_scope, 'clean', 'scanner-prov-3', v_hr, 'hr');
+
+  begin
+    perform app.attach_training_provider_evidence(v_provider.id, v_provider.record_version, v_file_infected, v_hr, 'hr');
+    raise exception 'ASSERTION FAILURE: an infected file was attached as provider evidence';
+  exception when others then
+    if sqlerrm not like 'evidence_file_infected%' then raise; end if;
+  end;
+  begin
+    perform app.attach_training_provider_evidence(v_provider.id, v_provider.record_version, v_file_pending, v_hr, 'hr');
+    raise exception 'ASSERTION FAILURE: a not-yet-scanned file was attached as provider evidence';
+  exception when others then
+    if sqlerrm not like 'evidence_file_not_scanned%' then raise; end if;
+  end;
+  begin
+    perform app.attach_training_provider_evidence(v_provider.id, v_provider.record_version, v_file_wrong_scope, v_hr, 'hr');
+    raise exception 'ASSERTION FAILURE: a clean file scoped to a DIFFERENT provider was attached as provider evidence';
+  exception when others then
+    if sqlerrm not like 'evidence_file_not_found%' then raise; end if;
+  end;
+
+  -- Attaching an accreditation is a write, so it carries HRS:Edit -- not the broader read access
+  -- the provider directory itself has (the directory is catalogue metadata; the document is not).
+  begin
+    perform app.attach_training_provider_evidence(v_provider.id, v_provider.record_version, v_file_clean, v_viewer, 'viewer');
+    v_failed := false;
+  exception when insufficient_privilege then
+    v_failed := true;
+  end;
+  if not v_failed then raise exception 'ASSERTION FAILURE: a viewer without HRS:Edit attached provider evidence'; end if;
+
+  v_provider := app.attach_training_provider_evidence(v_provider.id, v_provider.record_version, v_file_clean, v_hr, 'hr');
+  if v_provider.evidence_file_id <> v_file_clean then
+    raise exception 'ASSERTION FAILURE: clean, correctly-scoped provider evidence was not attached';
+  end if;
+
+  -- Stale version is refused after the attach bumped it, exactly as the certificate path behaves.
+  begin
+    perform app.attach_training_provider_evidence(v_provider.id, v_provider.record_version - 1, v_file_clean, v_hr, 'hr');
+    v_failed := false;
+  exception when serialization_failure then
+    v_failed := true;
+  end;
+  if not v_failed then raise exception 'ASSERTION FAILURE: a stale expected_version was accepted'; end if;
+
+  if not exists (
+    select 1 from app.audit_logs where action = 'attach_training_provider_evidence' and resource_id = v_provider.id and result = 'success'
+  ) then
+    raise exception 'ASSERTION FAILURE: no audit event recorded for the provider evidence attachment';
+  end if;
+
+  if (select count(*) from information_schema.routine_privileges where routine_name = 'attach_training_provider_evidence' and grantee = 'anon') <> 0 then
+    raise exception 'ASSERTION FAILURE: anon holds EXECUTE on attach_training_provider_evidence';
+  end if;
+
+  raise notice 'PASS: ISS-2026-083 -- provider evidence attaches under the identical PLT-128 discipline as certificate evidence, with no divergence to learn';
+end;
+$$;
+
 \echo 'HRT-284 TRAINING AND TALENT TEST SUITE COMPLETE'

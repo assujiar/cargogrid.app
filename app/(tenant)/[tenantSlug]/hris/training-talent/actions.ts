@@ -31,6 +31,7 @@ import {
   issueTrainingCertificate,
   importHistoricalTrainingCertificate,
   attachTrainingCertificateEvidence,
+  attachTrainingProviderEvidence,
   verifyTrainingCertificate,
   revokeTrainingCertificate,
   runTrainingCertificateExpiryBatch,
@@ -438,6 +439,30 @@ export async function attachTrainingCertificateEvidenceAction(tenantSlug: string
     await attachTrainingCertificateEvidence(supabase, { certificateId, expectedVersion, evidenceFileId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof TrainingTalentMutationError) return { error: `Could not attach this evidence file: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(path(tenantSlug));
+  return OK;
+}
+
+/**
+ * `ISS-2026-083`. Mirrors `attachTrainingCertificateEvidenceAction` exactly, including re-checking
+ * nothing: `HRS:Edit` and the PLT-128 file re-validation (tenant, record scope, malware scan) are
+ * enforced inside `app.attach_training_provider_evidence` regardless of what this file does.
+ */
+export async function attachTrainingProviderEvidenceAction(tenantSlug: string, providerId: string, expectedVersion: number, _prevState: TrainingTalentAdminActionState, formData: FormData): Promise<TrainingTalentAdminActionState> {
+  const access = await resolveHrisAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return NO_ACCESS;
+
+  const evidenceFileId = String(formData.get("evidenceFileId") ?? "").trim();
+  if (!evidenceFileId) return { error: "An evidence file id is required." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await attachTrainingProviderEvidence(supabase, { providerId, expectedVersion, evidenceFileId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof TrainingTalentMutationError) return { error: `Could not attach this accreditation file: ${error.message}` };
     throw error;
   }
 

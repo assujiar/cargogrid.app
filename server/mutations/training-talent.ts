@@ -378,6 +378,21 @@ export async function attachTrainingCertificateEvidence(
   return parseTrainingCertificateRow(unwrap(data, error) as Record<string, unknown>);
 }
 
+/**
+ * `ISS-2026-083`, Prompt 284 §16's provider half. Deliberately the same shape as
+ * `attachTrainingCertificateEvidence` above: two evidence paths in one capability that behaved
+ * differently would be a difference a reader has to learn for no benefit.
+ */
+export async function attachTrainingProviderEvidence(
+  client: TrainingTalentMutationRpcClient, input: { providerId: string; expectedVersion: number; evidenceFileId: string; actorAuthUserId: string; actorLabel: string },
+): Promise<TrainingProviderRow> {
+  const { data, error } = await client.rpc("attach_training_provider_evidence", {
+    p_provider_id: input.providerId, p_expected_version: input.expectedVersion, p_evidence_file_id: input.evidenceFileId,
+    p_actor_auth_user_id: input.actorAuthUserId, p_actor_label: input.actorLabel,
+  });
+  return parseTrainingProviderRow(unwrap(data, error) as Record<string, unknown>);
+}
+
 export async function verifyTrainingCertificate(
   client: TrainingTalentMutationRpcClient, input: { certificateId: string; expectedVersion: number; actorAuthUserId: string; actorLabel: string },
 ): Promise<TrainingCertificateRow> {

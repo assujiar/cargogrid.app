@@ -190,8 +190,9 @@ function CourseSection({ courses, courseVersionsByCourseId, createAction, publis
 
 // --- Provider / session ---
 
-function ProviderSessionSection({ providers, sessions, courses, courseVersionsByCourseId, createProviderAction, createSessionAction, cancelSessionAction, enrollEmployeeAction, bulkAssignAction }: {
+function ProviderSessionSection({ providers, sessions, courses, courseVersionsByCourseId, createProviderAction, attachProviderEvidenceAction, createSessionAction, cancelSessionAction, enrollEmployeeAction, bulkAssignAction }: {
   providers: TrainingProviderRow[];
+  attachProviderEvidenceAction: (providerId: string, expectedVersion: number) => BoundAction;
   sessions: TrainingSessionRow[];
   courses: TrainingCourseRow[];
   courseVersionsByCourseId: Record<string, TrainingCourseVersionRow[]>;
@@ -215,6 +216,30 @@ function ProviderSessionSection({ providers, sessions, courses, courseVersionsBy
           </label>
         </div>
       </InlineForm>
+
+      {/*
+        ISS-2026-083: the provider's own accreditation document -- Prompt 284 §16's other half.
+        Certificate evidence proves an employee attended; this proves the body that issued the
+        certificate was entitled to. Same PLT-128 discipline, enforced server-side.
+      */}
+      {providers.length > 0 ? (
+        <ul className="flex flex-col gap-2 text-sm">
+          {providers.slice(0, 25).map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2 rounded border border-neutral-200 p-2">
+              <span>
+                {p.name} ({p.providerType}
+                {p.evidenceFileId ? ", accreditation attached" : ", no accreditation on file"})
+              </span>
+              <details className="text-xs">
+                <summary className="cursor-pointer">{p.evidenceFileId ? "Replace accreditation" : "Attach accreditation"}</summary>
+                <InlineForm action={attachProviderEvidenceAction(p.id, p.recordVersion)} submitLabel="Attach">
+                  <input name="evidenceFileId" required placeholder="evidence file id (malware-scanned, PLT-128)" className="rounded border border-neutral-300 p-2 text-sm" />
+                </InlineForm>
+              </details>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <InlineForm action={createSessionAction} submitLabel="Schedule session">
         <label className="text-xs text-neutral-500">
@@ -405,7 +430,7 @@ function CertificateSection({ certificates, issueAction, importAction, attachEvi
   runReminderBatchAction: BoundAction;
 }) {
   return (
-    <Section title="Certificates" description="Certificate evidence files are private and malware-scanned before attach (PLT-128); provider evidence is not yet a built capability (disclosed in the build log). Expiry/reminder are real durable jobs (PLT-131/132).">
+    <Section title="Certificates" description="Certificate and provider evidence files are both private and malware-scanned before attach (PLT-128) -- provider accreditation lives in the Providers section above (ISS-2026-083). Expiry/reminder are real durable jobs (PLT-131/132).">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <InlineForm action={issueAction} submitLabel="Issue certificate">
           <input name="employeeId" required placeholder="employee id" className="rounded border border-neutral-300 p-2 text-sm" />
@@ -754,6 +779,7 @@ export interface TrainingTalentAdminPanelProps {
   issueCertificateAction: BoundAction;
   importCertificateAction: BoundAction;
   attachCertificateEvidenceAction: (certificateId: string, expectedVersion: number) => BoundAction;
+  attachProviderEvidenceAction: (providerId: string, expectedVersion: number) => BoundAction;
   verifyCertificateAction: (certificateId: string, expectedVersion: number) => BoundAction;
   revokeCertificateAction: (certificateId: string, expectedVersion: number) => BoundAction;
   runExpiryBatchAction: BoundAction;
@@ -782,6 +808,7 @@ export function TrainingTalentAdminPanel(props: TrainingTalentAdminPanelProps) {
       />
       <ProviderSessionSection
         providers={props.providers} sessions={props.sessions} courses={props.courses} courseVersionsByCourseId={props.courseVersionsByCourseId}
+        attachProviderEvidenceAction={props.attachProviderEvidenceAction}
         createProviderAction={props.createProviderAction} createSessionAction={props.createSessionAction} cancelSessionAction={props.cancelSessionAction}
         enrollEmployeeAction={props.enrollEmployeeAction} bulkAssignAction={props.bulkAssignMandatoryAction}
       />
