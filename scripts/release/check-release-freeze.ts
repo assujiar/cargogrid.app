@@ -3200,7 +3200,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-118 (238 files unchanged in count -- customer-portal-dashboard.sql's stub-card
   // assertion is split, since four of the six stopped being stubs, and a new block pins each
   // composed card's route and summary key plus the absence of a cross-currency summed amount).
-  dbTestSetSha256: "655cc713cbfb922a36cf665edd5589554904f33484a982ecde6a1bad7cd5c7df",
+  // History: 655cc713cbfb922a36cf665edd5589554904f33484a982ecde6a1bad7cd5c7df
+  // (238 files, sixty-third-pass state). Superseded 2026-08-31 (sixty-fourth pass) by
+  // ISS-2026-119 (238 files unchanged in count -- customer-portal-scope.sql gained the probe that
+  // proves the widened and legacy customer-scope resolvers agree across invited/active/revoked,
+  // which is what makes keeping two of them a consistency gap rather than a grant difference).
+  dbTestSetSha256: "86ffcc1e0f16293b3b2398bfc872504e37af4c4c576e4cfa7efb67c41fd32cef",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

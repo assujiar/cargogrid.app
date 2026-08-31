@@ -893,4 +893,78 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-119: the two customer-scope resolvers agree in every reachable state -- so the RPCs still on the legacy one are a consistency gap, not a live over- or under-grant'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug = 'cps1');
+  v_account uuid;
+  v_admin uuid := '00000000-0000-0000-0000-000000300010';
+  v_member uuid := '00000000-0000-0000-0000-000000300013';
+  v_widened uuid[];
+  v_legacy uuid[];
+  v_row app.customer_portal_account_memberships;
+begin
+  select account_id into v_account from app.customer_portal_account_memberships
+  where tenant_id = v_tenant and auth_user_id = v_admin and status = 'active' limit 1;
+  if v_account is null then
+    raise exception 'fixture precondition failed: expected an active portal membership for the alpha admin';
+  end if;
+
+  -- ISS-2026-119 records that app.list_customer_inventory_movement_summary,
+  -- list_customer_lot_identities, list_customer_serial_identities and
+  -- export_customer_inventory_snapshot still resolve scope through the LEGACY
+  -- app.resolve_customer_owner_account_scope while CPL-300 widened the portal onto
+  -- app.resolve_customer_account_scope. Two resolvers answering "which accounts may this customer
+  -- see" is a latent trap even when they agree -- so this pins that they DO agree, in each state a
+  -- real portal membership can actually be in. If they ever diverge, this fails and somebody
+  -- decides deliberately, instead of it being discovered by a customer seeing the wrong data.
+  --
+  -- Uses its OWN member rather than the alpha admin: revoking the admin is correctly refused by
+  -- the last-active-account_admin guard, which is a real invariant this probe must not fight.
+
+  -- (1) Invited, never accepted: NEITHER resolver may grant anything. The legacy
+  -- app.principal_memberships row is deliberately not created at invite time -- granting it there
+  -- was a live bypass a Tier C review already closed -- so an invitee has access from neither.
+  -- The probe brings its own auth identity rather than borrowing one whose state other blocks
+  -- in this file already depend on.
+  insert into auth.users (id, email) values (v_member, 'iss119probe@cps1.test') on conflict do nothing;
+
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+  select * into v_row from app.invite_customer_portal_user(v_tenant, v_account, v_member, 'member', v_admin, 'alpha-admin');
+
+  perform set_config('request.jwt.claim.sub', v_member::text, true);
+  v_widened := app.resolve_customer_account_scope(v_member, v_tenant);
+  v_legacy := app.resolve_customer_owner_account_scope(v_member, v_tenant);
+  if v_account = any (coalesce(v_widened, '{}'::uuid[])) or v_account = any (coalesce(v_legacy, '{}'::uuid[])) then
+    raise exception 'invited-not-accepted: expected NEITHER resolver to grant the account, widened=% legacy=%', v_widened, v_legacy;
+  end if;
+
+  -- (2) Accepted and active: BOTH must include it.
+  select * into v_row from app.customer_portal_account_memberships where id = v_row.id;
+  perform app.accept_customer_portal_invite(v_row.id, v_row.record_version, v_member);
+
+  v_widened := app.resolve_customer_account_scope(v_member, v_tenant);
+  v_legacy := app.resolve_customer_owner_account_scope(v_member, v_tenant);
+  if not (v_account = any (v_widened)) or not (v_account = any (v_legacy)) then
+    raise exception 'active member: expected BOTH resolvers to include the account, widened=% legacy=%', v_widened, v_legacy;
+  end if;
+
+  -- (3) Revoked: BOTH must drop it. This is the state that would have been a real access-control
+  -- defect if only the widened resolver honoured revocation -- a revoked customer would have kept
+  -- reading inventory through every RPC still on the legacy one. It does not: revoking also drives
+  -- the legacy app.principal_memberships row, so those consumers lose access in step.
+  select * into v_row from app.customer_portal_account_memberships where id = v_row.id;
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+  perform app.set_customer_portal_account_membership_status(v_row.id, v_row.record_version, 'revoked', 'ISS-2026-119 equivalence probe', v_admin, 'alpha-admin');
+
+  perform set_config('request.jwt.claim.sub', v_member::text, true);
+  v_widened := app.resolve_customer_account_scope(v_member, v_tenant);
+  v_legacy := app.resolve_customer_owner_account_scope(v_member, v_tenant);
+  if v_account = any (coalesce(v_widened, '{}'::uuid[])) or v_account = any (coalesce(v_legacy, '{}'::uuid[])) then
+    raise exception 'revoked member: expected BOTH resolvers to drop the account, widened=% legacy=%', v_widened, v_legacy;
+  end if;
+
+  raise notice 'PASS: ISS-2026-119 -- both customer-scope resolvers agree when a membership is invited-but-unaccepted, active, and revoked; the legacy-resolver RPCs are a consistency gap, not a live grant difference';
+end $$;
+
 \echo 'customer-portal-scope.sql: ALL PASSED'

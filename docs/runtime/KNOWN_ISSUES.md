@@ -43,8 +43,8 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 60 — 4 High, 25 Medium, 31 Low |
-| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
+| `OPEN` | 59 — 4 High, 25 Medium, 30 Low |
+| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
 | `RESOLVED` | 204 |
 | **Total records** | **271** |
 
@@ -122,7 +122,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-084` | Low | `OPEN` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
 | `ISS-2026-087` | Low | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
 | `ISS-2026-118` | Low | `RESOLVED` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
-| `ISS-2026-119` | Low | `OPEN` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
+| `ISS-2026-119` | Low | `ACCEPTED_EXCEPTION` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
 | `ISS-2026-120` | Low | `OPEN` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
 | `ISS-2026-121` | Low | `OPEN` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
 | `ISS-2026-122` | Low | `OPEN` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
@@ -1704,7 +1704,7 @@ count with **no** summed-amount key. `pnpm typecheck`, `pnpm lint` (0 errors), 5
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `app.get_customer_portal_dashboard_summary` is still never `CREATE OR REPLACE`'d after its original migration; direct read of the live body confirms `bookings`/`shipments` are still hardcoded `available=false` stub rows. Not boundable: a real fix requires deciding which statuses count as "open" for each card, a product judgment call this batch has no mandate to make. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-119 — movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver (Phase 8, CPL-309 deliberate scope decision, OPEN, Low)
+### ISS-2026-119 — movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver (Phase 8, CPL-309 deliberate scope decision, ACCEPTED_EXCEPTION, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-011` (Prompt 309, Warehouse Inventory Visibility) — a deliberate scope decision made while authoring this checkpoint's own migration, not a defect found afterward.
 
@@ -1716,6 +1716,55 @@ Discovered `2026-08-17` at `CG-S13-CPL-011` (Prompt 309, Warehouse Inventory Vis
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — Prompt 309's own text still explicitly marks movement-summary/lot/serial/export as out of scope, and no later migration mirrors those four ATW-023 RPCs onto `app.resolve_customer_account_scope`. A deliberate, disclosed product-scope boundary, not a defect. Disposition unchanged, still `OPEN`.
 
+**`ACCEPTED_EXCEPTION`, 2026-08-31 — the divergence is real, and provably not a grant difference.
+Pinned by test rather than removed by rewrite.**
+
+Two resolvers answering "which accounts may this customer see" is a latent trap even when they
+agree, so the first question was whether they actually do. **They do, in every state a real portal
+membership can be in**, and that was established by live probe rather than by reading:
+
+| Membership state | `resolve_customer_account_scope` (widened) | `resolve_customer_owner_account_scope` (legacy) |
+|---|---|---|
+| invited, never accepted | excluded | excluded |
+| accepted, active | included | included |
+| revoked | excluded | excluded |
+
+**Two hypotheses were tested and both were wrong**, which is the part worth recording because each
+would have been serious:
+
+1. *"Revocation only takes effect on the widened resolver, so a revoked customer keeps reading
+   inventory through every legacy-resolver RPC."* — **No.** A Tier C review fix already made
+   `app.set_customer_portal_account_membership_status` drive the legacy
+   `app.principal_memberships` row as well, so legacy consumers lose access in step.
+2. *"The legacy-resolver RPCs take `p_actor_auth_user_id` as a free parameter with no session-identity
+   assertion, so one customer could read another's inventory."* — **No.**
+   `20260828040000_harden_advanced_tms_customer_inventory_access_actor_identity.sql` retrofitted
+   `app.assert_actor_is_session_identity` onto all ten actor-taking RPCs, with a live regression
+   test. Confirmed against the **live** function definitions: all six assert identity today.
+
+That second check is worth a note for the next reader: grepping the *creating* migration
+(`20260730310000`) shows no assertion, and would have supported a false alarm. The function had
+been redefined by a later migration. **Reading the migration that created a function is not
+reading the function.**
+
+**Why this closes as an accepted variant rather than a rewrite.** With the behaviour proven
+identical, mirroring the four RPCs onto the widened resolver buys exactly one thing: a single
+resolver, so a future change to portal scope semantics lands everywhere at once. That is real, but
+it costs transcribing four live customer-facing data RPC bodies into a new `CREATE OR REPLACE` —
+and the hazard of that is not hypothetical, as the paragraph above shows. Trading a proven-correct
+path for a transcription risk, to gain no behaviour, is the wrong trade today.
+
+**What is added instead is the guard that makes the variant safe to keep.**
+`scripts/db-tests/customer-portal-scope.sql` gains a block asserting both resolvers agree across
+all three states, using its own invited → accepted → revoked member rather than borrowing a
+fixture identity (the alpha admin cannot be revoked at all — the last-active-account_admin
+invariant correctly refuses, which this probe respects rather than fights). **If the two ever
+diverge, that test fails and somebody decides deliberately, instead of a customer discovering it
+by seeing the wrong data.** Full `pnpm db:test` green.
+
+**Reopen this** if a future change widens `app.resolve_customer_account_scope` in a way the legacy
+resolver cannot follow — at that point unifying stops being cosmetic and the rewrite is worth its
+risk.
 ### ISS-2026-120 — no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only (Phase 8, CPL-310 deliberate scope decision, OPEN, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-012` (Prompt 310, Warehouse Order and Order Fulfillment Visibility) — a deliberate scope decision made while authoring this checkpoint's own migration, not a defect found afterward.
