@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 64 — 4 High, 25 Medium, 35 Low |
+| `OPEN` | 63 — 4 High, 25 Medium, 34 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 199 |
+| `RESOLVED` | 200 |
 | **Total records** | **270** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -149,7 +149,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-244` | Low | `OPEN` | Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emula |
 | `ISS-2026-245` | Low | `OPEN` | no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive  |
 | `ISS-2026-246` | Low | `OPEN` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
-| `ISS-2026-248` | Low | `OPEN` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
+| `ISS-2026-248` | Low | `RESOLVED` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
 | `ISS-2026-277` | Low | `OPEN` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
 | `ISS-2026-278` | Low | `OPEN` | no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk c |
 | `ISS-2026-294` | High | `RESOLVED` | the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into |
@@ -4886,13 +4886,51 @@ The source-sweep lens found 23 of 95 tables (24%) with zero overflow handling; t
 
 **Update (`2026-08-28`, Track B Batch 5):** **Status `RESOLVED`.** Re-swept and confirmed 19/96 unwrapped tables (one extra table since this entry was written, consistent with the entry's own 19/95 count). All 19 wrapped in `<div className="overflow-x-auto">…</div>` with a `min-w-[Npx]` floor added to each `<table>`, sized to its own column count — mirroring the exact pattern this checkpoint's own fix of the 4 worst offenders already established (e.g. `commercial/dashboard/page.tsx`). Post-fix re-sweep: 0 remaining unwrapped tables. `pnpm run typecheck`/`lint` on all 19 changed files pass clean. Not covered by any axe-core e2e spec (same disclosed root cause as `ISS-2026-140`/`244`: no live Supabase auth backend reachable in this sandbox, so no tenant-authenticated route is ever exercised by Playwright) — a real page-level visual regression check remains future work, but the fix itself is verified by direct source inspection, not merely claimed — owner: closed.
 
-### ISS-2026-248 — no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently (found at `HDN-381` Tier C, schema-wide completeness sweep lens, `OPEN`, Low, owner a dedicated future task)
+### ISS-2026-248 — no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently (found at `HDN-381` Tier C, schema-wide completeness sweep lens, `RESOLVED` 2026-08-31, was Low)
 
 `eslint.config.js` already has precedent for exactly this shape of rule: `bannedPatterns` and `chartGovernancePatterns` both use a `no-restricted-syntax` selector array to catch a banned source-code pattern at lint time (see `eslint.config.js` lines ~77-122). No equivalent selector exists for this checkpoint's own two fix classes — a `<table` with no accompanying `overflow-x-auto`/`overflow-auto` wrapper in the same file (`ISS-2026-247`'s own remaining-19 gap), or an interactive element (`button`/`input`/`select`/a clickable `div`) styled below the 44px touch-target floor. Both are visible defects a human reviewer already has to catch by eye today; a future contributor could easily re-introduce either without any automated signal.
 
 **Status `OPEN`**, Low severity (a tooling/guard-rail gap, not a live defect — nothing in the shipped product is broken by this entry's own absence). **Not fixed by this checkpoint** — a `no-restricted-syntax` selector precise enough to catch a genuinely unwrapped table or an under-sized touch target without false-positiving on, e.g., a deliberately small icon-only decorative element, needs careful regex/AST-selector design and its own validation pass against the existing codebase; that scope is outside this checkpoint's own bounded "5-15 files" repair charter. Owner: a dedicated future task, scoped to designing and landing the `no-restricted-syntax` selector(s) plus a false-positive sweep against the current tree before enabling it as a lint error (not just a warning).
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — read `eslint.config.js`'s existing `no-restricted-syntax` precedent (`bannedPatterns`, `chartGovernancePatterns`) and confirmed this entry's own diagnosis: "table with no wrapper in the same file" is a file-level absence-of-pattern check, which `no-restricted-syntax`'s per-node selectors cannot express without a custom rule; a sub-44px touch-target selector is similarly false-positive-prone (cannot distinguish a decorative small element from an interactive one via AST alone). Left undone rather than landing a guard that cannot be validated against false positives in this pass. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-31, `scripts/ui/check-interaction-primitives.ts` + `pnpm ui:check`, wired
+into CI.**
+
+**Both of this entry's technical objections were right, and neither was the real blocker.** The
+diagnosis held on re-verification: a per-node `no-restricted-syntax` selector genuinely cannot
+express "this file contains a `<table>` and no wrapper *anywhere else in it*", and a bare size
+selector genuinely cannot tell a decorative 16px icon from a 16px control.
+
+What both conclusions share is the premise that the guard had to live in ESLint, because that is
+where the `bannedPatterns` precedent was. **This repository has a second precedent that fits far
+better**: ten standalone checker scripts already run as `pnpm` gates (`check-secrets`,
+`check-rls-initplan`, `check-protected-paths`, `check-known-issues`, …), and a file-level absence
+check is exactly what those are for. The blocker was the tool, not the check.
+
+- **`TABLE_NO_SCROLL_WRAPPER`** — a `.tsx` under `app/` or `components/` containing `<table` must
+  also contain `overflow-x-auto`/`overflow-auto`/`overflow-x-scroll`. File-level on purpose: the
+  wrapper is often several components away from the table it protects, and requiring them on the
+  same node (the only thing ESLint could have expressed) would flag correct code constantly.
+- **`UNDERSIZED_TOUCH_TARGET`** — an **interactive tag** (`button`/`a`/`input`/`select`/
+  `textarea`, never an `<svg>` or `<div>`) pinned below 44px by `h-N`, `h-[Npx]` or `min-h-[Npx]`.
+  Restricting it to interactive tags is what answers the entry's decorative-element objection: a
+  16px icon is decoration, a 16px button is a control nobody can reliably hit.
+
+**The false-positive sweep this entry demanded was run, and it found something — in the rule, not
+in the product.** Against the whole tree (792 `.tsx` files): zero unwrapped tables, and four small
+controls, all checkboxes with associated labels. The first draft recognised only the explicit
+`<label htmlFor>` form and so flagged two perfectly correct controls in
+`admin/scheduler/scheduler-admin-panel.tsx`, which use HTML's other, equally valid form — the
+control simply nested inside its `<label>`. **A guard that knows one of the two label-association
+forms does not find defects; it finds the other form.** Both are now recognised, and the exemption
+is deliberately narrow: it applies to checkboxes and radios, where a label genuinely operates the
+control, and never to a small `<button>` that happens to sit inside one.
+
+With that corrected, the tree is clean, which is what makes it safe to land as a hard **error**
+rather than a warning — the condition this entry set. 14 unit tests pin both rules and every
+boundary, including the implicit-label case that broke the first draft. `pnpm typecheck`,
+`pnpm lint` (0 errors) and 5712 unit tests green.
 
 ### ISS-2026-249 — IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's own job-dead-letter fix — webhook delivery failure, AI governed-action failure, and security/auth denials still produce zero incident (found at `HDN-382` Observability Audit, live/simulated failure testing lens + source sweep lens, `RESOLVED` 2026-08-31, was High, owner a dedicated future task)
 

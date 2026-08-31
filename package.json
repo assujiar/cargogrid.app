@@ -21,6 +21,7 @@
     "package:check": "node --experimental-strip-types scripts/docs/check-prompt-package.ts",
     "issues:check": "node --experimental-strip-types scripts/docs/check-known-issues.ts",
     "security:check": "node --experimental-strip-types scripts/security/check-secrets.ts",
+    "ui:check": "node --experimental-strip-types scripts/ui/check-interaction-primitives.ts",
     "security:audit": "node --experimental-strip-types scripts/security/check-dependency-audit.ts",
     "security:check-rls-initplan": "node --experimental-strip-types scripts/security/check-rls-initplan.ts",
     "data-classification:check": "node --experimental-strip-types scripts/data-classification/check-registry.ts",

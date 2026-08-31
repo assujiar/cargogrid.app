@@ -104,6 +104,16 @@ jobs:
       - name: Known-issues ledger check (index covers every record, statuses agree)
         run: pnpm run issues:check
 
+      # ISS-2026-248: the two defect classes ISS-2026-247 fixed by hand -- a wide
+      # table with no horizontal-scroll wrapper, and an interactive control below the
+      # 44px touch-target floor -- were things a reviewer had to catch by eye, so both
+      # could silently come back. The entry concluded this could not be an ESLint rule,
+      # correctly: "table with no wrapper in the same file" is a file-level absence
+      # check, which a per-node no-restricted-syntax selector cannot express. It is a
+      # checker script instead, the same shape as the nine gates around it.
+      - name: Interaction primitives (table scroll wrappers, touch-target floor)
+        run: pnpm run ui:check
+
       - name: Secret scan (docs/standards/SECURITY_STANDARDS.md §3)
         run: pnpm run security:check
 
