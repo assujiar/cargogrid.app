@@ -2303,6 +2303,53 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test run (397 migrations, 236 runner files,
  * ALL PASSED).
  *
+ * AMENDED 2026-08-31 (forty-ninth pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. The automatic task scheduler.
+ * 20260831090000_create_tenant_configurable_task_scheduler.sql, plus the first new
+ * db-test runner file this freeze has taken (task-scheduler.sql, 236 -> 237).
+ *
+ * Eleven backlog entries shared one sentence -- some form of "on-demand/staff-triggered
+ * only; no automatic job wires this up". The sweeps all existed and all worked; nothing
+ * ever called them on a timer.
+ *
+ * Why that was not a cron entry: every sweep takes p_actor_auth_user_id and most are
+ * evaluate_permission-gated, and a cron job has no identity. Minting a second top-privilege
+ * platform identity for the scheduler was put to the project owner and REJECTED. The owner's
+ * own direction shaped what was built instead -- CargoGrid is configurable by Supreme Admin,
+ * per tenant, with access delegable to a tenant's own admin -- so: Supreme Admin owns a
+ * catalogue of schedulable tasks and a per-task delegation switch, and a scheduled run
+ * executes AS THE REAL PERSON who authorized the schedule, their authority re-checked every
+ * run. Nothing is minted and nothing runs as "the system".
+ *
+ * The consequences are deliberate: an authority failure is a distinct outcome from any other
+ * error, three consecutive ones auto-disable the schedule with the reason recorded, and
+ * re-authorizing means somebody with current authority reconfigures it, which re-stamps the
+ * identity as theirs. A departed employee's stale schedule becomes a visible dead row rather
+ * than permanent nightly noise.
+ *
+ * Two gates caught real defects in the first draft, both worth recording rather than quietly
+ * fixing. public-api-wrapper-regression.sql failed two functions with no public.* wrapper --
+ * fixed by app._ prefixing the internal predicate (a helper with no independent meaning should
+ * not become a REST endpoint) and giving the runner a service_role-only wrapper. And
+ * scripts/security/check-rls-initplan.ts failed both new RLS policies for a bare auth.uid(),
+ * which is re-evaluated per row; both now use (select auth.uid()).
+ *
+ * Honest scope, recorded in the entries themselves rather than claimed here: this closes the
+ * scheduler ITEM in ISS-2026-066 and the expiry half of ISS-2026-129. It does NOT close
+ * ISS-2026-070, 126, 127 or 132, because those need sweep functions that do not exist
+ * (an onboarding-overdue sweep, a tenant-wide tier recalculation) or an event trigger rather
+ * than a timer. A scheduler can only run sweeps that exist.
+ *
+ * Nothing is scheduled on the live project: pg_cron remains uninstalled, and attaching a
+ * trigger to app.run_due_scheduled_tasks is a deliberate operator step.
+ *
+ * ISS-2026-313 registered by this same pass: enumerating pg_proc afterwards found four more
+ * tenant-wide sweeps of exactly the right shape that the catalogue does not carry, because it
+ * was seeded from what the backlog complained about rather than from what the schema offers.
+ *
+ * Re-verified via a fresh full local db-test run (398 migrations, 237 runner files,
+ * ALL PASSED). 20260831090000 IS applied live and object-verified.
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2556,7 +2603,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (396 files, forty-seventh-pass amendment above). Superseded 2026-08-31 (forty-eighth
   // pass) by ISS-2026-086 (397 files: +1,
   // 20260831080000_split_ticket_admin_content_override_permission.sql).
-  migrationSetSha256: "ce7ae92e77046ffb102cefc61da453c00b86593e6064c6d33e06373c9f5b244a",
+  // History: ce7ae92e77046ffb102cefc61da453c00b86593e6064c6d33e06373c9f5b244a
+  // (397 files, forty-eighth-pass amendment above). Superseded 2026-08-31 (forty-ninth
+  // pass) by the task scheduler (398 files: +1,
+  // 20260831090000_create_tenant_configurable_task_scheduler.sql).
+  migrationSetSha256: "42161bc6d1fe31e12a6f7fd25f890ae7ea865653a67b9fc82ad4ff5f07d619de",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2812,7 +2863,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-086 (236 files unchanged in count -- ticketing-internal.sql gained the
   // TKT:Edit/TKT:Override separation proof, and nine service-desk-admin fixtures across the
   // ticketing files now grant TKT:Override explicitly).
-  dbTestSetSha256: "1689689c82d2975899730849e307e47f106e93b5e3ef93674340564480738435",
+  // History: 1689689c82d2975899730849e307e47f106e93b5e3ef93674340564480738435
+  // (236 files, forty-eighth-pass state). Superseded 2026-08-31 (forty-ninth pass) by the
+  // task scheduler (237 files: +1, task-scheduler.sql -- the first NEW runner file in this
+  // freeze's history, every prior amendment having only widened existing ones).
+  dbTestSetSha256: "d7a3a3184533bf28d6e4584eeb23c2477de6ebcc032d3a0f5686dfb4641dc4b4",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

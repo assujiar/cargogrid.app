@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 76 — 5 High, 34 Medium, 37 Low |
+| `OPEN` | 77 — 5 High, 34 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
 | `RESOLVED` | 185 |
-| **Total records** | **267** |
+| **Total records** | **268** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -106,6 +106,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
 | `ISS-2026-310` | Medium | `OPEN` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
 | `ISS-2026-312` | Low | `OPEN` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
+| `ISS-2026-313` | Low | `OPEN` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -649,6 +650,16 @@ None of the four blocks HR staff from using the shipped capability (position/gra
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — no `pg_cron`/`cron.schedule` usage exists anywhere in the migration set (the 3 files matching `pg_cron` only disclose its absence elsewhere), no bulk/multi-employee reorganization wizard route exists (only single-employee position pages), and no E2E specs cover organization/position pages. Disposition unchanged, still `OPEN`.
 
+**Scheduler item `RESOLVED`, 2026-08-31 (`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql`); the entry's OTHER items are untouched and stay `OPEN`.**
+
+The automatic task scheduler now exists, and it is configurable rather than hard-coded, per the project owner's own direction: *"cargogrid itu full configurable oleh supreme admin sehingga proses bisnis, operasi dll bisa disesuaikan dr supreme admin ui sesuai dgn kebutuhan tenant dan bisa juga dikasih aksesnya ke admin tenant oleh supreme admin."* Supreme Admin owns a catalogue of schedulable tasks and a per-task delegation switch; a tenant's own admin tunes the frequency of the tasks delegated to them, from `/{tenantSlug}/admin/scheduler`.
+
+**The part that made this more than "turn on `pg_cron`", and the answer.** Every sweep in this repository takes `p_actor_auth_user_id` and most are `app.evaluate_permission`-gated, and a cron job has no identity. Minting a second top-privilege platform identity for the scheduler was put to the owner and rejected. Instead **a scheduled run executes as the real person who authorized the schedule**, whose authority is re-checked on every run: nothing is minted, nothing runs as "the system", and every audit row a sweep writes names somebody accountable. If that person's rights go away the run fails and is recorded as `unauthorized` rather than escalating or silently skipping; three consecutive authority failures auto-disable the schedule with the reason recorded, so a departed employee's stale schedule becomes a visible dead row instead of permanent nightly noise. Re-authorizing is a real act — somebody with current authority reconfigures it, which re-stamps the identity as theirs.
+
+**Not done, and said plainly rather than implied: nothing is scheduled on the live project yet.** `pg_cron` is available and still not installed. What exists is the mechanism, the catalogue, the authority model, the dispatcher and one `service_role` entry point (`app.run_due_scheduled_tasks`). Pointing a trigger at it — `pg_cron` inside Postgres, or an external scheduler calling the worker — is a one-line infrastructure decision for the operator, and until it is taken every existing manual path is unchanged.
+
+**Which of this entry's four items that closes: one.** `app.activate_due_employee_position_assignments` is now a catalogue task (`employee_position_activation`), so future-dated assignment activation genuinely runs on a timer once a trigger is attached. The bulk/multi-employee reorganization wizard, the staged-import position/grade crosswalk, and the browser/accessibility E2E remain `OPEN` and are unaffected — none of them is a scheduling problem.
+
 ### ISS-2026-067 — Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalone candidate directory (OPEN, Low)
 
 Discovered `2026-08-09` during `CG-S12-HRT-004` (Prompt 276, Recruitment, Job Portal and ATS), by this checkpoint's own Tier B taxonomy self-check (class C-20) before closing, mirroring `ISS-2026-064`/`ISS-2026-066`'s own disclosure discipline. The full domain/service layer for every item below is real, tested, and live — what is disclosed here is UI depth beyond it, not a broken or fabricated code path:
@@ -705,6 +716,16 @@ None of the five blocks HR, IT, Finance, Operations, or an employee/manager task
 **Handling:** Not fixed by this checkpoint (disclosed scope trim under time/size constraints for a single capability checkpoint, mirroring `ISS-2026-064`/`066`/`067`'s own identical disposition). **Status `OPEN`**, Low severity (integration/UI-depth gaps over an already-real, already-tested service layer; no security/data-integrity exposure) — owner: a later Phase 7 UI-hardening checkpoint (`HRT-293`/`294`/`295`, the phase's own dedicated hardening/verification slots) or a dedicated future notification/scheduler-infrastructure task for items 1-2 specifically.
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `20260730880000_create_hris_onboarding_offboarding.sql:112-116` still discloses PLT-127 notification-engine not wired, with no later migration calling `queue_notification` from onboarding/offboarding code; no UI caller exists for `previewOnboardingCaseStart`/`exportOnboardingCases`; no `'transfer'` case-type scenario exists in `scripts/db-tests/hris-onboarding-offboarding.sql`. Disposition unchanged, still `OPEN`.
+
+**Scheduler item `RESOLVED`, 2026-08-31 (`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql`); the entry's OTHER items are untouched and stay `OPEN`.**
+
+The automatic task scheduler now exists, and it is configurable rather than hard-coded, per the project owner's own direction: *"cargogrid itu full configurable oleh supreme admin sehingga proses bisnis, operasi dll bisa disesuaikan dr supreme admin ui sesuai dgn kebutuhan tenant dan bisa juga dikasih aksesnya ke admin tenant oleh supreme admin."* Supreme Admin owns a catalogue of schedulable tasks and a per-task delegation switch; a tenant's own admin tunes the frequency of the tasks delegated to them, from `/{tenantSlug}/admin/scheduler`.
+
+**The part that made this more than "turn on `pg_cron`", and the answer.** Every sweep in this repository takes `p_actor_auth_user_id` and most are `app.evaluate_permission`-gated, and a cron job has no identity. Minting a second top-privilege platform identity for the scheduler was put to the owner and rejected. Instead **a scheduled run executes as the real person who authorized the schedule**, whose authority is re-checked on every run: nothing is minted, nothing runs as "the system", and every audit row a sweep writes names somebody accountable. If that person's rights go away the run fails and is recorded as `unauthorized` rather than escalating or silently skipping; three consecutive authority failures auto-disable the schedule with the reason recorded, so a departed employee's stale schedule becomes a visible dead row instead of permanent nightly noise. Re-authorizing is a real act — somebody with current authority reconfigures it, which re-stamps the identity as theirs.
+
+**Not done, and said plainly rather than implied: nothing is scheduled on the live project yet.** `pg_cron` is available and still not installed. What exists is the mechanism, the catalogue, the authority model, the dispatcher and one `service_role` entry point (`app.run_due_scheduled_tasks`). Pointing a trigger at it — `pg_cron` inside Postgres, or an external scheduler calling the worker — is a one-line infrastructure decision for the operator, and until it is taken every existing manual path is unchanged.
+
+**Which of this entry's items that closes: none of them, and that is worth stating rather than glossing.** The generic scheduling machinery this entry's "no live job worker/overdue scheduler" item needs now exists — but there is **no onboarding-overdue sweep function to schedule**. `app.run_due_scheduled_tasks` can only run sweeps that exist, and no `app.*` function computes overdue onboarding tasks tenant-wide today. Writing one is real capability work, not a scheduling change. The notification-engine wiring and the missing UI callers are likewise untouched. **This entry stays `OPEN` in full**; the scheduler removes the *infrastructure* excuse for it, not the work.
 
 ### ISS-2026-071 — Onboarding and Offboarding (HRT-277): Finance/Operations/IT task-owner completion authority is uniformly `HRS:Edit`-gated, not task-owner-identity-gated (RESOLVED, was Medium)
 
@@ -1489,6 +1510,12 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-018` (Prompt 316, Loyalty Progr
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `app.evaluate_customer_loyalty_earning_for_paid_invoice` still has zero `app.jobs`/`job_type` wiring; no `pg_cron`/`cron.schedule` usage exists anywhere in the migration set (independently re-confirmed, matching Track B Batch 3's own identical finding). This repository has never built a live scheduler (the same standing, disclosed gap family as `ISS-2026-015`/`066`/`070`). Closing this needs a new job worker + enqueue call site + regression proof, capability-sized, not a same-signature migration. Disposition unchanged, still `OPEN`.
 
+
+**Scheduler item addressed, 2026-08-31 (`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql`); this entry stays `OPEN` for its other items.**
+
+A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
+
+**Which of this entry's items that covers: none.** This entry asks for `app.evaluate_customer_loyalty_earning_for_paid_invoice` to fire when an invoice is actually paid. That is an **event trigger**, not a schedule: the function takes a `p_ar_open_item_id`, one specific invoice. Putting it on a timer would mean inventing a "find invoices paid since last time" sweep, which is a different and worse design than calling it from the payment path where the event already happens. The right fix remains a Finance-side call at the point of payment. `OPEN`, unchanged.
 ### ISS-2026-127 — Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting, and `tier_definition_version_id` is structurally identical to `to_tier_id` in this checkpoint's own flattened design (Phase 8, Batch 4, `CG-S13-CPL-019`, OPEN, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-019` (Prompt 317, Membership Tier) — deliberate scope decisions made while authoring `supabase/migrations/20260801190000_create_customer_portal_loyalty_membership_tier.sql`, not defects found afterward.
@@ -1503,6 +1530,12 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-019` (Prompt 317, Membership Ti
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — item 1 (on-demand recalc) is the same job-scheduler gap as `ISS-2026-126`. Item 2 (no auto base tier): design decision 8 (`20260801190000_create_customer_portal_loyalty_membership_tier.sql:114-124`) still deliberately raises `no_eligible_tier_definition` rather than defaulting — no domain-obvious safe default exists (auto-assigning an arbitrary tier could misrepresent account status), confirming this is a fail-loud design choice, not a boundable bug; the entry's own recommended fix is itself "none required." Item 3 (`tier_definition_version_id` = `to_tier_id`) is still backed by a real `latm_version_id_matches_to_tier_check` CHECK constraint — a documented naming/extensibility choice, not a defect. Disposition unchanged, still `OPEN`.
 
+
+**Scheduler item addressed, 2026-08-31 (`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql`); this entry stays `OPEN` for its other items.**
+
+A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
+
+**Which of this entry's items that covers: none, and the reason is a real finding rather than an omission.** `app.recalculate_customer_loyalty_tier` takes a `p_loyalty_account_id` — it recalculates **one account**, not a tenant. A scheduler can only run sweeps that exist, and there is no tenant-wide tier-recalculation batch to put in the catalogue. Closing this item needs a new `app.*` batch function that walks the tenant's loyalty accounts, which is capability work with its own correctness and cost questions (how many accounts per pass, what happens to an account mid-redemption), not a scheduling change. The base-tier-default and `tier_definition_version_id` items are likewise untouched. `OPEN`.
 ### ISS-2026-128 — Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied parameter rather than a persisted per-program config; the FIFO consumption primitive has no customer-facing redemption trigger yet (Phase 8, Batch 4, `CG-S13-CPL-020`, OPEN — item 1 only, item 2 `RESOLVED` Track B Batch 4, item 3 `RESOLVED` 2026-08-20 at CPL-324, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-020` (Prompt 318, Points Ledger) — deliberate scope decisions made while authoring `supabase/migrations/20260801200000_create_customer_portal_loyalty_points_ledger.sql`, not defects found afterward.
@@ -1531,6 +1564,12 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-021` (Prompt 319, Cashback Disc
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — item 1 (no Finance liability-handoff) still open, independently re-confirmed via `ISS-2026-134` item 5's own cross-reference: needs a new handoff-batch table + generator + Finance acknowledgement RPC (ADR-0024 Part D shape), capability-sized. Item 2 (issuance/expiry on-demand only) is the same job-scheduler class as `ISS-2026-126`/`128`; `CPL-322`'s sweep composes only the expiry half (`app.expire_loyalty_benefit_entitlements`), issuance still has no batch wrapper, and `ISS-2026-133` item 3 confirms the sweep itself stays staff-triggered only. Item 3 (currency-amount-only voucher model, no `value_kind`/percentage column) remains a disclosed product-design simplification. Disposition unchanged, still `OPEN`.
 
+
+**Scheduler item addressed, 2026-08-31 (`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql`); this entry stays `OPEN` for its other items.**
+
+A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
+
+**Which of this entry's items that covers: the expiry half of item 2, only.** `app.expire_loyalty_benefit_entitlements` and `app.run_loyalty_expiry_sweep` are both catalogue tasks now, so voucher/entitlement **expiry** genuinely runs on a timer. **Issuance** is not a sweep — it is triggered by a real commercial event — and no tenant-wide issuance batch exists to schedule. The Finance liability-handoff mechanism (item 1) and the percentage-based voucher model (item 3) are untouched. `OPEN`.
 ### ISS-2026-130 — no Supreme-Admin-exception override mechanism (RPD-022) exists yet for any of the four Loyalty ledger tables (Phase 8, Batch 4 Tier C review, `CG-S13-CPL-018/019/020/021`, `RESOLVED` 2026-08-20 at CPL-325, was Medium)
 
 Discovered/disclosed `2026-08-17` at the Batch 4 (`CPL-315..319`) Tier C review, cross-prompt-integration lens: `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §4 names `point_ledger`/`cashback_ledger` inside the repository's `append_only_ledger` policy family, §8 (RPD-022) requires a distinct Supreme-Admin-exception RLS policy granting `UPDATE`/`DELETE` on every such table (the disclosed, never-tamper-proof audit trail is the accountability mechanism substituting for true immutability), and §13 calls that per-table policy a Phase-8 release-blocker gate. None of `app.loyalty_earning_events` (CPL-316), `app.loyalty_account_tier_movements` (CPL-317), `app.loyalty_point_ledger_entries` (CPL-318), or `app.loyalty_benefit_entitlement_events` (CPL-319) implements it — each grants, at most, `select`/`insert` to `service_role` only, with zero `UPDATE`/`DELETE` grant to any role, staff or Supreme Admin alike.
@@ -1581,6 +1620,12 @@ Discovered/disclosed `2026-08-18` at `CG-S13-CPL-023` (Prompt 321, Redemption Ap
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `grep -rn "insert into app.role_assignments"` still finds exactly one call site (`app.assign_role`, staff-only), confirming no system/automation identity exists for a customer session to hold `LYL:Edit`; no `notify`/`notification` reference exists anywhere in the redemption migration. Both gaps (a new per-tenant automation-identity capability; a notification/retry/DLQ mechanism) are genuinely new capabilities. Disposition unchanged, still `OPEN`.
 
+
+**Scheduler item addressed, 2026-08-31 (`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql`); this entry stays `OPEN` for its other items.**
+
+A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
+
+**Which of this entry's items that covers: none.** Its three items are a synchronous auto-approval rule, a `discount_voucher` value-sourcing decision, and a notification/retry/DLQ mechanism. None is a scheduling gap — the notification/DLQ item needs a delivery mechanism, and `app.jobs` already provides the retry machinery it would build on. `OPEN`, unchanged.
 ### ISS-2026-133 — Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level fraud hold not built; expiry sweep is on-demand/staff-triggered only (Phase 8, Batch 5, `CG-S13-CPL-024`, OPEN — items 2-3 only, item 1 `RESOLVED` Track B Batch 4, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-024` (Prompt 322, Expiry and Fraud Prevention, the third prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801240000_create_customer_portal_loyalty_expiry_fraud_prevention.sql`, not defects found afterward.
@@ -6363,6 +6408,26 @@ Pinning proves they **exist**. It does not prove they **fire**. Eleven of the 14
 **What closing it takes.** For each: build the wrongly-scoped file in that domain's own db-test fixture and assert the named error, exactly as `procurement-vendor-assessment.sql:797` already does for its own guard. Bounded and mechanical — three fixtures, three assertions — but it is genuine per-domain test authoring, not a sweep, and it was deliberately not rushed inside the `ISS-2026-170` closure that found it.
 
 **Owner:** whoever next touches contract evidence, dispute evidence, or document checklists.
+
+
+### ISS-2026-313 — four existing, already-working tenant-wide sweeps are absent from the scheduler catalogue, so the capability that could automate them does not reach them (found 2026-08-31 while building the task scheduler, `OPEN`, Low)
+
+**Severity: Low. Status: `OPEN`. Owner: the next pass that touches `app.scheduled_task_definitions`.**
+
+Registered by the same work that created the condition, rather than left for a later reader to find.
+
+`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql` seeded its catalogue with the eleven sweeps the backlog's own scheduling complaints named. Enumerating `pg_proc` afterwards — to check the dispatcher had missed nothing — turned up **four more** functions with exactly the right shape (tenant-wide, actor-taking, safe to run repeatedly) that were never in that list because no backlog entry happened to complain about them:
+
+    app.activate_due_employee_lifecycle_transitions(p_tenant_id, p_actor_auth_user_id, p_actor_label)
+    app.expire_kb_article_versions_batch(p_tenant_id, p_as_of, p_period_label, p_actor_auth_user_id, p_actor_label)
+    app.expire_vendor_compliance_waivers(p_tenant_id, p_actor_auth_user_id, p_actor_label, p_max_rows)
+    app.recalculate_tenant_vendor_compliance_status(p_tenant_id, p_actor_auth_user_id, p_actor_label, p_max_vendors)
+
+**Live effect, stated honestly: none today, because nothing is scheduled on the live project at all yet.** The consequence is narrower than it looks — these four remain exactly as automatable-by-hand as every sweep was before the scheduler existed. What is real is the shape of the gap: the catalogue was seeded from *what the backlog complained about* rather than from *what the schema actually offers*, so a working capability silently does not reach four of its own candidates. An expired vendor-compliance waiver that nobody sweeps is the most consequential of the four, since it means a vendor keeps a waiver it is no longer entitled to until somebody runs the function by hand.
+
+**Recommended fix**, small and well-understood: one additive migration inserting four `app.scheduled_task_definitions` rows and extending `app._run_scheduled_task_once`'s `CASE` with four branches, plus the matching assertions in `scripts/db-tests/task-scheduler.sql` (that file's own final block already walks every catalogue task and fails if any lacks a dispatch branch, so the guard is in place — only the rows and branches are missing). The two `p_max_*` parameters would become `required_params`, so a tenant sets its own batch ceiling at configuration time.
+
+**Not fixed in the same pass deliberately.** The scheduler migration was already applied live and verified; adding four dispatch branches to it would mean either editing an applied migration (forbidden) or a second migration written under time pressure at the end of a long batch. Registering it is the honest alternative to quietly extending scope.
 
 ## 5. Maintenance rules
 
