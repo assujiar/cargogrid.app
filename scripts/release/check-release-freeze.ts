@@ -2039,6 +2039,49 @@ import { readFileSync } from "node:fs";
  *
  * Re-verified via a fresh full local db-test run (393 migrations, 236 runner files,
  * ALL PASSED). 20260831030000 IS applied live.
+ *
+ * AMENDED 2026-08-31 (forty-fourth pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A.
+ *
+ * `ISS-2026-172(b)` (Medium) -- a direct RLS read of app.files writes nothing to
+ * app.file_access_logs, so "every file read is logged" was not true. One new
+ * migration (393 -> 394 files: +1,
+ * 20260831040000_create_logged_file_metadata_listing.sql).
+ *
+ * Three of that entry's own claims did not survive contact with the live schema:
+ * there is no TABLE-level grant (a 26-of-29 COLUMN grant), listFilesForTenant() has
+ * only test callers rather than being "real, live and exercised", and the path is
+ * not browser-reachable at all (no public.files, app not exposed to PostgREST).
+ *
+ * Its proposed fix -- "revoke direct table SELECT entirely" -- was the wrong half,
+ * and taking it would have made the product less safe. Unlike ISS-2026-189's grant,
+ * this one is not vestigial: it backs files_select_scoped, and 12 db-test assertions
+ * exercise that policy as `authenticated`. Revoking would make the policy dead code,
+ * since nothing else reads the table as authenticated and every RPC bypasses RLS by
+ * running as definer.
+ *
+ * What genuinely cannot be fixed is stated rather than engineered around:
+ * PostgreSQL has no SELECT trigger, so a plain select cannot write an audit row by
+ * any available mechanism. The schema now carries the narrower true claim -- every
+ * read THROUGH THE FILE API is logged -- instead of the false general one.
+ *
+ * Built instead: app.list_files_for_tenant composes app.authorize_file_access per
+ * row with metadata_view, so the listing is authority-checked and logged through the
+ * existing decision rather than a second divergent one. An unauthorized row is
+ * skipped, not raised -- aborting would be unusable and would disclose the row's
+ * existence through the error. server/queries/document.ts is rewired onto it in the
+ * same commit, and its client interface now speaks RPC, so a regression back to
+ * .from("files") fails to type-check as well as failing tests.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count): document-file.sql proves
+ * exactly one metadata_view log entry per returned row (count-checked, not merely
+ * "wrote something"), the skip behaviour, the non-member refusal, and -- guard the
+ * guard -- that the direct grant STILL exists and storage_path is STILL withheld, so
+ * a later "tidy up" that revokes it fails loudly instead of quietly killing
+ * files_select_scoped.
+ *
+ * Re-verified via a fresh full local db-test run (394 migrations, 236 runner files,
+ * ALL PASSED). 20260831040000 IS applied live.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -2266,7 +2309,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (392 files, forty-second-pass amendment above). Superseded 2026-08-31 (forty-third
   // pass) by ISS-2026-189 (393 files: +1,
   // 20260831030000_revoke_unused_employee_directory_column_grant.sql).
-  migrationSetSha256: "e07f4ff308432f3c5077ad3ed4e396a65011a0a9e0363f9f1becff03eb870232",
+  // History: e07f4ff308432f3c5077ad3ed4e396a65011a0a9e0363f9f1becff03eb870232
+  // (393 files, forty-third-pass amendment above). Superseded 2026-08-31 (forty-fourth
+  // pass) by ISS-2026-172(b) (394 files: +1,
+  // 20260831040000_create_logged_file_metadata_listing.sql).
+  migrationSetSha256: "29e80b0443bda98ddd95d0d61a49fc53fa34b156efdf37728503c1bdce50f4c8",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2502,7 +2549,10 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (236 files, forty-second-pass state). Superseded 2026-08-31 (forty-third pass) by
   // ISS-2026-189 (236 files unchanged in count -- hris-employee-master.sql gained the
   // column-set pinning guard).
-  dbTestSetSha256: "4250d75c426c64b364557b14a38a6ac8f85291c7866c8ac98aa9c8b361043e13",
+  // History: 4250d75c426c64b364557b14a38a6ac8f85291c7866c8ac98aa9c8b361043e13
+  // (236 files, forty-third-pass state). Superseded 2026-08-31 (forty-fourth pass) by
+  // ISS-2026-172(b) (236 files unchanged -- document-file.sql gained the logged-listing proof).
+  dbTestSetSha256: "2acefedb71b9e0d083959408545dfc2381baf340cdef0a0489b3d4f335202a5a",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

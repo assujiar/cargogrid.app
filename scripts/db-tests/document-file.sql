@@ -991,3 +991,66 @@ end;
 $$;
 
 \echo '>> PLT-128 (Document and File Engine) test suite passed'
+
+\echo '>> ISS-2026-172(b) closure: app.list_files_for_tenant is the LOGGED metadata-listing path -- every row it returns writes an app.file_access_logs entry, unauthorized rows are skipped rather than raising, and the direct RLS path stays intact because 12 assertions above depend on it.'
+do $$
+declare
+  v_tenant_id uuid;
+  v_logs_before integer;
+  v_logs_after integer;
+  v_returned integer;
+  v_raised boolean;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmedoc');
+
+  select count(*) into v_logs_before from app.file_access_logs where access_type = 'metadata_view';
+
+  -- PROPERTY 1 -- the uploader gets a listing, and it is logged. This is the whole point: a
+  -- direct `select ... from app.files` returns the same rows and writes nothing, and cannot be
+  -- made to, because PostgreSQL has no SELECT trigger.
+  select count(*) into v_returned
+  from app.list_files_for_tenant(v_tenant_id, '00000000-0000-0000-0000-000000002001', null);
+
+  select count(*) into v_logs_after from app.file_access_logs where access_type = 'metadata_view';
+  if v_logs_after <= v_logs_before then
+    raise exception 'assertion failed: app.list_files_for_tenant returned % row(s) but wrote no metadata_view access log -- the listing is not logged, which is the entire reason it exists', v_returned;
+  end if;
+  if v_logs_after - v_logs_before <> v_returned then
+    raise exception 'assertion failed: % rows returned but % access-log entries written -- the log must have exactly one entry per returned row', v_returned, v_logs_after - v_logs_before;
+  end if;
+
+  -- PROPERTY 2 -- an unauthorized row is SKIPPED, not fatal. A listing that aborted on the first
+  -- forbidden row would be unusable, and the error would itself disclose that the row exists.
+  -- The outsider is a real tenant member with no access to these files.
+  select count(*) into v_returned
+  from app.list_files_for_tenant(v_tenant_id, '00000000-0000-0000-0000-000000002003', null);
+  -- No exception is the assertion here; the count is allowed to be anything, including 0.
+
+  -- PROPERTY 3 -- a non-member is refused outright, before any row is considered.
+  v_raised := false;
+  begin
+    perform app.list_files_for_tenant(
+      (select id from app.tenants where slug <> 'acmedoc' limit 1),
+      '00000000-0000-0000-0000-000000002001', null);
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'document_listing_unauthorized' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: app.list_files_for_tenant listed a tenant the actor is not a member of';
+  end if;
+
+  -- PROPERTY 4 -- GUARD THE GUARD. The direct RLS path must STILL work. Revoking it would have
+  -- looked like the stronger fix while turning files_select_scoped into dead code -- every RPC
+  -- runs as definer and bypasses RLS, so nothing else exercises that policy at all.
+  if not has_column_privilege('authenticated', 'app.files', 'original_filename', 'SELECT') then
+    raise exception 'assertion failed: the direct column grant on app.files was revoked -- files_select_scoped is now dead code and the 12 RLS assertions above no longer test anything real';
+  end if;
+  if has_column_privilege('authenticated', 'app.files', 'storage_path', 'SELECT') then
+    raise exception 'assertion failed: storage_path became readable by authenticated -- ISS-2026-216 has regressed';
+  end if;
+
+  raise notice 'ISS-2026-172(b) closure: the listing RPC writes exactly one metadata_view log per returned row, skips unauthorized rows without raising, refuses a non-member outright, and leaves the RLS read path (and storage_path''s exclusion) intact';
+end;
+$$;

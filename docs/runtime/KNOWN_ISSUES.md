@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 85 — 6 High, 39 Medium, 40 Low |
+| `OPEN` | 84 — 6 High, 38 Medium, 40 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 5 — formally ruled, not pending work |
-| `RESOLVED` | 176 |
+| `RESOLVED` | 177 |
 | **Total records** | **266** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -82,7 +82,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-153` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 9's own ~9 new admin/reporting/automation/integration UI routes |
 | `ISS-2026-155` | Medium | `RESOLVED` | a genuine breach of two different `job`-mapped workload types (e.g. `analytics` + `reports`) for the same tenant within the dedup window collapses int |
 | `ISS-2026-160` | Medium | `OPEN` | the `e2e` CI job provides no environment, so every guarded route returns 500 and the portal-guard specs fail; the specs also encode a fail-safe intent |
-| `ISS-2026-172` | Medium | `OPEN` | `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold i |
+| `ISS-2026-172` | Medium | `RESOLVED` | `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold i |
 | `ISS-2026-179` | Medium | `RESOLVED` | roughly 24 further `SECURITY DEFINER` boolean-oracle / narrow-scope functions share `ISS-2026-164`'s shape, candidate-swept but not individually live- |
 | `ISS-2026-186` | Medium | `RESOLVED` | roughly 14 shared `SECURITY DEFINER` primitives from `HDN-BLK-014`'s original ~30-candidate sweep are genuinely shared across first-party and third-pa |
 | `ISS-2026-206` | Medium | `OPEN` | the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up th |
@@ -2227,7 +2227,7 @@ still holds unchanged.
 
 The `notifications_select_own` policy is `recipient_auth_user_id = auth.uid() or is_supreme_admin()` with no tenant-membership check, unlike every other table in the schema, which correctly fails closed post-revocation (live-verified: `report_runs`/`files`/`jobs`/`scheduled_reports` all correctly return 0 rows for a revoked identity; `notifications` still returns the row). The content was legitimately addressed to the identity while an active member; the gap is retention of access after revocation. **Owner: `HDN-373`** — add the same membership conjunct every other policy already carries.
 
-### ISS-2026-172 — `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold it (found at `CG-S15-HDN-004`, `OPEN`, Medium, owner `HDN-377`)
+### ISS-2026-172 — `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold it (found at `CG-S15-HDN-004`, `RESOLVED` 2026-08-31, Medium)
 
 `app.files` grants table-level (not column-level) `SELECT` to `authenticated`; a direct RLS read of an authorized row writes nothing to `app.file_access_logs` — only RPC-mediated reads are logged, so "every file read is logged" is not true today. The same direct read also discloses `storage_path` (the future Storage object key) past several RPC layers whose own contracts explicitly withhold it (`server/contracts/customer-epod/customer-epod.ts`, `vendor-compliance.ts`). In-tenant, record-scoped — not a cross-tenant read. **Owner: `HDN-377`** — narrow to a column-level grant excluding `storage_path`, or log direct reads too.
 
@@ -2257,6 +2257,24 @@ change. **Owner, named**: a dedicated future task pairing the RPC-layer change w
 half alone. **Compensating control**: `storage_path` itself is no longer exposed via this path
 (per (a) above) — the residual exposure is metadata-only (filenames, classification, lifecycle
 status), not the Storage object key an attacker would need to actually retrieve file content.
+
+**Part (b) `RESOLVED` 2026-08-31 (`supabase/migrations/20260831040000_create_logged_file_metadata_listing.sql`), with three of this entry's own factual claims corrected against the live schema.**
+
+| This entry says | Live |
+|---|---|
+| "`app.files` grants **table-level** SELECT to authenticated" | **False.** `has_table_privilege` is `false`; what exists is a **26-of-29 column** grant. The distinction matters: a table-level grant would automatically cover any column added later, a column grant does not. |
+| the raw read path is "real, live and exercised" via `listFilesForTenant()` | `listFilesForTenant()` has **only test callers** — no production caller anywhere. |
+| implied browser reachability | **None.** There is no `public.files` (verified: 0 such objects) and `app` is not exposed to PostgREST — the reason this repository carries `public.*` wrappers. A direct RLS read needs a direct Postgres connection, which no end user holds. |
+
+**This entry's own proposed fix — "revoke direct table SELECT entirely" — is the wrong half, and doing it would have made the product less safe.** Unlike `ISS-2026-189`'s grant, this one is *not* vestigial: it backs the `files_select_scoped` RLS policy, and **12 db-test assertions exercise that policy directly as `authenticated`** — uploader sees own row, shared-org-unit teammate sees it, outsider does not, cross-tenant does not, a `customer_user`-layer principal sees zero. Revoking would not merely break those tests; it would make the policy **dead code**, because nothing else reads the table as `authenticated` and every RPC runs as definer and bypasses RLS by construction. Trading away a working tenant-isolation control to close a logging gap is a bad exchange.
+
+**What genuinely cannot be fixed, stated rather than engineered around.** PostgreSQL has **no SELECT trigger**. A plain `select … from app.files` cannot be made to write an audit row by any mechanism available here. So "every file read is logged" cannot be made true while the direct path exists — and the direct path should exist, per the paragraph above. The accurate claim, now carried by the schema's own `comment on table`, is narrower: **every read *through the file API* is logged**; the direct path is row-scoped by RLS, withholds `storage_path`, and is unreachable from a browser.
+
+**What was built.** `app.list_files_for_tenant` composes `app.authorize_file_access` **per row** with `access_type='metadata_view'` — the existing, already-tested authority decision *and* the thing that writes `app.file_access_logs` — so the listing is authority-checked and logged without a second, divergent notion of who may see a file. An unauthorized row is **skipped, not raised**: a listing that aborted on the first forbidden row would be unusable, and the error would itself disclose that the row exists.
+
+`server/queries/document.ts` — the one function in the codebase that would have done a raw read — is rewired onto it in the same commit, and its client interface now speaks RPC, so a regression back to `.from("files")` fails to type-check as well as failing the tests.
+
+**Four properties proven in `scripts/db-tests/document-file.sql`:** (1) the listing writes **exactly one** `metadata_view` log entry per returned row — count-checked, not merely "wrote something"; (2) an unauthorized row is skipped without raising; (3) a non-member is refused outright before any row is considered; (4) **guard-the-guard** — the direct column grant must *still* exist and `storage_path` must *still* be withheld, so a future pass that "tidies up" by revoking the grant fails loudly instead of quietly killing `files_select_scoped`.
 
 ### ISS-2026-173 — `app.saved_report_views` own-row policy has no tenant-membership conjunct (found at `CG-S15-HDN-004`, `RESOLVED` at `HDN-373` via `20260810500000_harden_own_row_rls_membership_gap.sql`, Low, owner `HDN-373`)
 

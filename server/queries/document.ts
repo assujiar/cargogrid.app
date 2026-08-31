@@ -1,23 +1,30 @@
 /**
- * Document and file engine read queries (PLT-128, CG-S6-PLT-025). Both reads here are
- * direct-table, RLS-governed `authenticated` grants (mirrors server/queries/field-access.ts's
- * `listUserDirectory` shape) -- app.files/app.document_types have no bespoke read RPC
- * (supabase/migrations/20260719140000_create_document_file_engine.sql's own header: this
- * capability is server-mediated for writes only, reads rely on RLS composing
- * app.can_access_record() directly). Record-type/record_id-scoped filtering beyond
- * tenant_id is left to the caller (or a future capability) -- no business-domain table
- * with a real record_type exists yet in this repository, the same disclosed scope
- * boundary every prior "no live consumer yet" capability this session recorded.
+ * Document and file engine read queries (PLT-128, CG-S6-PLT-025).
+ *
+ * ISS-2026-172(b), 2026-08-31: `listFilesForTenant` no longer reads app.files directly. It
+ * now calls the `list_files_for_tenant` RPC (20260831040000), which composes
+ * app.authorize_file_access per row with access_type='metadata_view' -- so every row it
+ * returns leaves an app.file_access_logs entry. The direct RLS read it used to do could not
+ * be logged by any means: PostgreSQL has no SELECT trigger.
+ *
+ * The direct column grant on app.files is deliberately NOT revoked. It backs the
+ * files_select_scoped RLS policy that 12 db-test assertions exercise (uploader sees own row,
+ * shared teammate sees it, outsider and cross-tenant do not, customer_user sees zero), and
+ * revoking it would turn a working tenant-isolation control into dead code, since every RPC
+ * runs as definer and bypasses RLS anyway. This module simply stops being the thing that
+ * uses it.
+ *
+ * listDocumentTypes below is unchanged and stays a direct read: app.document_types is a
+ * deliberately broadly-readable registry (app.document_types_select_all), not tenant data.
  */
 
 import { parseFileSummary, parseDocumentType, type FileSummary, type DocumentType } from "../contracts/document/document.ts";
 
 export interface FileLookupClient {
-  from(table: "files"): {
-    select(columns: string): {
-      eq(column: string, value: string): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-    };
-  };
+  rpc(
+    fn: "list_files_for_tenant",
+    args: Record<string, unknown>,
+  ): Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
 export class FileLookupError extends Error {
@@ -28,25 +35,38 @@ export class FileLookupError extends Error {
 }
 
 /**
- * Every file row the caller's RLS grants them visibility into for this tenant (own
- * uploads, shared/record-scoped access, non-restricted classification, non-deleted
- * -- see the migration's own files_select_scoped policy for the exact composed
- * rule). Returns FileSummary, never File -- app.files no longer grants
- * `authenticated` column-level SELECT on storage_path at all (HDN-377, Storage and
- * Signed URL Audit), so this explicit column list omits it too.
+ * Every file in this tenant the actor is authorized to see, as metadata.
+ *
+ * Goes through the `list_files_for_tenant` RPC rather than reading app.files, so each row
+ * returned is both authority-checked and access-logged by app.authorize_file_access. A row
+ * the actor may not see is skipped by the RPC rather than raising, so an unauthorized row
+ * neither breaks the listing nor discloses its own existence through an error.
+ *
+ * Returns FileSummary, never File: storage_path is not in the RPC's authorized projection,
+ * and `authenticated` holds no column grant on it either (ISS-2026-216).
+ *
+ * `actorAuthUserId` must be the calling session's own identity -- the RPC asserts it, so
+ * passing another user's id is refused rather than silently honoured.
  */
-export async function listFilesForTenant(client: FileLookupClient, tenantId: string): Promise<FileSummary[]> {
-  const { data, error } = await client
-    .from("files")
-    .select(
-      "id, tenant_id, document_type_code, config_version_id, record_type, record_id, classification, original_filename, mime_type, size_bytes, malware_scan_status, malware_scan_completed_at, malware_scan_provider_ref, version_group_id, version_number, is_latest_version, lifecycle_status, legal_hold, legal_hold_reason, deleted_at, uploaded_by_auth_user_id, shared_org_unit_ids, customer_account_ref, idempotency_key, created_at, updated_at",
-    )
-    .eq("tenant_id", tenantId);
+export async function listFilesForTenant(
+  client: FileLookupClient,
+  tenantId: string,
+  actorAuthUserId: string,
+  correlationId: string | null = null,
+): Promise<FileSummary[]> {
+  const { data, error } = await client.rpc("list_files_for_tenant", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_correlation_id: correlationId,
+  });
 
   if (error) {
     throw new FileLookupError(error.message);
   }
-  return (data ?? []).map((row) => parseFileSummary(row as Record<string, unknown>));
+  if (data !== null && data !== undefined && !Array.isArray(data)) {
+    throw new FileLookupError("list_files_for_tenant returned a non-array result");
+  }
+  return ((data as unknown[] | null) ?? []).map((row) => parseFileSummary(row as Record<string, unknown>));
 }
 
 export interface DocumentTypeLookupClient {

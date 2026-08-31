@@ -9,25 +9,18 @@ const RECORD_ID = "623e4567-e89b-12d3-a456-426614174000";
 const VERSION_GROUP_ID = "723e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "823e4567-e89b-12d3-a456-426614174000";
 
-function fakeFileClient(response: { data: unknown[] | null; error: { message: string } | null }): FileLookupClient {
+// ISS-2026-172(b): the client now speaks RPC, not raw table reads. The helper asserts the
+// exact call shape, so a regression that reverts to `.from("files")` fails to type-check
+// AND fails here, rather than silently going back to an unlogged read path.
+function fakeFileClient(
+  response: { data: unknown; error: { message: string } | null },
+  onArgs?: (args: Record<string, unknown>) => void,
+): FileLookupClient {
   return {
-    from(table) {
-      assert.equal(table, "files");
-      return {
-        select(columns) {
-          assert.equal(
-            columns,
-            "id, tenant_id, document_type_code, config_version_id, record_type, record_id, classification, original_filename, mime_type, size_bytes, malware_scan_status, malware_scan_completed_at, malware_scan_provider_ref, version_group_id, version_number, is_latest_version, lifecycle_status, legal_hold, legal_hold_reason, deleted_at, uploaded_by_auth_user_id, shared_org_unit_ids, customer_account_ref, idempotency_key, created_at, updated_at",
-          );
-          return {
-            async eq(column, value) {
-              assert.equal(column, "tenant_id");
-              assert.equal(value, TENANT_ID);
-              return response;
-            },
-          };
-        },
-      };
+    async rpc(fn, args) {
+      assert.equal(fn, "list_files_for_tenant");
+      onArgs?.(args);
+      return response;
     },
   };
 }
@@ -82,7 +75,7 @@ describe("listFilesForTenant", () => {
       ],
       error: null,
     });
-    const files = await listFilesForTenant(client, TENANT_ID);
+    const files = await listFilesForTenant(client, TENANT_ID, ACTOR_ID);
     assert.equal(files.length, 1);
     assert.equal(files[0]?.malwareScanStatus, "clean");
     // HDN-377 (Storage and Signed URL Audit) regression: storagePath must never appear
@@ -90,14 +83,46 @@ describe("listFilesForTenant", () => {
     assert.equal("storagePath" in (files[0] ?? {}), false);
   });
 
+  test("passes the tenant, the actor and the correlation id through to the logged RPC", () => {
+    // ISS-2026-172(b): the actor argument is what makes the read attributable in
+    // app.file_access_logs. Dropping it would still compile and still return rows, and the
+    // log would silently lose its subject -- so the call shape is asserted explicitly.
+    let seen: Record<string, unknown> | null = null;
+    const client = fakeFileClient({ data: [], error: null }, (args) => {
+      seen = args;
+    });
+    return listFilesForTenant(client, TENANT_ID, ACTOR_ID, RECORD_ID).then(() => {
+      assert.deepEqual(seen, {
+        p_tenant_id: TENANT_ID,
+        p_actor_auth_user_id: ACTOR_ID,
+        p_correlation_id: RECORD_ID,
+      });
+    });
+  });
+
+  test("defaults the correlation id to null rather than omitting it", () => {
+    let seen: Record<string, unknown> | null = null;
+    const client = fakeFileClient({ data: [], error: null }, (args) => {
+      seen = args;
+    });
+    return listFilesForTenant(client, TENANT_ID, ACTOR_ID).then(() => {
+      assert.equal((seen as unknown as Record<string, unknown>).p_correlation_id, null);
+    });
+  });
+
+  test("rejects a non-array RPC result rather than coercing it", async () => {
+    const client = fakeFileClient({ data: { not: "an array" }, error: null });
+    await assert.rejects(() => listFilesForTenant(client, TENANT_ID, ACTOR_ID), FileLookupError);
+  });
+
   test("wraps a database error into a typed error", async () => {
     const client = fakeFileClient({ data: null, error: { message: "connection reset" } });
-    await assert.rejects(() => listFilesForTenant(client, TENANT_ID), FileLookupError);
+    await assert.rejects(() => listFilesForTenant(client, TENANT_ID, ACTOR_ID), FileLookupError);
   });
 
   test("returns an empty array rather than throwing when there is nothing to see", async () => {
     const client = fakeFileClient({ data: [], error: null });
-    const files = await listFilesForTenant(client, TENANT_ID);
+    const files = await listFilesForTenant(client, TENANT_ID, ACTOR_ID);
     assert.deepEqual(files, []);
   });
 });
