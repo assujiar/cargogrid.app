@@ -25,6 +25,6 @@ export async function GET(request: Request): Promise<Response> {
       versions: versions.map((v) => ({ code: v.code, status: v.status, sunsetAt: v.sunsetAt, notes: v.notes })),
       rateLimit: { limitPerMinute: authorized.request.rateLimitPerMinute, remaining: authorized.request.rateLimitRemaining },
     },
-    { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) },
+    { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) },
   );
 }

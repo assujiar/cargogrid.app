@@ -92,6 +92,31 @@ export function parseAuthenticateAndAuthorizeApiRequestResult(row: Record<string
   });
 }
 
+/**
+ * ISS-2026-207: the request-time decision `app.api_versions` now drives.
+ *
+ *   ok         — serve normally.
+ *   deprecated — serve, and emit RFC 8594 `Deprecation`/`Sunset` headers.
+ *   gone       — refuse with 410; the version is past its announced sunset, or unknown.
+ */
+export const ApiVersionDecisionSchema = z.enum(["ok", "deprecated", "gone"]);
+export type ApiVersionDecision = z.infer<typeof ApiVersionDecisionSchema>;
+
+export const ApiVersionRequestStateSchema = z.object({
+  decision: ApiVersionDecisionSchema,
+  status: z.string(),
+  sunsetAt: z.string().nullable(),
+});
+export type ApiVersionRequestState = z.infer<typeof ApiVersionRequestStateSchema>;
+
+export function parseApiVersionRequestState(row: Record<string, unknown>): ApiVersionRequestState {
+  return ApiVersionRequestStateSchema.parse({
+    decision: row.decision,
+    status: row.status,
+    sunsetAt: row.sunset_at ?? null,
+  });
+}
+
 export const ListApiLogsForTenantInputSchema = z.object({
   tenantId: z.string().uuid(),
   actorAuthUserId: z.string().uuid(),

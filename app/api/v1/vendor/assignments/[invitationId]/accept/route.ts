@@ -69,5 +69,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ inv
 
   await recordApiV1Success(authorized.request, { operation: "accept_vendor_assignment_invitation_via_vendor_api", httpMethod: "POST", path: `/api/v1/vendor/assignments/${invitationId}/accept`, statusCode, startedAt });
 
-  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) });
+  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) });
 }

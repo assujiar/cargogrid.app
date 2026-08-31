@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 76 — 4 High, 34 Medium, 38 Low |
+| `OPEN` | 75 — 4 High, 33 Medium, 38 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 6 — formally ruled, not pending work |
-| `RESOLVED` | 187 |
+| `RESOLVED` | 188 |
 | **Total records** | **269** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -86,7 +86,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-179` | Medium | `RESOLVED` | roughly 24 further `SECURITY DEFINER` boolean-oracle / narrow-scope functions share `ISS-2026-164`'s shape, candidate-swept but not individually live- |
 | `ISS-2026-186` | Medium | `RESOLVED` | roughly 14 shared `SECURITY DEFINER` primitives from `HDN-BLK-014`'s original ~30-candidate sweep are genuinely shared across first-party and third-pa |
 | `ISS-2026-206` | Medium | `OPEN` | the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up th |
-| `ISS-2026-207` | Medium | `OPEN` | `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests |
+| `ISS-2026-207` | Medium | `RESOLVED` | `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests |
 | `ISS-2026-231` | Medium | `OPEN` | a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered befo |
 | `ISS-2026-234` | Medium | `OPEN` | `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR,  |
 | `ISS-2026-238` | Medium | `OPEN` | 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity si |
@@ -3186,7 +3186,7 @@ new trigger functions, no existing function body touched); no `public.*` wrapper
 stays `OPEN`, Medium** — 2 of 4 tables remain genuinely unfixed for the reasons already on
 record. Owner unchanged (`HDN-387`), scope narrowed to the 2 finance tables named above.
 
-### ISS-2026-207 — `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests (found at `CG-S15-HDN-008`, `OPEN`, Medium, owner `HDN-387`)
+### ISS-2026-207 — `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests (found at `CG-S15-HDN-008`, `RESOLVED` 2026-08-31, was Medium)
 
 Found by this checkpoint's own public/customer/vendor API lens, live-forced. `app.api_
 versions` is a real, audited, Supreme-only-mutable state machine (seeded `v1 active`),
@@ -3227,6 +3227,22 @@ version that has ever existed) on a guess. **Not fixed by this batch** — same 
 as the original disposition, re-confirmed rather than assumed. Owner and scope unchanged
 (`HDN-387`).
 
+
+**`RESOLVED`, 2026-08-31 (`supabase/migrations/20260831110000_give_api_version_registry_live_effect.sql`), under ADR-0027 Part A.**
+
+**Where the decision went, and why not into the gateway RPC.** The obvious fix is a version argument on `app.authenticate_and_authorize_api_request`. It was rejected because version state is not an authentication fact: RFC 8594 says a *deprecated* endpoint still answers normally and carries `Deprecation`/`Sunset` headers, so folding it into the auth outcome would force a choice between denying a request that should succeed and returning `ok` while losing the signal. The registry needs to say three things — serve, serve with a warning, refuse — and an auth result has room for two. `app.evaluate_api_version_request` returns that three-way decision, and the route layer (where the header is emitted anyway) acts on it.
+
+**The judgement call, stated because it is a real one.** A version marked `sunset` with a **future** `sunset_at` is still served. `app.set_api_version_status` requires a real date precisely so clients can be warned *before* the date; refusing the moment the status flips would turn the announcement into the outage it exists to prevent. It becomes `410 Gone` when the date arrives, when the date is null, or when the code is unknown — an unknown version is refused rather than silently served v1's behaviour under another name.
+
+**A choice I got wrong in the first draft and corrected before it shipped.** `evaluateApiVersionRequest` originally failed **closed**, returning `gone` when the registry could not be read. That is the wrong direction here: `410` means *permanently* gone, so emitting it because a `SELECT` blipped would tell every integrator the endpoint had been withdrawn, and well-behaved clients would stop calling — a transient database error becoming a sticky, self-inflicted outage across every integration at once. It now fails **open**, which costs nothing real: the very next step reads the same database and will fail honestly on its own. A genuinely unknown code is a separate case and is still refused, because the SQL returns a real `gone` row for it rather than an error.
+
+**The gate runs before authentication**, deliberately: whether a caller's key is valid is irrelevant to an endpoint that no longer exists, and answering 410 only to holders of good keys would leave everyone else guessing. Version state is a published contract fact, not a secret.
+
+**A second draft defect the suite caught.** The function was first granted to `authenticated` as well as `service_role`, and `scripts/db-tests/rbac-enforcement.sql`'s `ISS-2026-033` sweep failed it — a `SECURITY DEFINER` function reachable by `authenticated` with no authority check anywhere in its call graph. The gate offers two exits (add a check, or justify it on the reviewed list); a third was better than either, since the only caller is the gateway running as `service_role`. The narrower grant removes the question instead of answering it, and the db-test now pins `authenticated` at zero as well as `anon`.
+
+**Also fixed, and worth naming because it would have made the new tests lie:** the route-test harness 404s an unregistered RPC, and the new query fails open, so all nine existing route tests would have passed while silently exercising the failure path instead of the registry. `tests/api/v1/support/rpc-fetch-stub.ts` now defaults `evaluate_api_version_request` to an active `v1`, so they keep testing what they were written to test.
+
+Evidence: `scripts/db-tests/public-api-platform.sql` proves all five registry states drive the right decision and that the fixture never disturbs `v1`; `tests/api/v1/api-version-gate.test.ts` proves the 410 at the route with its log row, that a gone version never reaches the auth RPC, that a deprecated version is served **200** with `Deprecation: true` and a real HTTP-date `Sunset`, and that an unreadable registry serves rather than claiming permanence; `lib/api-gateway/api-version-headers.test.ts` covers header shaping including an unparseable stored date. Full `db:test` `ALL PASSED` (400 migrations, 237 runner files); applied live and verified (`v1` → `ok`, unknown → `gone`, zero over-grants).
 ### ISS-2026-208 — `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every sibling Vendor API mutation (found at `CG-S15-HDN-008`, `OPEN`, Low, owner `HDN-387`)
 
 Found by this checkpoint's own schema/migration-compatibility lens, live-forced. Every

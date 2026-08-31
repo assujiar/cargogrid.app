@@ -130,6 +130,85 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-207: the version registry now has LIVE request-time effect. active serves, deprecated serves WITH a signal, sunset-with-a-future-date still serves (the announcement is not the outage), sunset-in-the-past is gone, and an unknown code is gone rather than silently served'
+do $$
+declare
+  v_supreme uuid := '00000000-0000-0000-0000-000011000001';
+  v_decision text;
+  v_status text;
+  v_sunset timestamptz;
+begin
+  -- active
+  select decision, status into v_decision, v_status from app.evaluate_api_version_request('v1');
+  if v_decision <> 'ok' or v_status <> 'active' then
+    raise exception 'assertion failed: an active version must decide ok, got %/%', v_decision, v_status;
+  end if;
+
+  -- unknown code: gone, never ok. A caller asking for a version this platform has never heard
+  -- of must be told no, not silently served v1's behaviour under another name.
+  select decision, status into v_decision, v_status from app.evaluate_api_version_request('v99');
+  if v_decision <> 'gone' or v_status <> 'unknown' then
+    raise exception 'assertion failed: an unknown version code must decide gone, got %/%', v_decision, v_status;
+  end if;
+
+  -- deprecated: still served, but signalled.
+  perform app.register_api_version('vdep', 'active', null, 'ISS-2026-207 fixture', v_supreme, 'tester');
+  perform app.set_api_version_status('vdep', 'deprecated', null, v_supreme, 'tester');
+  select decision into v_decision from app.evaluate_api_version_request('vdep');
+  if v_decision <> 'deprecated' then
+    raise exception 'assertion failed: a deprecated version must still be served with a signal, got %', v_decision;
+  end if;
+
+  -- sunset with a FUTURE date: still served. This is the judgement call the migration records --
+  -- app.set_api_version_status requires a real sunset_at precisely so clients can be warned
+  -- BEFORE the date; refusing at the moment the status flips would turn the warning into the
+  -- outage it exists to prevent.
+  perform app.set_api_version_status('vdep', 'sunset', now() + interval '30 days', v_supreme, 'tester');
+  select decision, sunset_at into v_decision, v_sunset from app.evaluate_api_version_request('vdep');
+  if v_decision <> 'deprecated' then
+    raise exception 'assertion failed: sunset with a FUTURE date must still serve (announcement, not removal), got %', v_decision;
+  end if;
+  if v_sunset is null then
+    raise exception 'assertion failed: the sunset date must be returned so the gateway can emit a real Sunset header';
+  end if;
+
+  -- sunset with a PAST date: gone.
+  perform app.set_api_version_status('vdep', 'sunset', now() - interval '1 day', v_supreme, 'tester');
+  select decision into v_decision from app.evaluate_api_version_request('vdep');
+  if v_decision <> 'gone' then
+    raise exception 'assertion failed: sunset with a PAST date must be gone, got %', v_decision;
+  end if;
+
+  -- v1 itself is untouched by the fixture above -- the suite's other assertions depend on it.
+  select decision into v_decision from app.evaluate_api_version_request('v1');
+  if v_decision <> 'ok' then
+    raise exception 'assertion failed: the fixture must not have disturbed v1, got %', v_decision;
+  end if;
+
+  raise notice 'PASS: ISS-2026-207 -- the registry drives a real request-time decision across all five states';
+end;
+$$;
+
+\echo '>> ISS-2026-207 defence in depth: anon holds zero EXECUTE on the version evaluator, on either schema'
+do $$
+begin
+  if has_function_privilege('anon', 'app.evaluate_api_version_request(text)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.evaluate_api_version_request(text)', 'EXECUTE') then
+    raise exception 'assertion failed: anon must hold zero EXECUTE on the version evaluator (ERR-2026-004 regression guard)';
+  end if;
+  -- Narrower than anon-only: `authenticated` holds nothing either. The only caller is the
+  -- /api/v1 gateway, which runs as service_role, so granting authenticated would be reach
+  -- nobody needs -- and rbac-enforcement.sql's ISS-2026-033 sweep failed the first draft for
+  -- exactly that (a SECURITY DEFINER function reachable by authenticated with no authority
+  -- check in its call graph). Pinned here so a future grant has to justify itself.
+  if has_function_privilege('authenticated', 'app.evaluate_api_version_request(text)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.evaluate_api_version_request(text)', 'EXECUTE') then
+    raise exception 'assertion failed: the version evaluator is service_role-only -- authenticated must hold no EXECUTE';
+  end if;
+  raise notice 'PASS: the version evaluator is service_role-only on both schemas -- anon and authenticated hold nothing';
+end;
+$$;
+
 \echo '>> setup: a real API key for the rate-limit and gateway tests below (INTHUB:View scope, rate_limit_per_minute=3)'
 do $$
 declare

@@ -25,6 +25,6 @@ export async function GET(request: Request): Promise<Response> {
 
   return Response.json(
     { eventTypes: eventTypes.map((e) => ({ code: e.code, name: e.name, ownerPrimitiveCode: e.ownerPrimitiveCode })) },
-    { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) },
+    { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) },
   );
 }

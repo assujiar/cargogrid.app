@@ -16,10 +16,30 @@
 import { randomUUID } from "node:crypto";
 import { createSupabaseServiceRoleClient } from "../supabase/service-role.ts";
 import { authenticateAndAuthorizeApiRequest, type PublicApiPlatformMutationRpcClient } from "../../server/mutations/public-api-platform.ts";
-import type { PublicApiPlatformQueryRpcClient } from "../../server/queries/public-api-platform.ts";
+import { evaluateApiVersionRequest, type PublicApiPlatformQueryRpcClient } from "../../server/queries/public-api-platform.ts";
 import { recordApiRequest, type ApiLogMutationRpcClient } from "../../server/mutations/api-log.ts";
 import { buildApiError, API_VERSION, type ApiError } from "../../server/contracts/api/api.ts";
-import type { ApiGatewayOutcome } from "../../server/contracts/public-api-platform/public-api-platform.ts";
+import type { ApiGatewayOutcome, ApiVersionRequestState } from "../../server/contracts/public-api-platform/public-api-platform.ts";
+
+/**
+ * ISS-2026-207: RFC 8594 deprecation signalling.
+ *
+ * `Deprecation: true` says the version is deprecated now; `Sunset: <HTTP-date>` says when it
+ * stops answering. Both are advisory headers on an otherwise normal response, which is precisely
+ * why the registry decision could not be folded into the auth outcome — a deprecated request
+ * still succeeds, and the signal has to ride along with the success.
+ */
+export function apiVersionHeaders(state: ApiVersionRequestState): Record<string, string> {
+  if (state.decision !== "deprecated") return {};
+  const headers: Record<string, string> = { deprecation: "true" };
+  if (state.sunsetAt) {
+    const parsed = new Date(state.sunsetAt);
+    // An unparseable stored date must not produce `Sunset: Invalid Date`. Better to send the
+    // deprecation signal alone than a header a client cannot act on.
+    if (!Number.isNaN(parsed.getTime())) headers.sunset = parsed.toUTCString();
+  }
+  return headers;
+}
 
 const HTTP_STATUS_BY_DENIAL_OUTCOME: Record<Exclude<ApiGatewayOutcome, "ok">, number> = {
   unauthenticated: 401,
@@ -44,6 +64,8 @@ export interface AuthorizedApiV1Request {
   readonly rateLimitRemaining: number | null;
   /** IAE-011: only non-null for a vendor-scoped key -- a DATA-scope binding to one app.vendor_profiles row, never an actor identity (no vendor auth.users identity exists anywhere in this repository). */
   readonly vendorMasterRecordId: string | null;
+  /** ISS-2026-207: RFC 8594 headers this request's own version state requires, empty when active. */
+  readonly versionHeaders: Record<string, string>;
 }
 
 export type ApiV1AuthorizeResult = { readonly ok: true; readonly request: AuthorizedApiV1Request } | { readonly ok: false; readonly response: Response };
@@ -83,6 +105,29 @@ export async function authorizeApiV1Request(request: Request, operation: string,
     return { ok: false, response: apiErrorResponse(401, "unauthenticated", "A Bearer API key is required.", correlationId) };
   }
 
+  // ISS-2026-207: the version gate runs BEFORE authentication, deliberately. Whether a caller's
+  // key is valid is irrelevant to an endpoint that no longer exists, and answering "410 Gone"
+  // only to holders of good keys would leave everyone else guessing. Version state is a published
+  // contract fact, not a secret.
+  const versionState = await evaluateApiVersionRequest(rpcClient, API_VERSION);
+
+  if (versionState.decision === "gone") {
+    await recordApiRequest(rpcClient, {
+      correlationId, tenantId: null, actorAuthUserId: null, actorType: "anon", apiKeyId: null,
+      interface: "rest", operation, httpMethod, path: url.pathname, statusCode: 410, result: "failure",
+      errorCode: "api_version_gone", durationMs: Date.now() - startedAt,
+    });
+    return {
+      ok: false,
+      response: apiErrorResponse(
+        410,
+        "api_version_gone",
+        `API version ${API_VERSION} has reached its sunset date and no longer accepts requests.`,
+        correlationId,
+      ),
+    };
+  }
+
   const authResult = await authenticateAndAuthorizeApiRequest(rpcClient, { rawKey, requiredScope });
 
   if (authResult.outcome !== "ok") {
@@ -117,6 +162,7 @@ export async function authorizeApiV1Request(request: Request, operation: string,
       rateLimitPerMinute: authResult.rateLimitPerMinute,
       rateLimitRemaining: authResult.rateLimitRemaining,
       vendorMasterRecordId: authResult.vendorMasterRecordId,
+      versionHeaders: apiVersionHeaders(versionState),
     },
   };
 }
@@ -143,6 +189,18 @@ export async function recordApiV1Success(
   });
 }
 
-export function apiV1ResponseHeaders(correlationId: string): Record<string, string> {
-  return { "x-cargogrid-request-id": correlationId, "x-cargogrid-api-version": API_VERSION };
+/**
+ * Accepts the authorized request rather than only its correlation id, so a deprecated version's
+ * RFC 8594 headers ride on every success response as well as on errors. The correlation-id
+ * overload is kept because the denial paths above have no authorized request to pass.
+ */
+export function apiV1ResponseHeaders(source: string | AuthorizedApiV1Request): Record<string, string> {
+  if (typeof source === "string") {
+    return { "x-cargogrid-request-id": source, "x-cargogrid-api-version": API_VERSION };
+  }
+  return {
+    "x-cargogrid-request-id": source.correlationId,
+    "x-cargogrid-api-version": API_VERSION,
+    ...source.versionHeaders,
+  };
 }

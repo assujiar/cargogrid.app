@@ -44,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
     await recordApiV1Success(authorized.request, { operation: "create_customer_booking_request_draft", httpMethod: "POST", path: "/api/v1/customer/bookings", statusCode, startedAt });
     return Response.json(
       { error: buildApiError({ code: "missing_idempotency_key", message: "An Idempotency-Key header is required for this mutation.", requestId: authorized.request.correlationId }) },
-      { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) },
+      { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) },
     );
   }
 
@@ -83,5 +83,5 @@ export async function POST(request: Request): Promise<Response> {
 
   await recordApiV1Success(authorized.request, { operation: "create_customer_booking_request_draft", httpMethod: "POST", path: "/api/v1/customer/bookings", statusCode, idempotencyKey: idempotencyKeyResult.data, startedAt });
 
-  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) });
+  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) });
 }

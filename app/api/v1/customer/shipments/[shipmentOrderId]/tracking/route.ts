@@ -42,5 +42,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ ship
 
   await recordApiV1Success(authorized.request, { operation: "get_customer_shipment_tracking", httpMethod: "GET", path: `/api/v1/customer/shipments/${shipmentOrderId}/tracking`, statusCode, startedAt });
 
-  return Response.json(body, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) });
+  return Response.json(body, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) });
 }

@@ -46,5 +46,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ rfqI
 
   await recordApiV1Success(authorized.request, { operation: "get_rfq_for_vendor_api", httpMethod: "GET", path: `/api/v1/vendor/rfqs/${rfqInvitationId}`, statusCode, startedAt });
 
-  return Response.json(body, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) });
+  return Response.json(body, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) });
 }

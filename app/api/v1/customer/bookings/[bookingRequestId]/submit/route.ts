@@ -81,5 +81,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ boo
 
   await recordApiV1Success(authorized.request, { operation: "submit_customer_booking_request", httpMethod: "POST", path: `/api/v1/customer/bookings/${bookingRequestId}/submit`, statusCode, startedAt });
 
-  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) });
+  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) });
 }

@@ -8,12 +8,12 @@
  * SECURITY DEFINER, authority-gated, callable by `authenticated` too).
  */
 
-import { parseApiVersion, ListApiLogsForTenantInputSchema, type ApiVersion, type ListApiLogsForTenantInput } from "../contracts/public-api-platform/public-api-platform.ts";
+import { parseApiVersion, parseApiVersionRequestState, ListApiLogsForTenantInputSchema, type ApiVersion, type ApiVersionRequestState, type ListApiLogsForTenantInput } from "../contracts/public-api-platform/public-api-platform.ts";
 import { parseWebhookEventType, type WebhookEventType } from "../contracts/api-key-webhook/api-key-webhook.ts";
 import { parseApiLog, type ApiLog } from "../contracts/api/api.ts";
 
 export interface PublicApiPlatformQueryRpcClient {
-  rpc(fn: "list_api_versions" | "list_webhook_event_types" | "list_api_logs_for_tenant", args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
+  rpc(fn: "list_api_versions" | "list_webhook_event_types" | "list_api_logs_for_tenant" | "evaluate_api_version_request", args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
 export class PublicApiPlatformQueryError extends Error {
@@ -62,4 +62,38 @@ export async function listApiLogsForTenant(client: PublicApiPlatformQueryRpcClie
     throw new PublicApiPlatformQueryError("list_api_logs_for_tenant returned a non-array result");
   }
   return data.map((row) => parseApiLog(row as Record<string, unknown>));
+}
+
+/**
+ * ISS-2026-207: the registry's live request-time decision.
+ *
+ * **On an unreadable answer this returns `ok`, not `gone`, and the direction matters.** The first
+ * draft failed closed. That is wrong here, for a specific reason: `410 Gone` means *permanently*
+ * gone. Emitting it because a `SELECT` blipped tells every integrator that the endpoint has been
+ * withdrawn, and well-behaved clients stop calling — a transient database error would become a
+ * self-inflicted, sticky outage across every integration at once.
+ *
+ * Failing open costs nothing real here, because it cannot actually serve anything. The very next
+ * step is `app.authenticate_and_authorize_api_request`, which reads the same database; if the
+ * registry could not be read, authentication will not succeed either, and the caller gets an
+ * honest auth error instead of a misleading permanence claim.
+ *
+ * A genuinely unknown version code is a different case and is **not** this branch: the SQL
+ * returns a real `gone` row for it, so an unrecognised version is still refused.
+ */
+export async function evaluateApiVersionRequest(client: PublicApiPlatformQueryRpcClient, code: string): Promise<ApiVersionRequestState> {
+  const unreadable: ApiVersionRequestState = { decision: "ok", status: "unreadable", sunsetAt: null };
+  const { data, error } = await client.rpc("evaluate_api_version_request", { p_code: code });
+  if (error) {
+    return unreadable;
+  }
+  const row = Array.isArray(data) ? (data[0] as Record<string, unknown> | undefined) : (data as Record<string, unknown> | null);
+  if (!row) {
+    return unreadable;
+  }
+  try {
+    return parseApiVersionRequestState(row);
+  } catch {
+    return unreadable;
+  }
 }

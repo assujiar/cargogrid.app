@@ -2400,6 +2400,56 @@ import { readFileSync } from "node:fs";
  * ALL PASSED). 20260831100000 IS applied live and object-verified: 16 catalogue tasks, the
  * denial ledger present with one RLS policy, zero anon EXECUTE on either new function.
  *
+ * AMENDED 2026-08-31 (fifty-first pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. ISS-2026-207.
+ * 20260831110000_give_api_version_registry_live_effect.sql.
+ *
+ * app.api_versions was a real, audited, Supreme-only state machine, wired into the admin
+ * console and covered by passing db-tests -- and completely inert. Live-forced at HDN-008:
+ * mark v1 deprecated, then sunset with a real future date, then call the gateway with an
+ * otherwise valid key, and it still returned outcome=ok.
+ *
+ * The decision deliberately did NOT go into app.authenticate_and_authorize_api_request.
+ * Version state is not an authentication fact: RFC 8594 says a deprecated endpoint still
+ * answers normally and carries Deprecation/Sunset headers, so folding it into the auth outcome
+ * would force a choice between denying a request that should succeed and returning ok while
+ * losing the signal. The registry needs three answers; an auth outcome has room for two.
+ *
+ * The judgement call, recorded because it is one: a version marked sunset with a FUTURE
+ * sunset_at is still served. set_api_version_status requires a real date precisely so clients
+ * are warned before the date; refusing when the status flips would turn the announcement into
+ * the outage it exists to prevent.
+ *
+ * TWO DRAFT DEFECTS, both caught before shipping and both worth recording.
+ *
+ * First, the query wrapper originally failed CLOSED, returning gone on an unreadable registry.
+ * Wrong direction: 410 means PERMANENTLY gone, so emitting it because a SELECT blipped would
+ * tell every integrator the endpoint had been withdrawn and well-behaved clients would stop
+ * calling -- a transient error becoming a sticky outage across every integration at once. It
+ * now fails open, which costs nothing real because authentication reads the same database and
+ * fails honestly on its own. An unknown code is still refused: the SQL returns a real gone row
+ * for it rather than an error.
+ *
+ * Second, the function was granted to authenticated as well as service_role, and
+ * rbac-enforcement.sql's ISS-2026-033 sweep failed it -- a SECURITY DEFINER function reachable
+ * by authenticated with no authority check in its call graph. The gate offers two exits (add a
+ * check, or justify it on the reviewed list); a third was better, since the only caller is the
+ * gateway running as service_role. The narrower grant removes the question instead of answering
+ * it, and the db-test now pins authenticated at zero as well as anon.
+ *
+ * Also fixed, because it would have made the new tests lie: the route-test harness 404s an
+ * unregistered RPC and the new query fails open, so all nine existing route tests would have
+ * passed while silently exercising the failure path instead of the registry. The stub now
+ * defaults evaluate_api_version_request to an active v1.
+ *
+ * dbTestSetSha256 changed (237 files unchanged in count): public-api-platform.sql proves all
+ * five registry states drive the right decision, that the fixture never disturbs v1, and that
+ * the evaluator is service_role-only on both schemas.
+ *
+ * Re-verified via a fresh full local db-test run (400 migrations, 237 runner files,
+ * ALL PASSED). 20260831110000 IS applied live and verified: v1 -> ok, unknown -> gone, zero
+ * anon or authenticated EXECUTE on either schema.
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2661,7 +2711,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (398 files, forty-ninth-pass amendment above). Superseded 2026-08-31 (fiftieth pass) by
   // ISS-2026-249 + ISS-2026-313 (399 files: +1,
   // 20260831100000_close_authority_denial_alerting_and_scheduler_catalogue_gap.sql).
-  migrationSetSha256: "04367e3b842f68f719216c613f55046857e1cd3b05b8bbf12aa46af94c719802",
+  // History: 04367e3b842f68f719216c613f55046857e1cd3b05b8bbf12aa46af94c719802
+  // (399 files, fiftieth-pass amendment above). Superseded 2026-08-31 (fifty-first pass) by
+  // ISS-2026-207 (400 files: +1,
+  // 20260831110000_give_api_version_registry_live_effect.sql).
+  migrationSetSha256: "84203764b0d28bd824209e2b5725963ad8f81e56a0f9a03e6dddb4afd3976ffd",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2926,7 +2980,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-249 + ISS-2026-313 (237 files unchanged in count -- task-scheduler.sql gained the
   // burst-detector, step-up-recorder and denial-ledger-privilege proofs, and its catalogue
   // walk went from 11 tasks to 16).
-  dbTestSetSha256: "dc64811eb99224c485871cf2e282caa51a9945dcafec1823a1f768516efdfb1b",
+  // History: dc64811eb99224c485871cf2e282caa51a9945dcafec1823a1f768516efdfb1b
+  // (237 files, fiftieth-pass state). Superseded 2026-08-31 (fifty-first pass) by ISS-2026-207
+  // (237 files unchanged in count -- public-api-platform.sql gained the five-state registry
+  // decision proof and a service_role-only grant pin).
+  dbTestSetSha256: "9e26bcb23ea399ec040ce3e0487be2c625ddcab134bc3df5e1415f336a94c7e0",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

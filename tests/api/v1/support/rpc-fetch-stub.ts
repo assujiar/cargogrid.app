@@ -55,6 +55,16 @@ export function deniedAuthRow(outcome: "unauthenticated" | "forbidden_scope" | "
 /** `record_api_request` always succeeds trivially in these tests -- its own real behavior is covered by scripts/db-tests, not the route-level HTTP-layer concern this harness targets. Echoes the real input params back into a fully-shaped ApiLog row (ApiLogSchema, server/contracts/api/api.ts) so parseApiLog() never fails on a mocked call regardless of what the route passed. */
 function defaultHandlers(): RpcHandlers {
   return {
+    /**
+     * ISS-2026-207: the gateway now asks the version registry before authenticating. Defaulted
+     * to an ACTIVE v1 so every existing route test keeps testing what it was written to test.
+     *
+     * It has to be a real default rather than left unhandled: an unhandled name 404s here, and
+     * `evaluateApiVersionRequest` deliberately fails OPEN on an unreadable answer, so the nine
+     * route tests would still pass — while silently exercising the failure path instead of the
+     * registry. A test that passes for the wrong reason is worse than one that fails.
+     */
+    evaluate_api_version_request: { data: [{ decision: "ok", status: "active", sunset_at: null }] },
     record_api_request: (body: Record<string, unknown>) => ({
       data: {
         id: "44444444-4444-4444-8444-444444444444",

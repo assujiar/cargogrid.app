@@ -90,5 +90,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ rfq
     startedAt,
   });
 
-  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request.correlationId) });
+  return Response.json(responseBody, { status: statusCode, headers: apiV1ResponseHeaders(authorized.request) });
 }
