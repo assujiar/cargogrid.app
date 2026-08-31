@@ -121,7 +121,7 @@ begin
   -- for is_ticket_staff, decision matching section 9's own point).
   v_admin_role := (app.create_role(v_tenant1, 'Ticket Admin', 'TKT Edit/Assign', 'tester')).id;
   v_admin_draft := app.create_role_version(v_admin_role, 'tester');
-  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Assign')), 'tester');
+  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Override', 'Assign')), 'tester');
   perform app.publish_role_version(v_admin_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), '00000000-0000-0000-0000-000000292101', '00000000-0000-0000-0000-000000292101', 'tester');
 

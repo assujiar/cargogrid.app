@@ -2249,6 +2249,60 @@ import { readFileSync } from "node:fs";
  * Re-verified via a fresh full local db-test run (396 migrations, 236 runner files,
  * ALL PASSED).
  *
+ * AMENDED 2026-08-31 (forty-eighth pass), migrationSetSha256 and dbTestSetSha256.
+ * Same ruling: ADR-0027 Part A. `ISS-2026-086`, the RBAC-model decision three passes
+ * correctly declined to make under a bounded mandate.
+ * 20260831080000_split_ticket_admin_content_override_permission.sql.
+ *
+ * app.is_ticket_staff granted full ticket-content staff status -- every internal note,
+ * replies, queue transfer, reclassify -- to any TKT:Edit holder, on EVERY ticket in the
+ * tenant, unscoped by queue. 20260731060000's own decision-5 comment says the opposite:
+ * TKT:Edit is "reserved for QUEUE/CATEGORY CONFIGURATION ... not for ordinary ticket work."
+ * A tenant granting TKT:Edit for queue administration silently and inseparably handed over
+ * every ticket's contents, ISS-2026-111's HRS-masked-data-quoted-into-a-ticket case
+ * included, with no way to revoke one half without the other.
+ *
+ * The ruling is the split this entry itself names. TKT:Edit keeps configuration and
+ * on-behalf creation; the tenant-wide content override moves to TKT:Override, separately
+ * grantable and separately revocable. Keeping the blanket form was rejected on what it
+ * costs a tenant: a permission that cannot be granted for its stated purpose without also
+ * handing over every ticket's contents is not one a careful administrator can use.
+ *
+ * `Override`, not a freshly-invented action name, and that is not cosmetic. The first draft
+ * seeded TKT:Administer and was rejected on its first run by app.permissions_action_check --
+ * a FIXED 20-value enum reproduced from docs/architecture/06_RLS_RBAC_WORKSTREAM.md §5.1, a
+ * canonical catalogue rather than a list to append to. The constraint was doing its job.
+ * `Override` is already in it, already means "act outside the normal scope" for OPS and FIN,
+ * and is exactly what a queue-unscoped tenant-wide content override is.
+ *
+ * One function changed, not twenty-five. TKT:Edit gates ~25 configuration RPCs across
+ * queues, categories, SLA and the knowledge base; moving all of them would have been the
+ * shared-schema redesign this entry rightly warned a bounded pass away from. Adding the
+ * override grant achieves the same separation by touching app.is_ticket_staff alone.
+ *
+ * app.redact_ticket_message is deliberately NOT moved and still gates on TKT:Edit. Raising
+ * it for consistency would mean a tenant has to hand somebody every ticket's contents before
+ * they may scrub a leaked-PII message -- worse than the problem being fixed. Redaction
+ * destroys, it does not reveal.
+ *
+ * Migration safety measured, not assumed: the live project holds 0 tenants, 0 tickets, 0
+ * active role assignments and 0 role versions carrying TKT:Edit, so nobody lost access. The
+ * backfill is written anyway and is a live no-op -- every role version already granting
+ * TKT:Edit also gains TKT:Override, so any environment WITH data keeps every holder's
+ * effective access byte-for-byte.
+ *
+ * dbTestSetSha256 changed (236 files unchanged in count): ticketing-internal.sql proves a
+ * TKT:Edit-only identity is NOT staff on a queue it does not belong to, that adding
+ * TKT:Override makes it staff, and -- the half the finding is about -- that revoking
+ * TKT:Override alone removes content access while leaving TKT:Edit configuration authority
+ * intact. The fixture this entry named as the blocker (ticketing-internal.sql:593, staff1
+ * replying after a queue transfer) was updated rather than worked around: it now grants
+ * TKT:Override explicitly, which is the point. Eight further service-desk-admin fixtures
+ * were updated the same way; ticketing-escalation.sql failed first and revealed the set.
+ *
+ * Re-verified via a fresh full local db-test run (397 migrations, 236 runner files,
+ * ALL PASSED).
+ *
  * Also corrected in the same pass, outside the digests: the four migrations applied
  * live on 2026-08-31 via apply_migration had been recorded in
  * supabase_migrations.schema_migrations under the MCP tool's own wall-clock version
@@ -2498,7 +2552,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (395 files, forty-sixth-pass amendment above). Superseded 2026-08-31 (forty-seventh
   // pass) by ISS-2026-147 (396 files: +1,
   // 20260831070000_add_connector_scoped_execution_log_filters.sql).
-  migrationSetSha256: "49e3ca8b14376b9b9a8569d1d4c6b620838b209f5c2dcb011b8b3e56f229be19",
+  // History: 49e3ca8b14376b9b9a8569d1d4c6b620838b209f5c2dcb011b8b3e56f229be19
+  // (396 files, forty-seventh-pass amendment above). Superseded 2026-08-31 (forty-eighth
+  // pass) by ISS-2026-086 (397 files: +1,
+  // 20260831080000_split_ticket_admin_content_override_permission.sql).
+  migrationSetSha256: "ce7ae92e77046ffb102cefc61da453c00b86593e6064c6d33e06373c9f5b244a",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -2749,7 +2807,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (236 files, forty-sixth-pass state). Superseded 2026-08-31 (forty-seventh pass) by
   // ISS-2026-147 (236 files unchanged in count -- public-api-platform.sql and
   // webhook-management.sql each gained a per-connector filter proof).
-  dbTestSetSha256: "24117ef8f4cc859bc79e452a36353e939c428efd9333d8e24e281c9943dd37fd",
+  // History: 24117ef8f4cc859bc79e452a36353e939c428efd9333d8e24e281c9943dd37fd
+  // (236 files, forty-seventh-pass state). Superseded 2026-08-31 (forty-eighth pass) by
+  // ISS-2026-086 (236 files unchanged in count -- ticketing-internal.sql gained the
+  // TKT:Edit/TKT:Override separation proof, and nine service-desk-admin fixtures across the
+  // ticketing files now grant TKT:Override explicitly).
+  dbTestSetSha256: "1689689c82d2975899730849e307e47f106e93b5e3ef93674340564480738435",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

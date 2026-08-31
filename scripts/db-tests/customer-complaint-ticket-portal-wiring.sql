@@ -105,7 +105,7 @@ begin
 
   v_admin_role := (app.create_role(v_tenant1, 'Ticket Admin', 'TKT Edit/Close/Reopen', 'tester')).id;
   v_admin_draft := app.create_role_version(v_admin_role, 'tester');
-  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Close', 'Reopen')), 'tester');
+  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Override', 'Close', 'Reopen')), 'tester');
   perform app.publish_role_version(v_admin_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), v_staff1, v_staff1, 'tester');
 

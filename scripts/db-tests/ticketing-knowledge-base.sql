@@ -74,7 +74,7 @@ begin
 
   v_admin_role := (app.create_role(v_tenant1, 'Ticket Admin', 'TKT Edit', 'tester')).id;
   v_admin_draft := app.create_role_version(v_admin_role, 'tester');
-  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action = 'Edit'), 'tester');
+  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Override')), 'tester');
   perform app.publish_role_version(v_admin_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), '00000000-0000-0000-0000-000000289102', '00000000-0000-0000-0000-000000289101', 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), '00000000-0000-0000-0000-000000289103', '00000000-0000-0000-0000-000000289101', 'tester');

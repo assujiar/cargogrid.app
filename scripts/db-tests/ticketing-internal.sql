@@ -91,11 +91,16 @@ begin
     perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_hr_role and status = 'published'), '00000000-0000-0000-0000-000000286001', '00000000-0000-0000-0000-000000286001', 'tester');
   end;
 
-  -- TKT admin role: Edit/Assign/Export (queue/category config, on-behalf
-  -- create, redaction, assignment, export) -- granted to staff1 only.
-  v_admin_role := (app.create_role(v_tenant1, 'Ticket Admin', 'TKT Edit/Assign/Export', 'tester')).id;
+  -- TKT admin role: Edit/Override/Assign/Export (queue/category config, on-behalf
+  -- create, redaction, assignment, export, and -- since ISS-2026-086 split them apart --
+  -- the tenant-wide ticket-content override that used to ride along with TKT:Edit)
+  -- granted to staff1 only. TKT:Override is listed explicitly here rather than
+  -- inherited, which is the whole point of the split: this fixture WANTS the blanket
+  -- override (a later assertion has staff1 reply to a ticket after a queue transfer left
+  -- them without membership), so it now has to say so.
+  v_admin_role := (app.create_role(v_tenant1, 'Ticket Admin', 'TKT Edit/Override/Assign/Export', 'tester')).id;
   v_admin_draft := app.create_role_version(v_admin_role, 'tester');
-  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Assign', 'Export', 'Close', 'Reopen')), 'tester');
+  perform app.set_role_version_permissions(v_admin_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Override', 'Assign', 'Export', 'Close', 'Reopen')), 'tester');
   perform app.publish_role_version(v_admin_draft.id, now(), 'tester');
   perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_admin_role and status = 'published'), '00000000-0000-0000-0000-000000286004', '00000000-0000-0000-0000-000000286001', 'tester');
 
@@ -883,6 +888,75 @@ begin
   end if;
 
   raise notice 'PASS: add_ticket_watcher and reply_to_ticket reject both closed and cancelled tickets (invalid_transition / ticket_closed / ticket_cancelled); remove_ticket_watcher remains permitted on both as the deliberate cleanup-is-allowed design decision';
+end;
+$$;
+
+\echo '>> ISS-2026-086: TKT:Edit and the tenant-wide ticket-content override are now separate, separately-revocable grants. A config-only TKT:Edit holder is NOT ticket staff on a queue they do not belong to; adding TKT:Override makes them staff; revoking it alone takes the content access away and leaves the configuration authority intact'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'tkt1');
+  v_config_only uuid := '00000000-0000-0000-0000-000000286010';
+  v_role uuid;
+  v_draft app.role_versions;
+  v_ticket app.tickets;
+begin
+  -- 286010: the next free id in this file's own documented 286001..286006 fixture range.
+  insert into auth.users (id, email) values (v_config_only, 'configonly@tkt1.test');
+  perform app.invite_user(v_tenant1, v_config_only, 'configonly@tkt1.test', 'Tkt1 Config Only', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'configonly@tkt1.test'), 'active', 'onboarded', 'tester');
+
+  -- A genuine queue/category administrator: TKT:Edit and nothing else. Before this fix, this
+  -- identity silently held the contents of every ticket in the tenant.
+  v_role := (app.create_role(v_tenant1, 'Ticket Config Only', 'TKT Edit alone -- the ISS-2026-086 control', 'tester')).id;
+  v_draft := app.create_role_version(v_role, 'tester');
+  perform app.set_role_version_permissions(v_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action = 'Edit'), 'tester');
+  perform app.publish_role_version(v_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_role and status = 'published'), v_config_only, '00000000-0000-0000-0000-000000286001', 'tester');
+
+  if not (app.evaluate_permission(v_config_only, v_tenant1, 'TKT', 'Edit')).allowed then
+    raise exception 'assertion failed: the control identity must genuinely hold TKT:Edit';
+  end if;
+  if (app.evaluate_permission(v_config_only, v_tenant1, 'TKT', 'Override')).allowed then
+    raise exception 'assertion failed: the control identity must NOT hold TKT:Override -- that is what makes this test meaningful';
+  end if;
+
+  select * into v_ticket from app.tickets where tenant_id = v_tenant1 and channel <> 'helpdesk' limit 1;
+  if v_ticket.id is null then
+    raise exception 'assertion failed: this test needs a real non-helpdesk ticket from the fixtures above';
+  end if;
+
+  -- The fix: configuration authority alone is no longer ticket-content staff status.
+  if app.is_ticket_staff(v_ticket.id, v_config_only) then
+    raise exception 'assertion failed: a TKT:Edit-only identity must NOT be ticket staff on a queue it does not belong to -- that is exactly ISS-2026-086';
+  end if;
+
+  -- And the override still exists for tenants that genuinely want it: it is now a thing they
+  -- grant on purpose rather than a thing they cannot avoid granting.
+  v_draft := app.create_role_version(v_role, 'tester');
+  perform app.set_role_version_permissions(v_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action in ('Edit', 'Override')), 'tester');
+  perform app.publish_role_version(v_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, v_draft.id, v_config_only, '00000000-0000-0000-0000-000000286001', 'tester');
+
+  if not app.is_ticket_staff(v_ticket.id, v_config_only) then
+    raise exception 'assertion failed: adding TKT:Override must confer the tenant-wide ticket-content staff status';
+  end if;
+
+  -- The half this whole finding is about: the content access is revocable ON ITS OWN, without
+  -- taking the queue/category configuration authority with it. Before the split, revoking one
+  -- necessarily revoked the other, because they were the same grant.
+  v_draft := app.create_role_version(v_role, 'tester');
+  perform app.set_role_version_permissions(v_draft.id, array(select id from app.permissions where resource_module_code = 'TKT' and action = 'Edit'), 'tester');
+  perform app.publish_role_version(v_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, v_draft.id, v_config_only, '00000000-0000-0000-0000-000000286001', 'tester');
+
+  if app.is_ticket_staff(v_ticket.id, v_config_only) then
+    raise exception 'assertion failed: revoking TKT:Override alone must remove the tenant-wide content access';
+  end if;
+  if not (app.evaluate_permission(v_config_only, v_tenant1, 'TKT', 'Edit')).allowed then
+    raise exception 'assertion failed: revoking TKT:Override must NOT take the TKT:Edit configuration authority with it';
+  end if;
+
+  raise notice 'PASS: ISS-2026-086 -- TKT:Edit no longer carries tenant-wide ticket-content staff status; TKT:Override does, and is grantable and revocable on its own';
 end;
 $$;
 
