@@ -565,4 +565,224 @@ begin
   end loop;
 end $$;
 
+\echo '>> ISS-2026-303 setup: a warehouse and a location for tenant mdimp1, plus the tenant''s own published inventory_opening_balance_import column definition -- the fifth PLT-131 adapter, reusing the item masters and owner account the item_import block above already created'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'mdimp1');
+  v_admin uuid := '00000000-0000-0000-0000-000000094101';
+  v_supreme uuid := '00000000-0000-0000-0000-000000094999';
+  v_company uuid;
+  v_warehouse app.warehouses;
+  v_draft app.config_versions;
+  v_user app.users;
+begin
+  -- Created unconditionally under its own code rather than looked up by type: this file has
+  -- never needed an org unit before, and a lookup that silently finds nothing would fail
+  -- later, inside create_warehouse, where the reason is much harder to read.
+  perform app.create_org_unit(v_tenant1, 'company', null, 'MDIMP-CO', 'MdImp Co', 'tester');
+  select id into v_company from app.org_units where tenant_id = v_tenant1 and code = 'MDIMP-CO';
+
+  -- The importer needs genuine RECORD scope over the warehouse, not merely OPS:Import.
+  -- app.post_inventory_movement checks app.can_access_record against the warehouse's own
+  -- company org unit, and the adapter passes the importer's identity straight through -- so
+  -- somebody who could not post this movement by hand must not be able to post it via an
+  -- import either. Giving the admin that scope here is what makes the happy path a real
+  -- authorization pass rather than a bypass.
+  select * into v_user from app.users where tenant_id = v_tenant1 and auth_user_id = v_admin;
+  perform app.reassign_user_org_unit(v_user.id, v_company, v_user.record_version, 'tester');
+
+  v_warehouse := app.create_warehouse(v_tenant1, v_company, 'WH-MDIMP-1', 'MdImp Warehouse 1', null, 'Asia/Jakarta', null, array['land']::text[], v_supreme, 'supreme');
+  perform app.create_warehouse_location(v_warehouse.id, null, null, 'RACK-A1', 'Rack A1', 'rack', 1, null, null, null, null, null, true, true, v_supreme, 'supreme');
+
+  v_draft := app.create_config_draft('import_export:inventory_opening_balance_import', v_tenant1, 'tenant', null, v_admin, 'admin');
+  perform app.set_config_items(
+    v_draft.id,
+    jsonb_build_array(jsonb_build_object('key', 'columns', 'value', jsonb_build_array(
+      jsonb_build_object('key', 'warehouse_code', 'label', 'Warehouse', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'location_code', 'label', 'Location', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'owner_account_tax_id', 'label', 'Owner tax id', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'item_code', 'label', 'Item code', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'uom_code', 'label', 'UOM', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'quantity', 'label', 'Quantity', 'required', true, 'data_type', 'number')
+    ), 'canonical_ref', null)),
+    v_admin, 'admin'
+  );
+  perform app.publish_import_export_schema(v_draft.id, v_admin, now(), 'admin');
+end $$;
+
+\echo '>> ISS-2026-303: inventory_opening_balance_import -- an unresolvable warehouse/location/item and a non-positive quantity are refused at VALIDATION, so a cutover batch does not abort on row 700; a valid batch posts real opening-balance movements through app.post_inventory_movement rather than writing inventory itself; re-committing is a no-op, not a double-post'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'mdimp1');
+  v_admin uuid := '00000000-0000-0000-0000-000000094101';
+  v_owner_id uuid;
+  v_owner_tax text;
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+  v_recommit app.jobs;
+  v_ids uuid[];
+  v_idx integer;
+  v_status text;
+  v_error text;
+  v_movement_count integer;
+  v_balance numeric;
+begin
+  select id, tax_id into v_owner_id, v_owner_tax from app.accounts where tenant_id = v_tenant1 and legal_name = 'PT Sinar Bahari Kargo';
+  if v_owner_id is null or coalesce(v_owner_tax, '') = '' then
+    raise exception 'assertion failed: the customer import block must have created PT Sinar Bahari Kargo with a resolvable tax id';
+  end if;
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'opening-stock.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-invob-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'inventory_opening_balance_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-invob-job', v_admin, 'admin');
+
+  perform app.stage_import_rows(
+    v_job.job_id,
+    jsonb_build_array(
+      -- 1: valid.
+      jsonb_build_object('warehouse_code', 'WH-MDIMP-1', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0001', 'uom_code', 'PCS', 'quantity', '120'),
+      -- 2: valid, a second item at the same location.
+      jsonb_build_object('warehouse_code', 'WH-MDIMP-1', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0002', 'uom_code', 'PCS', 'quantity', '7.5'),
+      -- 3: unknown warehouse.
+      jsonb_build_object('warehouse_code', 'WH-NOPE', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0001', 'uom_code', 'PCS', 'quantity', '5'),
+      -- 4: unknown location within a real warehouse.
+      jsonb_build_object('warehouse_code', 'WH-MDIMP-1', 'location_code', 'RACK-NOPE', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0001', 'uom_code', 'PCS', 'quantity', '5'),
+      -- 5: an item that is not owned by the resolved account.
+      jsonb_build_object('warehouse_code', 'WH-MDIMP-1', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-NOT-MINE', 'uom_code', 'PCS', 'quantity', '5'),
+      -- 6: a zero quantity. An opening balance is what is on the shelf, so zero is a source
+      --    data error, refused up front rather than mid-commit.
+      jsonb_build_object('warehouse_code', 'WH-MDIMP-1', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0001', 'uom_code', 'PCS', 'quantity', '0'),
+      -- 7: a negative quantity.
+      jsonb_build_object('warehouse_code', 'WH-MDIMP-1', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0001', 'uom_code', 'PCS', 'quantity', '-3'),
+      -- 8: an unregistered UOM.
+      jsonb_build_object('warehouse_code', 'WH-MDIMP-1', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0001', 'uom_code', 'NOPE', 'quantity', '5'),
+      -- 9: a formula-injection prefix in a text cell.
+      jsonb_build_object('warehouse_code', '=cmd|calc', 'location_code', 'RACK-A1', 'owner_account_tax_id', v_owner_tax,
+                         'item_code', 'SKU-0001', 'uom_code', 'PCS', 'quantity', '5')
+    ),
+    v_admin, 'admin'
+  );
+
+  select array_agg(id order by row_number) into v_ids from app.import_staging_rows where job_id = v_job.job_id;
+
+  for v_idx in 1..9 loop
+    perform app.validate_inventory_opening_balance_import_row(v_ids[v_idx], v_admin, 'admin');
+  end loop;
+
+  for v_idx in 1..2 loop
+    select validation_status into v_status from app.import_staging_rows where id = v_ids[v_idx];
+    if v_status <> 'valid' then
+      raise exception 'assertion failed: row % should be valid, got % (%)', v_idx, v_status,
+        (select error from app.import_staging_rows where id = v_ids[v_idx]);
+    end if;
+  end loop;
+
+  for v_idx in 3..9 loop
+    select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[v_idx];
+    if v_status <> 'invalid' then
+      raise exception 'assertion failed: row % should be invalid, got %', v_idx, v_status;
+    end if;
+    if coalesce(v_error, '') = '' then
+      raise exception 'assertion failed: row % is invalid but carries no reason -- an importer cannot fix what they are not told', v_idx;
+    end if;
+  end loop;
+
+  v_updated := app.commit_inventory_opening_balance_import_job(v_job.job_id, true, v_admin, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected a completed job, got %', v_updated.status;
+  end if;
+  if (v_updated.payload ->> 'posted_count')::integer <> 2 then
+    raise exception 'assertion failed: expected 2 posted rows, got %', v_updated.payload ->> 'posted_count';
+  end if;
+
+  -- The adapter writes no inventory itself: every row went through app.post_inventory_movement,
+  -- so the movements carry that primitive's own opening_balance type and source lineage.
+  select count(*) into v_movement_count from app.inventory_movements
+  where tenant_id = v_tenant1 and movement_type = 'opening_balance' and source_type = 'opening_balance'
+    and idempotency_key like 'inventory-opening-balance-import:%';
+  if v_movement_count <> 2 then
+    raise exception 'assertion failed: expected 2 opening-balance movements posted through the primitive, got %', v_movement_count;
+  end if;
+
+  -- And the balance the primitive maintains genuinely moved -- proof the import produced real
+  -- stock rather than a movement header with nothing behind it.
+  select sum(b.on_hand) into v_balance from app.inventory_balances b
+  join app.item_masters i on i.id = b.item_master_id
+  where b.tenant_id = v_tenant1 and i.code in ('SKU-0001', 'SKU-0002');
+  if coalesce(v_balance, 0) <> 127.5 then
+    raise exception 'assertion failed: expected 120 + 7.5 = 127.5 units on hand from the import, got %', coalesce(v_balance, 0);
+  end if;
+
+  -- The invalid rows created nothing at all.
+  if exists (
+    select 1 from app.inventory_movements
+    where tenant_id = v_tenant1 and idempotency_key = any(array[
+      'inventory-opening-balance-import:' || v_ids[3]::text,
+      'inventory-opening-balance-import:' || v_ids[6]::text,
+      'inventory-opening-balance-import:' || v_ids[7]::text
+    ])
+  ) then
+    raise exception 'assertion failed: an invalid row must post no movement';
+  end if;
+
+  -- Re-committing is a no-op rather than a double-post. A cutover that half-succeeded and was
+  -- retried must not duplicate a warehouse's opening stock.
+  update app.jobs set status = 'in_progress' where job_id = v_job.job_id;
+  v_recommit := app.commit_inventory_opening_balance_import_job(v_job.job_id, true, v_admin, 'admin');
+  if (v_recommit.payload ->> 'posted_count')::integer <> 0 or (v_recommit.payload ->> 'skipped_count')::integer <> 2 then
+    raise exception 'assertion failed: a re-commit must post 0 and skip 2, got posted=% skipped=%',
+      v_recommit.payload ->> 'posted_count', v_recommit.payload ->> 'skipped_count';
+  end if;
+  select count(*) into v_movement_count from app.inventory_movements
+  where tenant_id = v_tenant1 and idempotency_key like 'inventory-opening-balance-import:%';
+  if v_movement_count <> 2 then
+    raise exception 'assertion failed: a re-commit must not create a third movement, got %', v_movement_count;
+  end if;
+
+  raise notice 'PASS: inventory opening balances import in bulk through the existing movement primitive, invalid rows are refused with reasons at validation time, and a retry is a no-op';
+end $$;
+
+\echo '>> ISS-2026-303: the inventory adapter refuses a caller without OPS:Import, and refuses a job staged under a different schema -- an adapter that will commit anything is not an adapter'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'mdimp1');
+  v_admin uuid := '00000000-0000-0000-0000-000000094101';
+  v_viewer uuid := '00000000-0000-0000-0000-000000094102';
+  v_wrong_job uuid := (select job_id from app.jobs where tenant_id = v_tenant1 and import_export_schema_code = 'item_import' limit 1);
+  v_job_id uuid := (select job_id from app.jobs where tenant_id = v_tenant1 and import_export_schema_code = 'inventory_opening_balance_import' limit 1);
+begin
+  update app.jobs set status = 'in_progress' where job_id = v_job_id;
+  begin
+    perform app.commit_inventory_opening_balance_import_job(v_job_id, true, v_viewer, 'viewer');
+    raise exception 'assertion failed: expected a caller without OPS:Import to be refused';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' and sqlerrm not like 'job_actor_unauthorized%' then raise; end if;
+  end;
+
+  begin
+    perform app.commit_inventory_opening_balance_import_job(v_wrong_job, true, v_admin, 'admin');
+    raise exception 'assertion failed: expected an item_import job to be refused by the inventory adapter';
+  exception
+    when others then
+      if sqlerrm not like 'import_export_wrong_schema%' then raise; end if;
+  end;
+
+  update app.jobs set status = 'completed' where job_id = v_job_id;
+  raise notice 'PASS: the inventory adapter refuses an unauthorized caller and a foreign schema';
+end $$;
+
 \echo '>> master-data-import.sql: ALL PASSED'

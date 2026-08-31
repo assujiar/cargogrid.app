@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 50 — 4 High, 22 Medium, 24 Low |
+| `OPEN` | 50 — 4 High, 21 Medium, 25 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 213 |
-| **Total records** | **271** |
+| `RESOLVED` | 214 |
+| **Total records** | **272** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -98,7 +98,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-288` | Medium | `OPEN` | `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the p |
 | `ISS-2026-300` | Medium | `RESOLVED` | `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations un |
 | `ISS-2026-302` | Medium | `OPEN` | the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring |
-| `ISS-2026-303` | Medium | `OPEN` | Inventory and HRIS still have no bulk opening-balance import |
+| `ISS-2026-303` | Medium | `RESOLVED` | Inventory and HRIS still have no bulk opening-balance import |
 | `ISS-2026-304` | Medium | `OPEN` | no public status page for unauthenticated visitors |
 | `ISS-2026-305` | Medium | `SUPERSEDED` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
 | `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
@@ -110,6 +110,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-314` | Medium | `RESOLVED` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
 | `ISS-2026-316` | Low | `OPEN` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
+| `ISS-2026-317` | Low | `OPEN` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -6446,7 +6447,7 @@ permit balances, payroll loan cutover flags) is **not** closed here. Those are d
 domains with different primitives and no financial double-entry to reconcile; they are
 carried forward as `ISS-2026-303`.
 
-### ISS-2026-303 — Inventory and HRIS still have no bulk opening-balance import (OPEN, Medium)
+### ISS-2026-303 — Inventory and HRIS still have no bulk opening-balance import (`RESOLVED` 2026-08-31, Medium)
 
 Split out of `ISS-2026-273` on 2026-08-30 when its Finance half was closed, so a partial
 closure does not retire a multi-domain finding.
@@ -6470,6 +6471,72 @@ can now bring its customers, vendors, items and open financial balances across i
 must still enter opening stock quantities and staff leave balances by hand. For a warehouse
 with thousands of SKUs or a company with hundreds of staff that is slow and error-prone, but
 nothing is silently wrong — the single-record paths that exist are correct and audited.
+
+**`RESOLVED`, 2026-08-31**, under `ADR-0027` Part A, by
+`20260831260000_create_inventory_and_leave_opening_balance_import_adapters.sql` — the fifth
+and sixth `PLT-131` adapters, applied live and recorded in
+`supabase_migrations.schema_migrations`.
+
+**What was built.** Two adapters, each the same two-function shape the four existing ones
+use: a row validator and a job committer.
+
+- `inventory_opening_balance_import` — columns `warehouse_code`, `location_code`,
+  `owner_account_tax_id`, `item_code`, `uom_code`, `quantity`. Validation resolves the
+  warehouse, the location *within that warehouse*, the owner account by tax id, the item
+  under that owner, and the UOM, and refuses a non-positive quantity.
+  `app.commit_inventory_opening_balance_import_job` gates on `OPS:Import` plus
+  administrative authority, then calls `app.post_inventory_movement` once per valid row.
+- `leave_opening_balance_import` — columns `employee_number`, `leave_type_code`, `units`,
+  `as_of_date`, `source_reference`. Validation resolves the employee by
+  `master_records.code` and the leave type by code within the tenant, and refuses a
+  non-positive or unparseable unit count and a missing or invalid as-of date.
+  `app.commit_leave_opening_balance_import_job` gates on `HRS:Import` plus administrative
+  authority, then calls `app.load_opening_leave_balance` once per valid row.
+
+**The adapters write no business rows of their own.** That is the point, and it is what
+makes them safe: every posting still goes through the existing single-record primitive, so
+that primitive's authority gate, its positive-quantity/units rule, its idempotency-conflict
+detection, its audit event and (for inventory) its GL and balance side effects all apply to
+an imported row exactly as they do to a hand-entered one. An import cannot post something a
+person could not post by hand — proven, not assumed: the inventory regression test only
+passes once the importer is given genuine record scope over the warehouse's own company org
+unit, because `app.post_inventory_movement` checks `app.can_access_record` and the adapter
+passes the importer's identity straight through rather than acting as the definer.
+
+**Idempotency keys are derived from the staging row id**
+(`'inventory-opening-balance-import:' || row.id`, `'leave-opening-balance-import:' ||
+row.id`), never taken from the file. A key the file controls would let a badly-built export
+either collide two genuinely different rows into one posting or, worse, be replayed to
+double a warehouse's opening stock. Already-posted rows are skipped and counted, so a
+cutover that half-succeeded resumes instead of duplicating.
+
+**Grants: `service_role` only**, matching `finance_opening_balance_import` exactly, for both
+the `app.*` functions and their `public.*` wrappers. The validators take
+`p_actor_auth_user_id` and are side-effecting, so granting them to `authenticated` would let
+any signed-in session pass someone else's identity — `scripts/db-tests/rbac-enforcement.sql`'s
+actor-authority sweep caught precisely that and refused the first version of this migration.
+The validator wrappers are invoker-rights rather than `security definer`, matching their
+`app.*` counterparts, as the `public.*` wrapper-parity gate requires.
+
+**Evidence.** `scripts/db-tests/master-data-import.sql` (inventory) and
+`scripts/db-tests/hris-leave-permit-business-trip.sql` (leave) each run a real 9-row staging
+batch — 2 valid, 7 invalid — and assert: every invalid row is refused *at validation time*
+with a non-empty, readable reason (a cutover must not abort on row 700); the valid rows post
+real movements/ledger entries through the primitive, with the balances actually moving
+(120 + 7.5 = 127.5 units on hand; a fractional 3.5-day leave balance landing as written); the
+invalid rows post nothing at all; and a re-commit posts 0 and skips 2 rather than
+double-posting. Each file also asserts the adapter refuses a caller without the required
+authority and refuses a job staged under a different schema. The leave refusal case
+deliberately uses the HR staff account, which genuinely *holds* `HRS:Import` but is not an
+administrator — picking an actor with no `HRS` at all would have proved only that the module
+gate works a second time. Full `pnpm run db:test` green.
+
+**What this does not cover.** `ISS-2026-273` named a third HRIS scope — payroll loan cutover
+flags — that this migration does not address. That is not an opening *balance*: a loan
+carried over from a previous system is a liability with a schedule, a rate and a remaining
+term, and importing one means importing a repayment plan, not a number. It needs its own
+adapter against the payroll-loan primitive and is recorded below as its own entry rather
+than folded into a closure it is not part of.
 
 ### ISS-2026-274 — no master-data (customer/vendor/item) or tenant-setup bulk-import mechanism exists anywhere (found at `HDN-385` Data Migration Rehearsal, live investigation, `RESOLVED` 2026-08-30, Medium)
 
@@ -8021,3 +8088,36 @@ version (owner/infrastructure), or a deliberate decision to pin `@playwright/tes
 whose Chromium build the sandbox does have — the latter is a real dependency change with its own
 CI implications and should not be made merely to suit one sandbox. Neither is a code fix available
 here.
+### ISS-2026-317 — payroll loan cutover has no import path, and it is not opening-balance-shaped (found 2026-08-31 while closing `ISS-2026-303`, `OPEN`, Low)
+
+`ISS-2026-273` named three domains whose opening-balance handling was bespoke and
+disconnected from `PLT-131`. Finance closed on 2026-08-30 (`20260830130000`); Inventory and
+the leave half of HRIS closed on 2026-08-31 (`20260831260000`, `ISS-2026-303`). The third
+HRIS scope that entry named — payroll loan cutover — is still open, and is being recorded
+separately rather than left inside a closure it is not actually part of.
+
+**Why it was not folded into `ISS-2026-303`.** The two adapters built there follow one
+shape: a number, an as-of date, and a single call to an existing single-record primitive
+that already knows how to post it. A payroll loan carried over from a previous system is not
+that. It is a liability with a principal, a rate, a remaining term and a repayment schedule
+already part-consumed — importing one means importing a plan, and deciding what the previous
+system's already-made deductions mean in this one. Which instalments are considered paid,
+whether the outstanding principal or the original principal is authoritative, and how a
+mid-term rate change carries across are business decisions, not mapping decisions. Building
+a numeric "opening balance" adapter over that would produce a loan whose balance is right
+and whose schedule is wrong — the worst of both, and silently so, because payroll would
+happily deduct against it.
+
+**Status `OPEN`**, Low severity. **Risk in plain terms:** a company migrating in that has
+staff loans still being repaid must re-enter each loan by hand. That is real work, but it is
+bounded — a company has far fewer active staff loans than it has SKUs or employees — and
+nothing is silently wrong: the single-record path that exists is correct and audited, and
+entering a loan by hand forces exactly the judgement calls an importer would have had to
+guess at.
+
+**What would close it:** a payroll-loan import adapter built against the existing
+single-record loan primitive, following the same never-write-business-rows-yourself
+discipline the six existing `PLT-131` adapters use — but only after the owner (or whoever
+runs the migration) settles the three questions above, since the adapter has to encode an
+answer to each. That makes this owner-input work, not purely engineering work, which is why
+it is filed rather than built.

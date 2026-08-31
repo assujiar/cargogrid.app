@@ -994,3 +994,235 @@ begin
     raise exception 'assertion failed: app.leave_requests must never carry its own shift_template_version_id -- schedule_snapshot (jsonb, immutable at submit time) is the only integration surface, never a second live FK into app.schedule_assignments'' own domain';
   end if;
 end $$;
+
+\echo '>> ISS-2026-303 setup: lv1''s own published leave_opening_balance_import column definition -- the sixth PLT-131 adapter, reusing the employees and leave types this file already created'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lv1');
+  v_admin uuid := '00000000-0000-0000-0000-000000028001';
+  v_supreme uuid := '00000000-0000-0000-0000-000000028099';
+  v_doctype_draft app.config_versions;
+  v_draft app.config_versions;
+begin
+  -- app.register_document_type returns an existing row unchanged, so this stays correct
+  -- whichever test file gets there first.
+  perform app.register_document_type('master_data_import_source', 'Master Data Import Source File', 'COM', v_supreme, 'supreme');
+  v_doctype_draft := app.create_config_draft('document:master_data_import_source', v_tenant1, 'tenant', null, v_admin, 'tenant admin');
+  perform app.set_config_items(v_doctype_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('text/csv')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', to_jsonb(10485760)),
+    jsonb_build_object('key', 'retention_class', 'value', to_jsonb('operational_contract_plus_90d'::text)),
+    jsonb_build_object('key', 'default_classification', 'value', to_jsonb('internal'::text)),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', to_jsonb(false))
+  ), v_admin, 'tenant admin');
+  perform app.publish_document_type_definition(v_doctype_draft.id, v_admin, now(), 'tenant admin');
+
+  v_draft := app.create_config_draft('import_export:leave_opening_balance_import', v_tenant1, 'tenant', null, v_admin, 'tenant admin');
+  perform app.set_config_items(
+    v_draft.id,
+    jsonb_build_array(jsonb_build_object('key', 'columns', 'value', jsonb_build_array(
+      jsonb_build_object('key', 'employee_number', 'label', 'Employee number', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'leave_type_code', 'label', 'Leave type', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'units', 'label', 'Units', 'required', true, 'data_type', 'number'),
+      jsonb_build_object('key', 'as_of_date', 'label', 'As of', 'required', true, 'data_type', 'date'),
+      jsonb_build_object('key', 'source_reference', 'label', 'Source reference', 'required', false, 'data_type', 'text')
+    ), 'canonical_ref', null)),
+    v_admin, 'tenant admin'
+  );
+  perform app.publish_import_export_schema(v_draft.id, v_admin, now(), 'tenant admin');
+
+  -- The adapter demands BOTH administrative authority and HRS:Import, and the two are
+  -- genuinely independent here: tenant_admin membership alone carries no module permission
+  -- (app.evaluate_permission answers no_active_assignment), and the HR staff account holds
+  -- HRS:Import but is not an admin. So the importer is given the staff role on top of its
+  -- tenant_admin membership -- which is what makes the refusal block below a real test of the
+  -- administrative gate rather than of the module gate a second time.
+  perform app.assign_role(
+    v_tenant1,
+    (select rv.id from app.role_versions rv join app.roles r on r.id = rv.role_id
+     where r.tenant_id = v_tenant1 and r.name = 'HRS Staff' and rv.status = 'published'),
+    -- Granted BY the Supreme Admin, not by the importer to themselves: app.assign_role
+    -- correctly refuses self_escalation, and routing around that by weakening the grant
+    -- would be testing a different system than the one that ships.
+    v_admin, v_supreme, 'supreme'
+  );
+end $$;
+
+\echo '>> ISS-2026-303: leave_opening_balance_import -- an unresolvable employee/leave type, a non-positive or unparseable unit count and a missing/invalid as-of date are refused at VALIDATION, so a cutover batch does not abort halfway; a valid batch posts real balances through app.load_opening_leave_balance rather than writing the append-only ledger itself; re-committing is a no-op, not a double-credit'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lv1');
+  v_admin uuid := '00000000-0000-0000-0000-000000028001';
+  v_emp2_code text;
+  v_emp3_code text;
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+  v_recommit app.jobs;
+  v_ids uuid[];
+  v_idx integer;
+  v_status text;
+  v_error text;
+  v_ledger_count integer;
+  v_units numeric;
+begin
+  select m.code into v_emp2_code from app.employees e join app.master_records m on m.id = e.master_record_id
+  where e.tenant_id = v_tenant1 and e.work_email = 'emp2work@lv1.test';
+  select m.code into v_emp3_code from app.employees e join app.master_records m on m.id = e.master_record_id
+  where e.tenant_id = v_tenant1 and e.work_email = 'emp3work@lv1.test';
+  if coalesce(v_emp2_code, '') = '' or coalesce(v_emp3_code, '') = '' then
+    raise exception 'assertion failed: the fixture employees must carry a resolvable master-record code -- employee_number is what a payroll export actually contains';
+  end if;
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'opening-leave.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-lv1-leaveob-source', v_admin, 'tenant admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'tenant admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'leave_opening_balance_import', v_source_file.id, '{}'::jsonb, 'idem-lv1-leaveob-job', v_admin, 'tenant admin');
+
+  perform app.stage_import_rows(
+    v_job.job_id,
+    jsonb_build_array(
+      -- 1: valid.
+      jsonb_build_object('employee_number', v_emp2_code, 'leave_type_code', 'annual', 'units', '5', 'as_of_date', '2024-01-01', 'source_reference', 'legacy payroll'),
+      -- 2: valid, a fractional balance -- half-days are ordinary in a real leave ledger.
+      jsonb_build_object('employee_number', v_emp3_code, 'leave_type_code', 'annual', 'units', '3.5', 'as_of_date', '2024-01-01', 'source_reference', 'legacy payroll'),
+      -- 3: an employee number that belongs to nobody in this tenant.
+      jsonb_build_object('employee_number', 'EMP-NOBODY', 'leave_type_code', 'annual', 'units', '5', 'as_of_date', '2024-01-01'),
+      -- 4: a leave type this tenant has never defined.
+      jsonb_build_object('employee_number', v_emp2_code, 'leave_type_code', 'sabbatical', 'units', '5', 'as_of_date', '2024-01-01'),
+      -- 5: zero units. An opening balance of nothing is a source-data error, not a balance.
+      jsonb_build_object('employee_number', v_emp2_code, 'leave_type_code', 'annual', 'units', '0', 'as_of_date', '2024-01-01'),
+      -- 6: units that are not a number at all.
+      jsonb_build_object('employee_number', v_emp2_code, 'leave_type_code', 'annual', 'units', 'twelve', 'as_of_date', '2024-01-01'),
+      -- 7: no as-of date. A balance with no date is not a balance -- accrual and
+      --    carry-forward both read from it.
+      jsonb_build_object('employee_number', v_emp2_code, 'leave_type_code', 'annual', 'units', '5'),
+      -- 8: an as-of date that does not exist.
+      jsonb_build_object('employee_number', v_emp2_code, 'leave_type_code', 'annual', 'units', '5', 'as_of_date', '2026-13-45'),
+      -- 9: a formula-injection prefix in a text cell.
+      jsonb_build_object('employee_number', '=cmd|calc', 'leave_type_code', 'annual', 'units', '5', 'as_of_date', '2024-01-01')
+    ),
+    v_admin, 'tenant admin'
+  );
+
+  select array_agg(id order by row_number) into v_ids from app.import_staging_rows where job_id = v_job.job_id;
+
+  for v_idx in 1..9 loop
+    perform app.validate_leave_opening_balance_import_row(v_ids[v_idx], v_admin, 'tenant admin');
+  end loop;
+
+  for v_idx in 1..2 loop
+    select validation_status into v_status from app.import_staging_rows where id = v_ids[v_idx];
+    if v_status <> 'valid' then
+      raise exception 'assertion failed: row % should be valid, got % (%)', v_idx, v_status,
+        (select error from app.import_staging_rows where id = v_ids[v_idx]);
+    end if;
+  end loop;
+
+  for v_idx in 3..9 loop
+    select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[v_idx];
+    if v_status <> 'invalid' then
+      raise exception 'assertion failed: row % should be invalid, got %', v_idx, v_status;
+    end if;
+    if coalesce(v_error, '') = '' then
+      raise exception 'assertion failed: row % is invalid but carries no reason -- an importer cannot fix what they are not told', v_idx;
+    end if;
+  end loop;
+
+  v_updated := app.commit_leave_opening_balance_import_job(v_job.job_id, true, v_admin, 'tenant admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected a completed job, got %', v_updated.status;
+  end if;
+  if (v_updated.payload ->> 'loaded_count')::integer <> 2 then
+    raise exception 'assertion failed: expected 2 loaded rows, got %', v_updated.payload ->> 'loaded_count';
+  end if;
+
+  -- The adapter writes no ledger row itself: every row went through
+  -- app.load_opening_leave_balance, so the entries carry that primitive's own
+  -- opening_balance event type and its append-only guarantees.
+  select count(*) into v_ledger_count from app.leave_balance_ledger
+  where tenant_id = v_tenant1 and event_type = 'opening_balance'
+    and idempotency_key like 'leave-opening-balance-import:%';
+  if v_ledger_count <> 2 then
+    raise exception 'assertion failed: expected 2 opening-balance ledger entries posted through the primitive, got %', v_ledger_count;
+  end if;
+
+  -- And the units landed as written, fraction included -- proof the import produced a real
+  -- balance rather than a ledger header with nothing behind it.
+  select units into v_units from app.leave_balance_ledger
+  where tenant_id = v_tenant1 and idempotency_key = 'leave-opening-balance-import:' || v_ids[2]::text;
+  if v_units <> 3.5 then
+    raise exception 'assertion failed: expected the fractional row to post 3.5 units, got %', v_units;
+  end if;
+
+  -- The invalid rows created nothing at all.
+  if exists (
+    select 1 from app.leave_balance_ledger
+    where tenant_id = v_tenant1 and idempotency_key = any(array[
+      'leave-opening-balance-import:' || v_ids[3]::text,
+      'leave-opening-balance-import:' || v_ids[5]::text,
+      'leave-opening-balance-import:' || v_ids[7]::text
+    ])
+  ) then
+    raise exception 'assertion failed: an invalid row must post no ledger entry';
+  end if;
+
+  -- Re-committing is a no-op rather than a double-credit. A cutover that half-succeeded and
+  -- was retried must not hand every employee their opening leave twice.
+  update app.jobs set status = 'in_progress' where job_id = v_job.job_id;
+  v_recommit := app.commit_leave_opening_balance_import_job(v_job.job_id, true, v_admin, 'tenant admin');
+  if (v_recommit.payload ->> 'loaded_count')::integer <> 0 or (v_recommit.payload ->> 'skipped_count')::integer <> 2 then
+    raise exception 'assertion failed: a re-commit must load 0 and skip 2, got loaded=% skipped=%',
+      v_recommit.payload ->> 'loaded_count', v_recommit.payload ->> 'skipped_count';
+  end if;
+  select count(*) into v_ledger_count from app.leave_balance_ledger
+  where tenant_id = v_tenant1 and idempotency_key like 'leave-opening-balance-import:%';
+  if v_ledger_count <> 2 then
+    raise exception 'assertion failed: a re-commit must not create a third ledger entry, got %', v_ledger_count;
+  end if;
+
+  raise notice 'PASS: leave opening balances import in bulk through the existing ledger primitive, invalid rows are refused with reasons at validation time, and a retry is a no-op';
+end $$;
+
+\echo '>> ISS-2026-303: the leave adapter refuses a caller holding HRS:Import but no administrative authority, and refuses a job staged under a different schema -- an adapter that will commit anything is not an adapter'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lv1');
+  v_admin uuid := '00000000-0000-0000-0000-000000028001';
+  -- Deliberately the HR staff account, which genuinely HOLDS HRS:Import. A bulk opening-balance
+  -- load rewrites the starting point of every employee's entitlement in one call, so the adapter
+  -- demands tenant-admin (or Supreme Admin) authority on top of the module permission -- exactly
+  -- as its finance sibling does. Picking an actor with no HRS at all would have proved only that
+  -- the module gate works.
+  v_staff uuid := '00000000-0000-0000-0000-000000028002';
+  v_wrong_job uuid;
+  v_job_id uuid := (select job_id from app.jobs where tenant_id = v_tenant1 and import_export_schema_code = 'leave_opening_balance_import' limit 1);
+begin
+  update app.jobs set status = 'in_progress' where job_id = v_job_id;
+  begin
+    perform app.commit_leave_opening_balance_import_job(v_job_id, true, v_staff, 'staff');
+    raise exception 'assertion failed: expected a caller without administrative authority to be refused even holding HRS:Import';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' and sqlerrm not like 'job_actor_unauthorized%' then raise; end if;
+  end;
+
+  -- A job from a different import schema entirely: the leave adapter must recognise it is not
+  -- the right adapter for it rather than reading its rows as leave balances.
+  select job_id into v_wrong_job from app.jobs where tenant_id = v_tenant1 and coalesce(import_export_schema_code, '') <> 'leave_opening_balance_import' limit 1;
+  if v_wrong_job is not null then
+    begin
+      perform app.commit_leave_opening_balance_import_job(v_wrong_job, true, v_admin, 'tenant admin');
+      raise exception 'assertion failed: expected a foreign-schema job to be refused by the leave adapter';
+    exception
+      when others then
+        if sqlerrm not like 'import_export_wrong_schema%' then raise; end if;
+    end;
+  end if;
+
+  update app.jobs set status = 'completed' where job_id = v_job_id;
+  raise notice 'PASS: the leave adapter refuses a caller without administrative authority and a foreign schema';
+end $$;

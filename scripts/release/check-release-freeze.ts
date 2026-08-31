@@ -2966,7 +2966,37 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // Nothing was retyped, and none was rebuilt from its creating migration -- several have been
   // superseded by later hardening migrations, and rebuilding from a creating migration is the
   // trap that nearly deleted five live dispatcher branches at the sixty-seventh pass.
-  migrationSetSha256: "6a9c6b9e8988a7724ace83a9bd5fa39e8e3d3deb438aebf6d1939a235eba9604",
+  //
+  // SEVENTIETH PASS (2026-08-31, ISS-2026-303): 415 files (+1,
+  // 20260831260000_create_inventory_and_leave_opening_balance_import_adapters.sql). The fifth
+  // and sixth PLT-131 import adapters -- inventory opening stock and staff leave opening
+  // balances -- closing the two domains ISS-2026-273 named and left open when its Finance half
+  // shipped.
+  //
+  // Neither adapter writes a business row. Each validates a staging row, then calls the
+  // EXISTING single-record primitive (app.post_inventory_movement, app.load_opening_leave_balance)
+  // once per valid row, so that primitive's authority gate, its positive-quantity rule, its
+  // idempotency-conflict detection, its audit event and its downstream GL/balance effects all
+  // apply to an imported row unchanged. An import cannot post what a person could not post by
+  // hand -- and that is proven rather than asserted: the inventory regression test only passes
+  // once the importer holds genuine record scope over the warehouse's own company org unit,
+  // because post_inventory_movement checks can_access_record and the adapter passes the
+  // importer's identity straight through instead of acting as the definer.
+  //
+  // Idempotency keys are derived from the staging row id, never taken from the file. A
+  // file-controlled key would let a bad export either collide two different rows into one
+  // posting or be replayed to double a warehouse's opening stock.
+  //
+  // Grants are service_role only, matching finance_opening_balance_import exactly, on both the
+  // app.* functions and their public.* wrappers. rbac-enforcement.sql's actor-authority sweep
+  // refused the first version of this migration for granting the validators to authenticated:
+  // they are volatile and take p_actor_auth_user_id, so any signed-in session could have passed
+  // someone else's identity. The validator wrappers are invoker-rights rather than definer,
+  // matching their app.* counterparts, as the public.* wrapper-parity gate requires -- it caught
+  // that on the first run too.
+  migrationSetSha256: "18baf889de6b445d8dd0afa39843d3b4e8a11b92b1947f1b61a7ee2f31955ad3",
+  // History: 6a9c6b9e8988a7724ace83a9bd5fa39e8e3d3deb438aebf6d1939a235eba9604
+  // (414 files, ISS-2026-069's per-domain approval routing).
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3383,7 +3413,21 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // is now an offset from current_date, preserving the relationships the assertions depend on.
   // The file's header had explicitly cleared the coverage seed of this exposure; that claim is
   // corrected in place, since it was wrong.
-  dbTestSetSha256: "55a5e1b2c54be399c7768a9a7b66ff3187c968fb891146654423b6f409a79184",
+  //
+  // SEVENTIETH PASS (2026-08-31, ISS-2026-303): 239 files, unchanged in count -- two existing
+  // files extended. master-data-import.sql gains the inventory adapter's blocks and
+  // hris-leave-permit-business-trip.sql the leave adapter's: each a real 9-row staging batch,
+  // 2 valid and 7 invalid, asserting that every invalid row is refused AT VALIDATION with a
+  // readable reason (a cutover must not abort on row 700), that the valid rows move the actual
+  // balance (120 + 7.5 = 127.5 units on hand; a fractional 3.5-day leave balance landing as
+  // written), that invalid rows post nothing, and that a re-commit posts 0 and skips 2 rather
+  // than double-posting. Each file also proves the adapter refuses a foreign-schema job and an
+  // under-authorised caller -- the leave case deliberately using the HR staff account, which
+  // genuinely HOLDS HRS:Import but is not an administrator, since an actor with no HRS at all
+  // would have proved only that the module gate works a second time.
+  dbTestSetSha256: "be44b6f0ed4f20b40a7a8d337f4ea41cd0c0575a502fdc49a59c8e53cca94d8d",
+  // History: 55a5e1b2c54be399c7768a9a7b66ff3187c968fb891146654423b6f409a79184
+  // (239 files, ISS-2026-069 plus the wall-clock fix to hris-leave-permit-business-trip.sql).
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 
