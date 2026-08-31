@@ -450,4 +450,157 @@ begin
 end;
 $$;
 
+
+\echo '>> ISS-2026-302 completeness sweep: EVERY app.* function gating on SEC:Configure, FIN:Approve or HRS:Approve now takes p_client_ip and calls app.assert_ip_allowed -- this is the assertion that catches the next such function being added without the gate, which is how the gap opened in the first place'
+do $$
+declare
+  v_missing text[];
+  v_wired integer;
+  v_wrapper_mismatch text[];
+begin
+  -- The three tuples ISS-2026-236 named. FIN:Approve is reached through the
+  -- app.check_finance_*_authority helpers, which take the action as a parameter -- that is
+  -- exactly why a naive count of literal evaluate_permission('FIN', 'Approve') calls returns
+  -- zero and the entry's own figure of 61 was low.
+  select array_agg(fn order by fn), count(*) filter (where wired) into v_missing, v_wired from (
+    select n.nspname || '.' || p.proname as fn,
+           (pg_get_functiondef(p.oid) like '%p_client_ip%'
+            and pg_get_functiondef(p.oid) like '%assert_ip_allowed%') as wired
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.provolatile = 'v'
+      and (pg_get_functiondef(p.oid) ~ '''SEC'',\s*''Configure'''
+        or pg_get_functiondef(p.oid) ~ '''HRS'',\s*''Approve'''
+        or pg_get_functiondef(p.oid) ~ 'check_finance_[a-z_]+_authority\(\s*''Approve''')
+  ) s where not wired;
+
+  -- app.create_and_post_finance_system_journal is the one deliberate exclusion: its front
+  -- door admits FIN:Edit OR FIN:Approve, no request reaches it directly, and it exists to be
+  -- composed by app.post_finance_subledger_batch / app.allocate_finance_receipt /
+  -- app.post_finance_correction. Naming it here rather than filtering it out of the query
+  -- above keeps the exclusion visible to the next reader instead of hiding it in a predicate.
+  if coalesce(v_missing, array[]::text[]) <> array['app.create_and_post_finance_system_journal'] then
+    raise exception 'assertion failed: expected exactly one deliberately-unwired function, got %', coalesce(v_missing, array[]::text[]);
+  end if;
+
+  if v_wired <> 0 then
+    raise exception 'assertion failed: the missing-set query must only return unwired functions';
+  end if;
+
+  select count(*) into v_wired from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app' and p.provolatile = 'v'
+    and pg_get_functiondef(p.oid) like '%p_client_ip%'
+    and pg_get_functiondef(p.oid) like '%assert_ip_allowed%'
+    and (pg_get_functiondef(p.oid) ~ '''SEC'',\s*''Configure'''
+      or pg_get_functiondef(p.oid) ~ '''HRS'',\s*''Approve'''
+      or pg_get_functiondef(p.oid) ~ 'check_finance_[a-z_]+_authority\(\s*''Approve''');
+  if v_wired <> 65 then
+    raise exception 'assertion failed: expected 65 wired functions, got %', v_wired;
+  end if;
+
+  -- The public.* wrapper must expose the parameter too, or the gate is unreachable from
+  -- PostgREST and every browser-originated call silently skips it.
+  select array_agg(fn order by fn) into v_wrapper_mismatch from (
+    select a.proname as fn
+    from pg_proc a join pg_namespace na on na.oid = a.pronamespace
+    join pg_proc b on b.proname = a.proname
+    join pg_namespace nb on nb.oid = b.pronamespace and nb.nspname = 'public'
+    where na.nspname = 'app'
+      and a.provolatile = 'v'
+      and pg_get_functiondef(a.oid) like '%p_client_ip%'
+      and pg_get_functiondef(a.oid) like '%assert_ip_allowed%'
+      and (pg_get_functiondef(a.oid) ~ '''SEC'',\s*''Configure'''
+        or pg_get_functiondef(a.oid) ~ '''HRS'',\s*''Approve'''
+        or pg_get_functiondef(a.oid) ~ 'check_finance_[a-z_]+_authority\(\s*''Approve''')
+      and pg_get_function_identity_arguments(b.oid) not like '%p_client_ip%'
+  ) s;
+  if v_wrapper_mismatch is not null then
+    raise exception 'assertion failed: % public.* wrapper(s) do not expose p_client_ip, so the gate is unreachable from PostgREST -- %',
+      array_length(v_wrapper_mismatch, 1), v_wrapper_mismatch;
+  end if;
+
+  raise notice 'PASS: all 65 wired, 1 deliberately excluded and named, every wrapper exposes the parameter';
+end;
+$$;
+
+\echo '>> ISS-2026-302 behaviour, end to end on a real one of the 65: app.add_ip_allowlist_entry (SEC:Configure) denies an out-of-allowlist caller, allows an in-range one, is a no-op when no address is supplied, and is skipped for a holder of an approved bypass grant'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaeip');
+  v_supreme uuid := '00000000-0000-0000-0000-000032000000';
+  v_admin1 uuid := '00000000-0000-0000-0000-000032000001';
+  v_admin3 uuid := '00000000-0000-0000-0000-000032000004';
+  v_role uuid;
+  v_draft app.role_versions;
+  v_entry app.ip_allowlist_entries;
+  v_before integer;
+begin
+  -- A SECOND administrator, deliberately WITHOUT the bypass grant admin1 acquired above.
+  -- Reusing admin1 would have proved only that a bypass holder is not blocked, which is the
+  -- least interesting of the four cases here.
+  insert into auth.users (id, email) values (v_admin3, 'admin3@iaeip.test');
+  perform app.invite_user(v_tenant1, v_admin3, 'admin3@iaeip.test', 'Admin Three', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'admin3@iaeip.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_admin3, 'tenant_admin', v_tenant1, null, 'tester');
+  v_role := (app.create_role(v_tenant1, 'IaeIp Admin Three', 'SEC:Configure/View', 'tester')).id;
+  v_draft := app.create_role_version(v_role, 'tester');
+  perform app.set_role_version_permissions(v_draft.id, array(select id from app.permissions where resource_module_code = 'SEC' and action in ('Configure', 'View')), 'tester');
+  perform app.publish_role_version(v_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_role and status = 'published'), v_admin3, v_supreme, 'supreme');
+
+  -- A live allowlist range and real enforcement. admin1 carries an approved bypass from the
+  -- block above, so it can still reconfigure the policy from anywhere -- which is the whole
+  -- point of the bypass and is what stops this fixture locking itself out.
+  perform app.add_ip_allowlist_entry(v_tenant1, '10.0.0.0/8', 'datacentre range', 'admin', v_admin1, 'admin1');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant1, 'enforced', v_admin1, 'admin1');
+
+  -- 1. Out of range, no bypass: refused. This is the case that did not exist before -- the
+  --    identical call, from the identical address, succeeded on all 65 of these functions.
+  begin
+    perform app.add_ip_allowlist_entry(v_tenant1, '192.0.2.0/24', 'from an unlisted address', 'admin', v_admin3, 'admin3', '203.0.113.77');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-allowlist caller on a SEC:Configure action';
+  exception when insufficient_privilege then
+    if sqlerrm not like 'ip_not_allowed%' then raise; end if;
+  end;
+
+  -- The refusal is genuinely the IP gate and not the authority check quietly failing: the
+  -- same actor, same call, from an in-range address, succeeds.
+  v_entry := app.add_ip_allowlist_entry(v_tenant1, '192.0.2.0/24', 'from a listed address', 'admin', v_admin3, 'admin3', '10.1.2.3');
+  if v_entry.cidr::text <> '192.0.2.0/24' then
+    raise exception 'assertion failed: expected the in-range call to succeed, got %', v_entry.cidr;
+  end if;
+
+  -- 3. No address supplied: unchanged behaviour. Every existing caller passes four arguments
+  --    and must keep working exactly as before -- a widened signature that broke them would
+  --    be a far worse defect than the one being fixed.
+  v_entry := app.add_ip_allowlist_entry(v_tenant1, '198.51.100.0/24', 'no address supplied', 'admin', v_admin3, 'admin3');
+  if v_entry.cidr::text <> '198.51.100.0/24' then
+    raise exception 'assertion failed: expected the no-address call to behave exactly as before';
+  end if;
+
+  -- 4. Approved bypass grant: honoured, from the same address that just refused admin3.
+  -- (203.0.113.77, deliberately NOT the 203.0.113.9 the ISS-2026-307 block above records a
+  -- durable denial for -- reusing it would have made the residual assertion below count
+  -- somebody else's row.)
+  if not app.has_active_ip_allowlist_bypass(v_tenant1, v_admin1) then
+    raise exception 'assertion failed: fixture precondition -- admin1 should still hold the approved bypass';
+  end if;
+  v_entry := app.add_ip_allowlist_entry(v_tenant1, '198.18.0.0/15', 'bypass holder, out-of-range address', 'admin', v_admin1, 'admin1', '203.0.113.77');
+  if v_entry.cidr::text <> '198.18.0.0/15' then
+    raise exception 'assertion failed: expected an approved bypass to skip the gate';
+  end if;
+
+  -- ISS-2026-307's residual, asserted as a property rather than left as prose: the denial in
+  -- case 1 raised inside the business transaction, so its own evaluation row went with the
+  -- rollback. If this ever starts persisting, invert this assertion -- do not delete it.
+  select count(*) into v_before from app.ip_access_evaluations
+  where tenant_id = v_tenant1 and ip_address = '203.0.113.77' and decision = 'denied';
+  if v_before <> 0 then
+    raise exception 'assertion failed: a denial raised inside a business transaction is expected to lose its evaluation row (ISS-2026-307 residual); it now persists (% row(s)), so this assertion should be INVERTED, not removed', v_before;
+  end if;
+
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant1, 'disabled', v_admin1, 'admin1');
+  raise notice 'PASS: the IP gate denies, allows, no-ops without an address, and honours a bypass, on a real one of the 65';
+end;
+$$;
+
 \echo 'ALL IAE-028 (IP Restriction and Network Access) ASSERTIONS PASSED'

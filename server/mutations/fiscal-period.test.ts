@@ -150,6 +150,11 @@ describe("reopenFinancePeriod", () => {
       p_reason: "correcting a posting error",
       p_actor_auth_user_id: ACTOR_ID,
       p_actor_label: "finance-approver",
+      // ISS-2026-302: the IP-allowlist address, resolved from the request rather than passed
+      // by the caller. Null here because a unit test has no request in scope -- which is the
+      // same answer a background job gets, and means the gated function skips the check
+      // exactly as it did before the control existed.
+      p_client_ip: null,
     });
   });
 

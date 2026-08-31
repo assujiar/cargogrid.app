@@ -22,6 +22,7 @@ import {
   type RequestFinanceSettlementReversalInput,
   type FinanceSettlement,
 } from "../contracts/settlement/settlement.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type SettlementMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -133,6 +134,9 @@ export async function discardFinanceSettlementDraft(client: SettlementMutationRp
     p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -144,6 +148,9 @@ export async function approveFinanceSettlement(client: SettlementMutationRpcClie
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -156,6 +163,9 @@ export async function executeFinanceSettlement(client: SettlementMutationRpcClie
     p_execution_reference: parsedInput.executionReference,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -167,6 +177,9 @@ export async function postFinanceSettlement(client: SettlementMutationRpcClient,
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -178,5 +191,8 @@ export async function requestFinanceSettlementReversal(client: SettlementMutatio
     p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

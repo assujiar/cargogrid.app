@@ -37,6 +37,7 @@ import {
   type UserSession,
   type MfaException,
 } from "../contracts/enterprise-mfa/enterprise-mfa.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type EnterpriseMfaMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -85,6 +86,9 @@ export async function setMfaTenantPolicy(client: EnterpriseMfaMutationRpcClient,
     p_additional_high_risk_actions: parsedInput.additionalHighRiskActions,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new EnterpriseMfaMutationError(classifyError(error.message), error.message);
@@ -155,6 +159,9 @@ export async function revokeUserSession(client: EnterpriseMfaMutationRpcClient, 
     p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new EnterpriseMfaMutationError(classifyError(error.message), error.message);
@@ -174,6 +181,9 @@ export async function revokeAllActorSessions(client: EnterpriseMfaMutationRpcCli
     p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new EnterpriseMfaMutationError(classifyError(error.message), error.message);
@@ -192,6 +202,9 @@ export async function requestMfaException(client: EnterpriseMfaMutationRpcClient
     p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new EnterpriseMfaMutationError(classifyError(error.message), error.message);

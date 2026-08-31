@@ -45,8 +45,8 @@ written.
 |---|---|
 | `OPEN` | 50 — 4 High, 21 Medium, 25 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 214 |
-| **Total records** | **272** |
+| `RESOLVED` | 215 |
+| **Total records** | **273** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -97,7 +97,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-284` | Medium | `OPEN` | A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpo |
 | `ISS-2026-288` | Medium | `OPEN` | `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the p |
 | `ISS-2026-300` | Medium | `RESOLVED` | `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations un |
-| `ISS-2026-302` | Medium | `OPEN` | the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring |
+| `ISS-2026-302` | Medium | `RESOLVED` | the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring |
 | `ISS-2026-303` | Medium | `RESOLVED` | Inventory and HRIS still have no bulk opening-balance import |
 | `ISS-2026-304` | Medium | `OPEN` | no public status page for unauthenticated visitors |
 | `ISS-2026-305` | Medium | `SUPERSEDED` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
@@ -111,6 +111,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
 | `ISS-2026-316` | Low | `OPEN` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
 | `ISS-2026-317` | Low | `OPEN` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
+| `ISS-2026-318` | Medium | `OPEN` | 111 `public.*` finance wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -5422,7 +5423,7 @@ that the enforcement reaches real, previously-unwired `SEC:Configure` functions
 `SEC:Configure` role gap it was written for rather than passing for the wrong reason. Full
 `pnpm run db:test` `ALL PASSED`.
 
-### ISS-2026-302 — the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring (OPEN, Medium)
+### ISS-2026-302 — the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring (`RESOLVED` 2026-08-31, Medium)
 
 Split out of `ISS-2026-236` on 2026-08-30 when that entry's step-up half was closed, rather
 than allowing a half-fix to retire a two-part finding.
@@ -5452,6 +5453,82 @@ they are not — the allowlist is enforced on the paths that were explicitly wir
 these 61 are not among them. An attacker who already holds a valid session and the right role
 (and, in an MFA-enabled tenant, can complete a step-up) is not additionally stopped by network
 location on these actions.
+
+**`RESOLVED`, 2026-08-31**, under `ADR-0027` Part A, by
+`20260831270000_wire_ip_allowlist_into_sec_configure_fin_approve_hrs_approve.sql` (65 function
+pairs) and its corrective sibling `20260831280000` (schema documentation), both applied live
+and recorded in `supabase_migrations.schema_migrations`, plus the TypeScript half in
+`lib/security/client-ip.ts` and 27 mutation modules.
+
+**The count in this entry's own title is wrong, and the correction matters.** A live `pg_proc`
+sweep returns **66** volatile `app.*` functions gating on one of the three tuples, not 61: 31
+on `SEC:Configure` or `HRS:Approve` through `app.evaluate_permission`, and **35 on
+`FIN:Approve` through the `app.check_finance_*_authority` helpers**. Those helpers take the
+action as a parameter, so a search for a literal `evaluate_permission(..., 'FIN', 'Approve')`
+returns **zero** — which is almost certainly how the finance third went uncounted. 61 is the
+number with a TypeScript caller, which is a different question. Whoever writes the next sweep
+of this kind should search for the helper shape as well as the direct one.
+
+**65 are wired. One is deliberately not**, and naming it is part of the closure rather than a
+footnote: `app.create_and_post_finance_system_journal` admits `FIN:Edit` **or** `FIN:Approve`,
+has no TypeScript caller, and exists to be composed by `app.post_finance_subledger_batch`,
+`app.allocate_finance_receipt` and `app.post_finance_correction`. It is an internal posting
+primitive that happens to accept an approver, not an approval a person performs from a
+browser. Wiring it would mean threading an address through every internal caller, to put a
+`p_client_ip` on a function no request ever reaches.
+
+**How the 130 definitions were produced.** Every one — 65 `app.*` plus their 65 `public.*`
+wrappers — is the **live** `pg_get_functiondef` output with exactly one scripted insertion,
+asserted to match exactly once per function before anything was emitted. Nothing was retyped
+and nothing was rebuilt from its creating migration; many of these have been superseded by
+later hardening migrations, and rebuilding from a creating migration is the trap that nearly
+deleted five live dispatcher branches at the sixty-seventh freeze pass. `CREATE OR REPLACE`
+cannot append a parameter (`ISS-2026-260`), so each is `DROP` + `CREATE`, wrapper first
+because a `language sql` wrapper holds a real `pg_depend` edge on the function it calls.
+
+**What this guarantees, and what it does not.** `p_client_ip` defaults to null and the gate is
+skipped when it is null, so this is **not** a boundary a caller cannot cross — any caller may
+omit the address, exactly as before. It is defense in depth and an audit signal: a caller that
+*does* supply an address is now checked on all 65 where it was checked on none. Authority
+remains the enforcement that cannot be omitted. All 65 now say exactly this in their own
+`comment on function`, so the next reader learns it from the schema rather than from here.
+
+**The TypeScript half reads the address rather than accepting it.** `lib/security/client-ip.ts`
+resolves it from the request inside the mutation layer; no call site passes it, because a
+security control a call site can forget to pass is not a control. It returns null outside a
+request — a unit test, a background job, a scheduled sweep — and null means "no address
+supplied", which is the correct answer: an allowlist is a statement about where a *person* may
+act from, and a sweep has no location to judge.
+
+**The header choice inside that helper is the security-relevant part.** `x-forwarded-for` is
+written by whoever sent the request, and a proxy *appends* rather than replaces — so on a
+spoofed request the list reads `<attacker's invention>, <address the proxy actually observed>`.
+Taking the **first** entry, the conventional "client IP" idiom, would hand anyone membership of
+any allowlist for the price of one header. So: `x-real-ip` first (the platform sets it and a
+client cannot forge a header the proxy overwrites), then the **last** `x-forwarded-for` hop.
+That rule has its own test, named for the spoofing case.
+
+**Evidence.** `scripts/db-tests/ip-restriction-network-access.sql` gains a completeness sweep —
+all 65 wired, the one exclusion named rather than filtered out of the query, and every
+`public.*` wrapper exposing the parameter, because a wrapper that does not makes the gate
+unreachable from PostgREST and every browser call silently skips it — plus an end-to-end
+behavioural block on `app.add_ip_allowlist_entry` proving denial, allow, no-op without an
+address, and an approved bypass being honoured. The 65 were transformed by **two** different
+scripted substitutions, one per authority shape, so `scripts/db-tests/finance-aging.sql` proves
+the `check_finance_*_authority` shape separately on `app.set_finance_aging_bucket_config` rather
+than letting one shape stand in for both. 9 new TypeScript tests on the header-trust rule.
+`db:test`, `typecheck`, `lint`, `test` green.
+
+**Not covered by any test here, stated rather than implied:** that Next's `headers()` returns
+the real address inside a live request. That is a framework guarantee, it needs a running
+server to observe, and the e2e suite cannot run in this sandbox (`ISS-2026-316`). Everything
+either side of it — which header is trusted, what happens when none is present, and what the
+database does with an address once it has one — is tested.
+
+**Found while doing this: `ISS-2026-318`,** 111 `public.*` finance wrappers whose live
+`security definer` flag has drifted from what the migration set declares. 29 of them were
+inside this change's own blast radius and are repaired here; the rest are filed separately.
+
 
 ### ISS-2026-237 — `server/queries/automation-rule.ts::getLatestAutomationRulePublishApprovalRequest` uses `select("*")` against `app.approval_requests`, whose `ended_reason` column is deliberately not granted to `authenticated`, breaking the live Automation Rule detail page (found at `HDN-378` Tier C schema-wide completeness sweep lens, `RESOLVED`, Medium, owner `HDN-387`)
 
@@ -8121,3 +8198,52 @@ discipline the six existing `PLT-131` adapters use — but only after the owner 
 runs the migration) settles the three questions above, since the adapter has to encode an
 answer to each. That makes this owner-input work, not purely engineering work, which is why
 it is filed rather than built.
+
+### ISS-2026-318 — 111 `public.*` finance wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it (found and live-reproduced 2026-08-31 while closing `ISS-2026-302`, `OPEN`, Medium)
+
+**How it surfaced, which is the interesting part.** `ISS-2026-302`'s migration rebuilds 65
+`public.*` wrappers from their **live** `pg_get_functiondef` output. The first `pnpm run
+db:test` after that failed immediately, naming 29 wrappers whose definer/invoker mode now
+differed from their `app.*` counterpart. The gate was right and the input was wrong: the live
+wrappers are `language sql` with no `SECURITY DEFINER`, while
+`20260826000000_create_public_api_data_wrappers.sql` — the migration that created every one of
+them — declares `security definer` explicitly, alongside a comment calling each "a thin
+security-definer pass-through". Copying live into a migration is what made the divergence
+visible.
+
+**Scope, measured live rather than estimated.** A direct query over the hosted project
+(`awdlicmwzdxquopwtcfd`) returns **111** `public.*` functions that are invoker-rights while
+their identically-named `app.*` function is `security definer`, after the 29 inside
+`ISS-2026-302`'s blast radius were repaired. Every one is a finance wrapper
+(`app.check_finance_*_authority`, `allocate_finance_receipt`, `capture_finance_receipt`,
+`apply_finance_ap_settlement`, and so on), which points at one event rather than gradual decay
+— most plausibly a live-applied fix that recreated these wrappers from a source lacking the
+flag. The same query against a migration-built disposable database returns **zero**.
+
+**Why no gate caught it, and why that is the real finding.**
+`scripts/db-tests/public-api-wrapper-regression.sql` asserts exactly this property, exhaustively
+— and it runs against a database built from the migrations. It compares what the migrations say
+to what the migrations say. Every drift between the migration set and the live project is
+invisible to it by construction, and always will be. This is the same class as `ISS-2026-284`
+(a load-bearing environment fact that drifted unverified because no checkpoint re-derived it)
+and of the "reading the migration that created a function is not reading the function" lesson
+this repository has now learned three times, running in the opposite direction.
+
+**Not an exposure, and the direction matters.** An invoker-rights wrapper is *more* restrictive
+than a definer one: the caller must hold `EXECUTE` on the inner `app.*` function in their own
+right. Those grants exist, so nothing is broken today, and nothing is reachable that was not
+reachable before. **Risk in plain terms:** these functions do not behave the way the code says
+they behave. If someone later tightens an `app.*` grant — a perfectly ordinary hardening step,
+and one this backlog has taken repeatedly — the finance wrappers would begin failing in
+production for reasons nobody could find by reading the repository, because the repository says
+they run as their owner and they do not.
+
+**Status `OPEN`**, Medium. **What would close it:** a corrective migration recreating the 111
+wrappers with the mode `20260826000000` declares, generated the same way `ISS-2026-302`'s was —
+live definition in, one asserted substitution, `DROP` + `CREATE`, grants re-emitted from each
+function's own live grantee set. That is mechanical and needs nobody's permission; it is filed
+rather than done in the same pass only because it is a second large generated migration and
+belongs in its own change with its own evidence. **Separately worth doing, and larger:** a
+live-versus-migrations drift check. The parity gate cannot become that check — CI has no live
+database credentials and should not — so it would be a separate operator-run reconciliation,
+which is a real design question rather than a script.

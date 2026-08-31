@@ -2994,7 +2994,42 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // someone else's identity. The validator wrappers are invoker-rights rather than definer,
   // matching their app.* counterparts, as the public.* wrapper-parity gate requires -- it caught
   // that on the first run too.
-  migrationSetSha256: "18baf889de6b445d8dd0afa39843d3b4e8a11b92b1947f1b61a7ee2f31955ad3",
+  //
+  // SEVENTY-FIRST PASS (2026-08-31, ISS-2026-302): 417 files (+2). The IP-allowlist half of
+  // ISS-2026-236, closed for all three high-risk tuples.
+  //
+  // 20260831270000 widens 65 app.* functions and their 65 public.* wrappers with a trailing
+  // optional p_client_ip and the gate 20260826190000 established for the import-commit RPCs,
+  // placed after the authority check and before any state change. Every one of the 130
+  // definitions is the LIVE pg_get_functiondef output with exactly one scripted insertion,
+  // asserted to match once per function before anything was emitted -- nothing retyped, and
+  // nothing rebuilt from a creating migration, which is the trap that nearly deleted five
+  // dispatcher branches at the sixty-seventh pass.
+  //
+  // The entry's own count of 61 is wrong and the correction is recorded in the ledger: 66
+  // functions gate on one of the three tuples, 35 of them on FIN:Approve through the
+  // app.check_finance_*_authority helpers, which take the action as a parameter and so return
+  // nothing to a search for a literal evaluate_permission('FIN', 'Approve'). 65 are wired;
+  // app.create_and_post_finance_system_journal is deliberately excluded and named in the
+  // db-test rather than filtered out of its query.
+  //
+  // 20260831280000 is a CORRECTIVE migration, not an edit. 20260831270000 was already applied
+  // when its header was found to describe an application-layer pre-check that was deliberately
+  // not built. An applied migration is never edited -- not even a comment inside one, because
+  // once the file stops being a byte-exact record of what ran, nobody can tell which parts of
+  // it still are -- so the correction lands as real DDL: comment on function for all 65, none
+  // of which had a comment at all, each now stating in the schema that it is IP-gated, that
+  // the gate is defense in depth rather than a boundary a caller cannot cross, and that a
+  // denial raised here takes its own evaluation row with it (ISS-2026-307's residual).
+  //
+  // Live drift found while doing this and filed as ISS-2026-318: 29 of the 65 public.* wrappers
+  // had lost their security definer flag on the hosted project while the migration set declares
+  // it. Recreated here as declared, which repairs those 29 live. 111 more remain, all finance,
+  // and the parity gate cannot see any of them -- it runs against a migration-built database,
+  // so it compares what the migrations say to what the migrations say.
+  migrationSetSha256: "6564319224c288a622775d1dc56fac4f02872dfc08c2701c5b07be5f134ccbb3",
+  // History: 18baf889de6b445d8dd0afa39843d3b4e8a11b92b1947f1b61a7ee2f31955ad3
+  // (415 files, ISS-2026-303's inventory and leave opening-balance import adapters).
   // History: 6a9c6b9e8988a7724ace83a9bd5fa39e8e3d3deb438aebf6d1939a235eba9604
   // (414 files, ISS-2026-069's per-domain approval routing).
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
@@ -3425,7 +3460,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // under-authorised caller -- the leave case deliberately using the HR staff account, which
   // genuinely HOLDS HRS:Import but is not an administrator, since an actor with no HRS at all
   // would have proved only that the module gate works a second time.
-  dbTestSetSha256: "be44b6f0ed4f20b40a7a8d337f4ea41cd0c0575a502fdc49a59c8e53cca94d8d",
+  //
+  // SEVENTY-FIRST PASS (2026-08-31, ISS-2026-302): 239 files, unchanged in count -- four
+  // existing files extended. ip-restriction-network-access.sql gains a completeness sweep (all
+  // 65 wired, the one exclusion named rather than filtered out, and every public.* wrapper
+  // exposing the parameter, because a wrapper that does not makes the gate unreachable from
+  // PostgREST and every browser call silently skips it) plus an end-to-end behavioural block
+  // proving denial, allow, no-op without an address, and an approved bypass being honoured.
+  // finance-aging.sql proves the SECOND authority shape independently: the 65 were transformed
+  // by two different scripted substitutions, so letting the evaluate_permission shape stand in
+  // for the check_finance_*_authority one would have left half the change unproven.
+  // finance-settlement.sql and finance-subledger.sql have three pinned function signatures
+  // updated for the added parameter -- those assertions name an exact signature, and the
+  // signature changed.
+  dbTestSetSha256: "4e8b11a879ff2062677c309978b019b428cd15f08134ca3c3915e1ab90422eec",
+  // History: be44b6f0ed4f20b40a7a8d337f4ea41cd0c0575a502fdc49a59c8e53cca94d8d
+  // (239 files, ISS-2026-303's inventory and leave opening-balance import regression blocks).
   // History: 55a5e1b2c54be399c7768a9a7b66ff3187c968fb891146654423b6f409a79184
   // (239 files, ISS-2026-069 plus the wall-clock fix to hris-leave-permit-business-trip.sql).
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",

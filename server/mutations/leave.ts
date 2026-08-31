@@ -41,6 +41,7 @@ import {
   type SyncEmployeeLeaveLifecycleStatusInput,
   type ApproveLeaveForPayrollInputInput,
 } from "../contracts/leave/leave.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type LeaveMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -137,6 +138,9 @@ export async function publishLeaveType(client: LeaveMutationRpcClient, input: Pu
     p_expected_version: v.expectedVersion,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -166,6 +170,9 @@ export async function publishLeaveTypePolicyVersion(client: LeaveMutationRpcClie
     p_expected_version: v.expectedVersion,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -335,5 +342,8 @@ export async function approveLeaveForPayrollInput(client: LeaveMutationRpcClient
     p_expected_version: v.expectedVersion,
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

@@ -17,6 +17,7 @@ import {
   type DiscardFinanceVendorBillDraftInput,
   type FinanceVendorBill,
 } from "../contracts/vendor-bill/vendor-bill.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type VendorBillMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -122,6 +123,9 @@ export async function approveFinanceVendorBill(client: VendorBillMutationRpcClie
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -133,5 +137,8 @@ export async function postFinanceVendorBill(client: VendorBillMutationRpcClient,
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

@@ -346,4 +346,51 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-302 behaviour on the FIN:Approve authority shape: app.set_finance_aging_bucket_config denies an out-of-allowlist caller and allows an in-range one. The 65 widened functions were transformed by TWO different scripted substitutions -- one for the app.evaluate_permission shape (SEC/HRS, proven in ip-restriction-network-access.sql) and one for the app.check_finance_*_authority shape -- so each shape needs a real execution, not one shape standing in for both'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmeaginga');
+  v_admin uuid := '00000000-0000-0000-0000-000000035001';
+  v_manager uuid := '00000000-0000-0000-0000-000000035002';
+  v_sec uuid := '00000000-0000-0000-0000-000000035006';
+  v_role uuid;
+  v_draft app.role_versions;
+  v_buckets jsonb := '[{"label":"Current","minDays":0,"maxDays":30},{"label":"Over 30","minDays":31,"maxDays":null}]'::jsonb;
+begin
+  -- A SEC:Configure holder, because configuring the allowlist is itself SEC:Configure-gated
+  -- and the finance manager deliberately holds no SEC permission at all.
+  insert into auth.users (id, email) values (v_sec, 'secadmina@acmeaging.test');
+  perform app.invite_user(v_tenant_a, v_sec, 'secadmina@acmeaging.test', 'Security Admin A', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'secadmina@acmeaging.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_sec, 'tenant_admin', v_tenant_a, null, 'tester');
+  v_role := (app.create_role(v_tenant_a, 'Aging Security Admin', 'SEC:Configure/View', 'tester')).id;
+  v_draft := app.create_role_version(v_role, 'tester');
+  perform app.set_role_version_permissions(v_draft.id, array(select id from app.permissions where resource_module_code = 'SEC' and action in ('Configure', 'View')), 'tester');
+  perform app.publish_role_version(v_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_role and status = 'published'), v_sec, v_admin, 'tester');
+
+  perform app.add_ip_allowlist_entry(v_tenant_a, '10.0.0.0/8', 'datacentre range', 'admin', v_sec, 'secadmina');
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant_a, 'enforced', v_sec, 'secadmina');
+
+  -- Out of range: refused, on a function whose authority check is the finance-helper shape
+  -- rather than the evaluate_permission one.
+  begin
+    perform app.set_finance_aging_bucket_config(v_tenant_a, 'ar', v_buckets, v_manager, 'financemanagera', '203.0.113.9');
+    raise exception 'assertion failed: expected ip_not_allowed for an out-of-allowlist caller on a FIN:Approve action';
+  exception when insufficient_privilege then
+    if sqlerrm not like 'ip_not_allowed%' then raise; end if;
+  end;
+
+  -- In range: the identical call succeeds, so the refusal above was the IP gate and not the
+  -- authority check quietly failing.
+  perform app.set_finance_aging_bucket_config(v_tenant_a, 'ar', v_buckets, v_manager, 'financemanagera', '10.1.2.3');
+
+  -- No address supplied: unchanged. Every pre-existing caller passes five arguments.
+  perform app.set_finance_aging_bucket_config(v_tenant_a, 'ar', v_buckets, v_manager, 'financemanagera');
+
+  perform app.set_ip_allowlist_enforcement_mode(v_tenant_a, 'disabled', v_sec, 'secadmina');
+  raise notice 'PASS: the FIN:Approve authority shape enforces the IP allowlist too, and still no-ops without an address';
+end;
+$$;
+
 \echo 'ALL FIN-210 (AR and AP Aging) db-test assertions passed.'

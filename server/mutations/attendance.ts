@@ -31,6 +31,7 @@ import {
   type PublishAttendancePolicyVersionInput,
   type RecalculateAttendanceExceptionsInput,
 } from "../contracts/attendance/attendance.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type AttendanceMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -163,6 +164,9 @@ export async function decideAttendanceCorrection(client: AttendanceMutationRpcCl
     p_decided_reason: parsed.decidedReason,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) throw new AttendanceMutationError(classifyError(error.message), error.message);
   const row = firstRow(data);
@@ -223,6 +227,9 @@ export async function approveAttendanceForPayrollInput(client: AttendanceMutatio
     p_employee_id: parsed.employeeId,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) throw new AttendanceMutationError(classifyError(error.message), error.message);
   return (data as Record<string, unknown>[] | null) ?? [];
@@ -289,6 +296,9 @@ export async function publishAttendancePolicyVersion(client: AttendanceMutationR
     p_expected_version: parsed.expectedVersion,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) throw new AttendanceMutationError(classifyError(error.message), error.message);
   const row = firstRow(data);

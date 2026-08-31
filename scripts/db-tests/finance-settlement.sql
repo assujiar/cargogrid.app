@@ -449,7 +449,7 @@ begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
 
-  select has_function_privilege('authenticated', 'app.request_finance_settlement_reversal(uuid,text,uuid,text)', 'EXECUTE') into v_can_authenticated_exec;
+  select has_function_privilege('authenticated', 'app.request_finance_settlement_reversal(uuid,text,uuid,text,text)', 'EXECUTE') into v_can_authenticated_exec;
   if not v_can_authenticated_exec then
     raise exception 'assertion failed: authenticated must retain EXECUTE on app.request_finance_settlement_reversal -- RGL-BLK-009''s own reachability regression';
   end if;

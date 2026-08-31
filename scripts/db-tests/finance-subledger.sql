@@ -873,10 +873,10 @@ declare
   v_fn text;
 begin
   foreach v_fn in array array[
-    'app.post_finance_opening_balance_batch(text, uuid, uuid, text)',
+    'app.post_finance_opening_balance_batch(text, uuid, uuid, text, text)',
     'app.validate_finance_opening_balance_import_row(uuid, uuid, text)',
     'app.commit_finance_opening_balance_import_job(uuid, boolean, uuid, text, text)',
-    'public.post_finance_opening_balance_batch(text, uuid, uuid, text)',
+    'public.post_finance_opening_balance_batch(text, uuid, uuid, text, text)',
     'public.validate_finance_opening_balance_import_row(uuid, uuid, text)',
     'public.commit_finance_opening_balance_import_job(uuid, boolean, uuid, text, text)'
   ] loop

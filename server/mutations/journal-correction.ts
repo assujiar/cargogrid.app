@@ -21,6 +21,7 @@ import {
   type DiscardFinanceCorrectionDraftInput,
   type FinanceJournalCorrection,
 } from "../contracts/journal-correction/journal-correction.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type JournalCorrectionMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -148,6 +149,9 @@ export async function approveFinanceCorrection(client: JournalCorrectionMutation
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -159,5 +163,8 @@ export async function postFinanceCorrection(client: JournalCorrectionMutationRpc
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

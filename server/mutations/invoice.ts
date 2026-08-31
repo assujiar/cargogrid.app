@@ -19,6 +19,7 @@ import {
   type IssueFinanceInvoiceInput,
   type FinanceInvoice,
 } from "../contracts/invoice/invoice.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type InvoiceMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -121,6 +122,9 @@ export async function approveFinanceInvoice(client: InvoiceMutationRpcClient, in
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -133,5 +137,8 @@ export async function issueFinanceInvoice(client: InvoiceMutationRpcClient, inpu
     p_issue_date: parsedInput.issueDate,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

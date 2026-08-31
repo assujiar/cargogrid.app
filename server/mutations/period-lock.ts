@@ -19,6 +19,7 @@ import {
   type FinancePeriodLockLifecycleInput,
   type FinancePeriodLock,
 } from "../contracts/period-lock/period-lock.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type PeriodLockMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -79,6 +80,9 @@ export async function lockFinancePeriod(client: PeriodLockMutationRpcClient, inp
     p_evidence_ref: parsedInput.evidenceRef,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -103,6 +107,9 @@ export async function approveFinancePeriodReopen(client: PeriodLockMutationRpcCl
     p_window_hours: parsedInput.windowHours,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -114,5 +121,8 @@ export async function relockFinancePeriod(client: PeriodLockMutationRpcClient, i
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

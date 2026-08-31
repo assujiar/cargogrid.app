@@ -34,6 +34,7 @@ import {
   type Position,
   type EmployeePositionAssignment,
 } from "../contracts/position/position.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type PositionMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -237,6 +238,9 @@ export async function decideEmployeePositionAssignment(client: PositionMutationR
     p_reason: parsed.reason,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) throw new PositionMutationError(classifyError(error.message), error.message);
   return parseAssignmentResponse(data, "decide_employee_position_assignment");

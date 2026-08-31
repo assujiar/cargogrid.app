@@ -17,6 +17,7 @@ import {
   type DiscardFinanceJournalDraftInput,
   type FinanceJournal,
 } from "../contracts/journal/journal.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type JournalMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -127,6 +128,9 @@ export async function approveFinanceJournal(client: JournalMutationRpcClient, in
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -138,5 +142,8 @@ export async function postFinanceJournal(client: JournalMutationRpcClient, input
     p_expected_version: parsedInput.expectedVersion,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

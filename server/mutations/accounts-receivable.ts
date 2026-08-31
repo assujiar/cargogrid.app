@@ -21,6 +21,7 @@ import {
   type ReverseFinanceArAllocationInput,
   type FinanceArOpenItem,
 } from "../contracts/accounts-receivable/accounts-receivable.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type AccountsReceivableMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -132,6 +133,9 @@ export async function releaseFinanceArHold(
     p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }
 
@@ -171,5 +175,8 @@ export async function reverseFinanceArAllocation(
     p_idempotency_key: parsedInput.idempotencyKey,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
 }

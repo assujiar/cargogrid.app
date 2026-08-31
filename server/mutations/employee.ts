@@ -64,6 +64,7 @@ import {
   ActivateDueEmployeeLifecycleTransitionsInputSchema,
   type ActivateDueEmployeeLifecycleTransitionsInput,
 } from "../contracts/employee/employee.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type EmployeeMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -265,6 +266,9 @@ export async function activateEmployee(client: EmployeeMutationRpcClient, input:
     p_expected_version: parsed.expectedVersion,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   return parseEmployeeResponse(data, "activate_employee");

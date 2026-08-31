@@ -32,6 +32,7 @@ import {
   type IpAllowlistEntry,
   type IpAllowlistBypassGrant,
 } from "../contracts/ip-restriction/ip-restriction.ts";
+import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type IpRestrictionMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -74,6 +75,9 @@ export async function setIpAllowlistEnforcementMode(client: IpRestrictionMutatio
     p_enforcement_mode: parsedInput.enforcementMode,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new IpRestrictionMutationError(classifyError(error.message), error.message);
@@ -93,6 +97,9 @@ export async function addIpAllowlistEntry(client: IpRestrictionMutationRpcClient
     p_scope: parsedInput.scope,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new IpRestrictionMutationError(classifyError(error.message), error.message);
@@ -109,6 +116,9 @@ export async function revokeIpAllowlistEntry(client: IpRestrictionMutationRpcCli
     p_entry_id: parsedInput.entryId,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new IpRestrictionMutationError(classifyError(error.message), error.message);
@@ -181,6 +191,9 @@ export async function requestIpAllowlistBypass(client: IpRestrictionMutationRpcC
     p_reason: parsedInput.reason,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    // ISS-2026-302: read here rather than threaded through every caller -- a security
+    // control a call site can forget to pass is not a control. Null outside a request.
+    p_client_ip: await resolveRequestClientIp(),
   });
   if (error) {
     throw new IpRestrictionMutationError(classifyError(error.message), error.message);
