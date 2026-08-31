@@ -126,3 +126,102 @@ export const CustomerWarehouseOrderCursorSchema = z
     path: ["cursorUpdatedAt"],
   });
 export type CustomerWarehouseOrderCursor = z.input<typeof CustomerWarehouseOrderCursorSchema>;
+
+// ---------------------------------------------------------------------------
+// Inbound half (ISS-2026-120). Kept in this file rather than a new one: the two
+// halves are one capability to a reader and to the page that renders them, and
+// splitting them would make the asymmetries below harder to see, not easier.
+//
+// Three things genuinely differ from the outbound schemas above, and each is
+// forced by app.wms_inbound_orders' own shape rather than chosen -- see the
+// migration header for the full reasoning.
+// ---------------------------------------------------------------------------
+
+/**
+ * Four real values, not three: `scheduled` has no outbound counterpart. Taken
+ * from wms_inbound_orders_status_check directly, never invented.
+ */
+export const CUSTOMER_INBOUND_ORDER_STATUSES = ["draft", "scheduled", "confirmed", "cancelled"] as const;
+export const CustomerInboundOrderStatusSchema = z.enum(CUSTOMER_INBOUND_ORDER_STATUSES);
+export type CustomerInboundOrderStatus = z.infer<typeof CustomerInboundOrderStatusSchema>;
+
+/** Customer-visible label per real status -- presentation only, never persisted or sent to the RPC layer. */
+export const CUSTOMER_INBOUND_ORDER_STATUS_LABELS: Record<CustomerInboundOrderStatus, string> = {
+  draft: "Preparing",
+  scheduled: "Appointment booked",
+  confirmed: "Confirmed",
+  cancelled: "Cancelled",
+};
+
+/** Three real values, not two: inbound orders can also originate from an import. */
+export const CUSTOMER_INBOUND_ORDER_SOURCE_TYPES = ["shipment_order", "manual", "import"] as const;
+export const CustomerInboundOrderSourceTypeSchema = z.enum(CUSTOMER_INBOUND_ORDER_SOURCE_TYPES);
+export type CustomerInboundOrderSourceType = z.infer<typeof CustomerInboundOrderSourceTypeSchema>;
+
+/** app.get_customer_portal_inbound_order / app.list_customer_portal_inbound_orders -- identical column projection. */
+export const CustomerInboundOrderSchema = z.object({
+  id: z.string().uuid(),
+  warehouseId: z.string().uuid(),
+  ownerAccountId: z.string().uuid(),
+  inboundNumber: z.string(),
+  sourceType: CustomerInboundOrderSourceTypeSchema,
+  expectedDate: z.string().nullable(),
+  appointmentWindowStart: z.string().nullable(),
+  appointmentWindowEnd: z.string().nullable(),
+  status: CustomerInboundOrderStatusSchema,
+  cancelledReason: z.string().nullable(),
+  recordVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CustomerInboundOrder = z.infer<typeof CustomerInboundOrderSchema>;
+
+export function parseCustomerInboundOrder(row: Record<string, unknown>): CustomerInboundOrder {
+  return CustomerInboundOrderSchema.parse({
+    id: row.id,
+    warehouseId: row.warehouse_id,
+    ownerAccountId: row.owner_account_id,
+    inboundNumber: row.inbound_number,
+    sourceType: row.source_type,
+    expectedDate: row.expected_date ?? null,
+    appointmentWindowStart: row.appointment_window_start ?? null,
+    appointmentWindowEnd: row.appointment_window_end ?? null,
+    status: row.status,
+    cancelledReason: row.cancelled_reason ?? null,
+    recordVersion: row.record_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+/** app.list_customer_portal_inbound_order_lines -- excludes `notes` (free-text, potentially staff-internal), exactly as the outbound line schema does. */
+export const CustomerInboundOrderLineSchema = z.object({
+  id: z.string().uuid(),
+  inboundOrderId: z.string().uuid(),
+  lineNumber: z.number().int(),
+  itemMasterId: z.string().uuid(),
+  expectedUomCode: z.string(),
+  expectedQuantity: z.coerce.number(),
+  lotControlled: z.boolean(),
+  serialControlled: z.boolean(),
+  expiryControlled: z.boolean(),
+  recordVersion: z.number().int().positive(),
+  updatedAt: z.string(),
+});
+export type CustomerInboundOrderLine = z.infer<typeof CustomerInboundOrderLineSchema>;
+
+export function parseCustomerInboundOrderLine(row: Record<string, unknown>): CustomerInboundOrderLine {
+  return CustomerInboundOrderLineSchema.parse({
+    id: row.id,
+    inboundOrderId: row.inbound_order_id,
+    lineNumber: row.line_number,
+    itemMasterId: row.item_master_id,
+    expectedUomCode: row.expected_uom_code,
+    expectedQuantity: row.expected_quantity,
+    lotControlled: row.lot_controlled,
+    serialControlled: row.serial_controlled,
+    expiryControlled: row.expiry_controlled,
+    recordVersion: row.record_version,
+    updatedAt: row.updated_at,
+  });
+}

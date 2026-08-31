@@ -67,6 +67,7 @@ declare
   v_item_delta uuid;
   v_supreme uuid := '00000000-0000-0000-0000-000000319001';
   v_order app.wms_outbound_orders;
+  v_inbound app.wms_inbound_orders;
   v_line app.wms_outbound_order_lines;
 begin
   insert into auth.users (id, email) values
@@ -209,6 +210,53 @@ begin
   -- Order T2D (tenant2, WH-CWO-T2, Delta) -- cross-tenant isolation fixture (item a).
   v_order := app.create_manual_wms_outbound_order(v_tenant2, v_wh_t2.id, v_account_delta.id, 'cwo delta order', 'idem-cwo-outbound-t2d', current_date + 3, v_supreme, 'admin');
   perform app.add_wms_outbound_order_line(v_order.id, v_item_delta, 'PCS', 6, null, v_supreme, 'admin');
+
+  -- ===================================================================
+  -- ISS-2026-120 inbound fixtures. Deliberately reuse the SAME accounts,
+  -- warehouses, eligibility grants and customer identities the outbound
+  -- fixtures above already established -- if the inbound RPCs resolved scope
+  -- through anything other than the same resolver and the same eligibility
+  -- predicate, these rows would come out differently, which is the point.
+  -- ===================================================================
+
+  -- Inbound IA1 (WH-CWO-1, Alpha) -- stays DRAFT. Used for get/line-list/
+  -- anti-enumeration and as page 1 of the inbound pagination proof.
+  v_inbound := app.create_manual_wms_inbound(v_tenant1, v_wh1.id, v_account_alpha.id, 'cwo alpha inbound 1', 'idem-cwo-inbound-a1', v_supreme, 'admin');
+  perform app.add_wms_inbound_order_line(v_inbound.id, v_item_alpha, 'PCS', 9, null, v_supreme, 'admin');
+
+  -- Inbound IA2 (WH-CWO-1, Alpha) -- SCHEDULED. This is the state that has no
+  -- outbound counterpart at all, and the only fixture that carries a real
+  -- appointment window and expected_date, so the projection of both is proven
+  -- against real data rather than nulls.
+  v_inbound := app.create_manual_wms_inbound(v_tenant1, v_wh1.id, v_account_alpha.id, 'cwo alpha inbound 2', 'idem-cwo-inbound-a2', v_supreme, 'admin');
+  perform app.add_wms_inbound_order_line(v_inbound.id, v_item_alpha, 'PCS', 7, null, v_supreme, 'admin');
+  select * into v_inbound from app.wms_inbound_orders where id = v_inbound.id;
+  perform app.schedule_wms_inbound_appointment(v_inbound.id, date_trunc('hour', now()) + interval '2 days', date_trunc('hour', now()) + interval '2 days 3 hours', v_inbound.record_version, v_supreme, 'admin');
+
+  -- Inbound IA3 (WH-CWO-1, Alpha) -- CANCELLED, for cancelled_reason display
+  -- and status-filter diversity.
+  v_inbound := app.create_manual_wms_inbound(v_tenant1, v_wh1.id, v_account_alpha.id, 'cwo alpha inbound 3', 'idem-cwo-inbound-a3', v_supreme, 'admin');
+  perform app.add_wms_inbound_order_line(v_inbound.id, v_item_alpha, 'PCS', 2, null, v_supreme, 'admin');
+  select * into v_inbound from app.wms_inbound_orders where id = v_inbound.id;
+  perform app.cancel_wms_inbound(v_inbound.id, 'cwo inbound fixture cancellation', v_inbound.record_version, v_supreme, 'admin');
+
+  -- Inbound IB1 (WH-CWO-2, Beta) -- cross-account isolation fixture.
+  v_inbound := app.create_manual_wms_inbound(v_tenant1, v_wh2.id, v_account_beta.id, 'cwo beta inbound', 'idem-cwo-inbound-b1', v_supreme, 'admin');
+  perform app.add_wms_inbound_order_line(v_inbound.id, v_item_beta, 'PCS', 4, null, v_supreme, 'admin');
+
+  -- Inbound IAR (WH-CWO-REVOKE, Alpha) -- the revocation-immediate-effect
+  -- fixture. WH-CWO-REVOKE's eligibility is revoked later in this file.
+  perform app.create_manual_wms_inbound(v_tenant1, v_wh_revoke.id, v_account_alpha.id, 'cwo alpha revoke-warehouse inbound', 'idem-cwo-inbound-arevoke', v_supreme, 'admin');
+
+  -- Inbound IG1 (WH-CWO-GAMMA, Gamma) -- THE KEY REGRESSION FIXTURE, the
+  -- inbound twin of order G1: reachable ONLY through customer-multi's
+  -- new-grant-table-only membership.
+  v_inbound := app.create_manual_wms_inbound(v_tenant1, v_wh_gamma.id, v_account_gamma.id, 'cwo gamma inbound', 'idem-cwo-inbound-g1', v_supreme, 'admin');
+  perform app.add_wms_inbound_order_line(v_inbound.id, v_item_gamma, 'PCS', 2, null, v_supreme, 'admin');
+
+  -- Inbound IT2D (tenant2, WH-CWO-T2, Delta) -- cross-tenant isolation fixture.
+  v_inbound := app.create_manual_wms_inbound(v_tenant2, v_wh_t2.id, v_account_delta.id, 'cwo delta inbound', 'idem-cwo-inbound-t2d', v_supreme, 'admin');
+  perform app.add_wms_inbound_order_line(v_inbound.id, v_item_delta, 'PCS', 6, null, v_supreme, 'admin');
 end $$;
 
 \echo '>> app.get_customer_portal_outbound_order: own row succeeds (via legacy marker AND via the NEW grant table -- item d), forbidden and genuinely-nonexistent ids raise the IDENTICAL record_not_found shape (item e, anti-enumeration); returned row carries none of ATW-023''s own disclosed internal-only fields (item g, functional check); app.record_customer_inventory_access_denial (ATW-023, reused as-is, resource_type=outbound_order) durably records a denial for either cause, scoped by tenant_id from the first draft'
@@ -781,4 +829,406 @@ begin
   if v_session_count <> v_superuser_count or v_session_count = 0 then
     raise exception 'assertion failed: expected a real authenticated session to see the identical, non-zero row count (% ) a direct superuser call returns, got % via session', v_superuser_count, v_session_count;
   end if;
+end $$;
+
+-- ===========================================================================
+-- ISS-2026-120 -- the inbound half. Everything below exercises
+-- app.get_customer_portal_inbound_order / app.list_customer_portal_inbound_
+-- order_lines / app.list_customer_portal_inbound_orders against the SAME
+-- fixtures the outbound assertions above already used, so a divergence in
+-- scope, eligibility, anti-enumeration or identity handling between the two
+-- halves shows up as a failure here rather than as a quiet asymmetry nobody
+-- reads. Ordered after the revocation block on purpose: by this point
+-- WH-CWO-REVOKE's eligibility is already gone, which lets the inbound list
+-- prove it reads live eligibility rather than a snapshot taken at any earlier
+-- moment.
+-- ===========================================================================
+
+\echo '>> ISS-2026-120 item (a/d): cross-tenant + cross-account isolation, and THE KEY REGRESSION -- an account granted ONLY through CPL-300''s new grant table is visible to the inbound RPCs, exactly as it is to the outbound ones'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cwo1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'cwo2');
+  v_customer_legacy uuid := '00000000-0000-0000-0000-000000319010';
+  v_customer_multi uuid := '00000000-0000-0000-0000-000000319011';
+  v_customer_t2 uuid := '00000000-0000-0000-0000-000000321010';
+  v_account_gamma uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Cwo Account Gamma');
+  v_account_beta uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Cwo Account Beta');
+  v_count integer;
+begin
+  -- customer-legacy holds Alpha only, through the legacy marker. Alpha owns
+  -- exactly three inbound orders in an eligible warehouse (IA1/IA2/IA3);
+  -- IAR's warehouse eligibility was revoked above, so it must not appear.
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, null, null, null, 200);
+  if v_count <> 3 then
+    raise exception 'assertion failed: expected customer-legacy to see exactly 3 inbound orders (IA1/IA2/IA3, NOT the revoked-warehouse IAR), got %', v_count;
+  end if;
+
+  -- Never another account's inbound order, even inside the same tenant.
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, null, null, null, 200) r
+    where r.owner_account_id = v_account_beta;
+  if v_count <> 0 then
+    raise exception 'assertion failed: customer-legacy must never see Beta''s inbound orders, got % rows', v_count;
+  end if;
+
+  -- THE KEY REGRESSION: customer-multi reaches Gamma ONLY through
+  -- app.customer_portal_account_memberships. If the inbound list resolved
+  -- scope through the legacy resolver, this count would be 3, not 4.
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_multi, null, null, null, null, 200);
+  if v_count <> 4 then
+    raise exception 'assertion failed: expected customer-multi to see 4 inbound orders (Alpha''s 3 + Gamma''s 1 via the NEW grant table only), got %', v_count;
+  end if;
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_multi, null, null, null, null, 200) r
+    where r.owner_account_id = v_account_gamma;
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 Gamma inbound order via the new grant table, got %', v_count;
+  end if;
+
+  -- Cross-tenant: tenant2's own customer sees only tenant2's inbound order,
+  -- and tenant1's customers never see it.
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant2, v_customer_t2, null, null, null, null, 200);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected customer-t2 to see exactly 1 inbound order, got %', v_count;
+  end if;
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant2, v_customer_legacy, null, null, null, null, 200);
+  if v_count <> 0 then
+    raise exception 'assertion failed: a tenant1 customer must see zero tenant2 inbound orders, got %', v_count;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-120 item (e): anti-enumeration -- a foreign inbound id and a genuinely nonexistent one raise the IDENTICAL record_not_found, on the get RPC and on the line-list RPC that delegates to it'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cwo1');
+  v_customer_legacy uuid := '00000000-0000-0000-0000-000000319010';
+  v_inbound_ia1 uuid := (select id from app.wms_inbound_orders where idempotency_key = 'idem-cwo-inbound-a1');
+  v_inbound_ib1 uuid := (select id from app.wms_inbound_orders where idempotency_key = 'idem-cwo-inbound-b1');
+  v_inbound_it2d uuid := (select id from app.wms_inbound_orders where idempotency_key = 'idem-cwo-inbound-t2d');
+  v_ghost uuid := '00000000-0000-0000-0000-0000003190ff';
+  v_row record;
+  v_line_count integer;
+  v_msg_foreign text;
+  v_msg_ghost text;
+begin
+  -- Positive path first, so a uniformly-denying function cannot pass this block.
+  select * into v_row from app.get_customer_portal_inbound_order(v_tenant1, v_customer_legacy, v_inbound_ia1);
+  if v_row.id <> v_inbound_ia1 or v_row.status <> 'draft' or v_row.source_type <> 'manual' then
+    raise exception 'assertion failed: expected IA1 back as a draft/manual inbound order';
+  end if;
+  select count(*) into v_line_count from app.list_customer_portal_inbound_order_lines(v_inbound_ia1, v_customer_legacy);
+  if v_line_count <> 1 then
+    raise exception 'assertion failed: expected 1 line on IA1, got %', v_line_count;
+  end if;
+
+  -- A same-tenant, different-account order and a nonexistent id must be
+  -- indistinguishable from each other in the error the caller sees.
+  begin
+    perform app.get_customer_portal_inbound_order(v_tenant1, v_customer_legacy, v_inbound_ib1);
+    raise exception 'assertion failed: expected record_not_found for Beta''s inbound order';
+  exception
+    when others then
+      if sqlerrm not like 'record_not_found%' then raise; end if;
+      v_msg_foreign := replace(sqlerrm, v_inbound_ib1::text, '<id>');
+  end;
+  begin
+    perform app.get_customer_portal_inbound_order(v_tenant1, v_customer_legacy, v_ghost);
+    raise exception 'assertion failed: expected record_not_found for a nonexistent inbound id';
+  exception
+    when others then
+      if sqlerrm not like 'record_not_found%' then raise; end if;
+      v_msg_ghost := replace(sqlerrm, v_ghost::text, '<id>');
+  end;
+  if v_msg_foreign is distinct from v_msg_ghost then
+    raise exception 'assertion failed: anti-enumeration broken -- forbidden (%) and nonexistent (%) must produce the identical message', v_msg_foreign, v_msg_ghost;
+  end if;
+
+  -- Cross-tenant id through the tenant the caller DOES belong to: still the
+  -- same shape, never a "wrong tenant" hint.
+  begin
+    perform app.get_customer_portal_inbound_order(v_tenant1, v_customer_legacy, v_inbound_it2d);
+    raise exception 'assertion failed: expected record_not_found for a cross-tenant inbound id';
+  exception
+    when others then
+      if sqlerrm not like 'record_not_found%' then raise; end if;
+  end;
+
+  -- The line-list RPC inherits the same denial by delegating its gate.
+  begin
+    perform app.list_customer_portal_inbound_order_lines(v_inbound_ib1, v_customer_legacy);
+    raise exception 'assertion failed: expected record_not_found from the inbound line-list RPC for a forbidden order';
+  exception
+    when others then
+      if sqlerrm not like 'record_not_found%' then raise; end if;
+  end;
+  begin
+    perform app.list_customer_portal_inbound_order_lines(v_ghost, v_customer_legacy);
+    raise exception 'assertion failed: expected record_not_found from the inbound line-list RPC for a nonexistent order';
+  exception
+    when others then
+      if sqlerrm not like 'record_not_found%' then raise; end if;
+  end;
+end $$;
+
+\echo '>> ISS-2026-120: the two genuinely inbound-only projections -- the `scheduled` status outbound has no counterpart for, and the appointment window / expected_date, all returned as real values rather than nulls'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cwo1');
+  v_customer_legacy uuid := '00000000-0000-0000-0000-000000319010';
+  v_inbound_ia2 uuid := (select id from app.wms_inbound_orders where idempotency_key = 'idem-cwo-inbound-a2');
+  v_inbound_ia3 uuid := (select id from app.wms_inbound_orders where idempotency_key = 'idem-cwo-inbound-a3');
+  v_row record;
+  v_count integer;
+begin
+  select * into v_row from app.get_customer_portal_inbound_order(v_tenant1, v_customer_legacy, v_inbound_ia2);
+  if v_row.status <> 'scheduled' then
+    raise exception 'assertion failed: expected IA2 to be scheduled, got %', v_row.status;
+  end if;
+  if v_row.appointment_window_start is null or v_row.appointment_window_end is null then
+    raise exception 'assertion failed: a scheduled inbound order must project its real appointment window, got start=% end=%', v_row.appointment_window_start, v_row.appointment_window_end;
+  end if;
+  if v_row.appointment_window_end <= v_row.appointment_window_start then
+    raise exception 'assertion failed: appointment window projected out of order';
+  end if;
+  if v_row.expected_date is distinct from v_row.appointment_window_start::date then
+    raise exception 'assertion failed: expected_date must be the window start''s own date, got % vs %', v_row.expected_date, v_row.appointment_window_start::date;
+  end if;
+
+  -- Cancellation reason is projected verbatim, the same way outbound does it.
+  select * into v_row from app.get_customer_portal_inbound_order(v_tenant1, v_customer_legacy, v_inbound_ia3);
+  if v_row.status <> 'cancelled' or v_row.cancelled_reason is distinct from 'cwo inbound fixture cancellation' then
+    raise exception 'assertion failed: expected IA3 cancelled with its real reason, got status=% reason=%', v_row.status, v_row.cancelled_reason;
+  end if;
+
+  -- Status filter reaches every one of the four real values, and an invented
+  -- one matches zero rows rather than raising -- the same non-validating shape
+  -- the outbound list uses.
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, 'scheduled', null, null, 200);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 scheduled inbound order, got %', v_count;
+  end if;
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, 'draft', null, null, 200);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 draft inbound order, got %', v_count;
+  end if;
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, 'cancelled', null, null, 200);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 cancelled inbound order, got %', v_count;
+  end if;
+  select count(*) into v_count from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, 'teleported', null, null, 200);
+  if v_count <> 0 then
+    raise exception 'assertion failed: an unrecognized status filter must match zero rows without raising, got %', v_count;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-120: pagination is a real keyset walk (updated_at desc, id desc) with no overlap and no gap, and a half-supplied cursor fails loud rather than silently returning an empty page'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cwo1');
+  v_customer_legacy uuid := '00000000-0000-0000-0000-000000319010';
+  v_page record;
+  v_seen uuid[] := array[]::uuid[];
+  v_cursor_updated timestamptz := null;
+  v_cursor_id uuid := null;
+  v_total integer;
+begin
+  for i in 1..3 loop
+    select * into v_page from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, null, v_cursor_updated, v_cursor_id, 1);
+    if v_page.id is null then
+      raise exception 'assertion failed: expected a row on inbound pagination step %', i;
+    end if;
+    if v_page.id = any(v_seen) then
+      raise exception 'assertion failed: inbound pagination returned a duplicate row on step %', i;
+    end if;
+    v_seen := array_append(v_seen, v_page.id);
+    v_cursor_updated := v_page.updated_at;
+    v_cursor_id := v_page.id;
+  end loop;
+
+  select count(*) into v_total from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, null, v_cursor_updated, v_cursor_id, 200);
+  if v_total <> 0 then
+    raise exception 'assertion failed: expected the inbound keyset walk to be exhausted after 3 pages, got % more rows', v_total;
+  end if;
+
+  begin
+    perform app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, null, null, v_seen[1], 50);
+    raise exception 'assertion failed: expected invalid_cursor when p_cursor_id is supplied without p_cursor_updated_at';
+  exception
+    when others then
+      if sqlerrm not like 'invalid_cursor%' then raise; end if;
+  end;
+end $$;
+
+\echo '>> ISS-2026-120: the actor-identity session cross-check applies to all three inbound RPCs, and a real session acting as ITSELF is denied by scope instead -- two independent gates'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cwo1');
+  v_customer_multi uuid := '00000000-0000-0000-0000-000000319011';
+  v_impersonator uuid := '00000000-0000-0000-0000-000000319050';
+  v_inbound_ia1 uuid := (select id from app.wms_inbound_orders where idempotency_key = 'idem-cwo-inbound-a1');
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000319050", "role": "authenticated"}';
+
+  begin
+    perform app.get_customer_portal_inbound_order(v_tenant1, v_customer_multi, v_inbound_ia1);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.get_customer_portal_inbound_order';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_portal_inbound_order_lines(v_inbound_ia1, v_customer_multi);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_portal_inbound_order_lines';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.list_customer_portal_inbound_orders(v_tenant1, v_customer_multi, null, null, null, null, 50);
+    raise exception 'assertion failed: expected actor_identity_mismatch on app.list_customer_portal_inbound_orders';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  begin
+    perform app.get_customer_portal_inbound_order(v_tenant1, v_impersonator, v_inbound_ia1);
+    raise exception 'assertion failed: expected record_not_found -- the impersonator, acting as themselves, has no scope over Alpha''s inbound order';
+  exception
+    when others then
+      if sqlerrm not like 'record_not_found%' then raise; end if;
+  end;
+
+  reset role;
+end $$;
+
+\echo '>> ISS-2026-120: raw-table RLS defense-in-depth -- this migration extends 20260730311000''s customer_user-layer denial to app.wms_inbound_orders/app.wms_inbound_order_lines, which were outside that migration''s own scope; a real customer session reads zero rows raw while the RPC surface returns its real rows'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cwo1');
+  v_customer_legacy uuid := '00000000-0000-0000-0000-000000319010';
+  v_raw_orders integer;
+  v_raw_lines integer;
+  v_rpc_rows integer;
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000319010", "role": "authenticated"}';
+
+  select count(*) into v_raw_orders from app.wms_inbound_orders;
+  select count(*) into v_raw_lines from app.wms_inbound_order_lines;
+  -- Same session, same instant: the sanctioned SECURITY DEFINER path works.
+  select count(*) into v_rpc_rows from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_legacy, null, null, null, null, 200);
+
+  reset role;
+
+  if v_raw_orders <> 0 then
+    raise exception 'assertion failed: a customer_user-layer session must read ZERO rows from app.wms_inbound_orders raw, got %', v_raw_orders;
+  end if;
+  if v_raw_lines <> 0 then
+    raise exception 'assertion failed: a customer_user-layer session must read ZERO rows from app.wms_inbound_order_lines raw, got %', v_raw_lines;
+  end if;
+  if v_rpc_rows <> 3 then
+    raise exception 'assertion failed: the RPC path must still return the caller''s own 3 inbound orders in the same session, got % -- a denial that also breaks the sanctioned path proves nothing', v_rpc_rows;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-120: grants -- anon holds EXECUTE on none of the three new app.* functions nor their public.* wrappers; authenticated and service_role hold it on all six'
+do $$
+declare
+  v_fn text;
+  v_has_priv boolean;
+begin
+  foreach v_fn in array array[
+    'app.get_customer_portal_inbound_order(uuid, uuid, uuid)',
+    'app.list_customer_portal_inbound_order_lines(uuid, uuid)',
+    'app.list_customer_portal_inbound_orders(uuid, uuid, uuid, text, timestamptz, uuid, integer)',
+    'public.get_customer_portal_inbound_order(uuid, uuid, uuid)',
+    'public.list_customer_portal_inbound_order_lines(uuid, uuid)',
+    'public.list_customer_portal_inbound_orders(uuid, uuid, uuid, text, timestamptz, uuid, integer)'
+  ] loop
+    select has_function_privilege('anon', v_fn, 'EXECUTE') into v_has_priv;
+    if v_has_priv then
+      raise exception 'assertion failed: anon must NOT hold EXECUTE on % (ISS-2026-309: revoking from PUBLIC alone does not remove Supabase''s explicit default-privilege grant)', v_fn;
+    end if;
+    select has_function_privilege('authenticated', v_fn, 'EXECUTE') into v_has_priv;
+    if not v_has_priv then
+      raise exception 'assertion failed: authenticated SHOULD hold EXECUTE on %', v_fn;
+    end if;
+    select has_function_privilege('service_role', v_fn, 'EXECUTE') into v_has_priv;
+    if not v_has_priv then
+      raise exception 'assertion failed: service_role SHOULD hold EXECUTE on %', v_fn;
+    end if;
+  end loop;
+end $$;
+
+\echo '>> ISS-2026-120: the public.* wrappers are pass-throughs, not reimplementations -- each returns byte-identical rows to its app.* original for the same caller'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cwo1');
+  v_customer_multi uuid := '00000000-0000-0000-0000-000000319011';
+  v_inbound_ia1 uuid := (select id from app.wms_inbound_orders where idempotency_key = 'idem-cwo-inbound-a1');
+  v_app_rows integer;
+  v_pub_rows integer;
+  v_app_row record;
+  v_pub_row record;
+begin
+  select count(*) into v_app_rows from app.list_customer_portal_inbound_orders(v_tenant1, v_customer_multi, null, null, null, null, 200);
+  select count(*) into v_pub_rows from public.list_customer_portal_inbound_orders(v_tenant1, v_customer_multi, null, null, null, null, 200);
+  if v_app_rows <> v_pub_rows then
+    raise exception 'assertion failed: public wrapper returned % rows vs app''s % -- a wrapper that disagrees with its original is a second implementation', v_pub_rows, v_app_rows;
+  end if;
+
+  select * into v_app_row from app.get_customer_portal_inbound_order(v_tenant1, v_customer_multi, v_inbound_ia1);
+  select * into v_pub_row from public.get_customer_portal_inbound_order(v_tenant1, v_customer_multi, v_inbound_ia1);
+  if v_app_row.id is distinct from v_pub_row.id
+    or v_app_row.warehouse_id is distinct from v_pub_row.warehouse_id
+    or v_app_row.owner_account_id is distinct from v_pub_row.owner_account_id
+    or v_app_row.inbound_number is distinct from v_pub_row.inbound_number
+    or v_app_row.source_type is distinct from v_pub_row.source_type
+    or v_app_row.expected_date is distinct from v_pub_row.expected_date
+    or v_app_row.appointment_window_start is distinct from v_pub_row.appointment_window_start
+    or v_app_row.appointment_window_end is distinct from v_pub_row.appointment_window_end
+    or v_app_row.status is distinct from v_pub_row.status
+    or v_app_row.cancelled_reason is distinct from v_pub_row.cancelled_reason
+    or v_app_row.record_version is distinct from v_pub_row.record_version
+    or v_app_row.created_at is distinct from v_pub_row.created_at
+    or v_app_row.updated_at is distinct from v_pub_row.updated_at
+  then
+    raise exception 'assertion failed: public.get_customer_portal_inbound_order disagrees with app.get_customer_portal_inbound_order on at least one column';
+  end if;
+
+  select count(*) into v_app_rows from app.list_customer_portal_inbound_order_lines(v_inbound_ia1, v_customer_multi);
+  select count(*) into v_pub_rows from public.list_customer_portal_inbound_order_lines(v_inbound_ia1, v_customer_multi);
+  if v_app_rows <> v_pub_rows then
+    raise exception 'assertion failed: public.list_customer_portal_inbound_order_lines returned % rows vs app''s %', v_pub_rows, v_app_rows;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-120: the inbound RPCs expose no internal pick/pack/receiving worker or productivity field -- structural check against the compiled source, mirroring the outbound check above'
+do $$
+declare
+  v_fn text;
+  v_src text;
+  v_forbidden text;
+  v_forbidden_terms text[] := array[
+    'wms_pick_tasks', 'wms_packages', 'wms_outbound_shipments', 'wms_pick_waves', 'wms_packing_tasks',
+    'claimed_by_auth_user_id', 'claimed_by_label', 'picked_quantity', 'task_quantity', 'remaining_quantity',
+    'qc_by_auth_user_id', 'qc_by_label', 'qc_override_by_auth_user_id',
+    'source_shipment_order_id', 'idempotency_key', 'source_reason'
+  ];
+begin
+  foreach v_fn in array array['get_customer_portal_inbound_order', 'list_customer_portal_inbound_order_lines', 'list_customer_portal_inbound_orders'] loop
+    select p.prosrc into v_src from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.proname = v_fn;
+    if v_src is null then
+      raise exception 'assertion failed: app.% not found', v_fn;
+    end if;
+    foreach v_forbidden in array v_forbidden_terms loop
+      if v_src like '%' || v_forbidden || '%' then
+        raise exception 'assertion failed: app.%''s compiled source references the internal/excluded term "%"', v_fn, v_forbidden;
+      end if;
+    end loop;
+  end loop;
 end $$;

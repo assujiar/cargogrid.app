@@ -20,8 +20,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  parseCustomerInboundOrder,
+  parseCustomerInboundOrderLine,
   parseCustomerWarehouseOrder,
   parseCustomerWarehouseOrderLine,
+  type CustomerInboundOrder,
+  type CustomerInboundOrderLine,
+  type CustomerInboundOrderStatus,
   type CustomerWarehouseOrder,
   type CustomerWarehouseOrderLine,
   type CustomerWarehouseOrderStatus,
@@ -145,4 +150,100 @@ export async function listCustomerPortalOutboundOrderLines(
     throw new CustomerPortalWarehouseOrderQueryError(error.message);
   }
   return ((data as Record<string, unknown>[] | null) ?? []).map(parseCustomerWarehouseOrderLine);
+}
+
+// ---------------------------------------------------------------------------
+// Inbound half (ISS-2026-120). Same client type, same error class, same
+// denial-audit convention as the outbound wrappers above -- deliberately, so a
+// caller that already knows one half needs to learn nothing new for the other.
+// ---------------------------------------------------------------------------
+
+/**
+ * `resource_type` is 'inbound_order', a value app.record_customer_inventory_
+ * access_denial has always accepted (it takes a free-text resource type and
+ * never validates against an enum, verified by direct read) but that nothing
+ * has used until now -- there was no inbound customer surface to deny. Kept
+ * distinct from 'outbound_order' rather than folded into it: an audit trail
+ * that cannot tell which surface was probed is worth less than one that can.
+ */
+async function recordCustomerPortalInboundOrderAccessDenial(
+  client: CustomerPortalWarehouseOrderQueryClient,
+  tenantId: string,
+  actorAuthUserId: string,
+  resourceId: string,
+): Promise<void> {
+  try {
+    await client.rpc("record_customer_inventory_access_denial", {
+      p_tenant_id: tenantId,
+      p_actor_auth_user_id: actorAuthUserId,
+      p_resource_type: "inbound_order",
+      p_resource_id: resourceId,
+    });
+  } catch {
+    // Best-effort: the original record_not_found error is what the caller must see.
+  }
+}
+
+/** Single permitted inbound order by id. Throws record_not_found (anti-enumerating, .code === "record_not_found") if missing or forbidden; also records a durable denial audit on that path. */
+export async function getCustomerPortalInboundOrder(
+  client: CustomerPortalWarehouseOrderQueryClient,
+  tenantId: string,
+  actorAuthUserId: string,
+  inboundOrderId: string,
+): Promise<CustomerInboundOrder> {
+  const { data, error } = await client.rpc("get_customer_portal_inbound_order", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_inbound_order_id: inboundOrderId,
+  });
+  if (error) {
+    const wrapped = new CustomerPortalWarehouseOrderQueryError(error.message);
+    if (wrapped.code === "record_not_found") {
+      await recordCustomerPortalInboundOrderAccessDenial(client, tenantId, actorAuthUserId, inboundOrderId);
+    }
+    throw wrapped;
+  }
+  const row = firstRow(data);
+  if (!row) {
+    throw new CustomerPortalWarehouseOrderQueryError("query_failed: get_customer_portal_inbound_order returned no row");
+  }
+  return parseCustomerInboundOrder(row);
+}
+
+/** Bounded (default 50, hard-capped 200 server-side), owner+warehouse-eligibility scoped, keyset-paginated. */
+export async function listCustomerPortalInboundOrders(
+  client: CustomerPortalWarehouseOrderQueryClient,
+  tenantId: string,
+  actorAuthUserId: string,
+  options?: CustomerPortalWarehouseOrderCursorOptions & { warehouseId?: string | null; statusFilter?: CustomerInboundOrderStatus | null },
+): Promise<CustomerInboundOrder[]> {
+  const { data, error } = await client.rpc("list_customer_portal_inbound_orders", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_warehouse_id: options?.warehouseId ?? null,
+    p_status_filter: options?.statusFilter ?? null,
+    p_cursor_updated_at: options?.cursorUpdatedAt ?? null,
+    p_cursor_id: options?.cursorId ?? null,
+    p_limit: options?.limit ?? 50,
+  });
+  if (error) {
+    throw new CustomerPortalWarehouseOrderQueryError(error.message);
+  }
+  return ((data as Record<string, unknown>[] | null) ?? []).map(parseCustomerInboundOrder);
+}
+
+/** Lines for a single permitted inbound order, ordered by line_number. Reuses the get RPC's own gate internally -- record_not_found (anti-enumerating) if the order is missing or forbidden. Deliberately takes no tenantId, mirroring the RPC's own signature. */
+export async function listCustomerPortalInboundOrderLines(
+  client: CustomerPortalWarehouseOrderQueryClient,
+  actorAuthUserId: string,
+  inboundOrderId: string,
+): Promise<CustomerInboundOrderLine[]> {
+  const { data, error } = await client.rpc("list_customer_portal_inbound_order_lines", {
+    p_inbound_order_id: inboundOrderId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
+  if (error) {
+    throw new CustomerPortalWarehouseOrderQueryError(error.message);
+  }
+  return ((data as Record<string, unknown>[] | null) ?? []).map(parseCustomerInboundOrderLine);
 }

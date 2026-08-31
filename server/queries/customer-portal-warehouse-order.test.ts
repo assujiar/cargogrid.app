@@ -4,6 +4,9 @@ import {
   getCustomerPortalOutboundOrder,
   listCustomerPortalOutboundOrders,
   listCustomerPortalOutboundOrderLines,
+  getCustomerPortalInboundOrder,
+  listCustomerPortalInboundOrders,
+  listCustomerPortalInboundOrderLines,
   CustomerPortalWarehouseOrderQueryError,
   type CustomerPortalWarehouseOrderQueryClient,
 } from "./customer-portal-warehouse-order.ts";
@@ -201,5 +204,136 @@ describe("listCustomerPortalOutboundOrderLines", () => {
         return true;
       },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Inbound half (ISS-2026-120).
+// ---------------------------------------------------------------------------
+
+const INBOUND_ORDER_ROW = {
+  id: ORDER_ID,
+  warehouse_id: WAREHOUSE_ID,
+  owner_account_id: OWNER_ID,
+  inbound_number: "WMSIN-2026-000001",
+  source_type: "manual",
+  expected_date: "2026-09-04",
+  appointment_window_start: "2026-09-04T02:00:00.000Z",
+  appointment_window_end: "2026-09-04T05:00:00.000Z",
+  status: "scheduled",
+  cancelled_reason: null,
+  record_version: 2,
+  created_at: "2026-08-01T00:00:00.000Z",
+  updated_at: "2026-08-17T00:00:00.000Z",
+};
+
+describe("getCustomerPortalInboundOrder", () => {
+  test("maps the RPC's own single row, including the two inbound-only projections", async () => {
+    const { client, calls } = fakeRpcClient({ data: [INBOUND_ORDER_ROW], error: null });
+    const result = await getCustomerPortalInboundOrder(client, TENANT_ID, ACTOR_ID, ORDER_ID);
+    assert.equal(result.status, "scheduled");
+    assert.equal(result.inboundNumber, "WMSIN-2026-000001");
+    assert.equal(result.appointmentWindowStart, "2026-09-04T02:00:00.000Z");
+    assert.equal(result.appointmentWindowEnd, "2026-09-04T05:00:00.000Z");
+    assert.equal(result.expectedDate, "2026-09-04");
+    assert.deepEqual(calls[0], {
+      fn: "get_customer_portal_inbound_order",
+      args: { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_inbound_order_id: ORDER_ID },
+    });
+  });
+
+  test("an unscheduled inbound order degrades its window to null rather than rejecting the row", async () => {
+    const { client } = fakeRpcClient({
+      data: [{ ...INBOUND_ORDER_ROW, status: "draft", expected_date: null, appointment_window_start: null, appointment_window_end: null }],
+      error: null,
+    });
+    const result = await getCustomerPortalInboundOrder(client, TENANT_ID, ACTOR_ID, ORDER_ID);
+    assert.equal(result.status, "draft");
+    assert.equal(result.expectedDate, null);
+    assert.equal(result.appointmentWindowStart, null);
+    assert.equal(result.appointmentWindowEnd, null);
+  });
+
+  test("propagates record_not_found with .code set, and records the denial under its own resource_type", async () => {
+    const { client, calls } = fakeRpcClient({ data: null, error: { message: "record_not_found: no permitted inbound order exists for x" } });
+    await assert.rejects(
+      () => getCustomerPortalInboundOrder(client, TENANT_ID, ACTOR_ID, ORDER_ID),
+      (error: unknown) => error instanceof CustomerPortalWarehouseOrderQueryError && error.code === "record_not_found",
+    );
+    // The denial audit must be a second, separate call -- an audit insert cannot
+    // survive the RAISE inside the RPC's own transaction.
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1]?.fn, "record_customer_inventory_access_denial");
+    assert.equal(calls[1]?.args["p_resource_type"], "inbound_order");
+  });
+});
+
+describe("listCustomerPortalInboundOrders", () => {
+  test("passes every filter and cursor param under its exact RPC name", async () => {
+    const { client, calls } = fakeRpcClient({ data: [INBOUND_ORDER_ROW], error: null });
+    const rows = await listCustomerPortalInboundOrders(client, TENANT_ID, ACTOR_ID, {
+      warehouseId: WAREHOUSE_ID,
+      statusFilter: "scheduled",
+      cursorUpdatedAt: "2026-08-16T00:00:00.000Z",
+      cursorId: LINE_ID,
+      limit: 25,
+    });
+    assert.equal(rows.length, 1);
+    assert.deepEqual(calls[0], {
+      fn: "list_customer_portal_inbound_orders",
+      args: {
+        p_tenant_id: TENANT_ID,
+        p_actor_auth_user_id: ACTOR_ID,
+        p_warehouse_id: WAREHOUSE_ID,
+        p_status_filter: "scheduled",
+        p_cursor_updated_at: "2026-08-16T00:00:00.000Z",
+        p_cursor_id: LINE_ID,
+        p_limit: 25,
+      },
+    });
+  });
+
+  test("a null result is an empty list, never a throw", async () => {
+    const { client } = fakeRpcClient({ data: null, error: null });
+    assert.deepEqual(await listCustomerPortalInboundOrders(client, TENANT_ID, ACTOR_ID), []);
+  });
+
+  test("wraps an RPC error", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "invalid_cursor: p_cursor_updated_at is required" } });
+    await assert.rejects(
+      () => listCustomerPortalInboundOrders(client, TENANT_ID, ACTOR_ID),
+      (error: unknown) => error instanceof CustomerPortalWarehouseOrderQueryError && error.code === "invalid_cursor",
+    );
+  });
+});
+
+describe("listCustomerPortalInboundOrderLines", () => {
+  test("passes the RPC's own tenant-id-less signature and maps the expected-quantity shape", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: [
+        {
+          id: LINE_ID,
+          inbound_order_id: ORDER_ID,
+          line_number: 1,
+          item_master_id: ITEM_ID,
+          expected_uom_code: "PCS",
+          expected_quantity: "9.000",
+          lot_controlled: false,
+          serial_controlled: false,
+          expiry_controlled: false,
+          record_version: 1,
+          updated_at: "2026-08-17T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const lines = await listCustomerPortalInboundOrderLines(client, ACTOR_ID, ORDER_ID);
+    assert.equal(lines.length, 1);
+    // numeric arrives from PostgREST as a string; the contract coerces it.
+    assert.equal(lines[0]?.expectedQuantity, 9);
+    assert.deepEqual(calls[0], {
+      fn: "list_customer_portal_inbound_order_lines",
+      args: { p_inbound_order_id: ORDER_ID, p_actor_auth_user_id: ACTOR_ID },
+    });
   });
 });

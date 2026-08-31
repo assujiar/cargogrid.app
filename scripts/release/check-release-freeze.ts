@@ -2871,7 +2871,29 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (409 files, sixty-second-pass amendment above). Superseded 2026-08-31 (sixty-third pass) by
   // ISS-2026-118 (410 files: +1,
   // 20260831210000_wire_customer_dashboard_bookings_shipments_invoices_payments.sql).
-  migrationSetSha256: "5b403a1c326197650266a23bc955f8b2a62be46d4615eddf6cdab7eb211e7f99",
+  // History: 5b403a1c326197650266a23bc955f8b2a62be46d4615eddf6cdab7eb211e7f99
+  // (410 files, sixty-third-pass amendment above). Superseded 2026-08-31 (sixty-fifth pass) by
+  // ISS-2026-120 (411 files: +1,
+  // 20260831220000_add_customer_portal_inbound_order_visibility.sql). The sixty-fourth pass,
+  // ISS-2026-119, touched no migration, which is why this history skips a number rather than
+  // losing one. Ruling: ADR-0027 Part A.
+  //
+  // CPL-310 shipped the outbound half of customer warehouse-order visibility and disclosed, in
+  // its own design decision 11, that no customer-facing inbound RPC existed anywhere in this
+  // repository. That was a budget disclosure, not a defect, and it stayed true for two weeks.
+  // This migration builds the inbound half exactly as ISS-2026-120's own recommended fix
+  // specified: three RPCs mirroring the outbound three, reusing
+  // app.evaluate_customer_portal_inventory_access and app.resolve_customer_account_scope
+  // unmodified, plus their three public.* wrappers.
+  //
+  // The part that was not in the recommended fix, and is the reason this migration is more than
+  // a mirror: 20260730311000 narrowed seven tables' raw SELECT policy to deny a
+  // customer_user-layer actor outright, and the inbound pair was not among them -- correctly, at
+  // the time, since no customer-facing inbound path existed to harden against. This migration is
+  // the thing that creates that path, so it is the migration that owes the matching denial. One
+  // added conjunct per policy, the rest byte-identical; it can only remove rows, and only for
+  // actors whose sanctioned read path is the SECURITY DEFINER layer.
+  migrationSetSha256: "e6d734bfb302d7c77f96881d72464a2464b8d50f33d3224a19f13453bcb0a805",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3205,7 +3227,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-119 (238 files unchanged in count -- customer-portal-scope.sql gained the probe that
   // proves the widened and legacy customer-scope resolvers agree across invited/active/revoked,
   // which is what makes keeping two of them a consistency gap rather than a grant difference).
-  dbTestSetSha256: "86ffcc1e0f16293b3b2398bfc872504e37af4c4c576e4cfa7efb67c41fd32cef",
+  // History: 86ffcc1e0f16293b3b2398bfc872504e37af4c4c576e4cfa7efb67c41fd32cef
+  // (238 files, sixty-fourth-pass state). Superseded 2026-08-31 (sixty-fifth pass) by
+  // ISS-2026-120 (238 files unchanged in count -- customer-warehouse-order-visibility.sql gained
+  // seven inbound fixtures and seven assertion blocks, deliberately inside the file that already
+  // owns the outbound half rather than in a new one. The reason is the point: the two halves run
+  // against the SAME accounts, warehouses, eligibility grants and customer identities, so any
+  // divergence in scope resolution, eligibility, anti-enumeration or identity handling between
+  // them fails here instead of becoming a quiet asymmetry nobody reads. The inbound block is
+  // ordered AFTER the existing revocation block on purpose, which lets it prove the inbound list
+  // reads live eligibility rather than a snapshot -- the revoked-warehouse order must already be
+  // gone by the time it counts.).
+  dbTestSetSha256: "b7980d9c7091d563b2acd20aed5312d0f476c3484dcdef3f122e95bc192bd7be",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

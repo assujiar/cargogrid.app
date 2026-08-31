@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 58 — 4 High, 24 Medium, 30 Low |
+| `OPEN` | 57 — 4 High, 24 Medium, 29 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 205 |
+| `RESOLVED` | 206 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -123,7 +123,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-087` | Low | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
 | `ISS-2026-118` | Low | `RESOLVED` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
 | `ISS-2026-119` | Low | `ACCEPTED_EXCEPTION` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
-| `ISS-2026-120` | Low | `OPEN` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
+| `ISS-2026-120` | Low | `RESOLVED` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
 | `ISS-2026-121` | Low | `OPEN` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
 | `ISS-2026-122` | Low | `OPEN` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
 | `ISS-2026-123` | Low | `OPEN` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
@@ -1765,7 +1765,7 @@ by seeing the wrong data.** Full `pnpm db:test` green.
 **Reopen this** if a future change widens `app.resolve_customer_account_scope` in a way the legacy
 resolver cannot follow — at that point unifying stops being cosmetic and the rewrite is worth its
 risk.
-### ISS-2026-120 — no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only (Phase 8, CPL-310 deliberate scope decision, OPEN, Low)
+### ISS-2026-120 — no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only (Phase 8, CPL-310 deliberate scope decision, RESOLVED 2026-08-31, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-012` (Prompt 310, Warehouse Order and Order Fulfillment Visibility) — a deliberate scope decision made while authoring this checkpoint's own migration, not a defect found afterward.
 
@@ -1776,6 +1776,79 @@ Discovered `2026-08-17` at `CG-S13-CPL-012` (Prompt 310, Warehouse Order and Ord
 **Not fixed here** — this checkpoint's own explicit file/migration budget (normally 5-15 files, at most 1-3 additive migrations) and its own chartered scope (the source prompt's own design section naming exactly three outbound RPCs to mirror) intentionally stopped there. Designing a wholly new inbound-order customer RPC surface from scratch — gate composition (already reusable unmodified), column projection, anti-enumeration, cursor pagination, and its own live db-test regression proof — is a capability-sized addition in its own right, not a bounded extension of this checkpoint. **Status `OPEN`**, Low severity (no live caller depends on the deferred surface; the UI never claims inbound visibility it does not have). Recommended fix for whichever future checkpoint picks it up: a new additive migration mirroring this checkpoint's own three functions' shape for `app.wms_inbound_orders`/`app.wms_inbound_order_lines`, reusing `app.evaluate_customer_portal_inventory_access`/`app.resolve_customer_account_scope` unchanged, plus a live db-test regression proof mirroring this checkpoint's own key isolation/anti-enumeration/pagination assertions.
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `grep -rn "customer_inbound_order"` across migrations/server/app still returns zero hits for a customer-facing inbound-order RPC. `app.wms_inbound_orders` does carry `warehouse_id`/`owner_account_id`, confirming a mirror is technically feasible but genuinely unbuilt — new-capability work (full RPC surface, gate composition, projection, anti-enumeration, pagination, db-test), not a same-signature migration. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-31 — built, exactly as this entry's own "Recommended fix" specified.**
+
+This entry was never a defect report; it was a budget disclosure, and re-reading it before starting
+confirmed the analysis holds. `app.wms_inbound_orders` carries both `warehouse_id` and
+`owner_account_id`, which is precisely the shape `app.evaluate_customer_portal_inventory_access`
+(CPL-309) already expects — so the gate is reused unmodified, the way CPL-310 reused it. Nothing
+about CPL-310's design was wrong; what changed is that this is now its own unit of work rather than
+an overflow of somebody else's.
+
+`supabase/migrations/20260831220000_add_customer_portal_inbound_order_visibility.sql` —
+`app.get_customer_portal_inbound_order`, `app.list_customer_portal_inbound_order_lines`,
+`app.list_customer_portal_inbound_orders`, plus their three `public.*` Option-2 wrappers. Every
+structural property is CPL-310's, deliberately: `assert_actor_is_session_identity` as the literal
+first statement; the identical anti-enumerating `record_not_found` for "does not exist", "other
+tenant" and "failed the gate" alike; the lines RPC delegating its gate to the get RPC rather than
+re-deriving it, keeping the same tenant-id-less signature; owner scope resolved once per call and
+warehouse eligibility per row; keyset pagination on `(updated_at desc, id desc)`, never OFFSET.
+
+**Three things genuinely differ, each forced by the inbound table rather than chosen.** Four
+statuses, not three — `scheduled` has no outbound counterpart. Three source types, not two —
+`import` is real. And the appointment window is projected, where outbound has only a requested ship
+date. That third one is a judgement worth stating rather than burying: an appointment window is not
+internal operational data in the sense Business rule 2 protects — no worker identity, no
+productivity, no task queue, no other customer's location. It is when this customer's own goods are
+booked to arrive at a warehouse they are eligible to see, which is the single most useful fact an
+inbound view can carry. Withholding it would have made the surface honest and useless.
+
+**A real defense-in-depth gap found while building this, and closed in the same migration.**
+`20260730311000_harden_customer_inventory_access_rls_isolation.sql` narrowed seven tables' raw
+SELECT policy so a `customer_user`-layer actor is denied outright at the RLS layer, on the
+reasoning that the SECURITY DEFINER surface is their only sanctioned read path. The outbound pair
+is in that seven; the inbound pair is not — correctly, at the time, because no customer-facing
+inbound path existed to harden against. This migration is the thing that creates that path, so it
+is the migration that owes the matching denial. One added conjunct
+(`not app.actor_holds_customer_user_layer(tenant_id)`) per policy, the rest byte-identical; it can
+only remove rows, and only for actors who should never have been reading these tables raw.
+
+**The client layer is built in the same change, not deferred.** This is the trap `ISS-2026-124`
+and `ISS-2026-315` both fell into — a correct DB fix invisible at the layer anyone actually looks
+at. `server/contracts/customer-portal-warehouse-order/` gained the inbound schemas and parsers;
+`server/queries/customer-portal-warehouse-order.ts` gained the three wrappers (denial audits
+recorded under `resource_type = 'inbound_order'`, kept distinct from `'outbound_order'`: an audit
+trail that cannot tell which surface was probed is worth less than one that can);
+`app/(tenant)/[tenantSlug]/customer-warehouse-orders/` gained an Inbound orders section and a
+detail route at `inbound/[inboundOrderId]`. The route is a named segment rather than a second bare
+dynamic one beside `[outboundOrderId]`, because the two ids come from different tables and a single
+segment would have to guess which — guessing wrong on a customer-facing gate is the exact class of
+mistake this capability's anti-enumeration discipline exists to prevent.
+
+**One filter, two vocabularies, handled rather than papered over.** `draft`/`confirmed`/`cancelled`
+are shared; `scheduled` is inbound-only. Rather than silently ignoring a filter one half cannot
+honour — which would show every outbound order under a filter the reader believes is applied — the
+half with no such status is skipped and says so in place of its table.
+
+**Evidence.** `scripts/db-tests/customer-warehouse-order-visibility.sql` gained seven inbound
+fixtures and seven assertion blocks, deliberately inside the file that already owns the outbound
+half: both halves run against the same accounts, warehouses, eligibility grants and identities, so
+a divergence in scope, eligibility, anti-enumeration or identity handling fails there rather than
+becoming a quiet asymmetry. The inbound block is ordered after the existing revocation block on
+purpose, which lets it prove the list reads live eligibility — the revoked-warehouse inbound must
+already be gone by the time it counts. Covered: cross-tenant and cross-account isolation; the
+new-grant-table-only regression (customer-multi sees 4, not 3); anti-enumeration with the two error
+messages compared after id substitution; the two inbound-only projections against real values, not
+nulls; a real three-page keyset walk with no overlap or gap plus the half-supplied-cursor failure;
+the identity cross-check on all three RPCs with a same-session scope denial proving the two gates
+are independent; raw-table RLS returning zero rows to a customer session in the same breath as the
+RPC returning its real three; grants (`anon` denied on all six functions); `public.*` wrappers
+column-by-column identical to their originals; and a structural `prosrc` sweep for internal terms.
+`pnpm db:test ALL PASSED` on the first run. 6 new TypeScript tests. `pnpm typecheck`, `pnpm lint`
+(0 errors), 5722 unit tests, and `npx next build` (all three warehouse-order routes compiled) green.
+Applied live; all six functions, their grants and both rewritten policies verified against the
+hosted project. Freeze digest amended (sixty-fifth pass).
 
 ### ISS-2026-121 — "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to narrow it further (Phase 8, CPL-311 deliberate scope decision, OPEN, Low)
 
