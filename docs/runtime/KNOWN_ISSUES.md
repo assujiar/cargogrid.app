@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 65 — 4 High, 25 Medium, 36 Low |
+| `OPEN` | 64 — 4 High, 25 Medium, 35 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 7 — formally ruled, not pending work |
-| `RESOLVED` | 198 |
+| `RESOLVED` | 199 |
 | **Total records** | **270** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -105,7 +105,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload |
 | `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
 | `ISS-2026-310` | Medium | `OPEN` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
-| `ISS-2026-312` | Low | `OPEN` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
+| `ISS-2026-312` | Low | `RESOLVED` | three of the 14 consumer-side record-scope guards exist in code but no test proves they fire |
 | `ISS-2026-313` | Low | `RESOLVED` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
 | `ISS-2026-314` | Low | `OPEN` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
@@ -6819,7 +6819,7 @@ they would be the wrong thing to do unilaterally even with access. Carried into
 
 ---
 
-### ISS-2026-312 — three of the 14 consumer-side record-scope guards exist in code but no test proves they fire (found 2026-08-31 while closing `ISS-2026-170`, `OPEN`, Low)
+### ISS-2026-312 — three of the 14 consumer-side record-scope guards exist in code but no test proves they fire (found 2026-08-31 while closing `ISS-2026-170`, `RESOLVED` the same day, was Low)
 
 `ISS-2026-170`'s enumeration established that a file's `record_id` is validated by the **consumer** that attaches it, not by `app.files` — 14 distinct guards, now pinned as a set in `scripts/db-tests/document-file.sql` so one silently disappearing fails the suite.
 
@@ -6836,6 +6836,35 @@ Pinning proves they **exist**. It does not prove they **fire**. Eleven of the 14
 **What closing it takes.** For each: build the wrongly-scoped file in that domain's own db-test fixture and assert the named error, exactly as `procurement-vendor-assessment.sql:797` already does for its own guard. Bounded and mechanical — three fixtures, three assertions — but it is genuine per-domain test authoring, not a sweep, and it was deliberately not rushed inside the `ISS-2026-170` closure that found it.
 
 **Owner:** whoever next touches contract evidence, dispute evidence, or document checklists.
+
+**`RESOLVED`, 2026-08-31.** All three now have a test that constructs the wrongly-scoped file and
+asserts the named rejection, exactly as this entry specified.
+
+**Each fixture is deliberately legitimate in every respect except the one under test.** That is
+the whole point, and it is what makes these three different from the eleven already covered: the
+file is in the **right tenant**, carries the **right document type**, has the **right
+`record_type`**, and has a **clean malware scan**. Every other guard in the same function waves it
+through. Only the record-scope check stands between it and being accepted as evidence for
+something it does not belong to — so a fixture that got any of those other properties wrong would
+pass for the wrong reason and prove nothing.
+
+| Guard | Where it is now proven |
+|---|---|
+| `document_checklist_record_mismatch` | `operations-document-requirement.sql` — a `pod` file uploaded against shipment **B**, linked to shipment **A**'s checklist item |
+| `contract_evidence_file_mismatch` | `procurement-vendor-contract.sql` — a clean, correctly-typed terms file scoped to a different contract, offered as signature evidence |
+| `dispute_evidence_file_mismatch` | `procurement-vendor-invoice-matching.sql` — a clean vendor-response file scoped to a different dispute |
+
+For the latter two, `record_id` is a fresh uuid standing in for another record rather than a second
+real contract/dispute: `app.files.record_id` is polymorphic with no foreign key (PLT-128), so that
+is precisely the shape a mis-scoped upload takes in practice, and building a whole second contract
+or dispute would test the fixture rather than the guard. Both files are scanned clean first, so the
+`*_unsafe_evidence` check cannot be what rejects them — if a future change moved the scan check
+ahead of the scope check, these tests would fail rather than quietly pass on the wrong error.
+
+The two procurement fixtures each register their own document type and publish its tenant config,
+mirroring the shape `ISS-2026-058` established in `procurement-vendor-capacity.sql` earlier this
+session. Full `pnpm db:test` green. **All 14 consumer-side record-scope guards are now both pinned
+as a set and individually proven to fire.**
 
 
 ### ISS-2026-313 — four existing, already-working tenant-wide sweeps are absent from the scheduler catalogue, so the capability that could automate them does not reach them (found 2026-08-31 while building the task scheduler, `RESOLVED` the same day, was Low)

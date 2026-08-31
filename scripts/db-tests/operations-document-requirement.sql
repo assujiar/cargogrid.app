@@ -344,6 +344,27 @@ begin
       if sqlerrm !~ 'document_checklist_cross_tenant' then raise; end if;
   end;
 
+  -- ISS-2026-312: the record-scope guard, proven to FIRE rather than merely to exist. The file
+  -- below is legitimate in every other respect -- right tenant, right document type, uploaded by
+  -- the same actor -- and belongs to a DIFFERENT shipment. That is the case the cross-tenant and
+  -- type checks both wave through, so it is the only one that exercises this guard.
+  declare
+    v_other_shipment_file app.files;
+  begin
+    select * into v_other_shipment_file from app.initiate_file_upload(
+      (select id from app.tenants where slug = 'acmedocreq'), 'pod', 'shipment_order',
+      (select id from app.shipment_orders where idempotency_key = 'idem-docreq-b'),
+      'pod-b.pdf', 'application/pdf', 102400, null, false, null, '{}'::uuid[], null, 'idem-docreq-b-pod-312', '00000000-0000-0000-0000-000000023102', 'rep'
+    );
+    begin
+      perform app.link_document_to_checklist_item(v_item.id, v_other_shipment_file.id, '00000000-0000-0000-0000-000000023102', 'rep');
+      raise exception 'assertion failed: expected document_checklist_record_mismatch for a same-tenant, same-type file uploaded against a DIFFERENT shipment order';
+    exception
+      when check_violation then
+        if sqlerrm !~ 'document_checklist_record_mismatch' then raise; end if;
+    end;
+  end;
+
   v_updated := app.link_document_to_checklist_item(v_item.id, v_file.id, '00000000-0000-0000-0000-000000023102', 'rep');
   if v_updated.file_id <> v_file.id or v_updated.review_status <> 'pending' then
     raise exception 'assertion failed: expected the checklist item to link the file and reset to pending review';

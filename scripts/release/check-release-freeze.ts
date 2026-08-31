@@ -3165,7 +3165,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // proof and, more importantly, the two boundaries the narrow replay signature exists to hold:
   // a decline retry with a DIFFERENT reason, and a client stale by more than their own write,
   // both still refused).
-  dbTestSetSha256: "be5e42c586cd13e104dff131a0c5156038e3dda3283326363155bf0f2a524058",
+  // History: be5e42c586cd13e104dff131a0c5156038e3dda3283326363155bf0f2a524058
+  // (238 files, fifty-ninth-pass state). Superseded 2026-08-31 (sixtieth pass) by ISS-2026-312
+  // (238 files unchanged in count -- operations-document-requirement.sql,
+  // procurement-vendor-contract.sql and procurement-vendor-invoice-matching.sql each gained the
+  // wrongly-scoped-file fixture that proves their record-scope guard FIRES, closing the last
+  // three of the 14 guards ISS-2026-170 pinned as a set but could only prove existed).
+  dbTestSetSha256: "3a36cd5d637e07f28318f3fdd19759e53d0b509156d45d9a98e16023d2aa411b",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

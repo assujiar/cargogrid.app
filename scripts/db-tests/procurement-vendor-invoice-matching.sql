@@ -737,6 +737,42 @@ begin
     raise exception 'assertion failed: expected disputed_amount masked for a View-only-no-cost caller';
   end if;
 
+  -- ISS-2026-312: the record-scope guard on a dispute's own vendor-response file, proven to FIRE
+  -- rather than merely to exist. Same tenant, correct document type, correct record_type, clean
+  -- scan -- and scoped to a different dispute. That is the case a tenant check waves through.
+  declare
+    v_doc_draft app.config_versions;
+    v_wrong_scope_file app.files;
+  begin
+    perform app.register_document_type('vendor_dispute_response', 'Vendor Dispute Response', 'DOC', '00000000-0000-0000-0000-000000265999', 'supreme');
+    v_doc_draft := app.create_config_draft('document:vendor_dispute_response', v_tenant1, 'tenant', null, '00000000-0000-0000-0000-000000265101', 'admin');
+    perform app.set_config_items(v_doc_draft.id, jsonb_build_array(
+      jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('application/pdf')),
+      jsonb_build_object('key', 'max_size_bytes', 'value', 5242880),
+      jsonb_build_object('key', 'retention_class', 'value', 'operational_contract_plus_90d'),
+      jsonb_build_object('key', 'default_classification', 'value', 'internal'),
+      jsonb_build_object('key', 'legal_hold_eligible', 'value', false)
+    ), '00000000-0000-0000-0000-000000265101', 'admin');
+    perform app.publish_document_type_definition(v_doc_draft.id, '00000000-0000-0000-0000-000000265101', now(), 'admin');
+
+    -- A fresh uuid standing in for a DIFFERENT dispute: app.files.record_id is polymorphic with
+    -- no FK (PLT-128), so this is exactly the shape a mis-scoped upload takes in practice.
+    select * into v_wrong_scope_file from app.initiate_file_upload(
+      v_tenant1, 'vendor_dispute_response', 'vendor_bill_match_dispute', gen_random_uuid(),
+      'vendor-reply-other-dispute.pdf', 'application/pdf', 20480, null, false, null, '{}'::uuid[], null,
+      'idem-vim-dispute-312', v_staff1, 'staff'
+    );
+    perform app.record_file_scan_result(v_wrong_scope_file.id, 'clean', 'test-scanner-312', v_staff1, 'staff');
+
+    begin
+      perform app.record_vendor_bill_match_dispute_response(v_dispute.id, v_dispute.record_version, 'vendor reply attached', v_wrong_scope_file.id, v_staff1, 'staff');
+      raise exception 'assertion failed: expected dispute_evidence_file_mismatch for a same-tenant, clean, correctly-typed file scoped to a DIFFERENT dispute';
+    exception
+      when check_violation then
+        if sqlerrm !~ 'dispute_evidence_file_mismatch' then raise; end if;
+    end;
+  end;
+
   v_dispute := app.record_vendor_bill_match_dispute_response(v_dispute.id, v_dispute.record_version, 'vendor confirms the invoice figure was correct, no adjustment needed', null, v_staff1, 'staff');
 
   begin

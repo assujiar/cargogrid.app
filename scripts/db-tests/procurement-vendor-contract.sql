@@ -329,6 +329,44 @@ begin
   end;
   if not v_failed then raise exception 'assertion failed: expected activation to be blocked before signature completes'; end if;
 
+  -- ISS-2026-312: the record-scope guard on the signature's own evidence file, proven to FIRE
+  -- rather than merely to exist. The file below is legitimate in every other respect -- right
+  -- tenant, right document type, right record_type -- and is scoped to a different contract.
+  -- That is precisely the case a tenant check waves through, so it is the only one that
+  -- exercises this guard.
+  declare
+    v_doc_draft app.config_versions;
+    v_wrong_scope_file app.files;
+  begin
+    perform app.register_document_type('vendor_contract_terms', 'Vendor Contract Terms', 'DOC', '00000000-0000-0000-0000-000000261999', 'supreme');
+    v_doc_draft := app.create_config_draft('document:vendor_contract_terms', v_tenant1, 'tenant', null, v_admin1, 'admin');
+    perform app.set_config_items(v_doc_draft.id, jsonb_build_array(
+      jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('application/pdf')),
+      jsonb_build_object('key', 'max_size_bytes', 'value', 5242880),
+      jsonb_build_object('key', 'retention_class', 'value', 'operational_contract_plus_90d'),
+      jsonb_build_object('key', 'default_classification', 'value', 'internal'),
+      jsonb_build_object('key', 'legal_hold_eligible', 'value', false)
+    ), v_admin1, 'admin');
+    perform app.publish_document_type_definition(v_doc_draft.id, v_admin1, now(), 'admin');
+
+    -- record_id is a fresh uuid standing in for a DIFFERENT vendor contract -- app.files.record_id
+    -- is polymorphic with no FK (PLT-128), so this is exactly the shape a mis-scoped upload takes.
+    select * into v_wrong_scope_file from app.initiate_file_upload(
+      v_tenant1, 'vendor_contract_terms', 'vendor_contract', gen_random_uuid(),
+      'terms-other-contract.pdf', 'application/pdf', 20480, null, false, null, '{}'::uuid[], null,
+      'idem-vc-terms-312', v_staff1, 'staff'
+    );
+    perform app.record_file_scan_result(v_wrong_scope_file.id, 'clean', 'test-scanner-312', v_staff1, 'staff');
+
+    begin
+      perform app.record_vendor_contract_signature(v_contract.id, v_contract.record_version, 'Budi Signatory', now(), v_wrong_scope_file.id, v_staff1, 'staff');
+      raise exception 'assertion failed: expected contract_evidence_file_mismatch for a same-tenant, clean, correctly-typed evidence file scoped to a DIFFERENT contract';
+    exception
+      when check_violation then
+        if sqlerrm !~ 'contract_evidence_file_mismatch' then raise; end if;
+    end;
+  end;
+
   v_contract := app.record_vendor_contract_signature(v_contract.id, v_contract.record_version, 'Budi Signatory', now(), null, v_staff1, 'staff');
   if v_contract.signature_status <> 'signed' or v_contract.signed_by <> 'Budi Signatory' then
     raise exception 'assertion failed: expected signature_status=signed signed_by=Budi Signatory, got %/%', v_contract.signature_status, v_contract.signed_by;
