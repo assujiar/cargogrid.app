@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 51 — 4 High, 23 Medium, 24 Low |
+| `OPEN` | 50 — 4 High, 22 Medium, 24 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 212 |
+| `RESOLVED` | 213 |
 | **Total records** | **271** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -64,7 +64,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-061` | Medium | `ACCEPTED_EXCEPTION` | Vendor invoice match-exception approval bypasses the canonical Platform approval engine |
 | `ISS-2026-062` | Medium | `OPEN` | Vendor assignment (PRC-263) has no shipment-leg/task granularity |
 | `ISS-2026-068` | Medium | `RESOLVED` | Recruitment, Job Portal and ATS (HRT-276): hiring managers have no self-scoped "assigned slice" read surface, unlike interviewers |
-| `ISS-2026-069` | Medium | `OPEN` | Job-offer approval (HRT-276) is the fourth domain forced to share PLT-121's single tenant-wide `config_type_code='approval'` singleton, undisclosed as |
+| `ISS-2026-069` | Medium | `RESOLVED` | Job-offer approval (HRT-276) is the fourth domain forced to share PLT-121's single tenant-wide `config_type_code='approval'` singleton, undisclosed as |
 | `ISS-2026-071` | Medium | `RESOLVED` | Onboarding and Offboarding (HRT-277): Finance/Operations/IT task-owner completion authority is uniformly `HRS:Edit`-gated, not task-owner-identity-gat |
 | `ISS-2026-073` | Medium | `RESOLVED` | Onboarding and Offboarding (HRT-277): a direct-hire onboarding case has no "approved direct hire" precondition anywhere in the implementation, despite |
 | `ISS-2026-076` | Medium | `RESOLVED` | Overtime and Timesheet (HRT-281): five mutation wrappers (HR-on-behalf create ×2, draft edit, explicit reconcile, per-employee payroll generate) exist |
@@ -820,13 +820,78 @@ Discovered `2026-08-09` during the Tier C batch review-round fix pass for `CG-S1
 
 Regression in `scripts/db-tests/hris-recruitment-ats.sql`, built on the fixture identity that already exists for exactly this shape — `hiringmgr@hrrec1.test` (`027608`), which holds **zero** `app.role_assignments` (the file's own no-permission control), asserted rather than assumed at the top of the block. Two vacancies are created, one naming that manager and one not: the manager sees exactly one, their own; the other is absent. A forged session (`request.jwt.claims`) proves it works for a real `authenticated` caller, and claiming a different identity raises `actor_identity_mismatch` rather than answering. Cross-tenant returns zero rows, not an error that would confirm the tenant exists. A customer-layer principal with no employee profile returns zero rows. Full `db:test` suite `ALL PASSED` (395 migrations); applied live and object-verified.
 
-### ISS-2026-069 — Job-offer approval (HRT-276) is the fourth domain forced to share PLT-121's single tenant-wide `config_type_code='approval'` singleton, undisclosed as a risk at the point it widened (OPEN, Medium)
+### ISS-2026-069 — Job-offer approval (HRT-276) is the fourth domain forced to share PLT-121's single tenant-wide `config_type_code='approval'` singleton, undisclosed as a risk at the point it widened (`RESOLVED` 2026-08-31 — and it was the seventh domain, not the fourth, Medium)
 
 Discovered `2026-08-09` during the Tier C batch review-round fix pass for `CG-S12-HRT-004` (Prompt 276), CONFIRMED by direct code read: `app.config_objects` carries a unique index on `(config_type_code, coalesce(tenant_id,...), scope_level, coalesce(scope_id,...))` (`supabase/migrations/20260717130000_...` lines 220-223), so at most ONE published `'approval'` config_object can exist per tenant at `scope_level='tenant'`. Every current consumer — Sales quotation approval (COM-153), Commercial credit control, Procurement PO approval (PRC-259/260), and now HRT-276 job-offer approval — selects its routing definition with the byte-for-byte identical filter `co.config_type_code = 'approval' and co.tenant_id = <tenant> and co.scope_level = 'tenant' and cv.status = 'published'`, confirmed by direct grep across all four migrations. `app.request_approval`'s own `entity_type` parameter (here `'job_offer'`) is stored purely for record-keeping on the resulting request row and is never used to select or filter which routing definition applies. Consequence: a tenant cannot run independent approval chains per business domain — a routing definition a tenant intends for HR job offers (e.g. HR manager then HR director) instantly governs every pending/future Sales quotation, credit override, and Procurement PO approval in that tenant, and vice versa. This is a real, pre-existing PLT-121 (Phase 6) architectural constraint, not something HRT-276 introduced — but HRT-276 is the checkpoint that measurably widens its blast radius by bringing a fourth, HR-compensation/employment-specific domain into the same shared singleton, and this consequence was not surfaced as a risk in `docs/build-log/phase-07/HRT-276.md`'s own residual-gaps section (§8) or filed as any known issue at the time.
 
 **Handling:** Not fixed by the HRT-276 review-round fix pass — domain-scoping `app.config_objects` (e.g. widening the uniqueness key to include a domain/entity discriminator, or adding a new `scope_level`) is a shared-schema redesign affecting every existing PLT-121 consumer across Phases 2/6/7, requiring its own ADR and change control per `AGENTS.md` "Scope and refactoring" ("Broad refactors, framework upgrades, shared-schema redesign... require dedicated prompts and ADR/change control"), not a bounded fix within one capability's own review pass. **Status `OPEN`**, Medium severity (a real cross-domain governance-isolation gap a tenant might reasonably expect NOT to exist, but each individual domain's own approval routing still functions correctly and is not itself insecure — no tenant/cross-tenant data exposure, no missing authorization check) — owner: a future Platform/Approval-Engine hardening prompt with a mandate spanning every PLT-121 consumer, not a single domain checkpoint.
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `config_objects_scope_unique` (`20260717130000...sql:220-223`) still uniquely keys on `(config_type_code, tenant_id, scope_level, scope_id)` with no domain/entity discriminator. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-08-31 — and the stated blocker was not real.**
+
+The disposition said domain-scoping approvals is *"a shared-schema redesign affecting every
+existing PLT-121 consumer across Phases 2/6/7, requiring its own ADR and change control."* That
+followed from reading the uniqueness key `(config_type_code, tenant_id, scope_level, scope_id)`
+as needing a **new** discriminator — *"widening the uniqueness key to include a domain/entity
+discriminator, or adding a new `scope_level`."*
+
+**The discriminator was already there. It is `config_type_code` itself.** Nothing ever required
+seven domains to share the single code `'approval'`; they share it because each hardcodes that
+literal in its own selector. And this repository had already stopped doing that twice:
+`approval:automation_rule_publish` (IAE-007) and `approval:ai_output_acceptance` (IAE-037) are
+registered config types in production today, each selecting its own domain-scoped routing
+definition. The convention exists, is proven, and needs no schema change at all. The seven
+functions below simply predate it. So this was never a redesign needing an ADR — it was seven
+domains catching up with a pattern two of their siblings already use.
+
+**The entry undercounted, and the correction is the point.** It names four consumers. A live
+`pg_proc` query for functions whose body carries the shared selector returns **seven**: those
+four plus `submit_leave_request`, `submit_onboarding_case_for_finalize_approval` and
+`submit_payroll_run_for_finalization`. Three whole domains joined the singleton after the entry
+was written — exactly the widening it warned would keep happening. All seven are fixed;
+fixing the named four would have left the same defect with a smaller blast radius and a stale
+entry claiming closure.
+
+`supabase/migrations/20260831250000_scope_approval_routing_per_domain.sql` registers seven
+`approval:<domain>` config types and adds
+`app._resolve_approval_config_type_code(tenant, domain)`, which returns the tenant's own
+published `approval:<domain>` definition if one exists and `'approval'` otherwise.
+
+**That fallback is the whole design, not a caveat.** A tenant that has only ever published the
+shared definition behaves byte-identically to before — nothing to migrate, nothing to
+re-publish, no tenant required to do anything. A tenant that wants HR job offers routed
+differently from sales quotations publishes an `approval:job_offer` definition, and from that
+moment job offers use it while every other domain is untouched. Opting back out is unpublishing
+it. A migration that instead required every tenant to publish seven new definitions before
+approvals kept working would have been the redesign the entry feared, and would have deserved
+the ADR it asked for.
+
+**How the seven rewrites were produced, because it matters for trust.** Each function is its own
+`pg_get_functiondef` read back from the **live** database, with exactly one scripted regex
+substitution applied and asserted to match once per function. Nothing was retyped, and none was
+rebuilt from its creating migration — several have been superseded by later hardening
+migrations, and rebuilding from a creating migration is the trap that nearly deleted five live
+dispatcher branches two migrations earlier in this same session.
+
+**A gate correction made on the way.** The resolver was first written as
+`app.resolve_approval_config_type_code`, granted to `authenticated`. The `public.*` wrapper-parity
+gate failed it, correctly — an externally-callable `app.*` function owes a wrapper. The right
+answer was not a wrapper but to notice that nothing outside the seven security-definer callers has
+any reason to ask which approval definition governs a domain. It is now `app._`-prefixed,
+`service_role`-only, and the definer callers need no grant at all since they execute as the owner.
+
+**Evidence.** `scripts/db-tests/config.sql` proves the behaviour rather than the plumbing: with
+nothing published every domain falls back to the shared definition; an unpublished **draft**
+changes nothing (publishing is the act that switches routing, or a half-configured chain would
+silently take over); publishing `approval:job_offer` moves job offers and leaves all six siblings
+on the shared one; neither crosses a tenant boundary; an unknown domain degrades to the shared
+definition rather than to nothing. Plus a structural sweep that all seven consumers go through
+the resolver **and** that no function anywhere still hardcodes the shared literal — which is how
+the original undercount happened, and is what stops the singleton silently regrowing. `db:test
+ALL PASSED`; `pnpm typecheck`, `pnpm lint` (0 errors), 5763 unit tests green. Applied live; the
+seven config types and the resolver's `authenticated`-denied grant verified against the hosted
+project. Freeze migration + db-test digests amended (sixty-ninth pass).
 
 ### ISS-2026-070 — Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/transfer scenario coverage (OPEN, Low)
 

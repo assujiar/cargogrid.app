@@ -2940,7 +2940,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // configure_tenant_scheduled_task was rebuilt from pg_get_functiondef against the live
   // database, not from the migration that created it -- the trap the previous pass's own
   // dispatcher near-miss had just demonstrated. Exactly one line differs.
-  migrationSetSha256: "c18be343209111874d4dac49a6a2149ff3ebb238e49994d10b0bdcf88edef6e5",
+  // History: c18be343209111874d4dac49a6a2149ff3ebb238e49994d10b0bdcf88edef6e5
+  // (413 files, sixty-eighth-pass amendment above). Superseded 2026-08-31 (sixty-ninth pass)
+  // by ISS-2026-069 (414 files: +1, 20260831250000_scope_approval_routing_per_domain.sql).
+  // Ruling: ADR-0027 Part A.
+  //
+  // Seven business domains shared one tenant-wide approval routing definition, so a chain a
+  // tenant meant for HR job offers also governed every sales quotation. The entry called the
+  // fix "a shared-schema redesign affecting every existing PLT-121 consumer... requiring its
+  // own ADR and change control". It is neither: the discriminator the entry proposed adding
+  // already exists (config_type_code itself), and two later capabilities -- IAE-007's
+  // approval:automation_rule_publish and IAE-037's approval:ai_output_acceptance -- already
+  // use it. The seven older domains simply predate the convention.
+  //
+  // The entry also undercounted: it names four consumers; a live pg_proc query for the shared
+  // selector returns seven. All seven are fixed here.
+  //
+  // Backward compatibility IS the design, not a caveat: the resolver returns the tenant's own
+  // published approval:<domain> definition if one exists and the shared 'approval' otherwise,
+  // so a tenant that has published nothing behaves byte-identically and is required to do
+  // nothing. That fallback is what made it safe to change seven live domains at once.
+  //
+  // Each of the seven bodies is its own pg_get_functiondef read back from the LIVE database
+  // with exactly one scripted regex substitution applied, asserted to match once per function.
+  // Nothing was retyped, and none was rebuilt from its creating migration -- several have been
+  // superseded by later hardening migrations, and rebuilding from a creating migration is the
+  // trap that nearly deleted five live dispatcher branches at the sixty-seventh pass.
+  migrationSetSha256: "6a9c6b9e8988a7724ace83a9bd5fa39e8e3d3deb438aebf6d1939a235eba9604",
   // History: 4df2ae90f01f1b67ee708efc9919d48de2bb78a76e8d1a52cf14788d508488dd
   // (231 files, RGL-393's widened freeze). Superseded 2026-08-25 by the same
   // remediation's new permanent regression test (232 files: +1,
@@ -3333,7 +3359,31 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // that CPL-319's entitlement-hold primitives are already independently staff-callable, which
   // was only ever prose -- if somebody revoked those grants the ruling would silently become
   // false and nobody would find out until a fraud investigation needed the lever.
-  dbTestSetSha256: "2bd1a5091da4a72ed80bd71d8d3593502b38fd896c71a1fab959fbfd4f5a6f65",
+  // History: 2bd1a5091da4a72ed80bd71d8d3593502b38fd896c71a1fab959fbfd4f5a6f65
+  // (239 files, sixty-eighth-pass state). Superseded 2026-08-31 (sixty-ninth pass) by
+  // ISS-2026-069 and a live-caught pre-existing flake (239 files unchanged in count -- two
+  // files widened).
+  //
+  // config.sql gains the domain-scoped approval routing proof: with nothing published every
+  // domain falls back to the shared definition; an unpublished DRAFT changes nothing (publishing
+  // is the act that switches routing, or a half-configured chain would silently take over);
+  // publishing approval:job_offer moves job offers and leaves all six siblings on the shared
+  // one; and neither crosses a tenant boundary. Plus the structural sweep that all seven
+  // consumers go through the resolver AND that no function anywhere still hardcodes the shared
+  // literal -- which is how the entry's own undercount happened, and stops the singleton
+  // silently regrowing.
+  //
+  // hris-leave-permit-business-trip.sql: a PRE-EXISTING, wall-clock-dependent failure that went
+  // live at 17:12 UTC during this pass and would have held the whole suite red for three days.
+  // Baseline-proven pre-existing: the same file, unmodified, failed identically on a clean
+  // stashed checkout in the same window. The fixture publishes a coverage requirement for
+  // `current_date`, and `lv-emp1-req1` was a hardcoded 2026-09-01..2026-09-03 -- which the
+  // file's own Jakarta-pinned session made "today" the moment UTC passed 17:00 on 2026-08-31,
+  // tripping a coverage guard exactly one other block is meant to trip. Every date in the file
+  // is now an offset from current_date, preserving the relationships the assertions depend on.
+  // The file's header had explicitly cleared the coverage seed of this exposure; that claim is
+  // corrected in place, since it was wrong.
+  dbTestSetSha256: "55a5e1b2c54be399c7768a9a7b66ff3187c968fb891146654423b6f409a79184",
   lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
 };
 

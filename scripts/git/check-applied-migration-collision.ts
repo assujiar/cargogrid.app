@@ -95,9 +95,16 @@ function baseRefExists(ref: string): boolean {
 
 function readBaseContent(ref: string, path: string): string | null {
   try {
-    return git(["show", `${ref}:${path}`]);
+    // stderr silenced deliberately: a file absent from the base branch is the NORMAL case for
+    // every new migration, and git reports it as `fatal: path ... exists on disk, but not in
+    // <ref>`. Letting that through would print a wall of "fatal" lines during a run that is
+    // about to pass, which teaches a reader to ignore the word.
+    return execFileSync("git", ["show", `${ref}:${path}`], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
   } catch {
-    // Not present on the base branch -- a genuinely new migration, which is the normal case.
     return null;
   }
 }

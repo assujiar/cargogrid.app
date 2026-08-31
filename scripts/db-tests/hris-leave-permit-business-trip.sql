@@ -49,6 +49,29 @@
 -- that check was not itself an exhaustive sweep -- treat only the cited
 -- comparison as swept-proven, the rest as reviewed.
 --
+-- AND THAT RESERVATION WAS RIGHT: a second exposure surfaced live on 2026-08-31
+-- at 17:12 UTC, in the coverage-requirement seed the paragraph above had cleared.
+--
+-- The setup publishes a coverage requirement and three schedule assignments for
+-- `current_date`, so approving any leave that OVERLAPS "today" trips
+-- coverage_below_minimum. That is deliberate, and exactly one block far below is
+-- meant to trip it. But `lv-emp1-req1` was a HARDCODED 2026-09-01..2026-09-03,
+-- and in this file's Jakarta-pinned session `current_date` became 2026-09-01 the
+-- moment UTC passed 17:00 on 2026-08-31 -- putting "today" inside a range whose
+-- own block expects a clean approval. The whole suite went red, and would have
+-- stayed red for three days.
+--
+-- A hardcoded calendar date in a fixture whose other half is relative to
+-- `current_date` is a collision waiting for the calendar to catch up with it.
+-- Every date in this file is now expressed as an offset from `current_date`,
+-- preserving the relationships the assertions actually depend on (req1 and req2
+-- overlap by two days; the over-balance request is 28 days; emp2's two cancel
+-- fixtures stay distinct and future) while making it structurally impossible for
+-- any of them to land on the fixture's own coverage-seeded "today".
+--
+-- Baseline evidence that this was pre-existing rather than introduced: the same
+-- file, unmodified, failed identically on a clean checkout in the same window.
+--
 -- run.sh gives every test file its own psql session, so this setting is scoped
 -- to this file and cannot leak into any other.
 set timezone = 'Asia/Jakarta';
@@ -343,7 +366,7 @@ declare
 begin
   perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000028004", "role": "authenticated"}', false);
   set role authenticated;
-  v_request := app.create_leave_request(v_tenant1, v_annual_id, '2026-09-01'::date, '2026-09-03'::date, 'full_day', 'Family vacation', null, null, 'lv-emp1-req1', '00000000-0000-0000-0000-000000028004', 'emp1');
+  v_request := app.create_leave_request(v_tenant1, v_annual_id, (current_date + 10), (current_date + 12), 'full_day', 'Family vacation', null, null, 'lv-emp1-req1', '00000000-0000-0000-0000-000000028004', 'emp1');
   if v_request.status <> 'draft' then raise exception 'assertion failed: expected a new request to start as draft, got %', v_request.status; end if;
   if v_request.total_units <> 3 then raise exception 'assertion failed: expected 3 business-day units, got %', v_request.total_units; end if;
 
@@ -353,7 +376,7 @@ begin
 
   -- A second, overlapping request is rejected at SUBMIT time by the real
   -- database-level EXCLUDE constraint, translated to a friendly error.
-  v_second := app.create_leave_request(v_tenant1, v_annual_id, '2026-09-02'::date, '2026-09-04'::date, 'full_day', 'Overlapping attempt', null, null, 'lv-emp1-req2', '00000000-0000-0000-0000-000000028004', 'emp1');
+  v_second := app.create_leave_request(v_tenant1, v_annual_id, (current_date + 11), (current_date + 13), 'full_day', 'Overlapping attempt', null, null, 'lv-emp1-req2', '00000000-0000-0000-0000-000000028004', 'emp1');
   begin
     perform app.submit_leave_request(v_second.id, v_second.record_version, '00000000-0000-0000-0000-000000028004', 'emp1');
     raise exception 'assertion failed: expected an overlapping submission to be rejected';
@@ -367,7 +390,7 @@ begin
   -- already, not merely at submit -- fast feedback before a request is even
   -- persisted.
   begin
-    perform app.create_leave_request(v_tenant1, v_annual_id, '2026-10-01'::date, '2026-10-28'::date, 'full_day', 'Too long', null, null, 'lv-emp1-over', '00000000-0000-0000-0000-000000028004', 'emp1');
+    perform app.create_leave_request(v_tenant1, v_annual_id, (current_date + 40), (current_date + 67), 'full_day', 'Too long', null, null, 'lv-emp1-over', '00000000-0000-0000-0000-000000028004', 'emp1');
     raise exception 'assertion failed: expected insufficient balance to block draft creation';
   exception
     when others then
@@ -433,7 +456,7 @@ declare
 begin
   perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000028005", "role": "authenticated"}', false);
   set role authenticated;
-  v_pending := app.create_leave_request(v_tenant1, v_annual_id, '2026-11-10'::date, '2026-11-10'::date, 'full_day', 'Placeholder', null, null, 'lv-emp2-cancel-pending', '00000000-0000-0000-0000-000000028005', 'emp2');
+  v_pending := app.create_leave_request(v_tenant1, v_annual_id, (current_date + 80), (current_date + 80), 'full_day', 'Placeholder', null, null, 'lv-emp2-cancel-pending', '00000000-0000-0000-0000-000000028005', 'emp2');
   v_pending := app.submit_leave_request(v_pending.id, v_pending.record_version, '00000000-0000-0000-0000-000000028005', 'emp2');
   v_cancelled := app.cancel_leave_request(v_pending.id, v_pending.record_version, 'changed my mind', '00000000-0000-0000-0000-000000028005', 'emp2');
   reset role;
@@ -447,7 +470,7 @@ begin
   -- Approve a FUTURE-dated request for emp2, then self-cancel it.
   perform set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-000000028005", "role": "authenticated"}', false);
   set role authenticated;
-  v_approved := app.create_leave_request(v_tenant1, v_annual_id, '2026-12-01'::date, '2026-12-02'::date, 'full_day', 'Year-end trip', null, null, 'lv-emp2-cancel-approved', '00000000-0000-0000-0000-000000028005', 'emp2');
+  v_approved := app.create_leave_request(v_tenant1, v_annual_id, (current_date + 100), (current_date + 101), 'full_day', 'Year-end trip', null, null, 'lv-emp2-cancel-approved', '00000000-0000-0000-0000-000000028005', 'emp2');
   v_approved := app.submit_leave_request(v_approved.id, v_approved.record_version, '00000000-0000-0000-0000-000000028005', 'emp2');
   reset role;
   perform set_config('request.jwt.claims', 'null', false);

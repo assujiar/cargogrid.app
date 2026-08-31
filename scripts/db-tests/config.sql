@@ -502,3 +502,110 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> ISS-2026-069: approval routing resolves per domain, falling back to the shared definition -- so seven already-live domains could adopt domain-scoped chains without any tenant being required to do anything'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmecfg');
+  v_other_tenant_id uuid := (select id from app.tenants where slug = 'gizmocfg');
+  v_admin uuid := '00000000-0000-0000-0000-000000001301';
+  v_draft app.config_versions;
+  v_code text;
+begin
+  -- Before this fix, seven domains selected `config_type_code = 'approval'` literally, so one
+  -- routing definition governed sales quotations, credit overrides, purchase orders, job
+  -- offers, leave, onboarding finalisation and payroll finalisation alike. A chain a tenant
+  -- meant for HR instantly governed every pending quotation.
+
+  -- The default, and the reason this was safe to apply to seven live domains at once: with no
+  -- domain-scoped definition published, every domain still resolves the shared code.
+  foreach v_code in array array['quotation', 'credit_profile', 'procurement_entity', 'job_offer', 'leave_request', 'onboarding_case', 'payroll_run'] loop
+    if app._resolve_approval_config_type_code(v_tenant_id, v_code) <> 'approval' then
+      raise exception 'assertion failed: with nothing domain-scoped published, % must fall back to the shared approval definition, got %', v_code, app._resolve_approval_config_type_code(v_tenant_id, v_code);
+    end if;
+  end loop;
+
+  -- A registered-but-unpublished DRAFT must not switch anything. Publishing is the act that
+  -- changes routing; drafting is not, or a half-configured chain would silently take over.
+  v_draft := app.create_config_draft('approval:job_offer', v_tenant_id, 'tenant', null, v_admin, 'tenant admin');
+  if app._resolve_approval_config_type_code(v_tenant_id, 'job_offer') <> 'approval' then
+    raise exception 'assertion failed: an unpublished draft must not change routing';
+  end if;
+
+  -- Published: this domain switches, and only this domain.
+  perform app.publish_config_version(v_draft.id, v_admin, null, 'tenant admin');
+  if app._resolve_approval_config_type_code(v_tenant_id, 'job_offer') <> 'approval:job_offer' then
+    raise exception 'assertion failed: a published approval:job_offer definition must govern job offers, got %', app._resolve_approval_config_type_code(v_tenant_id, 'job_offer');
+  end if;
+  foreach v_code in array array['quotation', 'credit_profile', 'procurement_entity', 'leave_request', 'onboarding_case', 'payroll_run'] loop
+    if app._resolve_approval_config_type_code(v_tenant_id, v_code) <> 'approval' then
+      raise exception 'assertion failed: scoping job offers must leave % on the shared definition -- that separation is the entire point, got %', v_code, app._resolve_approval_config_type_code(v_tenant_id, v_code);
+    end if;
+  end loop;
+
+  -- Tenant isolation: one tenant's domain-scoped definition never governs another's.
+  if app._resolve_approval_config_type_code(v_other_tenant_id, 'job_offer') <> 'approval' then
+    raise exception 'assertion failed: acmecfg''s approval:job_offer definition must not govern gizmocfg';
+  end if;
+
+  -- An unknown domain code resolves to the shared definition rather than to a code nobody has
+  -- registered -- a typo in a caller must degrade to the old behaviour, never to nothing.
+  if app._resolve_approval_config_type_code(v_tenant_id, 'no_such_domain') <> 'approval' then
+    raise exception 'assertion failed: an unknown domain must fall back to the shared definition';
+  end if;
+
+  raise notice 'PASS: job offers route through their own published definition while six sibling domains stay on the shared one, and neither crosses a tenant boundary';
+end $$;
+
+\echo '>> ISS-2026-069: all seven consumers genuinely go through the resolver -- a domain left on the hardcoded literal would look fixed while silently sharing the singleton'
+do $$
+declare
+  v_fn text;
+  v_src text;
+  v_expected text;
+  v_missing text[] := array[]::text[];
+  v_still_literal text[] := array[]::text[];
+begin
+  for v_fn, v_expected in
+    select * from (values
+      ('_request_procurement_entity_approval', 'procurement_entity'),
+      ('request_customer_credit_profile', 'credit_profile'),
+      ('submit_job_offer_for_approval', 'job_offer'),
+      ('submit_leave_request', 'leave_request'),
+      ('submit_onboarding_case_for_finalize_approval', 'onboarding_case'),
+      ('submit_payroll_run_for_finalization', 'payroll_run'),
+      ('submit_quotation', 'quotation')
+    ) as t(fn, domain)
+  loop
+    select p.prosrc into v_src from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.proname = v_fn;
+    if v_src is null then
+      raise exception 'assertion failed: app.% not found', v_fn;
+    end if;
+    if v_src not like '%resolve_approval_config_type_code(%''' || v_expected || '''%' then
+      v_missing := array_append(v_missing, v_fn);
+    end if;
+    -- The literal must be GONE from the selector, not merely accompanied by the resolver.
+    if v_src like '%config_type_code = ''approval'' and%' then
+      v_still_literal := array_append(v_still_literal, v_fn);
+    end if;
+  end loop;
+
+  if array_length(v_missing, 1) is not null then
+    raise exception 'assertion failed: these consumers do not resolve their own domain: %', v_missing;
+  end if;
+  if array_length(v_still_literal, 1) is not null then
+    raise exception 'assertion failed: these consumers still hardcode the shared approval literal: %', v_still_literal;
+  end if;
+
+  -- And nothing ELSE in the schema still hardcodes it, which is how the entry's own
+  -- undercount (four consumers named, seven actually present) happened in the first place.
+  select array_agg(p.proname order by p.proname) into v_missing
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app' and p.prosrc like '%config_type_code = ''approval'' and%';
+  if v_missing is not null then
+    raise exception 'assertion failed: a consumer outside the known seven still hardcodes the shared approval definition: % -- add it to the resolver rather than letting the singleton grow again', v_missing;
+  end if;
+
+  raise notice 'PASS: all seven consumers resolve their own domain, and no function anywhere still hardcodes the shared approval literal';
+end $$;
