@@ -9,6 +9,95 @@ removes a whole class of accident, so do it first.
 
 ---
 
+## 0. Promote the build to production, and put CargoGrid on a subdomain — `ISS-2026-311`
+
+**Time:** promote is 2 minutes; the subdomain is ~15 minutes plus DNS propagation.
+**Needs:** access to the Vercel project `cargogrid-app` (team `saiki-tech`) and to Cloudflare DNS
+for `cargogrid.app`.
+
+The go decision is recorded (`GO_DECISION.json`, `RGL-414.md`). The build is finished and
+verified. Two steps remain and both need your account.
+
+### 0.1 Promote the authorized build
+
+The go decision authorizes **exactly one commit**:
+`d48b589018321bba1c1fbb12f8befd7664b4fc34`. The build of that commit is
+`dpl_4iu6XpA4b4evMqgx9zJN6LiFVEqj`, state `READY`, at
+`cargogrid-18fjypfdd-saiki-tech.vercel.app`.
+
+1. Open <https://vercel.com/saiki-tech/cargogrid-app/4iu6XpA4b4evMqgx9zJN6LiFVEqj>.
+2. Confirm the commit shown is `d48b589` — if it is not, stop; the go decision does not cover it.
+3. Use the deployment's **⋯ → Promote to Production**.
+
+**Why this is not automated.** `vercel.json` sets `git.deploymentEnabled.main = false`, so
+merging to `main` deliberately does *not* deploy — that is `RGL-BLK-001`'s fix, and it is working.
+The session that prepared this release has no Vercel token and the tools available to it have no
+promote capability, so the last click is yours. That is the gate behaving as designed, not an
+obstacle to work around.
+
+*If you would rather this were automated next time:* add a Vercel API token to the agent
+environment. Weigh it deliberately — it hands an automated session the ability to deploy to
+production.
+
+### 0.2 Put CargoGrid on a subdomain, leaving `cargogrid.app` alone
+
+You chose *"Pakai subdomain saja"*, so the page currently on `cargogrid.app` stays exactly as it
+is. Nothing public is replaced. `app.cargogrid.app` is the conventional choice; any subdomain
+works.
+
+**In Vercel** — Project `cargogrid-app` → Settings → Domains → Add:
+
+- enter `app.cargogrid.app`;
+- assign it to the **Production** environment;
+- Vercel will show the DNS record it wants. Copy it exactly rather than the example below — Vercel
+  sometimes issues a project-specific target.
+
+**In Cloudflare** — DNS for `cargogrid.app` → Add record:
+
+| Field | Value |
+|---|---|
+| Type | `CNAME` |
+| Name | `app` |
+| Target | the value Vercel showed (typically `cname.vercel-dns.com`) |
+| Proxy status | **DNS only** (grey cloud, *not* orange) |
+| TTL | Auto |
+
+**The proxy setting matters.** Leaving Cloudflare's orange-cloud proxy on puts Cloudflare in front
+of Vercel's own edge. That commonly breaks TLS certificate issuance, and when it does not, you get
+two CDNs caching the same responses with different rules — which is a genuinely unpleasant class
+of bug to debug later. Grey cloud.
+
+**Do not touch the existing `cargogrid.app` or `www` records.** Those serve the current site.
+
+### 0.3 Verify, and what to expect
+
+Wait for Vercel to show the domain as **Valid Configuration** (usually minutes; DNS can take
+longer). Then:
+
+```
+curl -sS https://app.cargogrid.app/api/health
+curl -sS https://app.cargogrid.app/api/ready
+```
+
+**Expect these to be blocked at first, and that is not a fault.** The project has Vercel
+Authentication (SSO) enabled for `all_except_custom_domains`. Once `app.cargogrid.app` is a real
+custom domain it is exempt, so the endpoints answer. If you get a redirect to a Vercel login page
+instead, the domain is not yet recognised as a custom domain — wait for *Valid Configuration* and
+retry rather than changing the protection setting.
+
+Also confirm the untouched half:
+
+```
+curl -sSI https://cargogrid.app/ | head -1     # should still be the existing site, HTTP 200
+```
+
+### 0.4 Tell me when it is done
+
+Send me the outputs. I will re-run the live verification against the real domain and record the
+result in `RGL-414.md` §7 — including if it is bad.
+
+---
+
 ## 1. GitHub branch protection — `ISS-2026-289`
 
 **Time:** 10 minutes. **Needs:** admin on `assujiar/cargogrid.app`.
