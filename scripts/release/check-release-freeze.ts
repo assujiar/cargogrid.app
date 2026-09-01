@@ -3344,7 +3344,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // never match an unrelated pre-existing vendor), plus app.archive_employee_profile and
   // app.archive_vendor_profile (genuine overwrite-not-delete paths). Additive CREATE OR REPLACE
   // FUNCTION, ISS-2026-278's step-up-MFA composition on the same two import RPCs untouched.
-  migrationSetSha256: "dbe4010106f4be7b89a4a987a9f7f6fd75245991c3a14540e8680a1e3f707f0e",
+  // EIGHTY-NINTH PASS (2026-09-02, ISS-2026-066 item 3 + ISS-2026-070 scheduler/notification):
+  // 447 files (+5). ISS-2026-066 item 3: a new PLT-131 staged-import adapter for
+  // position/grade crosswalk (app.validate_position_crosswalk_import_row /
+  // app.commit_position_crosswalk_import_job) that routes every row through the existing
+  // app.propose_employee_position_assignment (never a direct decide), so bulk-imported rows
+  // land as real pending_approval proposals reviewed through the already-existing wizard --
+  // item 2 (scheduler) verified already resolved as of 20260831090000, nothing further needed.
+  // ISS-2026-070: a new app.run_onboarding_overdue_task_sweep registered on the existing
+  // tenant-configurable scheduler, wired to the real PLT-127 app.queue_notification primitive
+  // (this repo's second real domain consumer, mirroring app._queue_ticket_escalation_notification).
+  // Two self-found regressions from the new source_import_staging_row_id lineage column
+  // breaking two hand-projected SETOF read RPCs, and a Postgres anyarray||anyarray
+  // literal-parsing ambiguity, both fixed same-pass. Bulk/multi-employee reorg wizard, E2E, and
+  // several ISS-2026-070 UI-caller items are honestly left open, disclosed in the entries.
+  migrationSetSha256: "617c6bef38c490b6228a792362f796d466c05ed313de7ffd67eae9777135a00e",
+  // History: dbe4010106f4be7b89a4a987a9f7f6fd75245991c3a14540e8680a1e3f707f0e
+  // (442 files, ISS-2026-277's legal-hold import/archive overwrite guard).
   // History: 309b3b3e5cd882f4f1ebe09c682af3d174648477b6a9ea9d8671a8c1ddcd8876
   // (441 files, ISS-2026-063's procurement dashboard covering indexes).
   // History: e1cedbdcd93213a1f4e0dab4fca2911570cd8a3eb1e4b0c46dd6db4a6224dc33
@@ -3988,7 +4004,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (master-data-import.sql, hris-employee-master.sql, procurement-vendor-registration.sql),
   // each proving block-on-hold, an identical not-held control still succeeding, and an
   // unrelated new-record import unaffected.
-  dbTestSetSha256: "17ca1ad1324ecebcccd8398e8717afcdb1a5cef1e48283deaaf1af2638f5bf1c",
+  // EIGHTY-NINTH PASS (2026-09-02, ISS-2026-066/070): 243 files, unchanged in count -- 3
+  // extended (hris-organization-position-linkage.sql: crosswalk import validate/commit
+  // coverage; hris-onboarding-offboarding.sql: overdue-sweep notification proof; task-
+  // scheduler.sql: the new task_code registrations).
+  dbTestSetSha256: "26004fdc3bdfaeeb083c25e3691370c436786ae6ca402b73b86e53be967aedd4",
+  // History: 17ca1ad1324ecebcccd8398e8717afcdb1a5cef1e48283deaaf1af2638f5bf1c
+  // (243 files, ISS-2026-277's legal-hold import/archive regression).
   // History: de7ef285e54b33bc60e206213604e5e9e87c40800b627d06ff642e1da424b600
   // (243 files, ISS-2026-079's hris-payroll.sql failure-alert regression).
   // History: 1b981e06903879f92a46af453270d171933c4365140b3409fe9201fc63a18097
