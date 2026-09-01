@@ -3102,7 +3102,31 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // app.get_ip_denial_evidence_gap() reports denials-that-happened against denials-that-left-a-
   // row, and each log line carries its own serial, so a responder can tell when they have found
   // them all rather than hoping.
-  migrationSetSha256: "6f5d8cd8f7055d7f8fbc6877818192a56d46fedf36600685cecd00ca1790e24b",
+  //
+  // SEVENTY-FOURTH PASS (2026-09-01, ISS-2026-138): 422 files (+2). Closes the RPD-023
+  // step-up gap for reward approval and fraud release the entry's own heading named.
+  //
+  // 20260831330000 adds one tuple, ('LYL', 'Configure'), to app.is_high_risk_action's
+  // platform-default list via CREATE OR REPLACE (byte-identical signature, so
+  // public.is_high_risk_action's pg_depend edge and grants survive). Built from the LIVE
+  // pg_get_functiondef output, not reconstructed from 20260807100000. The naive fix -- gating
+  // app.decide_loyalty_redemption/app.decide_loyalty_fraud_review_case directly with
+  // assert_current_step_up_authorization -- is the exact shape CG-S14-IAE-037 shipped, broke
+  // 17 verified fixtures with (that helper ignores tenant_wide_required), and reverted
+  // (ISS-2026-151). The chokepoint fix composes for free with the existing transition path
+  // instead: app.evaluate_permission only denies on a high-risk action when the tenant's own
+  // tenant_wide_required is true, and app.mfa_tenant_policies holds zero rows live today, so
+  // this changes behaviour for zero tenants that have not turned MFA on.
+  //
+  // The entry's own load-bearing premise had changed underneath it: it was registered as "RPD-023
+  // has never been built, this is disclosure-only", but Phase 9 built it (IAE-027, ISS-2026-236)
+  // after the entry was written. Closing it as pure documentation would have closed it on a false
+  // premise; the real, narrower, still-open gap -- LYL was the one platform-default tuple missing
+  // from the classification -- is what this migration closes instead.
+  migrationSetSha256: "c098026ee4f311f262cb6524c7ffabc9f555296dcd264ec7259b95989d39b4b8",
+  // History: 6f5d8cd8f7055d7f8fbc6877818192a56d46fedf36600685cecd00ca1790e24b
+  // (420 files, ISS-2026-206's finance subledger source-lineage guard plus ISS-2026-259's
+  // tripwire extension).
   // History: 85d71d60438e96758362d2746071afec0babf27a33344080a27f701a584df103
   // (420 files, ISS-2026-259's tripwire extension and ISS-2026-206's subledger lineage guard).
   // History: 9fad7f42034da525b75bb9f23e261701048c6d8f15e487c75008a946e7077260
@@ -3587,7 +3611,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // an allowed evaluation is NOT counted -- a counter that ticked on success would make the
   // gap meaningless -- and the gap report is service_role-only on both sides of the wrapper
   // pair with the sequence itself unreachable from anon/authenticated.
-  dbTestSetSha256: "48724bb1ceb67b9f46c05a1c71d36078a5ef5afc4a7826f4835127a258361a57",
+  //
+  // SEVENTY-FOURTH PASS (2026-09-01): 239 files, unchanged in count -- one extended.
+  // enterprise-mfa-session-controls.sql gains a block proving the classification is
+  // unconditional (true for a tenant with no MFA policy row at all), a real LYL:Configure
+  // grant is denied mfa_step_up_required in an MFA-enabled tenant, the challenge is now
+  // genuinely obtainable where it previously raised mfa_step_up_not_required, a real verified
+  // challenge restores the ordinary role_grant decision, and a tenant with MFA off reaches an
+  // identical decision to before this fix.
+  dbTestSetSha256: "6670568cd302a6d835fe7129b65ddea1c27f0260962a132ee87480072fc5e233",
+  // History: 48724bb1ceb67b9f46c05a1c71d36078a5ef5afc4a7826f4835127a258361a57
+  // (239 files, ISS-2026-206's finance subledger regression plus ISS-2026-259's tripwire
+  // coverage sweep).
   // History: e7fc51569f99ecea41489afbbe3b74f5cc108b8bb2357c638d7fc812055ff3c0
   // (239 files, ISS-2026-206's real-settlement fixture rework).
   // History: 4e8b11a879ff2062677c309978b019b428cd15f08134ca3c3915e1ab90422eec

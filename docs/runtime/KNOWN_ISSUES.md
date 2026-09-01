@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 44 — 4 High, 14 Medium, 26 Low |
+| `OPEN` | 43 — 4 High, 13 Medium, 26 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 222 |
+| `RESOLVED` | 223 |
 | **Total records** | **275** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -74,7 +74,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-092` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant membe |
 | `ISS-2026-100` | Medium | `RESOLVED` | Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the re |
 | `ISS-2026-125` | Medium | `OPEN` | Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), p |
-| `ISS-2026-138` | Medium | `OPEN` | RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud rele |
+| `ISS-2026-138` | Medium | `RESOLVED` | RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud rele |
 | `ISS-2026-140` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 8's ~30 Customer Portal routes or 9 admin Loyalty routes |
 | `ISS-2026-141` | Medium | `OPEN` | zero load/performance-test evidence exists for any Phase 8 route or RPC at declared target volume |
 | `ISS-2026-142` | Medium | `RESOLVED` | Customer Portal and Loyalty Closure Verification (CPL-327): RPD-025 retention/legal-hold classification is unbuilt for every Phase 8 Customer Portal/L |
@@ -2668,7 +2668,7 @@ Grep-confirmed: `app.loyalty_account_tier_movements` still grants only `select, 
 
 **Update (`2026-08-28`, Track B Batch 4):** **Status `RESOLVED`.** Independently re-verified before drafting: `app.loyalty_account_tier_movements` (`20260801190000...sql:1192`) still granted only `select, insert` to `service_role` — zero `UPDATE`/`DELETE` to any role, staff or Supreme Admin alike — and carries the same `tenant_id`/`id` shape the already-generic `app.protect_loyalty_ledger_append_only()` trigger (keyed off `TG_TABLE_NAME`/`OLD.tenant_id`/`OLD.id`, no table-specific logic) requires. `supabase/migrations/20260828060000_harden_customer_portal_loyalty_tier_movements_supreme_admin_override.sql` — extends the same already-generic trigger to this 6th table, plus the matching grant, mirroring `20260801280000` exactly. New regression block in `scripts/db-tests/customer-portal-loyalty-ledger-supreme-admin-override.sql`; a pre-existing fixture in `scripts/db-tests/customer-loyalty-membership-tier.sql` that directly `UPDATE`d this table (simulating an elapsed review window) was updated to use a genuine Supreme Admin actor context, now correctly blocked by the new trigger otherwise; full suite `ALL PASSED`; applied live, trigger + grant live-verified — owner: closed.
 
-### ISS-2026-138 — RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud release, the two categories this repository's own hardening charter names by name), and CPL-315's own `ISS-2026-125` falsely cites a CPL-314 disclosure that does not exist (Phase 8, CPL-325, `CG-S13-CPL-027`, Medium, OPEN)
+### ISS-2026-138 — RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud release, the two categories this repository's own hardening charter names by name), and CPL-315's own `ISS-2026-125` falsely cites a CPL-314 disclosure that does not exist (Phase 8, CPL-325, `CG-S13-CPL-027`, `RESOLVED` 2026-09-01, Medium)
 
 Discovered `2026-08-20` at `CG-S13-CPL-027` (Prompt 325, Customer Portal and Loyalty Privacy Integrity Hardening), verified directly against every Phase 8 build log rather than accepted from any prior batch's own claim: `grep -ic "RPD-023\|MFA\|step-up"` against `docs/build-log/phase-08/CPL-3NN.md` for every capability returns 1-4 hits for CPL-300 through CPL-313 and CPL-315, but **exactly 0 hits for CPL-314 and for every one of CPL-316 through CPL-323** — the entire back half of Phase 8, including reward approval (CPL-320/321) and fraud release (CPL-322), the exact two high-risk action categories source spec §20 item 4 names explicitly as needing MFA/current-auth/RPD-022 disclosure. No Phase 8 migration SQL file cites RPD-023 either.
 
@@ -2679,6 +2679,78 @@ The underlying fact this practice discloses remains true and is NOT itself a new
 **Not fixed here** — a doc-only correction, bounded and additive in shape, but this checkpoint's own hardening lenses were instructed not to edit `docs/runtime/KNOWN_ISSUES.md` directly from inside a no-repo-edit lens; the orchestrating CPL-325 session registers this issue in that lens's place. **Status `OPEN`**, Medium (a real, live disclosure-completeness gap against a source-spec-named requirement — RPD-023 for reward approval/fraud release specifically — not merely a citation nit, though the citation error itself is a contributing, correctable component). Recommended fix for whichever future checkpoint or documentation pass (CPL-326 Documentation/Handoff is the natural owner) picks this up: (a) correct `ISS-2026-125`'s own false CPL-314 citation in place (do not delete — this entry's own governing convention, item 1 below, forbids that) by appending a note here pointing to this correction; (b) add one line to CPL-314's and CPL-316 through CPL-323's own build logs (or a single consolidated forward-pointing note in this file, mirroring how `ISS-2026-126`/`127`/`128`/`129`'s own "on-demand/staff-triggered only" precedent family is cited by name rather than re-derived at each site) confirming the RPD-023 gap remains open and applies to reward approval/fraud release specifically, per source spec §20 item 4 and §24 RPD-023's own literal text ("MFA/current authorization for privileged customer-admin, reward approval, export and support actions").
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — both claims confirmed. `grep -ic "RPD-023\|MFA\|step-up" docs/build-log/phase-08/CPL-314.md` returns 0 (the false citation confirmed); the same grep across `CPL-316`–`323`'s own build logs also returns 0 (the disclosure gap confirmed). **Not a missing enforcement gap** — direct code reads of `app.open_loyalty_fraud_review_case`, `app.claim_loyalty_fraud_review_case`, and `app.decide_loyalty_fraud_review_case` all show `perform app.assert_actor_is_session_identity(p_actor_auth_user_id)` as the literal first statement; RPD-023's "current-auth" enforcement is real and present. The gap is purely disclosure/citation-completeness (a missing paragraph in the relevant build logs), which this entry's own text already says is out of a migration-authoring pass's reach. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-09-01**, under `ADR-0027` Part A — and the correct finding turned out to be
+sharper than the one registered, because the entry's own load-bearing premise changed underneath
+it. Two facts, re-derived rather than assumed:
+
+**The citation half was already fixed and this entry never recorded it.** `ISS-2026-125`'s own
+record carries a "Correction (2026-08-20, CPL-326, `CG-S13-CPL-028`)" paragraph doing exactly
+what this entry's recommendation (a) prescribed — correcting the false CPL-314 citation in
+place, pointing at this entry. This entry's own 2026-08-28 update re-asserted that work as
+outstanding; it was not.
+
+**"RPD-023/MFA has never been built anywhere in this repository" is no longer true, and closing
+this entry as pure disclosure would now be closing it on a false premise.** Phase 9 built it:
+`20260807100000_create_intelligence_enterprise_mfa_session_controls.sql` (`IAE-027`) shipped
+`app.mfa_tenant_policies`, `app.mfa_step_up_challenges`, `app.is_high_risk_action`,
+`app.request_mfa_step_up_challenge` and `app.verify_mfa_step_up_challenge`, and
+`20260830110000_harden_evaluate_permission_step_up_enforcement.sql` (`ISS-2026-236`) put a real
+step-up-deny branch inside `app.evaluate_permission` itself — the chokepoint nearly every
+permission-gated RPC in this repository calls through. `docs/build-log/phase-09/IAE-355.md`
+names this entry by ID as the requirement it builds.
+
+**That made the honest, currently-true finding narrower and more concrete than "write a
+disclosure paragraph".** `app.is_high_risk_action` classified exactly seven platform-default
+(module, action) tuples, verified live against `pg_get_functiondef` rather than assumed: `AI:Approve`,
+`IAM:Configure`, `SEC:Configure`, `SEC:Approve`, `FIN:Approve`, `HRS:Approve`, `INTHUB:Configure`.
+`LYL` was not one of them. So `app.decide_loyalty_redemption` (reward approval) and
+`app.decide_loyalty_fraud_review_case` (fraud release) — the exact two actions this entry's own
+heading names — sat outside the step-up control even for a tenant that had turned MFA on, and
+`app.request_mfa_step_up_challenge` raised `mfa_step_up_not_required` for the tuple, so a Loyalty
+admin could not even voluntarily step up. That is a real, closable gap, not a documentation
+omission.
+
+**Closed by adding one tuple to the chokepoint's own classification, not by gating the two
+functions directly.** `supabase/migrations/20260831330000_classify_loyalty_configure_as_a_high_risk_action.sql`
+adds `('LYL', 'Configure')` to `app.is_high_risk_action`'s platform-default list via
+`CREATE OR REPLACE FUNCTION` (byte-identical signature, so `public.is_high_risk_action`'s
+`pg_depend` edge and grants survive), built from the live `pg_get_functiondef` output rather than
+reconstructed from the creating migration. The naive alternative — adding
+`perform app.assert_current_step_up_authorization(...)` inside the two Loyalty functions
+directly — is precisely the shape `CG-S14-IAE-037` shipped, broke 17 verified fixtures with (that
+helper ignores `tenant_wide_required` and fires unconditionally), and reverted; `ISS-2026-151`'s
+entire history is the record of it. The chokepoint fix instead composes for free with the
+transition path `ISS-2026-236`/`ISS-2026-151` already made safe: `app.evaluate_permission` only
+denies on a high-risk action when the tenant's own `tenant_wide_required` is true, and
+`app.mfa_tenant_policies` holds zero rows on the live project today — so this closes the gap for
+every tenant that turns MFA on, and changes behaviour for exactly zero tenants that have not.
+
+**One real, disclosed behavioural consequence, not hidden in the fix.**
+`20260810600000_harden_loyalty_redemption_maker_checker.sql` uses
+`(app.evaluate_permission(...,'LYL','Configure')).allowed` as a boolean *predicate* inside
+`app.submit_loyalty_redemption`'s `discount_voucher` auto-compose branch, not as a hard gate. In
+an MFA-enabled tenant with no current step-up, that branch now falls back to `pending_approval`
+rather than auto-composing — fail-closed, and it only engages once a tenant both enables MFA and
+reaches this classification, which none does today.
+
+**Scope, stated rather than left implicit.** `LYL:Configure` gates roughly 27 call sites — tier,
+points-ledger, reward-catalogue and reconciliation configuration, not only the two named
+approvals — and classifying the tuple covers all of them; a verified challenge lasts a
+policy-configured window (default 15 minutes) rather than one call. Narrower per-action
+granularity would need a new `LYL:Approve` permission and a role-version republish, out of scope
+here. Also explicitly excluded, for the same reason `ISS-2026-151` excluded
+`app.create_api_key`: Phase 8's "privileged customer-admin" actions gate on
+`app.actor_is_active_customer_portal_account_admin`, a principal/membership check with no
+`(module, action)` shape `app.is_high_risk_action` can represent.
+
+**Evidence.** `scripts/db-tests/enterprise-mfa-session-controls.sql` gains a block proving: the
+classification is unconditional (true even for a tenant with no MFA policy row at all); a real
+`LYL:Configure` grant is denied `mfa_step_up_required` in an MFA-enabled tenant; the challenge is
+now genuinely obtainable (previously `mfa_step_up_not_required`) and a real verified challenge
+restores the ordinary `role_grant` decision; and a tenant with MFA off reaches an identical
+decision to before this fix. Full `db:test` green. `docs/architecture/14_REQUIREMENT_PHASE_TRACEABILITY.md`'s
+RPD-023 row gains a correction note (not a rewrite) naming the real implementing artefacts.
 
 ### ISS-2026-139 — Redemption Approval and Fulfillment (CPL-321): a staff actor holding only `LYL:Edit` (not `LYL:Configure`) can submit AND instantly auto-fulfill a `discount_voucher` redemption for ANY loyalty account in the tenant, in one call — collapsing maker and checker into a single, lower-privileged actor and bypassing the `LYL:Configure`-gated `app.decide_loyalty_redemption` governance path entirely (Phase 8, CPL-325, `CG-S13-CPL-027`, Medium, `RESOLVED` (doc-only, already fixed))
 

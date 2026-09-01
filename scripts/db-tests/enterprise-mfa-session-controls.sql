@@ -683,3 +683,69 @@ begin
     raise exception 'assertion failed: a tenant with MFA off must reach an identical decision to before this fix, got reason=%', v_decision.reason;
   end if;
 end $$;
+
+\echo '>> ISS-2026-138: app.is_high_risk_action now classifies LYL:Configure as platform-default high-risk -- unconditionally true with no policy row at all; a tenant with MFA on and no current step-up is denied mfa_step_up_required on a real LYL:Configure grant; a real verified challenge (previously impossible -- request_mfa_step_up_challenge used to raise mfa_step_up_not_required for this tuple) restores the ordinary decision; a tenant with MFA off is completely unaffected'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'iaemfa2');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_supreme uuid := '00000000-0000-0000-0000-000031000000';
+  v_lyl_role uuid;
+  v_lyl_draft app.role_versions;
+  v_decision app.rbac_decision;
+  v_challenge app.mfa_step_up_challenges;
+begin
+  -- Platform-default classification does not depend on any tenant holding a policy row at
+  -- all -- confirmed against a tenant (iaemfa2) that has never called
+  -- app.set_mfa_tenant_policy anywhere in this file.
+  if not app.is_high_risk_action(v_tenant2, 'LYL', 'Configure') then
+    raise exception 'assertion failed: expected LYL:Configure to be platform-default high-risk unconditionally, even for a tenant with no MFA policy row';
+  end if;
+
+  -- admin1 needs a REAL LYL:Configure grant: evaluate_permission's mfa_step_up_required
+  -- reason only fires for an actor who would otherwise be allowed by role -- an actor with no
+  -- LYL grant at all would be denied for a different, unrelated reason, and the assertions
+  -- below would test nothing.
+  v_lyl_role := (app.create_role(v_tenant1, 'IaeMfa Loyalty Admin', 'LYL:Configure -- ISS-2026-138 probe', 'tester')).id;
+  v_lyl_draft := app.create_role_version(v_lyl_role, 'tester');
+  perform app.set_role_version_permissions(v_lyl_draft.id, array(select id from app.permissions where resource_module_code = 'LYL' and action = 'Configure'), 'tester');
+  perform app.publish_role_version(v_lyl_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_lyl_role and status = 'published'), v_admin1, v_supreme, 'supreme');
+
+  -- Before this fix: request_mfa_step_up_challenge raised mfa_step_up_not_required here,
+  -- because LYL:Configure was not classified at all -- proof the control was not merely
+  -- denying by default but genuinely unreachable, not only for evaluate_permission but for
+  -- the request path too.
+  update app.mfa_step_up_challenges set verified_at = now() - interval '10 years'
+  where tenant_id = v_tenant1 and status = 'verified';
+
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'LYL', 'Configure');
+  if v_decision.allowed or v_decision.reason <> 'mfa_step_up_required' then
+    raise exception 'assertion failed: expected mfa_step_up_required for LYL:Configure in an MFA-enabled tenant now that it is classified, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- The challenge is now genuinely obtainable -- this is the direct proof that
+  -- app.decide_loyalty_redemption (reward approval) and app.decide_loyalty_fraud_review_case
+  -- (fraud release), both gated on LYL:Configure, can now be stepped up into rather than
+  -- being permanently unreachable for an MFA-enabled tenant.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'LYL', 'Configure', v_admin1, 'admin1');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'LYL', 'Configure');
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected a verified LYL:Configure step-up to restore the ordinary role_grant decision, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+
+  -- Blast radius: a tenant with MFA off reaches an identical decision to before this fix.
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'LYL', 'Configure');
+  update app.mfa_tenant_policies set tenant_wide_required = false where tenant_id = v_tenant1;
+  v_decision := app.evaluate_permission(v_admin1, v_tenant1, 'LYL', 'Configure');
+  if v_decision.reason = 'mfa_step_up_required' then
+    raise exception 'assertion failed: a tenant with MFA off must never deny on LYL:Configure step-up, got reason=%', v_decision.reason;
+  end if;
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' then
+    raise exception 'assertion failed: expected an ordinary role_grant decision with MFA off, got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  end if;
+  update app.mfa_tenant_policies set tenant_wide_required = true where tenant_id = v_tenant1;
+end $$;
