@@ -1984,4 +1984,124 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-070 regression: app.run_onboarding_overdue_task_sweep queues a real PLT-127 notification (app.queue_notification) for each overdue task''s own owner, skips an unassigned task rather than raising, is idempotent per (task, period_label) and re-fires on a genuinely new period, records a real app.onboarding_case_events row, stops once the task is completed, and genuinely requires HRS:Override'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_employee_id uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and full_name = 'Interviewer One');
+  v_approver uuid := '00000000-0000-0000-0000-000000027703';
+  v_staff uuid := '00000000-0000-0000-0000-000000027702';
+  v_case app.onboarding_offboarding_cases;
+  v_return_task app.onboarding_case_tasks;
+  v_revoke_task app.onboarding_case_tasks;
+  v_future timestamptz := now() + interval '365 days';
+  v_notified integer;
+  v_notification_count integer;
+begin
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'offboarding', 'existing_employee', null, v_employee_id, null, current_date,
+    null, null, null, null, null, null, null, null, null, null, null, null, null,
+    'idem-hrt2771-offb-overdue-sweep', v_staff, 'tester'
+  );
+
+  select * into v_return_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'return-asset';
+  select * into v_revoke_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'revoke-access';
+
+  -- Only return-asset gets a real owner; revoke-access is left deliberately unassigned,
+  -- to prove a no-owner task is skipped as structurally expected rather than raised as a
+  -- failure.
+  select * into v_return_task from app.assign_onboarding_task(v_case.id, v_return_task.id, v_return_task.record_version, v_approver, v_staff, 'tester');
+
+  -- Staff (HRS Create/Edit/Export/View/View-personal-data -- no Override) is genuinely
+  -- denied: the gate is real, not merely disclosed in this migration's own comments.
+  begin
+    perform app.run_onboarding_overdue_task_sweep(v_tenant1, v_future, 'iss070-p1', v_staff, 'staff');
+    raise exception 'assertion failed: expected staff (no HRS:Override) to be denied';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%HRS:Override%' then raise; end if;
+  end;
+
+  select count(*) into v_notification_count from app.notifications where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_overdue';
+  if v_notification_count <> 0 then
+    raise exception 'assertion failed: expected zero onboarding_task_overdue notifications before any authorized sweep call, found %', v_notification_count;
+  end if;
+
+  -- Counts are asserted per-dedupe-key (this task/period), never as a tenant-wide total --
+  -- other blocks earlier in this SAME file already assign owners to their own now-overdue
+  -- tasks against this identical tenant/employee (e.g. the assign_onboarding_task block
+  -- above), so a bare "exactly N notifications exist in the tenant" count is not this
+  -- block's own, isolated signal to assert on.
+  select app.run_onboarding_overdue_task_sweep(v_tenant1, v_future, 'iss070-p1', v_approver, 'tester') into v_notified;
+  if v_notified < 1 then
+    raise exception 'assertion failed: expected at least one NEW notification (return-asset''s own owner) on the first sweep call, got %', v_notified;
+  end if;
+
+  if not exists (
+    select 1 from app.notifications
+    where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_overdue'
+      and recipient_auth_user_id = v_approver and requested_channel = 'in_app' and status = 'sent'
+      and dedupe_key = 'onboarding-task-overdue:' || v_return_task.id::text || ':iss070-p1'
+  ) then
+    raise exception 'assertion failed: expected a real, sent in_app notification queued for the task''s own owner via app.queue_notification, keyed by (task, period_label)';
+  end if;
+
+  -- revoke-access (never assigned an owner) was skipped, never notified -- checked by its
+  -- OWN dedupe key's absence, not a tenant-wide count.
+  if exists (
+    select 1 from app.notifications
+    where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_overdue'
+      and dedupe_key = 'onboarding-task-overdue:' || v_revoke_task.id::text || ':iss070-p1'
+  ) then
+    raise exception 'assertion failed: expected the unassigned revoke-access task to never be notified (no owner_auth_user_id to notify)';
+  end if;
+
+  if not exists (select 1 from app.onboarding_case_events where case_id = v_case.id and event_type = 'task_overdue_notified') then
+    raise exception 'assertion failed: expected a real task_overdue_notified app.onboarding_case_events row';
+  end if;
+
+  -- Idempotent replay: the SAME period_label re-notifies nobody -- this IS a genuine
+  -- tenant-wide zero, because app.queue_notification's own dedupe_key uniqueness means
+  -- EVERY task overdue on the first call (ours and any leftover from earlier blocks alike)
+  -- already has a period-1 notification row by now.
+  select app.run_onboarding_overdue_task_sweep(v_tenant1, v_future, 'iss070-p1', v_approver, 'tester') into v_notified;
+  if v_notified <> 0 then
+    raise exception 'assertion failed: expected zero NEW notifications on an idempotent replay of the same period_label, got %', v_notified;
+  end if;
+  select count(*) into v_notification_count from app.notifications
+  where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_overdue'
+    and dedupe_key = 'onboarding-task-overdue:' || v_return_task.id::text || ':iss070-p1';
+  if v_notification_count <> 1 then
+    raise exception 'assertion failed: expected still exactly one notification for THIS task/period after the idempotent replay, found %', v_notification_count;
+  end if;
+
+  -- A genuinely NEW period re-notifies the still-overdue task (checked by its own dedupe
+  -- key, not a tenant-wide count).
+  select app.run_onboarding_overdue_task_sweep(v_tenant1, v_future, 'iss070-p2', v_approver, 'tester') into v_notified;
+  if v_notified < 1 then
+    raise exception 'assertion failed: expected at least one NEW notification for a genuinely new period_label, got %', v_notified;
+  end if;
+  if not exists (
+    select 1 from app.notifications
+    where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_overdue'
+      and dedupe_key = 'onboarding-task-overdue:' || v_return_task.id::text || ':iss070-p2'
+  ) then
+    raise exception 'assertion failed: expected a fresh notification for the still-overdue task under the new period_label';
+  end if;
+
+  -- Completing the task removes it from the overdue scan on the NEXT sweep -- checked by
+  -- THIS task's own dedupe key never appearing for the p3 period, regardless of whether
+  -- other, unrelated leftover tasks in the tenant are still overdue and get notified for p3.
+  perform app.complete_onboarding_task(v_case.id, v_return_task.id, v_return_task.record_version, 'returned to IT', null, v_approver, 'tester');
+  perform app.run_onboarding_overdue_task_sweep(v_tenant1, v_future, 'iss070-p3', v_approver, 'tester');
+  if exists (
+    select 1 from app.notifications
+    where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_overdue'
+      and dedupe_key = 'onboarding-task-overdue:' || v_return_task.id::text || ':iss070-p3'
+  ) then
+    raise exception 'assertion failed: expected the now-completed task to never be notified again once completed';
+  end if;
+end;
+$$;
+
 \echo 'ALL HRT-277 db-test assertions passed.'
