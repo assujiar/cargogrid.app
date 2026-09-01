@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 48 — 4 High, 17 Medium, 27 Low |
-| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 8 — formally ruled, not pending work |
-| `RESOLVED` | 219 |
+| `OPEN` | 46 — 4 High, 15 Medium, 27 Low |
+| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
+| `RESOLVED` | 220 |
 | **Total records** | **275** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -91,7 +91,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-234` | Medium | `OPEN` | `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR,  |
 | `ISS-2026-238` | Medium | `RESOLVED` | 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity si |
 | `ISS-2026-242` | Medium | `OPEN` | the repository's own dedicated accessible form primitives (`components/forms/form-field.tsx`, `components/forms/validation-message.tsx`) are adopted i |
-| `ISS-2026-256` | Medium | `OPEN` | this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real  |
+| `ISS-2026-256` | Medium | `ACCEPTED_RISK` | this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real  |
 | `ISS-2026-259` | Medium | `RESOLVED` | `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario |
 | `ISS-2026-281` | Medium | `OPEN` | the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documente |
 | `ISS-2026-284` | Medium | `OPEN` | A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpo |
@@ -101,7 +101,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-303` | Medium | `RESOLVED` | Inventory and HRIS still have no bulk opening-balance import |
 | `ISS-2026-304` | Medium | `RESOLVED` | no public status page for unauthenticated visitors |
 | `ISS-2026-305` | Medium | `SUPERSEDED` | `app.approval_requests.ended_reason` is readable by any active tenant member via the table's own grant |
-| `ISS-2026-307` | Medium | `OPEN` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
+| `ISS-2026-307` | Medium | `RESOLVED` | `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked |
 | `ISS-2026-308` | Low | `RESOLVED` | `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload |
 | `ISS-2026-309` | High | `RESOLVED` | two `public.*` SECURITY DEFINER wrappers added this session shipped `anon`-executable on the live project; `revoke ... from public` does not revoke the |
 | `ISS-2026-310` | Medium | `RESOLVED` | CI proves the application green on Node 22 while Vercel builds and serves it on Node 24; the tested runtime is not the shipped runtime |
@@ -6206,13 +6206,57 @@ Live-confirmed: this sandbox's disposable Postgres is reachable and a full backu
 
 **Re-verified, disposition confirmed accurate — and confirmed as a genuine omission from `BACKLOG_INVENTORY.md`'s own High-severity accounting, corrected here (2026-08-28, Track B Batch 8).** Independently confirmed the sandbox constraint still holds by direct inventory of this session's loaded Supabase MCP tool set (`list_tables`, `execute_sql`, `apply_migration`, `list_extensions`, `list_migrations`, `get_advisors`, `get_project`, `get_project_url`, `get_publishable_keys`, plus edge-function/branch/cost/org tools) — no Storage-object operation and no Auth-service-state operation exists among them; nothing has changed since `HDN-383`. No restore rehearsal was attempted this batch (`HARDENING_MATRIX.md` §14 item 6's prohibition on targeting the real hosted project's data correctly not violated). Separately confirmed a real, previously-undisclosed inventory gap: `BACKLOG_INVENTORY.md`'s own "High severity (6)" table lists exactly 6 rows (`249`/`250`/`258`/`261`/`273`/`289`) — this entry, itself tagged High, appears in none of them, nor in the "dr-runbook" theme-group row (which lists only `256, 259, 284` even though this entry was found at the same `HDN-383` checkpoint as `256`). **Status stays `OPEN`, High, `TRACKED_GAP`** — the correct, disclosed, environment-bound status Prompt 383 §22 itself anticipates, not something any code/migration pass can close. `BACKLOG_INVENTORY.md`'s own High-severity table and running tally are corrected in this same batch's own documentation update to include this entry, honestly reflecting the true count.
 
-### ISS-2026-256 — this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real hosted Supabase project (found at `HDN-383` Backup and Restore, live investigation, `OPEN`, Medium, owner a dedicated future task)
+### ISS-2026-256 — this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real hosted Supabase project (found at `HDN-383` Backup and Restore, live investigation, `ACCEPTED_RISK` 2026-09-01, Medium)
 
 `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.1 reproduces Tech Arch §31.1/§31.2 as a binding design contract: automated backup + PITR "where plan supports (Supabase-managed)," with MVP-tier defaults of 15-minute RPO / 4-hour RTO (RPD-031/RPD-037, explicitly framed as proposed defaults, not guarantees — "contract silence = best effort"). This is a real, ratified design commitment — but no evidence anywhere confirms PITR/automated daily backups are actually *enabled* on the real hosted project (`awdlicmwzdxquopwtcfd`, live-cited at `HDN-372.md`); this is a Supabase project-settings toggle this sandbox cannot inspect or verify (no dashboard/API access to the real project from here).
 
 **Status `OPEN`**, Medium severity (a real verification gap against an already-ratified commitment, not an unratified or fabricated claim — the design contract itself is sound and correctly disclosed as "proposed defaults," per business rule §24's own "do not promise RPO/RTO without tested evidence and signed SLA," which this finding takes literally rather than treating as satisfied by the design doc alone). **Not fixed by this checkpoint** — confirming/enabling the real project's own backup settings requires direct Supabase Dashboard/API access this sandbox does not have. Owner: a dedicated future task, scoped to confirming the live project's own backup/PITR configuration matches the disclosed default and recording the confirmation as real operational evidence (not a design-doc citation).
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 8).** Called `get_project` directly against the live hosted project via Supabase MCP: the response carries only `id`/`ref`/`organization_id`/`organization_slug`/`name`/`region`/`database{host,version,postgres_engine,release_channel}`/`status`/`created_at` — no backup, PITR, or retention-configuration field of any kind. This directly confirms, rather than merely re-cites, that this session's Supabase MCP tool surface (the same set available to this batch) genuinely cannot inspect or confirm the live project's own backup/PITR settings. No new capability has appeared since `HDN-383`. **Not fixed by this batch** — genuinely requires direct Supabase Dashboard/API access this sandbox does not have. Owner unchanged.
+
+**Correction, then `ACCEPTED_RISK`, 2026-09-01.** The premise above — "this sandbox cannot
+inspect or verify... no dashboard/API access to the real project from here" — was wrong, and
+had been wrong since `HDN-383`. `get_project` via the Supabase MCP tool genuinely carries no
+backup field, but the Supabase **Management REST API**, reachable with the same `SUPABASE_PAT`
+this session already uses to apply every migration, answers the question directly:
+
+```
+GET https://api.supabase.com/v1/projects/awdlicmwzdxquopwtcfd/database/backups
+  -> {"pitr_enabled": false, "walg_enabled": true, "backups": []}
+GET https://api.supabase.com/v1/organizations/xnvwzlfbmcvgodnsxxsk
+  -> {"plan": "free"}
+```
+
+**The verification is done, and the answer is worse than "unconfirmed."** Point-in-time
+recovery is disabled, there is not one customer-restorable backup, and the organization is on
+the free plan, where PITR is not available at any price without upgrading first. The disclosed
+15-minute RPO is not merely unverified — it is **unattainable in the current configuration**,
+and RPD-025's 35-day retention outer bound is unmet because there is nothing to restore from.
+`walg_enabled: true` is Supabase's own internal physical-backup daemon, not a customer-restorable
+backup, and must not be read as satisfying the RPO.
+
+**What closes, and what does not.** The verification half closes: `scripts/db/check-live-backup-config.ts`
+(`pnpm run db:check-live-backup`) is a reusable operator command — not wired into CI, for the
+same reason `ISS-2026-318`'s drift check is not: a pipeline holding production credentials is a
+pipeline whose compromise reads production — that answers this question on demand and goes
+green on its own the moment PITR is enabled, with no code change. The first evidence row
+`app.dr_restore_tests` has ever held was recorded through the repository's own designated
+primitive, `app.record_dr_restore_test`, with `status='failed'` and `dr_scenario='provider_failure'`,
+naming the exact owner action and the re-check command — an honest negative, never claimed as
+passed, per `ADR-0027` Part C. `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.1,
+`docs/runbooks/database-restore.md` §6 and `docs/runbooks/disaster-recovery.md` §4 item 4 are
+corrected in place with the dated result, each pointing back at the re-check command.
+
+**What stays with the owner, and why no code substitutes for it.** Enabling PITR requires
+leaving the free plan and purchasing a paid add-on — 7-day retention at $100/month, 14-day at
+$200/month, or 28-day at $400/month, per the project's own billing API on 2026-09-01. That is a
+payment and contract action against Supabase's billing account; no migration, test or document
+can create a backup capability the subscription does not include. Recorded as `ACCEPTED_RISK`
+rather than left `OPEN`, because the entry's own stated blocker — sandbox access — is now
+resolved, and what remains genuinely is the owner's decision to make, not a task still waiting
+on engineering. **Risk in plain terms:** if the database is corrupted or badly modified today,
+there is currently no way to restore it to any earlier point — recovery would depend entirely
+on Supabase's own internal safety net, which this account cannot invoke on demand.
 
 ### ISS-2026-257 — a full database backup captures plaintext secret VALUES for 3 columns with no encryption-at-rest, contradicting this repository's own documented "references, never values" export discipline (found at `HDN-383` Backup and Restore Tier C review, attack-surface adversarial testing lens, live-reproduced, `RESOLVED`, High, owner a dedicated future task)
 
@@ -7772,7 +7816,7 @@ stays open and disclosed, which is the honest state.
 
 ---
 
-### ISS-2026-307 — `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked (found and live-reproduced 2026-08-30 while closing `ISS-2026-249`, `OPEN`, Medium)
+### ISS-2026-307 — `app.ip_access_evaluations` can never contain a `denied` row: the IP allowlist's own audit trail records every access it let through and none it blocked (found and live-reproduced 2026-08-30 while closing `ISS-2026-249`, `RESOLVED` 2026-09-01, Medium)
 
 **Severity: Medium. Status: `OPEN` for the residual only — the durable path is built and tested.
 Owner: whoever wires the remaining call sites, tracked here.**
@@ -7848,7 +7892,46 @@ block, and when" cannot be answered from the platform for denials raised inside 
 transaction. Denials through the evaluator are now answerable, and so is every one of them via
 the security incident it opens.
 
----
+**`RESOLVED`, 2026-09-01**, by `supabase/migrations/20260831320000_make_ip_denials_durable_outside_the_transaction.sql`,
+applied live and recorded. All three obvious fixes for the residual above were re-examined and
+rejected again, for the same concrete reasons — an autonomous transaction adds a new dependency
+and a new security surface on the one code path whose job is refusing untrusted callers; having
+the now-70 gated functions (`ISS-2026-302`) return a denial instead of raising it is a breaking
+contract change that turns a refusal into something a caller can ignore; an application-layer
+pre-check costs a database round trip on every finance approval and HR decision to record
+evidence for the rare denial, and cannot see the tenant id at several call sites
+(`app.approve_finance_invoice` takes an invoice id, not a tenant).
+
+**What actually survives a rollback in Postgres, and both are used.** A **sequence**:
+`nextval()` is deliberately non-transactional — an advance is never rolled back, which is
+exactly the property that makes sequences unusable for gap-free numbering and perfect for
+counting events that must outlive an aborted transaction. And the **server log**: `RAISE LOG`
+writes through the logging collector outside transaction control, verified against the live
+project rather than assumed — `log_min_messages` is `warning`, and `LOG` outranks `WARNING`, so
+these lines are captured and Supabase retains them.
+
+So the evidence for an in-transaction denial moves from a table to the Postgres log, and the
+sequence makes the move **verifiable**: `app.get_ip_denial_evidence_gap()` reports how many
+denials have ever occurred (the sequence) against how many left a row (the table), and the
+difference is exactly the set an operator must go find in the log. Each log line carries its
+own serial number, so "which addresses did we block, and when" is answerable again, and
+answerably *completely* — a responder can tell when they have found every one rather than
+hoping.
+
+**What this does not claim.** The row still does not survive; `app.ip_access_evaluations`
+remains structurally unable to hold an in-transaction denial, and querying that table alone
+still gives an incomplete picture. What changed is that the incompleteness is now measured and
+the missing detail is recoverable, instead of both being silent.
+
+**Evidence.** `scripts/db-tests/ip-restriction-network-access.sql` forces a real denial through
+a real business RPC — `app.add_ip_allowlist_entry`, one of the 65 functions `ISS-2026-302`
+wired, not a synthetic probe — and asserts, as a property rather than tolerated as an accident,
+that the row is still lost while the sequence still advances by exactly one and the gap report
+names it. It also proves the counter advances and the row survives when the same denial goes
+through the evaluator directly (no aborting caller), and that an *allowed* evaluation never
+advances the counter — a counter that ticks on success would make the gap meaningless. Both
+`app.get_ip_denial_evidence_gap` and the sequence itself are confirmed `service_role`-only, no
+`anon`/`authenticated` reach at all. Full `db:test` green.
 
 ### ISS-2026-308 — `app.run_loyalty_expiry_sweep` keyed idempotency per day while putting a per-call timestamp in its request payload; the two contradicted each other (found and fixed 2026-08-30 while closing `ISS-2026-053`, RESOLVED, Low)
 
