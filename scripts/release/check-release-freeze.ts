@@ -3326,7 +3326,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // Phase 9 named target-volume surfaces were EXPLAIN-tested; full methodology and every
   // EXPLAIN output recorded in docs/build-log/phase-08/ISS-2026-141-LOAD-TEST.md and
   // docs/build-log/phase-09/ISS-2026-148-LOAD-TEST.md.
-  migrationSetSha256: "e1cedbdcd93213a1f4e0dab4fca2911570cd8a3eb1e4b0c46dd6db4a6224dc33",
+  // EIGHTY-SEVENTH PASS (2026-09-02, ISS-2026-063): 441 files (+1), migrationSetSha256 only --
+  // dbTestSetSha256 unchanged (proof is EXPLAIN-based in a new scripts/load-tests/ seed file,
+  // not scripts/db-tests/). Extends the PRC-268/PRC-269 large-scale load proof to the 5
+  // surfaces it never measured (scorecards, match-case list, capacity, assignment, export
+  // throughput) using a new 26-tenant synthetic seed at the same ~68% single-tenant-
+  // concentration skew. 1 of 5 (scorecards) already used an efficient index path; the other 4
+  // genuinely degraded to a Bitmap Heap Scan + top-N sort and are fixed by 4 additive covering
+  // indexes, live-verified ~19-43x faster / ~22-41x fewer buffers.
+  migrationSetSha256: "309b3b3e5cd882f4f1ebe09c682af3d174648477b6a9ea9d8671a8c1ddcd8876",
+  // History: e1cedbdcd93213a1f4e0dab4fca2911570cd8a3eb1e4b0c46dd6db4a6224dc33
+  // (440 files, ISS-2026-141+148's Phase 8/9 target-volume covering indexes).
   // History: 5482304116508c7b2307fae64d8a09d5852efc6c3a0ed4f70599fbb31998c557
   // (439 files, ISS-2026-079's payroll-run-failure alerting).
   // History: 0d71dd1007c644be601c6d790a257c6930ed60a7e07b5b85be6c7ada81f8c2bc
