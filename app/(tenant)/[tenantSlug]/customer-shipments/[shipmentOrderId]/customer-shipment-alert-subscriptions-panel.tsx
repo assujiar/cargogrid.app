@@ -22,6 +22,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { CustomerShipmentOrderActionState } from "../actions.ts";
 import type { CustomerShipmentAlertSubscription, CustomerShipmentAlertType } from "../../../../../server/contracts/customer-shipment-alert/customer-shipment-alert.ts";
 
@@ -58,11 +59,7 @@ function AlertTypeRow({ alertType, isActive, subscribeAction, unsubscribeAction 
           </Button>
         </form>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </li>
   );
 }

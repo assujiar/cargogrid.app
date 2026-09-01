@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
 import { CUSTOMER_DOCUMENT_SOURCE_MODULES, type CustomerDocument, type CustomerDocumentSourceModule } from "../../../../server/contracts/customer-document/customer-document.ts";
 import type { CustomerPortalScopeContextRow } from "../../../../server/contracts/customer-portal-scope/customer-portal-scope.ts";
 import type { CustomerDocumentActionState } from "./actions.ts";
@@ -115,39 +117,39 @@ export function CustomerDocumentsPanel({
           <label htmlFor="sourceModule" className="text-xs font-medium text-neutral-600">
             Source
           </label>
-          <select id="sourceModule" name="sourceModule" defaultValue={filters.sourceModule} className="rounded border border-neutral-300 px-2 py-1 text-sm">
+          <Select id="sourceModule" name="sourceModule" defaultValue={filters.sourceModule}>
             <option value="">All sources</option>
             {CUSTOMER_DOCUMENT_SOURCE_MODULES.map((m) => (
               <option key={m} value={m}>
                 {SOURCE_MODULE_LABEL[m]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="accountId" className="text-xs font-medium text-neutral-600">
             Account
           </label>
-          <select id="accountId" name="accountId" defaultValue={filters.accountId} className="rounded border border-neutral-300 px-2 py-1 text-sm">
+          <Select id="accountId" name="accountId" defaultValue={filters.accountId}>
             <option value="">All accounts</option>
             {accounts.map((a) => (
               <option key={a.accountId} value={a.accountId}>
                 {a.accountName}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="dateFrom" className="text-xs font-medium text-neutral-600">
             From
           </label>
-          <input id="dateFrom" type="date" name="dateFrom" defaultValue={filters.dateFrom} className="rounded border border-neutral-300 px-2 py-1 text-sm" />
+          <Input id="dateFrom" type="date" name="dateFrom" defaultValue={filters.dateFrom} />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="dateTo" className="text-xs font-medium text-neutral-600">
             To
           </label>
-          <input id="dateTo" type="date" name="dateTo" defaultValue={filters.dateTo} className="rounded border border-neutral-300 px-2 py-1 text-sm" />
+          <Input id="dateTo" type="date" name="dateTo" defaultValue={filters.dateTo} />
         </div>
         <button type="submit" className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-neutral-50">
           Apply filters

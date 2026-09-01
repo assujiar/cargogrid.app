@@ -1,6 +1,7 @@
 import { Link } from "../../../../components/ui/link.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
 import type { CustomerPortalInventoryBalance, CustomerPortalWarehouseEligibility } from "../../../../server/contracts/customer-portal-inventory/customer-portal-inventory.ts";
 import type { CustomerPortalScopeContextRow } from "../../../../server/contracts/customer-portal-scope/customer-portal-scope.ts";
 
@@ -121,14 +122,14 @@ export function CustomerInventoryPanel({
           <label htmlFor="warehouseId" className="text-xs font-medium text-neutral-600">
             Warehouse
           </label>
-          <select id="warehouseId" name="warehouseId" defaultValue={warehouseId} className="rounded border border-neutral-300 px-2 py-1 text-sm">
+          <Select id="warehouseId" name="warehouseId" defaultValue={warehouseId}>
             <option value="">All eligible warehouses</option>
             {distinctWarehouseIds.map((id) => (
               <option key={id} value={id}>
                 WH-{shortId(id)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <button type="submit" className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-neutral-50">
           Apply filter

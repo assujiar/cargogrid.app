@@ -4,6 +4,11 @@ import { useActionState, useState } from "react";
 import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../components/forms/checkbox.tsx";
 import type { CustomerProfileActionState } from "./actions.ts";
 import {
   readCustomerProfileProposedValue,
@@ -53,11 +58,7 @@ function LegalIdentityPendingBanner({ request, withdrawAction }: { request: Cust
           Withdraw
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </div>
   );
 }
@@ -85,6 +86,7 @@ function LegalIdentityField({
   withdrawAction: BoundAction;
 }) {
   const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  const fieldId = `legal-identity-${fieldName}`;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
       <div className="flex items-center gap-2">
@@ -99,21 +101,22 @@ function LegalIdentityField({
         <LegalIdentityPendingBanner request={pendingRequest} withdrawAction={withdrawAction} />
       ) : (
         <form action={formAction} className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-neutral-500">
-            Request a correction
-            <input name="proposedValue" defaultValue={currentValue} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder={`Correct ${CUSTOMER_LEGAL_IDENTITY_WRITABLE_FIELD_LABELS[fieldName].toLowerCase()}`} />
-          </label>
+          <FormField id={fieldId} label="Request a correction" error={state.error ?? undefined}>
+            <Input
+              id={fieldId}
+              name="proposedValue"
+              defaultValue={currentValue}
+              placeholder={`Correct ${CUSTOMER_LEGAL_IDENTITY_WRITABLE_FIELD_LABELS[fieldName].toLowerCase()}`}
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? `${fieldId}-error` : undefined}
+            />
+          </FormField>
           <div>
             <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
               Request correction
             </Button>
           </div>
           <p className="text-xs text-neutral-400">A legal name or tax ID correction has compliance implications and is reviewed by our team before it takes effect -- it is never applied immediately.</p>
-          {state.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {state.error}
-            </p>
-          ) : null}
         </form>
       )}
     </div>
@@ -142,66 +145,64 @@ function PendingChangeBanner({ request, withdrawAction }: { request: CustomerPro
           Withdraw
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </div>
   );
 }
 
 function TradeNameForm({ currentValue, submitAction }: { currentValue: string; submitAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  const fieldId = "trade-name";
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="text-xs font-medium text-neutral-500">
-        Trade name
-        <input name="tradeName" defaultValue={currentValue} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. Acme Logistics" />
-      </label>
+      <FormField id={fieldId} label="Trade name" error={state.error ?? undefined}>
+        <Input
+          id={fieldId}
+          name="tradeName"
+          defaultValue={currentValue}
+          placeholder="e.g. Acme Logistics"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? `${fieldId}-error` : undefined}
+        />
+      </FormField>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
           Propose change
         </Button>
       </div>
       <p className="text-xs text-neutral-500">This does not change your trade name immediately -- it submits a request for our team to review.</p>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
     </form>
   );
 }
 
 function BillingAddressForm({ currentValue, submitAction }: { currentValue: CustomerProfileBillingAddress; submitAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  const errorId = "billing-address-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-3 sm:grid-cols-2">
-      <label className="text-xs font-medium text-neutral-500 sm:col-span-2">
-        Address line 1
-        <input name="billingLine1" defaultValue={typeof currentValue.line1 === "string" ? currentValue.line1 : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500 sm:col-span-2">
-        Address line 2
-        <input name="billingLine2" defaultValue={typeof currentValue.line2 === "string" ? currentValue.line2 : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        City
-        <input name="billingCity" defaultValue={typeof currentValue.city === "string" ? currentValue.city : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        State/Province
-        <input name="billingState" defaultValue={typeof currentValue.state === "string" ? currentValue.state : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Postal code
-        <input name="billingPostalCode" defaultValue={typeof currentValue.postalCode === "string" ? currentValue.postalCode : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Country
-        <input name="billingCountry" defaultValue={typeof currentValue.country === "string" ? currentValue.country : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <div className="sm:col-span-2">
+        <FormField id="billing-line1" label="Address line 1">
+          <Input id="billing-line1" name="billingLine1" defaultValue={typeof currentValue.line1 === "string" ? currentValue.line1 : ""} aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      <div className="sm:col-span-2">
+        <FormField id="billing-line2" label="Address line 2">
+          <Input id="billing-line2" name="billingLine2" defaultValue={typeof currentValue.line2 === "string" ? currentValue.line2 : ""} aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      <FormField id="billing-city" label="City">
+        <Input id="billing-city" name="billingCity" defaultValue={typeof currentValue.city === "string" ? currentValue.city : ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="billing-state" label="State/Province">
+        <Input id="billing-state" name="billingState" defaultValue={typeof currentValue.state === "string" ? currentValue.state : ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="billing-postal-code" label="Postal code">
+        <Input id="billing-postal-code" name="billingPostalCode" defaultValue={typeof currentValue.postalCode === "string" ? currentValue.postalCode : ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="billing-country" label="Country">
+        <Input id="billing-country" name="billingCountry" defaultValue={typeof currentValue.country === "string" ? currentValue.country : ""} aria-describedby={describedBy} />
+      </FormField>
       <div className="sm:col-span-2">
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
           Propose change
@@ -209,9 +210,9 @@ function BillingAddressForm({ currentValue, submitAction }: { currentValue: Cust
       </div>
       <p className="text-xs text-neutral-500 sm:col-span-2">This does not change your billing address immediately -- it submits a request for our team to review.</p>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -233,50 +234,40 @@ function ContactChangePendingBanner({ request, withdrawAction, verb }: { request
           Withdraw
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </div>
   );
 }
 
 function AddContactForm({ submitAction }: { submitAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  const errorId = "add-contact-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-3 sm:grid-cols-2">
       <p className="text-xs font-semibold text-neutral-900 sm:col-span-2">Request a new contact</p>
-      <label className="text-xs font-medium text-neutral-500">
-        Full name
-        <input name="fullName" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Title
-        <input name="title" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Email
-        <input name="email" type="email" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Phone
-        <input name="phone" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Role
-        <select name="role" defaultValue="other" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="add-contact-full-name" label="Full name">
+        <Input id="add-contact-full-name" name="fullName" required aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="add-contact-title" label="Title">
+        <Input id="add-contact-title" name="title" aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="add-contact-email" label="Email">
+        <Input id="add-contact-email" name="email" type="email" aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="add-contact-phone" label="Phone">
+        <Input id="add-contact-phone" name="phone" aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="add-contact-role" label="Role">
+        <Select id="add-contact-role" name="role" defaultValue="other" aria-describedby={describedBy}>
           {CUSTOMER_CONTACT_ROLES.map((role) => (
             <option key={role} value={role}>
               {role}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex items-center gap-2 text-xs font-medium text-neutral-500">
-        <input type="checkbox" name="isPrimary" value="true" className="rounded border-neutral-300" />
-        Primary contact
-      </label>
+        </Select>
+      </FormField>
+      <Checkbox id="add-contact-is-primary" name="isPrimary" value="true" label="Primary contact" />
       <p className="text-xs text-neutral-400 sm:col-span-2">Provide at least an email or a phone number. This submits a request for our team to review before the contact is added.</p>
       <div className="sm:col-span-2">
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
@@ -284,9 +275,9 @@ function AddContactForm({ submitAction }: { submitAction: BoundAction }) {
         </Button>
       </div>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -294,38 +285,33 @@ function AddContactForm({ submitAction }: { submitAction: BoundAction }) {
 
 function ContactEditForm({ contact, submitAction, onCancel }: { contact: CustomerPortalAccountContact; submitAction: BoundAction; onCancel: () => void }) {
   const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  const idPrefix = `contact-${contact.contactId}`;
+  const errorId = `${idPrefix}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 sm:grid-cols-2">
-      <label className="text-xs font-medium text-neutral-500">
-        Full name
-        <input name="fullName" defaultValue={contact.fullName} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Title
-        <input name="title" defaultValue={contact.title ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Email
-        <input name="email" type="email" defaultValue={contact.email ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Phone
-        <input name="phone" defaultValue={contact.phone ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Role
-        <select name="role" defaultValue={contact.role} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id={`${idPrefix}-full-name`} label="Full name">
+        <Input id={`${idPrefix}-full-name`} name="fullName" defaultValue={contact.fullName} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${idPrefix}-title`} label="Title">
+        <Input id={`${idPrefix}-title`} name="title" defaultValue={contact.title ?? ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${idPrefix}-email`} label="Email">
+        <Input id={`${idPrefix}-email`} name="email" type="email" defaultValue={contact.email ?? ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${idPrefix}-phone`} label="Phone">
+        <Input id={`${idPrefix}-phone`} name="phone" defaultValue={contact.phone ?? ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${idPrefix}-role`} label="Role">
+        <Select id={`${idPrefix}-role`} name="role" defaultValue={contact.role} aria-describedby={describedBy}>
           {CUSTOMER_CONTACT_ROLES.map((role) => (
             <option key={role} value={role}>
               {role}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex items-center gap-2 text-xs font-medium text-neutral-500">
-        <input type="checkbox" name="isPrimary" value="true" defaultChecked={contact.isPrimary} className="rounded border-neutral-300" />
-        Primary contact
-      </label>
+        </Select>
+      </FormField>
+      <Checkbox id={`${idPrefix}-is-primary`} name="isPrimary" value="true" defaultChecked={contact.isPrimary} label="Primary contact" />
       <p className="text-xs text-neutral-400 sm:col-span-2">Leave a field as-is to keep it unchanged. This submits a request for our team to review before it takes effect.</p>
       <div className="flex gap-2 sm:col-span-2">
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
@@ -336,9 +322,9 @@ function ContactEditForm({ contact, submitAction, onCancel }: { contact: Custome
         </Button>
       </div>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -351,11 +337,7 @@ function RemoveContactForm({ submitAction }: { submitAction: BoundAction }) {
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Submitting…">
         Request removal
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

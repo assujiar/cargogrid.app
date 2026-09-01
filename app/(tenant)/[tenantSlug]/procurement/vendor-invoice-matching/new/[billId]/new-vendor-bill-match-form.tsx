@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
+import { Checkbox } from "../../../../../../../components/forms/checkbox.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import type { FinanceVendorBillLine } from "../../../../../../../server/contracts/vendor-bill/vendor-bill.ts";
 import type { NewVendorBillMatchActionState } from "./actions.ts";
 
@@ -20,18 +23,11 @@ export function NewVendorBillMatchForm({
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="purchaseOrderId" className="text-xs font-medium text-neutral-700">
-            Purchase order id (optional -- three-way match)
-          </label>
+        <FormField id="purchaseOrderId" label={<span className="text-xs font-medium text-neutral-700">Purchase order id (optional -- three-way match)</span>}>
           <Input id="purchaseOrderId" name="purchaseOrderId" placeholder="Leave blank for non-PO / contract-based match" />
-        </div>
-        <label className="flex items-center gap-1 text-xs text-neutral-700">
-          <input type="checkbox" name="isPartialInvoice" /> Partial invoice
-        </label>
-        <label className="flex items-center gap-1 text-xs text-neutral-700">
-          <input type="checkbox" name="isConsolidatedInvoice" /> Consolidated invoice
-        </label>
+        </FormField>
+        <Checkbox id="isPartialInvoice" name="isPartialInvoice" label="Partial invoice" />
+        <Checkbox id="isConsolidatedInvoice" name="isConsolidatedInvoice" label="Consolidated invoice" />
       </div>
 
       <div className="overflow-x-auto rounded-md border border-neutral-200">
@@ -71,11 +67,7 @@ export function NewVendorBillMatchForm({
         </table>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Evaluating…" className="w-fit">
         Create match case

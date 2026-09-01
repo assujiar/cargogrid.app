@@ -4,6 +4,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceReconciliationFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceReconciliationFormState = { error: null };
@@ -22,36 +26,29 @@ export function ExecuteFinanceReconciliationRunForm({ action }: { action: BoundA
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="recon-scope" className="text-sm font-medium text-text-primary">
-            Scope
-          </label>
-          <select id="recon-scope" name="scope" required defaultValue="ar" className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm">
-            <option value="ar">ar</option>
-            <option value="ap">ap</option>
-          </select>
+        <div className="w-24">
+          <FormField id="recon-scope" label="Scope">
+            <Select id="recon-scope" name="scope" required defaultValue="ar" invalid={Boolean(state.error)}>
+              <option value="ar">ar</option>
+              <option value="ap">ap</option>
+            </Select>
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="recon-asOfDate" className="text-sm font-medium text-text-primary">
-            As-of date
-          </label>
-          <input id="recon-asOfDate" name="asOfDate" type="date" required className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-40">
+          <FormField id="recon-asOfDate" label="As-of date">
+            <Input id="recon-asOfDate" name="asOfDate" type="date" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="recon-toleranceAmount" className="text-sm font-medium text-text-primary">
-            Tolerance amount
-          </label>
-          <input id="recon-toleranceAmount" name="toleranceAmount" type="number" min={0} step="0.01" defaultValue={0} className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-32">
+          <FormField id="recon-toleranceAmount" label="Tolerance amount">
+            <Input id="recon-toleranceAmount" name="toleranceAmount" type="number" min={0} step="0.01" defaultValue={0} invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Running…" className="w-fit">
         Execute run
@@ -64,12 +61,11 @@ export function ResolveFinanceReconciliationExceptionForm({ action }: { action: 
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="resolutionReason" type="text" required placeholder="Resolution reason (required)" className="w-48 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="recon-resolution-reason" className="sr-only">
+        Resolution reason
+      </label>
+      <Input id="recon-resolution-reason" name="resolutionReason" type="text" required placeholder="Resolution reason (required)" className="w-48 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Resolving…">
         Resolve
       </Button>
@@ -81,12 +77,11 @@ export function CertifyFinanceReconciliationRunForm({ action }: { action: BoundA
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" required placeholder="Certification reason (required)" className="w-48 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="recon-certify-reason" className="sr-only">
+        Certification reason
+      </label>
+      <Input id="recon-certify-reason" name="reason" type="text" required placeholder="Certification reason (required)" className="w-48 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Certifying…">
         Certify
       </Button>

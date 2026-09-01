@@ -5,6 +5,10 @@ import { Link } from "../../../../../components/ui/link.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { CustomerShipmentOrderActionState } from "../actions.ts";
 import type { ShipmentOrderStatus, CustomerShipmentOrder, ShipmentChangeRequestStatus, CustomerShipmentChangeRequest } from "../../../../../server/contracts/customer-shipment-order/customer-shipment-order.ts";
 
@@ -106,21 +110,21 @@ function RequestChangeForm({
   requestChangeAction: (prevState: CustomerShipmentOrderActionState, formData: FormData) => Promise<CustomerShipmentOrderActionState>;
 }) {
   const [state, formAction, pending] = useActionState(requestChangeAction, INITIAL_STATE);
+  const errorId = "request-change-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Request a change</h2>
-      <label className="text-xs text-neutral-500">
-        Request type
-        <select name="requestType" required defaultValue="reschedule" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="request-change-type" label={<span className="text-xs text-neutral-500">Request type</span>}>
+        <Select id="request-change-type" name="requestType" required defaultValue="reschedule" aria-describedby={describedBy}>
           <option value="reschedule">Reschedule</option>
           <option value="cancel">Cancellation</option>
           <option value="other">Other</option>
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Details (required)
-        <textarea name="details" required rows={3} placeholder="Describe what you need changed" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id="request-change-details" label={<span className="text-xs text-neutral-500">Details (required)</span>}>
+        <Textarea id="request-change-details" name="details" required rows={3} placeholder="Describe what you need changed" aria-describedby={describedBy} />
+      </FormField>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
           Submit request
@@ -130,11 +134,7 @@ function RequestChangeForm({
         This does not change the shipment directly -- your account team reviews every request. Operations remains the sole owner of shipment execution. You can also{" "}
         <Link href={`/${tenantSlug}/customer-tickets`}>open a ticket</Link> for anything more urgent.
       </p>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

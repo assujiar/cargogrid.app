@@ -10,6 +10,9 @@ import { useActionState } from "react";
 import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import type { CustomerApiKey } from "../../../../server/contracts/customer-api/customer-api.ts";
 import { createCustomerApiKeyAction, rotateCustomerApiKeyAction, revokeCustomerApiKeyAction, type CustomerApiKeyActionState } from "./actions.ts";
 
@@ -17,13 +20,9 @@ const INITIAL_STATE: CustomerApiKeyActionState = { error: null, createdKey: null
 
 const STATUS_TONE: Record<CustomerApiKey["status"], StatusTone> = { active: "success", revoked: "danger", expired: "neutral" };
 
-function ErrorBanner({ error }: { error: string | null }) {
+function ErrorBanner({ error, id }: { error: string | null; id?: string }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-sm text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage id={id}>{error}</ValidationMessage>;
 }
 
 /** A raw key is shown here exactly once -- app.create_customer_api_key/app.rotate_api_key structurally never return it again. */
@@ -41,16 +40,14 @@ export function CreateCustomerApiKeyForm({ tenantSlug, accountId }: { tenantSlug
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-text-primary">Create an API key for this account</h2>
-      <label htmlFor="cak-name" className="text-xs font-medium text-text-secondary">
-        Key name
-      </label>
-      <input id="cak-name" name="name" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="cak-rate-limit" className="text-xs font-medium text-text-secondary">
-        Rate limit per minute (optional -- blank means unlimited)
-      </label>
-      <input id="cak-rate-limit" name="rateLimitPerMinute" type="number" min={1} max={100000} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <FormField id="cak-name" label="Key name">
+        <Input id="cak-name" name="name" type="text" required aria-describedby={state.error ? "cak-name-error" : undefined} />
+      </FormField>
+      <FormField id="cak-rate-limit" label="Rate limit per minute (optional -- blank means unlimited)">
+        <Input id="cak-rate-limit" name="rateLimitPerMinute" type="number" min={1} max={100000} aria-describedby={state.error ? "cak-name-error" : undefined} />
+      </FormField>
       <p className="text-xs text-text-secondary">This key lets your own systems call the CargoGrid Customer API (tracking, bookings) on this account&apos;s own behalf -- never a broader tenant scope.</p>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner error={state.error} id="cak-name-error" />
       {state.createdKey ? <RawKeyCallout rawKey={state.createdKey.rawKey} /> : null}
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create key
@@ -61,18 +58,29 @@ export function CreateCustomerApiKeyForm({ tenantSlug, accountId }: { tenantSlug
 
 function RotateCustomerApiKeyForm({ tenantSlug, accountId, keyId }: { tenantSlug: string; accountId: string; keyId: string }) {
   const [state, formAction, pending] = useActionState(rotateCustomerApiKeyAction.bind(null, tenantSlug, accountId, keyId), INITIAL_STATE);
+  const fieldId = `c-rotate-overlap-${keyId}`;
+  const errorId = `${fieldId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <label htmlFor={`c-rotate-overlap-${keyId}`} className="text-xs text-text-secondary">
-          Overlap (min)
-        </label>
-        <input id={`c-rotate-overlap-${keyId}`} name="overlapMinutes" type="number" min={0} max={10080} defaultValue={0} className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <FormField id={fieldId} label={<span className="text-xs text-text-secondary">Overlap (min)</span>}>
+          <Input
+            id={fieldId}
+            name="overlapMinutes"
+            type="number"
+            min={0}
+            max={10080}
+            defaultValue={0}
+            className="w-20 text-xs"
+            invalid={Boolean(state.error)}
+            aria-describedby={state.error ? errorId : undefined}
+          />
+        </FormField>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rotating…">
           Rotate
         </Button>
       </div>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner error={state.error} id={errorId} />
       {state.createdKey ? <RawKeyCallout rawKey={state.createdKey.rawKey} /> : null}
     </form>
   );
@@ -80,15 +88,28 @@ function RotateCustomerApiKeyForm({ tenantSlug, accountId, keyId }: { tenantSlug
 
 function RevokeCustomerApiKeyForm({ tenantSlug, accountId, keyId }: { tenantSlug: string; accountId: string; keyId: string }) {
   const [state, formAction, pending] = useActionState(revokeCustomerApiKeyAction.bind(null, tenantSlug, accountId, keyId), INITIAL_STATE);
+  const fieldId = `c-revoke-reason-${keyId}`;
+  const errorId = `${fieldId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <input name="reason" type="text" placeholder="Reason (optional)" className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <label htmlFor={fieldId} className="sr-only">
+          Reason
+        </label>
+        <Input
+          id={fieldId}
+          name="reason"
+          type="text"
+          placeholder="Reason (optional)"
+          className="w-32 text-xs"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+        />
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Revoking…">
           Revoke
         </Button>
       </div>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner error={state.error} id={errorId} />
     </form>
   );
 }

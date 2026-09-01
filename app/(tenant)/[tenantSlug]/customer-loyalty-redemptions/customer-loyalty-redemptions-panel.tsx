@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { Button } from "../../../../components/ui/button.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { describeLoyaltyRedemptionStatus, canCancelLoyaltyRedemption, type CustomerPortalLoyaltyRedemption } from "../../../../server/contracts/customer-portal-loyalty-redemptions/customer-portal-loyalty-redemptions.ts";
 import { cancelLoyaltyRedemptionAction, type CancelLoyaltyRedemptionFormState } from "./actions.ts";
 
@@ -32,11 +33,7 @@ function CancelForm({ tenantSlug, redemption }: { tenantSlug: string; redemption
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Cancelling…" className="w-fit">
         Cancel request
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

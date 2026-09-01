@@ -10,6 +10,9 @@ import { useActionState } from "react";
 import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { formatLoyaltyBenefitValue, describeLoyaltyBenefitExpiry, type CustomerPortalLoyaltyBenefitEntitlement } from "../../../../server/contracts/customer-portal-loyalty-benefits/customer-portal-loyalty-benefits.ts";
 import { redeemLoyaltyBenefitEntitlementByIdAction, redeemLoyaltyBenefitEntitlementByCodeAction, type CustomerLoyaltyBenefitsFormState } from "./actions.ts";
 
@@ -31,11 +34,7 @@ const BENEFIT_TYPE_LABEL: Record<CustomerPortalLoyaltyBenefitEntitlement["benefi
 
 function ErrorBanner({ error }: { error: string | null }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-sm text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage>{error}</ValidationMessage>;
 }
 
 function BenefitCard({ tenantSlug, entitlement }: { tenantSlug: string; entitlement: CustomerPortalLoyaltyBenefitEntitlement }) {
@@ -76,15 +75,22 @@ function RedeemByCodeForm({ tenantSlug }: { tenantSlug: string }) {
       <h3 className="text-sm font-semibold text-text-primary">Have a voucher code?</h3>
       <p className="text-xs text-text-secondary">Enter a voucher code you received elsewhere (e.g. by email) to redeem it here.</p>
       <div className="flex flex-wrap items-end gap-2">
-        <label htmlFor="benefit-code" className="sr-only">
-          Voucher code
-        </label>
-        <input id="benefit-code" name="code" type="text" placeholder="CGV-XXXX-XXXX" required className="w-48 rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm uppercase" />
+        <FormField id="benefit-code" label={<span className="sr-only">Voucher code</span>} error={state.error ?? undefined}>
+          <Input
+            id="benefit-code"
+            name="code"
+            type="text"
+            placeholder="CGV-XXXX-XXXX"
+            required
+            className="w-48 font-mono uppercase"
+            invalid={Boolean(state.error)}
+            aria-describedby={state.error ? "benefit-code-error" : undefined}
+          />
+        </FormField>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Redeeming…" className="w-fit">
           Redeem code
         </Button>
       </div>
-      <ErrorBanner error={state.error} />
     </form>
   );
 }

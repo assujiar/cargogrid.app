@@ -21,6 +21,10 @@ import { useActionState } from "react";
 import { Button, type ButtonVariant } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import type { CustomerPortalUsersActionState } from "./actions.ts";
 import type { CustomerPortalAccountMembership } from "../../../../server/contracts/customer-portal-scope/customer-portal-scope.ts";
 import { CUSTOMER_PORTAL_ACCESS_REVIEW_OUTCOME_LABELS, type CustomerPortalAccessReviewMembershipRow } from "../../../../server/contracts/customer-portal-user-management/customer-portal-user-management.ts";
@@ -50,26 +54,28 @@ const ROLE_LABEL: Record<CustomerPortalAccountMembership["role"], string> = {
 
 function InviteForm({ inviteAction }: { inviteAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(inviteAction, INITIAL_STATE);
+  const errorId = "invite-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4 sm:flex-row sm:items-end">
-      <label className="flex-1 text-xs font-medium text-neutral-500">
-        User&apos;s CargoGrid account ID
-        <input name="authUserId" placeholder="00000000-0000-0000-0000-000000000000" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs font-medium text-neutral-500">
-        Role
-        <select name="role" defaultValue="member" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <div className="flex-1">
+        <FormField id="invite-auth-user-id" label="User's CargoGrid account ID">
+          <Input id="invite-auth-user-id" name="authUserId" placeholder="00000000-0000-0000-0000-000000000000" aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      <FormField id="invite-role" label="Role">
+        <Select id="invite-role" name="role" defaultValue="member" aria-describedby={describedBy}>
           <option value="member">Member</option>
           <option value="account_admin">Account admin</option>
-        </select>
-      </label>
+        </Select>
+      </FormField>
       <Button type="submit" loading={pending} loadingLabel="Inviting…">
         Invite
       </Button>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:basis-full">
-          {state.error}
-        </p>
+        <div className="sm:basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -94,11 +100,7 @@ function RoleChangeForm({ membership, roleAction }: { membership: CustomerPortal
       >
         Make {ROLE_LABEL[nextRole]}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -124,7 +126,14 @@ function StatusChangeForm({
       <input type="hidden" name="membershipId" value={membership.id} />
       <input type="hidden" name="expectedVersion" value={membership.recordVersion} />
       <input type="hidden" name="toStatus" value={toStatus} />
-      {needsReason ? <input name="reason" placeholder="Reason (required)" className="rounded border border-neutral-300 p-1 text-xs" /> : null}
+      {needsReason ? (
+        <>
+          <label htmlFor={`status-reason-${membership.id}-${toStatus}`} className="sr-only">
+            Reason
+          </label>
+          <Input id={`status-reason-${membership.id}-${toStatus}`} name="reason" placeholder="Reason (required)" className="text-xs" invalid={Boolean(state.error)} />
+        </>
+      ) : null}
       <Button
         type="submit"
         variant={variant}
@@ -136,11 +145,7 @@ function StatusChangeForm({
       >
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -209,30 +214,34 @@ function MembersTable({ memberships, roleAction, statusAction }: { memberships: 
 
 function AccessReviewForm({ row, reviewAction }: { row: CustomerPortalAccessReviewMembershipRow; reviewAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(reviewAction, INITIAL_STATE);
+  const outcomeId = `review-outcome-${row.membershipId}`;
+  const noteId = `review-note-${row.membershipId}`;
+  const errorId = `review-error-${row.membershipId}`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
       <input type="hidden" name="membershipId" value={row.membershipId} />
-      <label className="text-xs font-medium text-neutral-500">
-        Outcome
-        <select name="reviewOutcome" defaultValue="confirmed_appropriate" className="mt-1 rounded border border-neutral-300 p-1 text-xs">
+      <FormField id={outcomeId} label="Outcome">
+        <Select id={outcomeId} name="reviewOutcome" defaultValue="confirmed_appropriate" className="text-xs" aria-describedby={describedBy}>
           {Object.entries(CUSTOMER_PORTAL_ACCESS_REVIEW_OUTCOME_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex-1 text-xs font-medium text-neutral-500">
-        Note (optional)
-        <input name="note" className="mt-1 w-full rounded border border-neutral-300 p-1 text-xs" />
-      </label>
+        </Select>
+      </FormField>
+      <div className="flex-1">
+        <FormField id={noteId} label="Note (optional)">
+          <Input id={noteId} name="note" className="text-xs" aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…">
         Record review
       </Button>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:basis-full">
-          {state.error}
-        </p>
+        <div className="sm:basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

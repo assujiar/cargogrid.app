@@ -28,6 +28,7 @@ import { useActionState } from "react";
 import { Link } from "../../../../../components/ui/link.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { CustomerShipmentOrderActionState } from "../actions.ts";
 import type { CustomerEpod, CustomerEpodFile } from "../../../../../server/contracts/customer-epod/customer-epod.ts";
 
@@ -134,11 +135,7 @@ export function CustomerEpodPanel({
         {epod.epodStatus === "available" ? (
           <p className="text-xs text-neutral-500">Every evidence file above has been verified and scanned clean. Live file delivery activates once this environment&apos;s storage delivery layer is provisioned.</p>
         ) : null}
-        {state.error ? (
-          <p role="alert" className="text-xs text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       </form>
     </section>
   );

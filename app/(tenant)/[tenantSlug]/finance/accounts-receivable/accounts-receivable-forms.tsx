@@ -4,6 +4,9 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceArOpenItemFormState, FinanceArExposureLookupFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceArOpenItemFormState = { error: null };
@@ -16,12 +19,11 @@ export function PlaceFinanceArHoldForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" placeholder="Hold reason (required)" required className="w-56 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="ar-hold-reason" className="sr-only">
+        Hold reason
+      </label>
+      <Input id="ar-hold-reason" name="reason" type="text" placeholder="Hold reason (required)" required className="w-56 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Placing hold…">
         Place hold
       </Button>
@@ -33,12 +35,11 @@ export function ReleaseFinanceArHoldForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" placeholder="Release reason (optional)" className="w-56 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="ar-release-reason" className="sr-only">
+        Release reason
+      </label>
+      <Input id="ar-release-reason" name="reason" type="text" placeholder="Release reason (optional)" className="w-56 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Releasing…">
         Release hold (FIN:Approve)
       </Button>
@@ -55,19 +56,14 @@ export function FinanceArExposureLookupForm({ action }: { action: BoundLookupAct
       <p className="text-xs text-text-secondary">Requires FIN:View. Internal Finance aggregate only -- customer-facing visibility is deferred to Step 13.</p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="customerAccountId" className="text-sm font-medium text-text-primary">
-            Customer account ID
-          </label>
-          <input id="customerAccountId" name="customerAccountId" type="text" required className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-96">
+          <FormField id="customerAccountId" label="Customer account ID">
+            <Input id="customerAccountId" name="customerAccountId" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       {state.result ? (
         <p className="text-sm text-text-primary">

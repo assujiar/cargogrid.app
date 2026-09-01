@@ -5,6 +5,11 @@ import Link from "next/link";
 import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import type { CustomerQuoteRequestActionState } from "./actions.ts";
 import type { CustomerQuoteRequest, QuoteRequestStatus } from "../../../../server/contracts/customer-quote-request/customer-quote-request.ts";
 import type { CustomerPortalScopeContextRow } from "../../../../server/contracts/customer-portal-scope/customer-portal-scope.ts";
@@ -44,13 +49,14 @@ function CreateQuoteRequestForm({
   createAction: (prevState: CustomerQuoteRequestActionState, formData: FormData) => Promise<CustomerQuoteRequestActionState>;
 }) {
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const errorId = "create-quote-request-error";
+  const describedBy = state.error ? errorId : undefined;
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
       <h2 className="text-sm font-semibold text-neutral-900 sm:col-span-2">Request a quotation</h2>
-      <label className="text-xs text-neutral-500">
-        Account
-        <select name="accountId" required defaultValue={accounts.length === 1 ? accounts[0]?.accountId : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="create-quote-account" label={<span className="text-xs text-neutral-500">Account</span>}>
+        <Select id="create-quote-account" name="accountId" required defaultValue={accounts.length === 1 ? accounts[0]?.accountId : ""} aria-describedby={describedBy}>
           {accounts.length !== 1 ? (
             <option value="" disabled>
               Select an account
@@ -61,36 +67,33 @@ function CreateQuoteRequestForm({
               {a.accountName}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Service type
-        <input name="serviceType" placeholder="e.g. ocean_freight" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Cargo description
-        <textarea name="cargoDescription" rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="What are you shipping?" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Origin label
-        <input name="originLabel" placeholder="e.g. Jakarta warehouse" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Destination label
-        <input name="destinationLabel" placeholder="e.g. Surabaya port" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Requested pickup date
-        <input type="date" name="requestedPickupDate" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Requested delivery date
-        <input type="date" name="requestedDeliveryDate" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Notes
-        <textarea name="notes" rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id="create-quote-service-type" label={<span className="text-xs text-neutral-500">Service type</span>}>
+        <Input id="create-quote-service-type" name="serviceType" placeholder="e.g. ocean_freight" aria-describedby={describedBy} />
+      </FormField>
+      <div className="sm:col-span-2">
+        <FormField id="create-quote-cargo-description" label={<span className="text-xs text-neutral-500">Cargo description</span>}>
+          <Textarea id="create-quote-cargo-description" name="cargoDescription" rows={2} placeholder="What are you shipping?" aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      <FormField id="create-quote-origin-label" label={<span className="text-xs text-neutral-500">Origin label</span>}>
+        <Input id="create-quote-origin-label" name="originLabel" placeholder="e.g. Jakarta warehouse" aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="create-quote-destination-label" label={<span className="text-xs text-neutral-500">Destination label</span>}>
+        <Input id="create-quote-destination-label" name="destinationLabel" placeholder="e.g. Surabaya port" aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="create-quote-pickup-date" label={<span className="text-xs text-neutral-500">Requested pickup date</span>}>
+        <Input id="create-quote-pickup-date" type="date" name="requestedPickupDate" aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="create-quote-delivery-date" label={<span className="text-xs text-neutral-500">Requested delivery date</span>}>
+        <Input id="create-quote-delivery-date" type="date" name="requestedDeliveryDate" aria-describedby={describedBy} />
+      </FormField>
+      <div className="sm:col-span-2">
+        <FormField id="create-quote-notes" label={<span className="text-xs text-neutral-500">Notes</span>}>
+          <Textarea id="create-quote-notes" name="notes" rows={2} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <div className="sm:col-span-2">
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Starting…" disabled={accounts.length === 0}>
           Start draft
@@ -98,9 +101,9 @@ function CreateQuoteRequestForm({
       </div>
       {accounts.length === 0 ? <p className="text-xs text-neutral-500 sm:col-span-2">No account is linked to your customer profile yet.</p> : null}
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

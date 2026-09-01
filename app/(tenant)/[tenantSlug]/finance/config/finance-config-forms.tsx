@@ -11,6 +11,10 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceConfigFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceConfigFormState = { error: null };
@@ -23,11 +27,7 @@ export function CreateFinanceConfigDraftForm({ action, disabled }: { action: Bou
   return (
     <form action={formAction} className="flex flex-col gap-2" noValidate>
       <p className="text-xs text-text-secondary">Requires FIN:Edit and Tenant Admin/Supreme authority to draft; FIN:Approve and Tenant Admin/Supreme authority to publish.</p>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Creating…" disabled={disabled} className="w-fit">
         Start a new draft
       </Button>
@@ -87,28 +87,24 @@ export function FinanceConfigItemsForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-2" noValidate>
-      <label htmlFor="itemsJson" className="text-sm font-medium text-text-primary">
-        Items (JSON object, key -&gt; value)
-      </label>
-      <textarea
+      <FormField
         id="itemsJson"
-        name="itemsJson"
-        rows={10}
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        disabled={disabled}
-        className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs"
-        aria-describedby="itemsJson-hint"
-      />
-      <p id="itemsJson-hint" className="text-xs text-text-secondary">
-        Each key is validated against this class&apos;s own structural rules when you publish (e.g. rounding mode/precision, numbering format tokens). Invalid JSON or an unsafe value is rejected before saving.
-      </p>
+        label="Items (JSON object, key -> value)"
+        helpText="Each key is validated against this class's own structural rules when you publish (e.g. rounding mode/precision, numbering format tokens). Invalid JSON or an unsafe value is rejected before saving."
+        error={state.error ?? undefined}
+      >
+        <Textarea
+          id="itemsJson"
+          name="itemsJson"
+          rows={10}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          disabled={disabled}
+          className="font-mono text-xs"
+          invalid={Boolean(state.error)}
+        />
+      </FormField>
       {dirty ? <p className="text-xs text-warning">Unsaved changes -- save before publishing or leaving this page.</p> : null}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" disabled={disabled} className="w-fit">
         Save items
       </Button>
@@ -121,11 +117,7 @@ export function PublishFinanceConfigVersionForm({ action, disabled }: { action: 
 
   return (
     <form action={formAction} className="flex flex-col gap-2" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Publishing…" disabled={disabled} className="w-fit">
         Publish
       </Button>
@@ -138,15 +130,10 @@ export function DiscardFinanceConfigDraftForm({ action, disabled }: { action: Bo
 
   return (
     <form action={formAction} className="flex flex-col gap-2" noValidate>
-      <label htmlFor="discard-reason" className="text-sm font-medium text-text-primary">
-        Reason (required)
-      </label>
-      <input id="discard-reason" name="reason" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <FormField id="discard-reason" label="Reason (required)">
+        <Input id="discard-reason" name="reason" type="text" required invalid={Boolean(state.error)} />
+      </FormField>
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Discarding…" disabled={disabled} className="w-fit">
         Discard draft
       </Button>
@@ -159,15 +146,10 @@ export function RollbackFinanceConfigVersionForm({ action, disabled }: { action:
 
   return (
     <form action={formAction} className="flex flex-col gap-2" noValidate>
-      <label htmlFor="rollback-reason" className="text-sm font-medium text-text-primary">
-        Reason (required)
-      </label>
-      <input id="rollback-reason" name="reason" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <FormField id="rollback-reason" label="Reason (required)">
+        <Input id="rollback-reason" name="reason" type="text" required invalid={Boolean(state.error)} />
+      </FormField>
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rolling back…" disabled={disabled} className="w-fit">
         Roll back to this version
       </Button>

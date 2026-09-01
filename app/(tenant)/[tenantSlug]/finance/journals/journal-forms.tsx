@@ -4,6 +4,9 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceJournalFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceJournalFormState = { error: null };
@@ -22,54 +25,44 @@ export function CreateFinanceJournalDraftForm({ action }: { action: BoundAction 
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="accountIds" className="text-sm font-medium text-text-primary">
-            Account IDs (comma-separated)
-          </label>
-          <input id="accountIds" name="accountIds" type="text" required className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-96">
+          <FormField id="accountIds" label="Account IDs (comma-separated)">
+            <Input id="accountIds" name="accountIds" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="directions" className="text-sm font-medium text-text-primary">
-            Directions (comma-separated)
-          </label>
-          <input id="directions" name="directions" type="text" required placeholder="debit, credit" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="directions" label="Directions (comma-separated)">
+            <Input id="directions" name="directions" type="text" required placeholder="debit, credit" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="amounts" className="text-sm font-medium text-text-primary">
-            Amounts (comma-separated)
-          </label>
-          <input id="amounts" name="amounts" type="text" required placeholder="500, 500" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="amounts" label="Amounts (comma-separated)">
+            <Input id="amounts" name="amounts" type="text" required placeholder="500, 500" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="journalDate" className="text-sm font-medium text-text-primary">
-            Journal date
-          </label>
-          <input id="journalDate" name="journalDate" type="date" required className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-40">
+          <FormField id="journalDate" label="Journal date">
+            <Input id="journalDate" name="journalDate" type="date" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="currency" className="text-sm font-medium text-text-primary">
-            Currency
-          </label>
-          <input id="currency" name="currency" type="text" required maxLength={3} placeholder="USD" className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm uppercase" />
+        <div className="w-24">
+          <FormField id="currency" label="Currency">
+            <Input id="currency" name="currency" type="text" required maxLength={3} placeholder="USD" className="uppercase" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="idempotencyKey" className="text-sm font-medium text-text-primary">
-            Idempotency key
-          </label>
-          <input id="idempotencyKey" name="idempotencyKey" type="text" required className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="idempotencyKey" label="Idempotency key">
+            <Input id="idempotencyKey" name="idempotencyKey" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Preparing…" className="w-fit">
         Prepare journal
@@ -82,11 +75,7 @@ export function SubmitFinanceJournalForApprovalForm({ action }: { action: BoundA
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
         Submit
       </Button>
@@ -98,12 +87,11 @@ export function DiscardFinanceJournalDraftForm({ action }: { action: BoundAction
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" placeholder="Reason (optional)" className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="discard-journal-reason" className="sr-only">
+        Reason
+      </label>
+      <Input id="discard-journal-reason" name="reason" type="text" placeholder="Reason (optional)" className="w-40 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Voiding…">
         Discard
       </Button>
@@ -115,11 +103,7 @@ export function ApproveFinanceJournalForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Approving…">
         Approve
       </Button>
@@ -131,11 +115,7 @@ export function PostFinanceJournalForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Posting…">
         Post
       </Button>

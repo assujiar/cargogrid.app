@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { ProcurementReportExportActionState } from "./actions.ts";
 
 const INITIAL_STATE: ProcurementReportExportActionState = { error: null, success: false };
@@ -15,11 +16,7 @@ export function ExportProcurementReportForm({ action, label }: { action: (prevSt
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Requesting…" className="w-fit text-xs">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       {state.success ? (
         <p role="status" className="text-xs text-neutral-500">
           Export queued. No live worker processes it in this environment yet (disclosed) -- it will remain &quot;queued&quot; in the run history below.

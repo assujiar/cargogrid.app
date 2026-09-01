@@ -5,6 +5,11 @@ import Link from "next/link";
 import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import type { CustomerTicketActionState, CustomerTicketPrecreateLinkSearchActionState } from "./actions.ts";
 import {
   TICKET_PRIORITIES,
@@ -123,9 +128,8 @@ function LinkRecordPicker({
       <p className="text-xs text-neutral-500">Link this ticket to your own shipment, warehouse order, invoice, or document. Every result is already scoped to your account -- a record you cannot access never appears here.</p>
       <form action={searchFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Record type
-            <select name="entityType" required defaultValue={searchState.entityType ?? ""} className="rounded border border-neutral-300 p-1.5 text-xs">
+          <FormField id="precreate-link-entity-type" label={<span className="text-xs text-neutral-600">Record type</span>}>
+            <Select id="precreate-link-entity-type" name="entityType" required defaultValue={searchState.entityType ?? ""} className="text-xs">
               <option value="" disabled>
                 Select…
               </option>
@@ -134,28 +138,27 @@ function LinkRecordPicker({
                   {PRECREATE_LINK_ENTITY_TYPE_LABELS[t]}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Relationship
-            <select name="relationship" defaultValue={searchState.relationship} className="rounded border border-neutral-300 p-1.5 text-xs">
+            </Select>
+          </FormField>
+          <FormField id="precreate-link-relationship" label={<span className="text-xs text-neutral-600">Relationship</span>}>
+            <Select id="precreate-link-relationship" name="relationship" defaultValue={searchState.relationship} className="text-xs">
               {TICKET_LINK_RELATIONSHIPS.map((r) => (
                 <option key={r} value={r}>
                   {PRECREATE_LINK_RELATIONSHIP_LABELS[r]}
                 </option>
               ))}
-            </select>
-          </label>
-          <input name="searchText" placeholder="Search by number/name…" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+            </Select>
+          </FormField>
+          <div className="min-w-[12rem] flex-1">
+            <FormField id="precreate-link-search-text" label={<span className="sr-only">Search by number/name</span>}>
+              <Input id="precreate-link-search-text" name="searchText" placeholder="Search by number/name…" className="text-xs" />
+            </FormField>
+          </div>
           <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
             Search
           </Button>
         </div>
-        {searchState.error ? (
-          <p role="alert" className="text-xs text-danger">
-            {searchState.error}
-          </p>
-        ) : null}
+        {searchState.error ? <ValidationMessage>{searchState.error}</ValidationMessage> : null}
         {searchState.entityType ? (
           searchState.results.length === 0 ? (
             <p className="text-xs text-neutral-500">No matching records found on your account.</p>
@@ -206,6 +209,8 @@ function CreateCustomerTicketForm({
 }) {
   const [state, formAction, pending] = useActionState(createTicketAction, INITIAL_STATE);
   const noCategoriesConfigured = categories.length === 0;
+  const errorId = "create-ticket-error";
+  const describedBy = state.error ? errorId : undefined;
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
@@ -222,9 +227,8 @@ function CreateCustomerTicketForm({
           <input type="hidden" name="linkRelationship" value={linked.relationship} />
         </>
       ) : null}
-      <label className="text-xs text-neutral-500">
-        Account
-        <select name="accountId" required defaultValue={accounts.length === 1 ? accounts[0]?.accountId : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="create-ticket-account" label={<span className="text-xs text-neutral-500">Account</span>}>
+        <Select id="create-ticket-account" name="accountId" required defaultValue={accounts.length === 1 ? accounts[0]?.accountId : ""} aria-describedby={describedBy}>
           {accounts.length !== 1 ? (
             <option value="" disabled>
               Select an account
@@ -235,11 +239,10 @@ function CreateCustomerTicketForm({
               {a.legalName}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Category
-        <select name="categoryId" required defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="create-ticket-category" label={<span className="text-xs text-neutral-500">Category</span>}>
+        <Select id="create-ticket-category" name="categoryId" required defaultValue="" aria-describedby={describedBy}>
           <option value="" disabled>
             Select a category
           </option>
@@ -248,34 +251,43 @@ function CreateCustomerTicketForm({
               {c.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Priority
-        <select name="priority" defaultValue="normal" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="create-ticket-priority" label={<span className="text-xs text-neutral-500">Priority</span>}>
+        <Select id="create-ticket-priority" name="priority" defaultValue="normal" aria-describedby={describedBy}>
           {TICKET_PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Subject
-        <input name="subject" required minLength={1} defaultValue={initialDispute ? `Invoice dispute -- ${initialDispute.invoiceNumber}` : undefined} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Description
-        <textarea
-          name="body"
-          required
-          minLength={1}
-          rows={4}
-          defaultValue={initialDispute ? `I'd like to dispute invoice ${initialDispute.invoiceNumber}.\n\nDetails: ` : undefined}
-          className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm"
-          placeholder="Describe your issue or question."
-        />
-      </label>
+        </Select>
+      </FormField>
+      <div className="sm:col-span-2">
+        <FormField id="create-ticket-subject" label={<span className="text-xs text-neutral-500">Subject</span>}>
+          <Input
+            id="create-ticket-subject"
+            name="subject"
+            required
+            minLength={1}
+            defaultValue={initialDispute ? `Invoice dispute -- ${initialDispute.invoiceNumber}` : undefined}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+      </div>
+      <div className="sm:col-span-2">
+        <FormField id="create-ticket-body" label={<span className="text-xs text-neutral-500">Description</span>}>
+          <Textarea
+            id="create-ticket-body"
+            name="body"
+            required
+            minLength={1}
+            rows={4}
+            defaultValue={initialDispute ? `I'd like to dispute invoice ${initialDispute.invoiceNumber}.\n\nDetails: ` : undefined}
+            placeholder="Describe your issue or question."
+            aria-describedby={describedBy}
+          />
+        </FormField>
+      </div>
       <div className="sm:col-span-2">
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Submitting…" disabled={noCategoriesConfigured || accounts.length === 0}>
           {initialDispute ? "Submit dispute" : "Submit ticket"}
@@ -286,9 +298,9 @@ function CreateCustomerTicketForm({
       ) : null}
       {accounts.length === 0 ? <p className="text-xs text-neutral-500 sm:col-span-2">No account is linked to your customer profile yet.</p> : null}
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
