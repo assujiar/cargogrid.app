@@ -18,7 +18,10 @@ import {
   withdrawApplicationAction,
   createCandidateAssessmentAction,
   recordAssessmentResultAction,
+  cancelCandidateAssessmentAction,
   scheduleInterviewAction,
+  rescheduleInterviewAction,
+  cancelInterviewAction,
   completeInterviewAction,
   submitInterviewFeedbackAction,
   createJobOfferVersionAction,
@@ -112,7 +115,10 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       withdrawAction={withdrawApplicationAction.bind(null, tenantSlug, applicationId, detail.application.recordVersion)}
       createAssessmentAction={createCandidateAssessmentAction.bind(null, tenantSlug, applicationId)}
       recordAssessmentResultAction={(assessmentId, expectedVersion) => recordAssessmentResultAction.bind(null, tenantSlug, applicationId, assessmentId, expectedVersion)}
+      cancelAssessmentAction={(assessmentId, expectedVersion) => cancelCandidateAssessmentAction.bind(null, tenantSlug, applicationId, assessmentId, expectedVersion)}
       scheduleInterviewAction={scheduleInterviewAction.bind(null, tenantSlug, applicationId)}
+      rescheduleInterviewAction={(interviewId, expectedVersion) => rescheduleInterviewAction.bind(null, tenantSlug, applicationId, interviewId, expectedVersion)}
+      cancelInterviewAction={(interviewId, expectedVersion) => cancelInterviewAction.bind(null, tenantSlug, applicationId, interviewId, expectedVersion)}
       completeInterviewAction={(interviewId, expectedVersion) => completeInterviewAction.bind(null, tenantSlug, applicationId, interviewId, expectedVersion)}
       submitFeedbackAction={(interviewId) => submitInterviewFeedbackAction.bind(null, tenantSlug, applicationId, interviewId)}
       createOfferVersionAction={createJobOfferVersionAction.bind(null, tenantSlug, applicationId)}

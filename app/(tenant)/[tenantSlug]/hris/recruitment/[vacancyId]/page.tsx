@@ -13,6 +13,7 @@ import {
   closeJobVacancyAction,
   cancelJobVacancyDraftAction,
   createCandidateAndApplyAction,
+  exportApplicationsForVacancyAction,
 } from "../actions.ts";
 
 /**
@@ -66,6 +67,7 @@ export default async function VacancyDetailPage({ params }: { params: Promise<{ 
       closeAction={closeJobVacancyAction.bind(null, tenantSlug, vacancyId, detail.vacancy.recordVersion)}
       cancelAction={cancelJobVacancyDraftAction.bind(null, tenantSlug, vacancyId, detail.vacancy.recordVersion)}
       addCandidateAction={createCandidateAndApplyAction.bind(null, tenantSlug, vacancyId)}
+      exportApplicationsAction={exportApplicationsForVacancyAction.bind(null, tenantSlug, vacancyId)}
     />
   );
 }

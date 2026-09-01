@@ -15,7 +15,10 @@ import {
   withdrawApplication,
   createCandidateAssessment,
   recordAssessmentResult,
+  cancelCandidateAssessment,
   scheduleInterview,
+  rescheduleInterview,
+  cancelInterview,
   completeInterview,
   submitInterviewFeedback,
   createJobOfferVersion,
@@ -161,6 +164,32 @@ export async function recordAssessmentResultAction(
   return OK;
 }
 
+/** ISS-2026-067 item 3: `app.cancel_candidate_assessment` had no UI caller. */
+export async function cancelCandidateAssessmentAction(
+  tenantSlug: string,
+  applicationId: string,
+  assessmentId: string,
+  expectedVersion: number,
+  _prevState: ApplicationActionState,
+  formData: FormData,
+): Promise<ApplicationActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to cancel an assessment." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await cancelCandidateAssessment(supabase, { id: assessmentId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof RecruitmentMutationError) return { error: `Could not cancel this assessment: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(detailPath(tenantSlug, applicationId));
+  return OK;
+}
+
 export async function scheduleInterviewAction(tenantSlug: string, applicationId: string, _prevState: ApplicationActionState, formData: FormData): Promise<ApplicationActionState> {
   const access = await requireAccess(tenantSlug);
   if (!access) return NO_ACCESS;
@@ -210,6 +239,64 @@ export async function completeInterviewAction(tenantSlug: string, applicationId:
     await completeInterview(supabase, { id: interviewId, expectedVersion, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof RecruitmentMutationError) return { error: `Could not complete this interview: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(detailPath(tenantSlug, applicationId));
+  return OK;
+}
+
+/** ISS-2026-067 item 3: `app.reschedule_interview` had no UI caller. */
+export async function rescheduleInterviewAction(
+  tenantSlug: string,
+  applicationId: string,
+  interviewId: string,
+  expectedVersion: number,
+  _prevState: ApplicationActionState,
+  formData: FormData,
+): Promise<ApplicationActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const scheduledAt = String(formData.get("scheduledAt") ?? "").trim();
+  const durationMinutes = Number(String(formData.get("durationMinutes") ?? "60"));
+  const locationOrLink = String(formData.get("locationOrLink") ?? "").trim() || null;
+  const mode = String(formData.get("mode") ?? "video") as InterviewMode;
+  if (!scheduledAt) return { error: "A new scheduled time is required to reschedule this interview." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await rescheduleInterview(supabase, {
+      id: interviewId,
+      expectedVersion,
+      scheduledAt: new Date(scheduledAt).toISOString(),
+      durationMinutes,
+      locationOrLink,
+      mode,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof RecruitmentMutationError) return { error: `Could not reschedule this interview: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(detailPath(tenantSlug, applicationId));
+  return OK;
+}
+
+/** ISS-2026-067 item 3: `app.cancel_interview` had no UI caller. */
+export async function cancelInterviewAction(tenantSlug: string, applicationId: string, interviewId: string, expectedVersion: number, _prevState: ApplicationActionState, formData: FormData): Promise<ApplicationActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to cancel an interview." };
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await cancelInterview(supabase, { id: interviewId, expectedVersion, reason, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof RecruitmentMutationError) return { error: `Could not cancel this interview: ${error.message}` };
     throw error;
   }
 

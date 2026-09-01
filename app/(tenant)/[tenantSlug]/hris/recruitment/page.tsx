@@ -8,7 +8,7 @@ import type { VacancyStatus } from "../../../../../server/contracts/recruitment/
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { PermissionState } from "../../../../../components/ui/permission-state.tsx";
 import { RecruitmentPanel } from "./recruitment-panel.tsx";
-import { createJobVacancyDraftAction } from "./actions.ts";
+import { createJobVacancyDraftAction, exportJobVacanciesAction } from "./actions.ts";
 
 /**
  * Recruitment pipeline entry point (HRT-276, CG-S12-HRT-004) -- the vacancy list and
@@ -57,9 +57,14 @@ export default async function RecruitmentPage({ params, searchParams }: { params
           <h1 className="text-xl font-semibold text-neutral-900">Recruitment</h1>
           <p className="text-xs text-neutral-500">Vacancies, candidates and offers. Publishing a vacancy opens a public, token-based application link.</p>
         </div>
-        <Link href={`/${tenantSlug}/hris/recruitment/my-interviews`} className="text-sm text-primary underline">
-          My assigned interviews
-        </Link>
+        <div className="flex flex-col items-end gap-1 text-sm">
+          <Link href={`/${tenantSlug}/hris/recruitment/my-interviews`} className="text-primary underline">
+            My assigned interviews
+          </Link>
+          <Link href={`/${tenantSlug}/hris/recruitment/candidates`} className="text-primary underline">
+            Candidate directory
+          </Link>
+        </div>
       </div>
 
       <RecruitmentPanel
@@ -69,6 +74,7 @@ export default async function RecruitmentPage({ params, searchParams }: { params
         statusFilter={statusFilter}
         search={q ?? ""}
         createVacancyAction={(positionId: string) => createJobVacancyDraftAction.bind(null, tenantSlug, positionId)}
+        exportAction={exportJobVacanciesAction.bind(null, tenantSlug, statusFilter)}
       />
     </div>
   );

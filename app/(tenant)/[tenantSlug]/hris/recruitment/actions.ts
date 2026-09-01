@@ -22,6 +22,10 @@ import {
   applyToVacancy,
   RecruitmentMutationError,
 } from "../../../../../server/mutations/recruitment.ts";
+import { exportJobVacancies, exportApplications } from "../../../../../server/queries/recruitment.ts";
+import type { RecruitmentExportActionState } from "../../../../../components/domain/recruitment-export-form.tsx";
+import { buildRecruitmentExport } from "../../../../../lib/recruitment/recruitment-export-action.ts";
+import type { VacancyStatus } from "../../../../../server/contracts/recruitment/recruitment.ts";
 
 export interface RecruitmentActionState {
   readonly error: string | null;
@@ -221,4 +225,50 @@ export async function createCandidateAndApplyAction(tenantSlug: string, vacancyI
 
   revalidatePath(detailPath(tenantSlug, vacancyId));
   return OK;
+}
+
+/**
+ * Bulk CSV export of the vacancy list (ISS-2026-067 item 2: `app.export_job_vacancies`
+ * had no UI caller). Respects the same status filter the list page itself is showing,
+ * so "export what I'm looking at" holds -- never a second, silently different dataset.
+ */
+export async function exportJobVacanciesAction(
+  tenantSlug: string,
+  statusFilter: VacancyStatus | null,
+  _prevState: RecruitmentExportActionState,
+  _formData: FormData,
+): Promise<RecruitmentExportActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: "You don't have access to this organization's HRIS workspace.", csv: null, filename: null, rowCount: 0, token: null };
+
+  const supabase = await createSupabaseServerClient();
+  return buildRecruitmentExport({
+    filenameStem: "job-vacancies",
+    header: ["Title", "Employment type", "Headcount", "Status"],
+    fetchRows: () => exportJobVacancies(supabase, access.tenant.id, access.authUserId, { statusFilter, limit: 500 }),
+    toCells: (row) => [row.title, row.employmentType, row.headcount, row.status],
+  });
+}
+
+/**
+ * Bulk CSV export of one vacancy's applications (ISS-2026-067 item 2:
+ * `app.export_applications` had no UI caller). Scoped to this vacancy -- the vacancy
+ * detail page is where the applications pipeline table this exports already lives.
+ */
+export async function exportApplicationsForVacancyAction(
+  tenantSlug: string,
+  vacancyId: string,
+  _prevState: RecruitmentExportActionState,
+  _formData: FormData,
+): Promise<RecruitmentExportActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: "You don't have access to this organization's HRIS workspace.", csv: null, filename: null, rowCount: 0, token: null };
+
+  const supabase = await createSupabaseServerClient();
+  return buildRecruitmentExport({
+    filenameStem: "applications",
+    header: ["Vacancy", "Candidate", "Stage", "Source", "Applied at"],
+    fetchRows: () => exportApplications(supabase, access.tenant.id, access.authUserId, { vacancyId, limit: 500 }),
+    toCells: (row) => [row.vacancyTitle, row.candidateFullName, row.stage, row.source, row.appliedAt],
+  });
 }

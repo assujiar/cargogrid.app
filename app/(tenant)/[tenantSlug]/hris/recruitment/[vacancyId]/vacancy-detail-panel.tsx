@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
+import { RecruitmentExportForm, type RecruitmentExportActionState } from "../../../../../../components/domain/recruitment-export-form.tsx";
 import type { JobVacancyDetail, ApplicationPipelineRow, ApplicationStage } from "../../../../../../server/contracts/recruitment/recruitment.ts";
 import type { RecruitmentActionState } from "../actions.ts";
 
@@ -33,6 +34,7 @@ export function VacancyDetailPanel({
   closeAction,
   cancelAction,
   addCandidateAction,
+  exportApplicationsAction,
 }: {
   tenantSlug: string;
   detail: JobVacancyDetail;
@@ -44,6 +46,7 @@ export function VacancyDetailPanel({
   closeAction: BoundAction;
   cancelAction: BoundAction;
   addCandidateAction: BoundAction;
+  exportApplicationsAction: (prevState: RecruitmentExportActionState, formData: FormData) => Promise<RecruitmentExportActionState>;
 }) {
   const { vacancy } = detail;
   const [publishState, publishFormAction, publishPending] = useActionState(publishAction, INITIAL_STATE);
@@ -182,6 +185,8 @@ export function VacancyDetailPanel({
           </Button>
         </form>
       ) : null}
+
+      <RecruitmentExportForm label="Export applications" description="Downloads every application against this vacancy." action={exportApplicationsAction} />
 
       {applications.length === 0 ? (
         <EmptyState title="No applications yet" description={vacancy.status === "open" ? "Add a candidate above, or share the public application link once published." : "This vacancy has no applications."} />

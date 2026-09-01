@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { RecruitmentExportForm, type RecruitmentExportActionState } from "../../../../../components/domain/recruitment-export-form.tsx";
 import type { JobVacancy, VacancyStatus } from "../../../../../server/contracts/recruitment/recruitment.ts";
 import type { PositionListRow } from "../../../../../server/contracts/position/position.ts";
 import type { RecruitmentActionState } from "./actions.ts";
@@ -26,6 +27,7 @@ export function RecruitmentPanel({
   statusFilter,
   search,
   createVacancyAction,
+  exportAction,
 }: {
   tenantSlug: string;
   vacancies: JobVacancy[];
@@ -33,6 +35,7 @@ export function RecruitmentPanel({
   statusFilter: VacancyStatus | null;
   search: string;
   createVacancyAction: (positionId: string) => (prevState: RecruitmentActionState, formData: FormData) => Promise<RecruitmentActionState>;
+  exportAction: (prevState: RecruitmentExportActionState, formData: FormData) => Promise<RecruitmentExportActionState>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -82,6 +85,8 @@ export function RecruitmentPanel({
           </Button>
         </div>
       </div>
+
+      <RecruitmentExportForm label="Export vacancies" description="Downloads the vacancy list, respecting the status filter above." action={exportAction} />
 
       {positions.length === 0 ? (
         <p className="text-xs text-neutral-500">No active positions exist yet -- create one under Positions &amp; grades before opening a vacancy.</p>

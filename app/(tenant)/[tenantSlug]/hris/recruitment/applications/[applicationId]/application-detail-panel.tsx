@@ -9,6 +9,7 @@ import type {
   ApplicationStageHistoryRow,
   CandidateAssessment,
   InterviewWithPanel,
+  Interview,
   ApplicationStage,
   OfferStatus,
   OfferApprovalStatus,
@@ -49,7 +50,10 @@ export function ApplicationDetailPanel({
   withdrawAction,
   createAssessmentAction,
   recordAssessmentResultAction,
+  cancelAssessmentAction,
   scheduleInterviewAction,
+  rescheduleInterviewAction,
+  cancelInterviewAction,
   completeInterviewAction,
   submitFeedbackAction,
   createOfferVersionAction,
@@ -70,7 +74,10 @@ export function ApplicationDetailPanel({
   withdrawAction: Bound0;
   createAssessmentAction: Bound0;
   recordAssessmentResultAction: (assessmentId: string, expectedVersion: number) => Bound0;
+  cancelAssessmentAction: (assessmentId: string, expectedVersion: number) => Bound0;
   scheduleInterviewAction: Bound0;
+  rescheduleInterviewAction: (interviewId: string, expectedVersion: number) => Bound0;
+  cancelInterviewAction: (interviewId: string, expectedVersion: number) => Bound0;
   completeInterviewAction: (interviewId: string, expectedVersion: number) => Bound0;
   submitFeedbackAction: (interviewId: string) => Bound0;
   createOfferVersionAction: Bound0;
@@ -167,8 +174,13 @@ export function ApplicationDetailPanel({
                 Score: {a.score} / {a.maxScore}
                 {a.passThreshold != null ? ` (pass threshold ${a.passThreshold})` : ""}
               </p>
+            ) : a.status === "cancelled" ? (
+              <p className="mt-1 text-neutral-500">Cancelled{a.notes ? `: ${a.notes}` : "."}</p>
             ) : (
-              <AssessmentResultForm assessmentId={a.id} expectedVersion={a.recordVersion} action={recordAssessmentResultAction(a.id, a.recordVersion)} />
+              <>
+                <AssessmentResultForm assessmentId={a.id} expectedVersion={a.recordVersion} action={recordAssessmentResultAction(a.id, a.recordVersion)} />
+                <CancelForm label="Cancel assessment" reasonPlaceholder="Cancellation reason" action={cancelAssessmentAction(a.id, a.recordVersion)} />
+              </>
             )}
           </div>
         ))}
@@ -227,11 +239,13 @@ export function ApplicationDetailPanel({
               <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs">{iw.interview.status}</span>
             </div>
             <p className="mt-1 text-xs text-neutral-500">{iw.feedbackCount} of {iw.interviewerEmployeeIds.length} scorecard(s) submitted</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap items-start gap-2">
               {iw.interview.status === "scheduled" ? (
                 <>
                   <FeedbackForm interviewId={iw.interview.id} action={submitFeedbackAction(iw.interview.id)} />
                   <StageButton label="Mark completed" action={completeInterviewAction(iw.interview.id, iw.interview.recordVersion)} />
+                  <RescheduleInterviewForm interview={iw.interview} action={rescheduleInterviewAction(iw.interview.id, iw.interview.recordVersion)} />
+                  <CancelForm label="Cancel interview" reasonPlaceholder="Cancellation reason" action={cancelInterviewAction(iw.interview.id, iw.interview.recordVersion)} />
                 </>
               ) : null}
             </div>
@@ -390,6 +404,87 @@ function AssessmentResultForm({ assessmentId, action }: { assessmentId: string; 
         </p>
       ) : null}
     </form>
+  );
+}
+
+/** ISS-2026-067 item 3: `app.cancel_candidate_assessment`/`app.cancel_interview` had no UI caller. Shared shape -- both take just a reason. */
+function CancelForm({ label, reasonPlaceholder, action }: { label: string; reasonPlaceholder: string; action: Bound0 }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  return (
+    <details>
+      <summary className="cursor-pointer text-sm text-danger">{label}</summary>
+      <form action={formAction} className="mt-2 flex items-center gap-2">
+        <input name="reason" placeholder={reasonPlaceholder} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…">
+          Confirm
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="mt-1 text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </details>
+  );
+}
+
+/** ISS-2026-067 item 3: `app.reschedule_interview` had no UI caller. */
+function RescheduleInterviewForm({ interview, action }: { interview: Interview; action: Bound0 }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  return (
+    <details>
+      <summary className="cursor-pointer text-sm text-primary">Reschedule</summary>
+      <form action={formAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`reschedule-mode-${interview.id}`} className="text-xs font-medium text-neutral-700">
+            Mode
+          </label>
+          <select id={`reschedule-mode-${interview.id}`} name="mode" defaultValue={interview.mode} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            <option value="video">Video</option>
+            <option value="phone">Phone</option>
+            <option value="in_person">In person</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`reschedule-at-${interview.id}`} className="text-xs font-medium text-neutral-700">
+            New scheduled time
+          </label>
+          <input id={`reschedule-at-${interview.id}`} name="scheduledAt" type="datetime-local" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`reschedule-duration-${interview.id}`} className="text-xs font-medium text-neutral-700">
+            Duration (min)
+          </label>
+          <input
+            id={`reschedule-duration-${interview.id}`}
+            name="durationMinutes"
+            type="number"
+            min="1"
+            defaultValue={interview.durationMinutes}
+            className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`reschedule-location-${interview.id}`} className="text-xs font-medium text-neutral-700">
+            Location / link
+          </label>
+          <input
+            id={`reschedule-location-${interview.id}`}
+            name="locationOrLink"
+            defaultValue={interview.locationOrLink ?? ""}
+            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+          />
+        </div>
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
+          Reschedule
+        </Button>
+        {state.error ? (
+          <p role="alert" className="w-full text-xs text-danger">
+            {state.error}
+          </p>
+        ) : null}
+      </form>
+    </details>
   );
 }
 
