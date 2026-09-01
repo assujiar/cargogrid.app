@@ -979,4 +979,194 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-066 item 3 regression: staged import (PLT-131/132) crosswalk for position/grade -- validates employee/position/grade/manager code resolution, rejects formula-injection and the secondary/secondary_assignment pairing mismatch, creates a real pending_approval proposal only (never auto-decided), is idempotent per staging row, and genuinely requires HRS:Import (not merely HRS:Edit)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrpos1');
+  v_admin uuid := '00000000-0000-0000-0000-000000027511';
+  v_staff uuid := '00000000-0000-0000-0000-000000027512';
+  v_viewer uuid := '00000000-0000-0000-0000-000000027514';
+  v_import_role uuid;
+  v_import_draft app.role_versions;
+  v_doc_draft app.config_versions;
+  v_schema_draft app.config_versions;
+  v_source_file app.files;
+  v_job app.jobs;
+  v_row_valid app.import_staging_rows;
+  v_row_bad_position app.import_staging_rows;
+  v_row_injection app.import_staging_rows;
+  v_row_secondary_mismatch app.import_staging_rows;
+  v_committed app.jobs;
+  v_report_number text;
+  v_manager_number text;
+  v_created_count integer;
+  v_recommitted app.jobs;
+  v_denial_job app.jobs;
+  v_denial_row app.import_staging_rows;
+  v_denial_source_file app.files;
+begin
+  -- staff (027512) already holds HRS:Create/Edit/View from the top-of-file fixture --
+  -- widened here with a SECOND role granting HRS:Import (roles are additive; a real
+  -- actor may hold more than one simultaneously), so this block proves the SAME staff
+  -- identity, never a new synthetic one, driving a real crosswalk import end to end.
+  v_import_role := (app.create_role(v_tenant1, 'HRS Import Grant', 'Import only', 'tester')).id;
+  v_import_draft := app.create_role_version(v_import_role, 'tester');
+  perform app.set_role_version_permissions(v_import_draft.id, array(select id from app.permissions where resource_module_code = 'HRS' and action = 'Import'), 'tester');
+  perform app.publish_role_version(v_import_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant1, (select id from app.role_versions where role_id = v_import_role and status = 'published'), v_staff, v_admin, 'tester');
+
+  -- Per-tenant onboarding steps this adapter requires, mirroring hris-employee-
+  -- master.sql's own identical staged-import setup exactly (tenant hrpos1 has never
+  -- published either config type before this block).
+  v_doc_draft := app.create_config_draft('document:employee_document', v_tenant1, 'tenant', null, v_admin, 'tester');
+  perform app.set_config_items(v_doc_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('text/csv')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', to_jsonb(10485760)),
+    jsonb_build_object('key', 'retention_class', 'value', to_jsonb('operational_contract_plus_90d'::text)),
+    jsonb_build_object('key', 'default_classification', 'value', to_jsonb('confidential'::text)),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', to_jsonb(false))
+  ), v_admin, 'tester');
+  perform app.publish_document_type_definition(v_doc_draft.id, v_admin, now(), 'tester');
+
+  v_schema_draft := app.create_config_draft('import_export:position_crosswalk_import', v_tenant1, 'tenant', null, v_admin, 'tester');
+  perform app.set_config_items(v_schema_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'columns', 'value', jsonb_build_array(
+      jsonb_build_object('key', 'employee_number', 'label', 'Employee Number', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'position_code', 'label', 'Position Code', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'grade_code', 'label', 'Grade Code', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'manager_employee_number', 'label', 'Manager Employee Number', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'assignment_type', 'label', 'Assignment Type', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'allocation_pct', 'label', 'Allocation %', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'effective_start_date', 'label', 'Effective Start Date', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'effective_end_date', 'label', 'Effective End Date', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'change_reason', 'label', 'Change Reason', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'reason_note', 'label', 'Reason Note', 'required', false, 'data_type', 'text')
+    ))
+  ), v_admin, 'tester');
+  perform app.publish_import_export_schema(v_schema_draft.id, v_admin, now(), 'tester');
+
+  select m.code into v_report_number from app.employees e join app.master_records m on m.id = e.master_record_id where e.tenant_id = v_tenant1 and e.full_name = 'Hrpos1 Report Person';
+  select m.code into v_manager_number from app.employees e join app.master_records m on m.id = e.master_record_id where e.tenant_id = v_tenant1 and e.full_name = 'Hrpos1 Manager Person';
+
+  v_source_file := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'position-crosswalk.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-poscross-source-1', v_staff, 'staff');
+  perform app.record_file_scan_result(v_source_file.id, 'clean', null, v_staff, 'staff');
+
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'position_crosswalk_import', v_source_file.id, '{}'::jsonb, 'idem-poscross-job-1', v_staff, 'staff');
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', v_report_number, 'position_code', 'POS-DUO', 'grade_code', 'GR-1',
+    'manager_employee_number', v_manager_number, 'change_reason', 'reorganization',
+    'reason_note', 'Crosswalk migration of legacy free-text title'
+  )), v_staff, 'staff');
+  select * into v_row_valid from app.import_staging_rows where job_id = v_job.job_id and row_number = 1;
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', v_report_number, 'position_code', 'NOT-A-REAL-POSITION'
+  )), v_staff, 'staff');
+  select * into v_row_bad_position from app.import_staging_rows where job_id = v_job.job_id and row_number = 2;
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', v_report_number, 'position_code', 'POS-DUO', 'reason_note', '=cmd|/c calc'
+  )), v_staff, 'staff');
+  select * into v_row_injection from app.import_staging_rows where job_id = v_job.job_id and row_number = 3;
+
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', v_report_number, 'position_code', 'POS-DUO', 'assignment_type', 'secondary', 'change_reason', 'transfer'
+  )), v_staff, 'staff');
+  select * into v_row_secondary_mismatch from app.import_staging_rows where job_id = v_job.job_id and row_number = 4;
+
+  perform app.validate_position_crosswalk_import_row(v_row_valid.id, v_staff, 'staff');
+  perform app.validate_position_crosswalk_import_row(v_row_bad_position.id, v_staff, 'staff');
+  perform app.validate_position_crosswalk_import_row(v_row_injection.id, v_staff, 'staff');
+  perform app.validate_position_crosswalk_import_row(v_row_secondary_mismatch.id, v_staff, 'staff');
+
+  if (select validation_status from app.import_staging_rows where id = v_row_valid.id) <> 'valid' then
+    raise exception 'assertion failed: expected the well-formed crosswalk row to validate as valid, got %', (select error from app.import_staging_rows where id = v_row_valid.id);
+  end if;
+  if (select validation_status from app.import_staging_rows where id = v_row_bad_position.id) <> 'invalid' or (select error from app.import_staging_rows where id = v_row_bad_position.id) !~ 'position_code' then
+    raise exception 'assertion failed: expected row 2 (unknown position_code) to be invalid with a position_code error, got %', (select error from app.import_staging_rows where id = v_row_bad_position.id);
+  end if;
+  if (select validation_status from app.import_staging_rows where id = v_row_injection.id) <> 'invalid' or (select error from app.import_staging_rows where id = v_row_injection.id) !~ 'formula/spreadsheet-injection' then
+    raise exception 'assertion failed: expected row 3 (formula-injection attempt in reason_note) to be rejected as invalid, got %', (select error from app.import_staging_rows where id = v_row_injection.id);
+  end if;
+  if (select validation_status from app.import_staging_rows where id = v_row_secondary_mismatch.id) <> 'invalid' or (select error from app.import_staging_rows where id = v_row_secondary_mismatch.id) !~ 'secondary_assignment' then
+    raise exception 'assertion failed: expected row 4 (secondary assignment_type with a non-secondary_assignment change_reason) to be rejected as invalid, got %', (select error from app.import_staging_rows where id = v_row_secondary_mismatch.id);
+  end if;
+
+  begin
+    perform app.commit_position_crosswalk_import_job(v_job.job_id, false, v_staff, 'staff');
+    raise exception 'assertion failed: expected import_export_job_has_invalid_rows without p_allow_partial';
+  exception
+    when others then
+      if sqlerrm not like 'import_export_job_has_invalid_rows%' then raise; end if;
+  end;
+
+  v_committed := app.commit_position_crosswalk_import_job(v_job.job_id, true, v_staff, 'staff');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected the job to complete on a partial commit, got %', v_committed.status;
+  end if;
+
+  select count(*) into v_created_count from app.employee_position_assignments where source_import_staging_row_id = v_row_valid.id;
+  if v_created_count <> 1 then
+    raise exception 'assertion failed: expected exactly one real proposal created from the valid staged row, found %', v_created_count;
+  end if;
+
+  if not exists (
+    select 1 from app.employee_position_assignments a
+    where a.source_import_staging_row_id = v_row_valid.id
+      and a.status = 'pending_approval'
+      and a.position_id = (select id from app.positions where tenant_id = v_tenant1 and code = 'POS-DUO')
+      and a.grade_id = (select id from app.position_grades where tenant_id = v_tenant1 and code = 'GR-1')
+      and a.manager_employee_id = (select e2.master_record_id from app.employees e2 join app.master_records m2 on m2.id = e2.master_record_id where e2.tenant_id = v_tenant1 and m2.code = v_manager_number)
+      and a.change_reason = 'reorganization'
+  ) then
+    raise exception 'assertion failed: expected the imported row to resolve employee/position/grade/manager codes correctly and land as a real pending_approval proposal, never auto-approved';
+  end if;
+
+  -- Idempotent replay: the job is no longer in_progress, so a second commit call is
+  -- itself refused -- but confirm no second proposal was ever created for the same
+  -- staging row regardless.
+  begin
+    v_recommitted := app.commit_position_crosswalk_import_job(v_job.job_id, true, v_staff, 'staff');
+    raise exception 'assertion failed: expected import_export_job_not_committable for a job already completed';
+  exception
+    when others then
+      if sqlerrm not like 'import_export_job_not_committable%' then raise; end if;
+  end;
+
+  select count(*) into v_created_count from app.employee_position_assignments where source_import_staging_row_id = v_row_valid.id;
+  if v_created_count <> 1 then
+    raise exception 'assertion failed: expected still exactly one proposal after the refused recommit, found %', v_created_count;
+  end if;
+
+  -- Authority: the tenant's HRS viewer (View only -- no Import, no Edit) genuinely
+  -- cannot commit a crosswalk job, proving HRS:Import is a real, enforced gate rather
+  -- than merely disclosed in this migration's own comments.
+  v_denial_source_file := app.initiate_file_upload(v_tenant1, 'employee_document', 'import_job', gen_random_uuid(), 'position-crosswalk-denial.csv', 'text/csv', 2048, null, false, null, '{}', null, 'idem-poscross-source-2', v_staff, 'staff');
+  perform app.record_file_scan_result(v_denial_source_file.id, 'clean', null, v_staff, 'staff');
+  v_denial_job := app.create_import_export_job(v_tenant1, 'import', 'position_crosswalk_import', v_denial_source_file.id, '{}'::jsonb, 'idem-poscross-job-denial-1', v_staff, 'staff');
+  perform app.stage_import_rows(v_denial_job.job_id, jsonb_build_array(jsonb_build_object(
+    'employee_number', v_report_number, 'position_code', 'POS-DUO'
+  )), v_staff, 'staff');
+  select * into v_denial_row from app.import_staging_rows where job_id = v_denial_job.job_id and row_number = 1;
+  perform app.validate_position_crosswalk_import_row(v_denial_row.id, v_staff, 'staff');
+
+  begin
+    perform app.commit_position_crosswalk_import_job(v_denial_job.job_id, false, v_viewer, 'viewer');
+    raise exception 'assertion failed: expected the HRS-View-only viewer identity to be denied HRS:Import';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%HRS:Import%' then raise; end if;
+  end;
+
+  -- The SAME job, committed by the staff identity that genuinely holds HRS:Import
+  -- (and HRS:Edit), still succeeds -- the denial above was a real authority gate, not
+  -- a structural failure of the job itself.
+  v_committed := app.commit_position_crosswalk_import_job(v_denial_job.job_id, false, v_staff, 'staff');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected the denial-proof job to complete once committed by an identity holding HRS:Import, got %', v_committed.status;
+  end if;
+end;
+$$;
+
 \echo 'ALL HRT-275 db-test assertions passed.'
