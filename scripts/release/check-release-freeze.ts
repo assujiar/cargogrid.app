@@ -3358,7 +3358,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // breaking two hand-projected SETOF read RPCs, and a Postgres anyarray||anyarray
   // literal-parsing ambiguity, both fixed same-pass. Bulk/multi-employee reorg wizard, E2E, and
   // several ISS-2026-070 UI-caller items are honestly left open, disclosed in the entries.
-  migrationSetSha256: "617c6bef38c490b6228a792362f796d466c05ed313de7ffd67eae9777135a00e",
+  // NINETIETH PASS (2026-09-02, ISS-2026-060 + ISS-2026-062): 451 files (+4). ISS-2026-060:
+  // additive app.vendor_rate_zone_distance_tiers parallel to the existing weight/volume tier
+  // engine plus app.calculate_vendor_rate_zoned, composing with (never replacing) the
+  // unmodified app._compute_vendor_rate_amount -- an unconfigured rate is byte-identical to
+  // app.calculate_vendor_rate; an unmatched zone/distance input raises a named error rather
+  // than silently falling back. ISS-2026-062: nullable shipment_leg_id on
+  // app.vendor_assignment_invitations (null = whole-shipment, unchanged); a leg-scoped
+  // confirm/reassign writes directly to app.shipment_legs.carrier_master_id (ATW-221) instead
+  // of the canonical, shipment-order-scoped app.resource_assignments (OPS-172, left untouched
+  // to protect its fleet/vehicle/driver roles) -- two vendors can now be live on two different
+  // legs of one shipment simultaneously. Both closures read live function bodies via
+  // pg_get_functiondef first and reproduce real drift from the applied-migration text (PRC-259
+  // governance routing; a Tier-C batch-3 fix pass) verbatim before adding the change.
+  migrationSetSha256: "360d2de06ce1db681fd3c19495805925cdfd09053d6b28445a3bc03d816738a3",
+  // History: 617c6bef38c490b6228a792362f796d466c05ed313de7ffd67eae9777135a00e
+  // (447 files, ISS-2026-066 item 3 + ISS-2026-070's scheduler/notification wiring).
   // History: dbe4010106f4be7b89a4a987a9f7f6fd75245991c3a14540e8680a1e3f707f0e
   // (442 files, ISS-2026-277's legal-hold import/archive overwrite guard).
   // History: 309b3b3e5cd882f4f1ebe09c682af3d174648477b6a9ea9d8671a8c1ddcd8876
@@ -4008,7 +4023,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // extended (hris-organization-position-linkage.sql: crosswalk import validate/commit
   // coverage; hris-onboarding-offboarding.sql: overdue-sweep notification proof; task-
   // scheduler.sql: the new task_code registrations).
-  dbTestSetSha256: "26004fdc3bdfaeeb083c25e3691370c436786ae6ca402b73b86e53be967aedd4",
+  // NINETIETH PASS (2026-09-02, ISS-2026-060/062): 245 files (+2) --
+  // vendor-rate-zone-distance-pricing.sql and vendor-assignment-leg-scope.sql (new), plus
+  // rbac-enforcement.sql extended for the new public API wrapper grant-parity coverage.
+  dbTestSetSha256: "0f578386c18a3a72cadd0a31c6e4b0f690837fcaedf21024baa02ce664d96826",
+  // History: 26004fdc3bdfaeeb083c25e3691370c436786ae6ca402b73b86e53be967aedd4
+  // (243 files, ISS-2026-066/070's crosswalk-import/overdue-sweep regression).
   // History: 17ca1ad1324ecebcccd8398e8717afcdb1a5cef1e48283deaaf1af2638f5bf1c
   // (243 files, ISS-2026-277's legal-hold import/archive regression).
   // History: de7ef285e54b33bc60e206213604e5e9e87c40800b627d06ff642e1da424b600
