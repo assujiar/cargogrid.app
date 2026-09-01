@@ -435,6 +435,177 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-277 setup: three accounts for the legal-hold regression below -- seed A (created through a FIRST import job, own source_import_staging_row_id set), seed B (a not-held control, structurally identical to seed A), seed C (created DIRECTLY, so it genuinely predates any import job created afterward -- a SEPARATE top-level statement from the reimport block below, so real wall-clock time, not merely transaction-identical now(), separates seed C''s own created_at from that later job''s)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'mdimp1');
+  v_admin uuid := '00000000-0000-0000-0000-000000094101';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+begin
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-seed-a.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-seed-a-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'customer_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-seed-a-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'legal_name', 'PT Legal Hold Target A', 'tax_id', '02.555.111.1-100.000'
+  )), v_admin, 'admin');
+  perform app.validate_customer_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  v_updated := app.commit_customer_import_job(v_job.job_id, false, v_admin, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: seed A commit should have succeeded, got %', v_updated.status;
+  end if;
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-seed-b.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-seed-b-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'customer_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-seed-b-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'legal_name', 'PT Legal Hold Control B', 'tax_id', '02.555.111.1-100.001'
+  )), v_admin, 'admin');
+  perform app.validate_customer_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  perform app.commit_customer_import_job(v_job.job_id, false, v_admin, 'admin');
+
+  perform app.create_customer_account_direct(
+    v_tenant1, 'PT Legal Hold Predating C', null, '02.555.111.1-100.002', '{}'::jsonb, null, v_admin, 'admin'
+  );
+end;
+$$;
+
+\echo '>> ISS-2026-277 regression: app.commit_customer_import_job refuses to link import content to an account under legal hold (app._is_under_legal_hold, scope app.accounts) with import_blocked_legal_hold -- both the "linked to a different staged row" and the "predates this job" branches -- while a structurally identical re-import against a NOT-held account still links normally, and an import naming a genuinely new, unrelated legal identity is unaffected'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'mdimp1');
+  v_admin uuid := '00000000-0000-0000-0000-000000094101';
+  v_supreme uuid := '00000000-0000-0000-0000-000000094999';
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+  v_held_account app.accounts;
+  v_predating_account app.accounts;
+  v_before integer;
+  v_after integer;
+  v_raised boolean;
+begin
+  select * into v_held_account from app.accounts where tenant_id = v_tenant1 and legal_name = 'PT Legal Hold Target A';
+  select * into v_predating_account from app.accounts where tenant_id = v_tenant1 and legal_name = 'PT Legal Hold Predating C';
+
+  -- Place legal holds on seed A and seed C (the generic, table-agnostic scope), leave seed B
+  -- untouched. v_admin holds no RET:Configure -- app.request_legal_hold requires it, and
+  -- Supreme Admin (v_supreme) is who this file's own setup already grants that universal
+  -- authority to.
+  perform app.request_legal_hold(v_tenant1, 'operational', 'app.accounts', v_held_account.id, 'ISS-2026-277 regression: litigation hold on seed A', v_supreme, 'supreme');
+  perform app.request_legal_hold(v_tenant1, 'operational', 'app.accounts', v_predating_account.id, 'ISS-2026-277 regression: litigation hold on seed C', v_supreme, 'supreme');
+
+  -- A fresh import row matching seed A's own legal identity -- exercises the
+  -- "source_import_staging_row_id is not null" (linked to a different staged row) branch.
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-reimport-a.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-reimport-a-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'customer_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-reimport-a-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'legal_name', 'PT Legal Hold Target A', 'tax_id', '02.555.111.1-100.000'
+  )), v_admin, 'admin');
+  perform app.validate_customer_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+
+  v_raised := false;
+  begin
+    perform app.commit_customer_import_job(v_job.job_id, false, v_admin, 'admin');
+    raise exception 'assertion failed: expected import_blocked_legal_hold re-importing a row matching a held account, the call unexpectedly succeeded';
+  exception when check_violation then
+    if sqlerrm !~ 'import_blocked_legal_hold' then raise; end if;
+    v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected import_blocked_legal_hold, got none';
+  end if;
+  if (select status from app.jobs where job_id = v_job.job_id) <> 'in_progress' then
+    raise exception 'assertion failed: a blocked commit must leave the job in_progress, not completed';
+  end if;
+  if (select legal_name from app.accounts where id = v_held_account.id) <> 'PT Legal Hold Target A' then
+    raise exception 'assertion failed: the held account''s own content must be untouched';
+  end if;
+
+  -- The identical shape, matching seed C instead -- exercises the "predates this job" branch.
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-reimport-c.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-reimport-c-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'customer_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-reimport-c-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'legal_name', 'PT Legal Hold Predating C', 'tax_id', '02.555.111.1-100.002'
+  )), v_admin, 'admin');
+  perform app.validate_customer_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+
+  v_raised := false;
+  begin
+    perform app.commit_customer_import_job(v_job.job_id, false, v_admin, 'admin');
+    raise exception 'assertion failed: expected import_blocked_legal_hold re-importing a row matching a held, job-predating account';
+  exception when check_violation then
+    if sqlerrm !~ 'import_blocked_legal_hold' then raise; end if;
+    v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected import_blocked_legal_hold for the predating-account branch, got none';
+  end if;
+
+  -- Control: the identical shape against seed B, which was never held, still LINKS
+  -- normally -- no regression to ordinary import behavior.
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-reimport-b.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-reimport-b-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'customer_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-reimport-b-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'legal_name', 'PT Legal Hold Control B', 'tax_id', '02.555.111.1-100.001'
+  )), v_admin, 'admin');
+  perform app.validate_customer_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  v_updated := app.commit_customer_import_job(v_job.job_id, false, v_admin, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected the control (not-held) re-import to link and complete normally, got %', v_updated.status;
+  end if;
+
+  -- Control: an import row naming a genuinely new, unrelated legal identity is unaffected --
+  -- the guard never blocks CREATION of a new record.
+  select count(*) into v_before from app.accounts where tenant_id = v_tenant1 and status = 'active';
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-unrelated.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-unrelated-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'customer_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-unrelated-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'legal_name', 'PT Legal Hold Unrelated New Co', 'tax_id', '02.555.111.1-100.999'
+  )), v_admin, 'admin');
+  perform app.validate_customer_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  v_updated := app.commit_customer_import_job(v_job.job_id, false, v_admin, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected the unrelated new-account import to succeed unaffected, got %', v_updated.status;
+  end if;
+  select count(*) into v_after from app.accounts where tenant_id = v_tenant1 and status = 'active';
+  if v_after <> v_before + 1 then
+    raise exception 'assertion failed: expected exactly 1 new account created for the unrelated row, before=% after=%', v_before, v_after;
+  end if;
+
+  raise notice 'PASS: app.commit_customer_import_job (ISS-2026-277) refuses to link import content to a held account (both the linked-to-another-row and predates-this-job branches) with import_blocked_legal_hold, a not-held account still links normally, and an unrelated new-account import is unaffected';
+end;
+$$;
+
 \echo '>> item_import: validator resolves the owner account by tax id or legal name and refuses an unresolved or AMBIGUOUS owner rather than guessing; an unregistered base_uom_code is rejected at validation, not mid-commit; a valid batch creates real item masters under the right owner; a repeated (owner, code) links rather than duplicating'
 do $$
 declare
@@ -599,6 +770,181 @@ begin
     raise exception 'assertion failed: expected no item master created for the ambiguous row';
   end if;
 end $$;
+
+\echo '>> ISS-2026-277 setup: three items for the legal-hold regression below -- seed X (created through a FIRST import job), seed Y (a not-held control), seed Z (created DIRECTLY, so it genuinely predates any import job created afterward -- a SEPARATE top-level statement from the reimport block below, so real wall-clock time separates seed Z''s own created_at from that later job''s)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'mdimp1');
+  v_admin uuid := '00000000-0000-0000-0000-000000094101';
+  v_owner_id uuid;
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+begin
+  select id into v_owner_id from app.accounts where tenant_id = v_tenant1 and legal_name = 'PT Sinar Bahari Kargo';
+  if v_owner_id is null then
+    raise exception 'assertion failed: expected PT Sinar Bahari Kargo (created by the customer_import block above) to exist as the owner for this block';
+  end if;
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-item-seed-x.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-item-seed-x-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'item_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-item-seed-x-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'code', 'SKU-LH-X', 'name', 'Legal Hold Target X', 'base_uom_code', 'PCS', 'owner_account_tax_id', '02.111.222.3-444.000'
+  )), v_admin, 'admin');
+  perform app.validate_item_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  v_updated := app.commit_item_import_job(v_job.job_id, false, v_admin, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: seed X commit should have succeeded, got %', v_updated.status;
+  end if;
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-item-seed-y.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-item-seed-y-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'item_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-item-seed-y-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'code', 'SKU-LH-Y', 'name', 'Legal Hold Control Y', 'base_uom_code', 'PCS', 'owner_account_tax_id', '02.111.222.3-444.000'
+  )), v_admin, 'admin');
+  perform app.validate_item_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  perform app.commit_item_import_job(v_job.job_id, false, v_admin, 'admin');
+
+  perform app.create_item_master(v_tenant1, v_owner_id, 'SKU-LH-Z', 'Legal Hold Predating Z', null, 'PCS', false, false, false, v_admin, 'admin');
+end;
+$$;
+
+\echo '>> ISS-2026-277 regression: app.commit_item_import_job refuses to link import content to an item master under legal hold (app._is_under_legal_hold, scope app.item_masters) with import_blocked_legal_hold -- both the "linked to a different staged row" and the "predates this job" branches -- while a structurally identical re-import against a NOT-held item still links normally, and an import naming a genuinely new, unrelated (owner, code) is unaffected'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'mdimp1');
+  v_admin uuid := '00000000-0000-0000-0000-000000094101';
+  v_supreme uuid := '00000000-0000-0000-0000-000000094999';
+  v_owner_id uuid;
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+  v_held_item app.item_masters;
+  v_predating_item app.item_masters;
+  v_before integer;
+  v_after integer;
+  v_raised boolean;
+begin
+  select id into v_owner_id from app.accounts where tenant_id = v_tenant1 and legal_name = 'PT Sinar Bahari Kargo';
+  select * into v_held_item from app.item_masters where tenant_id = v_tenant1 and owner_account_id = v_owner_id and code = 'SKU-LH-X';
+  select * into v_predating_item from app.item_masters where tenant_id = v_tenant1 and owner_account_id = v_owner_id and code = 'SKU-LH-Z';
+
+  -- Place legal holds on seed X and seed Z, leave seed Y untouched. v_admin holds no
+  -- RET:Configure -- app.request_legal_hold requires it, and Supreme Admin (v_supreme) is
+  -- who this file's own setup already grants that universal authority to.
+  perform app.request_legal_hold(v_tenant1, 'operational', 'app.item_masters', v_held_item.id, 'ISS-2026-277 regression: litigation hold on seed X', v_supreme, 'supreme');
+  perform app.request_legal_hold(v_tenant1, 'operational', 'app.item_masters', v_predating_item.id, 'ISS-2026-277 regression: litigation hold on seed Z', v_supreme, 'supreme');
+
+  -- A fresh import row matching seed X's own (owner, code) -- exercises the
+  -- "source_import_staging_row_id is not null" branch.
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-item-reimport-x.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-item-reimport-x-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'item_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-item-reimport-x-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'code', 'SKU-LH-X', 'name', 'Legal Hold Target X (re-import)', 'base_uom_code', 'PCS', 'owner_account_tax_id', '02.111.222.3-444.000'
+  )), v_admin, 'admin');
+  perform app.validate_item_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+
+  v_raised := false;
+  begin
+    perform app.commit_item_import_job(v_job.job_id, false, v_admin, 'admin');
+    raise exception 'assertion failed: expected import_blocked_legal_hold re-importing a row matching a held item, the call unexpectedly succeeded';
+  exception when check_violation then
+    if sqlerrm !~ 'import_blocked_legal_hold' then raise; end if;
+    v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected import_blocked_legal_hold, got none';
+  end if;
+  if (select status from app.jobs where job_id = v_job.job_id) <> 'in_progress' then
+    raise exception 'assertion failed: a blocked commit must leave the job in_progress, not completed';
+  end if;
+  if (select name from app.item_masters where id = v_held_item.id) <> 'Legal Hold Target X' then
+    raise exception 'assertion failed: the held item''s own content must be untouched';
+  end if;
+
+  -- The identical shape, matching seed Z instead -- exercises the "predates this job" branch.
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-item-reimport-z.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-item-reimport-z-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'item_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-item-reimport-z-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'code', 'SKU-LH-Z', 'name', 'Legal Hold Predating Z (re-import)', 'base_uom_code', 'PCS', 'owner_account_tax_id', '02.111.222.3-444.000'
+  )), v_admin, 'admin');
+  perform app.validate_item_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+
+  v_raised := false;
+  begin
+    perform app.commit_item_import_job(v_job.job_id, false, v_admin, 'admin');
+    raise exception 'assertion failed: expected import_blocked_legal_hold re-importing a row matching a held, job-predating item';
+  exception when check_violation then
+    if sqlerrm !~ 'import_blocked_legal_hold' then raise; end if;
+    v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected import_blocked_legal_hold for the predating-item branch, got none';
+  end if;
+
+  -- Control: the identical shape against seed Y, which was never held, still LINKS normally.
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-item-reimport-y.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-item-reimport-y-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'item_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-item-reimport-y-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'code', 'SKU-LH-Y', 'name', 'Legal Hold Control Y (re-import)', 'base_uom_code', 'PCS', 'owner_account_tax_id', '02.111.222.3-444.000'
+  )), v_admin, 'admin');
+  perform app.validate_item_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  v_updated := app.commit_item_import_job(v_job.job_id, false, v_admin, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected the control (not-held) re-import to link and complete normally, got %', v_updated.status;
+  end if;
+
+  -- Control: an import row naming a genuinely new, unrelated (owner, code) is unaffected --
+  -- the guard never blocks CREATION of a new record.
+  select count(*) into v_before from app.item_masters where tenant_id = v_tenant1 and owner_account_id = v_owner_id;
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'legalhold-item-unrelated.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-mdimp-lh-item-unrelated-source', v_admin, 'admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'item_import', v_source_file.id, '{}'::jsonb, 'idem-mdimp-lh-item-unrelated-job', v_admin, 'admin');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object(
+    'code', 'SKU-LH-UNRELATED', 'name', 'Legal Hold Unrelated New Item', 'base_uom_code', 'PCS', 'owner_account_tax_id', '02.111.222.3-444.000'
+  )), v_admin, 'admin');
+  perform app.validate_item_import_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), v_admin, 'admin');
+  v_updated := app.commit_item_import_job(v_job.job_id, false, v_admin, 'admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected the unrelated new-item import to succeed unaffected, got %', v_updated.status;
+  end if;
+  select count(*) into v_after from app.item_masters where tenant_id = v_tenant1 and owner_account_id = v_owner_id;
+  if v_after <> v_before + 1 then
+    raise exception 'assertion failed: expected exactly 1 new item master created for the unrelated row, before=% after=%', v_before, v_after;
+  end if;
+
+  raise notice 'PASS: app.commit_item_import_job (ISS-2026-277) refuses to link import content to a held item master (both the linked-to-another-row and predates-this-job branches) with import_blocked_legal_hold, a not-held item still links normally, and an unrelated new-item import is unaffected';
+end;
+$$;
 
 \echo '>> cross-schema and grant guards: each commit adapter refuses a job of the other schema code; neither anon nor authenticated holds EXECUTE on any new function or its public wrapper'
 do $$
