@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 32 — 4 High, 12 Medium, 16 Low |
+| `OPEN` | 31 — 4 High, 11 Medium, 16 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 236 |
+| `RESOLVED` | 237 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -93,7 +93,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-242` | Medium | `OPEN` | the repository's own dedicated accessible form primitives (`components/forms/form-field.tsx`, `components/forms/validation-message.tsx`) are adopted i |
 | `ISS-2026-256` | Medium | `ACCEPTED_RISK` | this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real  |
 | `ISS-2026-259` | Medium | `RESOLVED` | `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario |
-| `ISS-2026-281` | Medium | `OPEN` | the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documente |
+| `ISS-2026-281` | Medium | `RESOLVED` | the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documente |
 | `ISS-2026-284` | Medium | `RESOLVED` | A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpo |
 | `ISS-2026-288` | Medium | `OPEN` | `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the p |
 | `ISS-2026-300` | Medium | `RESOLVED` | `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations un |
@@ -7551,7 +7551,7 @@ Independently swept `docs/runbooks/` against `00_EXECUTION_INDEX.md` §11.4's ow
 
 **`RESOLVED` at `HDN-388`** (Documentation Handoff, its own already-named owner). `docs/runbooks/performance-capacity.md` (new) authored, grounded entirely in real evidence already produced elsewhere: `HDN-379`'s own `rbac-enforcement.sql` O(n²)→O(n) fix (both the first-round and Tier C-authoritative re-measurements cited, correctly labeled as test-infrastructure evidence, not an application metric); the real `scripts/load-tests/run.sh` 8-scenario harness with exact p50/p95/p99 figures quoted from its own committed results file; the honestly-disclosed Phase 8/9 evidence gap (`ISS-2026-141`, `ISS-2026-148`) and the unbounded-dataset gap (`ISS-2026-238`). States explicitly it is not a production capacity commitment. Indexed in `docs/runbooks/README.md` (new, same checkpoint).
 
-### ISS-2026-281 — the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documented as performed in only 3 of 16 domain-audit build logs (found at `HDN-386` cross-lane consistency lens, `OPEN`, Medium, owner `HDN-387`)
+### ISS-2026-281 — the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documented as performed in only 3 of 16 domain-audit build logs (found at `HDN-386` cross-lane consistency lens, RESOLVED 2026-09-01 by live re-derivation, was Medium, owner `HDN-387`)
 
 `00_EXECUTION_INDEX.md` §13's own carry-forward table requires "all lanes" to preserve the CI-mirrors-hosted property (extension schema and database-level `search_path` both) and names it a "cross-cutting Tier B review item." Swept all 16 build logs (`HDN-370.md` through `HDN-385.md`) for an explicit occurrence of this named check: only `HDN-370`, `HDN-371`, `HDN-372` contain it by name. `HDN-373` through `HDN-385` (13 of 16 lanes) contain zero occurrence of the named check, though several substantively engage the same property anyway without labeling it as such (`HDN-373` pins `search_path` on 95+ functions; `HDN-378`'s own lane is extension-schema relocation). No evidence of an actual regression was found — this is a gap in the *documented record* that the required check ran, not a confirmed divergence.
 
@@ -7560,6 +7560,13 @@ Independently swept `docs/runbooks/` against `00_EXECUTION_INDEX.md` §11.4's ow
 **Amended at `HDN-388`'s own Tier C (schema-wide completeness sweep), still `OPEN`, owner reassigned to `HDN-389`.** `HDN-387` closed `VERIFIED` without ever picking this up — absent from its own "charter items" summary in both rounds. `HDN-388`'s own charter is documentation reconciliation, not the positive re-derivation this finding's own text already specifies as the real remedy — a genuine, substantial investigative task (re-checking 13 lanes' own diffs against the CI-mirrors-hosted property), not a bounded documentation fix `HDN-388` has standing to attempt. `HDN-389` is the only remaining checkpoint in this session's own numbered sequence that can either perform that re-derivation directly or, per `00_EXECUTION_INDEX.md` §8.2 condition 5, formally rule this `ACCEPTED_EXCEPTION` (Medium, eligible) with a real named future owner — mirroring `HDN-BLK-039`/`ISS-2026-282`'s own already-proven treatment for the same "no more numbered technical-audit checkpoints remain" shape. Handed to `HDN-389` explicitly, not left to be rediscovered.
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — `grep -i "CI-mirrors-hosted"` across all 16 build logs `HDN-370.md`–`HDN-385.md` still finds zero occurrences in every one, including the 3 (`HDN-370`/`371`/`372`) this entry itself names as containing it "by name." Spot-checking those 3 lanes shows they perform the substantively equivalent divergence check without ever using that literal compound term — confirming this entry's own underlying point more strongly than the entry states it. Settling true compliance across the other 13 requires substantive per-lane diff re-derivation, exactly the investigative work already correctly scoped out to `HDN-389`. Not a text-correction-shaped fix. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-09-01.** This entry's own text already named the real remedy: "a positive re-derivation of whether the property held," not a per-lane documentation audit. That re-derivation is now done directly against the live database rather than against 13 lanes' historical diffs, which settles the same question more strongly — the property is a fact about the CURRENT schema, and per-lane diffs are only ever a proxy for it. Two live queries against the hosted project (`awdlicmwzdxquopwtcfd`), covering both halves `00_EXECUTION_INDEX.md` §13 names:
+
+- **Extension schema.** `select extname, nspname from pg_extension join pg_namespace on pg_namespace.oid = extnamespace` — all 8 installed extensions live in `extensions` (`btree_gist`, `pg_stat_statements`, `pg_trgm`, `pgcrypto`, `postgis`, `uuid-ossp`), `pg_catalog` (`plpgsql`), or `vault` (`supabase_vault`). Zero in `public`. (`postgis` was the last holdout, closed this same day by `ISS-2026-234`.)
+- **Database-level `search_path`.** Every `SECURITY DEFINER` function in the `app`/`public` schemas was queried for a pinned `search_path` in `pg_proc.proconfig`: `select count(*) from pg_proc join pg_namespace on pronamespace = pg_namespace.oid where nspname in ('app','public') and prosecdef and not (proconfig @> array['search_path=...'])`-shaped, using `unnest` rather than a literal value since the pinned path itself varies by function — zero rows returned. Every one of the hundreds of `SECURITY DEFINER` functions live today carries an explicit `search_path`.
+
+Both checks run against the actual hosted project, not a migration-file read, so they catch exactly the class of divergence a documentation audit of 13 lanes could not (a manual, out-of-migration change). `supabase_migrations.schema_migrations` shows 446 applied entries against 437 migration files on disk — a pre-existing count mismatch, already covered by `ISS-2026-300`'s own reconciliation, not a new finding of this entry and not evidence against the two properties actually checked here (a version-bookkeeping question, not a schema-content one). No code change was needed or made — this is a verification-only closure. Owner: closed.
 
 ### ISS-2026-282 — 14 open `BLOCKER_LEDGER.md` entries (12 High, 2 Medium) carry no named owning lane at all, only "a dedicated future task" (found at `HDN-386` blocker ledger reconciliation lens, `RESOLVED at HDN-387`, was High, owner `HDN-387`)
 
