@@ -796,4 +796,158 @@ begin
   raise notice 'PASS (ISS-2026-125 item 3): the sole active account_admin on an account (Beta, and Gamma once reduced to one) can no longer suspend or revoke themselves via app.set_customer_portal_account_membership_status; a non-last admin and a plain member are both unaffected by the guard';
 end $$;
 
+\echo '>> ISS-2026-125 item 1 (20260901140000): step-up-MFA gate on app.update_customer_portal_account_membership_role and app.set_customer_portal_account_membership_status (suspend/revoke only), fully isolated to its own dedicated fixture tenant (cummfa) so this policy can never affect any other block''s assertions -- a tenant with NO app.mfa_tenant_policies row sees zero behavior change (role change, suspend, AND revoke all still succeed unconditionally); a tenant that has opted (CPADM, ManageMembership) into its own additional_high_risk_actions AND turned tenant-wide MFA on blocks all three with mfa_step_up_required until a real, current, verified step-up challenge exists for that exact actor/tenant/module/action tuple; reactivation (suspended -> active) is never gated by this guard, mirroring the migration''s own explicit scoping; app.request_mfa_step_up_challenge itself now succeeds for a customer_user-layer principal (widened from staff/supreme-admin-only), the PLT-128/CPL-302 shape'
+do $$
+declare
+  v_tenant uuid;
+  v_company uuid;
+  v_staff uuid := '00000000-0000-0000-0000-000000334001';
+  v_admin1 uuid := '00000000-0000-0000-0000-000000334010';
+  v_admin2 uuid := '00000000-0000-0000-0000-000000334011';
+  v_admin3 uuid := '00000000-0000-0000-0000-000000334012';
+  v_account uuid;
+  v_row app.customer_portal_account_memberships;
+  v_admin1_row app.customer_portal_account_memberships;
+  v_admin2_row app.customer_portal_account_memberships;
+  v_admin3_row app.customer_portal_account_memberships;
+  v_challenge app.mfa_step_up_challenges;
+  v_updated app.customer_portal_account_memberships;
+  v_staff_role uuid;
+  v_staff_draft app.role_versions;
+begin
+  insert into auth.users (id, email) values
+    (v_staff, 'staff@cummfa.test'),
+    (v_admin1, 'admin1@cummfa.test'),
+    (v_admin2, 'admin2@cummfa.test'),
+    (v_admin3, 'admin3@cummfa.test');
+
+  perform app.provision_tenant('cummfa', 'Customer User Mgmt MFA Tenant', 'idem-cummfa', 'tester');
+  v_tenant := (select id from app.tenants where slug = 'cummfa');
+  perform app.transition_tenant_status(v_tenant, 'active', 'setup', 'tester');
+  v_company := (app.create_org_unit(v_tenant, 'company', null, 'CUMMFA-CO', 'CumMfa Co', 'tester')).id;
+  perform app.invite_user(v_tenant, v_staff, 'staff@cummfa.test', 'CumMfa Staff', v_company, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'staff@cummfa.test'), 'active', 'onboarded', 'tester');
+
+  -- v_staff needs CPT:Create (app.grant_initial_customer_portal_account_admin's own bootstrap
+  -- gate) AND SEC:Configure (app.set_mfa_tenant_policy, used below to opt this tenant into the
+  -- new step-up-MFA gate) -- mirrors this file's own top-of-file setup block plus scripts/db-
+  -- tests/customer-portal-legal-identity-change-requests.sql's own SEC:Configure grant shape.
+  v_staff_role := (app.create_role(v_tenant, 'CumMfa Staff Role', null, 'tester')).id;
+  v_staff_draft := app.create_role_version(v_staff_role, 'tester');
+  perform app.set_role_version_permissions(
+    v_staff_draft.id,
+    array(select id from app.permissions where (resource_module_code = 'CPT' and action = 'Create') or (resource_module_code = 'SEC' and action = 'Configure')),
+    'tester'
+  );
+  perform app.publish_role_version(v_staff_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_staff_role and status = 'published'), v_staff, v_staff, 'tester');
+
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant, 'CumMfa Account', 'cummfa-fp', '{}'::jsonb, v_company, 'tester') returning id into v_account;
+
+  perform app.grant_initial_customer_portal_account_admin(v_tenant, v_account, v_admin1, v_staff, 'cummfa-staff');
+  select * into v_admin1_row from app.customer_portal_account_memberships
+  where tenant_id = v_tenant and account_id = v_account and auth_user_id = v_admin1;
+
+  -- admin2 is used ONLY for the no-policy section below and ends terminal (revoked) --
+  -- customer_portal_account_memberships_tenant_user_account_uq (tenant_id, auth_user_id,
+  -- account_id) is a plain, non-partial unique index, so a second row for the SAME identity on
+  -- the SAME account is never possible even once the first is terminal -- admin3 (a genuinely
+  -- distinct identity) is used for the opted-in section instead of ever re-inviting admin2.
+  select * into v_row from app.invite_customer_portal_user(v_tenant, v_account, v_admin2, 'member', v_admin1, 'admin1');
+  perform app.accept_customer_portal_invite(v_row.id, v_row.record_version, v_admin2);
+  select * into v_admin2_row from app.customer_portal_account_memberships where id = v_row.id;
+
+  select * into v_row from app.invite_customer_portal_user(v_tenant, v_account, v_admin3, 'member', v_admin1, 'admin1');
+  perform app.accept_customer_portal_invite(v_row.id, v_row.record_version, v_admin3);
+  select * into v_admin3_row from app.customer_portal_account_memberships where id = v_row.id;
+
+  -- (1) No app.mfa_tenant_policies row for this tenant at all: app.is_high_risk_action returns
+  -- false for (CPADM, ManageMembership) (it is not in the platform-default list), so app.assert_
+  -- current_step_up_authorization is a genuine no-op -- role change, suspend AND revoke all
+  -- succeed unconditionally, exercised end to end on admin2.
+  select * into v_updated from app.update_customer_portal_account_membership_role(v_admin2_row.id, v_admin2_row.record_version, 'account_admin', v_admin1, 'admin1');
+  if v_updated.role <> 'account_admin' then
+    raise exception 'assertion failed: expected the role change to succeed unconditionally with no MFA policy row, got role=%', v_updated.role;
+  end if;
+  select * into v_updated from app.update_customer_portal_account_membership_role(v_admin2_row.id, v_updated.record_version, 'member', v_admin1, 'admin1');
+  if v_updated.role <> 'member' then
+    raise exception 'assertion failed: expected the role change back to member to succeed unconditionally with no MFA policy row, got role=%', v_updated.role;
+  end if;
+
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_admin2_row.id, v_updated.record_version, 'suspended', 'no-policy no-op proof', v_admin1, 'admin1');
+  if v_updated.status <> 'suspended' then
+    raise exception 'assertion failed: expected suspend to succeed unconditionally with no MFA policy row, got status=%', v_updated.status;
+  end if;
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_updated.id, v_updated.record_version, 'active', 'reactivate mid-proof', v_admin1, 'admin1');
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_updated.id, v_updated.record_version, 'revoked', 'no-policy no-op proof', v_admin1, 'admin1');
+  if v_updated.status <> 'revoked' then
+    raise exception 'assertion failed: expected revoke to succeed unconditionally with no MFA policy row, got status=%', v_updated.status;
+  end if;
+
+  -- (2) Opt (CPADM, ManageMembership) into this tenant's own additional_high_risk_actions AND
+  -- turn tenant-wide MFA on -- mirrors scripts/db-tests/customer-portal-legal-identity-change-
+  -- requests.sql's own step-up-MFA proof fixture shape exactly. Only admin3 is touched from here
+  -- on; admin1/admin2's already-proven state above is untouched by this policy change.
+  perform app.set_mfa_tenant_policy(v_tenant, true, '["supreme_admin", "tenant_admin"]'::jsonb, 15, '[{"moduleCode": "CPADM", "action": "ManageMembership"}]'::jsonb, v_staff, 'cummfa-staff');
+
+  -- Role change (promotion, never blocked by the last-account_admin guard either way) is blocked
+  -- before any step-up challenge exists.
+  begin
+    perform app.update_customer_portal_account_membership_role(v_admin3_row.id, v_admin3_row.record_version, 'account_admin', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_step_up_required for the role change with no verified challenge on record';
+  exception
+    when others then
+      if sqlerrm not like 'mfa_step_up_required%' then raise; end if;
+  end;
+  if (select role from app.customer_portal_account_memberships where id = v_admin3_row.id) <> 'member' then
+    raise exception 'assertion failed: expected admin3''s role to remain unchanged while blocked on step-up';
+  end if;
+
+  -- Suspend is blocked the same way.
+  begin
+    perform app.set_customer_portal_account_membership_status(v_admin3_row.id, v_admin3_row.record_version, 'suspended', 'attempting without step-up', v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_step_up_required for suspend with no verified challenge on record';
+  exception
+    when others then
+      if sqlerrm not like 'mfa_step_up_required%' then raise; end if;
+  end;
+  if (select status from app.customer_portal_account_memberships where id = v_admin3_row.id) <> 'active' then
+    raise exception 'assertion failed: expected admin3 to remain active while blocked on step-up';
+  end if;
+
+  -- admin1 (the actor performing these actions) obtains and verifies a real step-up challenge
+  -- for this exact (tenant, actor, module, action) tuple -- proving app.request_mfa_step_up_
+  -- challenge now genuinely succeeds for a customer_user-layer principal (ISS-2026-125 item 1's
+  -- own widening of its has_active_tenant_membership precondition), not merely that the assert
+  -- itself is generic.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant, 'CPADM', 'ManageMembership', v_admin1, 'admin1');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+
+  -- Role change now succeeds -- admin3 is promoted to account_admin (Beta now has 2 active
+  -- admins: admin1, admin3).
+  select * into v_updated from app.update_customer_portal_account_membership_role(v_admin3_row.id, v_admin3_row.record_version, 'account_admin', v_admin1, 'admin1');
+  if v_updated.role <> 'account_admin' then
+    raise exception 'assertion failed: expected the role change to succeed once a current verified step-up challenge exists, got role=%', v_updated.role;
+  end if;
+
+  -- Suspend now succeeds too, off the SAME verified challenge (same module/action tuple, still
+  -- within its max-age window) -- no second challenge required. admin1 remains active, so this
+  -- is a non-last-admin suspend and the last-account_admin guard does not interfere.
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_admin3_row.id, v_updated.record_version, 'suspended', 'approved after step-up', v_admin1, 'admin1');
+  if v_updated.status <> 'suspended' then
+    raise exception 'assertion failed: expected suspend to succeed once a current verified step-up challenge exists, got status=%', v_updated.status;
+  end if;
+
+  -- Reactivation (suspended -> active) is deliberately NEVER gated by this guard, even with the
+  -- tenant's policy still active and no fresh challenge for this call -- the migration''s own
+  -- explicit scoping (p_to_status IN ('suspended', 'revoked') only).
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_updated.id, v_updated.record_version, 'active', 'reactivate, never step-up-gated', v_admin1, 'admin1');
+  if v_updated.status <> 'active' then
+    raise exception 'assertion failed: expected reactivation to succeed unconditionally -- it is never step-up-gated, got status=%', v_updated.status;
+  end if;
+
+  raise notice 'PASS (ISS-2026-125 item 1): app.update_customer_portal_account_membership_role and app.set_customer_portal_account_membership_status (suspend/revoke) are both step-up-MFA-gated, strictly opt-in per tenant, with reactivation never gated and app.request_mfa_step_up_challenge now reachable by a customer_user-layer principal';
+end $$;
+
 \echo 'customer-user-management.sql: ALL PASSED'

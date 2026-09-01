@@ -20,16 +20,29 @@
  * RoleAction/recordCustomerPortalAccountMembershipAccessReviewAction compose
  * this checkpoint's own new RPCs.
  *
- * RPD-023 (MFA/current-authorization for high-risk changes): no MFA/step-up
- * mechanism exists anywhere in this repository (grep-verified repository-
- * wide, disclosed identically by CPL-300 §9 and this checkpoint's own build
- * log/KNOWN_ISSUES.md entry) -- role-change/suspend/revoke actions below
- * carry a client-side confirm() step (mirrors app/(tenant)/[tenantSlug]/hris/
- * employees/[masterRecordId]/employee-detail-panel.tsx's own established
- * `confirmReason` pattern) as a UX safeguard against an accidental click,
- * NEVER represented as satisfying RPD-023 -- the real authorization
- * boundary is, and remains, the server-side account_admin check every RPC
- * below performs on every call, live, never cached.
+ * RPD-023 (MFA/current-authorization for high-risk changes): as of
+ * 20260901140000 (ISS-2026-125 item 1), updateCustomerPortalAccountMembership
+ * RoleAction and setCustomerPortalAccountMembershipStatusAction's own
+ * underlying RPCs (app.update_customer_portal_account_membership_role,
+ * app.set_customer_portal_account_membership_status for suspend/revoke)
+ * additionally call app.assert_current_step_up_authorization(tenant, actor,
+ * 'CPADM', 'ManageMembership') -- a strict no-op unless THIS tenant has both
+ * turned on MFA and opted ('CPADM', 'ManageMembership') into its own
+ * additional_high_risk_actions (app.set_mfa_tenant_policy); every existing
+ * tenant, and the live project, is unaffected by default. This file itself
+ * still builds no UI to request/verify a step-up challenge from this screen
+ * -- a tenant that opts in gets a real, comprehensible mfa_step_up_required
+ * error surfaced verbatim via errorMessage() below (never a crash), but a
+ * genuine in-screen challenge flow is a separate, disclosed, not-yet-built
+ * gap, out of this fix's own bounded scope. Role-change/suspend/revoke
+ * actions below ALSO carry a client-side confirm() step (mirrors
+ * app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/employee-detail-
+ * panel.tsx's own established `confirmReason` pattern) as a UX safeguard
+ * against an accidental click, never itself represented as satisfying
+ * RPD-023 -- the real authorization boundary is, and remains, the
+ * server-side account_admin check every RPC below performs on every call,
+ * live, never cached, now joined by the step-up gate above where a tenant
+ * has configured one.
  */
 
 import { revalidatePath } from "next/cache";
