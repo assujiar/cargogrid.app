@@ -1397,4 +1397,211 @@ begin
   end if;
 end $$;
 
+\echo '>> fixture: tenant lra5 (own, fully isolated tenant), Loyalty Manager [full LYL] + Finance Viewer/Editor [FIN View/Edit], a published USD locale, a published loyalty program, customer account Epsilon enrolled -- used ONLY by the ISS-2026-134 item 2 (point-in-time) and item 5 (Finance handoff) regressions below'
+do $$
+declare
+  v_tenant5 uuid;
+  v_company5 uuid;
+  v_manager5 uuid := '00000000-0000-0000-0000-000000346901';
+  v_finance5 uuid := '00000000-0000-0000-0000-000000346902';
+  v_customer_epsilon uuid := '00000000-0000-0000-0000-000000346910';
+  v_account_epsilon uuid;
+  v_manager_role5 uuid; v_manager_draft5 app.role_versions;
+  v_finance_role5 uuid; v_finance_draft5 app.role_versions;
+  v_locale_draft5 app.tenant_locale_versions;
+  v_program5_id uuid;
+begin
+  insert into auth.users (id, email) values
+    (v_manager5, 'manager5@lra5.test'),
+    (v_finance5, 'finance5@lra5.test'),
+    (v_customer_epsilon, 'customer-epsilon@lra5.test');
+
+  perform app.provision_tenant('lra5', 'Liability Recon Test Tenant Five (point-in-time, Finance handoff)', 'idem-lra5', 'tester');
+  v_tenant5 := (select id from app.tenants where slug = 'lra5');
+  perform app.transition_tenant_status(v_tenant5, 'active', 'setup', 'tester');
+  perform app.create_org_unit(v_tenant5, 'company', null, 'LRA5-CO', 'Lra5 Co', 'tester');
+  v_company5 := (select id from app.org_units where tenant_id = v_tenant5 and code = 'LRA5-CO');
+
+  perform app.invite_user(v_tenant5, v_manager5, 'manager5@lra5.test', 'Lra5 Manager', v_company5, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'manager5@lra5.test'), 'active', 'onboarded', 'tester');
+  v_manager_role5 := (app.create_role(v_tenant5, 'Loyalty Manager', 'full LYL authority', 'tester')).id;
+  v_manager_draft5 := app.create_role_version(v_manager_role5, 'tester');
+  perform app.set_role_version_permissions(v_manager_draft5.id, array(select id from app.permissions where resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit', 'Configure')), 'tester');
+  perform app.publish_role_version(v_manager_draft5.id, now(), 'tester');
+  perform app.assign_role(v_tenant5, (select id from app.role_versions where role_id = v_manager_role5 and status = 'published'), v_manager5, v_manager5, 'tester');
+
+  perform app.invite_user(v_tenant5, v_finance5, 'finance5@lra5.test', 'Lra5 Finance', v_company5, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'finance5@lra5.test'), 'active', 'onboarded', 'tester');
+  -- v_finance5 deliberately holds FIN:View/Edit and ZERO LYL grant of any
+  -- kind -- proves the handoff's own two-sided authority boundary for real.
+  v_finance_role5 := (app.create_role(v_tenant5, 'Finance Viewer/Editor', 'FIN View/Edit', 'tester')).id;
+  v_finance_draft5 := app.create_role_version(v_finance_role5, 'tester');
+  perform app.set_role_version_permissions(v_finance_draft5.id, array(select id from app.permissions where resource_module_code = 'FIN' and action in ('View', 'Edit')), 'tester');
+  perform app.publish_role_version(v_finance_draft5.id, now(), 'tester');
+  perform app.assign_role(v_tenant5, (select id from app.role_versions where role_id = v_finance_role5 and status = 'published'), v_finance5, v_manager5, 'tester');
+
+  perform app.grant_principal_membership(v_manager5, 'tenant_admin', v_tenant5, null, 'tester');
+  v_locale_draft5 := app.create_tenant_locale_draft(v_tenant5, v_manager5, 'tester');
+  perform app.set_tenant_locale_config(v_locale_draft5.id, v_manager5, 'id', 'Asia/Jakarta', 'USD', '{}'::jsonb, 'tester');
+  perform app.publish_tenant_locale_version(v_locale_draft5.id, v_manager5, clock_timestamp(), 'tester');
+
+  perform app.invite_user(v_tenant5, v_customer_epsilon, 'customer-epsilon@lra5.test', 'Lra5 Customer Epsilon', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'customer-epsilon@lra5.test'), 'active', 'onboarded', 'tester');
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant5, 'Lra5 Account Epsilon', 'lra5-epsilon-fp', '{}'::jsonb, v_company5, 'tester') returning id into v_account_epsilon;
+  perform app.grant_principal_membership(v_customer_epsilon, 'customer_user', v_tenant5, v_account_epsilon::text, 'tester');
+
+  perform app.create_loyalty_program(v_tenant5, 'Lra5 Program', 'Program used ONLY by the ISS-2026-134 items 2/5 regressions.', v_manager5, 'manager5');
+  v_program5_id := (select id from app.loyalty_programs where tenant_id = v_tenant5 and name = 'Lra5 Program');
+  perform app.update_loyalty_program_status(v_tenant5, v_program5_id, 1, 'active', v_manager5, 'manager5');
+  perform app.enroll_customer_loyalty_account(v_tenant5, v_account_epsilon, v_program5_id, v_manager5, 'manager5');
+end $$;
+
+\echo '>> ISS-2026-134 item 2 (2026-09-02, point-in-time reconciliation): a run with an explicit past p_as_of reflects ONLY ledger activity dated at or before that moment; the CURRENT (p_as_of omitted) run reflects everything -- the identical raw ledger, two genuinely different, correct totals'
+do $$
+declare
+  v_tenant5 uuid := (select id from app.tenants where slug = 'lra5');
+  v_manager5 uuid := '00000000-0000-0000-0000-000000346901';
+  v_loyalty_account_epsilon uuid := (select id from app.loyalty_accounts where tenant_id = v_tenant5 and customer_account_id = (select id from app.accounts where tenant_id = v_tenant5 and legal_name = 'Lra5 Account Epsilon'));
+  v_t_before timestamptz := clock_timestamp() - interval '2 days';
+  v_t_asof timestamptz := clock_timestamp() - interval '1 day';
+  v_run_historical app.loyalty_liability_reconciliation_runs;
+  v_run_current app.loyalty_liability_reconciliation_runs;
+begin
+  -- Direct ledger insert (this checkpoint's own established "direct
+  -- insert, business logic not under test" precedent, HRT-291/292 and this
+  -- same file's own CPL-325 fixtures) -- explicit created_at values are the
+  -- entire point of this regression, which real-time RPC calls cannot
+  -- deterministically control within one test run.
+  insert into app.loyalty_point_ledger_entries (tenant_id, loyalty_account_id, event_type, amount, source_type, idempotency_key, created_by, created_at)
+  values (v_tenant5, v_loyalty_account_epsilon, 'earn', 100, 'manual_adjustment', 'lra5-pit-entry-before', 'tester', v_t_before);
+  insert into app.loyalty_point_ledger_entries (tenant_id, loyalty_account_id, event_type, amount, source_type, idempotency_key, created_by, created_at)
+  values (v_tenant5, v_loyalty_account_epsilon, 'earn', 50, 'manual_adjustment', 'lra5-pit-entry-after', 'tester', clock_timestamp());
+  -- Cached balance matches the CURRENT (both-entries) total, so the
+  -- "current" run below is genuinely clean (0 point mismatches) -- the
+  -- exactness cross-check is not this regression's own concern.
+  insert into app.loyalty_point_balances (tenant_id, loyalty_account_id, total_earned, total_consumed)
+  values (v_tenant5, v_loyalty_account_epsilon, 150, 0);
+
+  v_run_historical := app.execute_loyalty_liability_reconciliation_run(v_tenant5, v_t_asof, 'USD', v_manager5, 'manager5', 'lra5-pit-historical', 1);
+  if v_run_historical.points_liability_total <> 100 then
+    raise exception 'assertion failed: expected a p_as_of run strictly between the two ledger entries to reflect ONLY the earlier one (100), got %', v_run_historical.points_liability_total;
+  end if;
+
+  v_run_current := app.execute_loyalty_liability_reconciliation_run(v_tenant5, null, 'USD', v_manager5, 'manager5', 'lra5-pit-current', 1);
+  if v_run_current.points_liability_total <> 150 then
+    raise exception 'assertion failed: expected the current (p_as_of omitted) run to reflect BOTH ledger entries (150), got %', v_run_current.points_liability_total;
+  end if;
+  if v_run_current.status <> 'open' then
+    raise exception 'assertion failed: expected the current run to be exception-free (status=open) given the matching cached balance, got status=%', v_run_current.status;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-134 item 5 (2026-09-02, Finance liability handoff): a non-certified run is rejected; a certified run''s handoff copies its own totals verbatim and is idempotent on reconciliation_run_id; Finance (FIN:View/Edit) discovers and acknowledges it; Loyalty-only (LYL, no FIN) is rejected by both Finance-side gates; a NULL p_expected_version is rejected outright; a repeat acknowledgement is a safe no-op; both LYL:View and FIN:View can read it back'
+do $$
+declare
+  v_tenant5 uuid := (select id from app.tenants where slug = 'lra5');
+  v_manager5 uuid := '00000000-0000-0000-0000-000000346901';
+  v_finance5 uuid := '00000000-0000-0000-0000-000000346902';
+  v_run app.loyalty_liability_reconciliation_runs;
+  v_uncertified_run app.loyalty_liability_reconciliation_runs;
+  v_batch app.loyalty_finance_liability_handoff_batches;
+  v_replay app.loyalty_finance_liability_handoff_batches;
+  v_n integer;
+  v_read_lyl app.loyalty_finance_liability_handoff_batches;
+  v_read_fin app.loyalty_finance_liability_handoff_batches;
+begin
+  v_uncertified_run := app.execute_loyalty_liability_reconciliation_run(v_tenant5, null, 'USD', v_manager5, 'manager5', 'lra5-fh-uncertified', 1);
+  if v_uncertified_run.status = 'certified' then
+    raise exception 'assertion failed: fixture bug -- expected a freshly-executed run to NOT already be certified';
+  end if;
+
+  -- A non-certified run is rejected outright -- mirrors HRT-282's own
+  -- finalized-only gate.
+  begin
+    perform app.prepare_finance_liability_handoff_from_loyalty_liability(v_tenant5, v_uncertified_run.id, v_manager5, 'manager5');
+    raise exception 'assertion failed: expected loyalty_liability_reconciliation_run_not_certified for a non-certified run';
+  exception when others then
+    if sqlerrm not like 'loyalty_liability_reconciliation_run_not_certified%' then raise; end if;
+  end;
+
+  -- Certify the SAME run this file's own point-in-time section above
+  -- already produced clean (status=open, zero exceptions) -- re-select the
+  -- current row rather than reuse the pre-existing variable, since this is
+  -- a genuinely separate `do` block.
+  select * into v_run from app.loyalty_liability_reconciliation_runs where tenant_id = v_tenant5 and idempotency_key = 'lra5-pit-current';
+  v_run := app.certify_loyalty_liability_reconciliation_run(v_tenant5, v_run.id, v_run.record_version, v_manager5, 'manager5');
+  if v_run.status <> 'certified' then
+    raise exception 'assertion failed: expected the clean lra5-pit-current run to certify, got status=%', v_run.status;
+  end if;
+
+  v_batch := app.prepare_finance_liability_handoff_from_loyalty_liability(v_tenant5, v_run.id, v_manager5, 'manager5');
+  if v_batch.points_liability_total <> v_run.points_liability_total
+    or v_batch.cashback_liability_total <> v_run.cashback_liability_total
+    or v_batch.discount_liability_total <> v_run.discount_liability_total
+    or v_batch.voucher_liability_total <> v_run.voucher_liability_total
+    or v_batch.reward_fulfillment_liability_total <> v_run.reward_fulfillment_liability_total
+    or v_batch.currency <> v_run.currency
+    or v_batch.as_of <> v_run.as_of
+    or v_batch.status <> 'pending_acknowledgement' then
+    raise exception 'assertion failed: expected the handoff batch to copy the certified run''s own totals verbatim, got %', to_jsonb(v_batch);
+  end if;
+
+  -- Idempotent on reconciliation_run_id -- a replay returns the SAME batch,
+  -- never a second one.
+  v_replay := app.prepare_finance_liability_handoff_from_loyalty_liability(v_tenant5, v_run.id, v_manager5, 'manager5');
+  if v_replay.id <> v_batch.id then
+    raise exception 'assertion failed: expected a replayed prepare call to return the SAME batch id, got % vs %', v_replay.id, v_batch.id;
+  end if;
+  select count(*) into v_n from app.loyalty_finance_liability_handoff_batches where reconciliation_run_id = v_run.id;
+  if v_n <> 1 then raise exception 'assertion failed: expected exactly ONE handoff batch for this run, got %', v_n; end if;
+
+  -- Loyalty-only (LYL:Configure, zero FIN grant) cannot discover or
+  -- acknowledge -- the ONE place a Finance-side authority check applies.
+  begin
+    perform app.search_loyalty_finance_handoffs_pending_acknowledgement(v_tenant5, v_manager5);
+    raise exception 'assertion failed: expected insufficient_authority for a LYL-only actor searching pending Finance handoffs';
+  exception when others then
+    if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+  begin
+    perform app.acknowledge_loyalty_finance_liability_handoff(v_batch.id, v_batch.record_version, v_manager5, 'manager5');
+    raise exception 'assertion failed: expected insufficient_authority for a LYL-only actor acknowledging a Finance handoff';
+  exception when others then
+    if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- Finance (FIN:View) discovers it.
+  select count(*) into v_n from app.search_loyalty_finance_handoffs_pending_acknowledgement(v_tenant5, v_finance5) where id = v_batch.id;
+  if v_n <> 1 then raise exception 'assertion failed: expected Finance (FIN:View) to discover the pending handoff batch, got % matching rows', v_n; end if;
+
+  -- NULL p_expected_version rejected outright (ISS-2026-318 discipline),
+  -- even for a genuinely FIN:Edit-authorized actor.
+  begin
+    perform app.acknowledge_loyalty_finance_liability_handoff(v_batch.id, null, v_finance5, 'finance5');
+    raise exception 'assertion failed: expected stale_version for a NULL p_expected_version';
+  exception when others then
+    if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  v_batch := app.acknowledge_loyalty_finance_liability_handoff(v_batch.id, v_batch.record_version, v_finance5, 'finance5');
+  if v_batch.status <> 'acknowledged' or v_batch.acknowledged_by <> 'finance5' or v_batch.acknowledged_at is null then
+    raise exception 'assertion failed: expected FIN:Edit acknowledgement to succeed and record acknowledged_by/acknowledged_at, got %', to_jsonb(v_batch);
+  end if;
+
+  -- A repeat acknowledgement (any expected_version) is a safe no-op --
+  -- never a re-stamped acknowledged_by/acknowledged_at.
+  v_replay := app.acknowledge_loyalty_finance_liability_handoff(v_batch.id, 999999, v_finance5, 'finance5');
+  if v_replay.acknowledged_by <> v_batch.acknowledged_by or v_replay.acknowledged_at <> v_batch.acknowledged_at then
+    raise exception 'assertion failed: expected a repeat acknowledgement to be a no-op, got a changed acknowledged_by/acknowledged_at';
+  end if;
+
+  -- Readable by EITHER side of the boundary.
+  v_read_lyl := app.get_loyalty_finance_liability_handoff(v_batch.id, v_manager5);
+  v_read_fin := app.get_loyalty_finance_liability_handoff(v_batch.id, v_finance5);
+  if v_read_lyl.id <> v_batch.id or v_read_fin.id <> v_batch.id then
+    raise exception 'assertion failed: expected both LYL:View and FIN:View to read the SAME handoff batch back';
+  end if;
+end $$;
+
 \echo '>> ALL PASSED: CPL-323 Liability Reconciliation Analytics'

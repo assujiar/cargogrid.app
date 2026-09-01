@@ -709,3 +709,31 @@ begin
     raise exception 'assertion failed: expected a real authenticated session to see the identical, non-zero row count (%) a direct superuser call returns, got % via session', v_superuser_count, v_session_count;
   end if;
 end $$;
+
+\echo '>> 13. ISS-2026-122 item 2 (2026-09-02) -- app._ticket_portal_link_resolve_candidate''s ''document'' branch now has a real staff-facing access predicate: staff1 (tenant_admin, is_support_grant_authority) resolves Alpha''s own document candidate it neither uploaded nor shares an org unit with; a plain tenant member with no such tie still resolves zero (deny-by-default preserved); cust-alpha''s own pre-existing customer resolution is completely unaffected'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'ctw1');
+  v_staff1 uuid := '00000000-0000-0000-0000-000000327001';
+  v_cust_alpha uuid := '00000000-0000-0000-0000-000000327010';
+  v_staff2 uuid := '00000000-0000-0000-0000-000000327060';
+  v_file_id uuid := (select id from app.files where tenant_id = v_tenant1 and idempotency_key = 'upload-ctw-alpha-1');
+  v_n integer;
+begin
+  insert into auth.users (id, email) values (v_staff2, 'staff2@ctw1.test');
+  perform app.invite_user(v_tenant1, v_staff2, 'staff2@ctw1.test', 'Ctw1 Staff Two', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'staff2@ctw1.test'), 'active', 'onboarded', 'tester');
+  -- v_staff2 deliberately holds a plain active tenant membership ONLY --
+  -- no tenant_admin principal membership, no ownership/org-unit-sharing/
+  -- customer-account tie to Alpha's own document -- the genuinely
+  -- unauthorized staff case this fix's own regression requirement names.
+
+  select count(*) into v_n from app._ticket_portal_link_resolve_candidate('document', v_tenant1, v_staff1, v_file_id);
+  if v_n <> 1 then raise exception 'FAIL: expected staff1 (tenant_admin, support-grant authority) to resolve exactly 1 document candidate, got %', v_n; end if;
+
+  select count(*) into v_n from app._ticket_portal_link_resolve_candidate('document', v_tenant1, v_staff2, v_file_id);
+  if v_n <> 0 then raise exception 'FAIL: expected staff2 (no file-access authority) to resolve 0 document candidates -- deny-by-default must be preserved, got %', v_n; end if;
+
+  select count(*) into v_n from app._ticket_portal_link_resolve_candidate('document', v_tenant1, v_cust_alpha, v_file_id);
+  if v_n <> 1 then raise exception 'FAIL: expected cust-alpha''s own pre-existing customer document resolution to remain unaffected (1 row), got %', v_n; end if;
+end $$;
