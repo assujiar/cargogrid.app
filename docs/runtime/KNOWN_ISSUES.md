@@ -7602,6 +7602,21 @@ nothing is lost by deleting it, but that is your call to make, not mine to take.
 that bypasses pull requests would also bypass this check, which is `ISS-2026-289`'s
 branch-protection gap, not this one's.
 
+**Update (2026-09-01) — owner authorized deletion; this session's own git credentials cannot
+execute it.** Independently re-derived the branch's own divergence directly against its true
+merge-base (`6f4bd23`, not a stale plain diff against current `main`, which is meaningless after
+five weeks of unrelated history): 7 files, 939 insertions, identical to this entry's own figures
+— confirming the branch's entire content is a divergent, fully-superseded reauthoring of the
+already-shipped Finance Dashboard feature, nothing unique or unmerged. The owner explicitly
+authorized deleting `claude/prompt-206-210-dpxtmu`. `git push origin --delete
+claude/prompt-206-210-dpxtmu` was attempted and refused with HTTP 403 — this session's own git
+write credentials are scoped to push/fast-forward on its designated working branches, not to
+delete an arbitrary remote ref. The branch still exists
+(`refs/heads/claude/prompt-206-210-dpxtmu` at `f364c15`, confirmed via `git ls-remote` after the
+failed attempt). **Status stays `OPEN`** — authorization is no longer the blocker, tooling
+permission is: delete it directly via the GitHub UI/API with an account that holds branch-delete
+rights on this repository, or grant a future session that specific scope.
+
 ### ISS-2026-289 — GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repository's own "pull request is mandatory" policy has never been enforceable (found at `RGL-393`, High) (OPEN, High)
 
 `RGL-393`'s ingress audit queried the GitHub API for all 47 branches. **Every one, `main` included, reports `"protected": false`.** No branch protection, no required reviewers, no required status checks, anywhere.
